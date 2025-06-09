@@ -45,7 +45,6 @@ from multiprocessing.context import SpawnProcess
 from socket import socket
 from typing import Callable
 from uvicorn.config import Config
-from ....Loader import load_modules
 
 
 multiprocessing.allow_connection_pickling()
@@ -120,17 +119,3 @@ def subprocess_started(
         # supress the exception to avoid a traceback from subprocess.Popen
         # the parent already expects us to end, so no vital information is lost
         pass
-
-
-def run_broker(is_restarting: bool) -> multiprocessing.Process:
-    process = multiprocessing.Process(target=start_broker, args=(is_restarting,))
-    process.start()
-    return process
-
-
-def start_broker(is_restarting: bool) -> None:
-    from ...broker import Broker
-
-    load_modules("tasks", "Task", log=not is_restarting)
-
-    Broker.start()

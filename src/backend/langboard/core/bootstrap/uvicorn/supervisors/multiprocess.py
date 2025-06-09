@@ -43,7 +43,7 @@ from typing import Any, Callable
 import click
 from uvicorn.config import Config
 from ....broadcast import DispatcherQueue
-from .._subprocess import get_subprocess, run_broker
+from .._subprocess import get_subprocess
 
 
 SIGNALS = {
@@ -159,18 +159,14 @@ class Multiprocess:
             process = Process(self.config, self.target, self.sockets)
             process.start()
             self.processes.append(process)
-        self.broker_process = run_broker(is_restarting=False)
 
     def terminate_all(self) -> None:
         for process in self.processes:
             process.terminate()
-        self.broker_process.terminate()
-        self.broker_process.kill()
 
     def join_all(self) -> None:
         for process in self.processes:
             process.join()
-        self.broker_process.join()
 
     def restart_all(self) -> None:
         for idx, process in enumerate(self.processes):
@@ -179,10 +175,6 @@ class Multiprocess:
             new_process = Process(self.config, self.target, self.sockets)
             new_process.start()
             self.processes[idx] = new_process
-        self.broker_process.terminate()
-        self.broker_process.kill()
-        self.broker_process.join()
-        self.broker_process = run_broker(is_restarting=True)
 
     def run(self) -> None:
         message = f"Started parent process [{os.getpid()}]"
@@ -197,6 +189,7 @@ class Multiprocess:
 
         self.terminate_all()
         self.join_all()
+        DispatcherQueue.close()
 
         message = f"Stopping parent process [{os.getpid()}]"
         color_message = "Stopping parent process [{}]".format(click.style(str(os.getpid()), fg="cyan", bold=True))
@@ -220,12 +213,6 @@ class Multiprocess:
             process = Process(self.config, self.target, self.sockets)
             process.start()
             self.processes[idx] = process
-
-        if not self.broker_process.is_alive():
-            self.broker_process.terminate()
-            self.broker_process.kill()
-            self.broker_process.join()
-            self.broker_process = run_broker(is_restarting=True)
 
     def handle_signals(self) -> None:
         for sig in tuple(self.signal_queue):

@@ -68,6 +68,15 @@ Langboard is optimized for Docker deployment. The repository includes a Dockerfi
 
     - Once running, access Langboard at `http://localhost:NGINX_FRONTEND_EXPOSE_PORT` (replace `NGINX_FRONTEND_EXPOSE_PORT` with the configured port in your `.env` file).
 
+### Running Without Docker
+
+If you prefer to run the backend directly, start the server and worker separately:
+
+```bash
+poetry run langboard run
+poetry run langboard broker
+```
+
 ---
 
 ## 🔧 Agent Customization with Langflow
