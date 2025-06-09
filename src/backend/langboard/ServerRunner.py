@@ -29,6 +29,7 @@ def run():
             reload_dirs=str(BASE_DIR) if config.watch else None,
             log_config=Logger.get_config(),
             app_dir=str(BASE_DIR),
+            enable_broker=config.enable_broker,
         )
 
         run_server(uvicorn_config)

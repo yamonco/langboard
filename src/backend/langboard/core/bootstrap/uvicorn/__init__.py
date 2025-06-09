@@ -114,6 +114,7 @@ def create_config(
     app_dir: str | None = None,
     factory: bool = False,
     h11_max_incomplete_event_size: int | None = None,
+    enable_broker: bool = True,
 ) -> Config:
     if app_dir is not None:
         sys.path.insert(0, app_dir)
@@ -217,6 +218,7 @@ def create_config(
         h11_max_incomplete_event_size=h11_max_incomplete_event_size,
     )
 
+    config.enable_broker = enable_broker
     return config
 
 

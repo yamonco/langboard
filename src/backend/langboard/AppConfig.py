@@ -14,6 +14,7 @@ class AppConfigModel(BaseModel):
     workers: int
     is_restarting: bool = False
     watch: bool = False
+    enable_broker: bool = True
 
 
 @staticclass
@@ -29,6 +30,7 @@ class AppConfig:
         ssl_options: Any = None,
         workers: int = 1,
         watch: bool = False,
+        enable_broker: bool = True,
     ):
         DATA_DIR.mkdir(parents=True, exist_ok=True)
         AppConfig.CONFIG_FILE.touch(exist_ok=True)
@@ -43,6 +45,7 @@ class AppConfig:
                 "workers": workers,
                 "is_restarting": False,
                 "watch": watch,
+                "enable_broker": enable_broker,
             }
         )
 

@@ -323,6 +323,10 @@ class Server:
         if not self.force_exit:
             await self.lifespan.shutdown()
 
+        from ...broadcast import DispatcherQueue
+
+        DispatcherQueue.close()
+
     async def _wait_tasks_to_complete(self) -> None:
         # Wait for existing connections to finish sending responses.
         if self.server_state.connections and not self.force_exit:

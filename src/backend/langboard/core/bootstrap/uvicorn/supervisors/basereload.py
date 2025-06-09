@@ -113,7 +113,10 @@ class BaseReload:
         for sig in HANDLED_SIGNALS:
             signal.signal(sig, self.signal_handler)
 
-        self.broker_process = run_broker(is_restarting=False)
+        if getattr(self.config, "enable_broker", True):
+            self.broker_process = run_broker(is_restarting=False)
+        else:
+            self.broker_process = None
 
         self.process = get_subprocess(
             config=self.config,
@@ -123,12 +126,13 @@ class BaseReload:
         self.process.start()
 
     def restart(self) -> None:
-        if self.broker_process.pid:
-            os.kill(self.broker_process.pid, signal.SIGTERM)
-        else:
-            self.broker_process.terminate()
-            self.broker_process.kill()
-        self.broker_process.join()
+        if self.broker_process:
+            if self.broker_process.pid:
+                os.kill(self.broker_process.pid, signal.SIGTERM)
+            else:
+                self.broker_process.terminate()
+                self.broker_process.kill()
+            self.broker_process.join()
 
         if sys.platform == "win32":  # pragma: py-not-win32
             self.is_restarting = True
@@ -142,7 +146,10 @@ class BaseReload:
             self.process.terminate()
         self.process.join()
 
-        self.broker_process = run_broker(is_restarting=True)
+        if getattr(self.config, "enable_broker", True):
+            self.broker_process = run_broker(is_restarting=True)
+        else:
+            self.broker_process = None
 
         self.process = get_subprocess(
             config=self.config,
@@ -152,12 +159,13 @@ class BaseReload:
         self.process.start()
 
     def shutdown(self) -> None:
-        if self.broker_process.pid:
-            os.kill(self.broker_process.pid, signal.SIGTERM)
-        else:
-            self.broker_process.terminate()
-            self.broker_process.kill()
-        self.broker_process.join()
+        if self.broker_process:
+            if self.broker_process.pid:
+                os.kill(self.broker_process.pid, signal.SIGTERM)
+            else:
+                self.broker_process.terminate()
+                self.broker_process.kill()
+            self.broker_process.join()
 
         if sys.platform == "win32":
             self.should_exit.set()  # pragma: py-not-win32
@@ -167,6 +175,8 @@ class BaseReload:
 
         for sock in self.sockets:
             sock.close()
+
+        DispatcherQueue.close()
 
         message = f"Stopping reloader process [{str(self.pid)}]"
         color_message = "Stopping reloader process [{}]".format(click.style(str(self.pid), fg="cyan", bold=True))
