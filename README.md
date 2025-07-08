@@ -74,6 +74,10 @@ Langboard is optimized for Docker deployment. The repository includes a Dockerfi
 
 Langboard seamlessly integrates with the [Langflow](https://github.com/langflow-ai/langflow) project, allowing you to directly customize and fine-tune your AI agents. Langflow is a visual tool that empowers you to design, configure, and optimize your AI workflows, making it easy to tailor agent behaviors to your specific project needs. Check out the Langflow repository for more details and start customizing your agents today!
 
+### ➕ Multi-Agent Workflows with LangGraph
+
+LangGraph helps coordinate interactions between multiple agents. See [docs/docs/langgraph-integration.md](docs/docs/langgraph-integration.md) for a simple example of chaining agents together.
+
 ---
 
 ## 📌 Usage Guidelines
