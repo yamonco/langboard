@@ -139,6 +139,6 @@ class ProjectAssignedUserRepository(BaseRepository[ProjectAssignedUser]):
             db.exec(
                 SqlBuilder.delete.table(ProjectAssignedUser).where(
                     (ProjectAssignedUser.column("project_id") == project_id)
-                    & ProjectAssignedUser.column("id").in_(user_ids)
+                    & (ProjectAssignedUser.column("user_id").in_(user_ids))
                 )
             )

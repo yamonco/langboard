@@ -189,8 +189,59 @@ class ProjectService(BaseDomainService):
             for role in roles:
                 if role.user_id and role.user_id != project.owner_id:
                     response["member_roles"][role.user_id.to_short_code()] = role.actions
+            response["access_groups"] = self._build_access_groups(project, response["all_members"], roles)
 
         return project, response
+
+    def _build_access_groups(
+        self, project: Project, all_members: list[dict[str, Any]], roles: list[ProjectRole]
+    ) -> list[dict[str, Any]]:
+        role_map = {role.user_id.to_short_code(): role for role in roles if role.user_id}
+        groups = {
+            "owner": {
+                "uid": f"project-role:{project.get_uid()}:owner",
+                "role_key": "owner",
+                "name": "Owners",
+                "description": "Full project control and governance.",
+                "member_uids": [],
+            },
+            "contributor": {
+                "uid": f"project-role:{project.get_uid()}:contributor",
+                "role_key": "contributor",
+                "name": "Contributors",
+                "description": "Can update project content and active work.",
+                "member_uids": [],
+            },
+            "viewer": {
+                "uid": f"project-role:{project.get_uid()}:viewer",
+                "role_key": "viewer",
+                "name": "Viewers",
+                "description": "Read-only access to the project workspace.",
+                "member_uids": [],
+            },
+        }
+        for member in all_members:
+            member_uid = str(member.get("uid") or "").strip()
+            if not member_uid:
+                continue
+            if member_uid == project.owner_id.to_short_code():
+                groups["owner"]["member_uids"].append(member_uid)
+                continue
+            role = role_map.get(member_uid)
+            if role and role.is_all_granted():
+                groups["owner"]["member_uids"].append(member_uid)
+            elif role and any(action != ProjectRoleAction.Read.value for action in role.actions):
+                groups["contributor"]["member_uids"].append(member_uid)
+            else:
+                groups["viewer"]["member_uids"].append(member_uid)
+
+        return [
+            {
+                **group,
+                "member_count": len(group["member_uids"]),
+            }
+            for group in groups.values()
+        ]
 
     def is_assigned(self, user: User, project: TProjectParam | None) -> tuple[bool, ProjectAssignedUser | None]:
         project = InfraHelper.get_by_id_like(Project, project)

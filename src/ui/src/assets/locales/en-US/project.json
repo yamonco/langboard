@@ -54,7 +54,11 @@
   "settings": {
     "Basic info": "Basic info",
     "Internal bots": "Internal bots",
+    "Access groups": "Access groups",
     "Member roles": "Member roles",
+    "No members": "No members",
+    "members_one": "{{count}} member",
+    "members_other": "{{count}} members",
     "Label": "Label",
     "Add a label": "Add a label",
     "Label name": "Label name",

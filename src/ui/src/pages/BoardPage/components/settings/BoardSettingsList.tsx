@@ -6,6 +6,7 @@ import BoardSettingsSection from "@/pages/BoardPage/components/settings/BoardSet
 import BoardSettingsChatTemplateList from "@/pages/BoardPage/components/settings/chat/BoardSettingsChatTemplateList";
 import BoardSettingsInternalBotList from "@/pages/BoardPage/components/settings/internalBots/BoardSettingsInternalBotList";
 import BoardSettingsLabelList from "@/pages/BoardPage/components/settings/label/BoardSettingsLabelList";
+import BoardSettingsAccessGroupList from "@/pages/BoardPage/components/settings/roles/BoardSettingsAccessGroupList";
 import BoardSettingsMemberRoleList from "@/pages/BoardPage/components/settings/roles/BoardSettingsMemberRoleList";
 import { memo, useMemo } from "react";
 
@@ -18,6 +19,7 @@ const BoardSettingsList = memo(() => {
     const ownerUID = project.useField("owner_uid");
     const allMembers = project.useForeignFieldArray("all_members");
     const invitedMemberUIDs = project.useField("invited_member_uids");
+    const accessGroups = project.useField("access_groups");
     const isAdmin = currentUser.useField("is_admin");
     const numMembers = useMemo(
         () =>
@@ -33,6 +35,11 @@ const BoardSettingsList = memo(() => {
             <BoardSettingsSection title="project.settings.Internal bots">
                 <BoardSettingsInternalBotList key={`board-settings-internal-bots-${project.uid}`} />
             </BoardSettingsSection>
+            {Array.isArray(accessGroups) && accessGroups.length > 0 && (
+                <BoardSettingsSection title="project.settings.Access groups">
+                    <BoardSettingsAccessGroupList />
+                </BoardSettingsSection>
+            )}
             {numMembers > 0 && (
                 <BoardSettingsSection title="project.settings.Member roles">
                     <BoardSettingsMemberRoleList key={`board-settings-member-roles-${project.uid}`} />

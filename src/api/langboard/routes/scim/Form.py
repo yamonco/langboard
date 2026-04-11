@@ -11,6 +11,14 @@ class ScimUsersPagination(BaseModel):
     filter: str | None = None
 
 
+class ScimGroupsPagination(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    start_index: int = Field(default=1, alias="startIndex")
+    count: int = 100
+    filter: str | None = None
+
+
 class ScimName(BaseModel):
     givenName: str | None = None
     familyName: str | None = None
@@ -19,6 +27,11 @@ class ScimName(BaseModel):
 class ScimEmail(BaseModel):
     value: str
     primary: bool | None = None
+
+
+class ScimGroupMember(BaseModel):
+    value: str
+    display: str | None = None
 
 
 @form_model
@@ -31,6 +44,16 @@ class ScimUserUpsertForm(BaseFormModel):
     active: bool | None = None
     name: ScimName | None = None
     emails: list[ScimEmail] | None = None
+
+
+@form_model
+class ScimGroupUpsertForm(BaseFormModel):
+    model_config = ConfigDict(extra="allow")
+
+    schemas: list[str] | None = None
+    externalId: str | None = None
+    displayName: str | None = None
+    members: list[ScimGroupMember] | None = None
 
 
 class ScimPatchOperation(BaseModel):

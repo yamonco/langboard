@@ -52,6 +52,16 @@ from .forms import (
                             "current_auth_role_actions": [ALL_GRANTED, ProjectRoleAction],
                             "labels": [ProjectLabel],
                             "member_roles": {"<user uid>": [ALL_GRANTED, ProjectRoleAction]},
+                            "access_groups": [
+                                {
+                                    "uid": "string",
+                                    "role_key": "string",
+                                    "name": "string",
+                                    "description": "string",
+                                    "member_uids": ["string"],
+                                    "member_count": "integer",
+                                }
+                            ],
                             "chat_templates": [ChatTemplate],
                         }
                     },

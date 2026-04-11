@@ -175,11 +175,12 @@ class Auth:
 
             cookie = cookie_parser(queries_headers.get("cookie", ""))
             refresh_token = cookie.get(Env.REFRESH_TOKEN_NAME)
-            compared_result = AuthSecurity.compare_tokens(access_token, refresh_token)
-            if compared_result == "expired_access":
-                return status.HTTP_422_UNPROCESSABLE_CONTENT
-            if not compared_result:
-                return status.HTTP_401_UNAUTHORIZED
+            if refresh_token:
+                compared_result = AuthSecurity.compare_tokens(access_token, refresh_token)
+                if compared_result == "expired_access":
+                    return status.HTTP_422_UNPROCESSABLE_CONTENT
+                if not compared_result:
+                    return status.HTTP_401_UNAUTHORIZED
         else:
             if authorization.startswith("Bearer "):
                 access_token = authorization.split("Bearer ", maxsplit=1)[1]

@@ -66,6 +66,14 @@ export interface IStore extends Interface {
     last_viewed_at: Date;
 
     member_roles: Record<string, ProjectRole.TActions[]>; // This will be used in board setting.
+    access_groups: {
+        uid: string;
+        role_key: "owner" | "contributor" | "viewer";
+        name: string;
+        description: string;
+        member_uids: string[];
+        member_count: number;
+    }[];
 }
 
 class Project extends BaseModel<IStore> {
@@ -241,6 +249,13 @@ class Project extends BaseModel<IStore> {
     }
     public set member_roles(value) {
         this.update({ member_roles: value });
+    }
+
+    public get access_groups() {
+        return this.getValue("access_groups");
+    }
+    public set access_groups(value) {
+        this.update({ access_groups: value });
     }
 }
 
