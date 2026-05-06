@@ -77,6 +77,9 @@ Langboard's mission is to enable enterprises to harness AI efficiency without sa
 - Requests must include `X-MCP-Tool-Group-UID` for tool-group validation.
 - Middleware enforces authentication, ownership checks, and MCP role permissions.
 - Built-in MCP tools cover project, card, bot, activity, and metadata operations.
+- Card MCP tools include `get_issue_cards` and `create_issue_card` so external
+  delivery systems can treat a project board as the issue/scrum source of truth,
+  including UI selector cards from frontend development mode.
 
 ---
 

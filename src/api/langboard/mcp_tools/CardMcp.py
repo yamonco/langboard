@@ -4,7 +4,7 @@ from langboard_shared.core.db import EditorContentModel
 from langboard_shared.core.storage import Storage, StorageName
 from langboard_shared.core.types import SafeDateTime
 from langboard_shared.core.utils.Converter import convert_python_data
-from langboard_shared.domain.models import Bot, Card, Project, ProjectRole, User
+from langboard_shared.domain.models import Bot, Card, CardMetadata, Project, ProjectRole, User
 from langboard_shared.domain.models.bases import ALL_GRANTED
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.domain.services.DomainService import DomainService
@@ -21,6 +21,109 @@ def get_cards(project_uid: str, service: DomainService) -> dict:
         raise ValueError("Project not found")
     cards = service.card.get_api_list_by_project(project)
     return {"cards": cards}
+
+
+def _issue_card_metadata_matches(metadata: dict, title: str) -> bool:
+    normalized_title = title.lower()
+    if any(
+        str(metadata.get(key) or "").lower() in {"issue", "bug", "task", "ui_selector_issue"}
+        for key in ("kind", "type", "card_type", "work_item_kind")
+    ):
+        return True
+    if str(metadata.get("source_type") or "").lower() in {"element_selector", "ui_selector", "playwright_selector"}:
+        return True
+    return normalized_title.startswith(("issue:", "bug:")) or "[issue]" in normalized_title
+
+
+@McpTool.add(description="Get issue cards in a project, optionally filtered by column, metadata, and title text.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+def get_issue_cards(
+    project_uid: str,
+    service: DomainService,
+    column_uid: str | None = None,
+    metadata_key: str | None = None,
+    metadata_value: str | None = None,
+    title_contains: str | None = None,
+    include_metadata: bool = True,
+) -> dict:
+    project = service.project.get_by_id_like(project_uid)
+    if not project:
+        raise ValueError("Project not found")
+
+    normalized_column_uid = (column_uid or "").strip()
+    normalized_metadata_key = (metadata_key or "").strip()
+    normalized_metadata_value = (metadata_value or "").strip()
+    normalized_title = (title_contains or "").strip().lower()
+    cards = []
+    for card in service.card.get_api_list_by_project(project):
+        if normalized_column_uid and card.get("project_column_uid") != normalized_column_uid:
+            continue
+        if normalized_title and normalized_title not in str(card.get("title") or "").lower():
+            continue
+
+        card_model = service.card.get_by_id_like(card.get("uid"))
+        if not card_model:
+            continue
+        metadata = service.metadata.get_all_as_api(CardMetadata, card_model, as_dict=True)
+        if normalized_metadata_key:
+            if normalized_metadata_key not in metadata:
+                continue
+            if (
+                normalized_metadata_value
+                and str(metadata.get(normalized_metadata_key) or "") != normalized_metadata_value
+            ):
+                continue
+        elif not _issue_card_metadata_matches(metadata, str(card.get("title") or "")):
+            continue
+
+        if include_metadata:
+            card = {**card, "metadata": metadata}
+        cards.append(card)
+
+    return {"cards": cards, "count": len(cards)}
+
+
+@McpTool.add(description="Create an issue card from a UI selector or delivery issue.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+def create_issue_card(
+    project_uid: str,
+    column_uid: str,
+    title: str,
+    description: str | None,
+    user_or_bot: User | Bot,
+    service: DomainService,
+    selector: str | None = None,
+    route: str | None = None,
+    source_type: str = "element_selector",
+    severity: str = "",
+) -> dict:
+    result = service.card.create(
+        user_or_bot,
+        project_uid,
+        column_uid,
+        title,
+        EditorContentModel(content=description or ""),
+        None,
+    )
+    if not result:
+        raise ValueError("Failed to create")
+    _, api_card = result
+    card_uid = api_card.get("uid")
+    card = service.card.get_by_id_like(card_uid)
+    if not card:
+        return api_card
+    metadata = {
+        "kind": "issue",
+        "work_item_kind": "ui_selector_issue",
+        "source_type": source_type or "element_selector",
+        "selector": selector or "",
+        "route": route or "",
+        "severity": severity or "",
+    }
+    for key, value in metadata.items():
+        if value:
+            service.metadata.save(CardMetadata, card, key, str(value), None)
+    return {**api_card, "metadata": metadata}
 
 
 @McpTool.add(description="Get card details.")
