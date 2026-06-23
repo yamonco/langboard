@@ -1,5 +1,15 @@
-import { createContext, memo, useContext, useEffect, useMemo, useRef } from "react";
-import { AuthUser, GlobalRelationshipType, Project, ProjectCard, ProjectCardRelationship, ProjectColumn, ProjectLabel, User } from "@/core/models";
+import { createContext, memo, useCallback, useContext, useEffect, useMemo, useReducer, useRef } from "react";
+import {
+    AuthUser,
+    GlobalRelationshipType,
+    MetadataModel,
+    Project,
+    ProjectCard,
+    ProjectCardRelationship,
+    ProjectColumn,
+    ProjectLabel,
+    User,
+} from "@/core/models";
 import useRoleActionFilter from "@/core/hooks/useRoleActionFilter";
 import { To } from "react-router";
 import { ISocketContext, useSocket } from "@/core/providers/SocketProvider";
@@ -11,6 +21,11 @@ import useSearchFilters, { ISearchFilterMap } from "@/core/hooks/useSearchFilter
 import { IPageNavigateOptions, usePageNavigateRef } from "@/core/hooks/usePageNavigate";
 import { Utils } from "@langboard/core/utils";
 import { ProjectRole } from "@/core/models/roles";
+import { parseDoclingMetadata } from "@/core/constants/DoclingMetadata";
+import { ESocketTopic } from "@langboard/core/enums";
+import useSwitchSocketHandlers from "@/core/hooks/useSwitchSocketHandlers";
+import useBoardCardMetadataDeletedHandlers from "@/controllers/socket/metadata/useBoardCardMetadataDeletedHandlers";
+import useBoardCardMetadataUpdatedHandlers from "@/controllers/socket/metadata/useBoardCardMetadataUpdatedHandlers";
 
 const DEFAULT_ARCHIVE_CARD_VISIBLE_DAYS = 3;
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
@@ -96,6 +111,26 @@ export const BoardProvider = memo(({ project, currentUser, children }: IBoardPro
     const { hasRoleAction } = useRoleActionFilter(currentUserRoleActions);
     const columns = ProjectColumn.Model.useModels((model) => model.project_uid === project.uid);
     const cards = ProjectCard.Model.useModels((model) => model.project_uid === project.uid);
+    const cardUIDs = useMemo(() => cards.map((card) => card.uid), [cards]);
+    const [metadataUpdated, forceMetadataUpdate] = useReducer((value) => value + 1, 0);
+    const handleMetadataChanged = useCallback(() => {
+        forceMetadataUpdate();
+    }, []);
+    const boardCardMetadataHandlers = useMemo(
+        () =>
+            cardUIDs.flatMap((cardUID) => [
+                useBoardCardMetadataUpdatedHandlers({
+                    cardUID,
+                    callback: handleMetadataChanged,
+                }),
+                useBoardCardMetadataDeletedHandlers({
+                    cardUID,
+                    callback: handleMetadataChanged,
+                }),
+            ]),
+        [cardUIDs, handleMetadataChanged]
+    );
+    const cardMetadataRecords = MetadataModel.Model.useModels((model) => model.type === "card", [cards, metadataUpdated]);
     const forbiddenMessageIdRef = useRef<string | number | null>(null);
     const cardsMap = useMemo(() => {
         const map: Record<string, ProjectCard.TModel> = {};
@@ -104,6 +139,13 @@ export const BoardProvider = memo(({ project, currentUser, children }: IBoardPro
         });
         return map;
     }, [cards]);
+    const cardMetadataMap = useMemo(() => {
+        const map: Record<string, Record<string, string>> = {};
+        cardMetadataRecords.forEach((record) => {
+            map[record.uid] = record.metadata;
+        });
+        return map;
+    }, [cardMetadataRecords, metadataUpdated]);
     const globalRelationshipTypes = GlobalRelationshipType.Model.useModels(() => true, [selectCardViewType, filters]);
     const canDragAndDrop = useMemo(() => hasRoleAction(ProjectRole.EAction.Update) && !selectCardViewType, [hasRoleAction, selectCardViewType]);
 
@@ -123,6 +165,23 @@ export const BoardProvider = memo(({ project, currentUser, children }: IBoardPro
         forbiddenMessageIdRef.current = toastId;
         navigate(ROUTES.DASHBOARD.PROJECTS.ALL);
     }, [isAdmin, members]);
+
+    useEffect(() => {
+        if (!cardUIDs.length) {
+            return;
+        }
+
+        socket.subscribe(ESocketTopic.BoardCard, cardUIDs);
+        return () => {
+            socket.unsubscribe(ESocketTopic.BoardCard, cardUIDs);
+        };
+    }, [socket, cardUIDs]);
+
+    useSwitchSocketHandlers({
+        socket,
+        handlers: boardCardMetadataHandlers,
+        dependencies: boardCardMetadataHandlers,
+    });
 
     const navigateWithFilters = (to?: To, options?: IPageNavigateOptions) => {
         uniqueFilters();
@@ -179,6 +238,12 @@ export const BoardProvider = memo(({ project, currentUser, children }: IBoardPro
         return (
             card.title.toLowerCase().includes(keyword.toLowerCase()) ||
             card.description.content.toLowerCase().includes(keyword.toLowerCase()) ||
+            parseDoclingMetadata(cardMetadataMap[card.uid]).some((document) => {
+                const searchableDocumentText = [document.document_type, document.status, document.content.filename, document.content.markdown]
+                    .join(" ")
+                    .toLowerCase();
+                return searchableDocumentText.includes(keyword.toLowerCase());
+            }) ||
             User.Model.getModels(card.member_uids).some((member) => filterMember(member))
         );
     };

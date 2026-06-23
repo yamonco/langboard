@@ -37,6 +37,30 @@ class MetadataRepository(BaseRepository):
 
         return metadata
 
+    def get_by_foreign_ids_and_key(
+        self, model_cls: type[_TMetadata], foreign_key: str, foreign_ids: list[int], key: str
+    ) -> list[_TMetadata]:
+        if foreign_key not in model_cls.model_fields or not foreign_ids:
+            return []
+
+        with DbSession.use(readonly=True) as db:
+            result = db.exec(
+                SqlBuilder.select.table(model_cls).where(
+                    (model_cls.column(foreign_key).in_(foreign_ids)) & (model_cls.column("key") == key)
+                )
+            )
+            return list(result.all())
+
+    def get_by_foreign_ids(
+        self, model_cls: type[_TMetadata], foreign_key: str, foreign_ids: list[int]
+    ) -> list[_TMetadata]:
+        if foreign_key not in model_cls.model_fields or not foreign_ids:
+            return []
+
+        with DbSession.use(readonly=True) as db:
+            result = db.exec(SqlBuilder.select.table(model_cls).where(model_cls.column(foreign_key).in_(foreign_ids)))
+            return list(result.all())
+
     def save(
         self, model_cls: type[_TMetadata], foreign_model: BaseDbModel, key: str, value: str, old_key: str | None = None
     ) -> _TMetadata | None:

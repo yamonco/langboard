@@ -1,12 +1,19 @@
 from typing import Any
+from ....core.broker import Broker
+from ....core.broker.TaskParameters import TaskParameters
 from ....core.domain import BaseDomainService
+from ....core.routing import SocketTopic
 from ....core.storage import FileModel
 from ....core.types.ParamTypes import TAttachmentParam, TCardParam, TProjectParam
 from ....helpers import InfraHelper
 from ....publishers import CardAttachmentPublisher
 from ....tasks.activities import CardAttachmentActivityTask
 from ....tasks.bots import CardAttachmentBotTask
-from ...models import Card, CardAttachment, Project, User
+from ...models import Card, CardAttachment, CardMetadata, Project, User
+from .DoclingMetadataService import DoclingMetadataService
+
+
+DOCLING_INDEX_CARD_ATTACHMENT_TASK = "langboard_shared.tasks.docling.DoclingMetadataTask.index_card_attachment"
 
 
 class CardAttachmentService(BaseDomainService):
@@ -46,6 +53,10 @@ class CardAttachmentService(BaseDomainService):
         )
 
         self.repo.card_attachment.insert(card_attachment)
+        docling_metadata = self._get_service(DoclingMetadataService)
+        if docling_metadata.queue_document(CardMetadata, card, card_attachment.get_uid(), card_attachment.filename):
+            docling_metadata.publish_update(CardMetadata, card, SocketTopic.BoardCard)
+            self._queue_docling_index_task(card_attachment)
 
         CardAttachmentPublisher.uploaded(user, card, card_attachment)
         CardAttachmentActivityTask.card_attachment_uploaded(user, project, card, card_attachment)
@@ -115,6 +126,9 @@ class CardAttachmentService(BaseDomainService):
             return None
         project, card, card_attachment = params
 
+        docling_metadata = self._get_service(DoclingMetadataService)
+        docling_metadata.delete_document_by_attachment_uid(CardMetadata, card, card_attachment.get_uid())
+        docling_metadata.publish_update(CardMetadata, card, SocketTopic.BoardCard)
         self.repo.card_attachment.delete(card_attachment)
         self.repo.card_attachment.reoder_after_delete(card, card_attachment.order)
 
@@ -123,3 +137,7 @@ class CardAttachmentService(BaseDomainService):
         CardAttachmentBotTask.card_attachment_deleted(user, project, card, card_attachment)
 
         return True
+
+    def _queue_docling_index_task(self, card_attachment: CardAttachment) -> None:
+        args, kwargs = TaskParameters(card_attachment).pack()
+        Broker.celery.send_task(DOCLING_INDEX_CARD_ATTACHMENT_TASK, args=args, kwargs=kwargs)

@@ -41,6 +41,7 @@ dependencies = [
     "azure-keyvault-keys>=4.11.0",
     "azure-identity>=1.25.1",
     "hvac>=2.4.0",
+    "docling>=2.105.0",
 ]
 
 

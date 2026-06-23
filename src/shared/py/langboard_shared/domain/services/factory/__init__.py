@@ -11,6 +11,7 @@ from .CardService import CardService
 from .ChatService import ChatService
 from .CheckitemService import CheckitemService
 from .ChecklistService import ChecklistService
+from .DoclingMetadataService import DoclingMetadataService
 from .EmailService import EmailService
 from .GraphApprovalRequestService import GraphApprovalRequestService
 from .IdentityLinkService import IdentityLinkService
@@ -44,6 +45,7 @@ __all__ = [
     "ChatService",
     "CheckitemService",
     "ChecklistService",
+    "DoclingMetadataService",
     "EmailService",
     "GraphApprovalRequestService",
     "IdentityLinkService",

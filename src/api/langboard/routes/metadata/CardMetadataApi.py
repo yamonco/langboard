@@ -13,6 +13,7 @@ from langboard_shared.core.routing import (
     collaborative_text,
     create_editor_collaboration_document_id,
 )
+from langboard_shared.core.schema import OpenApiSchema
 from langboard_shared.domain.models import Card, CardMetadata, Project, ProjectRole
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.domain.services import DomainService
@@ -40,6 +41,36 @@ def get_card_metadata(project_uid: str, card_uid: str, service: DomainService = 
     _, card = params
 
     metadata = service.metadata.get_all_as_api(CardMetadata, card, as_dict=True)
+    return JsonResponse(content={"metadata": metadata})
+
+
+@AppRouter.schema(permission=ApiPermission.Read)
+@AppRouter.api.get(
+    "/metadata/project/{project_uid}/cards",
+    tags=["Metadata"],
+    description="Get project card metadata.",
+    responses=(
+        OpenApiSchema()
+        .suc({"metadata": {"card_uid": {"key": "value"}}})
+        .auth()
+        .forbidden()
+        .err(404, ApiErrorCode.NF2003)
+        .get()
+    ),
+)
+@RoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+@AuthFilter.add()
+def get_project_cards_metadata(project_uid: str, service: DomainService = DomainService.scope()) -> JsonResponse:
+    project = service.project.get_by_id_like(project_uid)
+    if project is None:
+        raise ApiException.NotFound_404(ApiErrorCode.NF2003)
+
+    cards = service.card.get_by_project(project)
+    metadata = service.metadata.get_all_by_foreign_models_as_api(
+        CardMetadata,
+        "card_id",
+        cards,
+    )
     return JsonResponse(content={"metadata": metadata})
 
 

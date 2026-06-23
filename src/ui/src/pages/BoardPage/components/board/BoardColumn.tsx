@@ -198,7 +198,7 @@ const BoardColumnCardList = memo(({ column, updateBoard, scrollableRef, onCardCo
                 filterCardRelationships(model)
             );
         },
-        rowDependencies: [filters],
+        rowDependencies: [filters, filterCard, filterCardMember, filterCardLabels, filterCardRelationships],
         columnUID: column.uid,
         socket,
         updater,

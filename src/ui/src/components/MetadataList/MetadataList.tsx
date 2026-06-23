@@ -8,6 +8,8 @@ import { MetadataModel } from "@/core/models";
 import { Utils } from "@langboard/core/utils";
 import { useEffect } from "react";
 
+const SYSTEM_METADATA_KEY_PREFIX = "__system.";
+
 export interface IMetadataListProps {
     form: TMetadataForm;
     errorsMap: () => IApiErrorHandlerMap;
@@ -57,9 +59,18 @@ function MetadataListInner({ form, metadata: record, errorsMap, canEdit }: IMeta
 
     return (
         <Flex direction="col" gap="2" mt="2" mb="2">
-            {Object.entries(metadata).map(([key, value]) => (
-                <MetadataRow key={Utils.String.Token.shortUUID()} form={form} keyName={key} value={value} errorsMap={errorsMap} canEdit={canEdit} />
-            ))}
+            {Object.entries(metadata)
+                .filter(([key]) => !key.startsWith(SYSTEM_METADATA_KEY_PREFIX))
+                .map(([key, value]) => (
+                    <MetadataRow
+                        key={Utils.String.Token.shortUUID()}
+                        form={form}
+                        keyName={key}
+                        value={value}
+                        errorsMap={errorsMap}
+                        canEdit={canEdit}
+                    />
+                ))}
         </Flex>
     );
 }

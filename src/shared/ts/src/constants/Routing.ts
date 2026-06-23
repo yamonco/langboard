@@ -204,6 +204,7 @@ const API = {
     },
     METADATA: {
         CARD: "/metadata/project/{uid}/card/{card_uid}",
+        PROJECT_CARDS: "/metadata/project/{uid}/cards",
         PROJECT_WIKI: "/metadata/project/{uid}/wiki/{wiki_uid}",
     },
     MCP: {

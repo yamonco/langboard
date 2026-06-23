@@ -135,6 +135,10 @@ class DomainService(Factory):
         return self._create_or_get_product(factory.CardCommentService)
 
     @property
+    def docling_metadata(self):
+        return self._create_or_get_product(factory.DoclingMetadataService)
+
+    @property
     def checkitem(self):
         return self._create_or_get_product(factory.CheckitemService)
 

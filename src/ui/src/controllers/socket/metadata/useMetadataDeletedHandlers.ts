@@ -2,10 +2,7 @@ import { SocketEvents } from "@langboard/core/constants";
 import useSocketHandler, { IBaseUseSocketHandlersProps } from "@/core/helpers/SocketHandler";
 import { MetadataModel } from "@/core/models";
 import { ESocketTopic } from "@langboard/core/enums";
-
-export interface IMetadataDeletedRawResponse {
-    keys: string[];
-}
+import { applyMetadataDeleted, IMetadataDeletedRawResponse } from "@/controllers/socket/shared/MetadataSocketHelper";
 
 export interface IUseMetadataDeletedHandlersProps extends IBaseUseSocketHandlersProps<{}> {
     type: MetadataModel.TType;
@@ -32,19 +29,7 @@ const useMetadataDeletedHandlers = ({ callback, type, uid }: IUseMetadataDeleted
             params: { uid },
             callback,
             responseConverter: (data) => {
-                const metadata = MetadataModel.Model.getModel(uid);
-                if (!metadata || metadata.type !== type) {
-                    return {};
-                }
-
-                const newMetadata = { ...metadata.metadata };
-                for (let i = 0; i < data.keys.length; ++i) {
-                    const key = data.keys[i];
-                    if (key in newMetadata) {
-                        delete newMetadata[key];
-                    }
-                }
-                metadata.metadata = newMetadata;
+                applyMetadataDeleted(type, uid, data);
                 return {};
             },
         },

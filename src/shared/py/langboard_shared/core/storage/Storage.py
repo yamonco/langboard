@@ -24,6 +24,13 @@ class Storage:
         storage = self._storages[storage_type]
         return storage.get(storage_name, filename)
 
+    def get_file(self, file_model: FileModel) -> bytes | None:
+        if file_model.storage_type not in self._storages:
+            return None
+
+        storage = self._storages[file_model.storage_type]
+        return storage.get(file_model.storage_name, file_model.filename)
+
     @overload
     def upload(self, file: UploadFile, storage_name: StorageName) -> FileModel | None: ...
     @overload

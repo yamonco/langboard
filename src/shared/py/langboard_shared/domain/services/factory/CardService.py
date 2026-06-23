@@ -41,6 +41,13 @@ class CardService(BaseDomainService):
         card = InfraHelper.get_by_id_like(Card, card)
         return card
 
+    def get_by_project(self, project: TProjectParam | None) -> list[Card]:
+        project = InfraHelper.get_by_id_like(Project, project)
+        if not project:
+            return []
+
+        return [card for card, _ in self.repo.card.get_all_by_project(project)]
+
     def get_details(self, project: TProjectParam | None, card: TCardParam | None) -> dict[str, Any] | None:
         params = InfraHelper.get_records_with_foreign_by_params((Project, project), (Card, card))
         if not params:

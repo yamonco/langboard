@@ -2,12 +2,7 @@ import { SocketEvents } from "@langboard/core/constants";
 import useSocketHandler, { IBaseUseSocketHandlersProps } from "@/core/helpers/SocketHandler";
 import { MetadataModel } from "@/core/models";
 import { ESocketTopic } from "@langboard/core/enums";
-
-export interface IMetadataUpdatedRawResponse {
-    key: string;
-    value: string;
-    old_key?: string;
-}
+import { applyMetadataUpdated, IMetadataUpdatedRawResponse } from "@/controllers/socket/shared/MetadataSocketHelper";
 
 export interface IUseMetadataUpdatedHandlersProps extends IBaseUseSocketHandlersProps<{}> {
     type: MetadataModel.TType;
@@ -34,17 +29,7 @@ const useMetadataUpdatedHandlers = ({ callback, type, uid }: IUseMetadataUpdated
             params: { uid },
             callback,
             responseConverter: (data) => {
-                const metadata = MetadataModel.Model.getModel(uid);
-                if (!metadata || metadata.type !== type) {
-                    return {};
-                }
-
-                const newMetadata = { ...metadata.metadata };
-                if (data.old_key && data.old_key !== data.key) {
-                    delete newMetadata[data.old_key];
-                }
-                newMetadata[data.key] = data.value;
-                metadata.metadata = newMetadata;
+                applyMetadataUpdated(type, uid, data);
                 return {};
             },
         },
