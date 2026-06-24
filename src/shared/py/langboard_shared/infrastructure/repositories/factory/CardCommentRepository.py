@@ -32,6 +32,18 @@ class CardCommentRepository(BaseRepository[CardComment]):
             record = result.first()
         return record
 
+    def count_by_card(self, card: TCardParam) -> int:
+        card_id = InfraHelper.convert_id(card)
+        with DbSession.use(readonly=True) as db:
+            return (
+                db.exec(
+                    SqlBuilder.select.count(CardComment, CardComment.column("id")).where(
+                        (CardComment.column("card_id") == card_id) & (CardComment.column("deleted_at") == None)  # noqa
+                    )
+                ).first()
+                or 0
+            )
+
     def __get_board_comment_api_query(self, card_id: int):
         return (
             SqlBuilder.select.tables(CardComment, User, Bot, with_deleted=True)

@@ -60,6 +60,7 @@ class CardService(BaseDomainService):
 
         api_card = card.api_response()
         api_card["project_column_name"] = column.name
+        api_card["count_comment"] = self.repo.card_comment.count_by_card(card)
 
         project_service = self._get_service(ProjectService)
         api_card["project_members"] = project_service.get_api_assigned_user_list(card.project_id)

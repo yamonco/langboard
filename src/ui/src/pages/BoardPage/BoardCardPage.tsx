@@ -122,9 +122,13 @@ const BoardCardPageComponent = ({
                                 !isExpanded &&
                                     cn(
                                         "h-[calc(100dvh-theme(spacing.6))] max-h-[calc(100dvh-theme(spacing.6))]",
-                                        "max-w-[100vw] overflow-visible bg-transparent",
+                                        "w-[calc(100vw-theme(spacing.4))] max-w-[calc(100vw-theme(spacing.4))] overflow-visible bg-transparent",
                                         "sm:h-[calc(100dvh-theme(spacing.8))] sm:max-h-[calc(100dvh-theme(spacing.8))]",
-                                        "sm:max-w-[90vw] lg:max-w-[1120px]"
+                                        "sm:w-[calc(100vw-theme(spacing.12))] sm:max-w-[calc(100vw-theme(spacing.12))]",
+                                        "lg:w-[min(calc(100vw-theme(spacing.12)),theme(screens.xl))]",
+                                        "lg:max-w-[min(calc(100vw-theme(spacing.12)),theme(screens.xl))]",
+                                        "2xl:w-[min(calc(100vw-theme(spacing.16)),theme(screens.2xl))]",
+                                        "2xl:max-w-[min(calc(100vw-theme(spacing.16)),theme(screens.2xl))]"
                                     ),
                                 shouldHideForCardSelection && "pointer-events-none -z-[9998] opacity-0"
                             )}

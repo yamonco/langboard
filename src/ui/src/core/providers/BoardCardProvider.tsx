@@ -82,7 +82,8 @@ const BoardCardPanelContext = createContext<IBoardCardPanelContext>(initialPanel
 export const BoardCardProvider = ({ projectUID, card, currentUser, viewportRef, children }: IBoardCardProviderProps): React.ReactNode => {
     const socket = useSocket();
     const replyRef = useRef<(target: TUserLikeModel) => void>(() => {});
-    const [isCommentPanelOpen, setIsCommentPanelOpen] = useState(false);
+    const commentCount = card.useField("count_comment");
+    const [isCommentPanelOpen, setIsCommentPanelOpen] = useState(() => commentCount > 0);
     const [isActionPanelOpen, setIsActionPanelOpen] = useState(false);
     const [commentLayoutMode, setCommentLayoutMode] = useState<"mobile" | "panel">("mobile");
     const [cardEditMode, setCardEditMode] = useState<"view" | "edit">("view");

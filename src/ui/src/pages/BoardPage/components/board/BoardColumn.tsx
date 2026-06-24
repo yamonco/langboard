@@ -22,19 +22,29 @@ import useBoardUIColumnDeletedHandlers from "@/controllers/socket/board/column/u
 import { Utils } from "@langboard/core/utils";
 import { columnRowDndHelpers } from "@/core/helpers/dnd";
 import { TColumnState } from "@/core/helpers/dnd/types";
-import { BLOCK_BOARD_PANNING_ATTR, BOARD_DND_SETTINGS, BOARD_DND_SYMBOL_SET } from "@/pages/BoardPage/components/board/BoardConstants";
+import {
+    BLOCK_BOARD_PANNING_ATTR,
+    BOARD_COLUMN_MAX_HEIGHT_CLASS_NAMES,
+    BOARD_COLUMN_TOUCH_DND_ATTR,
+    BOARD_DND_SETTINGS,
+    BOARD_DND_SYMBOL_SET,
+} from "@/pages/BoardPage/components/board/BoardConstants";
 import { COLUMN_IDLE } from "@/core/helpers/dnd/createDndColumnEvents";
 import useRowReordered from "@/core/hooks/useRowReordered";
 import { useHasRunningBot } from "@/core/stores/BotStatusStore";
-import { ProjectRole } from "@/core/models/roles";
 
 export function SkeletonBoardColumn({ cardCount }: { cardCount: number }) {
     return (
-        <Card.Root className="my-1 w-80 flex-shrink-0 border-transparent">
+        <Card.Root
+            className={cn(
+                BOARD_COLUMN_MAX_HEIGHT_CLASS_NAMES,
+                "my-1 grid w-80 flex-shrink-0 grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden border-transparent"
+            )}
+        >
             <Card.Header className="flex flex-row items-start space-y-0 pb-1 pt-4 text-left font-semibold">
                 <Skeleton h="6" className="w-1/3" />
             </Card.Header>
-            <Card.Content className="flex max-h-[calc(100vh_-_theme(spacing.52))] flex-grow flex-col gap-2 overflow-hidden p-3">
+            <Card.Content className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden p-3">
                 <Box pb="2.5" className="overflow-hidden">
                     <Flex direction="col" gap="3">
                         {Array.from({ length: cardCount }).map(() => (
@@ -60,7 +70,6 @@ export interface IBoardColumnProps {
 }
 
 function BoardColumn({ column, updateBoard }: IBoardColumnProps) {
-    const { hasRoleAction } = useBoard();
     const scrollableRef = useRef<HTMLDivElement | null>(null);
     const outerFullHeightRef = useRef<HTMLDivElement | null>(null);
     const headerRef = useRef<HTMLDivElement | null>(null);
@@ -107,24 +116,23 @@ function BoardColumn({ column, updateBoard }: IBoardColumnProps) {
         <BoardAddCardProvider column={column} viewportRef={scrollableRef} toLastPage={() => {}}>
             <Card.Root
                 ref={outerFullHeightRef}
+                {...{ [BOARD_COLUMN_TOUCH_DND_ATTR]: column.uid }}
                 className={cn(
-                    "relative my-1 w-72 flex-shrink-0 snap-center shadow-md shadow-black/30 ring-primary dark:shadow-border/90 sm:w-80",
+                    BOARD_COLUMN_MAX_HEIGHT_CLASS_NAMES,
+                    "relative my-1 grid w-72 flex-shrink-0 snap-center grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden shadow-md",
+                    "shadow-black/30 ring-primary dark:shadow-border/90 sm:w-80",
                     stateStyles[state.type]
                 )}
             >
                 {hasRunningBot && <ShineBorder />}
                 <BoardColumnHeader isDragging={state.type !== "idle"} column={column} headerProps={{ ref: headerRef }} />
-                <ScrollArea.Root viewportRef={scrollableRef} viewportClassName="!overflow-y-auto" mutable={`${state.type}:${cardCount}`}>
-                    <Card.Content
-                        className={cn(
-                            "flex flex-grow flex-col gap-2 p-3",
-                            hasRoleAction(ProjectRole.EAction.CardWrite) && !column.is_archive
-                                ? "max-h-[calc(100vh_-_theme(spacing.64)_-_theme(spacing.2))]"
-                                : "max-h-[calc(100vh_-_theme(spacing.56)_-_theme(spacing.1))]"
-                        )}
-                        {...{ [BLOCK_BOARD_PANNING_ATTR]: true }}
-                        ref={innerRef}
-                    >
+                <ScrollArea.Root
+                    className="min-h-0 flex-1"
+                    viewportRef={scrollableRef}
+                    viewportClassName="!overflow-y-auto overscroll-contain touch-pan-y"
+                    mutable={`${state.type}:${cardCount}`}
+                >
+                    <Card.Content className="flex min-h-0 touch-pan-y flex-col gap-2 p-3" {...{ [BLOCK_BOARD_PANNING_ATTR]: true }} ref={innerRef}>
                         <BoardColumnCardList
                             column={column}
                             updateBoard={updateBoard}
@@ -135,7 +143,7 @@ function BoardColumn({ column, updateBoard }: IBoardColumnProps) {
                         <BoardColumnAddCard />
                     </Card.Content>
                 </ScrollArea.Root>
-                <Card.Footer className="px-3 py-2">
+                <Card.Footer className="shrink-0 px-3 py-2">
                     <BoardColumnAddCardButton />
                 </Card.Footer>
             </Card.Root>

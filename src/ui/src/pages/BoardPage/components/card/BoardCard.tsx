@@ -115,7 +115,7 @@ const BoardCard = memo(
                 {!cardData || isFetching ? (
                     <SkeletonBoardCard />
                 ) : (
-                    <BoardCardProvider projectUID={projectUID} card={cardData.card} currentUser={currentUser} viewportRef={viewportRef}>
+                    <BoardCardProvider key={cardUID} projectUID={projectUID} card={cardData.card} currentUser={currentUser} viewportRef={viewportRef}>
                         <BoardCardResult
                             isExpanded={isExpanded}
                             setIsExpanded={setIsExpanded}
@@ -522,7 +522,7 @@ function BoardCardFloatingNav({ isExpanded }: { isExpanded: bool }): React.JSX.E
     return (
         <>
             <Floating.Nav
-                className={cn("z-[110]", !isExpanded && "max-w-[100vw] sm:max-w-[90vw] lg:max-w-[1120px]")}
+                className={cn("z-[110]", !isExpanded && "mx-auto max-w-[100vw] sm:max-w-[90vw] lg:max-w-[1120px]")}
                 contentClassName="bg-background"
                 itemClassName="h-10 px-3"
                 labelClassName="hidden md:inline"

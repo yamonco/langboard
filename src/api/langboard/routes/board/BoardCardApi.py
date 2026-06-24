@@ -63,6 +63,7 @@ from .forms import (
                     {
                         "schema": {
                             "project_column_name": "string",
+                            "count_comment": "integer",
                             "project_members": [User],
                             "labels": [ProjectLabel],
                             "member_uids": "string[]",

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import invariant from "tiny-invariant";
 import BoardColumn, { SkeletonBoardColumn } from "@/pages/BoardPage/components/board/BoardColumn";
 import { bindAll } from "bind-event-listener";
@@ -20,6 +20,8 @@ import { columnRowDndHelpers } from "@/core/helpers/dnd";
 import setupApiErrorHandler from "@/core/helpers/setupApiErrorHandler";
 import useColumnReordered from "@/core/hooks/useColumnReordered";
 import { useBoardController } from "@/core/providers/BoardController";
+import { cn } from "@/core/utils/ComponentUtils";
+import useBoardTouchCardDnd from "@/pages/BoardPage/components/board/useBoardTouchCardDnd";
 
 export function SkeletonBoard() {
     const [cardCounts, setCardCounts] = useState([1, 3, 2]);
@@ -60,7 +62,14 @@ export function SkeletonBoard() {
                 </Flex>
             </Flex>
 
-            <Box position="relative" h="full" className="max-h-[calc(100vh_-_theme(spacing.28)_-_theme(spacing.2))] overflow-hidden">
+            <Box
+                position="relative"
+                h="full"
+                className={cn(
+                    "max-h-[calc(100dvh_-_theme(spacing.28)_-_theme(spacing.2)_-_theme(spacing.16))]",
+                    "overflow-hidden md:max-h-[calc(100dvh_-_theme(spacing.28)_-_theme(spacing.2))]"
+                )}
+            >
                 <Box size="full" className="rounded-[inherit]">
                     <Flex direction="row" items="start" gap="10" p="4">
                         {cardCounts.map((count) => (
@@ -78,11 +87,14 @@ export function Board() {
 
     return (
         <ScrollArea.Root
-            className="h-[calc(100vh_-_theme(spacing.28)_-_theme(spacing.2))]"
+            className={cn(
+                "h-[calc(100dvh_-_theme(spacing.28)_-_theme(spacing.2)_-_theme(spacing.16))]",
+                "min-h-0 md:h-[calc(100dvh_-_theme(spacing.28)_-_theme(spacing.2))]"
+            )}
             viewportClassName="!overflow-x-auto"
             viewportRef={scrollableRef}
         >
-            <Flex direction="row" items="start" gap={{ initial: "6", sm: "8" }} p="4" h="full">
+            <Flex direction="row" items="start" gap={{ initial: "6", sm: "8" }} p="4" h="full" className="min-h-0">
                 <BoardDisplay scrollableRef={scrollableRef} />
             </Flex>
             <ScrollArea.Bar orientation="horizontal" />
@@ -106,22 +118,56 @@ function BoardDisplay({ scrollableRef }: { scrollableRef: React.RefObject<HTMLDi
     const { mutate: changeColumnOrderMutate } = useChangeProjectColumnOrder();
     const { mutate: changeCardOrderMutate } = useChangeCardOrder();
 
+    const setupApiErrors = useCallback((error: unknown, undo: () => void) => {
+        const { handle } = setupApiErrorHandler({
+            code: {
+                after: undo,
+            },
+            wildcard: {
+                after: undo,
+            },
+        });
+
+        handle(error);
+    }, []);
+
+    const changeColumnOrder = useCallback(
+        ({ columnUID, order, undo }: { columnUID: string; order: number; undo: () => void }) => {
+            changeColumnOrderMutate(
+                { project_uid: project.uid, project_column_uid: columnUID, order },
+                {
+                    onError: (error) => setupApiErrors(error, undo),
+                    onSettled: forceUpdate,
+                }
+            );
+        },
+        [changeColumnOrderMutate, forceUpdate, project, setupApiErrors]
+    );
+
+    const changeRowOrder = useCallback(
+        ({ rowUID, order, parentUID, undo }: { rowUID: string; order: number; parentUID?: string; undo: () => void }) => {
+            changeCardOrderMutate(
+                { project_uid: project.uid, parent_uid: parentUID, card_uid: rowUID, order },
+                {
+                    onError: (error) => setupApiErrors(error, undo),
+                    onSettled: forceUpdate,
+                }
+            );
+        },
+        [changeCardOrderMutate, forceUpdate, project, setupApiErrors]
+    );
+
+    useBoardTouchCardDnd({
+        enabled: canDragAndDrop,
+        scrollableRef,
+        columns,
+        rowsMap: cardsMap,
+        changeRowOrder,
+    });
+
     useEffect(() => {
         const scrollable = scrollableRef.current;
         invariant(scrollable);
-
-        const setupApiErrors = (error: unknown, undo: () => void) => {
-            const { handle } = setupApiErrorHandler({
-                code: {
-                    after: undo,
-                },
-                wildcard: {
-                    after: undo,
-                },
-            });
-
-            handle(error);
-        };
 
         return columnRowDndHelpers.root({
             columns,
@@ -130,26 +176,10 @@ function BoardDisplay({ scrollableRef }: { scrollableRef: React.RefObject<HTMLDi
             symbolSet: BOARD_DND_SYMBOL_SET,
             scrollable,
             settings: BOARD_DND_SETTINGS,
-            changeColumnOrder: ({ columnUID, order, undo }) => {
-                changeColumnOrderMutate(
-                    { project_uid: project.uid, project_column_uid: columnUID, order },
-                    {
-                        onError: (error) => setupApiErrors(error, undo),
-                        onSettled: forceUpdate,
-                    }
-                );
-            },
-            changeRowOrder: ({ rowUID, order, parentUID, undo }) => {
-                changeCardOrderMutate(
-                    { project_uid: project.uid, parent_uid: parentUID, card_uid: rowUID, order },
-                    {
-                        onError: (error) => setupApiErrors(error, undo),
-                        onSettled: forceUpdate,
-                    }
-                );
-            },
+            changeColumnOrder,
+            changeRowOrder,
         });
-    }, [cardsMap, changeCardOrderMutate, changeColumnOrderMutate, chatResizableSidebar, columns, forceUpdate, project]);
+    }, [cardsMap, changeColumnOrder, changeRowOrder, chatResizableSidebar, columns, scrollableRef]);
 
     // Panning the board
     useEffect(() => {

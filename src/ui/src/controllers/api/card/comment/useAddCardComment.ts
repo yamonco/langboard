@@ -2,8 +2,6 @@ import { sanitizeEditorValue } from "@/components/Editor/utils";
 import { Routing } from "@langboard/core/constants";
 import { api } from "@/core/helpers/Api";
 import { TMutationOptions, useQueryMutation } from "@/core/helpers/QueryMutation";
-import { addPendingLocalCommentCount } from "@/controllers/socket/card/comment/commentCountSync";
-import { ProjectCard } from "@/core/models";
 import { IEditorContent } from "@/core/models/Base";
 import { Utils } from "@langboard/core/utils";
 
@@ -29,12 +27,6 @@ const useAddCardComment = (options?: TMutationOptions<IAddCardCommentForm>) => {
                 } as never,
             }
         );
-
-        const card = ProjectCard.Model.getModel(params.card_uid);
-        if (card && Utils.Type.isNumber(card.count_comment)) {
-            card.count_comment = card.count_comment + 1;
-            addPendingLocalCommentCount(params.card_uid);
-        }
 
         return res.data;
     };

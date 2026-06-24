@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import invariant from "tiny-invariant";
-import { BOARD_DND_SYMBOL_SET } from "@/pages/BoardPage/components/board/BoardConstants";
+import { BOARD_CARD_TOUCH_DND_ATTR, BOARD_DND_SYMBOL_SET } from "@/pages/BoardPage/components/board/BoardConstants";
 import { ProjectCard, ProjectCardRelationship } from "@/core/models";
 import Box from "@/components/base/Box";
 import Card from "@/components/base/Card";
@@ -80,7 +80,7 @@ function BoardColumnCard({ card }: { card: ProjectCard.TModel }) {
                 });
             },
         });
-    }, [card, order, columnUID]);
+    }, [canDragAndDrop, card, order, columnUID]);
 
     return (
         <>
@@ -123,7 +123,7 @@ function BoardColumnCardDisplay({
     const cardClassName = cn(
         "relative min-w-[theme(spacing.72)_+_theme(spacing.1)]",
         canDragAndDrop
-            ? "cursor-pointer touch-none"
+            ? "cursor-pointer touch-pan-y"
             : cn(
                   !selectCardViewType || !isDisabledCard(card.uid) ? "cursor-pointer" : "cursor-not-allowed",
                   !!selectCardViewType && currentCardUIDRef.current === card.uid && "hidden",
@@ -140,6 +140,7 @@ function BoardColumnCardDisplay({
                 <Box
                     className={cardClassName}
                     ref={outerRef}
+                    {...{ [BOARD_CARD_TOUCH_DND_ATTR]: card.uid }}
                     style={relationshipSelectionActor ? ({ "--tw-ring-color": relationshipSelectionActor.color } as React.CSSProperties) : undefined}
                 >
                     {relationshipSelectionActor ? (

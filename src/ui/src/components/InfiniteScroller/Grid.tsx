@@ -1,4 +1,4 @@
-import { Children, cloneElement, forwardRef, isValidElement, useLayoutEffect, useRef, useState } from "react";
+import { Children, cloneElement, forwardRef, isValidElement, useCallback, useLayoutEffect, useRef, useState } from "react";
 import { cn } from "@/core/utils/ComponentUtils";
 import useInfiniteScrollerVirtualizer from "@/components/InfiniteScroller/useInfiniteScrollerVirtualizer";
 import { TSharedInfiniteScrollerProps } from "@/components/InfiniteScroller/types";
@@ -52,36 +52,60 @@ const GridInfiniteScroller = forwardRef<HTMLElement, IGridInfiniteScrollerProps>
 
         const flatItems = Children.toArray(children).filter(isValidElement) as React.ReactElement[];
         const [columnCount, setColumnCount] = useState(1);
+        const measureColumnCount = useCallback(() => {
+            const rowEl = measureRef.current;
+            if (!rowEl) {
+                return;
+            }
+
+            const children = Array.from(rowEl.children);
+            let firstChildOffsetTop = -1;
+            let count = 0;
+            for (let i = 0; i < children.length; ++i) {
+                const child = children[i] as HTMLElement;
+                if (child.offsetParent === null) {
+                    continue;
+                }
+
+                if (firstChildOffsetTop === -1) {
+                    firstChildOffsetTop = child.offsetTop;
+                }
+
+                if (firstChildOffsetTop !== child.offsetTop) {
+                    break;
+                }
+
+                ++count;
+            }
+
+            if (count > 0) {
+                setColumnCount((prev) => (prev === count ? prev : count));
+            }
+        }, []);
 
         // measure column count from actual DOM (via user-defined grid classes)
         useLayoutEffect(() => {
             const rowEl = measureRef.current;
-            if (rowEl) {
-                const children = Array.from(rowEl.children);
-                let firstChildOffsetTop = -1;
-                let count = 0;
-                for (let i = 0; i < children.length; ++i) {
-                    const child = children[i] as HTMLElement;
-                    if (child.offsetParent === null) {
-                        continue;
-                    }
-
-                    if (firstChildOffsetTop === -1) {
-                        firstChildOffsetTop = child.offsetTop;
-                    }
-
-                    if (firstChildOffsetTop !== child.offsetTop) {
-                        break;
-                    }
-
-                    ++count;
-                }
-
-                if (count > 0) {
-                    setColumnCount(count);
-                }
+            if (!rowEl) {
+                return;
             }
-        }, [children]);
+
+            let frame = window.requestAnimationFrame(measureColumnCount);
+            const resizeObserver = new ResizeObserver(() => {
+                window.cancelAnimationFrame(frame);
+                frame = window.requestAnimationFrame(measureColumnCount);
+            });
+
+            resizeObserver.observe(rowEl);
+            if (containerRef.current) {
+                resizeObserver.observe(containerRef.current);
+            }
+
+            return () => {
+                window.cancelAnimationFrame(frame);
+                resizeObserver.disconnect();
+            };
+        }, [measureColumnCount, flatItems.length, rowClassName]);
 
         gap = Utils.Type.isString(gap) ? parseInt(gap) : gap;
 
