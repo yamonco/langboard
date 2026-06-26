@@ -1,6 +1,8 @@
 from json import dumps as json_dumps
+from re import compile as re_compile
 from re import sub as re_sub
 from typing import Any, cast
+import httpx
 from langboard_shared.core.logger import Logger
 from langboard_shared.Env import Env
 from langchain.chat_models import init_chat_model
@@ -8,10 +10,11 @@ from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage, To
 from langchain_core.tools import StructuredTool
 from langgraph.types import interrupt
 from .context import create_runtime_context_state
+from .history import create_langboard_history_context_prompt
 from .state import DefaultGraphState
 from .tooling import (
-    create_langboard_api_approval_request,
-    create_langboard_api_tools,
+    create_langboard_api_tool_approval_request,
+    create_langboard_api_tool_context,
     create_langboard_context_prompt,
     create_langboard_entity_context_prompt,
     create_langboard_event_input,
@@ -50,6 +53,8 @@ _LANGBOARD_RESPONSE_RULES = "\n".join(
         "- When reporting an action result, use human-readable project, column, card, wiki, bot, or user names instead of uid values.",
         "- Never guess uid fields from human-readable names. If a user gives a card, column, wiki, project, bot, label, or user name, first use the relevant lookup/list API and then use the returned uid.",
         "- For card title tasks, use card lookup or project card list APIs before calling card detail, metadata, edit, relationship, checklist, comment, archive, or delete APIs.",
+        "- For card creation or card movement tasks that name a board column, first call the project column list API and use the returned project_column_uid.",
+        "- When a read/list API is needed to continue, call it immediately. Do not tell the user to wait for a lookup that you are not going to perform.",
     ]
 )
 _INTERNAL_UID_KEYS = (
@@ -66,6 +71,7 @@ _INTERNAL_UID_KEYS = (
     "thread_id",
     "session_id",
 )
+_LANGBOARD_UID_PATTERN = re_compile(r"^[0-9A-Za-z]{11}$")
 
 
 def _get_graph_config(tweaks: dict[str, Any]) -> tuple[str | None, dict[str, Any], str]:
@@ -131,14 +137,9 @@ def _create_chat_model(agent_llm: str | None, settings: dict[str, Any]):
 async def run_default_agent(state: DefaultGraphState) -> DefaultGraphState:
     input_value = state.get("input_value") or ""
     tweaks = state.get("tweaks") or {}
+    _reset_run_transient_state(state)
     _set_runtime_context_state(state, tweaks)
     approval_request = _get_approval_request(tweaks, state)
-    if approval_request is None:
-        approval_request = await create_langboard_api_approval_request(
-            tweaks,
-            thread_id=state.get("thread_id"),
-            session_id=state.get("session_id"),
-        )
     if approval_request is not None:
         state["approval_requests"] = (
             [approval_request] if isinstance(approval_request, dict) else [{"message": str(approval_request)}]
@@ -175,16 +176,35 @@ async def run_default_agent(state: DefaultGraphState) -> DefaultGraphState:
     entity_context_prompt = await create_langboard_entity_context_prompt(tweaks, input_value)
     if entity_context_prompt:
         messages.append(SystemMessage(content=entity_context_prompt))
+    history_context_prompt = state.get("history_context_prompt")
+    if history_context_prompt is None:
+        history_context_prompt = create_langboard_history_context_prompt(tweaks, state)
+    if history_context_prompt:
+        messages.append(SystemMessage(content=history_context_prompt))
     messages.append(HumanMessage(content=input_value))
 
-    tools = await create_langboard_api_tools(tweaks)
-    result, tool_results = await _invoke_agent(chat_model, messages, tools)
+    tools, api_tool_context = await create_langboard_api_tool_context(tweaks)
+    result, tool_results = await _invoke_agent(
+        chat_model,
+        messages,
+        tools,
+        tweaks=tweaks,
+        state=state,
+        api_tool_context=api_tool_context,
+    )
     state["tool_results"] = tool_results
     content = result.content
     if isinstance(content, str):
         state["response"] = _sanitize_user_response(content)
     else:
         state["response"] = json_dumps(content, ensure_ascii=False)
+    return state
+
+
+def collect_default_history_context(state: DefaultGraphState) -> DefaultGraphState:
+    tweaks = state.get("tweaks") or {}
+    _set_runtime_context_state(state, tweaks)
+    create_langboard_history_context_prompt(tweaks, state)
     return state
 
 
@@ -200,7 +220,16 @@ def _set_runtime_context_state(state: DefaultGraphState, tweaks: dict[str, Any])
     state.update(create_runtime_context_state(tweaks))
 
 
-def _apply_approved_api_context(tweaks: dict[str, Any], approval_result: Any) -> None:
+def _reset_run_transient_state(state: DefaultGraphState) -> None:
+    state["approval_requests"] = []
+    state["approval_result"] = None
+    state["tool_results"] = []
+    state["response"] = ""
+
+
+def _apply_approved_api_context(
+    tweaks: dict[str, Any], approval_result: Any, *, apply_approval_policy: bool = True
+) -> None:
     if not isinstance(approval_result, dict) or not approval_result.get("approved") or approval_result.get("rejected"):
         return
 
@@ -208,6 +237,9 @@ def _apply_approved_api_context(tweaks: dict[str, Any], approval_result: Any) ->
     app_api_token = approval_result.get("app_api_token")
     if isinstance(app_api_token, str) and app_api_token.strip():
         variables["app_api_token"] = app_api_token
+
+    if not apply_approval_policy:
+        return
 
     api_approval_policy = approval_result.get("api_approval_policy")
     if isinstance(api_approval_policy, dict):
@@ -411,6 +443,10 @@ async def _invoke_agent(
     chat_model: Any,
     messages: list[BaseMessage],
     tools: list[StructuredTool],
+    *,
+    tweaks: dict[str, Any] | None = None,
+    state: DefaultGraphState | None = None,
+    api_tool_context: dict[str, dict[str, Any]] | None = None,
 ) -> tuple[BaseMessage, list[dict[str, Any]]]:
     if not tools:
         return await _invoke_chat_model(chat_model, messages), []
@@ -434,12 +470,29 @@ async def _invoke_agent(
             return result, tool_results
 
         for tool_call in tool_calls[:8]:
-            tool_name = tool_call.get("name")
+            tool_name = str(tool_call.get("name") or "")
             tool = tool_map.get(tool_name)
             if not tool:
                 continue
 
             tool_args = tool_call.get("args") or {}
+            approval_result = await _get_tool_approval_result(
+                tool_name,
+                tool_args if isinstance(tool_args, dict) else {},
+                tweaks=tweaks,
+                state=state,
+                api_tool_context=api_tool_context,
+            )
+            if approval_result is not None:
+                tool_results.append({"name": tool_name, "args": tool_args, "result": approval_result})
+                current_messages.append(
+                    ToolMessage(
+                        content=str(approval_result),
+                        tool_call_id=tool_call.get("id") or tool_name,
+                    )
+                )
+                continue
+
             try:
                 tool_result = await tool.ainvoke(tool_args)
             except Exception as exc:
@@ -455,6 +508,197 @@ async def _invoke_agent(
 
     final_result = await _invoke_chat_model(chat_model, current_messages)
     return final_result, tool_results
+
+
+async def _get_tool_approval_result(
+    tool_name: str,
+    tool_args: dict[str, Any],
+    *,
+    tweaks: dict[str, Any] | None,
+    state: DefaultGraphState | None,
+    api_tool_context: dict[str, dict[str, Any]] | None,
+) -> str | None:
+    if tweaks is None or state is None:
+        return None
+
+    tool_metadata = (api_tool_context or {}).get(tool_name)
+    uid_resolution_result = await _resolve_tool_uid_args(tool_name, tool_args, tool_metadata)
+    if uid_resolution_result:
+        return uid_resolution_result
+
+    invalid_uid_result = _get_invalid_uid_tool_arg_result(tool_name, tool_args)
+    if invalid_uid_result:
+        return invalid_uid_result
+
+    approval_request = create_langboard_api_tool_approval_request(
+        tweaks,
+        tool_metadata,
+        tool_args,
+        tool_name=tool_name,
+        thread_id=state.get("thread_id"),
+        session_id=state.get("session_id"),
+    )
+    if approval_request is None:
+        return None
+
+    state["approval_requests"] = [approval_request]
+    state["approval_result"] = interrupt(approval_request)
+    approval_result = state["approval_result"]
+    instruction = _get_approval_instruction(approval_result)
+
+    if _is_rejected_approval_result(approval_result):
+        return _get_rejected_approval_response(approval_result)
+
+    if _is_approved_approval_result(approval_result):
+        _apply_approved_api_context(tweaks, approval_result, apply_approval_policy=False)
+        return None
+
+    _apply_instruction_api_context(tweaks)
+    if instruction:
+        return f"Tool {tool_name} was not approved. Latest human instruction: {instruction}"
+    return f"Tool {tool_name} was not approved."
+
+
+async def _resolve_tool_uid_args(
+    tool_name: str, tool_args: dict[str, Any], tool_metadata: dict[str, Any] | None
+) -> str:
+    if not isinstance(tool_metadata, dict) or tool_metadata.get("api_name") != "create_card":
+        return ""
+
+    column_arg = _get_tool_arg(tool_args, "form_project_column_uid", "form", "project_column_uid")
+    if not column_arg:
+        return ""
+
+    column_name = column_arg[1]
+    if not isinstance(column_name, str) or _is_langboard_uid_like(column_name):
+        return ""
+
+    resolved_uid = await _resolve_project_column_uid(column_name, tool_args, tool_metadata)
+    if not resolved_uid:
+        return (
+            f"Tool {tool_name} was not executed because project column {column_name!r} could not be resolved to an "
+            "existing column uid. Use get_project_columns to inspect existing columns. Do not create a new column "
+            "unless the user explicitly asks to create a column."
+        )
+
+    _set_tool_arg(tool_args, column_arg[0], "form", "project_column_uid", resolved_uid)
+    return ""
+
+
+async def _resolve_project_column_uid(
+    column_name: str, tool_args: dict[str, Any], tool_metadata: dict[str, Any]
+) -> str:
+    base_url = tool_metadata.get("base_url")
+    headers = tool_metadata.get("headers")
+    variables = tool_metadata.get("variables")
+    if not isinstance(base_url, str) or not isinstance(headers, dict) or not isinstance(variables, dict):
+        return ""
+
+    project_uid = _get_project_uid_for_tool(tool_args, variables)
+    if not project_uid:
+        return ""
+
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            response = await client.get(
+                f"{base_url}/board/{project_uid}/columns", headers=cast(dict[str, str], headers)
+            )
+            response.raise_for_status()
+            data = response.json()
+    except Exception:
+        return ""
+
+    columns = data.get("columns")
+    if not isinstance(columns, list):
+        return ""
+
+    normalized_column_name = column_name.casefold()
+    matches = [
+        column
+        for column in columns
+        if isinstance(column, dict) and str(column.get("name") or "").casefold() == normalized_column_name
+    ]
+    if len(matches) != 1:
+        return ""
+
+    uid = matches[0].get("uid")
+    return uid if isinstance(uid, str) and _is_langboard_uid_like(uid) else ""
+
+
+def _get_project_uid_for_tool(tool_args: dict[str, Any], variables: dict[str, Any]) -> str:
+    project_arg = _get_tool_arg(tool_args, "project_uid", "query", "project_uid")
+    if project_arg and isinstance(project_arg[1], str):
+        return project_arg[1]
+
+    rest_data = _get_rest_data(variables)
+    project_uid = rest_data.get("project_uid") or variables.get("project_uid")
+    return project_uid if isinstance(project_uid, str) else ""
+
+
+def _get_tool_arg(
+    tool_args: dict[str, Any], direct_key: str, nested_key: str, nested_value_key: str
+) -> tuple[str, Any] | None:
+    if direct_key in tool_args:
+        return direct_key, tool_args.get(direct_key)
+
+    nested_value = tool_args.get(nested_key)
+    if isinstance(nested_value, dict) and nested_value_key in nested_value:
+        return f"{nested_key}.{nested_value_key}", nested_value.get(nested_value_key)
+
+    return None
+
+
+def _set_tool_arg(tool_args: dict[str, Any], path: str, nested_key: str, nested_value_key: str, value: str) -> None:
+    if "." not in path:
+        tool_args[path] = value
+        return
+
+    nested_value = tool_args.get(nested_key)
+    if isinstance(nested_value, dict):
+        nested_value[nested_value_key] = value
+
+
+def _get_invalid_uid_tool_arg_result(tool_name: str, tool_args: dict[str, Any]) -> str:
+    invalid_uid_args = _get_invalid_uid_arg_paths(tool_args)
+    if not invalid_uid_args:
+        return ""
+
+    invalid_list = ", ".join(f"{path}={value!r}" for path, value in invalid_uid_args[:6])
+    return (
+        f"Tool {tool_name} was not executed because these UID arguments are not valid Langboard UIDs: "
+        f"{invalid_list}. Use the relevant read/list API to resolve human-readable names to exact uid values, "
+        f"then call {tool_name} again with those uid values. Never use names or placeholder values in uid fields."
+    )
+
+
+def _get_invalid_uid_arg_paths(value: Any, path: str = "", *, uid_context: bool = False) -> list[tuple[str, str]]:
+    invalid_args: list[tuple[str, str]] = []
+    if isinstance(value, dict):
+        for key, child_value in value.items():
+            child_path = f"{path}.{key}" if path else str(key)
+            child_uid_context = _is_uid_arg_name(str(key))
+            invalid_args.extend(_get_invalid_uid_arg_paths(child_value, child_path, uid_context=child_uid_context))
+        return invalid_args
+
+    if isinstance(value, (list, tuple)):
+        for index, child_value in enumerate(value):
+            child_path = f"{path}[{index}]"
+            invalid_args.extend(_get_invalid_uid_arg_paths(child_value, child_path, uid_context=uid_context))
+        return invalid_args
+
+    if uid_context and isinstance(value, str) and value and not _is_langboard_uid_like(value):
+        invalid_args.append((path, value))
+
+    return invalid_args
+
+
+def _is_uid_arg_name(name: str) -> bool:
+    normalized_name = name.lower()
+    return normalized_name in {"uid", "uids"} or normalized_name.endswith("_uid") or normalized_name.endswith("_uids")
+
+
+def _is_langboard_uid_like(value: str) -> bool:
+    return bool(_LANGBOARD_UID_PATTERN.fullmatch(value)) or (value.isdigit() and len(value) >= 15)
 
 
 async def _invoke_chat_model(chat_model: Any, messages: list[BaseMessage]) -> BaseMessage:

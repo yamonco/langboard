@@ -19,7 +19,11 @@ abstract class GraphRequest extends BaseRequest {
 
     protected createChatThreadId(requestModel: IBotRequestModel, sessionId: string): string {
         const projectUID = requestModel.projectUID ?? "global";
-        return [this.internalBot.uid, requestModel.userId, projectUID, sessionId, requestModel.runId ?? sessionId].join(":");
+        const parts = [this.internalBot.uid, requestModel.userId, projectUID, sessionId];
+        if (requestModel.threadScope !== "session") {
+            parts.push(requestModel.runId ?? sessionId);
+        }
+        return parts.join(":");
     }
 
     protected createStreamResponse({ requestModel, headers, task }: Omit<IRequestParams, "useStream">): BaseStreamResponse {

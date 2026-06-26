@@ -10,6 +10,7 @@ export interface IBotRequestModel {
     outputType?: string;
     sessionId?: string;
     runId?: string;
+    threadScope?: "run" | "session";
     tweaks?: Record<string, Record<string, any>>;
     restData?: Record<string, any> & {
         api_permission_level?: EAgentPermissionLevel;

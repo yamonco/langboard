@@ -267,6 +267,8 @@ EventManager.on(ESocketTopic.Board, SocketEvents.CLIENT.BOARD.CHAT.SEND, async (
     const [internalBot, internalBotSettings] = internalBotResult;
     const apiPermissionLevel = isAgentPermissionLevel(data?.api_permission_level) ? data.api_permission_level : EAgentPermissionLevel.Read;
     const restData: Record<string, any> = {
+        project_uid: topicId,
+        chat_scope: "project",
         api_permission_level: apiPermissionLevel,
         api_approval_policy: AGENT_PERMISSION_LEVEL_APPROVAL_POLICY[apiPermissionLevel],
     };
@@ -300,35 +302,6 @@ EventManager.on(ESocketTopic.Board, SocketEvents.CLIENT.BOARD.CHAT.SEND, async (
             "The API will automatically update the active collaborative draft instead of saving directly.",
             "Do not store unsaved draft values in metadata.",
         ].join(" ");
-    }
-
-    const response = await BotRunner.runAbortable({
-        internalBot,
-        internalBotSettings,
-        taskID: task_id,
-        data: {
-            message,
-            file_path,
-            task_id,
-            session_uid,
-            project_uid: topicId,
-            user_id: client.user.id,
-            rest_data: restData,
-        },
-    });
-
-    if (!response) {
-        client.send({
-            event: SocketEvents.SERVER.BOARD.CHAT.IS_AVAILABLE,
-            topic: ESocketTopic.Board,
-            topic_id: topicId,
-        });
-        return;
-    }
-
-    const isAborted = BotRunner.createAbortedChecker(EInternalBotType.ProjectChat, task_id);
-    if (isAborted()) {
-        return;
     }
 
     let chatSession: ChatSession | null = null;
@@ -415,6 +388,10 @@ EventManager.on(ESocketTopic.Board, SocketEvents.CLIENT.BOARD.CHAT.SEND, async (
     }).save();
     await chatSession.updateLastMessagedAt(userMessage.created_at);
 
+    restData.chat_session_uid = new SnowflakeID(chatSession.id).toShortCode();
+    restData.project_chat_session_uid = session.uid;
+    restData.chat_history_uid = userMessage.uid;
+
     client.send({
         event: SocketEvents.SERVER.BOARD.CHAT.SENT,
         topic: ESocketTopic.Board,
@@ -422,6 +399,31 @@ EventManager.on(ESocketTopic.Board, SocketEvents.CLIENT.BOARD.CHAT.SEND, async (
         data: { user_message: { ...userMessage.apiResponse, chat_session_uid: session.uid } },
     });
 
+    const response = await BotRunner.runAbortable({
+        internalBot,
+        internalBotSettings,
+        taskID: task_id,
+        data: {
+            message,
+            file_path,
+            task_id,
+            session_uid: session.uid,
+            project_uid: topicId,
+            user_id: client.user.id,
+            rest_data: restData,
+        },
+    });
+
+    if (!response) {
+        client.send({
+            event: SocketEvents.SERVER.BOARD.CHAT.IS_AVAILABLE,
+            topic: ESocketTopic.Board,
+            topic_id: topicId,
+        });
+        return;
+    }
+
+    const isAborted = BotRunner.createAbortedChecker(EInternalBotType.ProjectChat, task_id);
     if (isAborted()) {
         return;
     }
@@ -455,9 +457,8 @@ EventManager.on(ESocketTopic.Board, SocketEvents.CLIENT.BOARD.CHAT.SEND, async (
     let lastContent: string | undefined = undefined;
 
     const saveMessage = async () => {
-        await ChatHistory.update(aiMessage.id, {
-            message: newContent,
-        });
+        aiMessage.message = newContent;
+        await aiMessage.save();
         await chatSession.updateLastMessagedAt(aiMessage.updated_at);
     };
 

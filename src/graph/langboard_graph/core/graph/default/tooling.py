@@ -158,11 +158,18 @@ def _get_editor_content(value: Any) -> str:
 
 
 async def create_langboard_api_tools(tweaks: dict[str, Any]) -> list[StructuredTool]:
+    tools, _ = await create_langboard_api_tool_context(tweaks)
+    return tools
+
+
+async def create_langboard_api_tool_context(
+    tweaks: dict[str, Any],
+) -> tuple[list[StructuredTool], dict[str, dict[str, Any]]]:
     variables = _get_variables(tweaks)
     api_names = _get_api_names(tweaks)
     app_api_token = variables.get("app_api_token")
     if not api_names or not isinstance(app_api_token, str) or not app_api_token.strip():
-        return []
+        return [], {}
 
     base_url = _get_base_url(tweaks, variables)
     headers = _get_headers(app_api_token)
@@ -170,59 +177,51 @@ async def create_langboard_api_tools(tweaks: dict[str, Any]) -> list[StructuredT
     approval_policy = _get_api_approval_policy(tweaks, variables)
 
     tools: list[StructuredTool] = []
+    tool_context: dict[str, dict[str, Any]] = {}
     for api_name in api_names:
         schema = schemas.get(api_name)
         if not isinstance(schema, dict):
             continue
         if _get_schema_policy_decision(schema, approval_policy) == "deny":
             continue
-        tools.append(_create_api_tool(api_name, schema, base_url, headers, variables))
+        tool = _create_api_tool(api_name, schema, base_url, headers, variables)
+        tools.append(tool)
+        tool_context[tool.name] = {
+            "api_name": api_name,
+            "schema": schema,
+            "base_url": base_url,
+            "headers": headers,
+            "variables": variables,
+        }
 
-    return tools
+    return tools, tool_context
 
 
-async def create_langboard_api_approval_request(
+def create_langboard_api_tool_approval_request(
     tweaks: dict[str, Any],
+    tool_metadata: dict[str, Any] | None,
+    tool_args: dict[str, Any],
     *,
+    tool_name: str,
     thread_id: str | None,
     session_id: str | None,
 ) -> dict[str, Any] | None:
+    if not tool_metadata:
+        return None
+
+    schema = tool_metadata.get("schema")
+    api_name = tool_metadata.get("api_name")
+    if not isinstance(schema, dict) or not isinstance(api_name, str) or not api_name:
+        return None
+
     variables = _get_variables(tweaks)
-    api_names = _get_api_names(tweaks)
-    app_api_token = variables.get("app_api_token")
-    if not api_names or not isinstance(app_api_token, str) or not app_api_token.strip():
-        return None
-
     approval_policy = _get_api_approval_policy(tweaks, variables)
-    if "ask" not in approval_policy.values():
-        return None
-
-    base_url = _get_base_url(tweaks, variables)
-    schemas = await _fetch_api_schemas(base_url, api_names, _get_headers(app_api_token))
-    ask_api_names: list[str] = []
-    ask_permissions: set[str] = set()
-
-    for api_name in api_names:
-        schema = schemas.get(api_name)
-        if not isinstance(schema, dict):
-            continue
-        permission = _get_schema_permission(schema)
-        if _get_schema_policy_decision(schema, approval_policy) != "ask":
-            continue
-        ask_api_names.append(api_name)
-        ask_permissions.add(permission)
-
-    if not ask_api_names:
+    permission = _get_schema_permission(schema)
+    if _get_schema_policy_decision(schema, approval_policy) != "ask":
         return None
 
     rest_data = _get_rest_data(variables)
-    permissions = sorted(ask_permissions)
-    api_names_preview = ", ".join(ask_api_names[:5])
-    if len(ask_api_names) > 5:
-        api_names_preview = f"{api_names_preview}, +{len(ask_api_names) - 5} more"
-    permission_preview = ", ".join(permissions)
-    message = f"Approval required before this graph can use {permission_preview} API tools."
-
+    message = f"Approval required before this graph calls {api_name}."
     return {
         "type": "approval_request",
         "thread_id": thread_id,
@@ -232,20 +231,22 @@ async def create_langboard_api_approval_request(
         "scope_uid": _get_scope_uid(rest_data, variables),
         "document_name": _get_document_name(rest_data),
         "action_type": "api_call",
-        "permission": permission_preview,
-        "tool_name": "Langboard API tools",
-        "api_name": api_names_preview,
+        "permission": permission,
+        "tool_name": tool_name,
+        "api_name": api_name,
         "message": message,
         "preview": {
             "title": "API approval required",
             "summary": message,
-            "details": api_names_preview,
+            "details": f"{permission}: {api_name}",
         },
         "request_payload": {
-            "api_names": ask_api_names,
-            "permissions": permissions,
+            "api_name": api_name,
+            "api_names": [api_name],
+            "permissions": [permission],
             "policy": approval_policy,
             "rest_data": rest_data,
+            "tool_args": tool_args,
         },
     }
 
@@ -432,6 +433,7 @@ def _create_args_schema(
             default=default,
             required=default is None,
             description=f"Path parameter: {path_param}",
+            source_name=str(path_param),
         )
 
     _add_schema_part_fields(fields, field_sources, "query", schema.get("query"), rest_data)
@@ -470,16 +472,27 @@ def _add_schema_part_fields(
             required=source_name in required_fields and default is None,
             description=field_schema.get("description") or field_schema.get("title") or f"{source_type}: {source_name}",
             schema_type=field_schema.get("type"),
+            source_name=str(source_name),
         )
 
 
 def _create_model_field(
-    *, default: Any, required: bool, description: str, schema_type: str | None = None
+    *, default: Any, required: bool, description: str, schema_type: str | None = None, source_name: str | None = None
 ) -> tuple[Any, Any]:
     py_type = _get_python_type(schema_type)
+    if source_name and _is_uid_source_name(source_name):
+        description = (
+            f"{description}. Use the exact 11-character uid returned by a read/list API. "
+            "Never use a display name, guessed uid, or placeholder."
+        )
     if required:
         return py_type, Field(..., description=description)
     return py_type | None, Field(default, description=description)
+
+
+def _is_uid_source_name(source_name: str) -> bool:
+    normalized_name = source_name.lower()
+    return normalized_name in {"uid", "uids"} or normalized_name.endswith("_uid") or normalized_name.endswith("_uids")
 
 
 def _get_python_type(schema_type: str | None) -> type:

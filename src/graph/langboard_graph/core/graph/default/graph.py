@@ -5,14 +5,16 @@ from langgraph.types import Command
 from ...schema import GraphInterrupt, GraphRunResult
 from ..checkpoint import open_graph_checkpointer
 from .context import create_runtime_context_state
-from .nodes import run_default_agent
+from .nodes import collect_default_history_context, run_default_agent
 from .state import DefaultGraphState
 
 
 def build_default_graph(checkpointer: BaseCheckpointSaver | None = None):
     graph = StateGraph(DefaultGraphState)
+    graph.add_node("history", collect_default_history_context)
     graph.add_node("agent", run_default_agent)
-    graph.add_edge(START, "agent")
+    graph.add_edge(START, "history")
+    graph.add_edge("history", "agent")
     graph.add_edge("agent", END)
     return graph.compile(checkpointer=checkpointer)
 
