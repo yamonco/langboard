@@ -16,7 +16,11 @@ async def project_updated(user_or_bot: User | Bot, project: Project):
 @BotTaskSchemaHelper.project_schema(BotTriggerCondition.ProjectDeleted)
 @Broker.wrap_async_task_decorator
 async def project_deleted(user: User, project: Project):
-    bots = BotTaskHelper.get_scoped_bots(BotTriggerCondition.ProjectUpdated, project_id=project.id)
+    bots = BotTaskHelper.get_scoped_bots(
+        BotTriggerCondition.ProjectDeleted,
+        project_id=project.id,
+        with_deleted_target=True,
+    )
     await BotTaskHelper.run(
         bots, BotTriggerCondition.ProjectDeleted, BotTaskDataHelper.create_project(user, project), project
     )

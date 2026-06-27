@@ -19,7 +19,9 @@ logger = Logger.use("bot-task")
 @staticclass
 class BotTaskHelper:
     @staticmethod
-    def get_scoped_bots(condition: BotTriggerCondition, **where_clauses: Any) -> list[tuple[Bot, BaseDbModel]]:
+    def get_scoped_bots(
+        condition: BotTriggerCondition, *, with_deleted_target: bool = False, **where_clauses: Any
+    ) -> list[tuple[Bot, BaseDbModel]]:
         model_classes = BotHelper.get_scope_model_classes_by_condition(condition)
         records: list[tuple[Bot, BaseDbModel]] = []
         with DbSession.use(readonly=True) as db:
@@ -39,7 +41,7 @@ class BotTaskHelper:
                     continue
 
                 custom_query = (
-                    SqlBuilder.select.tables(Bot, model_class, target_table_class)
+                    SqlBuilder.select.tables(Bot, model_class, target_table_class, with_deleted=with_deleted_target)
                     .join(model_class, model_class.column("bot_id") == Bot.column("id"))
                     .join(
                         target_table_class,
@@ -61,7 +63,13 @@ class BotTaskHelper:
                         )
 
                 default_query = (
-                    SqlBuilder.select.tables(Bot, model_class, default_scope_model_cls, target_table_class)
+                    SqlBuilder.select.tables(
+                        Bot,
+                        model_class,
+                        default_scope_model_cls,
+                        target_table_class,
+                        with_deleted=with_deleted_target,
+                    )
                     .join(model_class, model_class.column("bot_id") == Bot.column("id"))
                     .join(
                         default_scope_model_cls,

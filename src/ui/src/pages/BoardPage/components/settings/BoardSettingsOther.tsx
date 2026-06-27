@@ -43,6 +43,7 @@ const BoardSettingsOther = memo(() => {
                 return messageRef.message;
             },
             success: () => {
+                deleteProjectModel(ESocketTopic.Board, project.uid);
                 setTimeout(() => {
                     navigate(ROUTES.DASHBOARD.PROJECTS.ALL, { replace: true });
                 }, 0);
@@ -51,7 +52,6 @@ const BoardSettingsOther = memo(() => {
             finally: () => {
                 setIsValidating(false);
                 setIsOpened(false);
-                deleteProjectModel(ESocketTopic.Board, project.uid);
             },
         });
     };
