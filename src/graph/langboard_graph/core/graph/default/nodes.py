@@ -551,12 +551,29 @@ async def _get_tool_approval_result(
 
     if _is_approved_approval_result(approval_result):
         _apply_approved_api_context(tweaks, approval_result, apply_approval_policy=False)
+        _apply_approved_tool_args(tool_args, tool_metadata)
         return None
 
     _apply_instruction_api_context(tweaks)
     if instruction:
         return f"Tool {tool_name} was not approved. Latest human instruction: {instruction}"
     return f"Tool {tool_name} was not approved."
+
+
+def _apply_approved_tool_args(tool_args: dict[str, Any], tool_metadata: dict[str, Any] | None) -> None:
+    if not isinstance(tool_metadata, dict) or tool_metadata.get("api_name") != "record_orchestration_bypass":
+        return
+
+    if isinstance(tool_args.get("form"), dict):
+        tool_args["form"]["allowed"] = True
+        return
+
+    for key in ("form_allowed", "allowed"):
+        if key in tool_args:
+            tool_args[key] = True
+            return
+
+    tool_args["form_allowed"] = True
 
 
 async def _resolve_tool_uid_args(

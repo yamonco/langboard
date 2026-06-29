@@ -119,6 +119,10 @@ class DomainService(Factory):
         return self._create_or_get_product(factory.MetadataService)
 
     @property
+    def orchestration_task(self):
+        return self._create_or_get_product(factory.OrchestrationTaskService)
+
+    @property
     def card(self):
         return self._create_or_get_product(factory.CardService)
 

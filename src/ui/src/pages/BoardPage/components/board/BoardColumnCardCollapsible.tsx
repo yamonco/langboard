@@ -21,6 +21,7 @@ import useCardStore, { useCardIsCollapsed } from "@/core/stores/CardStore";
 import { useHasRunningBot } from "@/core/stores/BotStatusStore";
 import BoardGraphApprovalTargetBadge from "@/pages/BoardPage/components/board/BoardGraphApprovalTargetBadge";
 import { EGraphApprovalScopeTable } from "@/core/models/GraphApprovalRequestModel";
+import BoardTaskMetadataBadges from "@/pages/BoardPage/components/task/BoardTaskMetadataBadges";
 
 export interface IBoardColumnCardCollapsibleProps {
     isDragging: bool;
@@ -167,6 +168,7 @@ function BoardColumnCardCollapsible({ isDragging }: IBoardColumnCardCollapsibleP
                                 ))}
                             </Flex>
                         )}
+                        {!isCollapsed && <BoardTaskMetadataBadges cardUID={card.uid} compact className="mb-1.5" />}
                         <Card.Title className="max-w-[calc(100%_-_theme(spacing.8))] break-all leading-tight">{title}</Card.Title>
                         <BoardGraphApprovalTargetBadge
                             projectUID={project.uid}

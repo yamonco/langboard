@@ -49,6 +49,8 @@
   "No message": "No message",
   "Coming soon": "Coming soon",
   "Warning": "Warning",
+  "Enabled": "Enabled",
+  "Disabled": "Disabled",
   "JSON Viewer": "JSON Viewer",
   "JSON Editor": "JSON Editor",
   "default": "default",

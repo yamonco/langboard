@@ -22,6 +22,7 @@ import { IPageNavigateOptions, usePageNavigateRef } from "@/core/hooks/usePageNa
 import { Utils } from "@langboard/core/utils";
 import { ProjectRole } from "@/core/models/roles";
 import { parseDoclingMetadata } from "@/core/constants/DoclingMetadata";
+import { parseTaskMetadata } from "@/core/constants/TaskMetadata";
 import { ESocketTopic } from "@langboard/core/enums";
 import useSwitchSocketHandlers from "@/core/hooks/useSwitchSocketHandlers";
 import useBoardCardMetadataDeletedHandlers from "@/controllers/socket/metadata/useBoardCardMetadataDeletedHandlers";
@@ -235,9 +236,44 @@ export const BoardProvider = memo(({ project, currentUser, children }: IBoardPro
             return true;
         }
 
+        const taskMetadata = parseTaskMetadata(cardMetadataMap[card.uid]);
+        const searchableTaskText = [
+            taskMetadata.source,
+            taskMetadata.sourceUrl,
+            taskMetadata.externalId,
+            taskMetadata.type,
+            taskMetadata.assignedAgent,
+            taskMetadata.riskLevel,
+            taskMetadata.prUrl,
+            taskMetadata.verification?.status,
+            taskMetadata.verification?.summary,
+            taskMetadata.failure?.status,
+            taskMetadata.failure?.summary,
+            taskMetadata.failure?.cause,
+            taskMetadata.run?.status,
+            taskMetadata.run?.run_id,
+            taskMetadata.run?.bot_log_uid,
+            taskMetadata.run?.assigned_agent,
+            taskMetadata.run?.summary,
+            taskMetadata.bypass?.reason,
+            taskMetadata.bypass?.risk_level,
+            taskMetadata.bypass?.action_type,
+            ...(taskMetadata.failure?.reproduction ?? []),
+            ...(taskMetadata.failure?.recommendation ?? []),
+            ...taskMetadata.acceptanceCriteria,
+            ...taskMetadata.relatedFiles,
+            ...taskMetadata.suggestions.map((suggestion) =>
+                [suggestion.title, suggestion.type, suggestion.assigned_agent, suggestion.risk_level].filter(Boolean).join(" ")
+            ),
+        ]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase();
+
         return (
             card.title.toLowerCase().includes(keyword.toLowerCase()) ||
             card.description.content.toLowerCase().includes(keyword.toLowerCase()) ||
+            searchableTaskText.includes(keyword.toLowerCase()) ||
             parseDoclingMetadata(cardMetadataMap[card.uid]).some((document) => {
                 const searchableDocumentText = [document.document_type, document.status, document.content.filename, document.content.markdown]
                     .join(" ")

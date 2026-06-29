@@ -41,6 +41,7 @@ import { useHasRunningBot } from "@/core/stores/BotStatusStore";
 import { cn } from "@/core/utils/ComponentUtils";
 import { useBoardChat } from "@/core/providers/BoardChatProvider";
 import { useIsMobile } from "@/core/hooks/useIsMobile";
+import BoardTaskMetadataSection from "@/pages/BoardPage/components/task/BoardTaskMetadataSection";
 
 export interface IBoardCardProps {
     projectUID: string;
@@ -318,6 +319,7 @@ function BoardCardResult({ isExpanded, setIsExpanded, onClose, onEditModeStateCh
                                                 <BoardCardDeadline key={`board-card-deadline-${card.uid}`} />
                                             </BoardCardSection>
                                         </Flex>
+                                        <BoardTaskMetadataSection cardUID={card.uid} />
                                         <BoardCardMobileActions />
                                         <BoardCardSection title="card.Description" className="relative min-h-56">
                                             <BoardCardDescription key={`board-card-description-${card.uid}`} />

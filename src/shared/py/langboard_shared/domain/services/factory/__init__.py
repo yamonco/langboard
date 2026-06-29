@@ -19,6 +19,7 @@ from .InternalBotService import InternalBotService
 from .McpToolGroupService import McpToolGroupService
 from .MetadataService import MetadataService
 from .NotificationService import NotificationService
+from .OrchestrationTaskService import OrchestrationTaskService
 from .ProjectColumnService import ProjectColumnService
 from .ProjectInvitationService import ProjectInvitationService
 from .ProjectLabelService import ProjectLabelService
@@ -53,6 +54,7 @@ __all__ = [
     "McpToolGroupService",
     "MetadataService",
     "NotificationService",
+    "OrchestrationTaskService",
     "ProjectColumnService",
     "ProjectInvitationService",
     "ProjectLabelService",

@@ -65,6 +65,28 @@ class ApiComfortTool(BaseDbModel, table=True):
             ),
             "api_names": ["get_card_details", "get_project_cards", "update_card_relationships"],
         },
+        "task_orchestration": {
+            "label": "Task orchestration",
+            "description": (
+                "Create orchestration task cards, record agent runs, verification results, failure feedback, "
+                "suggestions, and bypass decisions using existing card metadata and relationships. Record a run "
+                "when agent work starts or finishes. Record failed verification with failure details so LangBoard "
+                "can add card feedback and update task metadata. Use bypass only for low-risk changes; high-risk "
+                "work must be treated as approval-required."
+            ),
+            "api_names": [
+                "get_project",
+                "get_project_columns",
+                "get_project_cards",
+                "get_card_details",
+                "create_orchestration_task",
+                "record_orchestration_run",
+                "record_orchestration_verification",
+                "record_orchestration_suggestions",
+                "create_orchestration_suggestion_task",
+                "record_orchestration_bypass",
+            ],
+        },
     }
 
     name: str = Field(nullable=False, unique=True, index=True, api_field=ApiField())

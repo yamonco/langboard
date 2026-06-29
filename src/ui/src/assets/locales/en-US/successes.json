@@ -65,6 +65,8 @@
   "Chat template updated successfully.": "Chat template updated successfully.",
   "Chat template deleted successfully.": "Chat template deleted successfully.",
   "Project deleted successfully.": "Project deleted successfully.",
+  "Orchestration workflow applied successfully.": "Orchestration workflow applied successfully.",
+  "Child task created successfully.": "Child task created successfully.",
   "API key created successfully.": "API key created successfully.",
   "API key name changed successfully.": "API key name changed successfully.",
   "API key updated successfully.": "API key updated successfully.",

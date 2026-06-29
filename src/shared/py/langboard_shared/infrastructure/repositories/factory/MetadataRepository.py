@@ -1,4 +1,4 @@
-from typing import Any, TypeVar
+from typing import Any, Callable, TypeVar
 from ....core.db import BaseDbModel, DbSession, SqlBuilder
 from ....core.domain import BaseRepository
 from ....domain.models.bases import BaseMetadataModel
@@ -90,6 +90,45 @@ class MetadataRepository(BaseRepository):
                 metadata.key = key
                 metadata.value = value
                 db.update(metadata)
+
+        return metadata
+
+    def update_value_by_key(
+        self,
+        model_cls: type[_TMetadata],
+        foreign_model: BaseDbModel,
+        key: str,
+        updater: Callable[[str | None], str | None],
+    ) -> _TMetadata | None:
+        foreign_key = self.__get_foreign_key(foreign_model)
+        if foreign_key not in model_cls.model_fields:
+            return None
+
+        metadata = None
+        with DbSession.use(readonly=False) as db:
+            result = db.exec(
+                SqlBuilder.select.table(model_cls)
+                .where((model_cls.column(foreign_key) == foreign_model.id) & (model_cls.column("key") == key))
+                .with_for_update()
+            )
+            metadata = result.first()
+
+            next_value = updater(metadata.value if metadata else None)
+            if next_value is None:
+                return metadata
+
+            if metadata is None:
+                params: dict[str, Any] = {
+                    "key": key,
+                    "value": next_value,
+                }
+                params[foreign_key] = foreign_model.id
+                metadata = model_cls(**params)
+                db.insert(metadata)
+                return metadata
+
+            metadata.value = next_value
+            db.update(metadata)
 
         return metadata
 

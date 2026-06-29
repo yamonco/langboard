@@ -41,6 +41,7 @@ class GraphApprovalRequestRepository(BaseRepository[GraphApprovalRequest]):
     def insert_with_detail(self, approval: GraphApprovalRequest, detail: BaseGraphApprovalRequestModel) -> None:
         with DbSession.use(readonly=False) as db:
             db.insert(approval)
+            detail.approval_request_id = approval.id
             db.insert(detail)
 
     def get_all_ordered(

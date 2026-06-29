@@ -5,6 +5,7 @@ from typing import Any, Literal
 from urllib.parse import urlparse
 import httpx
 from langboard_shared.core.security import AuthSecurity
+from langboard_shared.domain.constants.TaskMetadata import BYPASS_APPROVAL_ACTION_TYPES
 from langboard_shared.Env import Env
 from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, Field, create_model
@@ -22,6 +23,7 @@ _DEFAULT_API_APPROVAL_POLICY = {
     "edit": "ask",
     "delete": "ask",
 }
+_ORCHESTRATION_BYPASS_API_NAME = "record_orchestration_bypass"
 
 
 def create_langboard_context_prompt(tweaks: dict[str, Any]) -> str:
@@ -219,9 +221,11 @@ def create_langboard_api_tool_approval_request(
     permission = _get_schema_permission(schema)
     if _get_schema_policy_decision(schema, approval_policy) != "ask":
         return None
+    if api_name == _ORCHESTRATION_BYPASS_API_NAME and _is_low_risk_orchestration_bypass(tool_args):
+        return None
 
     rest_data = _get_rest_data(variables)
-    message = f"Approval required before this graph calls {api_name}."
+    message = _get_api_approval_message(api_name, tool_args)
     return {
         "type": "approval_request",
         "thread_id": thread_id,
@@ -236,7 +240,7 @@ def create_langboard_api_tool_approval_request(
         "api_name": api_name,
         "message": message,
         "preview": {
-            "title": "API approval required",
+            "title": _get_api_approval_title(api_name),
             "summary": message,
             "details": f"{permission}: {api_name}",
         },
@@ -249,6 +253,41 @@ def create_langboard_api_tool_approval_request(
             "tool_args": tool_args,
         },
     }
+
+
+def _is_low_risk_orchestration_bypass(tool_args: dict[str, Any]) -> bool:
+    risk_level = _get_tool_string_arg(tool_args, "risk_level")
+    action_type = _get_tool_string_arg(tool_args, "action_type")
+    if not risk_level and not action_type:
+        return False
+    if risk_level == "high":
+        return False
+    return action_type not in BYPASS_APPROVAL_ACTION_TYPES
+
+
+def _get_api_approval_title(api_name: str) -> str:
+    if api_name == _ORCHESTRATION_BYPASS_API_NAME:
+        return "Orchestration approval required"
+    return "API approval required"
+
+
+def _get_api_approval_message(api_name: str, tool_args: dict[str, Any]) -> str:
+    if api_name != _ORCHESTRATION_BYPASS_API_NAME:
+        return f"Approval required before this graph calls {api_name}."
+
+    risk_level = _get_tool_string_arg(tool_args, "risk_level") or "unknown"
+    action_type = _get_tool_string_arg(tool_args, "action_type") or "unknown"
+    return f"Approval required for high-risk orchestration bypass: risk={risk_level}, action={action_type}."
+
+
+def _get_tool_string_arg(tool_args: dict[str, Any], source_name: str) -> str:
+    direct_value = tool_args.get(f"form_{source_name}")
+    if direct_value is None:
+        form_value = tool_args.get("form")
+        direct_value = form_value.get(source_name) if isinstance(form_value, dict) else None
+    if direct_value is None:
+        direct_value = tool_args.get(source_name)
+    return str(direct_value or "").strip().lower()
 
 
 def _get_variables(tweaks: dict[str, Any]) -> dict[str, Any]:

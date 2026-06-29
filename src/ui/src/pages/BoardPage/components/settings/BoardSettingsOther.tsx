@@ -4,6 +4,7 @@ import Flex from "@/components/base/Flex";
 import Popover from "@/components/base/Popover";
 import SubmitButton from "@/components/base/SubmitButton";
 import Toast from "@/components/base/Toast";
+import useApplyOrchestrationWorkflowTemplate from "@/controllers/api/board/orchestration/useApplyOrchestrationWorkflowTemplate";
 import useDeleteProject from "@/controllers/api/board/settings/useDeleteProject";
 import { deleteProjectModel } from "@/core/helpers/ModelHelper";
 import setupApiErrorHandler from "@/core/helpers/setupApiErrorHandler";
@@ -18,9 +19,38 @@ const BoardSettingsOther = memo(() => {
     const navigate = usePageNavigateRef();
     const { project } = useBoardSettings();
     const [isValidating, setIsValidating] = useState(false);
+    const [isApplyingWorkflow, setIsApplyingWorkflow] = useState(false);
     const [isOpened, setIsOpened] = useState(false);
     const [t] = useTranslation();
     const { mutateAsync } = useDeleteProject({ interceptToast: true });
+    const { mutateAsync: applyWorkflowTemplateMutateAsync } = useApplyOrchestrationWorkflowTemplate({ interceptToast: true });
+
+    const applyWorkflowTemplate = () => {
+        if (isApplyingWorkflow) {
+            return;
+        }
+
+        setIsApplyingWorkflow(true);
+
+        const promise = applyWorkflowTemplateMutateAsync({
+            project_uid: project.uid,
+        });
+
+        Toast.Add.promise(promise, {
+            loading: t("common.Updating..."),
+            error: (error) => {
+                const messageRef = { message: "" };
+                const { handle } = setupApiErrorHandler({}, messageRef);
+
+                handle(error);
+                return messageRef.message;
+            },
+            success: () => t("successes.Orchestration workflow applied successfully."),
+            finally: () => {
+                setIsApplyingWorkflow(false);
+            },
+        });
+    };
 
     const deleteProject = () => {
         if (isValidating) {
@@ -66,6 +96,16 @@ const BoardSettingsOther = memo(() => {
 
     return (
         <Flex direction="col" py="4" gap="4" items="end">
+            <SubmitButton
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={applyWorkflowTemplate}
+                isValidating={isApplyingWorkflow}
+                disabled={isValidating}
+            >
+                {t("project.settings.Apply orchestration workflow")}
+            </SubmitButton>
             <Popover.Root open={isOpened} onOpenChange={changeOpenState}>
                 <Popover.Trigger asChild>
                     <Button variant="destructive" size="sm">

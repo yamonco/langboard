@@ -10,7 +10,7 @@ from langboard_shared.security import Auth
 from pydantic import BaseModel, ConfigDict, Field
 from starlette.datastructures import Headers
 from .BatchForm import BatchFormRequestSchema
-from .BatchRunner import execute_batch_request_schemas
+from .BatchRunner import create_batch_response, execute_batch_request_schemas
 
 
 class ApiComfortToolRunForm(BaseModel):
@@ -39,16 +39,34 @@ async def run_api_comfort_tool(
 
     allowed_permissions = get_agent_allowed_permissions(Headers(raw=request.headers.raw), default_read=True)
     shared_params = _create_comfort_tool_shared_params(form)
-    request_schemas = [
-        _create_comfort_tool_request_schema(api_name, shared_params, comfort_tool)
-        for api_name in comfort_tool["api_names"]
-    ]
+    request_schemas: list[BatchFormRequestSchema] = []
+    runnable_api_names: list[str] = []
+    skipped_responses: dict[str, dict] = {}
+    for api_name in comfort_tool["api_names"]:
+        request_schema = _create_comfort_tool_request_schema(api_name, shared_params, comfort_tool)
+        missing_params = _get_missing_required_params(api_name, request_schema)
+        if missing_params:
+            skipped_responses[api_name] = create_batch_response(
+                {
+                    "skipped": True,
+                    "message": f"Skipped because required parameter(s) are missing: {', '.join(missing_params)}",
+                }
+            )
+            continue
+
+        request_schemas.append(request_schema)
+        runnable_api_names.append(api_name)
+
     responses = await execute_batch_request_schemas(request, request_schemas, user_or_bot, allowed_permissions)
+    response_by_api = {
+        **skipped_responses,
+        **{api_name: response for api_name, response in zip(runnable_api_names, responses)},
+    }
     return JsonResponse(
         content={
             "comfort_tool": comfort_tool_name,
             "base_apis": comfort_tool["api_names"],
-            "responses": {api_name: response for api_name, response in zip(comfort_tool["api_names"], responses)},
+            "responses": {api_name: response_by_api[api_name] for api_name in comfort_tool["api_names"]},
         }
     )
 
@@ -81,6 +99,25 @@ def _create_comfort_tool_request_schema(
         query=query,
         form=body_form,
     )
+
+
+def _get_missing_required_params(api_name: str, request_schema: BatchFormRequestSchema) -> list[str]:
+    api_schema = AppRouter.api_routes.get(api_name)
+    if not api_schema:
+        return []
+
+    request_params = {**(request_schema.query or {}), **(request_schema.form or {})}
+    required_params = [
+        *api_schema["path_params"],
+        *_get_required_schema_fields(api_schema.get("query")),
+        *_get_required_schema_fields(api_schema.get("form")),
+    ]
+    return [param for param in required_params if request_params.get(param) is None]
+
+
+def _get_required_schema_fields(schema: dict[str, Any] | None) -> list[str]:
+    required = (schema or {}).get("required")
+    return [str(field) for field in required] if isinstance(required, list) else []
 
 
 def _get_dict_value(source: Mapping[str, Any], key: str) -> dict[str, Any]:

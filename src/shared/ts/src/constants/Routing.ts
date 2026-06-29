@@ -101,6 +101,15 @@ const API = {
             APPROVE: "/board/{uid}/graph-approval/{approval_uid}/approve",
             REJECT: "/board/{uid}/graph-approval/{approval_uid}/reject",
         },
+        ORCHESTRATION: {
+            APPLY_WORKFLOW_TEMPLATE: "/board/{uid}/orchestration/workflow-template",
+            CREATE_TASK: "/board/{uid}/orchestration/tasks",
+            RECORD_VERIFICATION: "/board/{uid}/orchestration/card/{card_uid}/verification",
+            RECORD_RUN: "/board/{uid}/orchestration/card/{card_uid}/run",
+            RECORD_SUGGESTIONS: "/board/{uid}/orchestration/card/{card_uid}/suggestions",
+            CREATE_SUGGESTION_TASK: "/board/{uid}/orchestration/card/{card_uid}/suggestion-task",
+            RECORD_BYPASS: "/board/{uid}/orchestration/card/{card_uid}/bypass",
+        },
         COLUMN: {
             CREATE: "/board/{uid}/column",
             CHANGE_NAME: "/board/{uid}/column/{project_column_uid}/name",
