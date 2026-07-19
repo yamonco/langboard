@@ -68,6 +68,14 @@ interface ICardNewCommentEditorDataProviderProps extends IBaseEditorDataProvider
     };
 }
 
+interface IBotPromptEditorDataProviderProps extends IBaseEditorDataProviderProps {
+    editorType: typeof EEditorType.BotPrompt;
+    form: {
+        uid: string | number;
+        section: string | number;
+    };
+}
+
 interface IWikiContentEditorDataProviderProps extends IBaseEditorDataProviderProps {
     editorType: typeof EEditorType.WikiContent;
     form: {
@@ -81,6 +89,7 @@ export type TEditorDataProviderProps =
     | ICardDescriptionEditorDataProviderProps
     | ICardCommentEditorDataProviderProps
     | ICardNewCommentEditorDataProviderProps
+    | IBotPromptEditorDataProviderProps
     | IWikiContentEditorDataProviderProps;
 
 const initialContext = {
@@ -157,6 +166,20 @@ export const EditorDataProvider = ({
                         uid: newCommentForm.project_uid,
                         card_uid: newCommentForm.card_uid,
                     }),
+                ];
+            }
+            case EEditorType.BotPrompt: {
+                const botPromptForm = form as IBotPromptEditorDataProviderProps["form"];
+                return [
+                    undefined,
+                    Utils.String.createEditorCollaborationDocumentID({
+                        collaborationType: EEditorCollaborationType.AppSettings,
+                        uid: botPromptForm.uid,
+                        section: botPromptForm.section,
+                    }),
+                    undefined,
+                    undefined,
+                    undefined,
                 ];
             }
             case EEditorType.WikiContent: {

@@ -12,7 +12,7 @@ import { useTranslation } from "react-i18next";
 import { usePageNavigateRef } from "@/core/hooks/usePageNavigate";
 import { EHttpStatus } from "@langboard/core/enums";
 import { EEditorCollaborationType } from "@langboard/core/constants";
-import { getValueType } from "@/components/bots/BotValueInput/utils";
+import { getValueType, syncPendingBotValueInputChange } from "@/components/bots/BotValueInput/utils";
 import BotValueInput from "@/components/bots/BotValueInput";
 import { TBotValueDefaultInputRefLike } from "@/components/bots/BotValueInput/types";
 
@@ -35,7 +35,7 @@ const BotValue = memo(() => {
     const [isValidating, setIsValidating] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
 
-    const change = () => {
+    const change = async () => {
         const input = inputRef.current;
         if (isValidating || !newValueRef.current || !input || !canUpdateBot) {
             return;
@@ -48,6 +48,7 @@ const BotValue = memo(() => {
             }
         }
 
+        await syncPendingBotValueInputChange(input);
         const newValue = newValueRef.current.trim();
         if (value.trim() === newValue || !newValue) {
             newValueRef.current = newValue;
@@ -113,6 +114,7 @@ const BotValue = memo(() => {
         <Box w="full">
             <BotValueInput
                 collaborationType={EEditorCollaborationType.AppSettings}
+                currentUser={currentUser}
                 uid={internalBot.uid}
                 section="bot-value"
                 platform={platform}
@@ -123,9 +125,9 @@ const BotValue = memo(() => {
                 newValueRef={newValueRef}
                 isValidating={isValidating}
                 isEditing={isEditing}
-                startEditing={startEditing}
-                cancelEditing={cancelEditing}
-                change={change}
+                startEditing={canUpdateBot ? startEditing : undefined}
+                cancelEditing={canUpdateBot ? cancelEditing : undefined}
+                change={canUpdateBot ? change : undefined}
                 required
                 disabled={!canUpdateBot || (shouldUseEditMode && !isEditing)}
                 ref={inputRef}

@@ -115,6 +115,27 @@
     "Select comfort tool(s) to use": "Select comfort tool(s) to use",
     "Add comfort tool description": "Add description for {{tool}}",
     "Select API(s) to use": "Select API(s) to use",
+    "Action suggestion help": "Suggest tools from the current prompt without saving the bot.",
+    "Add actions from prompt": "Add actions from prompt",
+    "Apply action": "Apply",
+    "Applied": "Applied",
+    "Review action": "Review",
+    "Bot creation assistant": "Bot creation assistant",
+    "Draft only": "Draft only",
+    "Describe the bot to create": "Describe the bot to create...",
+    "Create draft": "Create draft",
+    "Bot draft applied": "Draft applied for {{name}}.",
+    "actionSuggestionSources": {
+      "comfort_tool": "Comfort",
+      "api": "API",
+      "mcp_tool": "MCP tool",
+      "mcp_tool_group": "MCP group"
+    },
+    "actionSuggestionRisks": {
+      "low": "Low risk",
+      "medium": "Changes data",
+      "high": "High risk"
+    },
     "errors": {
       "missing": {
         "agent_llm": "Agent provider is required.",

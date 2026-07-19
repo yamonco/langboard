@@ -1,4 +1,5 @@
-from typing import Any
+import re
+from typing import Any, Mapping, Sequence
 from ....core.domain import BaseDomainService
 from ....core.domain.BaseDomainService import TMutableValidatorMap
 from ....core.storage import FileModel
@@ -13,6 +14,14 @@ from ....tasks.bots import BotDefaultTask
 from ...models import Bot, BotDefaultScopeBranch, Card, Project, ProjectColumn
 from ...models.BaseBotModel import BotPlatform, BotPlatformRunningType
 from .GraphApprovalRequestService import GraphApprovalRequestService
+
+
+ACTION_SUGGESTION_RISK_BY_PERMISSION = {
+    "read": "low",
+    "create": "medium",
+    "edit": "medium",
+    "delete": "high",
+}
 
 
 class BotService(BaseDomainService):
@@ -216,6 +225,254 @@ class BotService(BaseDomainService):
         BotPublisher.bot_deleted(bot.get_uid())
 
         return True
+
+    def suggest_action_candidates(
+        self,
+        prompt: str,
+        api_schemas: Mapping[str, Mapping[str, Any]],
+        comfort_tools: Sequence[dict[str, Any]],
+        mcp_tools: Sequence[dict[str, Any]] | None = None,
+        mcp_tool_groups: Sequence[dict[str, Any]] | None = None,
+        selected_api_names: Sequence[str] | None = None,
+        selected_comfort_tool_names: Sequence[str] | None = None,
+        limit: int = 8,
+    ) -> list[dict[str, Any]]:
+        prompt_text = prompt.strip()
+        if not prompt_text:
+            return []
+
+        selected_api_set = set(selected_api_names or [])
+        selected_comfort_tool_set = set(selected_comfort_tool_names or [])
+        prompt_tokens = self._tokenize_action_suggestion_text(prompt_text)
+        candidates: list[dict[str, Any]] = []
+
+        for comfort_tool in comfort_tools:
+            name = str(comfort_tool.get("name") or "")
+            api_names = [str(api_name) for api_name in comfort_tool.get("api_names", [])]
+            if not name or not api_names:
+                continue
+
+            label = str(comfort_tool.get("label") or name)
+            description = str(comfort_tool.get("description") or "")
+            permissions = [
+                self._normalize_api_permission(api_schemas.get(api_name, {}).get("permission"))
+                for api_name in api_names
+            ]
+            risk = self._get_highest_action_risk(permissions)
+            score = self._score_action_suggestion(prompt_text, prompt_tokens, [name, label, description, *api_names])
+            if score <= 0:
+                continue
+
+            candidates.append(
+                {
+                    "source": "comfort_tool",
+                    "name": name,
+                    "label": label,
+                    "description": description,
+                    "api_names": api_names,
+                    "risk": risk,
+                    "confidence": min(100, score),
+                    "already_selected": name in selected_comfort_tool_set,
+                    "reason": self._create_action_suggestion_reason(label, risk),
+                }
+            )
+
+        for mcp_tool in mcp_tools or []:
+            name = str(mcp_tool.get("name") or "")
+            description = str(mcp_tool.get("description") or "")
+            if not name:
+                continue
+
+            score = self._score_action_suggestion(prompt_text, prompt_tokens, [name, description])
+            if score <= 0:
+                continue
+
+            candidates.append(
+                {
+                    "source": "mcp_tool",
+                    "name": name,
+                    "label": name,
+                    "description": description,
+                    "api_names": [],
+                    "risk": "medium",
+                    "confidence": min(100, score),
+                    "already_selected": False,
+                    "reason": f"{name} is an MCP tool candidate. Add it through an MCP tool group before the bot can use it.",
+                }
+            )
+
+        for mcp_tool_group in mcp_tool_groups or []:
+            name = str(mcp_tool_group.get("name") or "")
+            description = str(mcp_tool_group.get("description") or "")
+            tool_names = [str(tool_name) for tool_name in mcp_tool_group.get("tools", [])]
+            if not name or not tool_names:
+                continue
+
+            score = self._score_action_suggestion(prompt_text, prompt_tokens, [name, description, *tool_names])
+            if score <= 0:
+                continue
+
+            candidates.append(
+                {
+                    "source": "mcp_tool_group",
+                    "name": name,
+                    "label": name,
+                    "description": description,
+                    "api_names": [],
+                    "risk": "medium",
+                    "confidence": min(100, score),
+                    "already_selected": False,
+                    "reason": f"{name} is an active MCP tool group candidate. Review its tools before enabling bot use.",
+                }
+            )
+
+        for api_name, api_schema in api_schemas.items():
+            description = str(api_schema.get("description") or "")
+            permission = self._normalize_api_permission(api_schema.get("permission"))
+            risk = ACTION_SUGGESTION_RISK_BY_PERMISSION.get(permission, "medium")
+            score = self._score_action_suggestion(prompt_text, prompt_tokens, [api_name, description])
+            if score <= 0:
+                continue
+
+            candidates.append(
+                {
+                    "source": "api",
+                    "name": api_name,
+                    "label": api_name,
+                    "description": description,
+                    "api_names": [api_name],
+                    "risk": risk,
+                    "confidence": min(100, score),
+                    "already_selected": api_name in selected_api_set,
+                    "reason": self._create_action_suggestion_reason(api_name, risk),
+                }
+            )
+
+        candidates.sort(
+            key=lambda candidate: (
+                -int(candidate["confidence"]),
+                0 if candidate["source"] == "comfort_tool" else 1,
+                str(candidate["name"]),
+            )
+        )
+        return candidates[: max(limit, 0)]
+
+    def create_bot_draft(
+        self,
+        instruction: str,
+        api_schemas: Mapping[str, Mapping[str, Any]],
+        comfort_tools: Sequence[dict[str, Any]],
+        mcp_tools: Sequence[dict[str, Any]] | None = None,
+        mcp_tool_groups: Sequence[dict[str, Any]] | None = None,
+        selected_api_names: Sequence[str] | None = None,
+        selected_comfort_tool_names: Sequence[str] | None = None,
+    ) -> dict[str, Any]:
+        prompt = instruction.strip()
+        suggestions = self.suggest_action_candidates(
+            prompt,
+            api_schemas,
+            comfort_tools,
+            mcp_tools=mcp_tools,
+            mcp_tool_groups=mcp_tool_groups,
+            selected_api_names=selected_api_names,
+            selected_comfort_tool_names=selected_comfort_tool_names,
+            limit=6,
+        )
+        bot_name = self._create_draft_bot_name(prompt)
+        return {
+            "bot_name": bot_name,
+            "bot_uname": self._create_draft_bot_uname(bot_name),
+            "value_patch": {
+                "system_prompt": prompt,
+            },
+            "suggestions": suggestions,
+        }
+
+    def _score_action_suggestion(
+        self,
+        prompt_text: str,
+        prompt_tokens: set[str],
+        candidate_texts: Sequence[str],
+    ) -> int:
+        candidate_text = " ".join(candidate_texts).lower()
+        candidate_tokens = self._tokenize_action_suggestion_text(candidate_text)
+        token_score = len(prompt_tokens.intersection(candidate_tokens)) * 16
+        direct_score = sum(20 for text in candidate_texts if text and text.lower() in prompt_text.lower())
+        return token_score + direct_score
+
+    def _tokenize_action_suggestion_text(self, value: str) -> set[str]:
+        tokens = re.findall(r"[a-zA-Z0-9_]+", value.lower())
+        return {token for token in tokens if len(token) > 1}
+
+    def _normalize_api_permission(self, permission: Any) -> str:
+        if hasattr(permission, "value"):
+            permission = permission.value
+        return str(permission or "read").lower()
+
+    def _get_highest_action_risk(self, permissions: Sequence[str]) -> str:
+        if "delete" in permissions:
+            return "high"
+        if any(permission in {"create", "edit"} for permission in permissions):
+            return "medium"
+        return "low"
+
+    def _create_action_suggestion_reason(self, label: str, risk: str) -> str:
+        if risk == "high":
+            return f"{label} may change or remove data. Review before applying."
+        if risk == "medium":
+            return f"{label} can perform changes requested by the prompt."
+        return f"{label} can gather context requested by the prompt."
+
+    def _create_draft_bot_name(self, instruction: str) -> str:
+        first_line = next((line.strip() for line in instruction.splitlines() if line.strip()), "")
+        if not first_line:
+            return "New assistant"
+        return first_line[:48].rstrip(" .,:;")
+
+    def _create_draft_bot_uname(self, bot_name: str) -> str:
+        base_uname = re.sub(r"[^a-z0-9]+", "-", bot_name.lower()).strip("-")
+        if not base_uname:
+            base_uname = "new-assistant"
+
+        candidate = base_uname[:48].strip("-") or "new-assistant"
+        index = 2
+        while InfraHelper.get_by(Bot, "bot_uname", candidate):
+            suffix = f"-{index}"
+            candidate = f"{base_uname[: 48 - len(suffix)].strip('-')}{suffix}"
+            index += 1
+
+        return candidate
+
+    def merge_generated_bot_draft(
+        self,
+        fallback_draft: dict[str, Any],
+        generated_draft: dict[str, Any] | None,
+        _api_schemas: Mapping[str, Mapping[str, Any]],
+        _comfort_tools: Sequence[dict[str, Any]],
+    ) -> dict[str, Any]:
+        if not isinstance(generated_draft, dict):
+            return fallback_draft
+
+        draft = {
+            **fallback_draft,
+            "value_patch": dict(fallback_draft.get("value_patch") or {}),
+            "suggestions": list(fallback_draft.get("suggestions") or []),
+        }
+        generated_name = str(generated_draft.get("bot_name") or "").strip()
+        if generated_name:
+            draft["bot_name"] = generated_name[:48].rstrip(" .,:;")
+            draft["bot_uname"] = self._create_draft_bot_uname(str(draft["bot_name"]))
+
+        generated_value = generated_draft.get("value_patch")
+        if not isinstance(generated_value, dict):
+            return draft
+
+        patch = draft["value_patch"]
+        system_prompt = str(generated_value.get("system_prompt") or "").strip()
+        if system_prompt:
+            patch["system_prompt"] = system_prompt
+
+        return draft
 
     def generate_api_key(self) -> str:
         api_key = f"sk-{generate_random_string(53)}"

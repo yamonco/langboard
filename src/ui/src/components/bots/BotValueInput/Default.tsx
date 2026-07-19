@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AGENT_MODELS, TAgentModelName } from "@langboard/core/ai";
 import Box from "@/components/base/Box";
 import Flex from "@/components/base/Flex";
@@ -24,6 +24,9 @@ import DefaultTypedInput from "@/components/bots/BotValueInput/DefaultTypedInput
 import { providerIconMap } from "@/components/bots/BotValueInput/utils";
 import { ApiComfortToolModel } from "@/core/models";
 import { Utils } from "@langboard/core/utils";
+import BotPromptEditor from "@/components/bots/BotValueInput/BotPromptEditor";
+import BotActionSuggestionPanel from "@/components/bots/BotValueInput/BotActionSuggestionPanel";
+import type { IBotActionSuggestion } from "@/controllers/api/settings/bots/useSuggestBotActions";
 
 interface IApiSelectionMeta {
     added: bool;
@@ -72,9 +75,9 @@ function BotValueDefaultInputDisplay({
     isEditing,
     startEditing,
     cancelEditing,
+    initialActionSuggestions,
 }: TSharedBotValueInputProps) {
     const [t] = useTranslation();
-    const promptID = useId();
     const { mutateAsync: getApiListMutateAsync } = useGetApiList({ interceptToast: true });
     const { mutateAsync: getApiComfortToolListMutateAsync } = useGetApiComfortToolList({ interceptToast: true });
     const {
@@ -95,9 +98,13 @@ function BotValueDefaultInputDisplay({
         setApiList,
         showableInputs,
         collaborationType,
+        currentUser,
         uid,
         section,
+        resetTick,
     } = useBotValueDefaultInput();
+    const [promptValue, setPromptValue] = useState<string>((valuesRef.current["system_prompt"] as string) ?? "");
+    const [promptEditorResetKey, setPromptEditorResetKey] = useState(0);
     const comfortToolList = ApiComfortToolModel.Model.useModels(() => true);
     const providerCollaboration = useCollaborativeText({
         collaborationType,
@@ -311,6 +318,36 @@ function BotValueDefaultInputDisplay({
         setValue("agent_llm")(nextProvider);
         providerCollaboration.updateValue(nextProvider);
     };
+
+    const changePromptValue = (nextPrompt: string) => {
+        setPromptValue(nextPrompt);
+        setValue("system_prompt")(nextPrompt);
+    };
+
+    const applyActionSuggestion = (suggestion: IBotActionSuggestion) => {
+        if (suggestion.source === "comfort_tool") {
+            if (selectedComfortTools.includes(suggestion.name)) {
+                return;
+            }
+
+            changeSelectedComfortTools([...selectedComfortTools, suggestion.name]);
+            if (suggestion.description) {
+                changeComfortToolDescription(suggestion.name)(suggestion.description);
+            }
+            return;
+        }
+
+        if (suggestion.source !== "api") {
+            return;
+        }
+
+        if (selectedApis.includes(suggestion.name)) {
+            return;
+        }
+
+        changeSelectedApis([...selectedApis, suggestion.name]);
+    };
+
     const allApiNames = useMemo(() => Object.keys(apiList), [apiList]);
     const isAllApiSelected = !!allApiNames.length && allApiNames.every((apiName) => selectedApis.includes(apiName));
     const comfortToolMap = useMemo(
@@ -344,6 +381,11 @@ function BotValueDefaultInputDisplay({
         };
         getApiLists();
     }, []);
+
+    useEffect(() => {
+        setPromptValue((valuesRef.current["system_prompt"] as string) ?? "");
+        setPromptEditorResetKey((key) => key + 1);
+    }, [disabled, resetTick]);
 
     return (
         <Box border rounded px="3" pt="5" pb="4" position="relative">
@@ -637,24 +679,25 @@ function BotValueDefaultInputDisplay({
             )}
             {showableInputs.includes("prompt") && (
                 <Box mt="4">
-                    <Collaborative.Textarea
-                        id={promptID}
-                        collaborationType={collaborationType}
-                        uid={uid}
-                        section={section}
-                        field="system_prompt"
-                        placeholder=" "
-                        defaultValue={valuesRef.current["system_prompt"] ?? ""}
-                        resize="none"
-                        className="peer h-36"
+                    <BotPromptEditor
+                        currentUser={currentUser}
+                        value={promptValue}
                         disabled={isValidating || disabled}
-                        onValueChange={setValue("system_prompt")}
-                        ref={setInputRef("system_prompt")}
-                    >
-                        <Floating.Label className="select-none" htmlFor={promptID} isTextarea>
-                            {t("bot.agent.System prompt")}
-                        </Floating.Label>
-                    </Collaborative.Textarea>
+                        isValidating={isValidating}
+                        resetKey={promptEditorResetKey}
+                        onValueChange={changePromptValue}
+                        inputRef={setInputRef("system_prompt")}
+                    />
+                    {showableInputs.includes("api_names") && !disabled ? (
+                        <BotActionSuggestionPanel
+                            prompt={promptValue}
+                            selectedApis={selectedApis}
+                            selectedComfortTools={selectedComfortTools}
+                            initialSuggestions={initialActionSuggestions}
+                            disabled={isValidating || disabled}
+                            onApplySuggestion={applyActionSuggestion}
+                        />
+                    ) : null}
                 </Box>
             )}
             {inputs.map((input) => (

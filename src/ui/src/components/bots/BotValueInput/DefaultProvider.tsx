@@ -9,6 +9,7 @@ import { useTranslation } from "react-i18next";
 
 export interface IBotValueDefaultInputContext {
     collaborationType?: TSharedBotValueInputProps["collaborationType"];
+    currentUser: TSharedBotValueInputProps["currentUser"];
     platform: EBotPlatform;
     platformRunningType: EBotPlatformRunningType;
     section?: TSharedBotValueInputProps["section"];
@@ -33,6 +34,7 @@ export interface IBotValueDefaultInputContext {
     required?: bool;
     isValidating: bool;
     showableInputs: ("api_names" | "provider" | "prompt")[];
+    resetTick: number;
 }
 
 interface IBotValueDefaultInputProviderProps extends TSharedBotValueInputProps {
@@ -40,6 +42,7 @@ interface IBotValueDefaultInputProviderProps extends TSharedBotValueInputProps {
 }
 
 const initialContext = {
+    currentUser: {} as TSharedBotValueInputProps["currentUser"],
     platform: EBotPlatform.Default,
     platformRunningType: EBotPlatformRunningType.Default,
     valuesRef: { current: {} },
@@ -62,12 +65,14 @@ const initialContext = {
     required: false,
     isValidating: false,
     showableInputs: [],
+    resetTick: 0,
 };
 
 const BotValueDefaultInputContext = createContext<IBotValueDefaultInputContext>(initialContext);
 
 export const BotValueDefaultInputProvider = ({
     collaborationType,
+    currentUser,
     disabled,
     platform,
     platformRunningType,
@@ -91,7 +96,7 @@ export const BotValueDefaultInputProvider = ({
     const [inputs, setInputs] = useState<TAgentFormInput[]>([]);
     const inputsRef = useRef<Record<string, HTMLElement | null>>({});
     const [errors, setErrors] = useState<Record<string, string>>({});
-    const [, setResetTick] = useState(0);
+    const [resetTick, setResetTick] = useState(0);
     const syncValue = useCallback(() => {
         newValueRef.current = JSON.stringify(valuesRef.current);
     }, []);
@@ -105,6 +110,20 @@ export const BotValueDefaultInputProvider = ({
         },
         [syncValue]
     );
+    const createSafePatchValue = (patch: Record<string, unknown>) => {
+        const allowedKeys = new Set([
+            ...inputs.map((input) => input.name),
+            "agent_llm",
+            "api_names",
+            "comfort_tool_names",
+            "comfort_tool_descriptions",
+            "comfort_tool_definitions",
+            "system_prompt",
+        ]);
+        const blockedKeys = new Set(["api_key", "app_api_token", "token", "secret", "password"]);
+
+        return Object.fromEntries(Object.entries(patch).filter(([key]) => allowedKeys.has(key) && !blockedKeys.has(key)));
+    };
     const [apiList, setApiList] = useState<Record<string, string>>({});
     const showableInputs = useMemo(() => {
         return showableDefaultInputs[platform]?.[platformRunningType] ?? [];
@@ -129,6 +148,7 @@ export const BotValueDefaultInputProvider = ({
     const getRef = () => ({
         type: "default-bot-json" as const,
         value: newValueRef.current,
+        syncValue,
         validate: (shouldFocus?: bool) => {
             if (!required) {
                 return true;
@@ -169,6 +189,35 @@ export const BotValueDefaultInputProvider = ({
         onSuccess: () => {
             setErrors(() => ({}));
         },
+        patchValue: (patch: Record<string, unknown>) => {
+            const safePatch = createSafePatchValue(patch);
+            valuesRef.current = {
+                ...valuesRef.current,
+                ...safePatch,
+            };
+            syncValue();
+
+            if (Utils.Type.isString(safePatch["agent_llm"])) {
+                setSelectedProvider(safePatch["agent_llm"] as TAgentModelName);
+            }
+
+            if (Utils.Type.isArray(safePatch["api_names"]) && safePatch["api_names"].every((apiName) => Utils.Type.isString(apiName))) {
+                setSelectedApis(safePatch["api_names"] as string[]);
+            }
+
+            if (
+                Utils.Type.isArray(safePatch["comfort_tool_names"]) &&
+                safePatch["comfort_tool_names"].every((comfortToolName) => Utils.Type.isString(comfortToolName))
+            ) {
+                setSelectedComfortTools(safePatch["comfort_tool_names"] as string[]);
+            }
+
+            if (Utils.Type.isObject(safePatch["comfort_tool_descriptions"])) {
+                setComfortToolDescriptions(safePatch["comfort_tool_descriptions"] as Record<string, string>);
+            }
+
+            setResetTick((tick) => tick + 1);
+        },
     });
 
     if (Utils.Type.isFunction(ref)) {
@@ -207,6 +256,7 @@ export const BotValueDefaultInputProvider = ({
         <BotValueDefaultInputContext.Provider
             value={{
                 collaborationType,
+                currentUser,
                 platform,
                 platformRunningType,
                 section,
@@ -231,6 +281,7 @@ export const BotValueDefaultInputProvider = ({
                 required,
                 isValidating,
                 showableInputs,
+                resetTick,
             }}
         >
             {children}

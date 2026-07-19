@@ -10,7 +10,7 @@ import Form from "@/components/base/Form";
 import Label from "@/components/base/Label";
 import SubmitButton from "@/components/base/SubmitButton";
 import Toast from "@/components/base/Toast";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import useCreateBot from "@/controllers/api/settings/bots/useCreateBot";
 import setupApiErrorHandler from "@/core/helpers/setupApiErrorHandler";
 import { ROUTES } from "@/core/routing/constants";
@@ -24,18 +24,23 @@ import MultiSelect from "@/components/MultiSelect";
 import PasswordInput from "@/components/PasswordInput";
 import { usePageNavigateRef } from "@/core/hooks/usePageNavigate";
 import { ALLOWED_ALL_IPS_BY_PLATFORMS, EBotPlatform, EBotPlatformRunningType } from "@langboard/core/ai";
-import { getValueType, requirements } from "@/components/bots/BotValueInput/utils";
+import { getValueType, requirements, syncPendingBotValueInputChange } from "@/components/bots/BotValueInput/utils";
 import { TBotValueDefaultInputRefLike } from "@/components/bots/BotValueInput/types";
 import BotValueInput from "@/components/bots/BotValueInput";
 import BotPlatformSelect from "@/components/bots/BotPlatformSelect";
 import BotPlatformRunningTypeSelect from "@/components/bots/BotPlatformRunningTypeSelect";
 import { ISharedSettingsModalProps } from "@/pages/SettingsPage/types";
+import BotCreateAssistantPanel from "@/pages/SettingsPage/components/bots/BotCreateAssistantPanel";
+import type { IBotDraft } from "@/controllers/api/settings/bots/useDraftBotFromInstruction";
+import type { IBotActionSuggestion } from "@/controllers/api/settings/bots/useSuggestBotActions";
 
-function BotCreateFormDialog({ opened, setOpened }: ISharedSettingsModalProps): React.JSX.Element {
+function BotCreateFormDialog({ opened, setOpened, currentUser }: ISharedSettingsModalProps): React.JSX.Element {
     const [t] = useTranslation();
     const navigate = usePageNavigateRef();
     const [isValidating, setIsValidating] = useState(false);
     const [revealedToken, setRevealedToken] = useState<string>();
+    const [draftActionSuggestions, setDraftActionSuggestions] = useState<IBotActionSuggestion[]>([]);
+    const dialogContentRef = useRef<HTMLDivElement | null>(null);
     const dataTransferRef = useRef(new DataTransfer());
     const inputsRef = useRef({
         name: null as HTMLInputElement | null,
@@ -59,11 +64,39 @@ function BotCreateFormDialog({ opened, setOpened }: ISharedSettingsModalProps): 
     const { mutate } = useCreateBot();
     const [errors, setErrors] = useState<Record<string, string>>({});
     const ipWhitelistRef = useRef<string[]>([]);
-    const save = () => {
+    const getCurrentBotValue = () => {
+        if (!Utils.String.isJsonString(valueRef.current)) {
+            return {};
+        }
+
+        return JSON.parse(valueRef.current) as Record<string, unknown>;
+    };
+    const applyBotDraft = (draft: IBotDraft) => {
+        setDraftActionSuggestions(draft.suggestions);
+        if (inputsRef.current.name) {
+            inputsRef.current.name.value = draft.bot_name;
+        }
+        if (inputsRef.current.uname) {
+            inputsRef.current.uname.value = draft.bot_uname;
+        }
+
+        const valueInput = inputsRef.current.value;
+        if (valueInput?.type === "default-bot-json") {
+            (valueInput as TBotValueDefaultInputRefLike).patchValue(draft.value_patch);
+            return;
+        }
+
+        valueRef.current = JSON.stringify({
+            ...getCurrentBotValue(),
+            ...draft.value_patch,
+        });
+    };
+    const save = async () => {
         if (isValidating || !inputsRef.current.name || !inputsRef.current.uname) {
             return;
         }
 
+        await syncPendingBotValueInputChange(inputsRef.current.value);
         setIsValidating(true);
 
         const values = {} as Record<keyof typeof inputsRef.current, string>;
@@ -168,17 +201,40 @@ function BotCreateFormDialog({ opened, setOpened }: ISharedSettingsModalProps): 
         }
 
         setRevealedToken(undefined);
+        setDraftActionSuggestions([]);
         setOpened(opened);
     };
 
+    useEffect(() => {
+        if (!opened) {
+            return;
+        }
+
+        const resetScroll = () => dialogContentRef.current?.scrollTo({ top: 0, left: 0 });
+        resetScroll();
+        const animationFrame = requestAnimationFrame(() => {
+            resetScroll();
+            requestAnimationFrame(resetScroll);
+        });
+
+        return () => cancelAnimationFrame(animationFrame);
+    }, [opened]);
+
     return (
         <Dialog.Root open={opened} onOpenChange={changeOpenedState}>
-            <Dialog.Content className="sm:max-w-md" aria-describedby="">
+            <Dialog.Content
+                ref={dialogContentRef}
+                className="max-h-[calc(100vh-2rem)] w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] overflow-y-auto sm:max-w-2xl"
+                aria-describedby=""
+            >
                 <Dialog.Header>
                     <Dialog.Title>{t("settings.Create bot")}</Dialog.Title>
                 </Dialog.Header>
                 {!revealedToken && (
                     <Form.Root className="mt-4">
+                        <Box mb="4">
+                            <BotCreateAssistantPanel disabled={isValidating} getCurrentValue={getCurrentBotValue} onApplyDraft={applyBotDraft} />
+                        </Box>
                         <AvatarUploader
                             isBot
                             dataTransferRef={dataTransferRef}
@@ -260,12 +316,14 @@ function BotCreateFormDialog({ opened, setOpened }: ISharedSettingsModalProps): 
                         {formRequirements.includes("value") && (
                             <Box mt="4">
                                 <BotValueInput
+                                    currentUser={currentUser}
                                     platform={selectedPlatform}
                                     platformRunningType={selectedPlatformRunningType}
                                     value=""
                                     label={t(`bot.platformRunningTypes.${selectedPlatformRunningType}`)}
                                     valueType={valueType}
                                     newValueRef={valueRef}
+                                    initialActionSuggestions={draftActionSuggestions}
                                     isValidating={isValidating}
                                     previewByDialog
                                     required

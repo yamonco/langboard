@@ -2,6 +2,7 @@ export enum EEditorType {
     CardDescription = "card-description",
     CardComment = "card-comment",
     CardNewComment = "card-new-comment",
+    BotPrompt = "bot-prompt",
     WikiContent = "wiki-content",
 }
 

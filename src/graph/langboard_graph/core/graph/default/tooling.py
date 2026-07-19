@@ -49,7 +49,7 @@ def create_langboard_context_prompt(tweaks: dict[str, Any]) -> str:
 
 
 async def create_langboard_entity_context_prompt(tweaks: dict[str, Any], input_value: str) -> str:
-    if "card" not in input_value.lower() and "카드" not in input_value:
+    if "card" not in input_value.lower():
         return ""
 
     variables = _get_variables(tweaks)

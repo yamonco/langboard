@@ -12,7 +12,7 @@ import { useTranslation } from "react-i18next";
 import { usePageNavigateRef } from "@/core/hooks/usePageNavigate";
 import { EHttpStatus } from "@langboard/core/enums";
 import { EEditorCollaborationType } from "@langboard/core/constants";
-import { getValueType } from "@/components/bots/BotValueInput/utils";
+import { getValueType, syncPendingBotValueInputChange } from "@/components/bots/BotValueInput/utils";
 import BotValueInput from "@/components/bots/BotValueInput";
 import { TBotValueDefaultInputRefLike } from "@/components/bots/BotValueInput/types";
 
@@ -35,18 +35,20 @@ const InternalBotValue = memo(() => {
     const [isValidating, setIsValidating] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
 
-    const change = () => {
-        if (isValidating || !newValueRef.current || !inputRef.current || !canUpdateInternalBot) {
+    const change = async () => {
+        const input = inputRef.current;
+        if (isValidating || !newValueRef.current || !input || !canUpdateInternalBot) {
             return;
         }
 
-        if (inputRef.current.type === "default-bot-json") {
-            const validated = (inputRef.current as TBotValueDefaultInputRefLike).validate(true);
+        if (input.type === "default-bot-json") {
+            const validated = (input as TBotValueDefaultInputRefLike).validate(true);
             if (!validated) {
                 return;
             }
         }
 
+        await syncPendingBotValueInputChange(input);
         const newValue = newValueRef.current.trim();
         if (value.trim() === newValue || !newValue) {
             newValueRef.current = newValue;
@@ -108,6 +110,7 @@ const InternalBotValue = memo(() => {
         <Box w="full">
             <BotValueInput
                 collaborationType={EEditorCollaborationType.AppSettings}
+                currentUser={currentUser}
                 uid={internalBot.uid}
                 section="internal-bot-value"
                 platform={platform}
@@ -118,9 +121,9 @@ const InternalBotValue = memo(() => {
                 newValueRef={newValueRef}
                 isValidating={isValidating}
                 isEditing={isEditing}
-                startEditing={startEditing}
-                cancelEditing={cancelEditing}
-                change={change}
+                startEditing={canUpdateInternalBot ? startEditing : undefined}
+                cancelEditing={canUpdateInternalBot ? cancelEditing : undefined}
+                change={canUpdateInternalBot ? change : undefined}
                 required
                 disabled={!canUpdateInternalBot || (shouldUseEditMode && !isEditing)}
                 ref={inputRef}

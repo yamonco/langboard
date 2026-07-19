@@ -64,12 +64,12 @@ export const useCreateEditor = (props: TUseCreateEditor) => {
                     commonEventData,
                 })
             );
+        }
 
-            if (documentID) {
-                const yjsKit = createYjsKit({ socket, userName: fullName, documentID, onSyncChange: onCollaborativeSyncChange });
-                if (yjsKit) {
-                    pluginList.push(yjsKit);
-                }
+        if (!readOnly && documentID) {
+            const yjsKit = createYjsKit({ socket, userName: fullName, documentID, onSyncChange: onCollaborativeSyncChange });
+            if (yjsKit) {
+                pluginList.push(yjsKit);
             }
         }
         return pluginList;

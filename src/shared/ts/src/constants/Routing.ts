@@ -234,6 +234,8 @@ const API = {
         BOTS: {
             GET_LIST: "/settings/bots",
             CREATE: "/settings/bot",
+            ACTION_SUGGESTIONS: "/settings/bot/action-suggestions",
+            DRAFT: "/settings/bot/draft",
             COPY: "/settings/bot/{bot_uid}/copy",
             UPDATE: "/settings/bot/{bot_uid}",
             UPDATE_DEFAULT_TRIGGER_CONDITIONS: "/settings/bot/{bot_uid}/default-trigger-conditions",

@@ -1,6 +1,20 @@
 import { TSVGIconMap } from "@/assets/svgs/icons";
-import { TBotValueInputType } from "@/components/bots/BotValueInput/types";
+import { TBotValueDefaultInputRefLike, TBotValueInputType } from "@/components/bots/BotValueInput/types";
 import { EBotPlatform, EBotPlatformRunningType, TAgentModelName } from "@langboard/core/ai";
+
+type TBotValueInputRefLike = HTMLInputElement | HTMLTextAreaElement | TBotValueDefaultInputRefLike | null;
+
+const waitForNextAnimationFrame = () => new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+
+const isBotValueDefaultInputRef = (input: TBotValueInputRefLike): input is TBotValueDefaultInputRefLike => input?.type === "default-bot-json";
+
+export const syncPendingBotValueInputChange = async (input: TBotValueInputRefLike) => {
+    await waitForNextAnimationFrame();
+
+    if (isBotValueDefaultInputRef(input)) {
+        input.syncValue();
+    }
+};
 
 export const getValueType = (platform: EBotPlatform, runningType: EBotPlatformRunningType): TBotValueInputType => {
     if (platform === EBotPlatform.Default) {

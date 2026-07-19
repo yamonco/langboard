@@ -82,6 +82,22 @@ class UpdateBotForm(BaseFormModel):
     delete_avatar: bool = False
 
 
+class BotActionSuggestionForm(BaseModel):
+    prompt: str = ""
+    selected_api_names: list[str] = Field(default_factory=list)
+    selected_comfort_tool_names: list[str] = Field(default_factory=list)
+    include_mcp: bool = True
+    limit: int = 8
+
+
+class BotDraftForm(BaseModel):
+    instruction: str
+    value: dict[str, Any] = Field(default_factory=dict)
+    selected_api_names: list[str] = Field(default_factory=list)
+    selected_comfort_tool_names: list[str] = Field(default_factory=list)
+    include_mcp: bool = True
+
+
 @form_model
 class CreateBotDefaultScopeBranchForm(BaseFormModel):
     name: str

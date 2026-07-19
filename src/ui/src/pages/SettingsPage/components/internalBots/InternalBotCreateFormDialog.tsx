@@ -19,7 +19,7 @@ import { EHttpStatus } from "@langboard/core/enums";
 import useCreateInternalBot from "@/controllers/api/settings/internalBots/useCreateInternalBot";
 import PasswordInput from "@/components/PasswordInput";
 import { usePageNavigateRef } from "@/core/hooks/usePageNavigate";
-import { getValueType, requirements } from "@/components/bots/BotValueInput/utils";
+import { getValueType, requirements, syncPendingBotValueInputChange } from "@/components/bots/BotValueInput/utils";
 import { AVAILABLE_RUNNING_TYPES_BY_PLATFORM, EBotPlatform, EBotPlatformRunningType } from "@langboard/core/ai";
 import BotValueInput from "@/components/bots/BotValueInput";
 import { TBotValueDefaultInputRefLike } from "@/components/bots/BotValueInput/types";
@@ -27,10 +27,11 @@ import BotPlatformSelect from "@/components/bots/BotPlatformSelect";
 import BotPlatformRunningTypeSelect from "@/components/bots/BotPlatformRunningTypeSelect";
 import { ISharedSettingsModalProps } from "@/pages/SettingsPage/types";
 
-function InternalBotCreateFormDialog({ opened, setOpened }: ISharedSettingsModalProps): React.JSX.Element {
+function InternalBotCreateFormDialog({ opened, setOpened, currentUser }: ISharedSettingsModalProps): React.JSX.Element {
     const [t] = useTranslation();
     const navigate = usePageNavigateRef();
     const [isValidating, setIsValidating] = useState(false);
+    const dialogContentRef = useRef<HTMLDivElement | null>(null);
     const dataTransferRef = useRef(new DataTransfer());
     const inputsRef = useRef({
         displayName: null as HTMLInputElement | null,
@@ -52,11 +53,12 @@ function InternalBotCreateFormDialog({ opened, setOpened }: ISharedSettingsModal
     const valueRef = useRef("");
     const { mutate } = useCreateInternalBot();
     const [errors, setErrors] = useState<Record<string, string>>({});
-    const save = () => {
+    const save = async () => {
         if (isValidating || !inputsRef.current.displayName) {
             return;
         }
 
+        await syncPendingBotValueInputChange(inputsRef.current.value);
         setIsValidating(true);
 
         const values = {} as Record<keyof typeof inputsRef.current, string>;
@@ -162,9 +164,28 @@ function InternalBotCreateFormDialog({ opened, setOpened }: ISharedSettingsModal
         setSelectedPlatformRunningType(AVAILABLE_RUNNING_TYPES_BY_PLATFORM[selectedPlatform][0]);
     }, [selectedPlatform]);
 
+    useEffect(() => {
+        if (!opened) {
+            return;
+        }
+
+        const resetScroll = () => dialogContentRef.current?.scrollTo({ top: 0, left: 0 });
+        resetScroll();
+        const animationFrame = requestAnimationFrame(() => {
+            resetScroll();
+            requestAnimationFrame(resetScroll);
+        });
+
+        return () => cancelAnimationFrame(animationFrame);
+    }, [opened]);
+
     return (
         <Dialog.Root open={opened} onOpenChange={changeOpenedState}>
-            <Dialog.Content className="sm:max-w-md" aria-describedby="">
+            <Dialog.Content
+                ref={dialogContentRef}
+                className="max-h-[calc(100vh-2rem)] w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] overflow-y-auto sm:max-w-md"
+                aria-describedby=""
+            >
                 <Dialog.Header>
                     <Dialog.Title>{t("settings.Create internal bot")}</Dialog.Title>
                 </Dialog.Header>
@@ -241,6 +262,7 @@ function InternalBotCreateFormDialog({ opened, setOpened }: ISharedSettingsModal
                     {formRequirements.includes("value") && (
                         <Box mt="4">
                             <BotValueInput
+                                currentUser={currentUser}
                                 platform={selectedPlatform}
                                 platformRunningType={selectedPlatformRunningType}
                                 value=""

@@ -354,22 +354,60 @@ function EditorWrapper({
             // The editor can be between mount and editable registration here.
         }
         editor.selection = null;
-        yjsApi.init({
-            id: documentID,
-            autoSelect: false,
-            selection: null,
-            value: getEditorValue(editor),
-            onReady: () => {
-                if (editor.getOptions(YjsPlugin)?._isSynced) {
-                    setIsCollaborativeReady(true);
-                }
-            },
-        });
+        let disposed = false;
+        let initialized = false;
+        let initStarted = false;
+        let destroyed = false;
+        const destroyYjs = () => {
+            if (destroyed) {
+                return;
+            }
+
+            destroyed = true;
+            yjsApi.destroy();
+        };
+        const startYjs = () => {
+            if (disposed) {
+                return;
+            }
+
+            initStarted = true;
+            void yjsApi
+                .init({
+                    id: documentID,
+                    autoSelect: false,
+                    selection: null,
+                    value: getEditorValue(editor),
+                    onReady: () => {
+                        initialized = true;
+                        if (!disposed && editor.getOptions(YjsPlugin)?._isSynced) {
+                            setIsCollaborativeReady(true);
+                        }
+                    },
+                })
+                .then(() => {
+                    initialized = true;
+                    if (disposed) {
+                        destroyYjs();
+                    }
+                })
+                .catch(() => {
+                    initialized = false;
+                });
+        };
+
+        const initTimeoutID = window.setTimeout(startYjs, 0);
 
         return () => {
+            disposed = true;
             editor.onChange = originalOnChange;
             setIsCollaborativeReady(false);
-            yjsApi.destroy();
+            if (!initStarted) {
+                window.clearTimeout(initTimeoutID);
+            }
+            if (initialized) {
+                destroyYjs();
+            }
         };
     }, [collaborativeRetryKey, documentID, editor, focusEditor, getEditorValue, mounted, readOnly]);
 
