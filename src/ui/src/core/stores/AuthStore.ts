@@ -67,7 +67,7 @@ const useAuthStore = create(
                                 resolve(true);
                             }, 5000);
                         });
-                        return tryGetUser(attempts++);
+                        return tryGetUser(attempts + 1);
                     }
                 };
 
