@@ -1,4 +1,5 @@
 from enum import Enum
+from json import dumps as json_dumps
 from json import loads as json_loads
 from typing import Any, Callable, Protocol, Sequence, TypeVar, cast, runtime_checkable
 from pydantic import BaseModel, SecretStr
@@ -7,6 +8,7 @@ from pydantic_core import PydanticUndefinedType as UndefinedType
 from sqlalchemy import JSON, DateTime, func
 from sqlalchemy.types import TEXT, VARCHAR, BigInteger, TypeDecorator
 from ..types import SafeDateTime, SnowflakeID
+from ..utils.Converter import json_default
 from .ApiField import ApiField
 from .Field import Field
 
@@ -89,12 +91,10 @@ def ModelColumnType(model_type: type[TModelColumn]):
         cache_ok = True
         _model_type_class = model_type
 
-        def process_bind_param(self, value: TModelColumn | None, dialect) -> dict | None:
+        def process_bind_param(self, value: TModelColumn | None, dialect) -> str | None:
             if value is None:
                 return None
-            # SQLAlchemy's JSON type owns serialization. Returning a JSON string
-            # here makes it serialize that string again and stores quoted JSON.
-            return value.model_dump(mode="json")
+            return value.model_dump_json()
 
         def process_result_value(self, value: dict | str | TModelColumn | None, dialect) -> TModelColumn | None:
             if value is None:
@@ -116,10 +116,10 @@ def ModelColumnListType(model_type: type[TModelColumn]):
         cache_ok = True
         _model_type_class = model_type
 
-        def process_bind_param(self, value: list[BaseModel] | None, dialect) -> list[dict] | None:
+        def process_bind_param(self, value: list[BaseModel] | None, dialect) -> str | None:
             if value is None:
                 return None
-            return [item.model_dump(mode="json") for item in value]
+            return json_dumps([item.model_dump() for item in value], default=json_default)
 
         def process_result_value(
             self, value: str | list[BaseModel] | list[dict] | None, dialect
