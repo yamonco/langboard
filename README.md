@@ -90,6 +90,20 @@ Langboard's mission is to enable enterprises to harness AI efficiency without sa
 
 ---
 
+## 🪝 Webhooks
+
+- Project and card events are delivered asynchronously through the existing Celery worker.
+- New webhook registrations return a signing secret once; only its KeyVault reference is stored.
+- Payloads include `schema_version`, `event_id`, `occurred_at`, `event`, and `data`.
+- Verify `X-Langboard-Webhook-Signature` as HMAC-SHA256 over
+  `<X-Langboard-Webhook-Timestamp>.<raw request body>`, then reject stale timestamps
+  and deduplicate `X-Langboard-Webhook-Id`.
+- Delivery uses bounded timeouts and retries. Consumers must therefore support
+  at-least-once delivery.
+- The live event schemas and signing headers are documented at `/schema/webhook`.
+
+---
+
 ## 🛡️ Governance and Access Control
 
 - Role-based controls are applied to settings, API keys, MCP, bots, and user management.

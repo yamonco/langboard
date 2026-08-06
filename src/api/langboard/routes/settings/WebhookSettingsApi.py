@@ -56,9 +56,12 @@ def get_webhook(webhook_uid: str, service: DomainService = DomainService.scope()
 @RoleFilter.add(SettingRole, [SettingRoleAction.WebhookCreate], RoleFinder.setting, allowed_all_admin=False)
 @AuthFilter.add("admin")
 def create_webhook(form: CreateWebhookForm, service: DomainService = DomainService.scope()) -> JsonResponse:
-    setting = service.app_setting.create_webhook_setting(form.name, form.url)
+    setting, revealed_value = service.app_setting.create_webhook_setting(form.name, form.url)
 
-    return JsonResponse(content={"webhook": setting.api_response()}, status_code=status.HTTP_201_CREATED)
+    return JsonResponse(
+        content={"webhook": setting.api_response(), "revealed_value": revealed_value},
+        status_code=status.HTTP_201_CREATED,
+    )
 
 
 @collaborative_edit(
