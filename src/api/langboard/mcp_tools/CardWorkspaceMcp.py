@@ -114,6 +114,19 @@ def get_project_identity(
     return query_project_identity(_adapter(user_or_bot, service), project_uid)
 
 
+@McpTool.add(description="List compact project members without email addresses.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+def list_project_members(project_uid: str, service: DomainService) -> dict[str, Any]:
+    """Return the bounded public member directory needed for assignments."""
+
+    project = service.project.get_by_id_like(project_uid)
+    if not project:
+        raise ValueError("Project not found")
+    members = service.project.get_api_assigned_user_list(project)
+    items = [{key: member[key] for key in ("uid", "username") if key in member} for member in members[:50]]
+    return {"items": items, "total_count": len(members), "truncated": len(members) > 50}
+
+
 @McpTool.add(description="List a bounded newest-updated-first page of cards in a project.")
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
 def list_project_cards(

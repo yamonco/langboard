@@ -174,6 +174,22 @@ def change_column_name(
     return {"name": name}
 
 
+@McpTool.add(description="Change column order.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Update], RoleFinder.project)
+def change_column_order(
+    project_uid: str,
+    column_uid: str,
+    order: int,
+    service: DomainService,
+) -> dict:
+    if isinstance(order, bool) or order < 0:
+        raise ValueError("Column order must be a non-negative integer")
+    result = service.project_column.change_order(project_uid, column_uid, order)
+    if not result:
+        raise ValueError("Failed")
+    return {"message": "Order changed"}
+
+
 @McpTool.add(description="Delete a column from a project.")
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Update], RoleFinder.project)
 def delete_column(project_uid: str, column_uid: str, user_or_bot: User | Bot, service: DomainService) -> dict:

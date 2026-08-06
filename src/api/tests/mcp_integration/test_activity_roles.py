@@ -27,9 +27,13 @@ def test_project_scoped_activity_tools_require_project_read(monkeypatch: pytest.
         def add(*args: Any, **kwargs: Any) -> Any:
             return lambda method: method
 
+    pagination_values: list[dict[str, Any]] = []
+
     class TimeBasedPagination:
         def __init__(self, **kwargs: Any) -> None:
             self.values = kwargs
+            self.refer_time = kwargs.get("refer_time")
+            pagination_values.append(kwargs)
 
     _set_package(monkeypatch, "langboard_shared")
     _set_package(monkeypatch, "langboard_shared.core")
@@ -79,6 +83,29 @@ def test_project_scoped_activity_tools_require_project_read(monkeypatch: pytest.
     assert set(registrations) == expected
     assert "get_current_user_activities" not in registrations
     assert all(metadata == (project_role, ["read"], project_finder) for metadata in registrations.values())
+    service = type(
+        "Service",
+        (),
+        {
+            "activity": type(
+                "Activity",
+                (),
+                {
+                    "get_api_list_by_project": staticmethod(
+                        lambda project_uid, pagination: (
+                            [],
+                            0,
+                            type("Project", (), {"get_uid": lambda self: project_uid})(),
+                        )
+                    )
+                },
+            )()
+        },
+    )()
+
+    module.get_project_activities("project", service, limit=7, refer_time="2026-08-06T12:00:00+09:00")
+
+    assert pagination_values == [{"page": 1, "limit": 7, "refer_time": "2026-08-06T12:00:00+09:00"}]
 
 
 def _set_package(monkeypatch: pytest.MonkeyPatch, name: str) -> ModuleType:

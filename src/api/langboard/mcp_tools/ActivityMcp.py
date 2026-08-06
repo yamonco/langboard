@@ -23,13 +23,28 @@ def get_current_user_activities(user: User, service: DomainService, limit: int =
 
 @McpTool.add("user", description="Get activities for a project.")
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
-def get_project_activities(project_uid: str, service: DomainService, limit: int = 50) -> dict:
-    pagination = ActivityPagination(limit=limit)
+def get_project_activities(
+    project_uid: str,
+    service: DomainService,
+    limit: int = 50,
+    page: int = 1,
+    refer_time: str | None = None,
+) -> dict:
+    pagination = ActivityPagination(page=page, limit=limit, refer_time=refer_time)
     result = service.activity.get_api_list_by_project(project_uid, pagination)
     if not result:
-        return {"activities": [], "count_new_records": 0}
+        return {
+            "activities": [],
+            "count_new_records": 0,
+            "refer_time": str(pagination.refer_time),
+        }
     activities, count_new_records, project = result
-    return {"activities": activities, "count_new_records": count_new_records, "project": {"uid": project.get_uid()}}
+    return {
+        "activities": activities,
+        "count_new_records": count_new_records,
+        "refer_time": str(pagination.refer_time),
+        "project": {"uid": project.get_uid()},
+    }
 
 
 @McpTool.add("user", description="Get activities for a project column.")
