@@ -19,7 +19,8 @@ import { useTranslation } from "react-i18next";
 
 const BoardSettingsOther = memo(() => {
     const navigate = usePageNavigateRef();
-    const { project } = useBoardSettings();
+    const { currentUser, project } = useBoardSettings();
+    const isAdmin = currentUser.useField("is_admin");
     const [isValidating, setIsValidating] = useState(false);
     const [isApplyingWorkflow, setIsApplyingWorkflow] = useState(false);
     const [isOpened, setIsOpened] = useState(false);
@@ -110,28 +111,30 @@ const BoardSettingsOther = memo(() => {
 
     return (
         <Flex direction="col" py="4" gap="4" items="end">
-            <Popover.Root open={isTemplateOpen} onOpenChange={setIsTemplateOpen}>
-                <Popover.Trigger asChild>
-                    <Button variant="outline" size="sm">
-                        {t("project.settings.Copy as template")}
-                    </Button>
-                </Popover.Trigger>
-                <Popover.Content>
-                    <Flex direction="col" gap="2">
-                        <Box weight="semibold">{t("project.settings.Template name")}</Box>
-                        <Input value={templateName} onChange={(event) => setTemplateName(event.target.value)} autoFocus />
-                        <SubmitButton
-                            type="button"
-                            size="sm"
-                            disabled={!templateName.trim()}
-                            isValidating={isCopyingTemplate}
-                            onClick={createTemplate}
-                        >
-                            {t("common.Create")}
-                        </SubmitButton>
-                    </Flex>
-                </Popover.Content>
-            </Popover.Root>
+            {isAdmin && (
+                <Popover.Root open={isTemplateOpen} onOpenChange={setIsTemplateOpen}>
+                    <Popover.Trigger asChild>
+                        <Button variant="outline" size="sm">
+                            {t("project.settings.Copy as template")}
+                        </Button>
+                    </Popover.Trigger>
+                    <Popover.Content>
+                        <Flex direction="col" gap="2">
+                            <Box weight="semibold">{t("project.settings.Template name")}</Box>
+                            <Input value={templateName} onChange={(event) => setTemplateName(event.target.value)} autoFocus />
+                            <SubmitButton
+                                type="button"
+                                size="sm"
+                                disabled={!templateName.trim()}
+                                isValidating={isCopyingTemplate}
+                                onClick={createTemplate}
+                            >
+                                {t("common.Create")}
+                            </SubmitButton>
+                        </Flex>
+                    </Popover.Content>
+                </Popover.Root>
+            )}
             <SubmitButton
                 type="button"
                 variant="secondary"

@@ -10,39 +10,50 @@ import {
 } from "@/controllers/api/settings/projectTemplates/useProjectTemplates";
 import { usePageHeader } from "@/core/providers/PageHeaderProvider";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 function ProjectTemplatesPage() {
+    const [t] = useTranslation();
     const { setPageAliasRef } = usePageHeader();
     const [templates, setTemplates] = useState<IProjectTemplate[]>([]);
-    const [selected, setSelected] = useState("");
-    const { mutateAsync: getTemplates } = useGetProjectTemplates();
-    const { mutateAsync: setDefault, isPending } = useSetDefaultProjectTemplate();
+    const [selected, setSelected] = useState<string>();
+    const { mutateAsync: getTemplates } = useGetProjectTemplates({ interceptToast: true });
+    const { mutateAsync: setDefault, isPending } = useSetDefaultProjectTemplate({ interceptToast: true });
 
     useEffect(() => {
-        setPageAliasRef.current("Project templates");
-        getTemplates({}).then((items) => {
-            setTemplates(items);
-            setSelected(items.find((item) => item.is_default)?.name ?? items[0]?.name ?? "");
-        });
+        setPageAliasRef.current(t("settings.Project templates"));
+        getTemplates({})
+            .then((items) => {
+                setTemplates(items);
+                setSelected(items.find((item) => item.is_default)?.name ?? items[0]?.name);
+            })
+            .catch(() => Toast.Add.error(t("errors.Internal server error")));
     }, []);
 
-    const save = async () => {
-        const updated = await setDefault({ template_name: selected });
-        setTemplates((items) => items.map((item) => ({ ...item, is_default: item.name === updated.name })));
-        Toast.Add.success("Default project template updated.");
+    const save = () => {
+        if (!selected) return;
+        const promise = setDefault({ template_name: selected });
+        Toast.Add.promise(promise, {
+            loading: t("common.Saving..."),
+            error: () => t("errors.Internal server error"),
+            success: (updated) => {
+                setTemplates((items) => items.map((item) => ({ ...item, is_default: item.name === updated.name })));
+                return t("successes.Default project template updated.");
+            },
+        });
     };
 
     return (
         <Flex direction="col" gap="4">
             <Box textSize="3xl" weight="semibold">
-                Project templates
+                {t("settings.Project templates")}
             </Box>
-            <Box className="text-muted-foreground">New projects use this template when no template is specified.</Box>
+            <Box className="text-muted-foreground">{t("settings.New projects use this template when no template is specified.")}</Box>
             <Flex gap="2" items="end" maxW="xl">
                 <Box className="grow">
                     <Select.Root value={selected} onValueChange={setSelected}>
                         <Select.Trigger>
-                            <Select.Value placeholder="Select a template" />
+                            <Select.Value placeholder={t("settings.Select a template")} />
                         </Select.Trigger>
                         <Select.Content>
                             {templates.map((template) => (
@@ -54,7 +65,7 @@ function ProjectTemplatesPage() {
                     </Select.Root>
                 </Box>
                 <Button disabled={!selected || isPending} onClick={save}>
-                    Save default
+                    {t("settings.Save default")}
                 </Button>
             </Flex>
         </Flex>

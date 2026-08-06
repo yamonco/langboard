@@ -179,7 +179,7 @@ function SettingsProxyDisplay({ currentUser, isOllamaAvailable }: { currentUser:
     const sidebarNavs: Record<string, ISidebarNavItem> = {
         [ROUTES.SETTINGS.PROJECT_TEMPLATES]: {
             icon: "layout-template",
-            name: "Project templates",
+            name: t("settings.Project templates"),
             onClick: () => navigate(ROUTES.SETTINGS.PROJECT_TEMPLATES, { smooth: true }),
             hidden: !currentUser.is_admin,
         },

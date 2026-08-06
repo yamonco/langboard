@@ -30,6 +30,8 @@ class ProjectTemplateService(BaseDomainService):
     def ensure_builtin(self) -> ProjectTemplate:
         template = self.repo.project_template.get_by_name("SI")
         if template:
+            if not template.is_builtin:
+                raise ValueError("SI is reserved for the built-in project template")
             if self.repo.project_template.get_default() is None:
                 self.repo.project_template.replace_default(template)
                 template.is_default = True
@@ -68,6 +70,7 @@ class ProjectTemplateService(BaseDomainService):
         columns = sorted((column for column in raw_columns if not column.is_archive), key=lambda item: item.order)
         internal_bots = [
             {
+                "internal_bot_uid": internal_bot.get_uid(),
                 "bot_type": internal_bot.bot_type.value,
                 "prompt": assigned.prompt,
                 "use_default_prompt": assigned.use_default_prompt,
@@ -167,10 +170,10 @@ class ProjectTemplateService(BaseDomainService):
                 bot_type = InternalBotType(snapshot["bot_type"])
             except (KeyError, ValueError):
                 continue
-            internal_bot = next(
-                (bot for bot in InfraHelper.get_all(InternalBot) if bot.bot_type == bot_type),
-                None,
-            )
+            internal_bot_uid = str(snapshot.get("internal_bot_uid") or "")
+            internal_bot = InfraHelper.get_by_id_like(InternalBot, internal_bot_uid) if internal_bot_uid else None
+            if not internal_bot:
+                internal_bot = self.repo.internal_bot.get_default_by_type(bot_type)
             if not internal_bot:
                 continue
             assigned = self.repo.project_assigned_internal_bot.find_with_internal_bot_by_project_and_type(
@@ -179,7 +182,7 @@ class ProjectTemplateService(BaseDomainService):
             if assigned:
                 current_bot, setting = assigned
                 if current_bot.id != internal_bot.id:
-                    self.repo.project_assigned_internal_bot.replace_by_project(project, current_bot, internal_bot)
+                    setting.internal_bot_id = internal_bot.id
                 setting.prompt = str(snapshot.get("prompt") or "")
                 setting.use_default_prompt = bool(snapshot.get("use_default_prompt", True))
                 self.repo.project_assigned_internal_bot.update(setting)

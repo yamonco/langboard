@@ -50,7 +50,7 @@ from .forms import (
     description="Copy ordered columns and project bot hooks as a reusable template.",
 )
 @RoleFilter.add(ProjectRole, [ProjectRoleAction.Update], RoleFinder.project)
-@AuthFilter.add("user")
+@AuthFilter.add("admin")
 def copy_project_as_template(
     project_uid: str,
     form: CopyProjectTemplateForm,
@@ -61,7 +61,10 @@ def copy_project_as_template(
     project = service.project.get_by_id_like(project_uid)
     if not project:
         raise ApiException.NotFound_404(ApiErrorCode.NF2001)
-    template = service.project_template.copy_from_project(project, form.name)
+    try:
+        template = service.project_template.copy_from_project(project, form.name)
+    except ValueError as exc:
+        raise ApiException.BadRequest_400(ApiErrorCode.VA0000) from exc
     return JsonResponse(content={"template": template.api_response()}, status_code=status.HTTP_201_CREATED)
 
 

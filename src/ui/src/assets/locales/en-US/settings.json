@@ -1,5 +1,9 @@
 {
   "App settings": "App settings",
+  "Project templates": "Project templates",
+  "New projects use this template when no template is specified.": "New projects use this template when no template is specified.",
+  "Select a template": "Select a template",
+  "Save default": "Save default",
   "API keys": "API keys",
   "Active": "Active",
   "Edit IP whitelist": "Edit IP whitelist",

@@ -1,15 +1,18 @@
 import os
 from types import SimpleNamespace
 from typing import Any
+import pytest
 
 
 os.environ.setdefault("PROJECT_NAME", "langboard")
 
 from langboard_shared.domain.models import ProjectTemplate  # noqa: E402
+from langboard_shared.domain.models.InternalBot import InternalBotType  # noqa: E402
 from langboard_shared.domain.services.factory.ProjectTemplateService import (  # noqa: E402
     SI_COLUMNS,
     ProjectTemplateService,
 )
+from langboard_shared.helpers import InfraHelper  # noqa: E402
 
 
 class TemplateRepository:
@@ -59,6 +62,21 @@ def test_builtin_si_is_the_initial_default_without_duplicate_archive() -> None:
     assert len(templates.items) == 1
 
 
+def test_builtin_si_name_cannot_be_claimed_by_a_project_copy() -> None:
+    """A user template must never be promoted as the built-in SI default."""
+
+    templates = TemplateRepository()
+    templates.items.append(ProjectTemplate(name="SI", columns=["Custom"]))
+    repository = SimpleNamespace(project_template=templates)
+
+    try:
+        _service(repository).ensure_builtin()
+    except ValueError as exc:
+        assert str(exc) == "SI is reserved for the built-in project template"
+    else:
+        raise AssertionError("Expected a reserved-name error")
+
+
 def test_copy_snapshot_preserves_order_and_bot_settings_but_not_cards_or_schedules() -> None:
     """Copy captures only reusable board structure and automation hooks."""
 
@@ -70,7 +88,7 @@ def test_copy_snapshot_preserves_order_and_bot_settings_but_not_cards_or_schedul
         SimpleNamespace(id=1, name="Backlog", order=0, is_archive=False),
     ]
     bot_type = SimpleNamespace(value="project_chat")
-    internal_bot = SimpleNamespace(bot_type=bot_type)
+    internal_bot = SimpleNamespace(bot_type=bot_type, get_uid=lambda: "internal-bot-uid")
     setting = SimpleNamespace(prompt="Keep it short", use_default_prompt=False)
     repository = SimpleNamespace(
         project_template=templates,
@@ -87,6 +105,7 @@ def test_copy_snapshot_preserves_order_and_bot_settings_but_not_cards_or_schedul
     assert template.columns == ["Backlog", "Done"]
     assert template.internal_bots == [
         {
+            "internal_bot_uid": "internal-bot-uid",
             "bot_type": "project_chat",
             "prompt": "Keep it short",
             "use_default_prompt": False,
@@ -100,6 +119,75 @@ def test_copy_snapshot_preserves_order_and_bot_settings_but_not_cards_or_schedul
     }
     assert not hasattr(template, "cards")
     assert not hasattr(template, "schedules")
+
+
+def test_template_restores_the_exact_assigned_internal_bot(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A copied template must not select an arbitrary bot of the same type."""
+
+    exact_bot = SimpleNamespace(id=17)
+    inserted: list[Any] = []
+    fallback = SimpleNamespace(
+        get_default_by_type=lambda _bot_type: (_ for _ in ()).throw(AssertionError("unexpected fallback"))
+    )
+    assigned = SimpleNamespace(
+        find_with_internal_bot_by_project_and_type=lambda _project, _bot_type: None,
+        insert=inserted.append,
+    )
+    repository = SimpleNamespace(internal_bot=fallback, project_assigned_internal_bot=assigned)
+    monkeypatch.setattr(InfraHelper, "get_by_id_like", lambda _model, uid: exact_bot if uid == "exact-bot" else None)
+
+    _service(repository)._apply_internal_bots(
+        SimpleNamespace(id=9),
+        [
+            {
+                "internal_bot_uid": "exact-bot",
+                "bot_type": InternalBotType.ProjectChat.value,
+                "prompt": "Use this bot",
+                "use_default_prompt": False,
+            }
+        ],
+    )
+
+    assert len(inserted) == 1
+    assert inserted[0].internal_bot_id == exact_bot.id
+    assert inserted[0].prompt == "Use this bot"
+    assert inserted[0].use_default_prompt is False
+
+
+def test_template_replaces_an_existing_bot_without_stale_writeback(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Bot identity and prompt settings must be persisted in one update."""
+
+    exact_bot = SimpleNamespace(id=17)
+    current_bot = SimpleNamespace(id=8)
+    setting = SimpleNamespace(internal_bot_id=current_bot.id, prompt="Old", use_default_prompt=True)
+    updated: list[Any] = []
+    assigned = SimpleNamespace(
+        find_with_internal_bot_by_project_and_type=lambda _project, _bot_type: (current_bot, setting),
+        update=updated.append,
+        replace_by_project=lambda *_args: (_ for _ in ()).throw(AssertionError("redundant replacement")),
+    )
+    repository = SimpleNamespace(
+        internal_bot=SimpleNamespace(get_default_by_type=lambda _bot_type: None),
+        project_assigned_internal_bot=assigned,
+    )
+    monkeypatch.setattr(InfraHelper, "get_by_id_like", lambda _model, _uid: exact_bot)
+
+    _service(repository)._apply_internal_bots(
+        SimpleNamespace(id=9),
+        [
+            {
+                "internal_bot_uid": "exact-bot",
+                "bot_type": InternalBotType.ProjectChat.value,
+                "prompt": "New",
+                "use_default_prompt": False,
+            }
+        ],
+    )
+
+    assert updated == [setting]
+    assert setting.internal_bot_id == exact_bot.id
+    assert setting.prompt == "New"
+    assert setting.use_default_prompt is False
 
 
 def test_si_constant_is_stable_for_command_and_ui_contracts() -> None:

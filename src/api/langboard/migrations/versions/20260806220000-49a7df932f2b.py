@@ -6,7 +6,6 @@ Create Date: 2026-08-06 22:00:00
 """
 
 from typing import Sequence, Union
-
 import sqlalchemy as sa
 from alembic import op
 
@@ -18,7 +17,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    """Create template storage; the domain service materializes built-ins."""
+    """Create template storage and reserve the built-in SI template."""
 
     op.create_table(
         "project_template",
@@ -37,6 +36,17 @@ def upgrade() -> None:
     )
     op.create_index(op.f("ix_project_template_is_default"), "project_template", ["is_default"], unique=False)
     op.create_index(op.f("ix_project_template_name"), "project_template", ["name"], unique=False)
+    op.execute(
+        sa.text(
+            """INSERT INTO project_template
+            (id, created_at, updated_at, name, columns, internal_bots,
+             project_bot_scopes, column_bot_scopes, is_builtin, is_default)
+            VALUES
+            (1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'SI',
+             '["Backlog", "Ready", "In Progress", "Review", "Done"]', '[]', '[]', '[]', true, true)
+            """
+        )
+    )
 
 
 def downgrade() -> None:

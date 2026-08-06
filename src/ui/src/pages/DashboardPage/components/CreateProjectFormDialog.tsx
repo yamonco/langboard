@@ -6,12 +6,15 @@ import Dialog from "@/components/base/Dialog";
 import Floating from "@/components/base/Floating";
 import Form from "@/components/base/Form";
 import Input from "@/components/base/Input";
+import Select from "@/components/base/Select";
+import Toast from "@/components/base/Toast";
 import SubmitButton from "@/components/base/SubmitButton";
 import useCreateProject from "@/controllers/api/dashboard/useCreateProject";
+import { IProjectTemplate, useGetProjectTemplates } from "@/controllers/api/settings/projectTemplates/useProjectTemplates";
 import useForm from "@/core/hooks/form/useForm";
 import { Project } from "@/core/models";
 import { ROUTES } from "@/core/routing/constants";
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePageNavigateRef } from "@/core/hooks/usePageNavigate";
 
 export interface ICreateProjectFormDialogProps {
@@ -23,6 +26,9 @@ function CreateProjectFormDialog({ opened, setOpened }: ICreateProjectFormDialog
     const [t] = useTranslation();
     const navigate = usePageNavigateRef();
     const { mutate } = useCreateProject();
+    const { mutateAsync: getTemplates } = useGetProjectTemplates({ interceptToast: true });
+    const [templates, setTemplates] = useState<IProjectTemplate[]>([]);
+    const [templateName, setTemplateName] = useState<string>();
     const projectTypeRef = useRef("");
     const projectTypeInputRef = useRef<HTMLInputElement>(null);
     const { errors, isValidating, handleSubmit, formRef } = useForm({
@@ -31,6 +37,7 @@ function CreateProjectFormDialog({ opened, setOpened }: ICreateProjectFormDialog
             title: { required: true },
             description: {},
             project_type: { required: true },
+            template_name: {},
         },
         mutate,
         mutateOnSuccess: (data) => {
@@ -38,6 +45,16 @@ function CreateProjectFormDialog({ opened, setOpened }: ICreateProjectFormDialog
         },
         useDefaultBadRequestHandler: true,
     });
+
+    useEffect(() => {
+        if (!opened || templates.length) return;
+        getTemplates({})
+            .then((items) => {
+                setTemplates(items);
+                setTemplateName(items.find((item) => item.is_default)?.name ?? items[0]?.name);
+            })
+            .catch(() => Toast.Add.error(t("errors.Internal server error")));
+    }, [opened]);
 
     const setProjectType = (value: string) => {
         projectTypeRef.current = value;
@@ -89,6 +106,21 @@ function CreateProjectFormDialog({ opened, setOpened }: ICreateProjectFormDialog
                             className="mt-4"
                         />
                         {errors.project_type && <FormErrorMessage error={errors.project_type} icon="circle-alert" />}
+                    </Form.Field>
+                    <Form.Field name="template_name">
+                        {templateName && <Input type="hidden" name="template_name" value={templateName} />}
+                        <Select.Root value={templateName} onValueChange={setTemplateName} disabled={isValidating || !templates.length}>
+                            <Select.Trigger className="mt-4">
+                                <Select.Value placeholder={t("settings.Select a template")} />
+                            </Select.Trigger>
+                            <Select.Content>
+                                {templates.map((template) => (
+                                    <Select.Item key={template.uid} value={template.name}>
+                                        {template.name} · {template.columns.join(" → ")}
+                                    </Select.Item>
+                                ))}
+                            </Select.Content>
+                        </Select.Root>
                     </Form.Field>
                     <Dialog.Footer className="mt-6 flex-col gap-2 sm:justify-end sm:gap-0">
                         <Dialog.Close asChild>
