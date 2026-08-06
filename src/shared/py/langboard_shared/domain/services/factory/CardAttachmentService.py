@@ -26,11 +26,13 @@ class CardAttachmentService(BaseDomainService):
         attachment = InfraHelper.get_by_id_like(CardAttachment, attachment)
         return attachment
 
-    def get_api_list_by_card(self, card: TCardParam | None) -> list[dict[str, Any]]:
+    def get_api_list_by_card(self, card: TCardParam | None, limit: int | None = None) -> list[dict[str, Any]]:
+        """Return attachment metadata, optionally enforcing a repository row limit."""
+
         card = InfraHelper.get_by_id_like(Card, card)
         if not card:
             return []
-        card_attachments = self.repo.card_attachment.get_list_by_card(card)
+        card_attachments = self.repo.card_attachment.get_list_by_card(card, limit=limit)
         return [
             {**card_attachment.api_response(), "user": user.api_response()}
             for card_attachment, user in card_attachments

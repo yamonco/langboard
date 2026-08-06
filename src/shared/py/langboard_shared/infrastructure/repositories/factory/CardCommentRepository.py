@@ -1,5 +1,6 @@
 from ....core.db import DbSession, SqlBuilder
 from ....core.domain import BaseRepository
+from ....core.types import SafeDateTime
 from ....core.types.ParamTypes import TCardParam, TCommentParam
 from ....domain.models import Bot, CardComment, User
 from ....helpers import InfraHelper
@@ -22,6 +23,29 @@ class CardCommentRepository(BaseRepository[CardComment]):
             comments = result.all()
 
         return comments
+
+    def get_page_by_card(
+        self,
+        card: TCardParam,
+        limit: int,
+        before_created_at: SafeDateTime | None = None,
+        before_comment: TCommentParam | None = None,
+    ):
+        """Return one newest-first comment page plus one look-ahead row."""
+
+        card_id = InfraHelper.convert_id(card)
+        query = self.__get_board_comment_api_query(card_id).where(CardComment.column("deleted_at") == None)  # noqa
+        if before_created_at is not None and before_comment is not None:
+            comment_id = InfraHelper.convert_id(before_comment)
+            query = query.where(
+                (CardComment.column("created_at") < before_created_at)
+                | (
+                    (CardComment.column("created_at") == before_created_at)
+                    & (CardComment.column("id") < comment_id)
+                )
+            )
+        with DbSession.use(readonly=True) as db:
+            return db.exec(query.limit(limit + 1)).all()
 
     def get_one(self, card: TCardParam, comment: TCommentParam):
         card_id = InfraHelper.convert_id(card)

@@ -15,22 +15,30 @@ class CardRelationshipRepository(BaseRepository[CardRelationship]):
     def name() -> str:
         return "card_relationship"
 
-    def get_all_by_card(self, card: TCardParam) -> list[tuple[CardRelationship, GlobalCardRelationshipType]]:
+    def get_all_by_card(
+        self, card: TCardParam, limit: int | None = None
+    ) -> list[tuple[CardRelationship, GlobalCardRelationshipType]]:
+        """Return card relationships, optionally enforcing a database row limit."""
+
         card_id = InfraHelper.convert_id(card)
 
         relationships = []
-        with DbSession.use(readonly=True) as db:
-            result = db.exec(
-                SqlBuilder.select.tables(CardRelationship, GlobalCardRelationshipType)
-                .join(
-                    GlobalCardRelationshipType,
-                    CardRelationship.column("relationship_type_id") == GlobalCardRelationshipType.column("id"),
-                )
-                .where(
-                    (CardRelationship.column("card_id_parent") == card_id)
-                    | (CardRelationship.column("card_id_child") == card_id)
-                )
+        query = (
+            SqlBuilder.select.tables(CardRelationship, GlobalCardRelationshipType)
+            .join(
+                GlobalCardRelationshipType,
+                CardRelationship.column("relationship_type_id") == GlobalCardRelationshipType.column("id"),
             )
+            .where(
+                (CardRelationship.column("card_id_parent") == card_id)
+                | (CardRelationship.column("card_id_child") == card_id)
+            )
+            .order_by(CardRelationship.column("id").asc())
+        )
+        if limit is not None:
+            query = query.limit(limit)
+        with DbSession.use(readonly=True) as db:
+            result = db.exec(query)
             relationships = result.all()
         return relationships
 

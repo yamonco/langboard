@@ -105,6 +105,45 @@ class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
             records = result.all()
         return records
 
+    def get_page_by_project(
+        self,
+        project: TProjectParam,
+        limit: int,
+        before_updated_at: SafeDateTime | None = None,
+        before_card: TCardParam | None = None,
+    ) -> list[tuple[Card, ProjectColumn]]:
+        """Return a bounded newest-updated-first project-card keyset page."""
+
+        project_id = InfraHelper.convert_id(project)
+        query = (
+            SqlBuilder.select.tables(Card, ProjectColumn)
+            .join(ProjectColumn, Card.column("project_column_id") == ProjectColumn.column("id"))
+            .where(Card.column("project_id") == project_id)
+        )
+        if before_updated_at is not None:
+            if before_card is None:
+                raise ValueError("before_card is required with before_updated_at")
+            before_card_id = InfraHelper.convert_id(before_card)
+            query = query.where(
+                (Card.column("updated_at") < before_updated_at)
+                | ((Card.column("updated_at") == before_updated_at) & (Card.column("id") < before_card_id))
+            )
+        query = query.order_by(Card.column("updated_at").desc(), Card.column("id").desc()).limit(limit + 1)
+        with DbSession.use(readonly=True) as db:
+            return list(db.exec(query).all())
+
+    def count_by_project(self, project: TProjectParam) -> int:
+        """Count cards in one project without materializing them."""
+
+        project_id = InfraHelper.convert_id(project)
+        with DbSession.use(readonly=True) as db:
+            return (
+                db.exec(
+                    SqlBuilder.select.count(Card, Card.column("id")).where(Card.column("project_id") == project_id)
+                ).first()
+                or 0
+            )
+
     def get_all_by_column(self, column: TColumnParam):
         column_id = InfraHelper.convert_id(column)
 

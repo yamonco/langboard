@@ -284,6 +284,8 @@ make stop_docker WITH_DOCS=true WITH_UI_WATCHER=true WITH_OLLAMA_GPU=true
 | SOCKET_URL                             | **string (Optional)** | If you use domain, you must set the domain.<br>If you use docker **locally**, you must put **ip address** with the exposed port          |
 | API_URL                                | **string (Optional)** |                                                                                                                                          |
 | PUBLIC_UI_URL                          | **string (Optional)** |                                                                                                                                          |
+| MCP_ALLOWED_HOSTS                      | **array (Optional)**  | Comma-separated Host values accepted by `/mcp/stream` (`hostname:*` allows any port); defaults derive from `API_URL` and `API_HOST`.      |
+| MCP_ALLOWED_ORIGINS                    | **array (Optional)**  | Comma-separated Origin values accepted by `/mcp/stream` (`origin:*` allows any port); defaults derive from `API_URL` and `PUBLIC_UI_URL`. |
 | DOMAIN                                 | **string (Optional)** | If you use subdomains for the urls above, you must set as `.your.domain`.<br>DO NOT ADD **wildcard** in head                             |
 | DB_TIMEOUT                             | **int (Optional)**    | Default: `120`<br>Value must be set in seconds                                                                                           |
 | DB_TCP_USER_TIMEOUT                    | **int (Optional)**    | Default: `1000`<br>Value must be set in milliseconds                                                                                     |

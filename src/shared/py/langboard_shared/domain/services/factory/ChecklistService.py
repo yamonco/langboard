@@ -22,17 +22,31 @@ class ChecklistService(BaseDomainService):
         checklist = InfraHelper.get_by_id_like(Checklist, checklist)
         return checklist
 
-    def get_api_list_by_card(self, card: TCardParam | None) -> list[dict[str, Any]]:
+    def get_api_list_by_card(
+        self,
+        card: TCardParam | None,
+        limit: int | None = None,
+        checkitems_limit: int | None = None,
+    ) -> list[dict[str, Any]]:
+        """Return checklists, optionally bounding both nesting levels in the repository query."""
+
         card = InfraHelper.get_by_id_like(Card, card)
         if not card:
             return []
 
-        raw_checklists = InfraHelper.get_all_by(Checklist, "card_id", card.id)
+        raw_checklists = self.repo.checklist.get_all_by_card(card, limit=limit)
         if not raw_checklists:
             return []
 
         checkitem_service = self._get_service(CheckitemService)
-        checkitems_map = checkitem_service.get_api_map_by_card(card)
+        checkitems_map = (
+            checkitem_service.get_api_map_by_card(card)
+            if checkitems_limit is None
+            else {
+                checklist.id: checkitem_service.get_api_list_by_checklist(card, checklist, limit=checkitems_limit)
+                for checklist in raw_checklists
+            }
+        )
         checklists = []
         for raw_checklist in raw_checklists:
             checkitems = checkitems_map.get(raw_checklist.id, [])

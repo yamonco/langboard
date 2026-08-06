@@ -84,7 +84,7 @@ services:
     container_name: ${PROJECT_NAME}_celeryworker
     build:
       context: ../
-      target: base
+      target: with-document-processing
     command: uv run --no-sync ${PROJECT_NAME} run:broker
 
   socket:

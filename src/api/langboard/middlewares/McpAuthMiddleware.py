@@ -56,35 +56,44 @@ class McpAuthMiddleware(BaseMiddleware):
         # Validate MCP tool group and user ownership
         api_key: ApiKeySetting | None = scope.get("api_key")
         service = DomainService()
+        try:
+            tool_group = service.mcp_tool_group.get_by_id_like(mcp_tool_group_uid)
+            if not tool_group:
+                response = JsonResponse(ApiErrorCode.NF3006, status_code=status.HTTP_404_NOT_FOUND)
+                await response(scope, receive, send)
+                return
 
-        tool_group = service.mcp_tool_group.get_by_id_like(mcp_tool_group_uid)
-        if not tool_group:
-            response = JsonResponse(ApiErrorCode.NF3006, status_code=status.HTTP_404_NOT_FOUND)
-            await response(scope, receive, send)
-            return
-
-        # Check if it's a personal tool group and validate ownership
-        if tool_group.user_id is not None:
-            if not api_key:
+            if tool_group.activated_at is None:
                 response = JsonResponse(ApiErrorCode.PE1001, status_code=status.HTTP_403_FORBIDDEN)
                 await response(scope, receive, send)
                 return
 
-            # Validate that the API key belongs to the same user as the tool group
-            if api_key.user_id != tool_group.user_id:
-                response = JsonResponse(ApiErrorCode.PE1001, status_code=status.HTTP_403_FORBIDDEN)
-                await response(scope, receive, send)
-                return
+            # Check if it's a personal tool group and validate ownership
+            if tool_group.user_id is not None:
+                if not api_key:
+                    response = JsonResponse(ApiErrorCode.PE1001, status_code=status.HTTP_403_FORBIDDEN)
+                    await response(scope, receive, send)
+                    return
 
-        if isinstance(validation_result, User) and not validation_result.is_admin:
-            mcp_role = service.mcp_tool_group.get_role(validation_result)
-            if not mcp_role or not mcp_role.is_granted(McpRoleAction.Read):
-                response = JsonResponse(ApiErrorCode.PE1001, status_code=status.HTTP_403_FORBIDDEN)
-                await response(scope, receive, send)
-                return
+                # Validate that the API key belongs to the same user as the tool group
+                if api_key.user_id != tool_group.user_id:
+                    response = JsonResponse(ApiErrorCode.PE1001, status_code=status.HTTP_403_FORBIDDEN)
+                    await response(scope, receive, send)
+                    return
 
-        # Store auth data and validated tool group in context
-        auth_data = {"user_or_bot": validation_result, "api_key": api_key, "tool_group": tool_group}
-        mcp_auth_context.set(auth_data)
+            if isinstance(validation_result, User) and not validation_result.is_admin:
+                mcp_role = service.mcp_tool_group.get_role(validation_result)
+                if not mcp_role or not mcp_role.is_granted(McpRoleAction.Read):
+                    response = JsonResponse(ApiErrorCode.PE1001, status_code=status.HTTP_403_FORBIDDEN)
+                    await response(scope, receive, send)
+                    return
 
-        await MiddlewareHelper.log_api_key_usage(self.app, scope, receive, send, service)
+            # Store auth data and validated tool group in context
+            auth_data = {"user_or_bot": validation_result, "api_key": api_key, "tool_group": tool_group}
+            context_token = mcp_auth_context.set(auth_data)
+            try:
+                await MiddlewareHelper.log_api_key_usage(self.app, scope, receive, send, service)
+            finally:
+                mcp_auth_context.reset(context_token)
+        finally:
+            service.close()

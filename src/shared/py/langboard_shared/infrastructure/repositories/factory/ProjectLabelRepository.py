@@ -41,7 +41,14 @@ class ProjectLabelRepository(BaseOrderRepository[ProjectLabel, Project]):
             labels = result.all()
         return labels
 
-    def get_all_by_card(self, card: TCardParam, where_in: list[TBaseParam] | None = None) -> list[ProjectLabel]:
+    def get_all_by_card(
+        self,
+        card: TCardParam,
+        where_in: list[TBaseParam] | None = None,
+        limit: int | None = None,
+    ) -> list[ProjectLabel]:
+        """Return card labels, optionally enforcing a database row limit."""
+
         card_id = InfraHelper.convert_id(card)
         labels = []
         query = (
@@ -56,6 +63,9 @@ class ProjectLabelRepository(BaseOrderRepository[ProjectLabel, Project]):
         if where_in is not None:
             label_ids = [InfraHelper.convert_id(label) for label in where_in]
             query = query.where(ProjectLabel.column("id").in_(label_ids))
+        query = query.order_by(ProjectLabel.column("order").asc(), ProjectLabel.column("id").asc())
+        if limit is not None:
+            query = query.limit(limit)
 
         with DbSession.use(readonly=True) as db:
             result = db.exec(query)

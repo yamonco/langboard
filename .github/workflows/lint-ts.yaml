@@ -1,19 +1,6 @@
 name: Lint TS
 
-on:
-  push:
-    paths: &ts_paths
-      - "**/*.ts"
-      - "**/*.tsx"
-      - "**/*.js"
-      - "**/*.cjs"
-      - "**/package.json"
-      - "**/tsconfig.json"
-      - "**/tsconfig.*.json"
-      - "**/yarn.lock"
-      - ".github/workflows/lint-ts.yaml"
-  pull_request:
-    paths: *ts_paths
+on: workflow_dispatch
 
 env:
   NODE_VERSION: "22"
