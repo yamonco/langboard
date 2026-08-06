@@ -9,9 +9,9 @@ from ..mcp_integration import McpRoleFilter, McpTool
 def _normalize_invitation_emails(emails: list[str]) -> list[str]:
     """Validate, normalize, and bound one additive invitation request."""
 
+    if not 1 <= len(emails) <= 10:
+        raise ValueError("Provide between 1 and 10 email addresses")
     normalized = list(dict.fromkeys(email.strip().casefold() for email in emails))
-    if not 1 <= len(normalized) <= 10:
-        raise ValueError("Provide between 1 and 10 unique email addresses")
     if any(fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email) is None for email in normalized):
         raise ValueError("Invalid email address")
     return normalized
@@ -154,7 +154,7 @@ def invite_project_members(
         raise ValueError("Only users can access this endpoint")
     result = service.project.invite_assigned_users(user_or_bot, project_uid, _normalize_invitation_emails(emails))
     if result is None:
-        raise ValueError("Failed to invite")
+        raise ValueError("Project not found")
     return result
 
 

@@ -79,6 +79,12 @@ def test_invite_tool_normalizes_bounds_and_returns_safe_aggregate() -> None:
         ProjectMcp.invite_project_members(
             "project", user, [f"member-{index}@example.com" for index in range(11)], service
         )
+    with pytest.raises(ValueError, match="between 1 and 10"):
+        ProjectMcp.invite_project_members("project", user, ["same@example.com"] * 11, service)
+
+    missing_service = SimpleNamespace(project=SimpleNamespace(invite_assigned_users=lambda *_args: None))
+    with pytest.raises(ValueError, match="Project not found"):
+        ProjectMcp.invite_project_members("missing", user, ["member@example.com"], missing_service)
 
 
 def test_additive_retry_is_a_complete_noop() -> None:
