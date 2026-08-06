@@ -1,8 +1,20 @@
+from re import fullmatch
 from langboard_shared.domain.models import Bot, ProjectRole, User
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.domain.services.DomainService import DomainService
 from langboard_shared.security import RoleFinder
 from ..mcp_integration import McpRoleFilter, McpTool
+
+
+def _normalize_invitation_emails(emails: list[str]) -> list[str]:
+    """Validate, normalize, and bound one additive invitation request."""
+
+    if not 1 <= len(emails) <= 10:
+        raise ValueError("Provide between 1 and 10 email addresses")
+    normalized = list(dict.fromkeys(email.strip().casefold() for email in emails))
+    if any(fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email) is None for email in normalized):
+        raise ValueError("Invalid email address")
+    return normalized
 
 
 @McpTool.add("user", description="Get starred projects for the current user.")
@@ -129,6 +141,21 @@ def update_project_members(
     if result is None:
         raise ValueError("Failed to update")
     return {"message": "Updated"}
+
+
+@McpTool.add(description="Invite up to 10 project members without removing existing members.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Update], RoleFinder.project)
+def invite_project_members(
+    project_uid: str, user_or_bot: User | Bot, emails: list[str], service: DomainService
+) -> dict[str, int | str]:
+    """Add project invitations idempotently and return no recipient data."""
+
+    if not isinstance(user_or_bot, User):
+        raise ValueError("Only users can access this endpoint")
+    result = service.project.invite_assigned_users(user_or_bot, project_uid, _normalize_invitation_emails(emails))
+    if result is None:
+        raise ValueError("Project not found")
+    return result
 
 
 @McpTool.add(description="Unassign a member from a project.")
