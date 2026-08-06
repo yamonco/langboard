@@ -60,6 +60,11 @@ class ChangeInternalBotSettingsForm(BaseFormModel):
 
 
 @form_model
+class CopyProjectTemplateForm(BaseFormModel):
+    name: str
+
+
+@form_model
 class UpdateProjectChatSessionForm(BaseFormModel):
     title: str | None = None
     api_permission_level: Literal["read", "edit", "full_access"] | None = None

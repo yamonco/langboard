@@ -61,6 +61,8 @@
     "invalid_archive_visible_days": "Enter at least 1 day."
   },
   "settings": {
+    "Copy as template": "Copy as template",
+    "Template name": "Template name",
     "Basic info": "Basic info",
     "Internal bots": "Internal bots",
     "Member roles": "Member roles",

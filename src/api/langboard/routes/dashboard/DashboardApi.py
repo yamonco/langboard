@@ -70,7 +70,13 @@ def get_projects(user: User = Auth.scope("user"), service: DomainService = Domai
 def create_project(
     form: DashboardProjectCreateForm, user: User = Auth.scope("user"), service: DomainService = DomainService.scope()
 ):
-    project = service.project.create(user, form.title, form.description, form.project_type)
+    project, _, _ = service.project_template.create_project(
+        user,
+        form.title,
+        form.description,
+        form.project_type,
+        form.template_name,
+    )
     return JsonResponse(content={"project_uid": project.get_uid()}, status_code=status.HTTP_201_CREATED)
 
 

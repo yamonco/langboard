@@ -15,8 +15,14 @@ class FakeCommandPort:
     def __init__(self) -> None:
         self.calls: list[tuple[str, tuple[Any, ...]]] = []
 
-    def create_project_board(self, title: str, description: str | None) -> dict[str, Any]:
-        self.calls.append(("create_project_board", (title, description)))
+    def create_project_board(
+        self,
+        title: str,
+        description: str | None,
+        template_name: str | None,
+        infer_template_prefix: bool,
+    ) -> dict[str, Any]:
+        self.calls.append(("create_project_board", (title, description, template_name, infer_template_prefix)))
         return {"project": {"uid": "p1", "title": title}, "columns": []}
 
     def create_card_in_leftmost_column(
@@ -71,7 +77,7 @@ def test_create_commands_normalize_before_calling_port() -> None:
     create_card_in_leftmost_column(port, "p1", " Task ", assign_user_uids=["u1"])
 
     assert port.calls == [
-        ("create_project_board", ("Delivery", None)),
+        ("create_project_board", ("Delivery", None, None, False)),
         ("create_card_in_leftmost_column", ("p1", "Task", None, ["u1"])),
     ]
 

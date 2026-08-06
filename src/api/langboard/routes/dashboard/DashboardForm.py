@@ -7,6 +7,7 @@ class DashboardProjectCreateForm(BaseFormModel):
     title: str
     description: str | None = None
     project_type: str = "Other"
+    template_name: str | None = None
 
 
 class DashboardPagination(TimeBasedPagination):

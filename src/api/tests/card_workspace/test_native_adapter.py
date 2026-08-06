@@ -91,8 +91,8 @@ def test_native_source_rejects_over_bound_people_before_projection() -> None:
         adapter.get_card_bundle_source("p1", "c1", frozenset({"people"}))
 
 
-def test_native_project_creation_uses_other_and_exact_default_columns(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The native project API, not Hermes, owns the standard board shape."""
+def test_native_project_creation_uses_template_service(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The native project API, not Hermes, owns template selection and board shape."""
 
     class Actor:
         pass
@@ -104,30 +104,21 @@ def test_native_project_creation_uses_other_and_exact_default_columns(monkeypatc
         project_type="Other",
         get_uid=lambda: "project-one",
     )
-    created_columns: list[str] = []
-
-    def create_column(target_actor: Any, target_project: Any, name: str) -> Any:
-        assert target_actor is actor
-        assert target_project is project
-        created_columns.append(name)
-        return SimpleNamespace(
-            api_response=lambda: {
-                "uid": f"column-{len(created_columns)}",
-                "name": name,
-                "order": len(created_columns) - 1,
-            }
+    names = ["Backlog", "Ready", "In Progress", "Review", "Done"]
+    columns = [
+        SimpleNamespace(
+            api_response=lambda name=name, order=order: {"uid": f"column-{order}", "name": name, "order": order}
         )
-
-    create_project_calls: list[tuple[Any, str, str | None, str]] = []
+        for order, name in enumerate(names)
+    ]
+    create_project_calls: list[tuple[Any, str, str | None, str, str | None]] = []
     service = SimpleNamespace(
-        project=SimpleNamespace(
-            create=lambda *args: (
+        project_template=SimpleNamespace(
+            create_project=lambda *args: (
                 create_project_calls.append(args),
-                project,
+                (project, columns, SimpleNamespace(name="SI")),
             )[1],
-            delete=lambda *_args: pytest.fail("successful creation must not roll back"),
         ),
-        project_column=SimpleNamespace(create=create_column),
     )
     monkeypatch.setattr("langboard.card_workspace.infrastructure.native.User", Actor)
 
@@ -136,48 +127,33 @@ def test_native_project_creation_uses_other_and_exact_default_columns(monkeypatc
         "Room board",
     )
 
-    assert create_project_calls == [(actor, "Operations", "Room board", "Other")]
-    assert created_columns == ["Backlog", "In Progress", "Done"]
+    assert create_project_calls == [(actor, "Operations", "Room board", "Other", None, False)]
     assert result["project"] == {
         "uid": "project-one",
         "title": "Operations",
         "project_type": "Other",
         "url": "http://localhost:5173/board/project-one",
+        "template": "SI",
     }
-    assert [column["name"] for column in result["columns"]] == created_columns
+    assert [column["name"] for column in result["columns"]] == names
 
 
-def test_native_project_creation_rolls_back_partial_board(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A failed default-column creation cannot leave a partial native board."""
+def test_native_project_creation_propagates_template_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The adapter does not hide atomic template creation failures."""
 
     class Actor:
         pass
 
     actor = Actor()
-    project = SimpleNamespace(id=1)
-    deleted: list[Any] = []
-    attempts = 0
-
-    def create_column(*_args: Any) -> Any:
-        nonlocal attempts
-        attempts += 1
-        if attempts == 2:
-            raise RuntimeError("column insert failed")
-        return SimpleNamespace(api_response=lambda: {"uid": "backlog"})
-
     service = SimpleNamespace(
-        project=SimpleNamespace(
-            create=lambda *_args: project,
-            delete=lambda target_actor, target_project: deleted.append((target_actor, target_project)),
-        ),
-        project_column=SimpleNamespace(create=create_column),
+        project_template=SimpleNamespace(
+            create_project=lambda *_args: (_ for _ in ()).throw(RuntimeError("column insert failed"))
+        )
     )
     monkeypatch.setattr("langboard.card_workspace.infrastructure.native.User", Actor)
 
     with pytest.raises(RuntimeError, match="column insert failed"):
         NativeCardWorkspaceAdapter(actor, service).create_project_board("Operations", None)
-
-    assert deleted == [(actor, project)]
 
 
 def test_native_card_creation_selects_server_side_leftmost_active_column() -> None:

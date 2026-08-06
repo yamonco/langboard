@@ -62,6 +62,7 @@ export const ROUTES = {
     SETTINGS: {
         ROUTE: "/settings",
         API_KEYS: "/settings/api-keys",
+        PROJECT_TEMPLATES: "/settings/project-templates",
         USERS: "/settings/users",
         CREATE_USER: "/settings/users/create",
         CREATE_API_KEY: "/settings/api-keys/create",

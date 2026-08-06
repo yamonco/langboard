@@ -17,7 +17,6 @@ from ..application.ports import (
 from ..domain import require_public_metadata_key
 
 
-DEFAULT_BOARD_COLUMNS = ("Backlog", "In Progress", "Done")
 MAX_NATIVE_SECTION_SOURCE = 100
 _SOURCE_QUERY_LIMIT = MAX_NATIVE_SECTION_SOURCE + 1
 
@@ -205,20 +204,24 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
         )
         return {str(key): str(value) for key, value in metadata.items()}
 
-    def create_project_board(self, title: str, description: str | None) -> dict[str, Any]:
+    def create_project_board(
+        self,
+        title: str,
+        description: str | None,
+        template_name: str | None = None,
+        infer_template_prefix: bool = False,
+    ) -> dict[str, Any]:
         if not isinstance(self._actor, User):
             raise PermissionError("Only users can create projects")
-        project = self._service.project.create(self._actor, title, description, "Other")
-        columns: list[dict[str, Any]] = []
-        try:
-            for name in DEFAULT_BOARD_COLUMNS:
-                column = self._service.project_column.create(self._actor, project, name)
-                if column is None:
-                    raise RuntimeError(f"Failed to create project column: {name}")
-                columns.append({**column.api_response(), "count": 0})
-        except Exception:
-            self._service.project.delete(self._actor, project)
-            raise
+        project, created_columns, template = self._service.project_template.create_project(
+            self._actor,
+            title,
+            description,
+            "Other",
+            template_name,
+            infer_template_prefix,
+        )
+        columns = [{**column.api_response(), "count": 0} for column in created_columns]
         uid = project.get_uid()
         return {
             "project": {
@@ -226,6 +229,7 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
                 "title": project.title,
                 "project_type": project.project_type,
                 "url": f"{Env.PUBLIC_UI_URL}/board/{uid}",
+                "template": template.name,
             },
             "columns": columns,
         }
