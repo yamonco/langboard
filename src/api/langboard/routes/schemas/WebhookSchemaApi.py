@@ -9,6 +9,23 @@ from langboard_shared.domain.models.bases import BotTriggerCondition
 from langboard_shared.Env import Env
 
 
+_SAFE_EVENT_SCHEMA_IDENTIFIERS = frozenset(
+    {
+        "attachment_uid",
+        "card_uid",
+        "cardified_card_uid",
+        "checkitem_uid",
+        "checklist_uid",
+        "comment_uid",
+        "old_project_column_uid",
+        "project_column_uid",
+        "project_label_uid",
+        "project_uid",
+        "project_wiki_uid",
+    }
+)
+
+
 @AppRouter.api.get("/schema/webhook", response_class=HTMLResponse)
 def webhook_docs():
     return get_swagger_ui_html(openapi_url="/schema/webhook.json", title=Env.PROJECT_NAME.capitalize())
@@ -27,14 +44,18 @@ def webhook_openapi():
     user_schema = _make_object_property("user", user_schema)
 
     for schema_name in schemas:
-        schema = schemas[schema_name]
+        schema = _minimal_event_schema(schemas[schema_name])
         schemas[schema_name] = {
             "title": schema_name.replace("_", " ").capitalize(),
             "type": "object",
             "properties": {
+                "schema_version": {"type": "string", "enum": ["1"]},
+                "event_id": {"type": "string", "format": "uuid"},
+                "occurred_at": {"type": "string", "format": "date-time"},
                 "event": {"type": "string", "title": "Event", "enum": [schema_name]},
                 "data": _make_object_property("data", schema),
             },
+            "required": ["schema_version", "event_id", "occurred_at", "event", "data"],
         }
 
     return JsonResponse(
@@ -45,6 +66,16 @@ def webhook_openapi():
                 "version": Env.PROJECT_VERSION,
             },
             "components": {"schemas": schemas},
+            "x-langboard-webhook-signature": {
+                "algorithm": "HMAC-SHA256",
+                "signed_content": "<X-Langboard-Webhook-Timestamp>.<raw request body>",
+                "headers": [
+                    "X-Langboard-Webhook-Id",
+                    "X-Langboard-Webhook-Timestamp",
+                    "X-Langboard-Webhook-Version",
+                    "X-Langboard-Webhook-Signature",
+                ],
+            },
             "shared": {
                 "Bot": bot_schema,
                 "User": user_schema,
@@ -99,3 +130,16 @@ def _make_property(properties: dict[str, Any]):
         }
 
     return schema, required
+
+
+def _minimal_event_schema(schema: dict[str, Any]) -> dict[str, Any]:
+    """Expose only routing identifiers and non-PII actor identity."""
+
+    result = {
+        key.removesuffix("?"): value
+        for key, value in schema.items()
+        if key.removesuffix("?") in _SAFE_EVENT_SCHEMA_IDENTIFIERS or key == "reaction_type"
+    }
+    if "executor" in schema:
+        result["executor"] = {"uid": "string", "type": "string"}
+    return result
