@@ -101,14 +101,14 @@ def get_card_bundle(
     )
 
 
-@McpTool.add(description="Return a project's minimal stable identity for a trusted room binding.")
+@McpTool.add(description="Return a project's stable identity and bounded active workflow columns.")
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
 def get_project_identity(
     project_uid: str,
     user_or_bot: User | Bot,
     service: DomainService,
 ) -> ProjectIdentityResponse:
-    """Read project UID, title, type, and canonical URL only."""
+    """Read project identity and the active columns required for safe card moves."""
 
     return query_project_identity(_adapter(user_or_bot, service), project_uid)
 

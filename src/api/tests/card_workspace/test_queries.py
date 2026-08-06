@@ -6,6 +6,7 @@ from langboard.card_workspace.application.ports import (
 )
 from langboard.card_workspace.application.queries import (
     get_card_bundle,
+    get_project_identity,
     get_public_card_metadata,
     list_project_cards,
 )
@@ -106,6 +107,28 @@ class FakeQueryPort:
             ("2026-08-04T11:00:00+09:00", "c1"),
         )
 
+    def get_project_identity(self, project_uid: str) -> dict[str, object] | None:
+        """Return a bounded workflow fixture for identity projection."""
+
+        if project_uid != "p1":
+            return None
+        return {
+            "uid": "p1",
+            "title": "Delivery",
+            "project_type": "Other",
+            "url": "https://langboard.yamon.io/board/p1",
+            "columns": {
+                "items": [
+                    {"uid": "backlog", "name": "Backlog", "order": 0},
+                    {"uid": "doing", "name": "In Progress", "order": 1},
+                    {"uid": "done", "name": "Done", "order": 2},
+                ],
+                "total_count": 3,
+                "next_cursor": None,
+                "limit": 100,
+            },
+        }
+
     def get_public_card_metadata(self, project_uid: str, card_uid: str) -> dict[str, str] | None:
         return self.source.metadata
 
@@ -145,6 +168,20 @@ def test_initial_card_bundle_is_bounded_and_privacy_preserving() -> None:
     assert metadata["public.long"]["truncated"] is True
     assert "prompt" not in response.card.automation.bot_scopes.items[0]  # type: ignore[union-attr]
     assert "token" not in response.card.automation.bot_schedules.items[0]  # type: ignore[union-attr]
+
+
+def test_project_identity_exposes_only_bounded_move_destinations() -> None:
+    """Agents can discover active columns without a second unsafe project tool."""
+
+    response = get_project_identity(FakeQueryPort(), "p1")
+
+    assert [column["name"] for column in response.columns.items] == [
+        "Backlog",
+        "In Progress",
+        "Done",
+    ]
+    assert response.columns.total_count == 3
+    assert response.columns.next_cursor is None
 
 
 def test_section_continuation_rejects_changed_projection() -> None:

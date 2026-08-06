@@ -153,11 +153,32 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
         if project is None:
             return None
         uid = project.get_uid()
+        columns = sorted(
+            (
+                {
+                    "uid": str(column["uid"]),
+                    "name": str(column["name"]),
+                    "order": int(column["order"]),
+                }
+                for column in self._bounded_source(
+                    self._service.project_column.get_api_list_by_project(project),
+                    "project columns",
+                )
+                if not column.get("is_archive")
+            ),
+            key=lambda column: (column["order"], column["uid"]),
+        )
         return {
             "uid": uid,
             "title": project.title,
             "project_type": project.project_type,
             "url": f"{Env.PUBLIC_UI_URL}/board/{uid}",
+            "columns": {
+                "items": columns,
+                "total_count": len(columns),
+                "next_cursor": None,
+                "limit": MAX_NATIVE_SECTION_SOURCE,
+            },
         }
 
     def get_project_card_page(

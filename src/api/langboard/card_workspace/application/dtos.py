@@ -95,7 +95,7 @@ class CardBundleResponse(BaseModel):
 
 
 class ProjectIdentityResponse(BaseModel):
-    """Minimal project identity used for a trusted room binding."""
+    """Stable project identity plus its bounded active workflow columns."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -103,6 +103,7 @@ class ProjectIdentityResponse(BaseModel):
     title: str
     project_type: str
     url: str
+    columns: BoundedItemsDto
 
 
 class ProjectCardListResponse(BaseModel):
