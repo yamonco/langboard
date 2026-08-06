@@ -1,5 +1,5 @@
 from typing import Any
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, SerializerFunctionWrapHandler, model_serializer, model_validator
 
 
 class BoundedItemsDto(BaseModel):
@@ -49,13 +49,19 @@ class CardBundleDto(BaseModel):
 
     core: dict[str, Any]
     workflow: dict[str, Any]
-    people: BoundedItemsDto
-    classification: ClassificationDto
-    checklists: BoundedItemsDto
-    comments: BoundedItemsDto
+    people: BoundedItemsDto | None = None
+    classification: ClassificationDto | None = None
+    checklists: BoundedItemsDto | None = None
+    comments: BoundedItemsDto | None = None
     attachments: BoundedItemsDto | None = None
     metadata: BoundedItemsDto | None = None
     automation: AutomationDto | None = None
+
+    @model_serializer(mode="wrap")
+    def serialize_selected_sections(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        """Omit sections that callers did not explicitly request."""
+
+        return {key: value for key, value in handler(self).items() if value is not None}
 
 
 class CardBundleContinuationDto(BaseModel):

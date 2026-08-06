@@ -1,3 +1,4 @@
+import json
 import pytest
 from langboard.card_workspace.application.ports import (
     CardBundleSource,
@@ -142,7 +143,16 @@ def test_initial_card_bundle_is_bounded_and_privacy_preserving() -> None:
         "c1",
         CommentPage(limit=2),
         SectionPage(limit=10),
-        [CardBundleInclude.Attachments, CardBundleInclude.Metadata, CardBundleInclude.Automation],
+        [
+            CardBundleInclude.Description,
+            CardBundleInclude.People,
+            CardBundleInclude.Classification,
+            CardBundleInclude.Checklists,
+            CardBundleInclude.Comments,
+            CardBundleInclude.Attachments,
+            CardBundleInclude.Metadata,
+            CardBundleInclude.Automation,
+        ],
     )
 
     assert response.card is not None
@@ -188,8 +198,16 @@ def test_section_continuation_rejects_changed_projection() -> None:
     """Offset cursors fail closed if the native section changed between calls."""
 
     port = FakeQueryPort()
-    first = get_card_bundle(port, "p1", "c1", CommentPage(), SectionPage(limit=10))
+    first = get_card_bundle(
+        port,
+        "p1",
+        "c1",
+        CommentPage(),
+        SectionPage(limit=10),
+        [CardBundleInclude.Classification],
+    )
     assert first.card is not None
+    assert first.card.classification is not None
     cursor = first.card.classification.labels.next_cursor
     assert cursor
     port.source.details["labels"].append({"uid": "new", "name": "Changed"})
@@ -199,15 +217,36 @@ def test_section_continuation_rejects_changed_projection() -> None:
 
 
 def test_optional_native_sections_are_requested_lazily() -> None:
-    """A default or comment-continuation read does not fetch optional native sections."""
+    """Default and comment reads fetch no unrelated native sections."""
 
     port = FakeQueryPort()
     first = get_card_bundle(port, "p1", "c1", CommentPage(limit=1), SectionPage(limit=10))
     assert first.card is not None
-    assert "attachments" not in port.requested_sections[0]
-    assert "metadata" not in port.requested_sections[0]
-    assert "automation.bot_scopes" not in port.requested_sections[0]
-    comment_cursor = first.card.comments.next_cursor
+    assert port.requested_sections[0] == frozenset()
+    assert first.card.model_dump(exclude_none=True) == {
+        "core": {
+            "uid": "c1",
+            "title": "Bounded card",
+            "created_at": "2026-08-04T10:00:00+09:00",
+            "updated_at": "2026-08-04T11:00:00+09:00",
+        },
+        "workflow": {
+            "project_column_uid": "column-1",
+            "project_column_name": "Backlog",
+        },
+    }
+
+    comments = get_card_bundle(
+        port,
+        "p1",
+        "c1",
+        CommentPage(limit=1),
+        SectionPage(limit=10),
+        [CardBundleInclude.Comments],
+    )
+    assert comments.card is not None
+    assert comments.card.comments is not None
+    comment_cursor = comments.card.comments.next_cursor
     assert comment_cursor
 
     get_card_bundle(
@@ -218,7 +257,26 @@ def test_optional_native_sections_are_requested_lazily() -> None:
         SectionPage(limit=10),
     )
 
-    assert port.requested_sections[1] == frozenset()
+    assert port.requested_sections[1:] == [frozenset(), frozenset()]
+
+
+def test_compact_default_removes_large_unused_sections() -> None:
+    """The common identity/workflow read is materially smaller than an explicit full read."""
+
+    compact = get_card_bundle(FakeQueryPort(), "p1", "c1", CommentPage(), SectionPage())
+    full = get_card_bundle(
+        FakeQueryPort(),
+        "p1",
+        "c1",
+        CommentPage(),
+        SectionPage(),
+        list(CardBundleInclude),
+    )
+
+    compact_bytes = len(json.dumps(compact.model_dump(mode="json", exclude_none=True)).encode())
+    full_bytes = len(json.dumps(full.model_dump(mode="json", exclude_none=True)).encode())
+
+    assert compact_bytes < full_bytes / 10
 
 
 def test_project_card_list_is_bounded_and_uses_opaque_keyset_cursor() -> None:
