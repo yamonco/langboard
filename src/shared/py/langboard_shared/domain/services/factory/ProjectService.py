@@ -352,10 +352,13 @@ class ProjectService(BaseDomainService):
         if not project:
             return None
 
-        old_assigned_users = self.repo.project_assigned_user.get_all_by_project(project)
         invitation_service: "ProjectInvitationService" = self._get_service_by_name("project_invitation")
         invitation_data = invitation_service.get_additive_invitation_related_data(project, emails)
         changed_count = len(invitation_data.emails_should_invite)
+        if not changed_count:
+            return {"requested_count": len(emails), "changed_count": 0, "status": "unchanged"}
+
+        old_assigned_users = self.repo.project_assigned_user.get_all_by_project(project)
         invitation_service.invite_emails(user, project, invitation_data)
 
         new_assigned_users = self.repo.project_assigned_user.get_all_by_project(project)

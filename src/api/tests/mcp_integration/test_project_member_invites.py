@@ -1,5 +1,6 @@
 import os
 from types import SimpleNamespace
+from unittest.mock import Mock, patch
 import pytest
 
 
@@ -9,8 +10,10 @@ from langboard.mcp_integration import McpTool
 from langboard.mcp_tools import ProjectMcp
 from langboard_shared.domain.models import User
 from langboard_shared.domain.services.factory.ProjectInvitationService import (
+    InvitationRelatedResult,
     ProjectInvitationService,
 )
+from langboard_shared.domain.services.factory.ProjectService import ProjectService
 
 
 def test_additive_invitation_data_preserves_existing_members_and_invites() -> None:
@@ -76,6 +79,32 @@ def test_invite_tool_normalizes_bounds_and_returns_safe_aggregate() -> None:
         ProjectMcp.invite_project_members(
             "project", user, [f"member-{index}@example.com" for index in range(11)], service
         )
+
+
+def test_additive_retry_is_a_complete_noop() -> None:
+    """An already-assigned or pending request emits no repeated side effects."""
+
+    project = object()
+    invitation_service = SimpleNamespace(
+        get_additive_invitation_related_data=Mock(return_value=InvitationRelatedResult()),
+        invite_emails=Mock(),
+    )
+    assigned_users = Mock()
+    repository = SimpleNamespace(project_assigned_user=SimpleNamespace(get_all_by_project=assigned_users))
+    service = ProjectService(lambda _: None, lambda _: None, repository)
+
+    with (
+        patch(
+            "langboard_shared.domain.services.factory.ProjectService.InfraHelper.get_by_id_like",
+            return_value=project,
+        ),
+        patch.object(service, "_get_service_by_name", return_value=invitation_service),
+    ):
+        result = service.invite_assigned_users(User.model_construct(), project, ["pending@example.com"])
+
+    assert result == {"requested_count": 1, "changed_count": 0, "status": "unchanged"}
+    invitation_service.invite_emails.assert_not_called()
+    assigned_users.assert_not_called()
 
 
 def test_invite_tool_schema_and_legacy_replacement_tool_are_distinct() -> None:
