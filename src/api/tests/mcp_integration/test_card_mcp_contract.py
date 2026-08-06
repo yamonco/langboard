@@ -69,6 +69,25 @@ def test_mcp_serializer_omits_unrequested_card_sections() -> None:
     }
 
 
+def test_project_member_projection_omits_email_and_is_bounded() -> None:
+    """Room tools receive assignable identities without the private directory."""
+
+    service = SimpleNamespace(
+        project=SimpleNamespace(
+            get_by_id_like=lambda _uid: object(),
+            get_api_assigned_user_list=lambda _project: [
+                {"uid": str(index), "username": f"member-{index}", "email": "hidden@example.com"} for index in range(51)
+            ],
+        )
+    )
+
+    result = CardWorkspaceMcp.list_project_members("project", service)
+
+    assert len(result["items"]) == 50
+    assert result["truncated"] is True
+    assert "email" not in str(result)
+
+
 def test_empty_partial_edit_and_invalid_order_stop_before_service() -> None:
     """No-op and malformed multi-field writes never reach the native service."""
 
