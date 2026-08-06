@@ -18,15 +18,17 @@ class CardAssignedUserRepository(BaseRepository[CardAssignedUser]):
 
     @overload
     def get_all_by_card(
-        self, card: TCardParam, only_ids: Literal[False] = False
+        self, card: TCardParam, only_ids: Literal[False] = False, limit: int | None = None
     ) -> list[tuple[User, CardAssignedUser]]: ...
     @overload
     def get_all_by_card(
-        self, card: TCardParam, only_ids: Literal[True]
+        self, card: TCardParam, only_ids: Literal[True], limit: int | None = None
     ) -> list[tuple[SnowflakeID, CardAssignedUser]]: ...
     def get_all_by_card(
-        self, card: TCardParam, only_ids: bool = False
+        self, card: TCardParam, only_ids: bool = False, limit: int | None = None
     ) -> list[tuple[User, CardAssignedUser]] | list[tuple[SnowflakeID, CardAssignedUser]]:
+        """Return assigned card users, optionally enforcing a database row limit."""
+
         card_id = InfraHelper.convert_id(card)
 
         raw_users = []
@@ -34,13 +36,18 @@ class CardAssignedUserRepository(BaseRepository[CardAssignedUser]):
             query = SqlBuilder.select.columns(User.id, CardAssignedUser)
         else:
             query = SqlBuilder.select.tables(User, CardAssignedUser)
-        with DbSession.use(readonly=True) as db:
-            result = db.exec(
-                query.join(
-                    CardAssignedUser,
-                    User.column("id") == CardAssignedUser.column("user_id"),
-                ).where(CardAssignedUser.column("card_id") == card_id)
+        query = (
+            query.join(
+                CardAssignedUser,
+                User.column("id") == CardAssignedUser.column("user_id"),
             )
+            .where(CardAssignedUser.column("card_id") == card_id)
+            .order_by(CardAssignedUser.column("id").asc())
+        )
+        if limit is not None:
+            query = query.limit(limit)
+        with DbSession.use(readonly=True) as db:
+            result = db.exec(query)
             raw_users = result.all()
         return cast(Any, raw_users)
 

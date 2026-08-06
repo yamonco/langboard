@@ -1,0 +1,400 @@
+"""Safe native MCP tools for room-bound Langboard project workspaces."""
+
+from typing import Any
+from langboard_shared.domain.models import Bot, ProjectRole, User
+from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
+from langboard_shared.domain.services import DomainService
+from langboard_shared.security import RoleFinder
+from ..card_workspace.application import (
+    CardBundleResponse,
+    ProjectCardListResponse,
+    ProjectIdentityResponse,
+)
+from ..card_workspace.application import add_card_comment as add_comment
+from ..card_workspace.application import create_card_checkitem as create_checkitem
+from ..card_workspace.application import create_card_checklist as create_checklist
+from ..card_workspace.application import create_card_in_leftmost_column as create_leftmost
+from ..card_workspace.application import create_project_board as create_board
+from ..card_workspace.application import delete_card_attachment as delete_attachment
+from ..card_workspace.application import delete_card_checkitem as delete_checkitem
+from ..card_workspace.application import delete_card_checklist as delete_checklist
+from ..card_workspace.application import delete_card_comment as delete_comment
+from ..card_workspace.application import delete_public_card_metadata as delete_public_metadata
+from ..card_workspace.application import get_card_bundle as query_card_bundle
+from ..card_workspace.application import get_project_identity as query_project_identity
+from ..card_workspace.application import get_public_card_metadata as query_public_metadata
+from ..card_workspace.application import get_public_card_metadata_by_key as query_public_metadata_key
+from ..card_workspace.application import list_project_cards as query_project_cards
+from ..card_workspace.application import save_public_card_metadata as save_public_metadata
+from ..card_workspace.application import set_card_people_and_labels as replace_people_and_labels
+from ..card_workspace.application import set_card_relationships as replace_relationships
+from ..card_workspace.application import update_card_attachment as update_attachment
+from ..card_workspace.application import update_card_checkitem as update_checkitem
+from ..card_workspace.application import update_card_checklist as update_checklist
+from ..card_workspace.application import update_card_comment as update_comment
+from ..card_workspace.application.dtos import BoundedItemsDto
+from ..card_workspace.domain import CardBundleInclude, CommentPage, SectionPage
+from ..card_workspace.infrastructure import NativeCardWorkspaceAdapter
+from ..mcp_integration import McpRoleFilter, McpTool
+
+
+def _adapter(actor: User | Bot, service: DomainService) -> NativeCardWorkspaceAdapter:
+    """Build the native adapter at the MCP composition root."""
+
+    return NativeCardWorkspaceAdapter(actor, service)
+
+
+@McpTool.add("user", description="Create an Other project with Backlog, In Progress, and Done columns.")
+def create_project_board(
+    title: str,
+    user: User,
+    service: DomainService,
+    description: str | None = None,
+) -> dict[str, Any]:
+    """Create the standard agent-managed project board."""
+
+    return create_board(_adapter(user, service), title, description)
+
+
+@McpTool.add(description="Create a card in the current leftmost non-archive project column.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+def create_card_in_leftmost_column(
+    project_uid: str,
+    title: str,
+    user_or_bot: User | Bot,
+    service: DomainService,
+    description: str | None = None,
+    assign_user_uids: list[str] | None = None,
+) -> dict[str, Any]:
+    """Create a card without trusting a caller-provided destination column."""
+
+    return create_leftmost(_adapter(user_or_bot, service), project_uid, title, description, assign_user_uids)
+
+
+@McpTool.add(
+    description=(
+        "Read a bounded card aggregate. Request optional attachments, public metadata, or automation explicitly. "
+        "Use returned opaque cursors for comments, rich description, and every collection."
+    )
+)
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+def get_card_bundle(
+    project_uid: str,
+    card_uid: str,
+    user_or_bot: User | Bot,
+    service: DomainService,
+    comments_limit: int = 5,
+    comments_cursor: str | None = None,
+    section_limit: int = 10,
+    section_cursor: str | None = None,
+    include: list[CardBundleInclude] | None = None,
+) -> CardBundleResponse:
+    """Read an agent-friendly card bundle with bounded continuation."""
+
+    return query_card_bundle(
+        _adapter(user_or_bot, service),
+        project_uid,
+        card_uid,
+        CommentPage(limit=comments_limit, cursor=comments_cursor),
+        SectionPage(limit=section_limit, cursor=section_cursor),
+        include,
+    )
+
+
+@McpTool.add(description="Return a project's minimal stable identity for a trusted room binding.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+def get_project_identity(
+    project_uid: str,
+    user_or_bot: User | Bot,
+    service: DomainService,
+) -> ProjectIdentityResponse:
+    """Read project UID, title, type, and canonical URL only."""
+
+    return query_project_identity(_adapter(user_or_bot, service), project_uid)
+
+
+@McpTool.add(description="List a bounded newest-updated-first page of cards in a project.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+def list_project_cards(
+    project_uid: str,
+    user_or_bot: User | Bot,
+    service: DomainService,
+    limit: int = 20,
+    cursor: str | None = None,
+) -> ProjectCardListResponse:
+    """Read one safe project card page with an opaque keyset cursor."""
+
+    return query_project_cards(_adapter(user_or_bot, service), project_uid, limit, cursor)
+
+
+@McpTool.add(description="Add a rich-text comment to a card.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+def add_card_comment(
+    project_uid: str,
+    card_uid: str,
+    content: str,
+    user_or_bot: User | Bot,
+    service: DomainService,
+) -> dict[str, Any]:
+    """Add a native card comment."""
+
+    return add_comment(_adapter(user_or_bot, service), project_uid, card_uid, content)
+
+
+@McpTool.add(description="Update a card comment owned by the current actor.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+def update_card_comment(
+    project_uid: str,
+    card_uid: str,
+    comment_uid: str,
+    content: str,
+    user_or_bot: User | Bot,
+    service: DomainService,
+) -> dict[str, Any]:
+    """Update an owned native comment."""
+
+    return update_comment(_adapter(user_or_bot, service), project_uid, card_uid, comment_uid, content)
+
+
+@McpTool.add(description="Delete a card comment owned by the current actor.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+def delete_card_comment(
+    project_uid: str,
+    card_uid: str,
+    comment_uid: str,
+    user_or_bot: User | Bot,
+    service: DomainService,
+) -> dict[str, bool]:
+    """Delete an owned native comment."""
+
+    return delete_comment(_adapter(user_or_bot, service), project_uid, card_uid, comment_uid)
+
+
+@McpTool.add(description="Create a checklist on a card.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+def create_card_checklist(
+    project_uid: str,
+    card_uid: str,
+    title: str,
+    user_or_bot: User | Bot,
+    service: DomainService,
+) -> dict[str, Any]:
+    """Create a native checklist."""
+
+    return create_checklist(_adapter(user_or_bot, service), project_uid, card_uid, title)
+
+
+@McpTool.add(description="Update a card checklist title and/or checked state atomically validated.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+def update_card_checklist(
+    project_uid: str,
+    card_uid: str,
+    checklist_uid: str,
+    user_or_bot: User | Bot,
+    service: DomainService,
+    title: str | None = None,
+    is_checked: bool | None = None,
+) -> dict[str, Any]:
+    """Update a native checklist after validating every requested field."""
+
+    return update_checklist(
+        _adapter(user_or_bot, service),
+        project_uid,
+        card_uid,
+        checklist_uid,
+        title,
+        is_checked,
+    )
+
+
+@McpTool.add(description="Delete a checklist from a card.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+def delete_card_checklist(
+    project_uid: str,
+    card_uid: str,
+    checklist_uid: str,
+    user_or_bot: User | Bot,
+    service: DomainService,
+) -> dict[str, bool]:
+    """Delete a native checklist and its checkitems."""
+
+    return delete_checklist(_adapter(user_or_bot, service), project_uid, card_uid, checklist_uid)
+
+
+@McpTool.add(description="Create a checkitem in a card checklist.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+def create_card_checkitem(
+    project_uid: str,
+    card_uid: str,
+    checklist_uid: str,
+    title: str,
+    user_or_bot: User | Bot,
+    service: DomainService,
+) -> dict[str, Any]:
+    """Create a native checkitem."""
+
+    return create_checkitem(_adapter(user_or_bot, service), project_uid, card_uid, checklist_uid, title)
+
+
+@McpTool.add(description="Update checkitem title, deadline, and/or checked state after full validation.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+def update_card_checkitem(
+    project_uid: str,
+    card_uid: str,
+    checkitem_uid: str,
+    user_or_bot: User | Bot,
+    service: DomainService,
+    title: str | None = None,
+    deadline_at: str | None = None,
+    is_checked: bool | None = None,
+) -> dict[str, Any]:
+    """Update a native checkitem after validating every requested field."""
+
+    return update_checkitem(
+        _adapter(user_or_bot, service),
+        project_uid,
+        card_uid,
+        checkitem_uid,
+        title,
+        deadline_at,
+        is_checked,
+    )
+
+
+@McpTool.add(description="Delete a checkitem from a card checklist.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+def delete_card_checkitem(
+    project_uid: str,
+    card_uid: str,
+    checkitem_uid: str,
+    user_or_bot: User | Bot,
+    service: DomainService,
+) -> dict[str, bool]:
+    """Delete a native checkitem after ancestry validation."""
+
+    return delete_checkitem(_adapter(user_or_bot, service), project_uid, card_uid, checkitem_uid)
+
+
+@McpTool.add(description="Replace a card's assigned members and/or labels after validating every UID.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+def set_card_people_and_labels(
+    project_uid: str,
+    card_uid: str,
+    user_or_bot: User | Bot,
+    service: DomainService,
+    assign_user_uids: list[str] | None = None,
+    label_uids: list[str] | None = None,
+) -> dict[str, Any]:
+    """Replace optional native member and label sets."""
+
+    return replace_people_and_labels(
+        _adapter(user_or_bot, service),
+        project_uid,
+        card_uid,
+        assign_user_uids,
+        label_uids,
+    )
+
+
+@McpTool.add(description="Replace one direction of a card's typed relationships after full validation.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+def set_card_relationships(
+    project_uid: str,
+    card_uid: str,
+    is_parent: bool,
+    relationships: list[tuple[str, str]],
+    user_or_bot: User | Bot,
+    service: DomainService,
+) -> dict[str, Any]:
+    """Replace native parent or child relationship edges."""
+
+    return replace_relationships(_adapter(user_or_bot, service), project_uid, card_uid, is_parent, relationships)
+
+
+@McpTool.add("user", description="Update attachment name and/or order without bytes or user email.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+def update_card_attachment(
+    project_uid: str,
+    card_uid: str,
+    attachment_uid: str,
+    user: User,
+    service: DomainService,
+    name: str | None = None,
+    order: int | None = None,
+) -> dict[str, Any]:
+    """Update native attachment metadata after full field validation."""
+
+    return update_attachment(_adapter(user, service), project_uid, card_uid, attachment_uid, name, order)
+
+
+@McpTool.add("user", description="Delete a card attachment without exposing file bytes.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+def delete_card_attachment(
+    project_uid: str,
+    card_uid: str,
+    attachment_uid: str,
+    user: User,
+    service: DomainService,
+) -> dict[str, bool]:
+    """Delete a native card attachment after ancestry validation."""
+
+    return delete_attachment(_adapter(user, service), project_uid, card_uid, attachment_uid)
+
+
+@McpTool.add(description="List bounded public card metadata; reserved and secret-like keys are hidden.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+def get_public_card_metadata(
+    project_uid: str,
+    card_uid: str,
+    user_or_bot: User | Bot,
+    service: DomainService,
+    limit: int = 20,
+    cursor: str | None = None,
+) -> BoundedItemsDto:
+    """Read public metadata only."""
+
+    return query_public_metadata(_adapter(user_or_bot, service), project_uid, card_uid, limit, cursor)
+
+
+@McpTool.add(description="Read one public card metadata entry by key.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+def get_public_card_metadata_by_key(
+    project_uid: str,
+    card_uid: str,
+    key: str,
+    user_or_bot: User | Bot,
+    service: DomainService,
+) -> dict[str, Any]:
+    """Read one explicitly public metadata entry."""
+
+    return query_public_metadata_key(_adapter(user_or_bot, service), project_uid, card_uid, key)
+
+
+@McpTool.add(description="Save one public card metadata entry; secret-like keys are rejected.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+def save_public_card_metadata(
+    project_uid: str,
+    card_uid: str,
+    key: str,
+    value: str,
+    user_or_bot: User | Bot,
+    service: DomainService,
+    old_key: str | None = None,
+) -> dict[str, Any]:
+    """Create, update, or rename public metadata."""
+
+    return save_public_metadata(_adapter(user_or_bot, service), project_uid, card_uid, key, value, old_key)
+
+
+@McpTool.add(description="Delete public card metadata keys; reserved keys are rejected.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+def delete_public_card_metadata(
+    project_uid: str,
+    card_uid: str,
+    keys: list[str],
+    user_or_bot: User | Bot,
+    service: DomainService,
+) -> dict[str, bool]:
+    """Delete one or more explicitly public metadata entries."""
+
+    return delete_public_metadata(_adapter(user_or_bot, service), project_uid, card_uid, keys)

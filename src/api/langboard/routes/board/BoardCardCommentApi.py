@@ -107,7 +107,7 @@ def update_card_comment(
     card_comment = service.card_comment.get_by_id_like(comment_uid)
     if not card_comment:
         raise ApiException.NotFound_404(ApiErrorCode.NF2012)
-    if not _is_owner(user_or_bot, card_comment):
+    if not service.card_comment.can_mutate(user_or_bot, card_comment):
         raise ApiException.Forbidden_403(ApiErrorCode.PE2004)
     result = service.card_comment.update(user_or_bot, project_uid, card_uid, card_comment, comment)
     if not result:
@@ -140,7 +140,7 @@ def delete_card_comment(
     card_comment = service.card_comment.get_by_id_like(comment_uid)
     if not card_comment:
         raise ApiException.NotFound_404(ApiErrorCode.NF2012)
-    if not _is_owner(user_or_bot, card_comment):
+    if not service.card_comment.can_mutate(user_or_bot, card_comment):
         raise ApiException.Forbidden_403(ApiErrorCode.PE2004)
     result = service.card_comment.delete(user_or_bot, project_uid, card_uid, card_comment)
     if not result:
@@ -174,10 +174,3 @@ def toggle_reaction_card_comment(
         raise ApiException.NotFound_404(ApiErrorCode.NF2012)
 
     return JsonResponse(content={"is_reacted": result})
-
-
-def _is_owner(user_or_bot: User | Bot, card_comment: CardComment):
-    if isinstance(user_or_bot, User):
-        return card_comment.user_id == user_or_bot.id or user_or_bot.is_admin
-    else:
-        return card_comment.bot_id == user_or_bot.id

@@ -18,19 +18,24 @@ class CardAttachmentRepository(BaseOrderRepository[CardAttachment, Card]):
     def name() -> str:
         return "card_attachment"
 
-    def get_list_by_card(self, card: TCardParam):
+    def get_list_by_card(self, card: TCardParam, limit: int | None = None):
+        """Return card attachments, optionally enforcing a database row limit."""
+
         card_id = InfraHelper.convert_id(card)
         card_attachments = []
-        with DbSession.use(readonly=True) as db:
-            result = db.exec(
-                SqlBuilder.select.tables(CardAttachment, User)
-                .join(User, CardAttachment.column("user_id") == User.column("id"))
-                .where(CardAttachment.column("card_id") == card_id)
-                .order_by(
-                    CardAttachment.column("order").asc(),
-                    CardAttachment.column("id").desc(),
-                )
+        query = (
+            SqlBuilder.select.tables(CardAttachment, User)
+            .join(User, CardAttachment.column("user_id") == User.column("id"))
+            .where(CardAttachment.column("card_id") == card_id)
+            .order_by(
+                CardAttachment.column("order").asc(),
+                CardAttachment.column("id").desc(),
             )
+        )
+        if limit is not None:
+            query = query.limit(limit)
+        with DbSession.use(readonly=True) as db:
+            result = db.exec(query)
             card_attachments = result.all()
 
         return card_attachments

@@ -1,7 +1,9 @@
 from langboard_shared.core.schema import TimeBasedPagination
-from langboard_shared.domain.models import User
+from langboard_shared.domain.models import ProjectRole, User
+from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.domain.services.DomainService import DomainService
-from ..mcp_integration import McpTool
+from langboard_shared.security import RoleFinder
+from ..mcp_integration import McpRoleFilter, McpTool
 
 
 class ActivityPagination(TimeBasedPagination):
@@ -20,6 +22,7 @@ def get_current_user_activities(user: User, service: DomainService, limit: int =
 
 
 @McpTool.add("user", description="Get activities for a project.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
 def get_project_activities(project_uid: str, service: DomainService, limit: int = 50) -> dict:
     pagination = ActivityPagination(limit=limit)
     result = service.activity.get_api_list_by_project(project_uid, pagination)
@@ -30,6 +33,7 @@ def get_project_activities(project_uid: str, service: DomainService, limit: int 
 
 
 @McpTool.add("user", description="Get activities for a project column.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
 def get_project_column_activities(project_uid: str, column_uid: str, service: DomainService, limit: int = 50) -> dict:
     pagination = ActivityPagination(limit=limit)
     result = service.activity.get_api_list_by_column(project_uid, column_uid, pagination)
@@ -45,6 +49,7 @@ def get_project_column_activities(project_uid: str, column_uid: str, service: Do
 
 
 @McpTool.add("user", description="Get activities for a card.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
 def get_card_activities(project_uid: str, card_uid: str, service: DomainService, limit: int = 50) -> dict:
     pagination = ActivityPagination(limit=limit)
     result = service.activity.get_api_list_by_card(project_uid, card_uid, pagination)
@@ -60,6 +65,7 @@ def get_card_activities(project_uid: str, card_uid: str, service: DomainService,
 
 
 @McpTool.add("user", description="Get activities for a wiki.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
 def get_wiki_activities(project_uid: str, wiki_uid: str, service: DomainService, limit: int = 50) -> dict:
     pagination = ActivityPagination(limit=limit)
     result = service.activity.get_api_list_by_wiki(project_uid, wiki_uid, pagination)

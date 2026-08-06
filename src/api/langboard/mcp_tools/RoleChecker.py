@@ -1,39 +1,54 @@
-from typing import Callable
-from langboard_shared.domain.models import Bot, User
+from collections.abc import Callable
+from typing import Any
+from langboard_shared.ai import BotScopeHelper
+from langboard_shared.domain.models import Bot, ProjectBotScope, ProjectRole, User
 from langboard_shared.domain.services.DomainService import DomainService
-from ..mcp_integration import McpRoleFilter
+from langboard_shared.security import RoleSecurity
+from ..mcp_integration.RoleFilter import McpRoleFilter
 
 
 class McpRoleChecker:
-    def __init__(self):
-        self.service = DomainService()
+    """Apply one MCP role policy consistently across all execution transports."""
+
+    def __init__(self, service: DomainService) -> None:
+        self.service = service
 
     def check_permission(
         self,
-        method: Callable,
+        method: Callable[..., Any],
         user_or_bot: User | Bot,
-        arguments: dict,
+        arguments: dict[str, Any],
     ) -> bool:
-        if isinstance(user_or_bot, Bot):
-            return True
+        """Return whether the actor may invoke a role-filtered MCP method."""
 
         if not McpRoleFilter.exists(method):
             return True
 
-        required_actions = McpRoleFilter.get_filtered(method)
+        role_model, required_actions, role_finder, allowed_all_admin = McpRoleFilter.get_filtered(method)
 
-        project_uid = arguments.get("project_uid")
-        if not project_uid:
+        if isinstance(user_or_bot, Bot):
+            if role_model is not ProjectRole:
+                return True
+            return self._has_project_scope(user_or_bot, arguments)
+
+        if allowed_all_admin and user_or_bot.is_admin:
             return True
+
+        return RoleSecurity(role_model).is_authorized(
+            user_or_bot.id,
+            arguments,
+            required_actions,
+            role_finder,
+        )
+
+    def _has_project_scope(self, bot: Bot, arguments: dict[str, Any]) -> bool:
+        project_uid = arguments.get("project_uid")
+        if not isinstance(project_uid, str) or not project_uid:
+            return False
 
         project = self.service.project.get_by_id_like(project_uid)
         if not project:
             return False
 
-        actions = self.service.project.get_user_role_actions_by_project(user_or_bot, project)
-
-        for action in required_actions:
-            if action not in actions:
-                return False
-
-        return True
+        scopes = BotScopeHelper.get_list(ProjectBotScope, bot_id=bot.id, project_id=project.id)
+        return bool(scopes)

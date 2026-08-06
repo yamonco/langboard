@@ -1,21 +1,22 @@
 import traceback
+from collections.abc import Callable
 from enum import Enum
 from inspect import Parameter, iscoroutinefunction, signature
 from types import UnionType
-from typing import Callable, TypeGuard, Union, get_args, get_origin
+from typing import Any, TypeGuard, Union, get_args, get_origin
+from urllib.parse import urlsplit
 from langboard_shared.core.types import Factory
 from langboard_shared.core.utils.decorators import class_instance
 from langboard_shared.domain.models import Bot, McpToolGroup, User
 from langboard_shared.domain.services import DomainService
 from langboard_shared.Env import Env
 from langboard_shared.infrastructure.repositories import Repository
-from langboard_shared.security import RoleSecurity
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import BaseModel
+from ..mcp_tools.RoleChecker import McpRoleChecker
 from ..middlewares import DynamicSseMiddleware, McpAuthMiddleware
 from ..middlewares.McpAuthMiddleware import mcp_auth_context
-from .RoleFilter import McpRoleFilter
 from .Tool import McpTool
 
 
@@ -27,11 +28,7 @@ class McpServer:
 
     def get_http_app(self):
         try:
-            security_settings = TransportSecuritySettings(
-                enable_dns_rebinding_protection=False,
-                allowed_hosts=["*"],
-                allowed_origins=["*"],
-            )
+            security_settings = _get_transport_security_settings()
 
             app = FastMCP(
                 Env.PROJECT_NAME,
@@ -75,6 +72,9 @@ class McpServer:
             if not tool_group:
                 raise PermissionError("MCP tool group not validated")
 
+            if tool_group.activated_at is None:
+                raise PermissionError("MCP tool group is inactive")
+
             if tool_name not in tool_group.tools:
                 raise PermissionError(f"Tool '{tool_name}' not allowed for this tool group")
 
@@ -87,10 +87,11 @@ class McpServer:
                 if factory:
                     factories.append(factory)
 
-            result = await handler(**kwargs) if iscoroutinefunction(handler) else handler(**kwargs)
-            for factory in factories:
-                factory.close()
-            return result
+            try:
+                return await handler(**kwargs) if iscoroutinefunction(handler) else handler(**kwargs)
+            finally:
+                for factory in factories:
+                    factory.close()
 
         # Use the filtered signature so FastMCP only sees the non-excluded parameters
         wrapper.__signature__ = filtered_sig
@@ -115,21 +116,19 @@ class McpServer:
 
         return False
 
-    def _validate_role(self, user_or_bot: User | Bot | None, handler: Callable, **kwargs):
-        if not isinstance(user_or_bot, User):
-            return True
-
-        if not McpRoleFilter.exists(handler):
-            return True
-
-        role_model, actions, role_finder, allowed_all_admin = McpRoleFilter.get_filtered(handler)
-
-        if allowed_all_admin and user_or_bot.is_admin:
-            return True
-
-        role_sec = RoleSecurity(role_model)
-
-        return role_sec.is_authorized(user_or_bot.id, kwargs, actions, role_finder)
+    def _validate_role(
+        self,
+        user_or_bot: User | Bot | None,
+        handler: Callable[..., Any],
+        **kwargs: Any,
+    ) -> bool:
+        if not isinstance(user_or_bot, (User, Bot)):
+            return False
+        service = DomainService()
+        try:
+            return McpRoleChecker(service).check_permission(handler, user_or_bot, kwargs)
+        finally:
+            service.close()
 
     def _inject_kwargs(
         self, param_name: str, param: Parameter, auth_value: User | Bot, kwargs: dict
@@ -183,3 +182,55 @@ class McpServer:
                         raise ValueError(f"Invalid value for enum '{annotation.__name__}': {value}")
 
         return kwargs, factory
+
+
+def _get_transport_security_settings() -> TransportSecuritySettings:
+    allowed_hosts = Env.MCP_ALLOWED_HOSTS or _get_default_allowed_hosts()
+    allowed_origins = Env.MCP_ALLOWED_ORIGINS or _get_default_allowed_origins()
+    _reject_global_wildcards(allowed_hosts, "MCP_ALLOWED_HOSTS")
+    _reject_global_wildcards(allowed_origins, "MCP_ALLOWED_ORIGINS")
+    return TransportSecuritySettings(
+        enable_dns_rebinding_protection=True,
+        allowed_hosts=allowed_hosts,
+        allowed_origins=allowed_origins,
+    )
+
+
+def _get_default_allowed_hosts() -> list[str]:
+    hosts = {
+        _url_host(Env.API_URL),
+        _url_hostname(Env.API_URL),
+        Env.API_HOST,
+        f"{Env.API_HOST}:{Env.API_PORT}",
+    }
+    if Env.ENVIRONMENT == "development":
+        hosts.update(
+            {"localhost", "localhost:*", "127.0.0.1", "127.0.0.1:*", "[::1]", "[::1]:*", "testserver"}
+        )
+    return sorted(host for host in hosts if host)
+
+
+def _get_default_allowed_origins() -> list[str]:
+    origins = {_url_origin(Env.API_URL), _url_origin(Env.PUBLIC_UI_URL)}
+    if Env.ENVIRONMENT == "development":
+        origins.update({"http://localhost:*", "http://127.0.0.1:*", "http://[::1]:*"})
+    return sorted(origin for origin in origins if origin)
+
+
+def _url_host(url: str) -> str:
+    return urlsplit(url).netloc
+
+
+def _url_hostname(url: str) -> str:
+    return urlsplit(url).hostname or ""
+
+
+def _url_origin(url: str) -> str:
+    parsed = urlsplit(url)
+    return f"{parsed.scheme}://{parsed.netloc}" if parsed.scheme and parsed.netloc else ""
+
+
+def _reject_global_wildcards(values: list[str], setting_name: str) -> None:
+    unsafe_values = {"*", "http://*", "https://*"}
+    if any(value in unsafe_values for value in values):
+        raise ValueError(f"{setting_name} cannot contain a global wildcard")

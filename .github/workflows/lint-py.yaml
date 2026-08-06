@@ -1,16 +1,6 @@
 name: Lint Python
 
-on:
-  push:
-    paths: &py_paths
-      - "**/*.py"
-      - "**/uv.lock"
-      - "**/pyproject.toml"
-      - "src/shared/py/**"
-      - "src/graph/**"
-      - ".github/workflows/lint-py.yaml"
-  pull_request:
-    paths: *py_paths
+on: workflow_dispatch
 
 jobs:
   run-core-linter:

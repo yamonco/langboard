@@ -20,17 +20,25 @@ class CheckitemRepository(BaseOrderRepository[Checkitem, Checklist]):
     def name() -> str:
         return "checkitem"
 
-    def get_all_by_checklist(self, checklist: TChecklistParam) -> list[tuple[Checkitem, Card | None, User | None]]:
+    def get_all_by_checklist(
+        self, checklist: TChecklistParam, limit: int | None = None
+    ) -> list[tuple[Checkitem, Card | None, User | None]]:
+        """Return checklist items, optionally enforcing a database row limit."""
+
         checklist_id = InfraHelper.convert_id(checklist)
 
         records = []
+        query = (
+            SqlBuilder.select.tables(Checkitem, Card, User)
+            .outerjoin(Card, Card.column("id") == Checkitem.column("cardified_id"))
+            .outerjoin(User, User.column("id") == Checkitem.column("user_id"))
+            .where(Checkitem.column("checklist_id") == checklist_id)
+            .order_by(Checkitem.column("order").asc(), Checkitem.column("id").asc())
+        )
+        if limit is not None:
+            query = query.limit(limit)
         with DbSession.use(readonly=True) as db:
-            result = db.exec(
-                SqlBuilder.select.tables(Checkitem, Card, User)
-                .outerjoin(Card, Card.column("id") == Checkitem.column("cardified_id"))
-                .outerjoin(User, User.column("id") == Checkitem.column("user_id"))
-                .where(Checkitem.column("checklist_id") == checklist_id)
-            )
+            result = db.exec(query)
             records = result.all()
         return list(records)
 

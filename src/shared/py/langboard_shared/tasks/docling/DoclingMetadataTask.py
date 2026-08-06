@@ -1,7 +1,6 @@
 from os import unlink
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from docling.document_converter import DocumentConverter
 from ...core.broker import Broker
 from ...core.routing import SocketTopic
 from ...core.storage import Storage
@@ -73,5 +72,8 @@ async def index_card_attachment(attachment: CardAttachment):
 
 
 def _convert_to_markdown(source: str) -> str:
+    # Keep the optional document-processing dependency out of API imports.
+    from docling.document_converter import DocumentConverter
+
     result = DocumentConverter().convert(source)
     return result.document.export_to_markdown()

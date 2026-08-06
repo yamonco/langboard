@@ -21,13 +21,17 @@ class CheckitemService(BaseDomainService):
         checkitem = InfraHelper.get_by_id_like(Checkitem, checkitem)
         return checkitem
 
-    def get_api_list_by_checklist(self, card: TCardParam, checklist: TChecklistParam) -> list[dict[str, Any]]:
+    def get_api_list_by_checklist(
+        self, card: TCardParam, checklist: TChecklistParam, limit: int | None = None
+    ) -> list[dict[str, Any]]:
+        """Return checkitems, optionally enforcing a repository row limit."""
+
         params = InfraHelper.get_records_with_foreign_by_params((Card, card), (Checklist, checklist))
         if not params:
             return []
         card, checklist = params
 
-        records = self.repo.checkitem.get_all_by_checklist(checklist)
+        records = self.repo.checkitem.get_all_by_checklist(checklist, limit=limit)
 
         checkitems = [self.__convert_api_response(card, record) for record in records]
         return checkitems
@@ -382,16 +386,24 @@ class CheckitemService(BaseDomainService):
         card: TCardParam,
         checkitem: TCheckitemParam | None = None,
     ) -> tuple[Project, Card, Checkitem | None] | None:
-        params = InfraHelper.get_records_with_foreign_by_params((Project, project), (Card, card))
-        if not params:
-            return None
-        project, card = params
-
         if checkitem:
             checkitem = InfraHelper.get_by_id_like(Checkitem, checkitem)
             if not checkitem:
                 return None
+            params = InfraHelper.get_records_with_foreign_by_params(
+                (Project, project),
+                (Card, card),
+                (Checklist, checkitem.checklist_id),
+                (Checkitem, checkitem),
+            )
+            if not params:
+                return None
+            project, card, _, checkitem = params
         else:
+            params = InfraHelper.get_records_with_foreign_by_params((Project, project), (Card, card))
+            if not params:
+                return None
+            project, card = params
             checkitem = None
 
         return project, card, checkitem

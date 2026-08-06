@@ -18,11 +18,19 @@ class ChecklistRepository(BaseOrderRepository[Checklist, Card]):
     def name() -> str:
         return "checklist"
 
-    def get_all_by_card(self, card: TCardParam) -> list[Checklist]:
-        card_id = InfraHelper.convert_id(card)
+    def get_all_by_card(self, card: TCardParam, limit: int | None = None) -> list[Checklist]:
+        """Return card checklists, optionally enforcing a database row limit."""
 
-        checklists = InfraHelper.get_all_by(Checklist, "card_id", card_id)
-        return checklists
+        card_id = InfraHelper.convert_id(card)
+        query = (
+            SqlBuilder.select.table(Checklist)
+            .where(Checklist.column("card_id") == card_id)
+            .order_by(Checklist.column("order").asc(), Checklist.column("id").asc())
+        )
+        if limit is not None:
+            query = query.limit(limit)
+        with DbSession.use(readonly=True) as db:
+            return list(db.exec(query).all())
 
     def get_all_by_project(self, project: TProjectParam) -> list[Checklist]:
         project_id = InfraHelper.convert_id(project)

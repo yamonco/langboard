@@ -15,12 +15,14 @@ class CardRelationshipService(BaseDomainService):
         """DO NOT EDIT THIS METHOD"""
         return "card_relationship"
 
-    def get_api_list_by_card(self, card: TCardParam | None) -> list[dict[str, Any]]:
+    def get_api_list_by_card(self, card: TCardParam | None, limit: int | None = None) -> list[dict[str, Any]]:
+        """Return relationships, optionally enforcing a repository row limit."""
+
         card = InfraHelper.get_by_id_like(Card, card)
         if not card:
             return []
 
-        raw_relationships = self.repo.card_relationship.get_all_by_card(card)
+        raw_relationships = self.repo.card_relationship.get_all_by_card(card, limit=limit)
         relationships = [relationship.api_response() for relationship, _ in raw_relationships]
         return relationships
 
