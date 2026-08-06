@@ -7,6 +7,7 @@ import { registerModel } from "@/core/models/ModelRegistry";
 export interface Interface extends IBaseModel {
     name: string;
     url: string;
+    events: string[] | null;
     last_used_at: Date | null;
     total_used_count: number;
 }
@@ -43,6 +44,13 @@ class WebhookModel extends BaseModel<Interface> {
     }
     public set url(value) {
         this.update({ url: value });
+    }
+
+    public get events() {
+        return this.getValue("events");
+    }
+    public set events(value) {
+        this.update({ events: value });
     }
 
     public get last_used_at(): Date | null {

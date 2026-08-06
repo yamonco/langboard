@@ -91,7 +91,7 @@ function WebhookURL() {
     return (
         <Table.FlexCell
             className={cn(
-                "w-[calc(calc(100%_/_6_*_3)_-_theme(spacing.12))] truncate text-center",
+                "w-[calc(calc(100%_/_6_*_2)_-_theme(spacing.12))] truncate text-center",
                 isEditing && "pb-2.5 pt-[calc(theme(spacing.4)_-_2px)]"
             )}
         >

@@ -9,6 +9,7 @@ from langboard_shared.domain.models.BaseBotModel import BotPlatform, BotPlatform
 from langboard_shared.domain.models.InternalBot import InternalBotType
 from langboard_shared.domain.models.McpRole import McpRoleAction
 from langboard_shared.domain.models.SettingRole import SettingRoleAction
+from langboard_shared.tasks.webhooks.utils import validate_webhook_events
 from pydantic import BaseModel, Field, field_validator
 from ...Constants import EMAIL_REGEX
 
@@ -240,14 +241,34 @@ class UpdateMcpRoleForm(BaseFormModel):
 
 @form_model
 class CreateWebhookForm(BaseFormModel):
+    """Webhook creation input."""
+
     name: str
     url: str
+    events: list[str] | None = None
+
+    @field_validator("events")
+    @classmethod
+    def validate_events(cls, events: list[str] | None) -> list[str] | None:
+        """Validate a supplied webhook event allowlist."""
+
+        return validate_webhook_events(events)
 
 
 @form_model
 class UpdateWebhookForm(BaseFormModel):
+    """Partial webhook update input."""
+
     name: str | None = None
     url: str | None = None
+    events: list[str] | None = None
+
+    @field_validator("events")
+    @classmethod
+    def validate_events(cls, events: list[str] | None) -> list[str] | None:
+        """Validate a supplied webhook event allowlist."""
+
+        return validate_webhook_events(events)
 
 
 @form_model
