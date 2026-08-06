@@ -273,6 +273,7 @@ const API = {
             API_LIST: "/schema/api",
             API_COMFORT_TOOLS: "/schema/api/comfort",
             API_COMFORT_TOOL: "/schema/api/comfort/{comfort_tool_name}",
+            WEBHOOK: "/schema/webhook.json",
         },
         OLLAMA: {
             HEALTH: "/settings/ollama/health",

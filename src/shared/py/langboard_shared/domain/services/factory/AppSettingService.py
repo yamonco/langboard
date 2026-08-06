@@ -8,6 +8,7 @@ from ....core.types.ParamTypes import TGlobalCardRelationshipTypeParam
 from ....core.utils.Converter import convert_python_data
 from ....helpers import InfraHelper, ModelHelper
 from ....publishers import AppSettingPublisher
+from ....tasks.webhooks.utils import validate_webhook_events
 from ...models import ApiComfortTool, GlobalCardRelationshipType, NotificationScheduleRule, WebhookSetting
 from ...models.ApiComfortTool import ApiComfortToolMap
 from ...models.BaseNotificationScheduleModel import BaseNotificationScheduleModel
@@ -121,15 +122,19 @@ class AppSettingService(BaseDomainService):
             return None
         return setting.api_response()
 
-    def create_webhook_setting(self, name: str, url: str) -> tuple[WebhookSetting, str]:
+    def create_webhook_setting(
+        self, name: str, url: str, events: list[str] | None = None
+    ) -> tuple[WebhookSetting, str]:
         """Create a webhook and return its one-time signing secret."""
 
+        events = validate_webhook_events(events)
         secret_id = str(uuid4())
         secret = KeyVault.create_key(secret_id)
         webhook_setting = WebhookSetting(
             name=name,
             url=url.strip(),
             secret_id=secret_id,
+            events=events,
         )
         try:
             self.repo.webhook_setting.insert(webhook_setting)
@@ -142,8 +147,16 @@ class AppSettingService(BaseDomainService):
         return webhook_setting, secret
 
     def update_webhook_setting(
-        self, webhook_setting_uid: str, name: str | None = None, url: str | None = None
+        self,
+        webhook_setting_uid: str,
+        name: str | None = None,
+        url: str | None = None,
+        events: list[str] | None = None,
+        *,
+        replace_events: bool = False,
     ) -> WebhookSetting | None:
+        """Update a webhook, distinguishing omitted events from explicit null."""
+
         setting = InfraHelper.get_by_id_like(WebhookSetting, webhook_setting_uid)
         if not setting:
             return None
@@ -152,12 +165,16 @@ class AppSettingService(BaseDomainService):
             setting.name = name
         if url is not None:
             setting.url = url.strip()
+        if replace_events or events is not None:
+            setting.events = validate_webhook_events(events)
 
         model = {}
         if name is not None:
             model["name"] = setting.name
         if url is not None:
             model["url"] = setting.url
+        if replace_events or events is not None:
+            model["events"] = setting.events
 
         if not setting.has_changes():
             return setting

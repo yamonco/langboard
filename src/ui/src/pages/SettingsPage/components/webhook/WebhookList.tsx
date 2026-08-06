@@ -55,7 +55,8 @@ function WebhookList({ selectedWebhooks, setSelectedWebhooks }: IWebhookListProp
                             className: "w-12 text-center",
                         },
                         { name: t("settings.Name"), className: "w-1/6 text-center" },
-                        { name: t("settings.URL"), className: "w-[calc(calc(100%_/_6_*_3)_-_theme(spacing.12))] text-center" },
+                        { name: t("settings.URL"), className: "w-[calc(calc(100%_/_6_*_2)_-_theme(spacing.12))] text-center" },
+                        { name: t("settings.Events"), className: "w-1/6 text-center" },
                         { name: t("settings.Created"), className: "w-1/6 text-center" },
                         { name: t("settings.Last Used"), className: "w-1/6 text-center" },
                     ]}

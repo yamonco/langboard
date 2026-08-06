@@ -4,12 +4,14 @@ from json import dumps as json_dumps
 from time import time
 from typing import Any
 from httpx import AsyncClient, Timeout
+from kombu.exceptions import OperationalError
 from ...core.broker import Broker
 from ...core.db import DbSession, SqlBuilder
 from ...core.security import KeyVault
 from ...core.types import SafeDateTime
 from ...core.utils.Converter import convert_python_data
 from ...domain.models import WebhookSetting
+from ...helpers import InfraHelper
 from ...publishers import AppSettingPublisher
 from .utils import WebhookModel
 
@@ -34,60 +36,89 @@ _SAFE_EVENT_IDENTIFIERS = frozenset(
 
 
 class WebhookDeliveryError(RuntimeError):
-    """One or more webhook endpoints rejected an event delivery."""
+    """A webhook endpoint rejected an event delivery."""
 
 
-@Broker.wrap_async_task_decorator(
-    {
-        "autoretry_for": (WebhookDeliveryError,),
-        "retry_backoff": True,
-        "retry_jitter": True,
-        "retry_kwargs": {"max_retries": 3},
-    }
-)
-async def webhook_task(model: WebhookModel):
-    """Deliver one stable event through the existing Celery task."""
+WEBHOOK_FANOUT_RETRY_OPTIONS = {
+    "autoretry_for": (OperationalError,),
+    "retry_backoff": True,
+    "retry_backoff_max": 600,
+    "retry_jitter": True,
+    "retry_kwargs": {"max_retries": 3},
+}
+WEBHOOK_DELIVERY_RETRY_OPTIONS = {
+    "autoretry_for": (WebhookDeliveryError,),
+    "retry_backoff": True,
+    "retry_backoff_max": 600,
+    "retry_jitter": True,
+    "retry_kwargs": {"max_retries": 3},
+}
+
+
+@Broker.wrap_async_task_decorator(WEBHOOK_FANOUT_RETRY_OPTIONS)
+async def webhook_task(model: WebhookModel) -> None:
+    """Fan out one stable event and retry only child publish failures."""
 
     await run_webhook(model)
 
 
+@Broker.wrap_async_task_decorator(WEBHOOK_DELIVERY_RETRY_OPTIONS)
+async def webhook_delivery_task(model: WebhookModel, webhook_uid: str) -> None:
+    """Deliver one event to one endpoint with an independent retry budget."""
+
+    await deliver_webhook(model, webhook_uid)
+
+
 async def run_webhook(model: WebhookModel) -> None:
-    """Deliver an event to every configured endpoint with bounded I/O."""
+    """Schedule one delivery task for each endpoint that accepts the event."""
 
     settings = _get_webhook_settings()
-    if not settings:
+    for setting in settings:
+        if not _accepts_event(setting, model.event):
+            continue
+        try:
+            webhook_delivery_task(model, setting.get_uid())
+        except OperationalError as error:
+            Broker.logger.error(
+                "Webhook delivery scheduling failed: endpoint=%s error=%s",
+                setting.get_uid(),
+                type(error).__name__,
+            )
+            raise
+
+
+async def deliver_webhook(model: WebhookModel, webhook_uid: str) -> None:
+    """POST one event to one current endpoint with bounded I/O."""
+
+    setting = _get_webhook_setting(webhook_uid)
+    if not setting or not _accepts_event(setting, model.event):
         return
 
-    failures = 0
-    async with AsyncClient(timeout=WEBHOOK_TIMEOUT) as client:
-        for setting in settings:
-            try:
-                secret = KeyVault.get_key(setting.secret_id) if setting.secret_id else None
-                body, headers = signed_request(model, secret)
-                response = await client.post(setting.url, content=body, headers=headers)
-                response.raise_for_status()
-            except Exception as error:
-                failures += 1
-                Broker.logger.error(
-                    "Webhook delivery failed: endpoint=%s error=%s",
-                    setting.get_uid(),
-                    type(error).__name__,
-                )
-                continue
+    try:
+        secret = KeyVault.get_key(setting.secret_id) if setting.secret_id else None
+        body, headers = signed_request(model, secret)
+        async with AsyncClient(timeout=WEBHOOK_TIMEOUT) as client:
+            response = await client.post(setting.url, content=body, headers=headers)
+            response.raise_for_status()
+    except Exception as error:
+        Broker.logger.error(
+            "Webhook delivery failed: endpoint=%s error=%s",
+            webhook_uid,
+            type(error).__name__,
+        )
+        raise WebhookDeliveryError(f"Webhook delivery failed: endpoint={webhook_uid}") from error
 
-            setting.last_used_at = SafeDateTime.now()
-            setting.total_used_count += 1
-            with DbSession.use(readonly=False) as db:
-                db.update(setting)
-            AppSettingPublisher.webhook_setting_updated(
-                setting.get_uid(),
-                {
-                    "last_used_at": setting.last_used_at,
-                    "total_used_count": setting.total_used_count,
-                },
-            )
-    if failures:
-        raise WebhookDeliveryError(f"{failures} webhook delivery attempt(s) failed")
+    setting.last_used_at = SafeDateTime.now()
+    setting.total_used_count += 1
+    with DbSession.use(readonly=False) as db:
+        db.update(setting)
+    AppSettingPublisher.webhook_setting_updated(
+        webhook_uid,
+        {
+            "last_used_at": setting.last_used_at,
+            "total_used_count": setting.total_used_count,
+        },
+    )
 
 
 def signed_request(
@@ -156,3 +187,12 @@ def _get_webhook_settings() -> list[WebhookSetting]:
         return []
 
     return urls
+
+
+def _get_webhook_setting(webhook_uid: str) -> WebhookSetting | None:
+    return InfraHelper.get_by_id_like(WebhookSetting, webhook_uid)
+
+
+def _accepts_event(setting: WebhookSetting, event: str) -> bool:
+    events = setting.events
+    return events is None or event in events

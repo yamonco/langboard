@@ -119,6 +119,7 @@
   "Webhook created successfully.": "Webhook created successfully.",
   "Webhook name changed successfully.": "Webhook name changed successfully.",
   "Webhook URL changed successfully.": "Webhook URL changed successfully.",
+  "Webhook events changed successfully.": "Webhook events changed successfully.",
   "Selected webhooks deleted successfully.": "Selected webhooks deleted successfully.",
   "Internal bot created successfully.": "Internal bot created successfully.",
   "Internal bot copied successfully.": "Internal bot copied successfully.",

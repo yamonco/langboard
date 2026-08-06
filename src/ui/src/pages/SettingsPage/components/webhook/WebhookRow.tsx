@@ -6,6 +6,7 @@ import { WebhookModel } from "@/core/models";
 import { ModelRegistry } from "@/core/models/ModelRegistry";
 import WebhookName from "@/pages/SettingsPage/components/webhook/WebhookName";
 import WebhookURL from "@/pages/SettingsPage/components/webhook/WebhookURL";
+import WebhookEvents from "@/pages/SettingsPage/components/webhook/WebhookEvents";
 import { memo } from "react";
 
 export interface IWebhookRowProps extends IFlexProps {
@@ -36,6 +37,7 @@ const WebhookRow = memo(({ webhook, selectedWebhooks, setSelectedWebhooks, ...pr
                 </Table.FlexCell>
                 <WebhookName />
                 <WebhookURL />
+                <WebhookEvents />
                 <Table.FlexCell className="w-1/6 truncate text-center">
                     <DateDistance date={createdAt} />
                 </Table.FlexCell>
