@@ -13,6 +13,7 @@ from .Comment import ToggleCardCommentReactionForm
 from .Project import (
     ChangeInternalBotForm,
     ChangeInternalBotSettingsForm,
+    CopyProjectTemplateForm,
     ChatHistoryPagination,
     GraphApprovalListForm,
     InviteProjectMemberForm,
@@ -60,5 +61,6 @@ __all__ = [
     "ChangeWikiPublicForm",
     "ChangeInternalBotForm",
     "ChangeInternalBotSettingsForm",
+    "CopyProjectTemplateForm",
     "UpdateProjectChatSessionForm",
 ]

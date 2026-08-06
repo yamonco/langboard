@@ -39,7 +39,7 @@ def toggle_star_project(project_uid: str, user: User, service: DomainService) ->
 
 @McpTool.add("user", description="Create a new project.")
 def create_project(title: str, description: str | None, project_type: str, user: User, service: DomainService) -> dict:
-    project = service.project.create(user, title, description, project_type)
+    project, _, _ = service.project_template.create_project(user, title, description, project_type)
     return {"project_uid": project.get_uid()}
 
 

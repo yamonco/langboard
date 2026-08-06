@@ -15,10 +15,22 @@ from ..projections import (
 )
 
 
-def create_project_board(port: CardWorkspaceCommandPort, title: str, description: str | None = None) -> dict[str, Any]:
+def create_project_board(
+    port: CardWorkspaceCommandPort,
+    title: str,
+    description: str | None = None,
+    template_name: str | None = None,
+    infer_template_prefix: bool = False,
+) -> dict[str, Any]:
     """Create a project with the native standard workflow."""
 
-    return port.create_project_board(_required_text(title, "Project title"), description)
+    normalized_template = _required_text(template_name, "Template name") if template_name is not None else None
+    return port.create_project_board(
+        _required_text(title, "Project title"),
+        description,
+        normalized_template,
+        infer_template_prefix,
+    )
 
 
 def create_card_in_leftmost_column(

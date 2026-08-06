@@ -110,6 +110,7 @@ const API = {
             CREATE_SUGGESTION_TASK: "/board/{uid}/orchestration/card/{card_uid}/suggestion-task",
             RECORD_BYPASS: "/board/{uid}/orchestration/card/{card_uid}/bypass",
         },
+        COPY_AS_TEMPLATE: "/board/{uid}/settings/copy-as-template",
         COLUMN: {
             CREATE: "/board/{uid}/column",
             CHANGE_NAME: "/board/{uid}/column/{project_column_uid}/name",
@@ -221,6 +222,10 @@ const API = {
     },
     SETTINGS: {
         GET_SETTING_ROLES: "/settings/roles",
+        PROJECT_TEMPLATES: {
+            GET_LIST: "/settings/project-templates",
+            SET_DEFAULT: "/settings/project-templates/default",
+        },
         USERS: {
             GET_LIST: "/settings/users",
             CREATE: "/settings/users",

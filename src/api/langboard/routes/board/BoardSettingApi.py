@@ -36,11 +36,36 @@ from .forms import (
     ChangeInternalBotForm,
     ChangeInternalBotSettingsForm,
     ChangeRootOrderForm,
+    CopyProjectTemplateForm,
     CreateProjectLabelForm,
     UpdateProjectDetailsForm,
     UpdateProjectLabelDetailsForm,
     UpdateRolesForm,
 )
+
+
+@AppRouter.api.post(
+    "/board/{project_uid}/settings/copy-as-template",
+    tags=["Board.Settings"],
+    description="Copy ordered columns and project bot hooks as a reusable template.",
+)
+@RoleFilter.add(ProjectRole, [ProjectRoleAction.Update], RoleFinder.project)
+@AuthFilter.add("admin")
+def copy_project_as_template(
+    project_uid: str,
+    form: CopyProjectTemplateForm,
+    service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    """Snapshot reusable board structure while excluding cards, members, and schedules."""
+
+    project = service.project.get_by_id_like(project_uid)
+    if not project:
+        raise ApiException.NotFound_404(ApiErrorCode.NF2001)
+    try:
+        template = service.project_template.copy_from_project(project, form.name)
+    except ValueError as exc:
+        raise ApiException.BadRequest_400(ApiErrorCode.VA0000) from exc
+    return JsonResponse(content={"template": template.api_response()}, status_code=status.HTTP_201_CREATED)
 
 
 @AppRouter.schema(permission=ApiPermission.Read)

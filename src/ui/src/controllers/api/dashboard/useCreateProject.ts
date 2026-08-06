@@ -6,6 +6,7 @@ interface ICreateProjectForm {
     title: string;
     description?: string;
     project_type: string;
+    template_name?: string;
 }
 
 interface ICreateProjectResponse {

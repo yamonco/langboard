@@ -256,6 +256,11 @@ class DeleteSelectedWebhooksForm(BaseFormModel):
 
 
 @form_model
+class SetDefaultProjectTemplateForm(BaseFormModel):
+    template_name: str
+
+
+@form_model
 class CreateNotificationScheduleRuleForm(BaseFormModel):
     name: str
     is_enabled: bool = False

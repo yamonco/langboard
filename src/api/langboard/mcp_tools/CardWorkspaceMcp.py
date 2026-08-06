@@ -44,16 +44,24 @@ def _adapter(actor: User | Bot, service: DomainService) -> NativeCardWorkspaceAd
     return NativeCardWorkspaceAdapter(actor, service)
 
 
-@McpTool.add("user", description="Create an Other project with Backlog, In Progress, and Done columns.")
+@McpTool.add("user", description="Create a project from a named template, or the configured default.")
 def create_project_board(
     title: str,
     user: User,
     service: DomainService,
     description: str | None = None,
+    template_name: str | None = None,
+    infer_template_prefix: bool = False,
 ) -> dict[str, Any]:
-    """Create the standard agent-managed project board."""
+    """Create a template-backed agent-managed project board."""
 
-    return create_board(_adapter(user, service), title, description)
+    return create_board(
+        _adapter(user, service),
+        title,
+        description,
+        template_name,
+        infer_template_prefix,
+    )
 
 
 @McpTool.add(description="Create a card in the current leftmost non-archive project column.")
