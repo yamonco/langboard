@@ -59,44 +59,55 @@ def get_card_bundle(
         return _section_continuation(card_uid, source, section_cursor, section_page.limit)
 
     comment_cursor = CommentCursor.decode(comment_page.cursor) if comment_page.cursor else None
-    comments = port.get_comment_page(
-        card_uid,
-        comment_page.limit,
-        comment_cursor.created_at if comment_cursor else None,
-        comment_cursor.comment_uid if comment_cursor else None,
-    )
-    comment_projection = _comment_page(
-        comments.items, comments.total_count, comments.next_cursor_fields, comment_page.limit
-    )
+    requested = set(include or [])
+    comment_projection = None
+    if comment_cursor is not None or CardBundleInclude.Comments in requested:
+        comments = port.get_comment_page(
+            card_uid,
+            comment_page.limit,
+            comment_cursor.created_at if comment_cursor else None,
+            comment_cursor.comment_uid if comment_cursor else None,
+        )
+        comment_projection = _comment_page(
+            comments.items, comments.total_count, comments.next_cursor_fields, comment_page.limit
+        )
     if comment_page.cursor:
+        if comment_projection is None:
+            raise ValueError("Comments continuation is unavailable")
         return CardBundleResponse(
             card_uid=card_uid,
-            continuation=CardBundleContinuationDto(section="comments", page=comment_projection),
+            continuation=CardBundleContinuationDto(section=CardBundleSection.Comments, page=comment_projection),
         )
 
     details = source.details
-    labels = [public_label(item) for item in details.get("labels", []) if isinstance(item, dict)]
-    relationships = [public_relationship(item) for item in details.get("relationships", []) if isinstance(item, dict)]
-    checklists = [public_checklist(item) for item in source.checklists if isinstance(item, dict)]
     core = pick(details, ("uid", "title", "created_at", "updated_at"))
-    core["description"] = bounded_text(details.get("description"), CardBundleSection.CoreDescription).model_dump(
-        mode="json"
-    )
+    if CardBundleInclude.Description in requested:
+        core["description"] = bounded_text(details.get("description"), CardBundleSection.CoreDescription).model_dump(
+            mode="json"
+        )
     bundle = CardBundleDto(
         core=core,
         workflow=pick(
             details,
             ("project_column_uid", "project_column_name", "order", "deadline_at", "archived_at"),
         ),
-        people=bounded_items(assigned_people(details), CardBundleSection.People, section_page.limit),
-        classification=ClassificationDto(
+    )
+    if CardBundleInclude.People in requested:
+        bundle.people = bounded_items(assigned_people(details), CardBundleSection.People, section_page.limit)
+    if CardBundleInclude.Classification in requested:
+        labels = [public_label(item) for item in details.get("labels", []) if isinstance(item, dict)]
+        relationships = [
+            public_relationship(item) for item in details.get("relationships", []) if isinstance(item, dict)
+        ]
+        bundle.classification = ClassificationDto(
             labels=bounded_items(labels, CardBundleSection.Labels, section_page.limit),
             relationships=bounded_items(relationships, CardBundleSection.Relationships, section_page.limit),
-        ),
-        checklists=bounded_items(checklists, CardBundleSection.Checklists, section_page.limit),
-        comments=comment_projection,
-    )
-    requested = set(include or [])
+        )
+    if CardBundleInclude.Checklists in requested:
+        checklists = [public_checklist(item) for item in source.checklists if isinstance(item, dict)]
+        bundle.checklists = bounded_items(checklists, CardBundleSection.Checklists, section_page.limit)
+    if comment_projection is not None:
+        bundle.comments = comment_projection
     if CardBundleInclude.Attachments in requested:
         bundle.attachments = bounded_items(
             [public_attachment(item) for item in source.attachments if isinstance(item, dict)],
@@ -285,13 +296,14 @@ def _requested_source_sections(
         return frozenset({section_cursor.section})
     if is_comment_continuation:
         return frozenset()
-    sections = {
-        CardBundleSection.People.value,
-        CardBundleSection.Labels.value,
-        CardBundleSection.Relationships.value,
-        CardBundleSection.Checklists.value,
-    }
+    sections: set[str] = set()
     requested = set(include or [])
+    if CardBundleInclude.People in requested:
+        sections.add(CardBundleSection.People.value)
+    if CardBundleInclude.Classification in requested:
+        sections.update({CardBundleSection.Labels.value, CardBundleSection.Relationships.value})
+    if CardBundleInclude.Checklists in requested:
+        sections.add(CardBundleSection.Checklists.value)
     if CardBundleInclude.Attachments in requested:
         sections.add(CardBundleSection.Attachments.value)
     if CardBundleInclude.Metadata in requested:

@@ -73,8 +73,9 @@ def create_card_in_leftmost_column(
 
 @McpTool.add(
     description=(
-        "Read a bounded card aggregate. Request optional attachments, public metadata, or automation explicitly. "
-        "Use returned opaque cursors for comments, rich description, and every collection."
+        "Read compact card core and workflow fields. Request description, people, classification, checklists, "
+        "comments, attachments, public metadata, or automation explicitly. Use returned opaque cursors for "
+        "rich description and every collection."
     )
 )
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)

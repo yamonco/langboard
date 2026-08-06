@@ -35,6 +35,11 @@ _COMPACT_SECRET_FRAGMENTS = (
 class CardBundleInclude(StrEnum):
     """Optional sections available in the bounded card aggregate."""
 
+    Description = "description"
+    People = "people"
+    Classification = "classification"
+    Checklists = "checklists"
+    Comments = "comments"
     Attachments = "attachments"
     Metadata = "metadata"
     Automation = "automation"
@@ -48,6 +53,7 @@ class CardBundleSection(StrEnum):
     Labels = "classification.labels"
     Relationships = "classification.relationships"
     Checklists = "checklists"
+    Comments = "comments"
     Attachments = "attachments"
     Metadata = "metadata"
     BotScopes = "automation.bot_scopes"

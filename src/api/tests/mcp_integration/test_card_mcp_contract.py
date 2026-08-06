@@ -7,8 +7,10 @@ import pytest
 
 os.environ.setdefault("PROJECT_NAME", "langboard")
 
+from langboard.card_workspace.application.dtos import CardBundleDto, CardBundleResponse  # noqa: E402
 from langboard.mcp_integration import McpTool  # noqa: E402
-from langboard.mcp_tools import CardMcp  # noqa: E402
+from langboard.mcp_tools import CardMcp, CardWorkspaceMcp  # noqa: E402, F401
+from langboard.routes.mcp.McpApi import serialize_mcp_result  # noqa: E402
 from langboard_shared.domain.services.factory.CardService import CardService  # noqa: E402
 
 
@@ -30,6 +32,41 @@ def test_card_move_schema_makes_column_an_optional_destination() -> None:
 
     assert schema["required"] == ["project_uid", "card_uid", "order"]
     assert schema["properties"]["column_uid"]["default"] is None
+
+
+def test_card_bundle_schema_exposes_opt_in_sections() -> None:
+    """Agents can request rich sections without paying for them by default."""
+
+    schema = McpTool.get_tool("get_card_bundle")["input_schema"]
+
+    assert schema["$defs"]["CardBundleInclude"]["enum"] == [
+        "description",
+        "people",
+        "classification",
+        "checklists",
+        "comments",
+        "attachments",
+        "metadata",
+        "automation",
+    ]
+    assert schema["properties"]["include"]["default"] is None
+
+
+def test_mcp_serializer_omits_unrequested_card_sections() -> None:
+    """The real MCP response path does not leak optional sections as null placeholders."""
+
+    result = serialize_mcp_result(
+        CardBundleResponse(
+            card_uid="card-1",
+            card=CardBundleDto(core={"uid": "card-1", "title": "Work"}, workflow={}),
+        )
+    )
+
+    assert result == {
+        "card_uid": "card-1",
+        "card": {"core": {"uid": "card-1", "title": "Work"}, "workflow": {}},
+        "continuation": None,
+    }
 
 
 def test_empty_partial_edit_and_invalid_order_stop_before_service() -> None:
