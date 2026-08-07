@@ -10,6 +10,7 @@ from pydantic import ValidationError
 
 os.environ.setdefault("PROJECT_NAME", "langboard")
 
+from langboard_shared.core.broker import Broker  # noqa: E402
 from langboard_shared.tasks.bots.utils.BotTaskDataHelper import BotTaskDataHelper  # noqa: E402
 from langboard_shared.tasks.webhooks import WebhookTask  # noqa: E402
 from langboard_shared.tasks.webhooks.utils import WEBHOOK_EVENT_NAMES, WebhookModel  # noqa: E402
@@ -150,14 +151,14 @@ def test_webhook_schema_documents_envelope_and_signature(monkeypatch: pytest.Mon
         webhook_schema_module.Broker,
         "get_schema",
         lambda group: {
-                "card_created": {
-                    "project_uid": "string",
-                    "project_title": "string",
-                    "card_uid": "string",
-                    "card_title": "string",
-                    "project_column_name": "string",
-                    "project_column_is_archive": "boolean",
-                    "related_cards": {"title": "string"},
+            "card_created": {
+                "project_uid": "string",
+                "project_title": "string",
+                "card_uid": "string",
+                "card_title": "string",
+                "project_column_name": "string",
+                "project_column_is_archive": "boolean",
+                "related_cards": {"title": "string"},
                 "executor": {"email": "string", "uid": "string"},
             }
         },
@@ -218,6 +219,17 @@ def test_native_card_snapshot_is_frozen_at_event_creation(monkeypatch: pytest.Mo
     assert data["project_column_name"] == "진행중"
     assert data["project_column_is_archive"] is False
     assert data["card_title"] == "업무 요청"
+
+
+def test_native_card_move_schema_documents_old_column_snapshot() -> None:
+    """The emitted old-column snapshot remains visible to webhook consumers."""
+
+    importlib.import_module("langboard_shared.tasks.bots.CardBotTask")
+    schema = Broker.get_schema("webhook")["card_moved"]
+
+    assert schema["old_project_column_uid"] == "string"
+    assert schema["old_project_column_name"] == "string"
+    assert schema["old_project_column_is_archive"] == "boolean"
 
 
 def test_webhook_schema_matches_emitted_registry_without_import_order(

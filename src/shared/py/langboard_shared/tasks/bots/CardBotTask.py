@@ -32,7 +32,14 @@ async def card_updated(user_or_bot: User | Bot, project: Project, card: Card):
     )
 
 
-@BotTaskSchemaHelper.card_schema(BotTriggerCondition.CardMoved)
+@BotTaskSchemaHelper.card_schema(
+    BotTriggerCondition.CardMoved,
+    {
+        "old_project_column_uid": "string",
+        "old_project_column_name": "string",
+        "old_project_column_is_archive": "boolean",
+    },
+)
 @Broker.wrap_async_task_decorator
 async def card_moved(user_or_bot: User | Bot, project: Project, card: Card, old_column: ProjectColumn):
     bots = BotTaskHelper.get_scoped_bots(
