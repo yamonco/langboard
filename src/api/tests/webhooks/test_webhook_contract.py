@@ -10,6 +10,7 @@ from pydantic import ValidationError
 
 os.environ.setdefault("PROJECT_NAME", "langboard")
 
+from langboard_shared.tasks.bots.utils.BotTaskDataHelper import BotTaskDataHelper  # noqa: E402
 from langboard_shared.tasks.webhooks import WebhookTask  # noqa: E402
 from langboard_shared.tasks.webhooks.utils import WEBHOOK_EVENT_NAMES, WebhookModel  # noqa: E402
 
@@ -28,11 +29,21 @@ def test_signed_request_has_stable_versioned_envelope() -> None:
         event="card_moved",
         data={
             "project_uid": "project-1",
+            "project_title": "산모피아",
             "card_uid": "card-1",
+            "card_title": "업무 요청사항(2026.08.06)",
+            "project_column_uid": "column-2",
+            "project_column_name": "진행중",
+            "project_column_is_archive": False,
+            "old_project_column_uid": "column-1",
+            "old_project_column_name": "진행예정",
+            "old_project_column_is_archive": False,
             "related_cards": [{"card_uid": "other", "title": "private title"}],
             "executor": {
                 "uid": "user-1",
                 "type": "user",
+                "firstname": "이대중",
+                "lastname": "",
                 "email": "private@example.com",
             },
         },
@@ -48,8 +59,16 @@ def test_signed_request_has_stable_versioned_envelope() -> None:
         "event": "card_moved",
         "data": {
             "project_uid": "project-1",
+            "project_title": "산모피아",
             "card_uid": "card-1",
-            "executor": {"uid": "user-1", "type": "user"},
+            "card_title": "업무 요청사항(2026.08.06)",
+            "project_column_uid": "column-2",
+            "project_column_name": "진행중",
+            "project_column_is_archive": False,
+            "old_project_column_uid": "column-1",
+            "old_project_column_name": "진행예정",
+            "old_project_column_is_archive": False,
+            "executor": {"uid": "user-1", "type": "user", "display_name": "이대중"},
         },
     }
     assert headers["X-Langboard-Webhook-Id"] == "event-1"
@@ -131,10 +150,14 @@ def test_webhook_schema_documents_envelope_and_signature(monkeypatch: pytest.Mon
         webhook_schema_module.Broker,
         "get_schema",
         lambda group: {
-            "card_created": {
-                "project_uid": "string",
-                "card_uid": "string",
-                "related_cards": {"title": "string"},
+                "card_created": {
+                    "project_uid": "string",
+                    "project_title": "string",
+                    "card_uid": "string",
+                    "card_title": "string",
+                    "project_column_name": "string",
+                    "project_column_is_archive": "boolean",
+                    "related_cards": {"title": "string"},
                 "executor": {"email": "string", "uid": "string"},
             }
         },
@@ -153,8 +176,48 @@ def test_webhook_schema_documents_envelope_and_signature(monkeypatch: pytest.Mon
     ]
     assert document["x-langboard-webhook-signature"]["algorithm"] == "HMAC-SHA256"
     data_properties = schema["properties"]["data"]["properties"]
-    assert set(data_properties) == {"project_uid", "card_uid", "executor"}
-    assert set(data_properties["executor"]["properties"]) == {"uid", "type"}
+    assert set(data_properties) == {
+        "project_uid",
+        "project_title",
+        "card_uid",
+        "card_title",
+        "project_column_name",
+        "project_column_is_archive",
+        "executor",
+    }
+    assert set(data_properties["executor"]["properties"]) == {"uid", "type", "display_name"}
+
+
+def test_minimal_event_data_freezes_safe_bot_and_unknown_actor_labels() -> None:
+    """Presentation snapshots exclude credentials while retaining one actor label."""
+
+    assert WebhookTask.minimal_event_data(
+        {"executor": {"uid": "bot-1", "type": "bot", "name": "자동화", "api_key": "secret"}}
+    ) == {"executor": {"uid": "bot-1", "type": "bot", "display_name": "자동화"}}
+    assert WebhookTask.minimal_event_data(
+        {"executor": {"uid": "external-1", "type": "external", "email": "private@example.com"}}
+    ) == {"executor": {"uid": "external-1", "type": "external", "display_name": "알 수 없음"}}
+
+
+def test_native_card_snapshot_is_frozen_at_event_creation(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Native helper data carries the names needed after later provider changes."""
+
+    actor = SimpleNamespace(api_response=lambda: {"uid": "user-1", "type": "user"})
+    project = SimpleNamespace(get_uid=lambda: "project-1", title="산모피아", id=1)
+    column = SimpleNamespace(get_uid=lambda: "column-1", name="진행중", is_archive=False)
+    card = SimpleNamespace(get_uid=lambda: "card-1", title="업무 요청", project_column_id=1)
+    monkeypatch.setattr(
+        BotTaskDataHelper,
+        "create_card_relationship_context",
+        lambda _card: {"parents": [], "children": []},
+    )
+
+    data = BotTaskDataHelper.create_card(actor, project, card, column)
+
+    assert data["project_title"] == "산모피아"
+    assert data["project_column_name"] == "진행중"
+    assert data["project_column_is_archive"] is False
+    assert data["card_title"] == "업무 요청"
 
 
 def test_webhook_schema_matches_emitted_registry_without_import_order(

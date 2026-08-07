@@ -17,7 +17,17 @@ from .utils import WebhookModel
 
 
 WEBHOOK_TIMEOUT = Timeout(5.0, connect=2.0)
-_SAFE_EVENT_FIELDS = frozenset({"reaction_type"})
+_SAFE_EVENT_FIELDS = frozenset(
+    {
+        "card_title",
+        "old_project_column_is_archive",
+        "old_project_column_name",
+        "project_column_is_archive",
+        "project_column_name",
+        "project_title",
+        "reaction_type",
+    }
+)
 _SAFE_EVENT_IDENTIFIERS = frozenset(
     {
         "attachment_uid",
@@ -172,8 +182,31 @@ def minimal_event_data(data: dict[str, Any]) -> dict[str, Any]:
         executor_type = executor.get("type")
         if not isinstance(executor_type, str):
             executor_type = "bot" if "bot_uname" in executor else "unknown"
-        result["executor"] = {"uid": executor["uid"], "type": executor_type}
+        result["executor"] = {
+            "uid": executor["uid"],
+            "type": executor_type,
+            "display_name": _executor_display_name(executor, executor_type),
+        }
     return result
+
+
+def _executor_display_name(executor: dict[str, Any], executor_type: str) -> str:
+    """Freeze the safe actor label used by downstream notifications."""
+
+    if executor_type == "user":
+        full_name = " ".join(
+            part.strip()
+            for part in (executor.get("firstname"), executor.get("lastname"))
+            if isinstance(part, str) and part.strip()
+        )
+        if full_name:
+            return full_name
+        username = executor.get("username")
+        return username.strip() if isinstance(username, str) and username.strip() else "알 수 없음"
+    if executor_type == "bot":
+        name = executor.get("name")
+        return name.strip() if isinstance(name, str) and name.strip() else "Langboard"
+    return "알 수 없음"
 
 
 def _get_webhook_settings() -> list[WebhookSetting]:

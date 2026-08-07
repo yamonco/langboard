@@ -24,6 +24,7 @@ class BotTaskSchemaHelper:
             condition,
             {
                 "project_uid": "string",
+                "project_title": "string",
                 "executor": BotTaskSchemaHelper.create_user_or_bot_schema(),
                 **(schema or {}),
             },
@@ -35,7 +36,10 @@ class BotTaskSchemaHelper:
             condition,
             {
                 "project_uid": "string",
+                "project_title": "string",
                 "project_column_uid": "string",
+                "project_column_name": "string",
+                "project_column_is_archive": "boolean",
                 "executor": BotTaskSchemaHelper.create_user_or_bot_schema(),
                 **(schema or {}),
             },
@@ -47,8 +51,12 @@ class BotTaskSchemaHelper:
             condition,
             {
                 "project_uid": "string",
+                "project_title": "string",
                 "project_column_uid": "string",
+                "project_column_name": "string",
+                "project_column_is_archive": "boolean",
                 "card_uid": "string",
+                "card_title": "string",
                 "related_cards": {
                     "parents": [BotTaskSchemaHelper.create_related_card_schema()],
                     "children": [BotTaskSchemaHelper.create_related_card_schema()],
