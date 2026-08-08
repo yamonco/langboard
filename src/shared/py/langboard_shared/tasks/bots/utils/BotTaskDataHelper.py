@@ -16,6 +16,7 @@ class BotTaskDataHelper:
     def create_project(user_or_bot: User | Bot, project: Project, data: dict | None = None) -> dict[str, Any]:
         return {
             "project_uid": project.get_uid(),
+            "project_title": project.title,
             **BotTaskDataHelper.create_executor(user_or_bot),
             **(data or {}),
         }
@@ -27,6 +28,8 @@ class BotTaskDataHelper:
             project,
             {
                 "project_column_uid": column.get_uid(),
+                "project_column_name": column.name,
+                "project_column_is_archive": column.is_archive,
             },
         )
 
@@ -47,6 +50,7 @@ class BotTaskDataHelper:
         return {
             **BotTaskDataHelper.create_project_column(user_or_bot, project, column),
             "card_uid": card.get_uid(),
+            "card_title": card.title,
             "related_cards": BotTaskDataHelper.create_card_relationship_context(card),
         }
 
