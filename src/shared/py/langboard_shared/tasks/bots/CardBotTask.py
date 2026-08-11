@@ -1,6 +1,9 @@
+from typing import Any
 from ...core.broker import Broker
 from ...domain.models import Bot, Card, Project, ProjectColumn, User
 from ...domain.models.bases import BotTriggerCondition
+from ..webhooks import WebhookTask
+from ..webhooks.utils import WebhookModel
 from .utils import BotTaskDataHelper, BotTaskHelper, BotTaskSchemaHelper
 
 
@@ -41,21 +44,53 @@ async def card_updated(user_or_bot: User | Bot, project: Project, card: Card):
     },
 )
 @Broker.wrap_async_task_decorator
-async def card_moved(user_or_bot: User | Bot, project: Project, card: Card, old_column: ProjectColumn):
+async def card_moved(
+    user_or_bot: User | Bot,
+    project: Project,
+    card: Card,
+    old_column: ProjectColumn,
+    emit_webhook: bool,
+) -> None:
     bots = BotTaskHelper.get_scoped_bots(
         BotTriggerCondition.CardMoved, project_id=project.id, project_column_id=card.project_column_id, card_id=card.id
     )
     await BotTaskHelper.run(
         bots,
         BotTriggerCondition.CardMoved,
-        {
-            **BotTaskDataHelper.create_card(user_or_bot, project, card),
-            "old_project_column_uid": old_column.get_uid(),
-            "old_project_column_name": old_column.name,
-            "old_project_column_is_archive": old_column.is_archive,
-        },
+        create_card_moved_data(user_or_bot, project, card, old_column),
         project,
+        emit_webhook=emit_webhook,
     )
+
+
+def enqueue_card_moved_webhook(
+    user_or_bot: User | Bot,
+    project: Project,
+    card: Card,
+    old_column: ProjectColumn,
+    current_column: ProjectColumn,
+) -> None:
+    """Freeze and queue a move webhook before optional bot execution."""
+
+    data = create_card_moved_data(user_or_bot, project, card, old_column, current_column)
+    WebhookTask.webhook_task(WebhookModel(event=BotTriggerCondition.CardMoved.value, data=data))
+
+
+def create_card_moved_data(
+    user_or_bot: User | Bot,
+    project: Project,
+    card: Card,
+    old_column: ProjectColumn,
+    current_column: ProjectColumn | None = None,
+) -> dict[str, Any]:
+    """Create the stable card-move snapshot shared by webhooks and bots."""
+
+    return {
+        **BotTaskDataHelper.create_card(user_or_bot, project, card, current_column),
+        "old_project_column_uid": old_column.get_uid(),
+        "old_project_column_name": old_column.name,
+        "old_project_column_is_archive": old_column.is_archive,
+    }
 
 
 @BotTaskSchemaHelper.card_schema(BotTriggerCondition.CardLabelsUpdated)
