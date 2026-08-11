@@ -111,6 +111,8 @@ class BotTaskHelper:
         data: dict[str, Any],
         project: Project | None = None,
         scope_model: BaseDbModel | None = None,
+        *,
+        emit_webhook: bool = True,
     ): ...
     @overload
     @staticmethod
@@ -119,6 +121,8 @@ class BotTaskHelper:
         event: BotTriggerCondition | BotDefaultTrigger,
         data: dict[str, Any],
         project: Project | None = None,
+        *,
+        emit_webhook: bool = True,
     ): ...
     @staticmethod
     async def run(
@@ -127,11 +131,14 @@ class BotTaskHelper:
         data: dict[str, Any],
         project: Project | None = None,
         scope_model: BaseDbModel | None = None,
+        *,
+        emit_webhook: bool = True,
     ):
         if not isinstance(bots, list):
             bots = [bots]
 
-        WebhookTask.webhook_task(WebhookModel(event=event.value, data=data))
+        if emit_webhook:
+            WebhookTask.webhook_task(WebhookModel(event=event.value, data=data))
 
         for bot in bots:
             if isinstance(bot, tuple):

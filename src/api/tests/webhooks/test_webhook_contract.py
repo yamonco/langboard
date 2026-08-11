@@ -11,6 +11,7 @@ from pydantic import ValidationError
 os.environ.setdefault("PROJECT_NAME", "langboard")
 
 from langboard_shared.core.broker import Broker  # noqa: E402
+from langboard_shared.tasks.bots import CardBotTask  # noqa: E402
 from langboard_shared.tasks.bots.utils.BotTaskDataHelper import BotTaskDataHelper  # noqa: E402
 from langboard_shared.tasks.webhooks import WebhookTask  # noqa: E402
 from langboard_shared.tasks.webhooks.utils import WEBHOOK_EVENT_NAMES, WebhookModel  # noqa: E402
@@ -219,6 +220,30 @@ def test_native_card_snapshot_is_frozen_at_event_creation(monkeypatch: pytest.Mo
     assert data["project_column_name"] == "진행중"
     assert data["project_column_is_archive"] is False
     assert data["card_title"] == "업무 요청"
+
+
+def test_card_move_webhook_is_queued_before_scoped_bot_execution(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A user move queues its immutable webhook without depending on bot lookup."""
+
+    actor = SimpleNamespace(api_response=lambda: {"uid": "user-1", "type": "user"})
+    project = SimpleNamespace(get_uid=lambda: "project-1", title="산모피아", id=1)
+    old_column = SimpleNamespace(get_uid=lambda: "column-1", name="진행예정", is_archive=False)
+    current_column = SimpleNamespace(get_uid=lambda: "column-2", name="진행중", is_archive=False)
+    card = SimpleNamespace(get_uid=lambda: "card-1", title="업무 요청", project_column_id=2)
+    queued: list[WebhookModel] = []
+    monkeypatch.setattr(
+        BotTaskDataHelper,
+        "create_card_relationship_context",
+        lambda _card: {"parents": [], "children": []},
+    )
+    monkeypatch.setattr(WebhookTask, "webhook_task", queued.append)
+
+    CardBotTask.enqueue_card_moved_webhook(actor, project, card, old_column, current_column)
+
+    assert len(queued) == 1
+    assert queued[0].event == "card_moved"
+    assert queued[0].data["project_column_name"] == "진행중"
+    assert queued[0].data["old_project_column_name"] == "진행예정"
 
 
 def test_native_card_move_schema_documents_old_column_snapshot() -> None:

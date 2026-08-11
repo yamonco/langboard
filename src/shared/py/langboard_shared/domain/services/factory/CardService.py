@@ -376,8 +376,9 @@ class CardService(BaseDomainService):
         CardPublisher.order_changed(project, card, old_column, cast(ProjectColumn, new_column))
 
         if new_column:
+            CardBotTask.enqueue_card_moved_webhook(user_or_bot, project, card, old_column, new_column)
             CardActivityTask.card_moved(user_or_bot, project, card, old_column)
-            CardBotTask.card_moved(user_or_bot, project, card, old_column)
+            CardBotTask.card_moved(user_or_bot, project, card, old_column, False)
 
         return True
 
