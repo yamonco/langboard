@@ -51,6 +51,7 @@ _EMAIL_NOTIFICATION_POLICY_SCHEMA = {
     "categories": "string[]",
     "card_move_target_columns": "string[]",
     "recipient_user_uids": "string[]",
+    "external_recipient_emails": "string[]",
     "available_recipients": [
         {
             "uid": "string",
@@ -61,6 +62,10 @@ _EMAIL_NOTIFICATION_POLICY_SCHEMA = {
     ],
     "available_columns": "string[]",
     "smtp_available": "boolean",
+    "last_delivery_status": "string|null",
+    "last_delivery_at": "datetime|null",
+    "last_delivery_recipient_email": "string|null",
+    "last_delivery_error": "string|null",
 }
 
 
@@ -95,6 +100,7 @@ def get_project_email_notification_policy(
 def update_project_email_notification_policy(
     project_uid: str,
     form: UpdateProjectEmailNotificationPolicyForm,
+    user: User = Auth.scope("user"),
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
     """Replace a board policy after server-side membership validation."""
@@ -107,6 +113,8 @@ def update_project_email_notification_policy(
             categories=form.categories,
             recipient_user_uids=form.recipient_user_uids,
             card_move_target_columns=form.card_move_target_columns,
+            external_recipient_emails=[str(email) for email in form.external_recipient_emails],
+            actor=user,
         )
     except ValueError as exc:
         raise ApiException.BadRequest_400(ApiErrorCode.VA0000) from exc

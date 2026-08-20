@@ -76,6 +76,10 @@
     "Recipients": "Recipients",
     "All current board members": "All current board members",
     "The person who made the change is excluded.": "The person who made the change is excluded.",
+    "External email recipients": "External email recipients",
+    "External recipients do not need a Langboard account.": "External recipients do not need a Langboard account.",
+    "Add an external email...": "Add an external email...",
+    "Recent email delivery failed": "Recent email delivery failed",
     "emailCategories": {
       "board": "Board settings and columns",
       "cards": "Cards",

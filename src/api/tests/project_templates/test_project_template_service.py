@@ -128,6 +128,31 @@ def test_copy_snapshot_preserves_order_and_bot_settings_but_not_cards_or_schedul
     assert not hasattr(template, "schedules")
 
 
+def test_template_policy_excludes_external_email_addresses() -> None:
+    """Reusable workflow policy must not leak one customer's recipients into another board."""
+
+    policy = SimpleNamespace(
+        is_enabled=True,
+        notify_all_members=False,
+        categories=[SimpleNamespace(value="cards")],
+        card_move_target_columns=["Review"],
+        external_recipient_emails=["customer@example.com"],
+    )
+    repository = SimpleNamespace(
+        project_email_notification=SimpleNamespace(get_with_recipients=lambda _project: (policy, []))
+    )
+
+    snapshot = _service(repository)._email_notification_policy_snapshot(SimpleNamespace(id=7))
+
+    assert snapshot == {
+        "is_enabled": True,
+        "notify_all_members": False,
+        "categories": ["cards"],
+        "card_move_target_columns": ["Review"],
+    }
+    assert "external_recipient_emails" not in snapshot
+
+
 def test_template_restores_the_exact_assigned_internal_bot(monkeypatch: pytest.MonkeyPatch) -> None:
     """A copied template must not select an arbitrary bot of the same type."""
 

@@ -1,12 +1,15 @@
+from dataclasses import dataclass
 from html import escape
 from typing import Any, cast
 from urllib.parse import urlparse
+from pydantic import EmailStr, TypeAdapter, ValidationError
 from ....core.domain import BaseDomainService
 from ....core.types import SnowflakeID
 from ....core.types.ParamTypes import TProjectParam
 from ....core.utils.String import concat
 from ....Env import UI_QUERY_NAMES, Env
 from ....helpers import InfraHelper
+from ....tasks.activities import ProjectActivityTask
 from ...models import Bot, Project, ProjectActivity, ProjectWikiActivity, User
 from ...models.ProjectActivity import ProjectActivityType
 from ...models.ProjectEmailNotificationPolicy import (
@@ -73,6 +76,17 @@ _ACTIVITY_CATEGORY: dict[str, ProjectEmailNotificationCategory] = {
 }
 
 
+@dataclass(frozen=True)
+class ProjectEmailDeliveryRecipient:
+    """One policy-authorized delivery target resolved at execution time."""
+
+    email: str
+    language: str
+
+
+_EMAIL_ADAPTER = TypeAdapter(EmailStr)
+
+
 class ProjectEmailNotificationService(BaseDomainService):
     DEFAULT_CATEGORIES = [
         ProjectEmailNotificationCategory.Cards,
@@ -105,6 +119,7 @@ class ProjectEmailNotificationService(BaseDomainService):
             "categories": [category.value for category in (policy.categories if policy else self.DEFAULT_CATEGORIES)],
             "card_move_target_columns": policy.card_move_target_columns if policy else [],
             "recipient_user_uids": [recipient.get_uid() for recipient in recipients],
+            "external_recipient_emails": policy.external_recipient_emails if policy else [],
             "available_recipients": [
                 {
                     "uid": member.get_uid(),
@@ -117,6 +132,10 @@ class ProjectEmailNotificationService(BaseDomainService):
             ],
             "available_columns": [column.name for column in sorted(columns, key=lambda item: item.order)],
             "smtp_available": self.smtp_available(),
+            "last_delivery_status": policy.last_delivery_status if policy else None,
+            "last_delivery_at": policy.last_delivery_at if policy else None,
+            "last_delivery_recipient_email": policy.last_delivery_recipient_email if policy else None,
+            "last_delivery_error": policy.last_delivery_error if policy else None,
         }
 
     def update_policy(
@@ -128,18 +147,24 @@ class ProjectEmailNotificationService(BaseDomainService):
         categories: list[ProjectEmailNotificationCategory],
         recipient_user_uids: list[str],
         card_move_target_columns: list[str],
+        external_recipient_emails: list[str],
+        actor: User | None = None,
     ) -> dict[str, Any] | None:
         """Replace one board policy after checking every recipient is a current member."""
 
         project_model = InfraHelper.get_by_id_like(Project, project)
         if not project_model:
             return None
+        existing_policy, _ = self.repo.project_email_notification.get_with_recipients(project_model)
         if len(categories) != len(set(categories)):
             raise ValueError("Email notification categories must be unique")
         if len(recipient_user_uids) != len(set(recipient_user_uids)):
             raise ValueError("Email notification recipients must be unique")
         if len(recipient_user_uids) > 50:
             raise ValueError("Email notification recipients are limited to 50")
+        normalized_external_emails = self._normalize_external_emails(external_recipient_emails)
+        if len(normalized_external_emails) > 50:
+            raise ValueError("External email notification recipients are limited to 50")
         normalized_columns = [column.strip() for column in card_move_target_columns if column.strip()]
         if len(normalized_columns) != len(set(normalized_columns)):
             raise ValueError("Card move target columns must be unique")
@@ -150,7 +175,10 @@ class ProjectEmailNotificationService(BaseDomainService):
         }
         if not set(normalized_columns).issubset(project_columns):
             raise ValueError("Every card move target column must exist on the project")
-        if is_enabled and (not categories or (not notify_all_members and not recipient_user_uids)):
+        if is_enabled and (
+            not categories
+            or (not notify_all_members and not recipient_user_uids and not normalized_external_emails)
+        ):
             raise ValueError("Enabled email notifications require a category and recipient")
 
         recipient_ids = [SnowflakeID.from_short_code(uid) for uid in recipient_user_uids]
@@ -170,7 +198,17 @@ class ProjectEmailNotificationService(BaseDomainService):
             categories=categories,
             card_move_target_columns=normalized_columns,
             recipient_user_ids=recipient_ids,
+            external_recipient_emails=normalized_external_emails,
         )
+        previous_external_emails = set(existing_policy.external_recipient_emails if existing_policy else [])
+        current_external_emails = set(normalized_external_emails)
+        if actor and previous_external_emails != current_external_emails:
+            ProjectActivityTask.project_email_notification_policy_updated(
+                actor,
+                project_model,
+                sorted(current_external_emails - previous_external_emails),
+                sorted(previous_external_emails - current_external_emails),
+            )
         response = self.get_api_policy(project_model)
         if response is None:
             return None
@@ -181,15 +219,16 @@ class ProjectEmailNotificationService(BaseDomainService):
                 "categories": [category.value for category in categories],
                 "card_move_target_columns": normalized_columns,
                 "recipient_user_uids": [eligible_members[user_id].get_uid() for user_id in recipient_ids],
+                "external_recipient_emails": normalized_external_emails,
             }
         )
         return response
 
-    def get_delivery_recipient_ids(
+    def get_delivery_recipients(
         self,
         activity: ProjectActivity | ProjectWikiActivity,
-    ) -> list[SnowflakeID]:
-        """Return current eligible recipients for one persisted board activity."""
+    ) -> list[ProjectEmailDeliveryRecipient]:
+        """Return deduplicated current members and explicit edge email recipients."""
 
         category = self.category_for_activity(activity.activity_type.value)
         if category is None:
@@ -208,24 +247,38 @@ class ProjectEmailNotificationService(BaseDomainService):
             current_member_ids = {member.id for member, _ in current_members}
             recipients = [recipient for recipient in recipients if recipient.id in current_member_ids]
 
-        actor_id = activity.user_id
-        return [
-            recipient.id
-            for recipient in recipients
-            if recipient.id != actor_id
-            and recipient.deleted_at is None
-            and recipient.activated_at is not None
-            and bool(recipient.email)
-        ]
+        actor = cast(User | None, InfraHelper.get_by_id_like(User, activity.user_id)) if activity.user_id else None
+        actor_email = actor.email.casefold() if actor and actor.email else None
+        resolved: dict[str, ProjectEmailDeliveryRecipient] = {}
+        for recipient in recipients:
+            if (
+                recipient.id == activity.user_id
+                or recipient.deleted_at is not None
+                or recipient.activated_at is None
+                or not recipient.email
+            ):
+                continue
+            email = recipient.email.casefold()
+            if email != actor_email:
+                resolved[email] = ProjectEmailDeliveryRecipient(email=email, language=recipient.preferred_lang)
+        for email in policy.external_recipient_emails:
+            normalized = email.casefold()
+            if normalized != actor_email:
+                resolved.setdefault(normalized, ProjectEmailDeliveryRecipient(email=normalized, language="en-US"))
+        return list(resolved.values())
 
     def send_activity_email(
         self,
         activity: ProjectActivity | ProjectWikiActivity,
-        recipient: User,
+        recipient_email: str,
     ) -> bool:
         """Send one policy-authorized activity email through the existing SMTP service."""
 
-        if recipient.id not in self.get_delivery_recipient_ids(activity):
+        recipient = next(
+            (item for item in self.get_delivery_recipients(activity) if item.email == recipient_email.casefold()),
+            None,
+        )
+        if recipient is None:
             return True
         project = cast(Project | None, InfraHelper.get_by_id_like(Project, activity.project_id))
         if not project:
@@ -238,17 +291,34 @@ class ProjectEmailNotificationService(BaseDomainService):
         target_name = self._activity_target_name(history, project.title)
         action_name = activity.activity_type.value.replace("_", " ").capitalize()
         return self._get_service(EmailService).send_template(
-            recipient.preferred_lang,
+            recipient.language,
             recipient.email,
             "project_activity_updated",
             {
-                "recipient": escape(recipient.firstname),
                 "sender": escape(notifier.get_fullname() if isinstance(notifier, User) else notifier.name),
                 "project_name": escape(project.title),
                 "activity_name": escape(action_name),
                 "target_name": escape(target_name),
                 "url": self._create_redirect_url(project, activity),
             },
+            reply_to=self._project_owner_email(project),
+        )
+
+    def record_delivery(
+        self,
+        activity: ProjectActivity | ProjectWikiActivity,
+        recipient_email: str,
+        *,
+        succeeded: bool,
+        error: str | None = None,
+    ) -> None:
+        """Persist the latest delivery outcome without storing message content."""
+
+        self.repo.project_email_notification.record_delivery(
+            activity.project_id,
+            recipient_email=recipient_email.casefold(),
+            succeeded=succeeded,
+            error=error,
         )
 
     @staticmethod
@@ -256,6 +326,27 @@ class ProjectEmailNotificationService(BaseDomainService):
         """Report whether the existing SMTP transport has its required public configuration."""
 
         return bool(Env.MAIL_SERVER and Env.MAIL_FROM and Env.MAIL_PORT)
+
+    @staticmethod
+    def _normalize_external_emails(emails: list[str]) -> list[str]:
+        """Validate, normalize, and deduplicate explicit edge recipients."""
+
+        normalized: list[str] = []
+        for raw_email in emails:
+            try:
+                email = str(_EMAIL_ADAPTER.validate_python(raw_email.strip())).casefold()
+            except (ValidationError, ValueError) as exc:
+                raise ValueError("Every external email notification recipient must be valid") from exc
+            if email not in normalized:
+                normalized.append(email)
+        return normalized
+
+    @staticmethod
+    def _project_owner_email(project: Project) -> str | None:
+        """Resolve Reply-To from the board owner instead of another mutable setting."""
+
+        owner = cast(User | None, InfraHelper.get_by_id_like(User, project.owner_id))
+        return owner.email if owner and owner.email else None
 
     @staticmethod
     def category_for_activity(activity_type: str) -> ProjectEmailNotificationCategory | None:

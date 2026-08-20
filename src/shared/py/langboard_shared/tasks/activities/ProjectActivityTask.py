@@ -50,6 +50,29 @@ async def project_assigned_users_updated(
 
 
 @Broker.wrap_async_task_decorator
+async def project_email_notification_policy_updated(
+    user: User,
+    project: Project,
+    added_external_emails: list[str],
+    removed_external_emails: list[str],
+):
+    """Record exact edge recipient changes in the native project activity lineage."""
+
+    helper = ActivityTaskHelper(ProjectActivity)
+    activity_history = {
+        **helper.create_project_default_history(project),
+        "added_external_emails": added_external_emails,
+        "removed_external_emails": removed_external_emails,
+    }
+    activity = helper.record(
+        user,
+        activity_history,
+        **_get_activity_params(ProjectActivityType.ProjectEmailNotificationPolicyUpdated, project),
+    )
+    record_project_activity(user, activity)
+
+
+@Broker.wrap_async_task_decorator
 async def project_invited_user_accepted(user: User, project: Project):
     helper = ActivityTaskHelper(ProjectActivity)
     activity_history = helper.create_project_default_history(project)

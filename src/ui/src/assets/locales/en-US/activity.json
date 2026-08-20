@@ -40,6 +40,10 @@
       "default": "<Recorder/> updated the assigned users of the project.",
       "user": "You updated the assigned users of the project <Project/>."
     },
+    "project_email_notification_policy_updated": {
+      "default": "<Recorder/> updated the project email recipients.",
+      "user": "You updated the project email recipients for <Project/>."
+    },
     "project_invited_user_accepted": {
       "default": "<Recorder/> accepted the project invitation.",
       "user": "You accepted the project invitation."
