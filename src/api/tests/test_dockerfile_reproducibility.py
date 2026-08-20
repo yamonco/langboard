@@ -60,8 +60,14 @@ def test_ui_build_refreshes_the_mounted_shared_package_first() -> None:
     """A UI rebuild must not retain stale routing constants from its image layer."""
 
     compose = (ROOT / "docker" / "docker-compose.server.yaml").read_text()
+    ui_service = compose.split("\n  ui:", maxsplit=1)[1].split("\n  api:", maxsplit=1)[0]
 
-    assert 'command: sh -c "cd /shared/ts && yarn build && cd /app && yarn build"' in compose
+    assert (
+        'command: sh -c "cd /shared/ts && yarn build && cd /app && yarn link @langboard/core && yarn build"'
+        in ui_service
+    )
+    assert "../src/shared/ts/src:/shared/ts/src" in ui_service
+    assert "../src/shared/ts:/shared/ts" not in ui_service
 
 
 def test_environment_renderer_is_release_worktree_safe() -> None:
