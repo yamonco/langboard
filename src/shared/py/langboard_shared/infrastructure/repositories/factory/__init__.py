@@ -33,6 +33,7 @@ from .ProjectBotScopeRepository import ProjectBotScopeRepository
 from .ProjectColumnBotDefaultScopeRepository import ProjectColumnBotDefaultScopeRepository
 from .ProjectColumnBotScopeRepository import ProjectColumnBotScopeRepository
 from .ProjectColumnRepository import ProjectColumnRepository
+from .ProjectEmailNotificationRepository import ProjectEmailNotificationRepository
 from .ProjectInvitationRepository import ProjectInvitationRepository
 from .ProjectLabelRepository import ProjectLabelRepository
 from .ProjectRepository import ProjectRepository
@@ -93,6 +94,7 @@ __all__ = [
     "ProjectColumnBotDefaultScopeRepository",
     "ProjectColumnBotScopeRepository",
     "ProjectColumnRepository",
+    "ProjectEmailNotificationRepository",
     "ProjectInvitationRepository",
     "ProjectLabelRepository",
     "ProjectRepository",

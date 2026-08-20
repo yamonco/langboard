@@ -146,5 +146,6 @@
   "New wiki page created successfully.": "New wiki page created successfully.",
   "Wiki page deleted successfully.": "Wiki page deleted successfully.",
   "Public state changed successfully.": "Public state changed successfully.",
-  "Assigned bots and members updated successfully.": "Assigned bots and members updated successfully."
+  "Assigned bots and members updated successfully.": "Assigned bots and members updated successfully.",
+  "Email notification policy updated successfully.": "Email notification policy updated successfully."
 }

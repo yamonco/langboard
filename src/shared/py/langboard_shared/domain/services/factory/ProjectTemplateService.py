@@ -15,9 +15,16 @@ from ...models import (
 )
 from ...models.bases import BotTriggerCondition
 from ...models.InternalBot import InternalBotType
+from ...models.ProjectEmailNotificationPolicy import ProjectEmailNotificationCategory
 
 
 SI_COLUMNS = ["Backlog", "Ready", "In Progress", "Review", "Done"]
+SI_EMAIL_NOTIFICATION_POLICY = {
+    "is_enabled": True,
+    "notify_all_members": True,
+    "categories": [ProjectEmailNotificationCategory.Cards.value],
+    "card_move_target_columns": ["Review"],
+}
 
 
 class ProjectTemplateService(BaseDomainService):
@@ -35,8 +42,17 @@ class ProjectTemplateService(BaseDomainService):
             if self.repo.project_template.get_default() is None:
                 self.repo.project_template.replace_default(template)
                 template.is_default = True
+            if not template.email_notification_policy:
+                template.email_notification_policy = SI_EMAIL_NOTIFICATION_POLICY
+                self.repo.project_template.update(template)
             return template
-        template = ProjectTemplate(name="SI", columns=SI_COLUMNS, is_builtin=True, is_default=True)
+        template = ProjectTemplate(
+            name="SI",
+            columns=SI_COLUMNS,
+            email_notification_policy=SI_EMAIL_NOTIFICATION_POLICY,
+            is_builtin=True,
+            is_default=True,
+        )
         self.repo.project_template.insert(template)
         if self.repo.project_template.get_default() is None:
             self.repo.project_template.replace_default(template)
@@ -92,6 +108,7 @@ class ProjectTemplateService(BaseDomainService):
             internal_bots=internal_bots,
             project_bot_scopes=project_scopes,
             column_bot_scopes=column_scopes,
+            email_notification_policy=self._email_notification_policy_snapshot(project),
         )
         self.repo.project_template.insert(template)
         return template
@@ -128,10 +145,36 @@ class ProjectTemplateService(BaseDomainService):
             self.repo.project_column.update([*columns, archive])
             self._apply_internal_bots(project, template.internal_bots)
             self._apply_scopes(project, columns, template)
+            self._apply_email_notification_policy(project, template)
         except Exception:
             project_service.delete(user, project)
             raise
         return project, columns, template
+
+    def _email_notification_policy_snapshot(self, project: Project) -> dict[str, Any]:
+        policy, _ = self.repo.project_email_notification.get_with_recipients(project)
+        if not policy:
+            return {}
+        return {
+            "is_enabled": policy.is_enabled,
+            "notify_all_members": policy.notify_all_members,
+            "categories": [category.value for category in policy.categories],
+            "card_move_target_columns": policy.card_move_target_columns,
+        }
+
+    def _apply_email_notification_policy(self, project: Project, template: ProjectTemplate) -> None:
+        snapshot = template.email_notification_policy
+        if not snapshot:
+            return
+        categories = [ProjectEmailNotificationCategory(value) for value in snapshot.get("categories", [])]
+        self.repo.project_email_notification.replace(
+            project,
+            is_enabled=bool(snapshot.get("is_enabled")),
+            notify_all_members=bool(snapshot.get("notify_all_members")),
+            categories=categories,
+            card_move_target_columns=[str(value) for value in snapshot.get("card_move_target_columns", [])],
+            recipient_user_ids=[],
+        )
 
     def resolve_creation_target(
         self,

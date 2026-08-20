@@ -39,9 +39,80 @@ from .forms import (
     CopyProjectTemplateForm,
     CreateProjectLabelForm,
     UpdateProjectDetailsForm,
+    UpdateProjectEmailNotificationPolicyForm,
     UpdateProjectLabelDetailsForm,
     UpdateRolesForm,
 )
+
+
+_EMAIL_NOTIFICATION_POLICY_SCHEMA = {
+    "is_enabled": "boolean",
+    "notify_all_members": "boolean",
+    "categories": "string[]",
+    "card_move_target_columns": "string[]",
+    "recipient_user_uids": "string[]",
+    "available_recipients": [
+        {
+            "uid": "string",
+            "firstname": "string",
+            "lastname": "string",
+            "email": "string",
+        }
+    ],
+    "available_columns": "string[]",
+    "smtp_available": "boolean",
+}
+
+
+@AppRouter.api.get(
+    "/board/{project_uid}/settings/email-notifications",
+    tags=["Board.Settings"],
+    description="Get the board email notification policy and eligible member recipients.",
+    responses=OpenApiSchema().suc({"policy": _EMAIL_NOTIFICATION_POLICY_SCHEMA}).auth().forbidden().get(),
+)
+@RoleFilter.add(ProjectRole, [ProjectRoleAction.Update], RoleFinder.project)
+@AuthFilter.add("user")
+def get_project_email_notification_policy(
+    project_uid: str,
+    service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    """Return the project-owned SMTP notification policy."""
+
+    policy = service.project_email_notification.get_api_policy(project_uid)
+    if policy is None:
+        raise ApiException.NotFound_404(ApiErrorCode.NF2001)
+    return JsonResponse(content={"policy": policy})
+
+
+@AppRouter.api.put(
+    "/board/{project_uid}/settings/email-notifications",
+    tags=["Board.Settings"],
+    description="Replace the board email notification policy.",
+    responses=OpenApiSchema().suc({"policy": _EMAIL_NOTIFICATION_POLICY_SCHEMA}).auth().forbidden().get(),
+)
+@RoleFilter.add(ProjectRole, [ProjectRoleAction.Update], RoleFinder.project)
+@AuthFilter.add("user")
+def update_project_email_notification_policy(
+    project_uid: str,
+    form: UpdateProjectEmailNotificationPolicyForm,
+    service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    """Replace a board policy after server-side membership validation."""
+
+    try:
+        policy = service.project_email_notification.update_policy(
+            project_uid,
+            is_enabled=form.is_enabled,
+            notify_all_members=form.notify_all_members,
+            categories=form.categories,
+            recipient_user_uids=form.recipient_user_uids,
+            card_move_target_columns=form.card_move_target_columns,
+        )
+    except ValueError as exc:
+        raise ApiException.BadRequest_400(ApiErrorCode.VA0000) from exc
+    if policy is None:
+        raise ApiException.NotFound_404(ApiErrorCode.NF2001)
+    return JsonResponse(content={"policy": policy})
 
 
 @AppRouter.api.post(
