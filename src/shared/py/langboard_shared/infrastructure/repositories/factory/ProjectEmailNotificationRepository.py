@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from sqlalchemy import delete
 from ....core.db import DbSession, SqlBuilder
 from ....core.domain import BaseRepository
@@ -51,6 +52,7 @@ class ProjectEmailNotificationRepository(BaseRepository[ProjectEmailNotification
         categories: list[ProjectEmailNotificationCategory],
         card_move_target_columns: list[str],
         recipient_user_ids: list[SnowflakeID],
+        external_recipient_emails: list[str],
     ) -> ProjectEmailNotificationPolicy:
         """Replace policy and recipients atomically."""
 
@@ -67,6 +69,7 @@ class ProjectEmailNotificationRepository(BaseRepository[ProjectEmailNotification
                     notify_all_members=notify_all_members,
                     categories=categories,
                     card_move_target_columns=card_move_target_columns,
+                    external_recipient_emails=external_recipient_emails,
                 )
                 db.insert(policy)
             else:
@@ -74,6 +77,7 @@ class ProjectEmailNotificationRepository(BaseRepository[ProjectEmailNotification
                 policy.notify_all_members = notify_all_members
                 policy.categories = categories
                 policy.card_move_target_columns = card_move_target_columns
+                policy.external_recipient_emails = external_recipient_emails
                 db.update(policy)
 
             db.exec(
@@ -86,3 +90,28 @@ class ProjectEmailNotificationRepository(BaseRepository[ProjectEmailNotification
                 for user_id in recipient_user_ids
             )
             return policy
+
+    def record_delivery(
+        self,
+        project: TProjectParam,
+        *,
+        recipient_email: str,
+        succeeded: bool,
+        error: str | None = None,
+    ) -> None:
+        """Record only the latest SMTP outcome; message bodies are never retained."""
+
+        project_id = InfraHelper.convert_id(project)
+        with DbSession.use(readonly=False) as db:
+            policy = db.exec(
+                SqlBuilder.select.table(ProjectEmailNotificationPolicy).where(
+                    ProjectEmailNotificationPolicy.column("project_id") == project_id
+                )
+            ).first()
+            if policy is None:
+                return
+            policy.last_delivery_status = "succeeded" if succeeded else "failed"
+            policy.last_delivery_at = datetime.now(timezone.utc)
+            policy.last_delivery_recipient_email = recipient_email
+            policy.last_delivery_error = None if succeeded else (error or "SMTP delivery failed")[:1000]
+            db.update(policy)

@@ -1,6 +1,7 @@
+from datetime import datetime
 from enum import Enum
 from typing import Any
-from sqlalchemy import JSON
+from sqlalchemy import JSON, TEXT
 from ...core.db import ApiField, BaseDbModel, CSVType, Field, SnowflakeIDField
 from ...core.types import SnowflakeID
 from .Project import Project
@@ -37,12 +38,35 @@ class ProjectEmailNotificationPolicy(BaseDbModel, table=True):
         sa_type=JSON,
         api_field=ApiField(),
     )
+    external_recipient_emails: list[str] = Field(
+        default_factory=list,
+        nullable=False,
+        sa_type=JSON,
+        api_field=ApiField(),
+    )
+    last_delivery_status: str | None = Field(default=None, max_length=20, nullable=True, api_field=ApiField())
+    last_delivery_at: datetime | None = Field(default=None, nullable=True, api_field=ApiField())
+    last_delivery_recipient_email: str | None = Field(
+        default=None,
+        max_length=320,
+        nullable=True,
+        api_field=ApiField(),
+    )
+    last_delivery_error: str | None = Field(default=None, nullable=True, sa_type=TEXT, api_field=ApiField())
 
     def notification_data(self) -> dict[str, Any]:
         return {}
 
     def _get_repr_keys(self) -> list[str | tuple[str, str]]:
-        return ["project_id", "is_enabled", "notify_all_members", "categories", "card_move_target_columns"]
+        return [
+            "project_id",
+            "is_enabled",
+            "notify_all_members",
+            "categories",
+            "card_move_target_columns",
+            "external_recipient_emails",
+            "last_delivery_status",
+        ]
 
 
 class ProjectEmailNotificationRecipient(BaseDbModel, table=True):

@@ -2,8 +2,10 @@ import Alert from "@/components/base/Alert";
 import Button from "@/components/base/Button";
 import Checkbox from "@/components/base/Checkbox";
 import Flex from "@/components/base/Flex";
+import MultiSelect from "@/components/MultiSelect";
 import Switch from "@/components/base/Switch";
 import Toast from "@/components/base/Toast";
+import { EMAIL_REGEX } from "@/constants";
 import {
     TProjectEmailNotificationCategory,
     useGetProjectEmailNotificationPolicy,
@@ -24,6 +26,7 @@ const BoardSettingsEmailNotifications = memo(() => {
     const [notifyAllMembers, setNotifyAllMembers] = useState(false);
     const [categories, setCategories] = useState<TProjectEmailNotificationCategory[]>([]);
     const [recipientUIDs, setRecipientUIDs] = useState<string[]>([]);
+    const [externalEmails, setExternalEmails] = useState<string[]>([]);
     const [targetColumns, setTargetColumns] = useState<string[]>([]);
 
     useEffect(() => {
@@ -32,6 +35,7 @@ const BoardSettingsEmailNotifications = memo(() => {
         setNotifyAllMembers(policy.notify_all_members);
         setCategories(policy.categories);
         setRecipientUIDs(policy.recipient_user_uids);
+        setExternalEmails(policy.external_recipient_emails);
         setTargetColumns(policy.card_move_target_columns);
     }, [policy]);
 
@@ -54,6 +58,7 @@ const BoardSettingsEmailNotifications = memo(() => {
                 notify_all_members: notifyAllMembers,
                 categories,
                 recipient_user_uids: notifyAllMembers ? [] : recipientUIDs,
+                external_recipient_emails: externalEmails,
                 card_move_target_columns: targetColumns,
             }),
             {
@@ -69,6 +74,15 @@ const BoardSettingsEmailNotifications = memo(() => {
             {!policy.smtp_available && (
                 <Alert variant="warning" icon="triangle-alert" title={t("project.settings.SMTP is not configured")}>
                     {t("project.settings.Configure SMTP before enabling board email notifications.")}
+                </Alert>
+            )}
+            {policy.last_delivery_status === "failed" && (
+                <Alert variant="destructive" title={t("project.settings.Recent email delivery failed")}>
+                    <p className="text-sm">
+                        {policy.last_delivery_recipient_email}
+                        {policy.last_delivery_at ? ` · ${new Date(policy.last_delivery_at).toLocaleString()}` : ""}
+                    </p>
+                    {policy.last_delivery_error && <p className="text-xs">{policy.last_delivery_error}</p>}
                 </Alert>
             )}
             <Switch
@@ -128,6 +142,20 @@ const BoardSettingsEmailNotifications = memo(() => {
                             label={`${recipient.firstname} ${recipient.lastname} · ${recipient.email}`}
                         />
                     ))}
+                <div className="grid gap-2 pt-2">
+                    <strong className="text-sm">{t("project.settings.External email recipients")}</strong>
+                    <p className="text-xs text-muted-foreground">{t("project.settings.External recipients do not need a Langboard account.")}</p>
+                    <MultiSelect
+                        selections={externalEmails.map((email) => ({ label: email, value: email }))}
+                        selectedValue={externalEmails}
+                        onValueChange={(values) => setExternalEmails(values.map((value) => value.trim().toLowerCase()))}
+                        placeholder={t("project.settings.Add an external email...")}
+                        canCreateNew
+                        validateCreatedNewValue={(value) => EMAIL_REGEX.test(value.trim())}
+                        createNewCommandItemLabel={(values) => values[0]?.trim().toLowerCase() ?? ""}
+                        disabled={!canEditBasicInfo || isPending}
+                    />
+                </div>
             </div>
             {canEditBasicInfo && (
                 <Flex justify="end">

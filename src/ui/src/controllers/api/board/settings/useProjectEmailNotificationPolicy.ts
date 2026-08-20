@@ -17,10 +17,15 @@ export interface IProjectEmailNotificationPolicy {
     notify_all_members: boolean;
     categories: TProjectEmailNotificationCategory[];
     recipient_user_uids: string[];
+    external_recipient_emails: string[];
     card_move_target_columns: string[];
     available_recipients: IProjectEmailNotificationRecipient[];
     available_columns: string[];
     smtp_available: boolean;
+    last_delivery_status: "succeeded" | "failed" | null;
+    last_delivery_at: string | null;
+    last_delivery_recipient_email: string | null;
+    last_delivery_error: string | null;
 }
 
 export interface IUpdateProjectEmailNotificationPolicyForm {
@@ -28,6 +33,7 @@ export interface IUpdateProjectEmailNotificationPolicyForm {
     notify_all_members: boolean;
     categories: TProjectEmailNotificationCategory[];
     recipient_user_uids: string[];
+    external_recipient_emails: string[];
     card_move_target_columns: string[];
 }
 

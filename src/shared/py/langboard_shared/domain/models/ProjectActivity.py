@@ -13,6 +13,7 @@ class ProjectActivityType(Enum):
     ProjectCreated = "project_created"
     ProjectUpdated = "project_updated"
     ProjectAssignedUsersUpdated = "project_assigned_users_updated"
+    ProjectEmailNotificationPolicyUpdated = "project_email_notification_policy_updated"
     ProjectInvitedUserAccepted = "project_invited_user_accepted"
     ProjectDeleted = "project_deleted"
 

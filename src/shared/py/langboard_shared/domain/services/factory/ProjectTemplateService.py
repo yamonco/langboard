@@ -174,6 +174,7 @@ class ProjectTemplateService(BaseDomainService):
             categories=categories,
             card_move_target_columns=[str(value) for value in snapshot.get("card_move_target_columns", [])],
             recipient_user_ids=[],
+            external_recipient_emails=[],
         )
 
     def resolve_creation_target(

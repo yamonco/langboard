@@ -14,7 +14,17 @@ class EmailService(BaseDomainService):
         """DO NOT EDIT THIS METHOD"""
         return "email"
 
-    def send_template(self, lang: str, to: str, template_name: TEmailTemplateName, formats: dict[str, str]) -> bool:
+    def send_template(
+        self,
+        lang: str,
+        to: str,
+        template_name: TEmailTemplateName,
+        formats: dict[str, str],
+        *,
+        reply_to: str | None = None,
+    ) -> bool:
+        """Render and send one localized template through the configured SMTP transport."""
+
         if not self.__create_config():
             return False
 
@@ -33,6 +43,7 @@ class EmailService(BaseDomainService):
             recipients=[to],
             body=template,
             subtype=MessageType.html,
+            reply_to=[reply_to] if reply_to else [],
         )
 
         fm = FastMail(self.__config)
