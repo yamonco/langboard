@@ -32,11 +32,11 @@ services:
     env_file:
       - ./envs/.ui.env
     working_dir: /app
-    command: sh -c "cd /shared/ts && yarn build && cd /app && yarn build"
+    command: sh -c "cd /shared/ts && yarn build && cd /app && yarn link @langboard/core && yarn build"
     volumes:
       - ../src/ui/src:/app/src
       - ../src/ui/dist:/app/dist:rw
-      - ../src/shared/ts:/shared/ts
+      - ../src/shared/ts/src:/shared/ts/src
       - ../src/ui/vite.config.ts:/app/vite.config.ts
       - ../src/ui/tailwind.config.js:/app/tailwind.config.js
       - ../src/ui/postcss.config.js:/app/postcss.config.js
