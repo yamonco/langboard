@@ -13,4 +13,5 @@ TEmailTemplateName = Literal[
     "assigned_to_card",
     "reacted_to_comment",
     "notified_from_checklist",
+    "project_activity_updated",
 ]

@@ -11,6 +11,12 @@ class ProjectTemplate(BaseDbModel, table=True):
     internal_bots: list[dict[str, Any]] = Field(default_factory=list, nullable=False, sa_type=JSON)
     project_bot_scopes: list[dict[str, Any]] = Field(default_factory=list, nullable=False, sa_type=JSON)
     column_bot_scopes: list[dict[str, Any]] = Field(default_factory=list, nullable=False, sa_type=JSON)
+    email_notification_policy: dict[str, Any] = Field(
+        default_factory=dict,
+        nullable=False,
+        sa_type=JSON,
+        api_field=ApiField(),
+    )
     is_builtin: bool = Field(default=False, nullable=False, api_field=ApiField())
     is_default: bool = Field(default=False, nullable=False, index=True, api_field=ApiField())
 

@@ -10,6 +10,7 @@ from langboard_shared.domain.models import ProjectTemplate  # noqa: E402
 from langboard_shared.domain.models.InternalBot import InternalBotType  # noqa: E402
 from langboard_shared.domain.services.factory.ProjectTemplateService import (  # noqa: E402
     SI_COLUMNS,
+    SI_EMAIL_NOTIFICATION_POLICY,
     ProjectTemplateService,
 )
 from langboard_shared.helpers import InfraHelper  # noqa: E402
@@ -32,6 +33,9 @@ class TemplateRepository:
 
     def insert(self, template: ProjectTemplate) -> None:
         self.items.append(template)
+
+    def update(self, template: ProjectTemplate) -> None:
+        assert template in self.items
 
     def replace_default(self, template: ProjectTemplate) -> None:
         for item in self.items:
@@ -58,6 +62,7 @@ def test_builtin_si_is_the_initial_default_without_duplicate_archive() -> None:
     assert template.columns == ["Backlog", "Ready", "In Progress", "Review", "Done"]
     assert "Archive" not in template.columns
     assert template.is_default is True
+    assert template.email_notification_policy == SI_EMAIL_NOTIFICATION_POLICY
     assert _service(repository).ensure_builtin() is template
     assert len(templates.items) == 1
 
@@ -98,6 +103,7 @@ def test_copy_snapshot_preserves_order_and_bot_settings_but_not_cards_or_schedul
         ),
         project_assigned_internal_bot=SimpleNamespace(get_all_by_project=lambda _project: [(internal_bot, setting)]),
         project_bot_scope=SimpleNamespace(get_all_by_project=lambda _project: []),
+        project_email_notification=SimpleNamespace(get_with_recipients=lambda _project: (None, [])),
     )
 
     template = _service(repository).copy_from_project(project, "Support")
@@ -116,6 +122,7 @@ def test_copy_snapshot_preserves_order_and_bot_settings_but_not_cards_or_schedul
         "internal_bots",
         "project_bot_scopes",
         "column_bot_scopes",
+        "email_notification_policy",
     }
     assert not hasattr(template, "cards")
     assert not hasattr(template, "schedules")
@@ -194,6 +201,12 @@ def test_si_constant_is_stable_for_command_and_ui_contracts() -> None:
     """Prevent silent workflow drift in the built-in template."""
 
     assert SI_COLUMNS == ["Backlog", "Ready", "In Progress", "Review", "Done"]
+    assert SI_EMAIL_NOTIFICATION_POLICY == {
+        "is_enabled": True,
+        "notify_all_members": True,
+        "categories": ["cards"],
+        "card_move_target_columns": ["Review"],
+    }
 
 
 def test_creation_prefix_is_used_only_when_it_is_a_real_template() -> None:

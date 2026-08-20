@@ -176,6 +176,7 @@ const API = {
         },
         SETTINGS: {
             UPDATE_DETAILS: "/board/{uid}/settings/details",
+            EMAIL_NOTIFICATIONS: "/board/{uid}/settings/email-notifications",
             UPDATE_USER_ROLES: "/board/{uid}/settings/roles/user/{user_uid}",
             DELETE_PROJECT: "/board/{uid}/settings/delete",
             LABEL: {

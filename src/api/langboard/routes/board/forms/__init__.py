@@ -13,14 +13,15 @@ from .Comment import ToggleCardCommentReactionForm
 from .Project import (
     ChangeInternalBotForm,
     ChangeInternalBotSettingsForm,
-    CopyProjectTemplateForm,
     ChatHistoryPagination,
+    CopyProjectTemplateForm,
     GraphApprovalListForm,
     InviteProjectMemberForm,
     ProjectInvitationForm,
     RejectGraphApprovalForm,
     UpdateProjectChatSessionForm,
     UpdateProjectDetailsForm,
+    UpdateProjectEmailNotificationPolicyForm,
     UpdateRolesForm,
 )
 from .ProjectLabel import CreateProjectLabelForm, UpdateProjectLabelDetailsForm
@@ -42,6 +43,7 @@ __all__ = [
     "UpdateChatTemplate",
     "InviteProjectMemberForm",
     "UpdateProjectDetailsForm",
+    "UpdateProjectEmailNotificationPolicyForm",
     "UpdateRolesForm",
     "CreateProjectLabelForm",
     "UpdateProjectLabelDetailsForm",
