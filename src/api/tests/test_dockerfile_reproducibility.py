@@ -56,6 +56,14 @@ def test_compose_cron_target_uses_safe_dockerfile_default() -> None:
     assert "CRON_TAB_FILE:" not in compose
 
 
+def test_ui_build_refreshes_the_mounted_shared_package_first() -> None:
+    """A UI rebuild must not retain stale routing constants from its image layer."""
+
+    compose = (ROOT / "docker" / "docker-compose.server.yaml").read_text()
+
+    assert 'command: sh -c "cd /shared/ts && yarn build && cd /app && yarn build"' in compose
+
+
 def test_environment_renderer_is_release_worktree_safe() -> None:
     """Resolve the repository root from the script, not its checkout basename."""
 
