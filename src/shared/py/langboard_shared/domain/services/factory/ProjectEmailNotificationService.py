@@ -171,7 +171,19 @@ class ProjectEmailNotificationService(BaseDomainService):
             card_move_target_columns=normalized_columns,
             recipient_user_ids=recipient_ids,
         )
-        return self.get_api_policy(project_model)
+        response = self.get_api_policy(project_model)
+        if response is None:
+            return None
+        response.update(
+            {
+                "is_enabled": is_enabled,
+                "notify_all_members": notify_all_members,
+                "categories": [category.value for category in categories],
+                "card_move_target_columns": normalized_columns,
+                "recipient_user_uids": [eligible_members[user_id].get_uid() for user_id in recipient_ids],
+            }
+        )
+        return response
 
     def get_delivery_recipient_ids(
         self,
