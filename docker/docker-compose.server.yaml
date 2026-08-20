@@ -32,7 +32,7 @@ services:
     env_file:
       - ./envs/.ui.env
     working_dir: /app
-    command: yarn build
+    command: sh -c "cd /shared/ts && yarn build && cd /app && yarn build"
     volumes:
       - ../src/ui/src:/app/src
       - ../src/ui/dist:/app/dist:rw
