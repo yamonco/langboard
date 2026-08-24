@@ -88,3 +88,33 @@ def test_upsert_hook_rejects_events_not_supported_by_target(
         )
 
     assert writes == []
+
+
+def test_upsert_hook_fails_closed_on_duplicate_native_scopes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Do not pick an arbitrary subscription when legacy data is ambiguous."""
+
+    bot = SimpleNamespace(id=1)
+    target = SimpleNamespace(id=2)
+    scopes = [SimpleNamespace(), SimpleNamespace()]
+    monkeypatch.setattr(InfraHelper, "get_by_id_like", lambda model, value: bot)
+    monkeypatch.setattr(
+        BotHelper,
+        "get_target_model_by_param",
+        lambda kind, table, uid: (FakeScopeModel, target),
+    )
+    monkeypatch.setattr(BotScopeHelper, "get_list", lambda *args, **kwargs: scopes)
+    writes: list[object] = []
+    monkeypatch.setattr(BotScopeHelper, "upsert_conditions", lambda *args, **kwargs: writes.append(args))
+
+    with pytest.raises(ValueError, match="administrator repair"):
+        BotService.upsert_hook(
+            object.__new__(BotService),
+            "bot-1",
+            "card",
+            "card-1",
+            [BotTriggerCondition.CardMoved],
+        )
+
+    assert writes == []

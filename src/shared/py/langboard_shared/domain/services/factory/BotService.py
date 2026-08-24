@@ -111,6 +111,8 @@ class BotService(BaseDomainService):
             bot_id=resolved_bot.id,
             **{scope_column_name: target.id},
         )
+        if len(existing) > 1:
+            raise ValueError("Duplicate Bot Hooks require administrator repair")
         previous_events = tuple(existing[0].conditions) if existing else None
         previous_active = not existing[0].is_frozen if existing else None
 
