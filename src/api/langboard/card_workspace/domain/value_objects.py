@@ -13,6 +13,7 @@ MAX_CHECKITEMS_PER_CHECKLIST = 25
 MAX_TEXT_CHARS = 8_000
 MAX_METADATA_VALUE_CHARS = 4_000
 MAX_METADATA_KEY_CHARS = 128
+MAX_PROJECTION_KEY_CHARS = 64
 
 _COMPACT_SECRET_FRAGMENTS = (
     "accesskey",
@@ -58,6 +59,43 @@ class CardBundleSection(StrEnum):
     Metadata = "metadata"
     BotScopes = "automation.bot_scopes"
     BotSchedules = "automation.bot_schedules"
+
+
+@dataclass(frozen=True)
+class ChecklistProjectionItem:
+    """One caller-owned desired item in an idempotent checklist projection."""
+
+    key: str
+    title: str
+    is_checked: bool = False
+    deadline_at: str | None = None
+
+    def __post_init__(self) -> None:
+        if not _is_projection_key(self.key):
+            raise ValueError("Checklist projection item key is invalid")
+        if not isinstance(self.title, str) or not self.title.strip() or len(self.title) > 500:
+            raise ValueError("Checklist projection item title is invalid")
+        if not isinstance(self.is_checked, bool):
+            raise ValueError("Checklist projection item checked state must be boolean")
+        if self.deadline_at is not None:
+            datetime.fromisoformat(self.deadline_at)
+
+
+def require_projection_key(value: str) -> str:
+    """Normalize a caller-owned stable key for one card integration."""
+
+    normalized = value.strip() if isinstance(value, str) else ""
+    if not _is_projection_key(normalized):
+        raise ValueError("Checklist projection key is invalid")
+    return normalized
+
+
+def _is_projection_key(value: str) -> bool:
+    return (
+        bool(value)
+        and len(value) <= MAX_PROJECTION_KEY_CHARS
+        and all(character.isalnum() or character in "._-" for character in value)
+    )
 
 
 @dataclass(frozen=True)

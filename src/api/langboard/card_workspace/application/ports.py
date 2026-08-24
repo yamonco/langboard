@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from typing import Any, Protocol
+from ..domain import ChecklistProjectionItem
 
 
 @dataclass(frozen=True)
@@ -174,3 +175,14 @@ class CardWorkspaceCommandPort(Protocol):
 
     def delete_public_card_metadata(self, project_uid: str, card_uid: str, keys: list[str]) -> None:
         """Delete public metadata entries."""
+
+    def reconcile_card_checklist_projection(
+        self,
+        project_uid: str,
+        card_uid: str,
+        projection_key: str,
+        title: str,
+        items: list[ChecklistProjectionItem],
+        expected_receipt: str | None,
+    ) -> dict[str, Any]:
+        """Converge one caller-owned checklist and persist its receipt last."""

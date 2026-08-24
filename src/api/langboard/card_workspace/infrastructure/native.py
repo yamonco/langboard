@@ -1,6 +1,7 @@
 """Adapter from card workspace ports to Langboard's native domain services."""
 
 from __future__ import annotations
+import json
 from typing import Any
 from langboard_shared.core.db import EditorContentModel
 from langboard_shared.core.types import SafeDateTime
@@ -14,7 +15,12 @@ from ..application.ports import (
     CommentPageSource,
     ProjectCardPageSource,
 )
-from ..domain import require_public_metadata_key
+from ..domain import (
+    MAX_METADATA_VALUE_CHARS,
+    ChecklistProjectionItem,
+    projection_revision,
+    require_public_metadata_key,
+)
 
 
 MAX_NATIVE_SECTION_SOURCE = 100
@@ -467,6 +473,141 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
         card = self._ensure_card(project_uid, card_uid)
         if not self._service.metadata.delete(CardMetadata, card, normalized):
             raise ValueError("Metadata not found")
+
+    def reconcile_card_checklist_projection(
+        self,
+        project_uid: str,
+        card_uid: str,
+        projection_key: str,
+        title: str,
+        items: list[ChecklistProjectionItem],
+        expected_receipt: str | None,
+    ) -> dict[str, Any]:
+        """Converge one checklist projection, checkpointing identities before the receipt."""
+
+        card = self._ensure_card(project_uid, card_uid)
+        metadata_key = require_public_metadata_key(f"projection.checklist.{projection_key}")
+        metadata = self.get_public_card_metadata(project_uid, card_uid) or {}
+        state = self._checklist_projection_state(metadata.get(metadata_key))
+        if expected_receipt is not None and state.get("receipt") != expected_receipt:
+            raise ValueError("Checklist projection changed after review")
+        desired_payload = {
+            "projection_key": projection_key,
+            "title": title,
+            "items": [
+                {
+                    "key": item.key,
+                    "title": item.title.strip(),
+                    "is_checked": item.is_checked,
+                    "deadline_at": item.deadline_at,
+                }
+                for item in items
+            ],
+        }
+        receipt = projection_revision(desired_payload)
+        changed = False
+        checklists = self._service.checklist.get_api_list_by_card(card_uid, limit=26, checkitems_limit=26)
+        checklist = next(
+            (item for item in checklists if item["uid"] == state.get("checklist_uid")),
+            None,
+        )
+        if checklist is None:
+            created = self._service.checklist.create(self._actor, project_uid, card_uid, title)
+            if created is None:
+                raise ValueError("Card not found in project")
+            checklist = {**created.api_response(), "checkitems": []}
+            state = {"version": 1, "checklist_uid": checklist["uid"], "items": {}}
+            self._save_checklist_projection_state(card, metadata_key, state)
+            changed = True
+        elif checklist["title"] != title:
+            native = self._ensure_checklist(project_uid, card_uid, checklist["uid"])
+            if not self._service.checklist.change_title(self._actor, project_uid, card_uid, native, title):
+                raise ValueError("Checklist not found in card")
+            changed = True
+
+        item_uids = state.setdefault("items", {})
+        actual_items = {item["uid"]: item for item in checklist.get("checkitems", [])}
+        desired_keys = {item.key for item in items}
+        for item in items:
+            item_uid = item_uids.get(item.key)
+            actual = actual_items.get(item_uid)
+            if actual is None:
+                created = self._service.checkitem.create(
+                    self._actor, project_uid, card_uid, checklist["uid"], item.title.strip()
+                )
+                if created is None:
+                    raise ValueError("Checklist not found in card")
+                item_uid = created.get_uid()
+                item_uids[item.key] = item_uid
+                actual = created.api_response()
+                self._save_checklist_projection_state(card, metadata_key, state)
+                changed = True
+            native_item = self._ensure_checkitem(project_uid, card_uid, item_uid)
+            if actual.get("title") != item.title.strip():
+                if not self._service.checkitem.change_title(
+                    self._actor, project_uid, card_uid, native_item, item.title.strip()
+                ):
+                    raise ValueError("Checkitem not found in card")
+                changed = True
+            if item.deadline_at is not None and not self._same_deadline(actual.get("deadline_at"), item.deadline_at):
+                deadline = SafeDateTime.fromisoformat(item.deadline_at)
+                if deadline.tzinfo is None:
+                    deadline = deadline.replace(tzinfo=SafeDateTime.now().astimezone().tzinfo)
+                if not self._service.checkitem.change_deadline(project_uid, card_uid, native_item, deadline):
+                    raise ValueError("Checkitem not found in card")
+                changed = True
+            if bool(actual.get("is_checked")) != item.is_checked:
+                if not self._service.checkitem.toggle_checked(self._actor, project_uid, card_uid, native_item):
+                    raise ValueError("Checkitem not found in card")
+                changed = True
+
+        for stale_key in sorted(set(item_uids) - desired_keys):
+            stale_uid = item_uids.pop(stale_key)
+            if stale_uid in actual_items:
+                self.delete_card_checkitem(project_uid, card_uid, stale_uid)
+            self._save_checklist_projection_state(card, metadata_key, state)
+            changed = True
+
+        state.update({"version": 1, "receipt": receipt, "target_receipt": receipt})
+        self._save_checklist_projection_state(card, metadata_key, state)
+        checklists = self._service.checklist.get_api_list_by_card(card_uid, limit=26, checkitems_limit=26)
+        result = next(item for item in checklists if item["uid"] == checklist["uid"])
+        return {"changed": changed, "receipt": receipt, "checklist": result}
+
+    def _save_checklist_projection_state(
+        self,
+        card: Any,
+        metadata_key: str,
+        state: dict[str, Any],
+    ) -> None:
+        encoded = json.dumps(state, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+        if len(encoded) > MAX_METADATA_VALUE_CHARS:
+            raise ValueError("Checklist projection state exceeds metadata capacity")
+        if self._service.metadata.save(CardMetadata, card, metadata_key, encoded) is None:
+            raise RuntimeError("Failed to save checklist projection state")
+
+    @staticmethod
+    def _checklist_projection_state(raw: str | None) -> dict[str, Any]:
+        if raw is None:
+            return {"version": 1, "items": {}}
+        try:
+            state = json.loads(raw)
+        except (TypeError, json.JSONDecodeError) as error:
+            raise ValueError("Checklist projection state is malformed") from error
+        if (
+            not isinstance(state, dict)
+            or state.get("version") != 1
+            or not isinstance(state.get("items"), dict)
+            or any(not isinstance(key, str) or not isinstance(value, str) for key, value in state["items"].items())
+        ):
+            raise ValueError("Checklist projection state is malformed")
+        return state
+
+    @staticmethod
+    def _same_deadline(actual: object, desired: str) -> bool:
+        if not isinstance(actual, str):
+            return False
+        return SafeDateTime.fromisoformat(actual) == SafeDateTime.fromisoformat(desired)
 
     def _ensure_project_card(self, project_uid: str, card_uid: str) -> tuple[Any, Any]:
         project = self._service.project.get_by_id_like(project_uid)
