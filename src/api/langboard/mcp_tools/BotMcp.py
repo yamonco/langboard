@@ -1,7 +1,15 @@
 from typing import NoReturn
 from langboard_shared.ai import BotScheduleHelper
 from langboard_shared.core.types import SafeDateTime
-from langboard_shared.domain.models import CardBotSchedule, ProjectBotSchedule, ProjectColumnBotSchedule, ProjectRole
+from langboard_shared.domain.models import (
+    Bot,
+    CardBotSchedule,
+    ProjectBotSchedule,
+    ProjectColumnBotSchedule,
+    ProjectRole,
+    User,
+)
+from langboard_shared.domain.models.bases import BotTriggerCondition
 from langboard_shared.domain.models.BotSchedule import BotScheduleRunningType
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.domain.services.DomainService import DomainService
@@ -137,6 +145,140 @@ def _raise_bot_service_error(error: BotServiceError) -> NoReturn:
     """Expose the same stable service error code through MCP."""
 
     raise ValueError(f"{error.code}: {error}") from error
+
+
+@McpTool.add(description="Read one Bot-owned event Hook inside a project.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+def get_bot_hook(
+    project_uid: str,
+    bot_uid: str,
+    target_table: str,
+    hook_uid: str,
+    user_or_bot: User | Bot,
+    service: DomainService,
+) -> dict:
+    """Return the same canonical Hook projection exposed by REST."""
+
+    _ensure_bot_author(user_or_bot, bot_uid)
+    try:
+        hook = service.bot.get_hook(bot_uid, target_table, hook_uid, project=project_uid)
+    except BotServiceError as error:
+        _raise_bot_service_error(error)
+    if not hook:
+        raise ValueError("hook_not_found: Bot Hook not found or not owned by Bot")
+    return {"hook": hook}
+
+
+@McpTool.add(description="Idempotently converge one Bot event Hook inside a project.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Update], RoleFinder.project)
+def upsert_bot_hook(
+    project_uid: str,
+    bot_uid: str,
+    target_table: str,
+    target_uid: str,
+    events: list[BotTriggerCondition],
+    active: bool,
+    user_or_bot: User | Bot,
+    service: DomainService,
+) -> dict:
+    """Create or converge a Hook and return its canonical operation receipt."""
+
+    _ensure_bot_author(user_or_bot, bot_uid)
+    try:
+        hook = service.bot.upsert_hook(
+            bot_uid,
+            target_table,
+            target_uid,
+            _normalize_hook_events(events),
+            active=_normalize_hook_active(active),
+            project=project_uid,
+        )
+    except BotServiceError as error:
+        _raise_bot_service_error(error)
+    if not hook:
+        raise ValueError("hook_not_found: Bot or Hook target not found")
+    return {"operation": "upserted", "hook": hook}
+
+
+@McpTool.add(description="Update one Bot-owned event Hook inside a project.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Update], RoleFinder.project)
+def update_bot_hook(
+    project_uid: str,
+    bot_uid: str,
+    target_table: str,
+    hook_uid: str,
+    events: list[BotTriggerCondition] | None,
+    active: bool | None,
+    user_or_bot: User | Bot,
+    service: DomainService,
+) -> dict:
+    """Update a Hook and return its canonical operation receipt."""
+
+    _ensure_bot_author(user_or_bot, bot_uid)
+    try:
+        hook = service.bot.update_hook(
+            bot_uid,
+            target_table,
+            hook_uid,
+            events=_normalize_hook_events(events),
+            active=_normalize_hook_active(active),
+            project=project_uid,
+        )
+    except BotServiceError as error:
+        _raise_bot_service_error(error)
+    if not hook:
+        raise ValueError("hook_not_found: Bot Hook not found or not owned by Bot")
+    return {"operation": "updated", "hook": hook}
+
+
+@McpTool.add(description="Delete one Bot-owned event Hook inside a project.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Update], RoleFinder.project)
+def delete_bot_hook(
+    project_uid: str,
+    bot_uid: str,
+    target_table: str,
+    hook_uid: str,
+    user_or_bot: User | Bot,
+    service: DomainService,
+) -> dict:
+    """Delete a Hook and return its canonical operation receipt."""
+
+    _ensure_bot_author(user_or_bot, bot_uid)
+    try:
+        hook = service.bot.delete_hook(bot_uid, target_table, hook_uid, project=project_uid)
+    except BotServiceError as error:
+        _raise_bot_service_error(error)
+    if not hook:
+        raise ValueError("hook_not_found: Bot Hook not found or not owned by Bot")
+    return {"operation": "deleted", "hook": hook}
+
+
+def _ensure_bot_author(actor: User | Bot, bot_uid: str) -> None:
+    """Fail closed when one Bot attempts to author changes as another Bot."""
+
+    if isinstance(actor, Bot) and actor.get_uid() != bot_uid:
+        raise ValueError("bot_actor_mismatch: authenticated Bot cannot act as another Bot")
+
+
+def _normalize_hook_events(
+    events: list[BotTriggerCondition] | list[str] | None,
+) -> list[BotTriggerCondition] | None:
+    """Validate raw REST-MCP executor values before they reach Hook storage."""
+
+    if events is None:
+        return None
+    try:
+        return [event if isinstance(event, BotTriggerCondition) else BotTriggerCondition(event) for event in events]
+    except ValueError as error:
+        raise ValueError("events_invalid: unsupported Bot Hook event") from error
+
+
+def _normalize_hook_active(active: bool | None) -> bool | None:
+    """Reject truthy non-boolean JSON values at the REST MCP boundary."""
+
+    if active is not None and not isinstance(active, bool):
+        raise ValueError("active_invalid: Bot Hook active must be a boolean")
+    return active
 
 
 @McpTool.add(description="Get bot scopes for a project.")
