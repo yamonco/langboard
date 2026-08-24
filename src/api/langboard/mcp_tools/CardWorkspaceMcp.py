@@ -54,6 +54,22 @@ def _as_card_bundle_include(value: str | CardBundleInclude) -> CardBundleInclude
 JsonCardBundleInclude = Annotated[CardBundleInclude, BeforeValidator(_as_card_bundle_include)]
 
 
+def _as_checklist_projection_item(
+    value: dict[str, Any] | ChecklistProjectionItem,
+) -> ChecklistProjectionItem:
+    """Parse one JSON projection item without leaking transport types inward."""
+
+    if isinstance(value, ChecklistProjectionItem):
+        return value
+    return ChecklistProjectionItem(**value)
+
+
+JsonChecklistProjectionItem = Annotated[
+    ChecklistProjectionItem,
+    BeforeValidator(_as_checklist_projection_item),
+]
+
+
 def _adapter(actor: User | Bot, service: DomainService) -> NativeCardWorkspaceAdapter:
     """Build the native adapter at the MCP composition root."""
 
@@ -286,7 +302,7 @@ def reconcile_card_checklist_projection(
     card_uid: str,
     projection_key: str,
     title: str,
-    items: list[ChecklistProjectionItem],
+    items: list[JsonChecklistProjectionItem],
     user_or_bot: User | Bot,
     service: DomainService,
     expected_receipt: str | None = None,
