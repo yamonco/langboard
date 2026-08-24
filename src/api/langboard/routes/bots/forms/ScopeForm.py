@@ -12,6 +12,16 @@ class CreateBotScopeForm(BaseFormModel):
 
 
 @form_model
+class UpsertBotHookForm(BaseFormModel):
+    """Desired event hook for one bot and one native target."""
+
+    target_table: str = Field(..., title=f"Target type ({', '.join(AVAILABLE_BOT_TARGET_TABLES.keys())})")
+    target_uid: str = Field(..., title="Target UID")
+    events: list[BotTriggerCondition] = Field(..., min_length=1, title="Events subscribed by the bot")
+    active: bool = True
+
+
+@form_model
 class ToggleBotTriggerConditionForm(BaseFormModel):
     target_table: str = Field(..., title=f"Target table name ({', '.join(AVAILABLE_BOT_TARGET_TABLES.keys())})")
     condition: BotTriggerCondition

@@ -7,6 +7,7 @@ from .value_objects import (
     MAX_TEXT_CHARS,
     CardBundleInclude,
     CardBundleSection,
+    ChecklistProjectionItem,
     CommentCursor,
     CommentPage,
     ProjectCardCursor,
@@ -14,6 +15,7 @@ from .value_objects import (
     SectionPage,
     is_public_metadata_key,
     projection_revision,
+    require_projection_key,
     require_public_metadata_key,
 )
 
@@ -25,6 +27,7 @@ __all__ = [
     "MAX_TEXT_CHARS",
     "CardBundleInclude",
     "CardBundleSection",
+    "ChecklistProjectionItem",
     "CommentCursor",
     "CommentPage",
     "ProjectCardCursor",
@@ -32,5 +35,6 @@ __all__ = [
     "SectionPage",
     "is_public_metadata_key",
     "projection_revision",
+    "require_projection_key",
     "require_public_metadata_key",
 ]

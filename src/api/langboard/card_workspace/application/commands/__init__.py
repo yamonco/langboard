@@ -1,7 +1,13 @@
 """State-changing use cases for the card workspace feature."""
 
 from typing import Any
-from ...domain import CardBundleSection, require_public_metadata_key
+from ...domain import (
+    MAX_CHECKITEMS_PER_CHECKLIST,
+    CardBundleSection,
+    ChecklistProjectionItem,
+    require_projection_key,
+    require_public_metadata_key,
+)
 from ..ports import CardWorkspaceCommandPort
 from ..projections import (
     bounded_items,
@@ -279,6 +285,43 @@ def delete_public_card_metadata(
         raise ValueError("Duplicate metadata key")
     port.delete_public_card_metadata(project_uid, card_uid, normalized)
     return {"deleted": True}
+
+
+def reconcile_card_checklist_projection(
+    port: CardWorkspaceCommandPort,
+    project_uid: str,
+    card_uid: str,
+    projection_key: str,
+    title: str,
+    items: list[ChecklistProjectionItem],
+    expected_receipt: str | None = None,
+) -> dict[str, Any]:
+    """Converge one integration-owned checklist without title matching."""
+
+    normalized_key = require_projection_key(projection_key)
+    normalized_title = _required_text(title, "Checklist title")
+    if len(items) > MAX_CHECKITEMS_PER_CHECKLIST:
+        raise ValueError(f"Checklist projection exceeds {MAX_CHECKITEMS_PER_CHECKLIST} items")
+    item_keys = [item.key for item in items]
+    if len(item_keys) != len(set(item_keys)):
+        raise ValueError("Checklist projection item keys contain duplicates")
+    if expected_receipt is not None and (
+        len(expected_receipt) != 64 or any(character not in "0123456789abcdef" for character in expected_receipt)
+    ):
+        raise ValueError("Expected checklist projection receipt is invalid")
+    result = port.reconcile_card_checklist_projection(
+        project_uid,
+        card_uid,
+        normalized_key,
+        normalized_title,
+        items,
+        expected_receipt,
+    )
+    return {
+        "changed": bool(result["changed"]),
+        "receipt": str(result["receipt"]),
+        "checklist": public_checklist(result["checklist"]),
+    }
 
 
 def _required_text(value: Any, label: str) -> str:

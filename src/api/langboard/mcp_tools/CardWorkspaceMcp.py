@@ -25,6 +25,7 @@ from ..card_workspace.application import get_project_identity as query_project_i
 from ..card_workspace.application import get_public_card_metadata as query_public_metadata
 from ..card_workspace.application import get_public_card_metadata_by_key as query_public_metadata_key
 from ..card_workspace.application import list_project_cards as query_project_cards
+from ..card_workspace.application import reconcile_card_checklist_projection as reconcile_checklist
 from ..card_workspace.application import save_public_card_metadata as save_public_metadata
 from ..card_workspace.application import set_card_people_and_labels as replace_people_and_labels
 from ..card_workspace.application import set_card_relationships as replace_relationships
@@ -33,7 +34,12 @@ from ..card_workspace.application import update_card_checkitem as update_checkit
 from ..card_workspace.application import update_card_checklist as update_checklist
 from ..card_workspace.application import update_card_comment as update_comment
 from ..card_workspace.application.dtos import BoundedItemsDto
-from ..card_workspace.domain import CardBundleInclude, CommentPage, SectionPage
+from ..card_workspace.domain import (
+    CardBundleInclude,
+    ChecklistProjectionItem,
+    CommentPage,
+    SectionPage,
+)
 from ..card_workspace.infrastructure import NativeCardWorkspaceAdapter
 from ..mcp_integration import McpRoleFilter, McpTool
 
@@ -256,6 +262,36 @@ def create_card_checkitem(
     """Create a native checkitem."""
 
     return create_checkitem(_adapter(user_or_bot, service), project_uid, card_uid, checklist_uid, title)
+
+
+@McpTool.add(
+    description=(
+        "Idempotently reconcile one bot-authored checklist by stable keys. "
+        "The server checkpoints native identities and writes the content receipt last."
+    )
+)
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+def reconcile_card_checklist_projection(
+    project_uid: str,
+    card_uid: str,
+    projection_key: str,
+    title: str,
+    items: list[ChecklistProjectionItem],
+    user_or_bot: User | Bot,
+    service: DomainService,
+    expected_receipt: str | None = None,
+) -> dict[str, Any]:
+    """Converge one integration-owned checklist without title matching."""
+
+    return reconcile_checklist(
+        _adapter(user_or_bot, service),
+        project_uid,
+        card_uid,
+        projection_key,
+        title,
+        items,
+        expected_receipt,
+    )
 
 
 @McpTool.add(description="Update checkitem title, deadline, and/or checked state after full validation.")

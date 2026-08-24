@@ -90,9 +90,11 @@ class BotScopeHelper:
 
         if records:
             model = records[0]
-            model.conditions = conditions
-            with DbSession.use(readonly=False) as db:
-                db.update(model)
+            if model.conditions != conditions or model.default_scope_branch_id is not None:
+                model.conditions = conditions
+                model.default_scope_branch_id = None
+                with DbSession.use(readonly=False) as db:
+                    db.update(model)
             return model, False
 
         model = BotScopeHelper.create(model_cls, bot, scope, conditions, **kwargs)

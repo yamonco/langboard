@@ -1,5 +1,6 @@
 import re
 from typing import Any, Mapping, Sequence
+from ....ai import BotScopeHelper
 from ....core.domain import BaseDomainService
 from ....core.domain.BaseDomainService import TMutableValidatorMap
 from ....core.storage import FileModel
@@ -9,10 +10,11 @@ from ....core.utils.Converter import convert_python_data
 from ....core.utils.IpAddress import ALLOWED_ALL_IPS, is_valid_ipv4_address_or_range, make_valid_ipv4_range
 from ....core.utils.String import generate_random_string
 from ....helpers import BotHelper, InfraHelper
-from ....publishers import BotPublisher
+from ....publishers import BotPublisher, ProjectBotPublisher
 from ....tasks.bots import BotDefaultTask
 from ...models import Bot, BotDefaultScopeBranch, Card, Project, ProjectColumn
 from ...models.BaseBotModel import BotPlatform, BotPlatformRunningType
+from ...models.bases import BaseBotScopeModel, BotTriggerCondition
 from .GraphApprovalRequestService import GraphApprovalRequestService
 
 
@@ -77,6 +79,86 @@ class BotService(BaseDomainService):
         BotDefaultTask.bot_created(bot)
 
         return bot
+
+    def upsert_hook(
+        self,
+        bot: TBotParam | None,
+        target_table: str,
+        target_uid: str,
+        events: list[BotTriggerCondition],
+        *,
+        active: bool = True,
+    ) -> dict[str, Any] | None:
+        """Converge one bot event subscription on one native target."""
+
+        resolved_bot = InfraHelper.get_by_id_like(Bot, bot)
+        target_result = BotHelper.get_target_model_by_param("scope", target_table, target_uid)
+        if not resolved_bot or not target_result:
+            return None
+
+        scope_model_class, target = target_result
+        if len(events) != len(set(events)):
+            raise ValueError("Bot Hook events must be unique")
+        invalid_events = set(events) - scope_model_class.get_available_conditions()
+        if invalid_events:
+            names = ", ".join(sorted(event.value for event in invalid_events))
+            raise ValueError(f"Events are not available for {target_table}: {names}")
+
+        scope_column_name = scope_model_class.get_scope_column_name()
+        existing = BotScopeHelper.get_list(
+            scope_model_class,
+            None,
+            bot_id=resolved_bot.id,
+            **{scope_column_name: target.id},
+        )
+        previous_events = tuple(existing[0].conditions) if existing else None
+        previous_active = not existing[0].is_frozen if existing else None
+
+        upserted = BotScopeHelper.upsert_conditions(scope_model_class, resolved_bot, target, events)
+        if not upserted:
+            return None
+        scope, created = upserted
+        active_changed = previous_active is None or previous_active != active
+        if scope.is_frozen == active:
+            updated = BotScopeHelper.set_freeze(scope_model_class, scope, not active)
+            if not updated:
+                return None
+            scope = updated
+
+        project = self._hook_project(target)
+        if project:
+            if created:
+                ProjectBotPublisher.scope_created(project, scope)
+            elif previous_events != tuple(events):
+                ProjectBotPublisher.scope_conditions_updated(project, scope)
+            if not created and active_changed:
+                ProjectBotPublisher.scope_freeze_updated(project, scope)
+
+        return self._hook_response(resolved_bot, scope, target_table, target.get_uid())
+
+    def _hook_project(self, target: Project | ProjectColumn | Card) -> Project | None:
+        """Resolve the project that owns a hook target."""
+
+        if isinstance(target, Project):
+            return target
+        return InfraHelper.get_by_id_like(Project, target.project_id)
+
+    @staticmethod
+    def _hook_response(
+        bot: Bot,
+        scope: BaseBotScopeModel,
+        target_table: str,
+        target_uid: str,
+    ) -> dict[str, Any]:
+        """Return the canonical public Bot Hook representation."""
+
+        return {
+            "uid": scope.get_uid(),
+            "bot_uid": bot.get_uid(),
+            "target": {"type": target_table, "uid": target_uid},
+            "events": [event.value for event in scope.conditions],
+            "active": not scope.is_frozen,
+        }
 
     def copy(self, bot: TBotParam | None) -> Bot | None:
         source_bot = InfraHelper.get_by_id_like(Bot, bot)
