@@ -40,3 +40,7 @@ change is still authored by the authenticated bot.
 3. Every mutation has one authenticated user or bot author.
 4. Event envelopes carry stable IDs and are delivered at least once.
 5. Product-specific identifiers belong in caller-owned projection keys, not Langboard schemas.
+
+Bot-authored events remain visible to activities and outbound webhooks, but they do not trigger
+another scoped bot. This fail-closed rule prevents both direct recursion and multi-bot cycles;
+cross-bot orchestration must use an explicit workflow with its own bounded execution policy.
