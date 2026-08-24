@@ -6,6 +6,7 @@ import pytest
 os.environ.setdefault("PROJECT_NAME", "langboard")
 
 from langboard_shared.ai import BotScopeHelper
+from langboard_shared.domain.models import Bot, BotSchedule
 from langboard_shared.domain.models.bases import BotTriggerCondition
 from langboard_shared.domain.services.factory.BotService import BotService
 from langboard_shared.helpers import BotHelper, InfraHelper
@@ -182,3 +183,34 @@ def test_delete_hook_removes_owned_scope_through_service(
         "active": True,
     }
     assert deleted == [scope]
+
+
+def test_get_owned_schedule_rejects_schedule_owned_by_another_bot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """REST and MCP schedule mutations share the same Bot ownership guard."""
+
+    bot = SimpleNamespace(id=1)
+    schedule_model = SimpleNamespace(bot_schedule_id=20)
+    foreign_schedule = SimpleNamespace(bot_id=2)
+
+    def get_by_id_like(model: object, value: object) -> object | None:
+        if model is Bot:
+            return bot
+        if model is FakeScopeModel:
+            return schedule_model
+        if model is BotSchedule:
+            return foreign_schedule
+        return None
+
+    monkeypatch.setattr(InfraHelper, "get_by_id_like", get_by_id_like)
+    monkeypatch.setattr(BotHelper, "get_bot_model_class", lambda kind, table: FakeScopeModel)
+
+    result = BotService.get_owned_schedule(
+        object.__new__(BotService),
+        "bot-1",
+        "card",
+        "schedule-foreign",
+    )
+
+    assert result is None

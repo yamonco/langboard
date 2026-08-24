@@ -137,17 +137,10 @@ def reschedule_bot_cron(
     if isinstance(end_at, str):
         end_at = SafeDateTime.fromisoformat(end_at)
 
-    target_model_class = BotHelper.get_bot_model_class("schedule", target_table)
-    if not target_model_class:
-        raise ValueError("Invalid target table")
-
-    bot_schedule = BotScheduleHelper.get_by_id_like(target_model_class, schedule_uid)
-    if not bot_schedule:
-        raise ValueError("Bot schedule not found")
-
-    bot = service.bot.get_by_id_like(bot_uid)
-    if not bot:
-        raise ValueError("Bot not found")
+    owned_schedule = service.bot.get_owned_schedule(bot_uid, target_table, schedule_uid)
+    if not owned_schedule:
+        raise ValueError("Bot schedule not found or not owned by Bot")
+    target_model_class, bot_schedule, _ = owned_schedule
 
     if interval_str:
         interval_str = BotScheduleHelper.utils.convert_valid_interval_str(interval_str)
@@ -175,17 +168,10 @@ def reschedule_bot_cron(
 @McpTool.add(description="Unschedule a bot cron schedule.")
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Update], RoleFinder.project)
 def unschedule_bot_cron(bot_uid: str, schedule_uid: str, target_table: str, service: DomainService) -> dict:
-    bot = service.bot.get_by_id_like(bot_uid)
-    if not bot:
-        raise ValueError("Bot not found")
-
-    target_model_class = BotHelper.get_bot_model_class("schedule", target_table)
-    if not target_model_class:
-        raise ValueError("Invalid target table")
-
-    bot_schedule = BotScheduleHelper.get_by_id_like(target_model_class, schedule_uid)
-    if not bot_schedule:
-        raise ValueError("Bot schedule not found")
+    owned_schedule = service.bot.get_owned_schedule(bot_uid, target_table, schedule_uid)
+    if not owned_schedule:
+        raise ValueError("Bot schedule not found or not owned by Bot")
+    target_model_class, bot_schedule, _ = owned_schedule
 
     result = BotScheduleHelper.unschedule(target_model_class, bot_schedule)
     if not result:

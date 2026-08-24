@@ -12,9 +12,9 @@ from ....core.utils.String import generate_random_string
 from ....helpers import BotHelper, InfraHelper
 from ....publishers import BotPublisher, ProjectBotPublisher
 from ....tasks.bots import BotDefaultTask
-from ...models import Bot, BotDefaultScopeBranch, Card, Project, ProjectColumn
+from ...models import Bot, BotDefaultScopeBranch, BotSchedule, Card, Project, ProjectColumn
 from ...models.BaseBotModel import BotPlatform, BotPlatformRunningType
-from ...models.bases import BaseBotScopeModel, BotTriggerCondition
+from ...models.bases import BaseBotScheduleModel, BaseBotScopeModel, BotTriggerCondition
 from ...models.GraphApprovalRequest import GraphApprovalOriginType
 from .GraphApprovalRequestService import GraphApprovalRequestService
 
@@ -215,6 +215,32 @@ class BotService(BaseDomainService):
             return None
         _, target = target_result
         return resolved_bot, scope, target
+
+    def get_owned_schedule(
+        self,
+        bot: TBotParam | None,
+        target_table: str,
+        schedule_uid: str,
+    ) -> tuple[type[BaseBotScheduleModel], BaseBotScheduleModel, Project | ProjectColumn | Card] | None:
+        """Resolve a schedule only when the requested Bot owns its runtime record."""
+
+        resolved_bot = InfraHelper.get_by_id_like(Bot, bot)
+        schedule_model_class = BotHelper.get_bot_model_class("schedule", target_table)
+        if not resolved_bot or not schedule_model_class:
+            return None
+        schedule_model = InfraHelper.get_by_id_like(schedule_model_class, schedule_uid)
+        if not schedule_model:
+            return None
+        schedule = InfraHelper.get_by_id_like(BotSchedule, schedule_model.bot_schedule_id)
+        if not schedule or schedule.bot_id != resolved_bot.id:
+            return None
+
+        target_id = schedule_model.__dict__.get(schedule_model_class.get_scope_column_name())
+        target_result = BotHelper.get_target_model_by_param("schedule", target_table, target_id)
+        if not target_result:
+            return None
+        _, target = target_result
+        return schedule_model_class, schedule_model, target
 
     def _hook_project(self, target: Project | ProjectColumn | Card) -> Project | None:
         """Resolve the project that owns a hook target."""
