@@ -1,8 +1,20 @@
 import re
+import subprocess
 from pathlib import Path
 
 
 ROOT = Path(__file__).parents[3]
+
+
+def test_shared_python_lock_matches_its_build_manifest() -> None:
+    """The first locked Docker sync must work in a clean build context."""
+
+    subprocess.run(
+        ["uv", "lock", "--check", "--directory", str(ROOT / "src" / "shared" / "py")],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
 
 
 def test_python_and_uv_images_are_digest_pinned_without_remote_installer() -> None:
