@@ -2,6 +2,7 @@ from types import SimpleNamespace
 import pytest
 from fastmcp import Client
 from fastmcp.exceptions import AuthorizationError, ToolError
+from fastmcp.tools import Tool
 from ..middlewares.McpAuthMiddleware import mcp_auth_context
 from . import Server
 from .Server import _create_fastmcp, _get_transport_security_allowlists, _reject_global_wildcards
@@ -93,3 +94,21 @@ async def test_native_wrapper_uses_fastmcp_authorization_error(monkeypatch: pyte
             await wrapper(value=1)
     finally:
         mcp_auth_context.reset(token)
+
+
+def test_native_wrapper_preserves_visible_parameter_annotations(monkeypatch: pytest.MonkeyPatch) -> None:
+    """FastMCP can register the filtered wrapper used by the full application registry."""
+
+    def handler(title: str, user_or_bot: Server.User | Server.Bot) -> dict[str, str]:
+        return {"title": title}
+
+    monkeypatch.setattr(
+        Server.McpTool,
+        "get_tool",
+        lambda name: {"exclude": ["user_or_bot"]},
+    )
+
+    tool = Tool.from_function(Server.McpServer._wrap_tool("create", handler), name="create")
+
+    assert tool.parameters["required"] == ["title"]
+    assert tool.parameters["properties"] == {"title": {"type": "string"}}
