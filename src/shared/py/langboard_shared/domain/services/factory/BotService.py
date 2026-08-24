@@ -120,7 +120,7 @@ class BotService(BaseDomainService):
             return None
 
         scope_model_class, target = target_result
-        self._require_hook_project(target, project)
+        self.require_target_project(target, project)
         if len(events) != len(set(events)):
             raise ValueError("Bot Hook events must be unique")
         invalid_events = set(events) - scope_model_class.get_available_conditions()
@@ -176,7 +176,7 @@ class BotService(BaseDomainService):
         if not resolved:
             return None
         resolved_bot, scope, target = resolved
-        self._require_hook_project(target, project)
+        self.require_target_project(target, project)
         return self._hook_response(resolved_bot, scope, target_table, target.get_uid())
 
     def update_hook(
@@ -195,7 +195,7 @@ class BotService(BaseDomainService):
         if not resolved:
             return None
         resolved_bot, scope, target = resolved
-        self._require_hook_project(target, project)
+        self.require_target_project(target, project)
         return self.upsert_hook(
             resolved_bot,
             target_table,
@@ -219,7 +219,7 @@ class BotService(BaseDomainService):
         if not resolved:
             return None
         resolved_bot, scope, target = resolved
-        self._require_hook_project(target, project)
+        self.require_target_project(target, project)
         hook = self._hook_response(resolved_bot, scope, target_table, target.get_uid())
         scope_model_class = type(scope)
         BotScopeHelper.delete(scope_model_class, scope)
@@ -239,15 +239,15 @@ class BotService(BaseDomainService):
             ProjectBotPublisher.scope_deleted(project, scope)
         return hook
 
-    def _require_hook_project(self, target: Project | ProjectColumn | Card, project: str | None) -> None:
-        """Fail closed when an authorized project does not own the Hook target."""
+    def require_target_project(self, target: Project | ProjectColumn | Card, project: str | None) -> None:
+        """Fail closed when an authorized project does not own a Bot target."""
 
         if project is None:
             return
         resolved_project = InfraHelper.get_by_id_like(Project, project)
         target_project = self._hook_project(target)
         if not resolved_project or not target_project or resolved_project.id != target_project.id:
-            raise BotServiceError("project_mismatch", "Bot Hook target is outside the authorized project")
+            raise BotServiceError("project_mismatch", "Bot target is outside the authorized project")
 
     def _resolve_hook(
         self,
@@ -308,6 +308,8 @@ class BotService(BaseDomainService):
         start_at: SafeDateTime | None = None,
         end_at: SafeDateTime | None = None,
         timezone: str | float = "UTC",
+        *,
+        project: str | None = None,
     ) -> dict[str, Any]:
         """Create a Bot Schedule and return its canonical operation receipt."""
 
@@ -333,6 +335,7 @@ class BotService(BaseDomainService):
         if not target_result:
             raise BotServiceError("target_not_found", "Bot Schedule target not found")
         schedule_model_class, target = target_result
+        self.require_target_project(target, project)
         scheduled = BotScheduleHelper.schedule(
             schedule_model_class,
             resolved_bot,
@@ -369,6 +372,8 @@ class BotService(BaseDomainService):
         start_at: SafeDateTime | None = None,
         end_at: SafeDateTime | None = None,
         timezone: str | float = "UTC",
+        *,
+        project: str | None = None,
     ) -> dict[str, Any]:
         """Update an owned Bot Schedule and publish the same result for every adapter."""
 
@@ -390,6 +395,7 @@ class BotService(BaseDomainService):
         if not owned:
             raise BotServiceError("schedule_not_found", "Bot Schedule not found or not owned by Bot")
         schedule_model_class, schedule_model, target = owned
+        self.require_target_project(target, project)
         updated = BotScheduleHelper.reschedule(
             schedule_model_class,
             schedule_model,
@@ -424,6 +430,8 @@ class BotService(BaseDomainService):
         bot: TBotParam | None,
         target_table: str,
         schedule_uid: str,
+        *,
+        project: str | None = None,
     ) -> dict[str, Any]:
         """Delete an owned Bot Schedule and cancel its pending approval work."""
 
@@ -433,6 +441,7 @@ class BotService(BaseDomainService):
         if not owned:
             raise BotServiceError("schedule_not_found", "Bot Schedule not found or not owned by Bot")
         schedule_model_class, schedule_model, target = owned
+        self.require_target_project(target, project)
         resolved_bot = InfraHelper.get_by_id_like(Bot, bot)
         schedule = InfraHelper.get_by_id_like(BotSchedule, schedule_model.bot_schedule_id)
         if not resolved_bot or not schedule:

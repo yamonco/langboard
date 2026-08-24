@@ -1,8 +1,9 @@
 from types import SimpleNamespace
 import pytest
 from fastmcp import Client
-from fastmcp.exceptions import ToolError
+from fastmcp.exceptions import AuthorizationError, ToolError
 from ..middlewares.McpAuthMiddleware import mcp_auth_context
+from . import Server
 from .Server import _create_fastmcp, _get_transport_security_allowlists, _reject_global_wildcards
 
 
@@ -62,5 +63,33 @@ async def test_fastmcp_rejects_invalid_arguments_before_handler() -> None:
             with pytest.raises(ToolError, match="valid integer"):
                 await client.call_tool("record", {"value": "not-an-integer"})
             assert called is False
+    finally:
+        mcp_auth_context.reset(token)
+
+
+def test_mcp_startup_failure_is_not_hidden(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Invalid transport configuration fails application startup visibly."""
+
+    def fail() -> tuple[list[str], list[str]]:
+        raise ValueError("invalid transport policy")
+
+    monkeypatch.setattr(Server, "_get_transport_security_allowlists", fail)
+
+    with pytest.raises(ValueError, match="invalid transport policy"):
+        Server.McpServer.get_http_app()
+
+
+async def test_native_wrapper_uses_fastmcp_authorization_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Authorization failures have the same MCP error contract on every transport."""
+
+    async def handler(value: int) -> dict[str, int]:
+        return {"value": value}
+
+    monkeypatch.setattr(Server.McpServer, "_validate_auth", lambda actor, tool_name: False)
+    wrapper = Server.McpServer._wrap_tool("blocked", handler)
+    token = mcp_auth_context.set({"user_or_bot": None})
+    try:
+        with pytest.raises(AuthorizationError, match="Authentication required"):
+            await wrapper(value=1)
     finally:
         mcp_auth_context.reset(token)

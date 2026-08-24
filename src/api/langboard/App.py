@@ -87,10 +87,7 @@ class App:
 
     def _init_mcp_server(self):
         ModuleLoader.load("mcp_tools", "Mcp", log=not self.config.is_restarting)
-        result = McpServer.get_http_app()
-        if not result:
-            raise RuntimeError("Failed to initialize MCP server")
-        mcp_http_app, mcp_app = result
+        mcp_http_app, mcp_app = McpServer.get_http_app()
         self.mcp_http_app = mcp_http_app
         self.mcp_app = mcp_app
 

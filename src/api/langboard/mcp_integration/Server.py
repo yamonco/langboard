@@ -1,10 +1,10 @@
-import traceback
 from collections.abc import Callable
 from inspect import Parameter, iscoroutinefunction, signature
 from types import UnionType
 from typing import Any, TypeGuard, Union, get_args, get_origin
 from urllib.parse import urlsplit
 from fastmcp import FastMCP
+from fastmcp.exceptions import AuthorizationError
 from fastmcp.tools import Tool
 from langboard_shared.core.types import Factory
 from langboard_shared.core.utils.decorators import class_instance
@@ -34,30 +34,28 @@ class McpServer:
         self.mcp = _create_fastmcp()
         self._streamable_http_app = None
 
-    def get_http_app(self):
-        try:
-            allowed_hosts, allowed_origins = _get_transport_security_allowlists()
-            app = _create_fastmcp()
+    def get_http_app(self) -> tuple[Any, FastMCP]:
+        """Build the MCP transport or fail application startup."""
 
-            all_tools = McpTool.get_tools()
-            for tool_name, tool_data in all_tools.items():
-                handler = tool_data["handler"]
-                wrapper = self._wrap_tool(tool_name, handler)
-                app.add_tool(Tool.from_function(wrapper, name=tool_name, description=tool_data["description"]))
+        allowed_hosts, allowed_origins = _get_transport_security_allowlists()
+        app = _create_fastmcp()
 
-            http_app = app.http_app(
-                path="/stream",
-                stateless_http=True,
-                allowed_hosts=allowed_hosts,
-                allowed_origins=allowed_origins,
-            )
-            http_app.add_middleware(McpAuthMiddleware)
+        all_tools = McpTool.get_tools()
+        for tool_name, tool_data in all_tools.items():
+            handler = tool_data["handler"]
+            wrapper = self._wrap_tool(tool_name, handler)
+            app.add_tool(Tool.from_function(wrapper, name=tool_name, description=tool_data["description"]))
 
-            self.mcp = app
-            return http_app, app
-        except Exception:
-            traceback.print_exc()
-            return None
+        http_app = app.http_app(
+            path="/stream",
+            stateless_http=True,
+            allowed_hosts=allowed_hosts,
+            allowed_origins=allowed_origins,
+        )
+        http_app.add_middleware(McpAuthMiddleware)
+
+        self.mcp = app
+        return http_app, app
 
     def _wrap_tool(self, tool_name: str, handler: Callable):
         sig = signature(handler)
@@ -73,10 +71,10 @@ class McpServer:
             auth_value: User | Bot | None = auth_data.get("user_or_bot") if auth_data else None
 
             if not self._validate_auth(auth_value, tool_name):
-                raise PermissionError("Authentication required")
+                raise AuthorizationError("Authentication required")
 
             if not self._validate_role(auth_value, handler, **kwargs):
-                raise PermissionError("Insufficient permissions")
+                raise AuthorizationError("Insufficient permissions")
 
             factories: list[Factory] = []
             for param_name, param in sig.parameters.items():
@@ -143,22 +141,22 @@ class McpServer:
                 if isinstance(auth_value, User):
                     kwargs[param_name] = auth_value
                 else:
-                    raise PermissionError("User authentication required")
+                    raise AuthorizationError("User authentication required")
             elif Bot in args:
                 if isinstance(auth_value, Bot):
                     kwargs[param_name] = auth_value
                 else:
-                    raise PermissionError("Bot authentication required")
+                    raise AuthorizationError("Bot authentication required")
         elif annotation == User:
             if isinstance(auth_value, User):
                 kwargs[param_name] = auth_value
             else:
-                raise PermissionError("User authentication required")
+                raise AuthorizationError("User authentication required")
         elif annotation == Bot:
             if isinstance(auth_value, Bot):
                 kwargs[param_name] = auth_value
             else:
-                raise PermissionError("Bot authentication required")
+                raise AuthorizationError("Bot authentication required")
         elif annotation == DomainService:
             factory = DomainService()
             kwargs[param_name] = factory
