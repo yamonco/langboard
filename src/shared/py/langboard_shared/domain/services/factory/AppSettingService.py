@@ -8,7 +8,7 @@ from ....core.types.ParamTypes import TGlobalCardRelationshipTypeParam
 from ....core.utils.Converter import convert_python_data
 from ....helpers import InfraHelper, ModelHelper
 from ....publishers import AppSettingPublisher
-from ....tasks.webhooks.utils import validate_webhook_events
+from ....tasks.webhooks.utils import validate_webhook_events, validate_webhook_url
 from ...models import ApiComfortTool, GlobalCardRelationshipType, NotificationScheduleRule, WebhookSetting
 from ...models.ApiComfortTool import ApiComfortToolMap
 from ...models.BaseNotificationScheduleModel import BaseNotificationScheduleModel
@@ -132,7 +132,7 @@ class AppSettingService(BaseDomainService):
         secret = KeyVault.create_key(secret_id)
         webhook_setting = WebhookSetting(
             name=name,
-            url=url.strip(),
+            url=validate_webhook_url(url),
             secret_id=secret_id,
             events=events,
         )
@@ -164,7 +164,7 @@ class AppSettingService(BaseDomainService):
         if name is not None:
             setting.name = name
         if url is not None:
-            setting.url = url.strip()
+            setting.url = validate_webhook_url(url)
         if replace_events or events is not None:
             setting.events = validate_webhook_events(events)
 
