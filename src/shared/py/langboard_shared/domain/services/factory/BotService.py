@@ -15,6 +15,7 @@ from ....tasks.bots import BotDefaultTask
 from ...models import Bot, BotDefaultScopeBranch, Card, Project, ProjectColumn
 from ...models.BaseBotModel import BotPlatform, BotPlatformRunningType
 from ...models.bases import BaseBotScopeModel, BotTriggerCondition
+from ...models.GraphApprovalRequest import GraphApprovalOriginType
 from .GraphApprovalRequestService import GraphApprovalRequestService
 
 
@@ -137,6 +138,83 @@ class BotService(BaseDomainService):
                 ProjectBotPublisher.scope_freeze_updated(project, scope)
 
         return self._hook_response(resolved_bot, scope, target_table, target.get_uid())
+
+    def update_hook(
+        self,
+        bot: TBotParam | None,
+        target_table: str,
+        hook_uid: str,
+        *,
+        events: list[BotTriggerCondition] | None = None,
+        active: bool | None = None,
+    ) -> dict[str, Any] | None:
+        """Update one existing Bot Hook without bypassing its ownership boundary."""
+
+        resolved = self._resolve_hook(bot, target_table, hook_uid)
+        if not resolved:
+            return None
+        resolved_bot, scope, target = resolved
+        return self.upsert_hook(
+            resolved_bot,
+            target_table,
+            target.get_uid(),
+            list(scope.conditions) if events is None else events,
+            active=not scope.is_frozen if active is None else active,
+        )
+
+    def delete_hook(
+        self,
+        bot: TBotParam | None,
+        target_table: str,
+        hook_uid: str,
+    ) -> dict[str, Any] | None:
+        """Delete one owned Bot Hook and cancel work that can no longer run."""
+
+        resolved = self._resolve_hook(bot, target_table, hook_uid)
+        if not resolved:
+            return None
+        resolved_bot, scope, target = resolved
+        hook = self._hook_response(resolved_bot, scope, target_table, target.get_uid())
+        scope_model_class = type(scope)
+        BotScopeHelper.delete(scope_model_class, scope)
+
+        project = self._hook_project(target)
+        if project:
+            approval_service = self._get_service(GraphApprovalRequestService)
+            for origin_type in (GraphApprovalOriginType.Trigger, GraphApprovalOriginType.ManualScopeRun):
+                approval_service.cancel_pending_by_scope(
+                    project,
+                    target_table,
+                    target.get_uid(),
+                    origin_type=origin_type,
+                    bot=resolved_bot,
+                    reason="bot hook deleted",
+                )
+            ProjectBotPublisher.scope_deleted(project, scope)
+        return hook
+
+    def _resolve_hook(
+        self,
+        bot: TBotParam | None,
+        target_table: str,
+        hook_uid: str,
+    ) -> tuple[Bot, BaseBotScopeModel, Project | ProjectColumn | Card] | None:
+        """Resolve an existing hook and fail closed when its Bot does not own it."""
+
+        resolved_bot = InfraHelper.get_by_id_like(Bot, bot)
+        scope_model_class = BotHelper.get_bot_model_class("scope", target_table)
+        if not resolved_bot or not scope_model_class:
+            return None
+        scope = BotScopeHelper.get_by_id_like(scope_model_class, hook_uid)
+        if not scope or scope.bot_id != resolved_bot.id:
+            return None
+
+        target_id = scope.__dict__.get(scope.get_scope_column_name())
+        target_result = BotHelper.get_target_model_by_param("scope", target_table, target_id)
+        if not target_result:
+            return None
+        _, target = target_result
+        return resolved_bot, scope, target
 
     def _hook_project(self, target: Project | ProjectColumn | Card) -> Project | None:
         """Resolve the project that owns a hook target."""
