@@ -1,10 +1,11 @@
+from typing import NoReturn
 from langboard_shared.ai import BotScheduleHelper
 from langboard_shared.core.types import SafeDateTime
 from langboard_shared.domain.models import CardBotSchedule, ProjectBotSchedule, ProjectColumnBotSchedule, ProjectRole
 from langboard_shared.domain.models.BotSchedule import BotScheduleRunningType
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.domain.services.DomainService import DomainService
-from langboard_shared.helpers import BotHelper
+from langboard_shared.domain.services.factory.BotService import BotServiceError
 from langboard_shared.security import RoleFinder
 from ..mcp_integration import McpRoleFilter, McpTool
 
@@ -70,50 +71,24 @@ def schedule_bot_cron(
     tz: str | float | None,
     service: DomainService,
 ) -> dict:
-    if tz is None:
-        tz = "UTC"
-
-    interval_str = BotScheduleHelper.utils.convert_valid_interval_str(interval_str)
-    if not interval_str:
-        raise ValueError("Invalid interval")
-
     if isinstance(start_at, str):
         start_at = SafeDateTime.fromisoformat(start_at)
     if isinstance(end_at, str):
         end_at = SafeDateTime.fromisoformat(end_at)
 
-    if running_type is None:
-        running_type = BotScheduleRunningType.Infinite
-
-    if running_type == BotScheduleRunningType.Duration and not start_at:
-        start_at = SafeDateTime.now()
-
-    if not BotScheduleHelper.get_default_status_with_dates(running_type=running_type, start_at=start_at, end_at=end_at):
-        raise ValueError("Invalid schedule parameters")
-
-    result = BotHelper.get_target_model_by_param("schedule", target_table, target_uid)
-    if not result:
-        raise ValueError("Invalid target")
-    target_model_class, target_model = result
-
-    bot = service.bot.get_by_id_like(bot_uid)
-    if not bot:
-        raise ValueError("Bot not found")
-
-    bot_schedule = BotScheduleHelper.schedule(
-        target_model_class,
-        bot,
-        interval_str,
-        target_model,
-        running_type,
-        start_at,
-        end_at,
-        tz,
-    )
-    if not bot_schedule:
-        raise ValueError("Failed to schedule")
-
-    return {"message": "Bot scheduled successfully"}
+    try:
+        return service.bot.create_schedule(
+            bot_uid,
+            target_table,
+            target_uid,
+            interval_str,
+            running_type,
+            start_at,
+            end_at,
+            tz or "UTC",
+        )
+    except BotServiceError as error:
+        _raise_bot_service_error(error)
 
 
 @McpTool.add(description="Reschedule a bot cron schedule.")
@@ -129,55 +104,39 @@ def reschedule_bot_cron(
     tz: str | float,
     service: DomainService,
 ) -> dict:
-    if tz is None:
-        tz = "UTC"
-
     if isinstance(start_at, str):
         start_at = SafeDateTime.fromisoformat(start_at)
     if isinstance(end_at, str):
         end_at = SafeDateTime.fromisoformat(end_at)
 
-    owned_schedule = service.bot.get_owned_schedule(bot_uid, target_table, schedule_uid)
-    if not owned_schedule:
-        raise ValueError("Bot schedule not found or not owned by Bot")
-    target_model_class, bot_schedule, _ = owned_schedule
-
-    if interval_str:
-        interval_str = BotScheduleHelper.utils.convert_valid_interval_str(interval_str)
-        if not interval_str:
-            raise ValueError("Invalid interval")
-
-    if not BotScheduleHelper.get_default_status_with_dates(running_type=running_type, start_at=start_at, end_at=end_at):
-        raise ValueError("Invalid schedule parameters")
-
-    result = BotScheduleHelper.reschedule(
-        target_model_class,
-        bot_schedule,
-        interval_str,
-        running_type,
-        start_at,
-        end_at,
-        tz,
-    )
-    if not result:
-        raise ValueError("Failed to reschedule")
-
-    return {"message": "Bot rescheduled successfully"}
+    try:
+        return service.bot.update_schedule(
+            bot_uid,
+            target_table,
+            schedule_uid,
+            interval_str,
+            running_type,
+            start_at,
+            end_at,
+            tz or "UTC",
+        )
+    except BotServiceError as error:
+        _raise_bot_service_error(error)
 
 
 @McpTool.add(description="Unschedule a bot cron schedule.")
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Update], RoleFinder.project)
 def unschedule_bot_cron(bot_uid: str, schedule_uid: str, target_table: str, service: DomainService) -> dict:
-    owned_schedule = service.bot.get_owned_schedule(bot_uid, target_table, schedule_uid)
-    if not owned_schedule:
-        raise ValueError("Bot schedule not found or not owned by Bot")
-    target_model_class, bot_schedule, _ = owned_schedule
+    try:
+        return service.bot.delete_schedule(bot_uid, target_table, schedule_uid)
+    except BotServiceError as error:
+        _raise_bot_service_error(error)
 
-    result = BotScheduleHelper.unschedule(target_model_class, bot_schedule)
-    if not result:
-        raise ValueError("Failed to unschedule")
 
-    return {"message": "Bot unscheduled successfully"}
+def _raise_bot_service_error(error: BotServiceError) -> NoReturn:
+    """Expose the same stable service error code through MCP."""
+
+    raise ValueError(f"{error.code}: {error}") from error
 
 
 @McpTool.add(description="Get bot scopes for a project.")
