@@ -14,7 +14,8 @@ from langboard_shared.core.routing import (
 from langboard_shared.core.schema import OpenApiSchema
 from langboard_shared.core.types import SafeDateTime
 from langboard_shared.core.types.BotRelatedTypes import AVAILABLE_BOT_TARGET_TABLES
-from langboard_shared.domain.models import Project, ProjectRole
+from langboard_shared.domain.models import Card, Project, ProjectColumn, ProjectRole
+from langboard_shared.domain.models.bases import BaseBotScheduleModel
 from langboard_shared.domain.models.BotSchedule import BotScheduleRunningType
 from langboard_shared.domain.models.GraphApprovalRequest import GraphApprovalOriginType
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
@@ -129,11 +130,7 @@ def reschedule_bot_crons(
     ):
         raise ApiException.BadRequest_400(ApiErrorCode.VA3002)
 
-    bot = service.bot.get_by_id_like(bot_uid)
-    if not bot:
-        raise ApiException.NotFound_404(ApiErrorCode.NF2015)
-
-    result = _get_target_model_with_bot_schedule(form.target_table, schedule_uid)
+    result = _get_owned_target_model_with_bot_schedule(service, bot_uid, form.target_table, schedule_uid)
     target_model_class, bot_schedule, target_model = result
 
     result = BotScheduleHelper.reschedule(
@@ -187,12 +184,11 @@ def reschedule_bot_crons(
 def unschedule_bot_crons(
     bot_uid: str, schedule_uid: str, form: DeleteBotCronTimeForm, service: DomainService = DomainService.scope()
 ) -> JsonResponse:
+    result = _get_owned_target_model_with_bot_schedule(service, bot_uid, form.target_table, schedule_uid)
+    target_model_class, bot_schedule, target_model = result
     bot = service.bot.get_by_id_like(bot_uid)
     if not bot:
         raise ApiException.NotFound_404(ApiErrorCode.NF2015)
-
-    result = _get_target_model_with_bot_schedule(form.target_table, schedule_uid)
-    target_model_class, bot_schedule, target_model = result
 
     result = BotScheduleHelper.unschedule(target_model_class, bot_schedule)
     if not result:
@@ -219,23 +215,15 @@ def unschedule_bot_crons(
     return JsonResponse()
 
 
-def _get_target_model_with_bot_schedule(target_table: str, schedule_uid: str):
-    target_model_class = BotHelper.get_bot_model_class("schedule", target_table)
-    if not target_model_class:
+def _get_owned_target_model_with_bot_schedule(
+    service: DomainService,
+    bot_uid: str,
+    target_table: str,
+    schedule_uid: str,
+) -> tuple[type[BaseBotScheduleModel], BaseBotScheduleModel, Project | ProjectColumn | Card]:
+    if not BotHelper.get_bot_model_class("schedule", target_table):
         raise ApiException.BadRequest_400(ApiErrorCode.VA3003)
-
-    bot_schedule = BotScheduleHelper.get_by_id_like(target_model_class, schedule_uid)
-    if not bot_schedule:
-        raise ApiException.NotFound_404(ApiErrorCode.NF2015)
-
-    target_id = bot_schedule.__dict__.get(target_model_class.get_scope_column_name())
-    if not target_id:
-        raise ApiException.NotFound_404(ApiErrorCode.NF2015)
-
-    result = BotHelper.get_target_model_by_param("schedule", target_table, target_id)
+    result = service.bot.get_owned_schedule(bot_uid, target_table, schedule_uid)
     if not result:
-        raise ApiException.BadRequest_400(ApiErrorCode.VA3004)
-
-    target_model_class, target_model = result
-
-    return target_model_class, bot_schedule, target_model
+        raise ApiException.NotFound_404(ApiErrorCode.NF2015)
+    return result
