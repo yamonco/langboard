@@ -118,3 +118,67 @@ def test_upsert_hook_fails_closed_on_duplicate_native_scopes(
         )
 
     assert writes == []
+
+
+def test_update_hook_rejects_scope_owned_by_another_bot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A legacy scope UID cannot be used to mutate another Bot's Hook."""
+
+    bot = SimpleNamespace(id=1)
+    foreign_scope = SimpleNamespace(bot_id=2)
+    monkeypatch.setattr(InfraHelper, "get_by_id_like", lambda model, value: bot)
+    monkeypatch.setattr(BotHelper, "get_bot_model_class", lambda kind, table: FakeScopeModel)
+    monkeypatch.setattr(BotScopeHelper, "get_by_id_like", lambda model, uid: foreign_scope)
+    writes: list[object] = []
+    monkeypatch.setattr(BotScopeHelper, "upsert_conditions", lambda *args, **kwargs: writes.append(args))
+
+    result = BotService.update_hook(
+        object.__new__(BotService),
+        "bot-1",
+        "card",
+        "hook-foreign",
+        active=False,
+    )
+
+    assert result is None
+    assert writes == []
+
+
+def test_delete_hook_removes_owned_scope_through_service(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Hook deletion reuses native storage while returning the canonical receipt."""
+
+    bot = SimpleNamespace(id=1, get_uid=lambda: "bot-1")
+    target = SimpleNamespace(id=2, get_uid=lambda: "card-1")
+    scope = SimpleNamespace(
+        bot_id=1,
+        card_id=2,
+        is_frozen=False,
+        conditions=[BotTriggerCondition.CardMoved],
+        get_scope_column_name=lambda: "card_id",
+        get_uid=lambda: "hook-1",
+    )
+    monkeypatch.setattr(InfraHelper, "get_by_id_like", lambda model, value: bot)
+    monkeypatch.setattr(BotHelper, "get_bot_model_class", lambda kind, table: FakeScopeModel)
+    monkeypatch.setattr(BotScopeHelper, "get_by_id_like", lambda model, uid: scope)
+    monkeypatch.setattr(
+        BotHelper,
+        "get_target_model_by_param",
+        lambda kind, table, uid: (FakeScopeModel, target),
+    )
+    deleted: list[object] = []
+    monkeypatch.setattr(BotScopeHelper, "delete", lambda model, value: deleted.append(value))
+    monkeypatch.setattr(BotService, "_hook_project", lambda self, value: None)
+
+    result = BotService.delete_hook(object.__new__(BotService), "bot-1", "card", "hook-1")
+
+    assert result == {
+        "uid": "hook-1",
+        "bot_uid": "bot-1",
+        "target": {"type": "card", "uid": "card-1"},
+        "events": [BotTriggerCondition.CardMoved.value],
+        "active": True,
+    }
+    assert deleted == [scope]
