@@ -13,7 +13,7 @@ from ...core.utils.Converter import convert_python_data
 from ...domain.models import WebhookSetting
 from ...helpers import InfraHelper
 from ...publishers import AppSettingPublisher
-from .utils import WebhookModel
+from .utils import WebhookModel, ensure_public_webhook_url
 
 
 WEBHOOK_TIMEOUT = Timeout(5.0, connect=2.0)
@@ -107,8 +107,9 @@ async def deliver_webhook(model: WebhookModel, webhook_uid: str) -> None:
     try:
         secret = KeyVault.get_key(setting.secret_id) if setting.secret_id else None
         body, headers = signed_request(model, secret)
-        async with AsyncClient(timeout=WEBHOOK_TIMEOUT) as client:
-            response = await client.post(setting.url, content=body, headers=headers)
+        url = await ensure_public_webhook_url(setting.url)
+        async with AsyncClient(timeout=WEBHOOK_TIMEOUT, follow_redirects=False) as client:
+            response = await client.post(url, content=body, headers=headers)
             response.raise_for_status()
     except Exception as error:
         Broker.logger.error(

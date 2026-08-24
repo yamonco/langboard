@@ -14,11 +14,18 @@ from langboard_shared.core.broker import Broker  # noqa: E402
 from langboard_shared.tasks.bots import CardBotTask  # noqa: E402
 from langboard_shared.tasks.bots.utils.BotTaskDataHelper import BotTaskDataHelper  # noqa: E402
 from langboard_shared.tasks.webhooks import WebhookTask  # noqa: E402
-from langboard_shared.tasks.webhooks.utils import WEBHOOK_EVENT_NAMES, WebhookModel  # noqa: E402
+from langboard_shared.tasks.webhooks.utils import (  # noqa: E402
+    WEBHOOK_EVENT_NAMES,
+    WebhookModel,
+    validate_webhook_url,
+)
 
 
 app_setting_module = importlib.import_module("langboard_shared.domain.services.factory.AppSettingService")
 webhook_schema_module = importlib.import_module("langboard.routes.schemas.WebhookSchemaApi")
+webhook_url_policy_module = importlib.import_module(
+    "langboard_shared.tasks.webhooks.utils.WebhookUrlPolicy"
+)
 settings_form_module = importlib.import_module("langboard.routes.settings.Form")
 
 
@@ -143,6 +150,42 @@ def test_webhook_event_allowlist_validation_and_omission_compatibility() -> None
                 url="https://example.invalid",
                 events=events,
             )
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://127.0.0.1/hook",
+        "http://169.254.169.254/latest/meta-data",
+        "https://localhost/hook",
+        "https://service.internal/hook",
+        "https://user:secret@example.com/hook",
+        "https://example.com:8443/hook",
+        "file:///etc/passwd",
+    ],
+)
+def test_webhook_url_policy_rejects_ssrf_destinations(url: str) -> None:
+    """Webhook configuration cannot target local networks or unsafe URL forms."""
+
+    with pytest.raises(ValueError):
+        validate_webhook_url(url)
+
+    with pytest.raises(ValidationError):
+        settings_form_module.CreateWebhookForm(name="Unsafe", url=url)
+
+
+@pytest.mark.asyncio
+async def test_webhook_delivery_rechecks_dns_before_connect(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A hostname that resolves inside the network is blocked at delivery time."""
+
+    monkeypatch.setattr(
+        webhook_url_policy_module,
+        "getaddrinfo",
+        lambda *args: [(2, 1, 6, "", ("10.0.0.8", 443))],
+    )
+
+    with pytest.raises(ValueError, match="private network"):
+        await webhook_url_policy_module.ensure_public_webhook_url("https://example.com/hook")
 
 
 def test_webhook_schema_documents_envelope_and_signature(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -451,9 +494,13 @@ async def test_endpoint_delivery_failure_is_bounded_and_retryable(monkeypatch: p
     )
     observed_timeout: list[object] = []
 
+    async def allow_public_url(url: str) -> str:
+        return url
+
     class FakeClient:
-        def __init__(self, *, timeout: object) -> None:
+        def __init__(self, *, timeout: object, follow_redirects: bool) -> None:
             observed_timeout.append(timeout)
+            assert follow_redirects is False
 
         async def __aenter__(self) -> "FakeClient":
             return self
@@ -465,6 +512,7 @@ async def test_endpoint_delivery_failure_is_bounded_and_retryable(monkeypatch: p
             raise TimeoutError("bounded")
 
     monkeypatch.setattr(WebhookTask, "_get_webhook_setting", lambda uid: setting)
+    monkeypatch.setattr(WebhookTask, "ensure_public_webhook_url", allow_public_url)
     monkeypatch.setattr(WebhookTask, "AsyncClient", FakeClient)
     monkeypatch.setattr(WebhookTask.KeyVault, "get_key", lambda key: "secret")
 
