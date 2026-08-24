@@ -1,7 +1,8 @@
+from functools import wraps
 from inspect import Parameter, signature
 from typing import Callable, Literal, TypedDict, get_args
+from fastmcp.tools import Tool
 from langboard_shared.core.utils.decorators import class_instance, thread_safe_singleton
-from pydantic import ConfigDict, create_model
 
 
 _TAccessibleType = Literal["all", "user", "bot"]
@@ -31,26 +32,23 @@ class McpTool:
             params = sig.parameters
             exclude = [name for name, param in params.items() if self._is_injected_parameter(param)]
 
-            visible_params = {name: param for name, param in params.items() if name not in exclude}
-            fields = {
-                name: (
-                    str if param.annotation is Parameter.empty else param.annotation,
-                    ... if param.default is Parameter.empty else param.default,
-                )
-                for name, param in visible_params.items()
-            }
-            input_model = create_model(
-                f"{func.__name__}Input",
-                __config__=ConfigDict(extra="forbid"),
-                **fields,
+            @wraps(func)
+            def visible_handler(*args, **kwargs):
+                return func(*args, **kwargs)
+
+            visible_handler.__signature__ = sig.replace(
+                parameters=[param for name, param in params.items() if name not in exclude]
             )
-            input_schema = input_model.model_json_schema()
-            input_schema.pop("title", None)
+            tool = Tool.from_function(
+                visible_handler,
+                name=func.__name__,
+                description=description or func.__doc__ or func.__name__,
+            )
 
             self._tools[func.__name__] = {
-                "description": description or func.__doc__ or func.__name__,
+                "description": tool.description or func.__name__,
                 "handler": func,
-                "input_schema": input_schema,
+                "input_schema": tool.parameters,
                 "accessible_type": accessible_type,
                 "exclude": exclude,
             }

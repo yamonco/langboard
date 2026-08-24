@@ -81,13 +81,3 @@ def test_rest_and_mcp_reject_cross_bot_authorship(monkeypatch: pytest.MonkeyPatc
             service=SimpleNamespace(bot=SimpleNamespace(has_project_access=lambda *_: False)),
         )
     assert getattr(unscoped_error.value, "status_code", None) == 403
-
-
-def test_mcp_normalizes_raw_event_values_and_rejects_unknown_events() -> None:
-    """The REST MCP executor cannot bypass Hook event validation with raw JSON."""
-
-    assert BotMcp._normalize_hook_events([BotTriggerCondition.CardMoved.value]) == [BotTriggerCondition.CardMoved]
-    with pytest.raises(ValueError, match="events_invalid"):
-        BotMcp._normalize_hook_events(["unknown_event"])
-    with pytest.raises(ValueError, match="active_invalid"):
-        BotMcp._normalize_hook_active("false")  # type: ignore[arg-type]

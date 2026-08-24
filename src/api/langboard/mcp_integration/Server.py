@@ -1,52 +1,59 @@
 import traceback
 from collections.abc import Callable
-from enum import Enum
 from inspect import Parameter, iscoroutinefunction, signature
 from types import UnionType
 from typing import Any, TypeGuard, Union, get_args, get_origin
 from urllib.parse import urlsplit
+from fastmcp import FastMCP
+from fastmcp.tools import Tool
 from langboard_shared.core.types import Factory
 from langboard_shared.core.utils.decorators import class_instance
-from langboard_shared.domain.models import Bot, McpToolGroup, User
+from langboard_shared.domain.models import Bot, User
 from langboard_shared.domain.services import DomainService
 from langboard_shared.Env import Env
 from langboard_shared.infrastructure.repositories import Repository
-from mcp.server.fastmcp import FastMCP
-from mcp.server.transport_security import TransportSecuritySettings
-from pydantic import BaseModel
 from ..mcp_tools.RoleChecker import McpRoleChecker
-from ..middlewares import DynamicSseMiddleware, McpAuthMiddleware
+from ..middlewares import McpAuthMiddleware
 from ..middlewares.McpAuthMiddleware import mcp_auth_context
 from .Tool import McpTool
+from .ToolGroupMiddleware import ToolGroupMiddleware
+
+
+def _create_fastmcp() -> FastMCP:
+    return FastMCP(
+        Env.PROJECT_NAME,
+        strict_input_validation=True,
+        mask_error_details=True,
+        middleware=[ToolGroupMiddleware()],
+    )
 
 
 @class_instance()
 class McpServer:
     def __init__(self):
-        self.mcp = FastMCP(Env.PROJECT_NAME)
+        self.mcp = _create_fastmcp()
         self._streamable_http_app = None
 
     def get_http_app(self):
         try:
-            security_settings = _get_transport_security_settings()
-
-            app = FastMCP(
-                Env.PROJECT_NAME,
-                transport_security=security_settings,
-                streamable_http_path="/stream",
-                stateless_http=True,
-            )
+            allowed_hosts, allowed_origins = _get_transport_security_allowlists()
+            app = _create_fastmcp()
 
             all_tools = McpTool.get_tools()
             for tool_name, tool_data in all_tools.items():
                 handler = tool_data["handler"]
                 wrapper = self._wrap_tool(tool_name, handler)
-                app.add_tool(wrapper, name=tool_name, description=tool_data["description"])
+                app.add_tool(Tool.from_function(wrapper, name=tool_name, description=tool_data["description"]))
 
-            http_app = app.streamable_http_app()
-            http_app.add_middleware(DynamicSseMiddleware)
+            http_app = app.http_app(
+                path="/stream",
+                stateless_http=True,
+                allowed_hosts=allowed_hosts,
+                allowed_origins=allowed_origins,
+            )
             http_app.add_middleware(McpAuthMiddleware)
 
+            self.mcp = app
             return http_app, app
         except Exception:
             traceback.print_exc()
@@ -64,19 +71,9 @@ class McpServer:
         async def wrapper(**kwargs):
             auth_data = mcp_auth_context.get()
             auth_value: User | Bot | None = auth_data.get("user_or_bot") if auth_data else None
-            tool_group: McpToolGroup | None = auth_data.get("tool_group") if auth_data else None
 
             if not self._validate_auth(auth_value, tool_name):
                 raise PermissionError("Authentication required")
-
-            if not tool_group:
-                raise PermissionError("MCP tool group not validated")
-
-            if tool_group.activated_at is None:
-                raise PermissionError("MCP tool group is inactive")
-
-            if tool_name not in tool_group.tools:
-                raise PermissionError(f"Tool '{tool_name}' not allowed for this tool group")
 
             if not self._validate_role(auth_value, handler, **kwargs):
                 raise PermissionError("Insufficient permissions")
@@ -168,32 +165,15 @@ class McpServer:
         elif annotation == Repository:
             factory = Repository()
             kwargs[param_name] = factory
-        elif isinstance(annotation, type) and issubclass(annotation, BaseModel):
-            kwargs[param_name] = annotation.model_validate(kwargs.get(param_name))
-        elif isinstance(annotation, type) and issubclass(annotation, Enum):
-            value = kwargs.get(param_name)
-            if value is not None:
-                try:
-                    kwargs[param_name] = annotation(value)
-                except Exception:
-                    try:
-                        kwargs[param_name] = annotation[value]
-                    except Exception:
-                        raise ValueError(f"Invalid value for enum '{annotation.__name__}': {value}")
-
         return kwargs, factory
 
 
-def _get_transport_security_settings() -> TransportSecuritySettings:
+def _get_transport_security_allowlists() -> tuple[list[str], list[str]]:
     allowed_hosts = Env.MCP_ALLOWED_HOSTS or _get_default_allowed_hosts()
     allowed_origins = Env.MCP_ALLOWED_ORIGINS or _get_default_allowed_origins()
     _reject_global_wildcards(allowed_hosts, "MCP_ALLOWED_HOSTS")
     _reject_global_wildcards(allowed_origins, "MCP_ALLOWED_ORIGINS")
-    return TransportSecuritySettings(
-        enable_dns_rebinding_protection=True,
-        allowed_hosts=allowed_hosts,
-        allowed_origins=allowed_origins,
-    )
+    return allowed_hosts, allowed_origins
 
 
 def _get_default_allowed_hosts() -> list[str]:
@@ -204,9 +184,7 @@ def _get_default_allowed_hosts() -> list[str]:
         f"{Env.API_HOST}:{Env.API_PORT}",
     }
     if Env.ENVIRONMENT == "development":
-        hosts.update(
-            {"localhost", "localhost:*", "127.0.0.1", "127.0.0.1:*", "[::1]", "[::1]:*", "testserver"}
-        )
+        hosts.update({"localhost", "localhost:*", "127.0.0.1", "127.0.0.1:*", "[::1]", "[::1]:*", "testserver"})
     return sorted(host for host in hosts if host)
 
 

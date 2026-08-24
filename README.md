@@ -73,10 +73,10 @@ Langboard's mission is to enable enterprises to harness AI efficiency without sa
 
 ## 🧩 MCP Integration
 
-- Embedded **FastMCP** server is mounted at `/mcp` (streamable HTTP transport).
+- Embedded standalone **FastMCP 4** server is mounted at `/mcp/stream` and serves both legacy MCP and `2026-07-28` clients.
 - MCP tool groups support admin/global and user-scoped governance.
 - Requests must include `X-MCP-Tool-Group-UID` for tool-group validation.
-- Middleware enforces authentication, ownership checks, and MCP role permissions.
+- Native FastMCP middleware filters both tool discovery and execution; Langboard retains only ownership and role policy.
 - Built-in MCP tools cover project, card, bot, activity, and metadata operations.
 
 ---
