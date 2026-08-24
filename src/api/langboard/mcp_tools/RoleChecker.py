@@ -1,7 +1,6 @@
 from collections.abc import Callable
 from typing import Any
-from langboard_shared.ai import BotScopeHelper
-from langboard_shared.domain.models import Bot, ProjectBotScope, ProjectRole, User
+from langboard_shared.domain.models import Bot, ProjectRole, User
 from langboard_shared.domain.services.DomainService import DomainService
 from langboard_shared.security import RoleSecurity
 from ..mcp_integration.RoleFilter import McpRoleFilter
@@ -45,10 +44,4 @@ class McpRoleChecker:
         project_uid = arguments.get("project_uid")
         if not isinstance(project_uid, str) or not project_uid:
             return False
-
-        project = self.service.project.get_by_id_like(project_uid)
-        if not project:
-            return False
-
-        scopes = BotScopeHelper.get_list(ProjectBotScope, bot_id=bot.id, project_id=project.id)
-        return bool(scopes)
+        return self.service.bot.has_project_access(bot, project_uid)

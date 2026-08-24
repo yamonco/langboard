@@ -13,7 +13,7 @@ from ....core.utils.String import generate_random_string
 from ....helpers import BotHelper, InfraHelper
 from ....publishers import BotPublisher, ProjectBotPublisher
 from ....tasks.bots import BotDefaultTask
-from ...models import Bot, BotDefaultScopeBranch, BotSchedule, Card, Project, ProjectColumn
+from ...models import Bot, BotDefaultScopeBranch, BotSchedule, Card, Project, ProjectBotScope, ProjectColumn
 from ...models.BaseBotModel import BotPlatform, BotPlatformRunningType
 from ...models.bases import BaseBotScheduleModel, BaseBotScopeModel, BotTriggerCondition
 from ...models.BotSchedule import BotScheduleRunningType
@@ -54,6 +54,17 @@ class BotService(BaseDomainService):
             api_bot = bot.api_response(is_setting=is_setting)
             api_bots.append(api_bot)
         return api_bots
+
+    def has_project_access(self, bot: TBotParam | None, project: str | None) -> bool:
+        """Return whether a Bot already owns a Hook on the project."""
+
+        if not project:
+            return False
+        resolved_bot = InfraHelper.get_by_id_like(Bot, bot)
+        resolved_project = InfraHelper.get_by_id_like(Project, project)
+        if not resolved_bot or not resolved_project:
+            return False
+        return bool(BotScopeHelper.get_list(ProjectBotScope, bot_id=resolved_bot.id, project_id=resolved_project.id))
 
     def create(
         self,
@@ -99,6 +110,7 @@ class BotService(BaseDomainService):
         events: list[BotTriggerCondition],
         *,
         active: bool = True,
+        project: str | None = None,
     ) -> dict[str, Any] | None:
         """Converge one bot event subscription on one native target."""
 
@@ -108,6 +120,7 @@ class BotService(BaseDomainService):
             return None
 
         scope_model_class, target = target_result
+        self._require_hook_project(target, project)
         if len(events) != len(set(events)):
             raise ValueError("Bot Hook events must be unique")
         invalid_events = set(events) - scope_model_class.get_available_conditions()
@@ -149,6 +162,23 @@ class BotService(BaseDomainService):
 
         return self._hook_response(resolved_bot, scope, target_table, target.get_uid())
 
+    def get_hook(
+        self,
+        bot: TBotParam | None,
+        target_table: str,
+        hook_uid: str,
+        *,
+        project: str | None = None,
+    ) -> dict[str, Any] | None:
+        """Return one Bot-owned Hook within an optional project boundary."""
+
+        resolved = self._resolve_hook(bot, target_table, hook_uid)
+        if not resolved:
+            return None
+        resolved_bot, scope, target = resolved
+        self._require_hook_project(target, project)
+        return self._hook_response(resolved_bot, scope, target_table, target.get_uid())
+
     def update_hook(
         self,
         bot: TBotParam | None,
@@ -157,6 +187,7 @@ class BotService(BaseDomainService):
         *,
         events: list[BotTriggerCondition] | None = None,
         active: bool | None = None,
+        project: str | None = None,
     ) -> dict[str, Any] | None:
         """Update one existing Bot Hook without bypassing its ownership boundary."""
 
@@ -164,12 +195,14 @@ class BotService(BaseDomainService):
         if not resolved:
             return None
         resolved_bot, scope, target = resolved
+        self._require_hook_project(target, project)
         return self.upsert_hook(
             resolved_bot,
             target_table,
             target.get_uid(),
             list(scope.conditions) if events is None else events,
             active=not scope.is_frozen if active is None else active,
+            project=project,
         )
 
     def delete_hook(
@@ -177,6 +210,8 @@ class BotService(BaseDomainService):
         bot: TBotParam | None,
         target_table: str,
         hook_uid: str,
+        *,
+        project: str | None = None,
     ) -> dict[str, Any] | None:
         """Delete one owned Bot Hook and cancel work that can no longer run."""
 
@@ -184,6 +219,7 @@ class BotService(BaseDomainService):
         if not resolved:
             return None
         resolved_bot, scope, target = resolved
+        self._require_hook_project(target, project)
         hook = self._hook_response(resolved_bot, scope, target_table, target.get_uid())
         scope_model_class = type(scope)
         BotScopeHelper.delete(scope_model_class, scope)
@@ -202,6 +238,16 @@ class BotService(BaseDomainService):
                 )
             ProjectBotPublisher.scope_deleted(project, scope)
         return hook
+
+    def _require_hook_project(self, target: Project | ProjectColumn | Card, project: str | None) -> None:
+        """Fail closed when an authorized project does not own the Hook target."""
+
+        if project is None:
+            return
+        resolved_project = InfraHelper.get_by_id_like(Project, project)
+        target_project = self._hook_project(target)
+        if not resolved_project or not target_project or resolved_project.id != target_project.id:
+            raise BotServiceError("project_mismatch", "Bot Hook target is outside the authorized project")
 
     def _resolve_hook(
         self,

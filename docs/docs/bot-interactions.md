@@ -11,7 +11,9 @@ that cannot act as a Langboard bot.
 
 ## Canonical hook API
 
-`PUT /bots/{bot_uid}/hooks` converges one subscription identified by the bot and target.
+`PUT /projects/{project_uid}/bots/{bot_uid}/hooks` converges one subscription identified by
+the bot and target. The project in the path is both the authorization boundary and the owner
+of the target; a target from another project fails closed.
 Calling it again updates the event set and active state instead of creating a duplicate.
 
 ```json
@@ -23,8 +25,15 @@ Calling it again updates the event set and active state instead of creating a du
 }
 ```
 
-The current `BotScope` tables remain the storage model. Existing scope endpoints remain
-compatible while clients migrate to the service-level Hook vocabulary.
+Read, update, and delete use
+`/projects/{project_uid}/bots/{bot_uid}/hooks/{target_table}/{hook_uid}`. The MCP tools
+`get_bot_hook`, `upsert_bot_hook`, `update_bot_hook`, and `delete_bot_hook` expose the same
+project boundary, Hook representation, and mutation receipt. An authenticated bot may only
+use its own `bot_uid`.
+
+The current `BotScope` tables remain the storage model. Existing scope endpoints and
+`PUT /bots/{bot_uid}/hooks` remain compatibility adapters while clients migrate to the
+project-scoped service vocabulary.
 
 ## Bot-authored projections
 

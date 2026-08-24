@@ -22,6 +22,18 @@ class UpsertBotHookForm(BaseFormModel):
 
 
 @form_model
+class UpdateBotHookForm(BaseFormModel):
+    """Desired changes to one existing Bot Hook."""
+
+    events: list[BotTriggerCondition] | None = Field(
+        default=None,
+        min_length=1,
+        title="Replacement events subscribed by the bot",
+    )
+    active: bool | None = None
+
+
+@form_model
 class ToggleBotTriggerConditionForm(BaseFormModel):
     target_table: str = Field(..., title=f"Target table name ({', '.join(AVAILABLE_BOT_TARGET_TABLES.keys())})")
     condition: BotTriggerCondition

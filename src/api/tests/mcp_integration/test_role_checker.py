@@ -41,16 +41,13 @@ def test_bot_requires_scope_for_exact_project(monkeypatch: pytest.MonkeyPatch) -
 
     contract = _load_role_checker(monkeypatch)
     bot = contract.Bot(9)
-    contract.BotScopeHelper.scopes = []
+    contract.bot_service.allowed = False
 
     assert contract.checker.check_permission(contract.handler, bot, {"project_uid": "project-a"}) is False
 
-    contract.BotScopeHelper.scopes = [object()]
+    contract.bot_service.allowed = True
     assert contract.checker.check_permission(contract.handler, bot, {"project_uid": "project-a"}) is True
-    assert contract.BotScopeHelper.calls[-1] == (
-        contract.ProjectBotScope,
-        {"bot_id": bot.id, "project_id": contract.project.id},
-    )
+    assert contract.bot_service.calls[-1] == (bot, "project-a")
 
 
 @pytest.mark.parametrize("project_uid", [None, "", 123])
@@ -60,8 +57,7 @@ def test_bot_missing_string_project_uid_fails_closed(monkeypatch: pytest.MonkeyP
     contract = _load_role_checker(monkeypatch)
 
     assert contract.checker.check_permission(contract.handler, contract.Bot(9), {"project_uid": project_uid}) is False
-    assert contract.project_service.calls == []
-    assert contract.BotScopeHelper.calls == []
+    assert contract.bot_service.calls == []
 
 
 def _load_role_checker(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
@@ -77,33 +73,20 @@ def _load_role_checker(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
     class ProjectRole:
         pass
 
-    class ProjectBotScope:
-        pass
-
-    project = SimpleNamespace(id=22)
-
-    class ProjectService:
+    class BotService:
         def __init__(self) -> None:
-            self.calls: list[str] = []
+            self.calls: list[tuple[Bot, str]] = []
+            self.allowed = False
 
-        def get_by_id_like(self, project_uid: str) -> Any:
-            self.calls.append(project_uid)
-            return project if project_uid == "project-a" else None
+        def has_project_access(self, bot: Bot, project_uid: str) -> bool:
+            self.calls.append((bot, project_uid))
+            return self.allowed
 
-    project_service = ProjectService()
+    bot_service = BotService()
 
     class DomainService:
         def __init__(self) -> None:
-            self.project = project_service
-
-    class BotScopeHelper:
-        calls: ClassVar[list[tuple[type, dict[str, Any]]]] = []
-        scopes: ClassVar[list[Any]] = []
-
-        @classmethod
-        def get_list(cls, model: type, **where_clauses: Any) -> list[Any]:
-            cls.calls.append((model, where_clauses))
-            return cls.scopes
+            self.bot = bot_service
 
     class RoleSecurity:
         calls: ClassVar[list[tuple[Any, ...]]] = []
@@ -141,13 +124,11 @@ def _load_role_checker(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
             return cls.metadata
 
     _set_package(monkeypatch, "langboard_shared")
-    _set_module(monkeypatch, "langboard_shared.ai", BotScopeHelper=BotScopeHelper)
     _set_package(monkeypatch, "langboard_shared.domain")
     _set_module(
         monkeypatch,
         "langboard_shared.domain.models",
         Bot=Bot,
-        ProjectBotScope=ProjectBotScope,
         ProjectRole=ProjectRole,
         User=User,
     )
@@ -167,17 +148,14 @@ def _load_role_checker(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
 
     return SimpleNamespace(
         Bot=Bot,
-        BotScopeHelper=BotScopeHelper,
         McpRoleFilter=McpRoleFilter,
-        ProjectBotScope=ProjectBotScope,
         ProjectRole=ProjectRole,
         RoleSecurity=RoleSecurity,
         User=User,
         checker=module.McpRoleChecker(DomainService()),
+        bot_service=bot_service,
         finder=finder,
         handler=handler,
-        project=project,
-        project_service=project_service,
     )
 
 
