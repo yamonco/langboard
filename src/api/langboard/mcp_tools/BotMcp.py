@@ -3,8 +3,11 @@ from langboard_shared.ai import BotScheduleHelper
 from langboard_shared.core.types import SafeDateTime
 from langboard_shared.domain.models import (
     Bot,
+    Card,
     CardBotSchedule,
+    Project,
     ProjectBotSchedule,
+    ProjectColumn,
     ProjectColumnBotSchedule,
     ProjectRole,
     User,
@@ -20,7 +23,10 @@ from ..mcp_integration import McpRoleFilter, McpTool
 
 @McpTool.add(description="Get bot schedules for a project.")
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Update], RoleFinder.project)
-def get_bot_schedules_by_project(bot_uid: str, project_uid: str, service: DomainService) -> dict:
+def get_bot_schedules_by_project(
+    bot_uid: str, project_uid: str, user_or_bot: User | Bot, service: DomainService
+) -> dict:
+    _ensure_bot_author(user_or_bot, bot_uid)
     bot = service.bot.get_by_id_like(bot_uid)
     if not bot:
         raise ValueError("Bot not found")
@@ -36,7 +42,10 @@ def get_bot_schedules_by_project(bot_uid: str, project_uid: str, service: Domain
 
 @McpTool.add(description="Get bot schedules for a card.")
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Update], RoleFinder.project)
-def get_bot_schedules_by_card(bot_uid: str, card_uid: str, service: DomainService) -> dict:
+def get_bot_schedules_by_card(
+    project_uid: str, bot_uid: str, card_uid: str, user_or_bot: User | Bot, service: DomainService
+) -> dict:
+    _ensure_bot_author(user_or_bot, bot_uid)
     bot = service.bot.get_by_id_like(bot_uid)
     if not bot:
         raise ValueError("Bot not found")
@@ -44,6 +53,7 @@ def get_bot_schedules_by_card(bot_uid: str, card_uid: str, service: DomainServic
     card = service.card.get_by_id_like(card_uid)
     if not card:
         raise ValueError("Card not found")
+    _require_target_project(service, card, project_uid)
 
     schedules = BotScheduleHelper.get_all_by_scope(CardBotSchedule, bot, card, as_api=True)
 
@@ -52,7 +62,10 @@ def get_bot_schedules_by_card(bot_uid: str, card_uid: str, service: DomainServic
 
 @McpTool.add(description="Get bot schedules for a column.")
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Update], RoleFinder.project)
-def get_bot_schedules_by_column(bot_uid: str, column_uid: str, service: DomainService) -> dict:
+def get_bot_schedules_by_column(
+    project_uid: str, bot_uid: str, column_uid: str, user_or_bot: User | Bot, service: DomainService
+) -> dict:
+    _ensure_bot_author(user_or_bot, bot_uid)
     bot = service.bot.get_by_id_like(bot_uid)
     if not bot:
         raise ValueError("Bot not found")
@@ -60,6 +73,7 @@ def get_bot_schedules_by_column(bot_uid: str, column_uid: str, service: DomainSe
     column = service.project_column.get_by_id_like(column_uid)
     if not column:
         raise ValueError("Column not found")
+    _require_target_project(service, column, project_uid)
 
     schedules = BotScheduleHelper.get_all_by_scope(ProjectColumnBotSchedule, bot, column, as_api=True)
 
@@ -69,6 +83,7 @@ def get_bot_schedules_by_column(bot_uid: str, column_uid: str, service: DomainSe
 @McpTool.add(description="Schedule a bot cron schedule.")
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Update], RoleFinder.project)
 def schedule_bot_cron(
+    project_uid: str,
     bot_uid: str,
     target_table: str,
     target_uid: str,
@@ -77,8 +92,10 @@ def schedule_bot_cron(
     start_at: str | SafeDateTime | None,
     end_at: str | SafeDateTime | None,
     tz: str | float | None,
+    user_or_bot: User | Bot,
     service: DomainService,
 ) -> dict:
+    _ensure_bot_author(user_or_bot, bot_uid)
     if isinstance(start_at, str):
         start_at = SafeDateTime.fromisoformat(start_at)
     if isinstance(end_at, str):
@@ -94,6 +111,7 @@ def schedule_bot_cron(
             start_at,
             end_at,
             tz or "UTC",
+            project=project_uid,
         )
     except BotServiceError as error:
         _raise_bot_service_error(error)
@@ -102,6 +120,7 @@ def schedule_bot_cron(
 @McpTool.add(description="Reschedule a bot cron schedule.")
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Update], RoleFinder.project)
 def reschedule_bot_cron(
+    project_uid: str,
     bot_uid: str,
     schedule_uid: str,
     target_table: str,
@@ -110,8 +129,10 @@ def reschedule_bot_cron(
     start_at: str | SafeDateTime | None,
     end_at: str | SafeDateTime | None,
     tz: str | float,
+    user_or_bot: User | Bot,
     service: DomainService,
 ) -> dict:
+    _ensure_bot_author(user_or_bot, bot_uid)
     if isinstance(start_at, str):
         start_at = SafeDateTime.fromisoformat(start_at)
     if isinstance(end_at, str):
@@ -127,6 +148,7 @@ def reschedule_bot_cron(
             start_at,
             end_at,
             tz or "UTC",
+            project=project_uid,
         )
     except BotServiceError as error:
         _raise_bot_service_error(error)
@@ -134,9 +156,17 @@ def reschedule_bot_cron(
 
 @McpTool.add(description="Unschedule a bot cron schedule.")
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Update], RoleFinder.project)
-def unschedule_bot_cron(bot_uid: str, schedule_uid: str, target_table: str, service: DomainService) -> dict:
+def unschedule_bot_cron(
+    project_uid: str,
+    bot_uid: str,
+    schedule_uid: str,
+    target_table: str,
+    user_or_bot: User | Bot,
+    service: DomainService,
+) -> dict:
+    _ensure_bot_author(user_or_bot, bot_uid)
     try:
-        return service.bot.delete_schedule(bot_uid, target_table, schedule_uid)
+        return service.bot.delete_schedule(bot_uid, target_table, schedule_uid, project=project_uid)
     except BotServiceError as error:
         _raise_bot_service_error(error)
 
@@ -260,6 +290,15 @@ def _ensure_bot_author(actor: User | Bot, bot_uid: str) -> None:
         raise ValueError("bot_actor_mismatch: authenticated Bot cannot act as another Bot")
 
 
+def _require_target_project(service: DomainService, target: Project | ProjectColumn | Card, project_uid: str) -> None:
+    """Expose the canonical Bot target boundary through MCP."""
+
+    try:
+        service.bot.require_target_project(target, project_uid)
+    except BotServiceError as error:
+        _raise_bot_service_error(error)
+
+
 @McpTool.add(description="Get bot scopes for a project.")
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Update], RoleFinder.project)
 def get_project_bot_scopes(project_uid: str, service: DomainService) -> dict:
@@ -273,10 +312,11 @@ def get_project_bot_scopes(project_uid: str, service: DomainService) -> dict:
 
 @McpTool.add(description="Get bot scopes for a card.")
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Update], RoleFinder.project)
-def get_card_bot_scopes(card_uid: str, service: DomainService) -> dict:
+def get_card_bot_scopes(project_uid: str, card_uid: str, service: DomainService) -> dict:
     card = service.card.get_by_id_like(card_uid)
     if not card:
         raise ValueError("Card not found")
+    _require_target_project(service, card, project_uid)
 
     project = service.project.get_by_id_like(card.project_id)
     scopes = service.card.get_api_bot_scope_list(project, card)
@@ -285,10 +325,11 @@ def get_card_bot_scopes(card_uid: str, service: DomainService) -> dict:
 
 @McpTool.add(description="Get bot scopes for a column.")
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Update], RoleFinder.project)
-def get_column_bot_scopes(column_uid: str, service: DomainService) -> dict:
+def get_column_bot_scopes(project_uid: str, column_uid: str, service: DomainService) -> dict:
     column = service.project_column.get_by_id_like(column_uid)
     if not column:
         raise ValueError("Column not found")
+    _require_target_project(service, column, project_uid)
 
     scopes = service.project_column.get_api_bot_scopes_by_project(column.project_id)
 
