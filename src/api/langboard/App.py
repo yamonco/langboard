@@ -112,5 +112,5 @@ class App:
         except Exception:
             raise
 
-        async with self.mcp_app.session_manager.run():
+        async with self.mcp_http_app.router.lifespan_context(self.mcp_http_app):
             yield

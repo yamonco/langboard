@@ -1,7 +1,8 @@
 import asyncio
+from email.message import EmailMessage
+from email.utils import formataddr
 from json import loads as json_loads
-from fastapi_mail import ConnectionConfig, FastMail, MessageSchema, MessageType
-from pydantic import SecretStr
+import aiosmtplib
 from ....core.domain import BaseDomainService
 from ....core.resources import get_resource_path
 from ....core.resources.locales.EmailTemplateNames import TEmailTemplateName
@@ -25,9 +26,6 @@ class EmailService(BaseDomainService):
     ) -> bool:
         """Render and send one localized template through the configured SMTP transport."""
 
-        if not self.__create_config():
-            return False
-
         subject, template = self.__get_template(
             lang,
             template_name,
@@ -38,44 +36,33 @@ class EmailService(BaseDomainService):
             },
         )
 
-        message = MessageSchema(
-            subject=subject,
-            recipients=[to],
-            body=template,
-            subtype=MessageType.html,
-            reply_to=[reply_to] if reply_to else [],
-        )
+        message = EmailMessage()
+        message["From"] = formataddr((Env.MAIL_FROM_NAME, Env.MAIL_FROM))
+        message["To"] = to
+        message["Subject"] = subject
+        if reply_to:
+            message["Reply-To"] = reply_to
+        message.set_content(template, subtype="html")
 
-        fm = FastMail(self.__config)
         try:
-            asyncio.run(fm.send_message(message))
+            asyncio.run(
+                aiosmtplib.send(
+                    message,
+                    hostname=Env.MAIL_SERVER,
+                    port=int(Env.MAIL_PORT),
+                    username=Env.MAIL_USERNAME or None,
+                    password=Env.MAIL_PASSWORD or None,
+                    start_tls=Env.MAIL_STARTTLS,
+                    use_tls=Env.MAIL_SSL_TLS,
+                    timeout=5,
+                )
+            )
         except Exception:
             if Env.ENVIRONMENT == "development":
                 return True
             return False
 
         return True
-
-    def __create_config(self) -> bool:
-        if hasattr(self, "__config"):
-            return True
-
-        try:
-            self.__config = ConnectionConfig(
-                MAIL_FROM=Env.MAIL_FROM,
-                MAIL_FROM_NAME=Env.MAIL_FROM_NAME,
-                MAIL_USERNAME=Env.MAIL_USERNAME,
-                MAIL_PASSWORD=SecretStr(Env.MAIL_PASSWORD),
-                MAIL_PORT=int(Env.MAIL_PORT),
-                MAIL_SERVER=Env.MAIL_SERVER,
-                MAIL_STARTTLS=Env.MAIL_STARTTLS,
-                MAIL_SSL_TLS=Env.MAIL_SSL_TLS,
-                USE_CREDENTIALS=bool(Env.MAIL_USERNAME) and bool(Env.MAIL_PASSWORD),
-                TIMEOUT=5,
-            )
-            return True
-        except Exception:
-            return False
 
     def __get_template(self, lang: str, template_name: TEmailTemplateName, formats: dict[str, str]) -> tuple[str, str]:
         locale_path = get_resource_path("locales", lang)

@@ -189,8 +189,8 @@ def upsert_bot_hook(
             bot_uid,
             target_table,
             target_uid,
-            _normalize_hook_events(events),
-            active=_normalize_hook_active(active),
+            events,
+            active=active,
             project=project_uid,
         )
     except BotServiceError as error:
@@ -220,8 +220,8 @@ def update_bot_hook(
             bot_uid,
             target_table,
             hook_uid,
-            events=_normalize_hook_events(events),
-            active=_normalize_hook_active(active),
+            events=events,
+            active=active,
             project=project_uid,
         )
     except BotServiceError as error:
@@ -258,27 +258,6 @@ def _ensure_bot_author(actor: User | Bot, bot_uid: str) -> None:
 
     if isinstance(actor, Bot) and actor.get_uid() != bot_uid:
         raise ValueError("bot_actor_mismatch: authenticated Bot cannot act as another Bot")
-
-
-def _normalize_hook_events(
-    events: list[BotTriggerCondition] | list[str] | None,
-) -> list[BotTriggerCondition] | None:
-    """Validate raw REST-MCP executor values before they reach Hook storage."""
-
-    if events is None:
-        return None
-    try:
-        return [event if isinstance(event, BotTriggerCondition) else BotTriggerCondition(event) for event in events]
-    except ValueError as error:
-        raise ValueError("events_invalid: unsupported Bot Hook event") from error
-
-
-def _normalize_hook_active(active: bool | None) -> bool | None:
-    """Reject truthy non-boolean JSON values at the REST MCP boundary."""
-
-    if active is not None and not isinstance(active, bool):
-        raise ValueError("active_invalid: Bot Hook active must be a boolean")
-    return active
 
 
 @McpTool.add(description="Get bot scopes for a project.")
