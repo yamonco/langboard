@@ -32,27 +32,26 @@ from ..forms import (
 def create_bot_scope_in_project(
     bot_uid: str, form: CreateBotScopeForm, service: DomainService = DomainService.scope()
 ) -> JsonResponse:
+    """Compatibility adapter for the canonical idempotent Bot Hook service."""
+
     result = BotHelper.get_target_model_by_param("scope", form.target_table, form.target_uid)
     if not result:
         raise ApiException.BadRequest_400(ApiErrorCode.VA3003)
-    scope_model_class, target_scope = result
-
-    bot = service.bot.get_by_id_like(bot_uid)
-    if not bot:
+    scope_model_class, _ = result
+    try:
+        hook = service.bot.upsert_hook(
+            bot_uid,
+            form.target_table,
+            form.target_uid,
+            form.conditions,
+        )
+    except ValueError as error:
+        raise ApiException.BadRequest_400(ApiErrorCode.VA3003) from error
+    if not hook:
         raise ApiException.NotFound_404(ApiErrorCode.NF2020)
-
-    bot_scope = BotScopeHelper.create(scope_model_class, bot, target_scope, form.conditions)
+    bot_scope = BotScopeHelper.get_by_id_like(scope_model_class, hook["uid"])
     if not bot_scope:
         raise ApiException.NotFound_404(ApiErrorCode.NF2020)
-
-    if isinstance(target_scope, tuple(AVAILABLE_BOT_TARGET_TABLES.values())):
-        if isinstance(target_scope, Project):
-            project = target_scope
-        else:
-            project = service.project.get_by_id_like(target_scope.project_id)
-
-        if project:
-            ProjectBotPublisher.scope_created(project, bot_scope)
 
     scope_table = BotHelper.get_target_table_by_bot_model("scope", bot_scope.__class__)
     return JsonResponse(content={"scope_table": scope_table, "bot_scope": bot_scope.api_response()})
