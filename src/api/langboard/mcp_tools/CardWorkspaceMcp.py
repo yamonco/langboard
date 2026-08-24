@@ -1,10 +1,11 @@
 """Safe native MCP tools for room-bound Langboard project workspaces."""
 
-from typing import Any
+from typing import Annotated, Any
 from langboard_shared.domain.models import Bot, ProjectRole, User
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.domain.services import DomainService
 from langboard_shared.security import RoleFinder
+from pydantic import BeforeValidator
 from ..card_workspace.application import (
     CardBundleResponse,
     ProjectCardListResponse,
@@ -42,6 +43,15 @@ from ..card_workspace.domain import (
 )
 from ..card_workspace.infrastructure import NativeCardWorkspaceAdapter
 from ..mcp_integration import McpRoleFilter, McpTool
+
+
+def _as_card_bundle_include(value: str | CardBundleInclude) -> CardBundleInclude:
+    """Parse one JSON enum value without weakening the domain type."""
+
+    return CardBundleInclude(value)
+
+
+JsonCardBundleInclude = Annotated[CardBundleInclude, BeforeValidator(_as_card_bundle_include)]
 
 
 def _adapter(actor: User | Bot, service: DomainService) -> NativeCardWorkspaceAdapter:
@@ -102,7 +112,7 @@ def get_card_bundle(
     comments_cursor: str | None = None,
     section_limit: int = 10,
     section_cursor: str | None = None,
-    include: list[CardBundleInclude] | None = None,
+    include: list[JsonCardBundleInclude] | None = None,
 ) -> CardBundleResponse:
     """Read an agent-friendly card bundle with bounded continuation."""
 
