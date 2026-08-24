@@ -15,7 +15,11 @@ function BotScheduleListItemAddButton(): React.JSX.Element {
     const { bot, params, target, copiedForm, isAddMode, setIsAddMode } = useBotScheduleList();
     const [t] = useTranslation();
     const [isValidating, setIsValidating] = useState(false);
-    const { mutateAsync: scheduleBotCronMutateAsync } = useScheduleBotCron({ ...params, bot_uid: bot.uid }, { interceptToast: true });
+    const projectUID = "project_uid" in target ? target.project_uid : target.uid;
+    const { mutateAsync: scheduleBotCronMutateAsync } = useScheduleBotCron(
+        { ...params, bot_uid: bot.uid, project_uid: projectUID },
+        { interceptToast: true }
+    );
     const valuesMapRef = useRef<IBotScheduleFormMap>(copiedForm ?? {});
     const triggersMapRef = useRef<IBotScheduleTriggersMap>({});
 

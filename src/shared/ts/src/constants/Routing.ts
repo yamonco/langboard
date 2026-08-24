@@ -203,9 +203,9 @@ const API = {
             GET_ALL_BY_PROJECT: "/bot/{bot_uid}/project/{project_uid}/schedules",
             GET_ALL_BY_CARD: "/bot/{bot_uid}/card/{card_uid}/schedules",
             GET_ALL_BY_COLUMN: "/bot/{bot_uid}/column/{project_column_uid}/schedules",
-            SCHEDULE: "/bot/{bot_uid}/schedule",
-            RESCHEDULE: "/bot/{bot_uid}/reschedule/{schedule_uid}",
-            UNSCHEDULE: "/bot/{bot_uid}/unschedule/{schedule_uid}",
+            PROJECT_SCHEDULE: "/projects/{project_uid}/bots/{bot_uid}/schedules",
+            PROJECT_RESCHEDULE: "/projects/{project_uid}/bots/{bot_uid}/schedules/{schedule_uid}",
+            PROJECT_UNSCHEDULE: "/projects/{project_uid}/bots/{bot_uid}/schedules/{schedule_uid}",
         },
         LOG: {
             GET_ALL_BY_PROJECT: "/bot/{bot_uid}/project/{project_uid}/logs",
