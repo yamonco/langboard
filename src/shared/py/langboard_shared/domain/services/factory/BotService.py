@@ -1,9 +1,10 @@
 import re
 from typing import Any, Mapping, Sequence
-from ....ai import BotScopeHelper
+from ....ai import BotScheduleHelper, BotScopeHelper
 from ....core.domain import BaseDomainService
 from ....core.domain.BaseDomainService import TMutableValidatorMap
 from ....core.storage import FileModel
+from ....core.types import SafeDateTime
 from ....core.types.BotRelatedTypes import AVAILABLE_BOT_TARGET_TABLES
 from ....core.types.ParamTypes import TBotParam
 from ....core.utils.Converter import convert_python_data
@@ -15,6 +16,7 @@ from ....tasks.bots import BotDefaultTask
 from ...models import Bot, BotDefaultScopeBranch, BotSchedule, Card, Project, ProjectColumn
 from ...models.BaseBotModel import BotPlatform, BotPlatformRunningType
 from ...models.bases import BaseBotScheduleModel, BaseBotScopeModel, BotTriggerCondition
+from ...models.BotSchedule import BotScheduleRunningType
 from ...models.GraphApprovalRequest import GraphApprovalOriginType
 from .GraphApprovalRequestService import GraphApprovalRequestService
 
@@ -25,6 +27,14 @@ ACTION_SUGGESTION_RISK_BY_PERMISSION = {
     "edit": "medium",
     "delete": "high",
 }
+
+
+class BotServiceError(ValueError):
+    """Stable domain error shared by REST and MCP Bot adapters."""
+
+    def __init__(self, code: str, message: str):
+        super().__init__(message)
+        self.code = code
 
 
 class BotService(BaseDomainService):
@@ -241,6 +251,196 @@ class BotService(BaseDomainService):
             return None
         _, target = target_result
         return schedule_model_class, schedule_model, target
+
+    def create_schedule(
+        self,
+        bot: TBotParam | None,
+        target_table: str,
+        target_uid: str,
+        interval: str,
+        running_type: BotScheduleRunningType | None = None,
+        start_at: SafeDateTime | None = None,
+        end_at: SafeDateTime | None = None,
+        timezone: str | float = "UTC",
+    ) -> dict[str, Any]:
+        """Create a Bot Schedule and return its canonical operation receipt."""
+
+        normalized_interval = BotScheduleHelper.utils.convert_valid_interval_str(interval)
+        if not normalized_interval:
+            raise BotServiceError("invalid_interval", "Invalid Bot Schedule interval")
+        normalized_running_type = running_type or BotScheduleRunningType.Infinite
+        if normalized_running_type == BotScheduleRunningType.Duration and not start_at:
+            start_at = SafeDateTime.now()
+        if not BotScheduleHelper.get_default_status_with_dates(
+            running_type=normalized_running_type,
+            start_at=start_at,
+            end_at=end_at,
+        ):
+            raise BotServiceError("invalid_window", "Invalid Bot Schedule time window")
+
+        resolved_bot = InfraHelper.get_by_id_like(Bot, bot)
+        if not resolved_bot:
+            raise BotServiceError("bot_not_found", "Bot not found")
+        if not BotHelper.get_bot_model_class("schedule", target_table):
+            raise BotServiceError("target_type_invalid", "Bot Schedule target type is invalid")
+        target_result = BotHelper.get_target_model_by_param("schedule", target_table, target_uid)
+        if not target_result:
+            raise BotServiceError("target_not_found", "Bot Schedule target not found")
+        schedule_model_class, target = target_result
+        scheduled = BotScheduleHelper.schedule(
+            schedule_model_class,
+            resolved_bot,
+            normalized_interval,
+            target,
+            normalized_running_type,
+            start_at,
+            end_at,
+            timezone,
+        )
+        if not scheduled:
+            raise BotServiceError("schedule_failed", "Bot Schedule could not be created")
+
+        project = self._hook_project(target)
+        if project:
+            ProjectBotPublisher.scheduled(project, scheduled)
+        schedule, schedule_model = scheduled
+        return self._schedule_receipt(
+            "created",
+            resolved_bot,
+            schedule,
+            schedule_model,
+            target_table,
+            target.get_uid(),
+        )
+
+    def update_schedule(
+        self,
+        bot: TBotParam | None,
+        target_table: str,
+        schedule_uid: str,
+        interval: str | None = None,
+        running_type: BotScheduleRunningType | None = None,
+        start_at: SafeDateTime | None = None,
+        end_at: SafeDateTime | None = None,
+        timezone: str | float = "UTC",
+    ) -> dict[str, Any]:
+        """Update an owned Bot Schedule and publish the same result for every adapter."""
+
+        normalized_interval = interval
+        if interval:
+            normalized_interval = BotScheduleHelper.utils.convert_valid_interval_str(interval)
+            if not normalized_interval:
+                raise BotServiceError("invalid_interval", "Invalid Bot Schedule interval")
+        if not BotScheduleHelper.get_default_status_with_dates(
+            running_type=running_type,
+            start_at=start_at,
+            end_at=end_at,
+        ):
+            raise BotServiceError("invalid_window", "Invalid Bot Schedule time window")
+
+        if not BotHelper.get_bot_model_class("schedule", target_table):
+            raise BotServiceError("target_type_invalid", "Bot Schedule target type is invalid")
+        owned = self.get_owned_schedule(bot, target_table, schedule_uid)
+        if not owned:
+            raise BotServiceError("schedule_not_found", "Bot Schedule not found or not owned by Bot")
+        schedule_model_class, schedule_model, target = owned
+        updated = BotScheduleHelper.reschedule(
+            schedule_model_class,
+            schedule_model,
+            normalized_interval,
+            running_type,
+            start_at,
+            end_at,
+            timezone,
+        )
+        if not updated:
+            raise BotServiceError("schedule_failed", "Bot Schedule could not be updated")
+        schedule, updated_schedule_model, changes = updated
+
+        project = self._hook_project(target)
+        if project:
+            ProjectBotPublisher.rescheduled(project, updated_schedule_model, changes)
+        resolved_bot = InfraHelper.get_by_id_like(Bot, bot)
+        if not resolved_bot:
+            raise BotServiceError("bot_not_found", "Bot not found")
+        return self._schedule_receipt(
+            "updated",
+            resolved_bot,
+            schedule,
+            updated_schedule_model,
+            target_table,
+            target.get_uid(),
+            changes=changes,
+        )
+
+    def delete_schedule(
+        self,
+        bot: TBotParam | None,
+        target_table: str,
+        schedule_uid: str,
+    ) -> dict[str, Any]:
+        """Delete an owned Bot Schedule and cancel its pending approval work."""
+
+        if not BotHelper.get_bot_model_class("schedule", target_table):
+            raise BotServiceError("target_type_invalid", "Bot Schedule target type is invalid")
+        owned = self.get_owned_schedule(bot, target_table, schedule_uid)
+        if not owned:
+            raise BotServiceError("schedule_not_found", "Bot Schedule not found or not owned by Bot")
+        schedule_model_class, schedule_model, target = owned
+        resolved_bot = InfraHelper.get_by_id_like(Bot, bot)
+        schedule = InfraHelper.get_by_id_like(BotSchedule, schedule_model.bot_schedule_id)
+        if not resolved_bot or not schedule:
+            raise BotServiceError("schedule_not_found", "Bot Schedule not found or not owned by Bot")
+        receipt = self._schedule_receipt(
+            "deleted",
+            resolved_bot,
+            schedule,
+            schedule_model,
+            target_table,
+            target.get_uid(),
+        )
+        deleted = BotScheduleHelper.unschedule(schedule_model_class, schedule_model)
+        if not deleted:
+            raise BotServiceError("schedule_failed", "Bot Schedule could not be deleted")
+        _, deleted_schedule_model = deleted
+
+        project = self._hook_project(target)
+        if project:
+            self._get_service(GraphApprovalRequestService).cancel_pending_by_scope(
+                project,
+                target_table,
+                target.get_uid(),
+                origin_type=GraphApprovalOriginType.Schedule,
+                bot=resolved_bot,
+                reason="bot schedule deleted",
+            )
+            ProjectBotPublisher.unscheduled(project, deleted_schedule_model)
+        return receipt
+
+    @staticmethod
+    def _schedule_receipt(
+        operation: str,
+        bot: Bot,
+        schedule: BotSchedule,
+        schedule_model: BaseBotScheduleModel,
+        target_table: str,
+        target_uid: str,
+        *,
+        changes: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Return one canonical Schedule receipt for REST, MCP, and audit consumers."""
+
+        receipt: dict[str, Any] = {
+            "operation": operation,
+            "schedule": {
+                **schedule.api_response(),
+                **schedule_model.api_response(),
+                "bot_uid": bot.get_uid(),
+                "target": {"type": target_table, "uid": target_uid},
+            },
+            "changes": convert_python_data(changes or {}, recursive=True),
+        }
+        return receipt
 
     def _hook_project(self, target: Project | ProjectColumn | Card) -> Project | None:
         """Resolve the project that owns a hook target."""
