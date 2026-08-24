@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from functools import wraps
 from inspect import Parameter, iscoroutinefunction, signature
 from types import UnionType
 from typing import Any, TypeGuard, Union, get_args, get_origin
@@ -66,6 +67,7 @@ class McpServer:
         filtered_params = [param for name, param in sig.parameters.items() if name not in exclude]
         filtered_sig = sig.replace(parameters=filtered_params)
 
+        @wraps(handler)
         async def wrapper(**kwargs):
             auth_data = mcp_auth_context.get()
             auth_value: User | Bot | None = auth_data.get("user_or_bot") if auth_data else None
