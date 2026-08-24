@@ -83,8 +83,9 @@ function BotScheduleListItemEdit({
     const { bot, params, target } = useBotScheduleList();
     const [t] = useTranslation();
     const [isValidating, setIsValidating] = useState(false);
+    const projectUID = "project_uid" in target ? target.project_uid : target.uid;
     const { mutateAsync: rescheduleBotCronMutateAsync } = useRescheduleBotCron(
-        { ...params, bot_uid: bot.uid, schedule_uid: schedule.uid },
+        { ...params, bot_uid: bot.uid, project_uid: projectUID, schedule_uid: schedule.uid },
         { interceptToast: true }
     );
     const runningType = schedule.useField("running_type");
@@ -101,7 +102,6 @@ function BotScheduleListItemEdit({
         }),
         [runningType, intervalStr, startAt, endAt]
     );
-    const projectUID = "project_uid" in target ? target.project_uid : target.uid;
     const valuesMapRef = useRef<IBotScheduleFormMap>(originalValuesMap);
     const triggersMapRef = useRef<IBotScheduleTriggersMap>({});
     const [isOpened, setIsOpened] = useState(false);

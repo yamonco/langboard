@@ -4,3 +4,7 @@ export type TBotScheduleRelatedParams = {
     target_table: TBotRelatedTargetTable;
     bot_uid: string;
 };
+
+export type TBotScheduleMutationParams = TBotScheduleRelatedParams & {
+    project_uid: string;
+};

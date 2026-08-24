@@ -1,4 +1,4 @@
-import { TBotScheduleRelatedParams } from "@/controllers/api/shared/botSchedules/types";
+import { TBotScheduleMutationParams } from "@/controllers/api/shared/botSchedules/types";
 import { Routing } from "@langboard/core/constants";
 import { api } from "@/core/helpers/Api";
 import { TMutationOptions, useQueryMutation } from "@/core/helpers/QueryMutation";
@@ -14,23 +14,23 @@ export interface IScheduleBotCronForm {
     end_at?: Date;
 }
 
-const useScheduleBotCron = (params: TBotScheduleRelatedParams, options?: TMutationOptions<IScheduleBotCronForm>) => {
+const useScheduleBotCron = (params: TBotScheduleMutationParams, options?: TMutationOptions<IScheduleBotCronForm>) => {
     const { mutate } = useQueryMutation();
 
-    let url;
     switch (params.target_table) {
         case "project":
         case "project_column":
         case "card":
-            url = Utils.String.format(Routing.API.BOT.SCHEDULE.SCHEDULE, {
-                bot_uid: params.bot_uid,
-            });
             break;
         default:
             throw new Error("Invalid target_table");
     }
 
     const scheduleBotCron = async (form: IScheduleBotCronForm) => {
+        const url = Utils.String.format(Routing.API.BOT.SCHEDULE.PROJECT_SCHEDULE, {
+            project_uid: params.project_uid,
+            bot_uid: params.bot_uid,
+        });
         const res = await api.post(
             url,
             {

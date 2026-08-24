@@ -36,6 +36,20 @@ BOT_SCHEDULE_RECEIPT_SCHEMA = {
 
 @AppRouter.schema(form=CreateBotCronTimeForm, permission=ApiPermission.Create)
 @AppRouter.api.post(
+    "/projects/{project_uid}/bots/{bot_uid}/schedules",
+    tags=["Bot.Schedule"],
+    description="Schedule a bot cron schedule inside one project boundary.",
+    responses=(
+        OpenApiSchema()
+        .suc(BOT_SCHEDULE_RECEIPT_SCHEMA)
+        .auth()
+        .forbidden()
+        .err(400, ApiErrorCode.VA3001, ApiErrorCode.VA3002, ApiErrorCode.VA3004, ApiErrorCode.VA3005)
+        .err(404, ApiErrorCode.NF3001)
+        .get()
+    ),
+)
+@AppRouter.api.post(
     "/bot/{bot_uid}/schedule",
     tags=["Bot.Schedule"],
     description="Schedule a bot cron schedule.",
@@ -52,8 +66,12 @@ BOT_SCHEDULE_RECEIPT_SCHEMA = {
 @RoleFilter.add(ProjectRole, [ProjectRoleAction.Update], RoleFinder.project)
 @AuthFilter.add()
 def schedule_bot_crons(
-    bot_uid: str, form: CreateBotCronTimeForm, service: DomainService = DomainService.scope()
+    bot_uid: str,
+    form: CreateBotCronTimeForm,
+    service: DomainService = DomainService.scope(),
+    project_uid: str | None = None,
 ) -> JsonResponse:
+    project_boundary = {"project": project_uid} if project_uid else {}
     try:
         receipt = service.bot.create_schedule(
             bot_uid,
@@ -64,6 +82,7 @@ def schedule_bot_crons(
             form.start_at,
             form.end_at,
             form.timezone,
+            **project_boundary,
         )
     except BotServiceError as error:
         _raise_schedule_api_error(error, creating=True)
@@ -78,6 +97,27 @@ def schedule_bot_crons(
     )
 )
 @AppRouter.schema(form=UpdateBotCronTimeForm, permission=ApiPermission.Edit)
+@AppRouter.api.put(
+    "/projects/{project_uid}/bots/{bot_uid}/schedules/{schedule_uid}",
+    tags=["Bot.Schedule"],
+    description="Reschedule a bot cron schedule inside one project boundary.",
+    responses=(
+        OpenApiSchema()
+        .suc(BOT_SCHEDULE_RECEIPT_SCHEMA)
+        .auth()
+        .forbidden()
+        .err(
+            400,
+            ApiErrorCode.VA3001,
+            ApiErrorCode.VA3002,
+            ApiErrorCode.VA3003,
+            ApiErrorCode.VA3004,
+            ApiErrorCode.VA3005,
+        )
+        .err(404, ApiErrorCode.NF2015)
+        .get()
+    ),
+)
 @AppRouter.api.put(
     "/bot/{bot_uid}/reschedule/{schedule_uid}",
     tags=["Bot.Schedule"],
@@ -97,8 +137,13 @@ def schedule_bot_crons(
 @RoleFilter.add(ProjectRole, [ProjectRoleAction.Update], RoleFinder.project)
 @AuthFilter.add()
 def reschedule_bot_crons(
-    bot_uid: str, schedule_uid: str, form: UpdateBotCronTimeForm, service: DomainService = DomainService.scope()
+    bot_uid: str,
+    schedule_uid: str,
+    form: UpdateBotCronTimeForm,
+    service: DomainService = DomainService.scope(),
+    project_uid: str | None = None,
 ) -> JsonResponse:
+    project_boundary = {"project": project_uid} if project_uid else {}
     try:
         receipt = service.bot.update_schedule(
             bot_uid,
@@ -109,6 +154,7 @@ def reschedule_bot_crons(
             form.start_at,
             form.end_at,
             form.timezone,
+            **project_boundary,
         )
     except BotServiceError as error:
         _raise_schedule_api_error(error)
@@ -123,6 +169,20 @@ def reschedule_bot_crons(
     )
 )
 @AppRouter.schema(form=DeleteBotCronTimeForm, permission=ApiPermission.Delete)
+@AppRouter.api.delete(
+    "/projects/{project_uid}/bots/{bot_uid}/schedules/{schedule_uid}",
+    tags=["Bot.Schedule"],
+    description="Unschedule a bot cron schedule inside one project boundary.",
+    responses=(
+        OpenApiSchema()
+        .suc(BOT_SCHEDULE_RECEIPT_SCHEMA)
+        .auth()
+        .forbidden()
+        .err(400, ApiErrorCode.VA3003, ApiErrorCode.VA3004)
+        .err(404, ApiErrorCode.NF2015)
+        .get()
+    ),
+)
 @AppRouter.api.delete(
     "/bot/{bot_uid}/unschedule/{schedule_uid}",
     tags=["Bot.Schedule"],
@@ -140,10 +200,15 @@ def reschedule_bot_crons(
 @RoleFilter.add(ProjectRole, [ProjectRoleAction.Update], RoleFinder.project)
 @AuthFilter.add()
 def unschedule_bot_crons(
-    bot_uid: str, schedule_uid: str, form: DeleteBotCronTimeForm, service: DomainService = DomainService.scope()
+    bot_uid: str,
+    schedule_uid: str,
+    form: DeleteBotCronTimeForm,
+    service: DomainService = DomainService.scope(),
+    project_uid: str | None = None,
 ) -> JsonResponse:
+    project_boundary = {"project": project_uid} if project_uid else {}
     try:
-        receipt = service.bot.delete_schedule(bot_uid, form.target_table, schedule_uid)
+        receipt = service.bot.delete_schedule(bot_uid, form.target_table, schedule_uid, **project_boundary)
     except BotServiceError as error:
         _raise_schedule_api_error(error)
     return JsonResponse(content={"receipt": receipt})
