@@ -94,7 +94,7 @@ def _is_projection_key(value: str) -> bool:
     return (
         bool(value)
         and len(value) <= MAX_PROJECTION_KEY_CHARS
-        and all(character.isalnum() or character in "._-" for character in value)
+        and all(character.isalnum() or character in ":._-" for character in value)
     )
 
 
