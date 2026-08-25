@@ -39,8 +39,11 @@ class App:
 
     def _init_api_middlewares(self):
         origins = [Env.PUBLIC_UI_URL, "http://localhost:6274"]
-        self.api.add_middleware(RoleMiddleware, routes=self.api.routes)
-        self.api.add_middleware(ApiAuthMiddleware, routes=self.api.routes)
+        # FastAPI 0.141+ keeps included routers behind an internal wrapper.
+        # Authorization filters are registered on the original API routes, so
+        # middleware must inspect that stable route collection directly.
+        self.api.add_middleware(RoleMiddleware, routes=AppRouter.api.routes)
+        self.api.add_middleware(ApiAuthMiddleware, routes=AppRouter.api.routes)
         self.api.add_middleware(CollaborativeEditMiddleware)
         self.api.add_middleware(GZipMiddleware, minimum_size=1024, compresslevel=5)
         self.api.add_middleware(
