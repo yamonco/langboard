@@ -44,7 +44,7 @@ class Auth:
         if where in {"all", "user", "bot"}:
 
             def get_user_or_bot(req: Request) -> User | Bot | None:  # type: ignore
-                return req.scope.get("auth")
+                return req.auth
 
         else:
             raise ValueError("Auth.scope must be called with either 'all', 'user', or 'bot'")
