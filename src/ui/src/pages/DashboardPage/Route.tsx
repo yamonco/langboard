@@ -62,5 +62,4 @@ function createModalRoutePath(type: string, modal: string, tabName?: string): st
 
 export default {
     routes,
-    loadInitially: false,
 };

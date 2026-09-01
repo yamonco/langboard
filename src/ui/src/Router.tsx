@@ -2,7 +2,7 @@ import { createBrowserRouter, Navigate, RouteObject } from "react-router";
 import { RouterProvider } from "react-router/dom";
 import SuspenseComponent from "@/components/base/SuspenseComponent";
 import { ROUTES } from "@/core/routing/constants";
-import { memo, useEffect, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import useAuthStore from "@/core/stores/AuthStore";
 import SwallowErrorBoundary from "@/components/SwallowErrorBoundary";
 import { EHttpStatus } from "@langboard/core/enums";
@@ -10,7 +10,6 @@ import { IS_OLLAMA_RUNNING } from "@/constants";
 
 interface IRouteConfig {
     routes: RouteObject[];
-    loadInitially: bool;
 }
 
 type TRouteModule = { default: IRouteConfig };
@@ -34,7 +33,6 @@ export interface IRouterProps {
 
 const Router = memo(({ children }: IRouterProps) => {
     const [routes, setRoutes] = useState<RouteObject[] | null>(null);
-    const [isAllRoutesLoaded, setIsAllRoutesLoaded] = useState(false);
 
     useEffect(() => {
         let isDisposed = false;
@@ -44,28 +42,10 @@ const Router = memo(({ children }: IRouterProps) => {
                 return;
             }
 
-            const initialConfigs = loadedConfigs.filter((routeConfig) => routeConfig.loadInitially);
-            const initialRoutes = toRoutes(initialConfigs.length ? initialConfigs : loadedConfigs);
-            const allRoutes = toRoutes(loadedConfigs);
-
-            setRoutes(initialRoutes);
+            setRoutes(toRoutes(loadedConfigs));
             useAuthStore.setState(() => ({
                 pageLoaded: true,
             }));
-
-            if (initialRoutes.length === allRoutes.length) {
-                setIsAllRoutesLoaded(true);
-                return;
-            }
-
-            setTimeout(() => {
-                if (isDisposed) {
-                    return;
-                }
-
-                setRoutes(allRoutes);
-                setIsAllRoutesLoaded(true);
-            }, 0);
         });
 
         return () => {
@@ -73,44 +53,47 @@ const Router = memo(({ children }: IRouterProps) => {
         };
     }, []);
 
-    if (!routes) {
+    const router = useMemo(() => {
+        if (!routes) {
+            return null;
+        }
+
+        const routeList: RouteObject[] = [
+            ...(!IS_OLLAMA_RUNNING
+                ? [
+                      {
+                          path: ROUTES.SETTINGS.OLLAMA,
+                          element: <Navigate to={ROUTES.SETTINGS.API_KEYS} replace />,
+                      },
+                  ]
+                : []),
+            ...routes,
+            {
+                path: "*",
+                element: <Navigate to={ROUTES.ERROR(EHttpStatus.HTTP_404_NOT_FOUND)} />,
+            },
+        ];
+
+        return createBrowserRouter([
+            {
+                path: "/",
+                element: (
+                    <SwallowErrorBoundary>
+                        <SuspenseComponent shouldWrapChildren={false} isPage>
+                            {children}
+                        </SuspenseComponent>
+                    </SwallowErrorBoundary>
+                ),
+                children: routeList,
+            },
+        ]);
+    }, [children, routes]);
+
+    if (!router) {
         return null;
     }
 
-    const routeList: RouteObject[] = [
-        ...(!IS_OLLAMA_RUNNING
-            ? [
-                  {
-                      path: ROUTES.SETTINGS.OLLAMA,
-                      element: <Navigate to={ROUTES.SETTINGS.API_KEYS} replace />,
-                  },
-              ]
-            : []),
-        ...routes,
-        {
-            path: "*",
-            element: <Navigate to={ROUTES.ERROR(EHttpStatus.HTTP_404_NOT_FOUND)} />,
-        },
-    ];
-
-    return (
-        <RouterProvider
-            key={isAllRoutesLoaded ? "all-routes" : "initial-routes"}
-            router={createBrowserRouter([
-                {
-                    path: "/",
-                    element: (
-                        <SwallowErrorBoundary>
-                            <SuspenseComponent shouldWrapChildren={false} isPage>
-                                {children}
-                            </SuspenseComponent>
-                        </SwallowErrorBoundary>
-                    ),
-                    children: routeList,
-                },
-            ])}
-        />
-    );
+    return <RouterProvider router={router} />;
 });
 
 export default Router;
