@@ -73,6 +73,20 @@ class Env:
         return self.__get_from_cache("API_INTERNAL_URL", f"http://{self.API_HOST}:{self.API_PORT}").rstrip("/")
 
     @property
+    def MCP_ALLOWED_HOSTS(self) -> list[str]:
+        """Return explicitly allowed MCP Host header values."""
+
+        hosts = self.__get_from_cache("MCP_ALLOWED_HOSTS", "")
+        return [host.strip() for host in hosts.split(",") if host.strip()]
+
+    @property
+    def MCP_ALLOWED_ORIGINS(self) -> list[str]:
+        """Return explicitly allowed MCP Origin header values."""
+
+        origins = self.__get_from_cache("MCP_ALLOWED_ORIGINS", "")
+        return [origin.strip().rstrip("/") for origin in origins.split(",") if origin.strip()]
+
+    @property
     def UI_PORT(self) -> int:
         return int(self.__get_from_cache("UI_PORT", "5173"))
 

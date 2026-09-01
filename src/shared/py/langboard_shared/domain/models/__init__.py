@@ -50,9 +50,11 @@ from .ProjectColumnBotDefaultScope import ProjectColumnBotDefaultScope
 from .ProjectColumnBotLog import ProjectColumnBotLog
 from .ProjectColumnBotSchedule import ProjectColumnBotSchedule
 from .ProjectColumnBotScope import ProjectColumnBotScope
+from .ProjectEmailNotificationPolicy import ProjectEmailNotificationPolicy, ProjectEmailNotificationRecipient
 from .ProjectInvitation import ProjectInvitation
 from .ProjectLabel import ProjectLabel
 from .ProjectRole import ProjectRole
+from .ProjectTemplate import ProjectTemplate
 from .ProjectUserRelationship import ProjectUserRelationship
 from .ProjectWiki import ProjectWiki
 from .ProjectWikiActivity import ProjectWikiActivity
@@ -119,6 +121,8 @@ __all__ = [
     "NotificationScheduleRule",
     "Project",
     "ProjectActivity",
+    "ProjectEmailNotificationPolicy",
+    "ProjectEmailNotificationRecipient",
     "ProjectAssignedInternalBot",
     "ProjectAssignedUser",
     "ProjectBotLog",
@@ -132,6 +136,7 @@ __all__ = [
     "ProjectInvitation",
     "ProjectLabel",
     "ProjectRole",
+    "ProjectTemplate",
     "ProjectUserRelationship",
     "ProjectWiki",
     "ProjectWikiActivity",

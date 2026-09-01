@@ -104,32 +104,39 @@ def create_card(
 def change_card_details(
     project_uid: str,
     card_uid: str,
-    title: str | None,
-    description: str | None,
-    deadline_at: str | None,
     user_or_bot: User | Bot,
     service: DomainService,
+    title: str | None = None,
+    description: str | None = None,
+    deadline_at: str | None = None,
 ) -> dict:
-    form_dict = {}
+    if title is None and description is None and deadline_at is None:
+        raise ValueError("At least one card detail field is required")
+    normalized_title = None
     if title is not None:
-        form_dict["title"] = title
+        normalized_title = title.strip()
+        if not normalized_title:
+            raise ValueError("Card title is required")
+    parsed_deadline = None
+    if deadline_at:
+        parsed_deadline = SafeDateTime.fromisoformat(deadline_at)
+        if parsed_deadline.tzinfo is None:
+            parsed_deadline = parsed_deadline.replace(tzinfo=SafeDateTime.now().astimezone().tzinfo)
+
+    form_dict = {}
+    if normalized_title is not None:
+        form_dict["title"] = normalized_title
     if description is not None:
         form_dict["description"] = EditorContentModel(content=description)
     if deadline_at is not None:
-        if deadline_at:
-            val = SafeDateTime.fromisoformat(deadline_at)
-            if val.tzinfo is None:
-                val = val.replace(tzinfo=SafeDateTime.now().astimezone().tzinfo)
-            form_dict["deadline_at"] = val
-        else:
-            form_dict["deadline_at"] = None
+        form_dict["deadline_at"] = parsed_deadline
     result = service.card.update(user_or_bot, project_uid, card_uid, form_dict)
     if not result:
         raise ValueError("Failed to update")
     if result is True:
         response = {}
-        if title is not None:
-            response["title"] = title
+        if normalized_title is not None:
+            response["title"] = normalized_title
         if description is not None:
             response["description"] = convert_python_data(EditorContentModel(content=description))
         if deadline_at is not None:
@@ -162,9 +169,21 @@ def delete_card(project_uid: str, card_uid: str, user_or_bot: User | Bot, servic
 @McpTool.add(description="Change card order or move to another project column.")
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
 def change_card_order_or_move_column(
-    project_uid: str, card_uid: str, order: int, column_uid: str | None, user_or_bot: User | Bot, service: DomainService
+    project_uid: str,
+    card_uid: str,
+    order: int,
+    user_or_bot: User | Bot,
+    service: DomainService,
+    column_uid: str | None = None,
 ) -> dict:
-    result = service.card.change_order(user_or_bot, project_uid, card_uid, order, column_uid or "")
+    if isinstance(order, bool) or order < 0:
+        raise ValueError("Card order must be a non-negative integer")
+    normalized_column_uid = None
+    if column_uid is not None:
+        normalized_column_uid = column_uid.strip()
+        if not normalized_column_uid:
+            raise ValueError("column_uid cannot be blank")
+    result = service.card.change_order(user_or_bot, project_uid, card_uid, order, normalized_column_uid or "")
     if not result:
         raise ValueError("Failed to change order or move column")
     return {"message": "Order changed or card moved"}

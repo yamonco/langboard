@@ -85,8 +85,9 @@ class BotScheduleHelper:
             query = query.where(BotSchedule.column("status") == status)
 
         if pagination:
-            query = query.limit(pagination.limit).offset((pagination.page - 1) * pagination.limit)
             query = query.where(BotSchedule.column("created_at") <= pagination.refer_time)
+            query = query.order_by(BotSchedule.column("created_at").desc(), BotSchedule.column("id").desc())
+            query = query.limit(pagination.limit).offset((pagination.page - 1) * pagination.limit)
 
         schedules = []
         with DbSession.use(readonly=True) as db:

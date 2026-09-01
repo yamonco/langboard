@@ -1,11 +1,11 @@
 import { AuthGuard } from "@/core/routing/AuthGuard";
 import { ROUTES } from "@/core/routing/constants";
-import ModalPage from "@/pages/SettingsPage/ModalPage";
 import { lazy } from "react";
 import { Navigate, Outlet, RouteObject } from "react-router";
 import { IS_OLLAMA_RUNNING } from "@/constants";
 
 const SettingsProxy = lazy(() => import("./index"));
+const ModalPage = lazy(() => import("./ModalPage"));
 
 const routes: RouteObject[] = [
     ...(!IS_OLLAMA_RUNNING
@@ -31,6 +31,10 @@ const routes: RouteObject[] = [
             },
             {
                 path: ROUTES.SETTINGS.API_KEYS,
+                element: <></>,
+            },
+            {
+                path: ROUTES.SETTINGS.PROJECT_TEMPLATES,
                 element: <></>,
             },
             {
@@ -115,5 +119,4 @@ const routes: RouteObject[] = [
 
 export default {
     routes,
-    loadInitially: false,
 };

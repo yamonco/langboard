@@ -1,4 +1,4 @@
-from langboard_shared.ai import BotScheduleHelper
+from typing import NoReturn
 from langboard_shared.core.filter import AuthFilter
 from langboard_shared.core.routing import (
     ApiErrorCode,
@@ -12,27 +12,50 @@ from langboard_shared.core.routing import (
     create_editor_collaboration_document_id,
 )
 from langboard_shared.core.schema import OpenApiSchema
-from langboard_shared.core.types import SafeDateTime
-from langboard_shared.core.types.BotRelatedTypes import AVAILABLE_BOT_TARGET_TABLES
-from langboard_shared.domain.models import Project, ProjectRole
-from langboard_shared.domain.models.BotSchedule import BotScheduleRunningType
-from langboard_shared.domain.models.GraphApprovalRequest import GraphApprovalOriginType
+from langboard_shared.domain.models import ProjectRole
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.domain.services import DomainService
+from langboard_shared.domain.services.factory.BotService import BotServiceError
 from langboard_shared.filter import RoleFilter
-from langboard_shared.helpers import BotHelper
-from langboard_shared.publishers import ProjectBotPublisher
 from langboard_shared.security import RoleFinder
 from ..forms import CreateBotCronTimeForm, DeleteBotCronTimeForm, UpdateBotCronTimeForm
 
 
+BOT_SCHEDULE_RECEIPT_SCHEMA = {
+    "receipt": {
+        "operation": "string",
+        "schedule": {
+            "uid": "string",
+            "bot_uid": "string",
+            "target": {"type": "string", "uid": "string"},
+        },
+        "changes": "object",
+    }
+}
+
+
 @AppRouter.schema(form=CreateBotCronTimeForm, permission=ApiPermission.Create)
+@AppRouter.api.post(
+    "/projects/{project_uid}/bots/{bot_uid}/schedules",
+    tags=["Bot.Schedule"],
+    description="Schedule a bot cron schedule inside one project boundary.",
+    responses=(
+        OpenApiSchema()
+        .suc(BOT_SCHEDULE_RECEIPT_SCHEMA)
+        .auth()
+        .forbidden()
+        .err(400, ApiErrorCode.VA3001, ApiErrorCode.VA3002, ApiErrorCode.VA3004, ApiErrorCode.VA3005)
+        .err(404, ApiErrorCode.NF3001)
+        .get()
+    ),
+)
 @AppRouter.api.post(
     "/bot/{bot_uid}/schedule",
     tags=["Bot.Schedule"],
     description="Schedule a bot cron schedule.",
     responses=(
         OpenApiSchema()
+        .suc(BOT_SCHEDULE_RECEIPT_SCHEMA)
         .auth()
         .forbidden()
         .err(400, ApiErrorCode.VA3001, ApiErrorCode.VA3002, ApiErrorCode.VA3004, ApiErrorCode.VA3005)
@@ -43,52 +66,27 @@ from ..forms import CreateBotCronTimeForm, DeleteBotCronTimeForm, UpdateBotCronT
 @RoleFilter.add(ProjectRole, [ProjectRoleAction.Update], RoleFinder.project)
 @AuthFilter.add()
 def schedule_bot_crons(
-    bot_uid: str, form: CreateBotCronTimeForm, service: DomainService = DomainService.scope()
+    bot_uid: str,
+    form: CreateBotCronTimeForm,
+    service: DomainService = DomainService.scope(),
+    project_uid: str | None = None,
 ) -> JsonResponse:
-    form.interval_str = BotScheduleHelper.utils.convert_valid_interval_str(form.interval_str)
-    if not form.interval_str:
-        raise ApiException.BadRequest_400(ApiErrorCode.VA3001)
-
-    if form.running_type == BotScheduleRunningType.Duration and not form.start_at:
-        form.start_at = SafeDateTime.now()
-
-    if not BotScheduleHelper.get_default_status_with_dates(
-        running_type=form.running_type, start_at=form.start_at, end_at=form.end_at
-    ):
-        raise ApiException.BadRequest_400(ApiErrorCode.VA3002)
-
-    result = BotHelper.get_target_model_by_param("schedule", form.target_table, form.target_uid)
-    if not result:
-        raise ApiException.BadRequest_400(ApiErrorCode.VA3004)
-    target_model_class, target_model = result
-
-    bot = service.bot.get_by_id_like(bot_uid)
-    if not bot:
-        raise ApiException.NotFound_404(ApiErrorCode.NF3001)
-
-    bot_schedule = BotScheduleHelper.schedule(
-        target_model_class,
-        bot,
-        form.interval_str,
-        target_model,
-        form.running_type,
-        form.start_at,
-        form.end_at,
-        form.timezone,
-    )
-    if not bot_schedule:
-        raise ApiException.BadRequest_400(ApiErrorCode.VA3005)
-
-    if isinstance(target_model, tuple(AVAILABLE_BOT_TARGET_TABLES.values())):
-        if isinstance(target_model, Project):
-            project = target_model
-        else:
-            project = service.project.get_by_id_like(target_model.project_id)
-
-        if project:
-            ProjectBotPublisher.scheduled(project, bot_schedule)
-
-    return JsonResponse()
+    project_boundary = {"project": project_uid} if project_uid else {}
+    try:
+        receipt = service.bot.create_schedule(
+            bot_uid,
+            form.target_table,
+            form.target_uid,
+            form.interval_str,
+            form.running_type,
+            form.start_at,
+            form.end_at,
+            form.timezone,
+            **project_boundary,
+        )
+    except BotServiceError as error:
+        _raise_schedule_api_error(error, creating=True)
+    return JsonResponse(content={"receipt": receipt})
 
 
 @collaborative_edit(
@@ -100,11 +98,33 @@ def schedule_bot_crons(
 )
 @AppRouter.schema(form=UpdateBotCronTimeForm, permission=ApiPermission.Edit)
 @AppRouter.api.put(
+    "/projects/{project_uid}/bots/{bot_uid}/schedules/{schedule_uid}",
+    tags=["Bot.Schedule"],
+    description="Reschedule a bot cron schedule inside one project boundary.",
+    responses=(
+        OpenApiSchema()
+        .suc(BOT_SCHEDULE_RECEIPT_SCHEMA)
+        .auth()
+        .forbidden()
+        .err(
+            400,
+            ApiErrorCode.VA3001,
+            ApiErrorCode.VA3002,
+            ApiErrorCode.VA3003,
+            ApiErrorCode.VA3004,
+            ApiErrorCode.VA3005,
+        )
+        .err(404, ApiErrorCode.NF2015)
+        .get()
+    ),
+)
+@AppRouter.api.put(
     "/bot/{bot_uid}/reschedule/{schedule_uid}",
     tags=["Bot.Schedule"],
     description="Reschedule a bot cron schedule.",
     responses=(
         OpenApiSchema()
+        .suc(BOT_SCHEDULE_RECEIPT_SCHEMA)
         .auth()
         .forbidden()
         .err(
@@ -117,48 +137,28 @@ def schedule_bot_crons(
 @RoleFilter.add(ProjectRole, [ProjectRoleAction.Update], RoleFinder.project)
 @AuthFilter.add()
 def reschedule_bot_crons(
-    bot_uid: str, schedule_uid: str, form: UpdateBotCronTimeForm, service: DomainService = DomainService.scope()
+    bot_uid: str,
+    schedule_uid: str,
+    form: UpdateBotCronTimeForm,
+    service: DomainService = DomainService.scope(),
+    project_uid: str | None = None,
 ) -> JsonResponse:
-    if form.interval_str:
-        form.interval_str = BotScheduleHelper.utils.convert_valid_interval_str(form.interval_str)
-        if not form.interval_str:
-            raise ApiException.BadRequest_400(ApiErrorCode.VA3001)
-
-    if not BotScheduleHelper.get_default_status_with_dates(
-        running_type=form.running_type, start_at=form.start_at, end_at=form.end_at
-    ):
-        raise ApiException.BadRequest_400(ApiErrorCode.VA3002)
-
-    bot = service.bot.get_by_id_like(bot_uid)
-    if not bot:
-        raise ApiException.NotFound_404(ApiErrorCode.NF2015)
-
-    result = _get_target_model_with_bot_schedule(form.target_table, schedule_uid)
-    target_model_class, bot_schedule, target_model = result
-
-    result = BotScheduleHelper.reschedule(
-        target_model_class,
-        bot_schedule,
-        form.interval_str,
-        form.running_type,
-        form.start_at,
-        form.end_at,
-        form.timezone,
-    )
-    if not result:
-        raise ApiException.BadRequest_400(ApiErrorCode.VA3005)
-    _, schedule_model, model = result
-
-    if isinstance(target_model, tuple(AVAILABLE_BOT_TARGET_TABLES.values())):
-        if isinstance(target_model, Project):
-            project = target_model
-        else:
-            project = service.project.get_by_id_like(target_model.project_id)
-
-        if project:
-            ProjectBotPublisher.rescheduled(project, schedule_model, model)
-
-    return JsonResponse()
+    project_boundary = {"project": project_uid} if project_uid else {}
+    try:
+        receipt = service.bot.update_schedule(
+            bot_uid,
+            form.target_table,
+            schedule_uid,
+            form.interval_str,
+            form.running_type,
+            form.start_at,
+            form.end_at,
+            form.timezone,
+            **project_boundary,
+        )
+    except BotServiceError as error:
+        _raise_schedule_api_error(error)
+    return JsonResponse(content={"receipt": receipt})
 
 
 @collaborative_edit(
@@ -170,11 +170,26 @@ def reschedule_bot_crons(
 )
 @AppRouter.schema(form=DeleteBotCronTimeForm, permission=ApiPermission.Delete)
 @AppRouter.api.delete(
+    "/projects/{project_uid}/bots/{bot_uid}/schedules/{schedule_uid}",
+    tags=["Bot.Schedule"],
+    description="Unschedule a bot cron schedule inside one project boundary.",
+    responses=(
+        OpenApiSchema()
+        .suc(BOT_SCHEDULE_RECEIPT_SCHEMA)
+        .auth()
+        .forbidden()
+        .err(400, ApiErrorCode.VA3003, ApiErrorCode.VA3004)
+        .err(404, ApiErrorCode.NF2015)
+        .get()
+    ),
+)
+@AppRouter.api.delete(
     "/bot/{bot_uid}/unschedule/{schedule_uid}",
     tags=["Bot.Schedule"],
     description="Unschedule a bot cron schedule.",
     responses=(
         OpenApiSchema()
+        .suc(BOT_SCHEDULE_RECEIPT_SCHEMA)
         .auth()
         .forbidden()
         .err(400, ApiErrorCode.VA3003, ApiErrorCode.VA3004)
@@ -185,57 +200,33 @@ def reschedule_bot_crons(
 @RoleFilter.add(ProjectRole, [ProjectRoleAction.Update], RoleFinder.project)
 @AuthFilter.add()
 def unschedule_bot_crons(
-    bot_uid: str, schedule_uid: str, form: DeleteBotCronTimeForm, service: DomainService = DomainService.scope()
+    bot_uid: str,
+    schedule_uid: str,
+    form: DeleteBotCronTimeForm,
+    service: DomainService = DomainService.scope(),
+    project_uid: str | None = None,
 ) -> JsonResponse:
-    bot = service.bot.get_by_id_like(bot_uid)
-    if not bot:
-        raise ApiException.NotFound_404(ApiErrorCode.NF2015)
-
-    result = _get_target_model_with_bot_schedule(form.target_table, schedule_uid)
-    target_model_class, bot_schedule, target_model = result
-
-    result = BotScheduleHelper.unschedule(target_model_class, bot_schedule)
-    if not result:
-        raise ApiException.NotFound_404(ApiErrorCode.NF2015)
-    _, schedule_model = result
-
-    if isinstance(target_model, tuple(AVAILABLE_BOT_TARGET_TABLES.values())):
-        if isinstance(target_model, Project):
-            project = target_model
-        else:
-            project = service.project.get_by_id_like(target_model.project_id)
-
-        if project:
-            service.graph_approval_request.cancel_pending_by_scope(
-                project,
-                form.target_table,
-                target_model.get_uid(),
-                origin_type=GraphApprovalOriginType.Schedule,
-                bot=bot,
-                reason="bot schedule deleted",
-            )
-            ProjectBotPublisher.unscheduled(project, schedule_model)
-
-    return JsonResponse()
+    project_boundary = {"project": project_uid} if project_uid else {}
+    try:
+        receipt = service.bot.delete_schedule(bot_uid, form.target_table, schedule_uid, **project_boundary)
+    except BotServiceError as error:
+        _raise_schedule_api_error(error)
+    return JsonResponse(content={"receipt": receipt})
 
 
-def _get_target_model_with_bot_schedule(target_table: str, schedule_uid: str):
-    target_model_class = BotHelper.get_bot_model_class("schedule", target_table)
-    if not target_model_class:
-        raise ApiException.BadRequest_400(ApiErrorCode.VA3003)
+def _raise_schedule_api_error(error: BotServiceError, *, creating: bool = False) -> NoReturn:
+    """Translate the shared Bot Schedule error contract to legacy REST codes."""
 
-    bot_schedule = BotScheduleHelper.get_by_id_like(target_model_class, schedule_uid)
-    if not bot_schedule:
-        raise ApiException.NotFound_404(ApiErrorCode.NF2015)
-
-    target_id = bot_schedule.__dict__.get(target_model_class.get_scope_column_name())
-    if not target_id:
-        raise ApiException.NotFound_404(ApiErrorCode.NF2015)
-
-    result = BotHelper.get_target_model_by_param("schedule", target_table, target_id)
-    if not result:
-        raise ApiException.BadRequest_400(ApiErrorCode.VA3004)
-
-    target_model_class, target_model = result
-
-    return target_model_class, bot_schedule, target_model
+    if error.code == "invalid_interval":
+        raise ApiException.BadRequest_400(ApiErrorCode.VA3001) from error
+    if error.code == "invalid_window":
+        raise ApiException.BadRequest_400(ApiErrorCode.VA3002) from error
+    if error.code == "target_type_invalid":
+        code = ApiErrorCode.VA3004 if creating else ApiErrorCode.VA3003
+        raise ApiException.BadRequest_400(code) from error
+    if error.code == "target_not_found":
+        raise ApiException.BadRequest_400(ApiErrorCode.VA3004) from error
+    if error.code in {"bot_not_found", "schedule_not_found"}:
+        code = ApiErrorCode.NF3001 if creating else ApiErrorCode.NF2015
+        raise ApiException.NotFound_404(code) from error
+    raise ApiException.BadRequest_400(ApiErrorCode.VA3005) from error

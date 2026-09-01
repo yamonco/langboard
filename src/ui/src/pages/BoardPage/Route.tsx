@@ -1,12 +1,13 @@
-import { Navigate, Outlet, type RouteObject } from "react-router";
+import { lazy } from "react";
+import { Navigate, type RouteObject } from "react-router";
 import { AuthGuard } from "@/core/routing/AuthGuard";
 import { ROUTES } from "@/core/routing/constants";
-import BoardProxy from "@/pages/BoardPage";
-import { BoardController } from "@/core/providers/BoardController";
-import WikiActivityDialog from "@/pages/BoardPage/components/wiki/WikiActivityDialog";
-import WikiMetadataDialog from "@/pages/BoardPage/components/wiki/WikiMetadataDialog";
-import BoardInvitationPage from "@/pages/BoardPage/BoardInvitationPage";
 import { EHttpStatus } from "@langboard/core/enums";
+
+const BoardRoutePage = lazy(() => import("./RoutePage"));
+const WikiActivityDialog = lazy(() => import("./components/wiki/WikiActivityDialog"));
+const WikiMetadataDialog = lazy(() => import("./components/wiki/WikiMetadataDialog"));
+const BoardInvitationPage = lazy(() => import("./BoardInvitationPage"));
 
 const routes: RouteObject[] = [
     {
@@ -22,10 +23,7 @@ const routes: RouteObject[] = [
         path: ROUTES.BOARD.MAIN(":projectUID"),
         element: (
             <AuthGuard>
-                <BoardController>
-                    <BoardProxy />
-                    <Outlet />
-                </BoardController>
+                <BoardRoutePage />
             </AuthGuard>
         ),
         children: [
@@ -71,5 +69,4 @@ const routes: RouteObject[] = [
 
 export default {
     routes,
-    loadInitially: true,
 };

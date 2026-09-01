@@ -9,6 +9,7 @@
     "mentioned_in_comment": "{sender} mentioned you in a comment",
     "mentioned_in_wiki": "{sender} mentioned you you in a wiki",
     "notified_from_checklist": "{sender} notified you from checklist",
-    "reacted_to_comment": "{sender} reacted to your comment"
+    "reacted_to_comment": "{sender} reacted to your comment",
+    "project_activity_updated": "{project_name}: {activity_name}"
   }
 }

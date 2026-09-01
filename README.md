@@ -73,10 +73,10 @@ Langboard's mission is to enable enterprises to harness AI efficiency without sa
 
 ## 🧩 MCP Integration
 
-- Embedded **FastMCP** server is mounted at `/mcp` (streamable HTTP transport).
+- Embedded standalone **FastMCP 4** server is mounted at `/mcp/stream` and serves both legacy MCP and `2026-07-28` clients.
 - MCP tool groups support admin/global and user-scoped governance.
 - Requests must include `X-MCP-Tool-Group-UID` for tool-group validation.
-- Middleware enforces authentication, ownership checks, and MCP role permissions.
+- Native FastMCP middleware filters both tool discovery and execution; Langboard retains only ownership and role policy.
 - Built-in MCP tools cover project, card, bot, activity, and metadata operations.
 
 ---
@@ -87,6 +87,20 @@ Langboard's mission is to enable enterprises to harness AI efficiency without sa
 - IP whitelist validation and API key usage logging are built in.
 - Key material is issued through `KeyVault` providers.
 - Supported providers: **OpenBao**, **HashiCorp Vault**, **AWS KMS**, **Azure Key Vault**.
+
+---
+
+## 🪝 Webhooks
+
+- Project and card events are delivered asynchronously through the existing Celery worker.
+- New webhook registrations return a signing secret once; only its KeyVault reference is stored.
+- Payloads include `schema_version`, `event_id`, `occurred_at`, `event`, and `data`.
+- Verify `X-Langboard-Webhook-Signature` as HMAC-SHA256 over
+  `<X-Langboard-Webhook-Timestamp>.<raw request body>`, then reject stale timestamps
+  and deduplicate `X-Langboard-Webhook-Id`.
+- Delivery uses bounded timeouts and retries. Consumers must therefore support
+  at-least-once delivery.
+- The live event schemas and signing headers are documented at `/schema/webhook`.
 
 ---
 

@@ -18,5 +18,4 @@ const routes: RouteObject[] = [
 
 export default {
     routes,
-    loadInitially: true,
 };

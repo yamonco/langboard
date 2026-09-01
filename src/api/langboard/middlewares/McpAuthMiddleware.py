@@ -85,6 +85,11 @@ class McpAuthMiddleware(BaseMiddleware):
             await response(scope, receive, send)
             return
 
+        if tool_group.activated_at is None:
+            response = JsonResponse(ApiErrorCode.PE1001, status_code=status.HTTP_403_FORBIDDEN)
+            await response(scope, receive, send)
+            return
+
         # Check if it's a personal tool group and validate ownership
         if tool_group.user_id is not None:
             if not api_key:

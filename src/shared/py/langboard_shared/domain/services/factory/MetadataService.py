@@ -15,16 +15,30 @@ class MetadataService(BaseDomainService):
 
     @overload
     def get_all_as_api(
-        self, model: type[_TMetadata], foreign_model: BaseDbModel, as_dict: Literal[False]
+        self,
+        model: type[_TMetadata],
+        foreign_model: BaseDbModel,
+        as_dict: Literal[False],
+        limit: int | None = None,
     ) -> list[dict[str, Any]]: ...
     @overload
     def get_all_as_api(
-        self, model: type[_TMetadata], foreign_model: BaseDbModel, as_dict: Literal[True]
+        self,
+        model: type[_TMetadata],
+        foreign_model: BaseDbModel,
+        as_dict: Literal[True],
+        limit: int | None = None,
     ) -> dict[str, Any]: ...
     def get_all_as_api(
-        self, model: type[_TMetadata], foreign_model: BaseDbModel, as_dict: bool = False
+        self,
+        model: type[_TMetadata],
+        foreign_model: BaseDbModel,
+        as_dict: bool = False,
+        limit: int | None = None,
     ) -> list[dict[str, Any]] | dict[str, Any]:
-        metadata_list = self.repo.metadata.get_list(model, foreign_model)
+        """Return metadata, optionally enforcing a repository row limit."""
+
+        metadata_list = self.repo.metadata.get_list(model, foreign_model, limit=limit)
         if not as_dict:
             return [metadata.api_response() for metadata in metadata_list]
 

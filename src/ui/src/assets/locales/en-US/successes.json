@@ -1,4 +1,6 @@
 {
+  "Project copied as a template.": "Project copied as a template.",
+  "Default project template updated.": "Default project template updated.",
   "Role updated successfully.": "Role updated successfully.",
   "Column added successfully.": "Column added successfully.",
   "Chat session renamed successfully.": "Chat session renamed successfully.",
@@ -117,6 +119,7 @@
   "Webhook created successfully.": "Webhook created successfully.",
   "Webhook name changed successfully.": "Webhook name changed successfully.",
   "Webhook URL changed successfully.": "Webhook URL changed successfully.",
+  "Webhook events changed successfully.": "Webhook events changed successfully.",
   "Selected webhooks deleted successfully.": "Selected webhooks deleted successfully.",
   "Internal bot created successfully.": "Internal bot created successfully.",
   "Internal bot copied successfully.": "Internal bot copied successfully.",
@@ -143,5 +146,6 @@
   "New wiki page created successfully.": "New wiki page created successfully.",
   "Wiki page deleted successfully.": "Wiki page deleted successfully.",
   "Public state changed successfully.": "Public state changed successfully.",
-  "Assigned bots and members updated successfully.": "Assigned bots and members updated successfully."
+  "Assigned bots and members updated successfully.": "Assigned bots and members updated successfully.",
+  "Email notification policy updated successfully.": "Email notification policy updated successfully."
 }

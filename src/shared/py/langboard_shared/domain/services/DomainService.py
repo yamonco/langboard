@@ -35,6 +35,10 @@ class DomainService(Factory):
         return self._create_or_get_product(factory.ProjectService)
 
     @property
+    def project_template(self):
+        return self._create_or_get_product(factory.ProjectTemplateService)
+
+    @property
     def project_invitation(self):
         return self._create_or_get_product(factory.ProjectInvitationService)
 
@@ -49,6 +53,10 @@ class DomainService(Factory):
     @property
     def project_column(self):
         return self._create_or_get_product(factory.ProjectColumnService)
+
+    @property
+    def project_email_notification(self):
+        return self._create_or_get_product(factory.ProjectEmailNotificationService)
 
     @property
     def project_label(self):

@@ -1,6 +1,7 @@
 from typing import Any
 from ....core.db import EditorContentModel
 from ....core.domain import BaseDomainService
+from ....core.types import SafeDateTime
 from ....core.types.ParamTypes import TCardParam, TCommentParam, TProjectParam, TUserOrBot
 from ....helpers import InfraHelper
 from ....publishers import CardCommentPublisher
@@ -21,6 +22,14 @@ class CardCommentService(BaseDomainService):
         comment = InfraHelper.get_by_id_like(CardComment, comment)
         return comment
 
+    @staticmethod
+    def can_mutate(user_or_bot: TUserOrBot, comment: CardComment) -> bool:
+        """Return whether the actor owns the comment or is an administrator."""
+
+        if isinstance(user_or_bot, User):
+            return comment.user_id == user_or_bot.id or user_or_bot.is_admin
+        return isinstance(user_or_bot, Bot) and comment.bot_id == user_or_bot.id
+
     def get_api_list_by_card(self, card: TCardParam | None) -> list[dict[str, Any]]:
         card = InfraHelper.get_by_id_like(Card, card)
         if not card:
@@ -37,6 +46,35 @@ class CardCommentService(BaseDomainService):
                 comments.append(api_comment)
 
         return comments
+
+    def get_api_page_by_card(
+        self,
+        card: TCardParam | None,
+        limit: int,
+        before_created_at: SafeDateTime | None = None,
+        before_comment: TCommentParam | None = None,
+    ) -> tuple[list[dict[str, Any]], int, tuple[str, str] | None]:
+        """Return a bounded newest-first page, total count, and next cursor fields."""
+
+        card = InfraHelper.get_by_id_like(Card, card)
+        if not card:
+            return [], 0, None
+        raw_comments = self.repo.card_comment.get_page_by_card(card, limit, before_created_at, before_comment)
+        has_more = len(raw_comments) > limit
+        page = raw_comments[:limit]
+
+        reaction_service = self._get_service(ReactionService)
+        reactions = reaction_service.get_api_map(CardCommentReaction, [comment.id for comment, _, _ in page])
+        comments = [
+            api_comment
+            for comment, user, bot in page
+            if (api_comment := self.convert_to_api_response((comment, user, bot), reactions.get(comment.id))) is not None
+        ]
+        next_fields = None
+        if has_more and page:
+            last_comment = page[-1][0]
+            next_fields = (last_comment.created_at.isoformat(), last_comment.get_uid())
+        return comments, self.repo.card_comment.count_by_card(card), next_fields
 
     def get_as_api(self, card: TCardParam | None, comment: TCommentParam | None) -> dict[str, Any] | None:
         if not comment:
@@ -120,6 +158,8 @@ class CardCommentService(BaseDomainService):
         if not params:
             return None
         project, card, comment = params
+        if not self.can_mutate(user_or_bot, comment):
+            return None
 
         if isinstance(content, dict):
             content = EditorContentModel(**content)
@@ -151,6 +191,8 @@ class CardCommentService(BaseDomainService):
         if not params:
             return None
         project, card, comment = params
+        if not self.can_mutate(user_or_bot, comment):
+            return None
 
         self.repo.card_comment.delete(comment)
 

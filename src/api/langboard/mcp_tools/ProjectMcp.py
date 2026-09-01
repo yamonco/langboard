@@ -1,8 +1,20 @@
+from re import fullmatch
 from langboard_shared.domain.models import Bot, ProjectRole, User
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.domain.services.DomainService import DomainService
 from langboard_shared.security import RoleFinder
 from ..mcp_integration import McpRoleFilter, McpTool
+
+
+def _normalize_invitation_emails(emails: list[str]) -> list[str]:
+    """Validate, normalize, and bound one additive invitation request."""
+
+    if not 1 <= len(emails) <= 10:
+        raise ValueError("Provide between 1 and 10 email addresses")
+    normalized = list(dict.fromkeys(email.strip().casefold() for email in emails))
+    if any(fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email) is None for email in normalized):
+        raise ValueError("Invalid email address")
+    return normalized
 
 
 @McpTool.add("user", description="Get starred projects for the current user.")
@@ -27,7 +39,7 @@ def toggle_star_project(project_uid: str, user: User, service: DomainService) ->
 
 @McpTool.add("user", description="Create a new project.")
 def create_project(title: str, description: str | None, project_type: str, user: User, service: DomainService) -> dict:
-    project = service.project.create(user, title, description, project_type)
+    project, _, _ = service.project_template.create_project(user, title, description, project_type)
     return {"project_uid": project.get_uid()}
 
 
@@ -131,6 +143,21 @@ def update_project_members(
     return {"message": "Updated"}
 
 
+@McpTool.add(description="Invite up to 10 project members without removing existing members.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Update], RoleFinder.project)
+def invite_project_members(
+    project_uid: str, user_or_bot: User | Bot, emails: list[str], service: DomainService
+) -> dict[str, int | str]:
+    """Add project invitations idempotently and return no recipient data."""
+
+    if not isinstance(user_or_bot, User):
+        raise ValueError("Only users can access this endpoint")
+    result = service.project.invite_assigned_users(user_or_bot, project_uid, _normalize_invitation_emails(emails))
+    if result is None:
+        raise ValueError("Project not found")
+    return result
+
+
 @McpTool.add(description="Unassign a member from a project.")
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Update], RoleFinder.project)
 def unassign_project_member(
@@ -172,6 +199,22 @@ def change_column_name(
     if not result:
         raise ValueError("Failed")
     return {"name": name}
+
+
+@McpTool.add(description="Change column order.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Update], RoleFinder.project)
+def change_column_order(
+    project_uid: str,
+    column_uid: str,
+    order: int,
+    service: DomainService,
+) -> dict:
+    if isinstance(order, bool) or order < 0:
+        raise ValueError("Column order must be a non-negative integer")
+    result = service.project_column.change_order(project_uid, column_uid, order)
+    if not result:
+        raise ValueError("Failed")
+    return {"message": "Order changed"}
 
 
 @McpTool.add(description="Delete a column from a project.")

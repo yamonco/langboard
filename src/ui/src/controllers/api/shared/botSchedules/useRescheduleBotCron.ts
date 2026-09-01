@@ -1,4 +1,4 @@
-import { TBotScheduleRelatedParams } from "@/controllers/api/shared/botSchedules/types";
+import { TBotScheduleMutationParams } from "@/controllers/api/shared/botSchedules/types";
 import { Routing } from "@langboard/core/constants";
 import { api } from "@/core/helpers/Api";
 import { TMutationOptions, useQueryMutation } from "@/core/helpers/QueryMutation";
@@ -6,7 +6,7 @@ import { BaseBotScheduleModel } from "@/core/models";
 import { Utils } from "@langboard/core/utils";
 import { TBotRelatedTargetModel } from "@/core/models/types/bot.related.type";
 
-export type TRescheduleBotCronParams = TBotScheduleRelatedParams & {
+export type TRescheduleBotCronParams = TBotScheduleMutationParams & {
     schedule_uid: string;
 };
 
@@ -26,7 +26,8 @@ const useRescheduleBotCron = (params: TRescheduleBotCronParams, options?: TMutat
         case "project":
         case "project_column":
         case "card":
-            url = Utils.String.format(Routing.API.BOT.SCHEDULE.RESCHEDULE, {
+            url = Utils.String.format(Routing.API.BOT.SCHEDULE.PROJECT_RESCHEDULE, {
+                project_uid: params.project_uid,
                 bot_uid: params.bot_uid,
                 schedule_uid: params.schedule_uid,
             });

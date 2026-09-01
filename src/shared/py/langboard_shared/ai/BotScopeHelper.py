@@ -24,8 +24,11 @@ class BotScopeHelper:
     def get_list(
         model_cls: type[_TBotScopeModel],
         set_query: Callable[[SelectOfScalar[_TBotScopeModel]], SelectOfScalar[_TBotScopeModel]] | None = None,
+        limit: int | None = None,
         **where_clauses: Any,
     ) -> list[_TBotScopeModel]:
+        """Return bot scopes, optionally enforcing a database row limit."""
+
         query = SqlBuilder.select.table(model_cls)
 
         if set_query:
@@ -33,6 +36,8 @@ class BotScopeHelper:
 
         if where_clauses:
             query = InfraHelper.where_recursive(query, model_cls, **where_clauses)
+        if limit is not None:
+            query = query.limit(limit)
 
         records = []
         with DbSession.use(readonly=True) as db:
@@ -85,9 +90,11 @@ class BotScopeHelper:
 
         if records:
             model = records[0]
-            model.conditions = conditions
-            with DbSession.use(readonly=False) as db:
-                db.update(model)
+            if model.conditions != conditions or model.default_scope_branch_id is not None:
+                model.conditions = conditions
+                model.default_scope_branch_id = None
+                with DbSession.use(readonly=False) as db:
+                    db.update(model)
             return model, False
 
         model = BotScopeHelper.create(model_cls, bot, scope, conditions, **kwargs)

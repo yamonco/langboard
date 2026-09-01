@@ -9,6 +9,7 @@ from langboard_shared.domain.models.BaseBotModel import BotPlatform, BotPlatform
 from langboard_shared.domain.models.InternalBot import InternalBotType
 from langboard_shared.domain.models.McpRole import McpRoleAction
 from langboard_shared.domain.models.SettingRole import SettingRoleAction
+from langboard_shared.tasks.webhooks.utils import validate_webhook_events, validate_webhook_url
 from pydantic import BaseModel, Field, field_validator
 from ...Constants import EMAIL_REGEX
 
@@ -240,19 +241,58 @@ class UpdateMcpRoleForm(BaseFormModel):
 
 @form_model
 class CreateWebhookForm(BaseFormModel):
+    """Webhook creation input."""
+
     name: str
     url: str
+    events: list[str] | None = None
+
+    @field_validator("url")
+    @classmethod
+    def validate_url(cls, url: str) -> str:
+        """Reject webhook destinations that cannot be delivered safely."""
+
+        return validate_webhook_url(url)
+
+    @field_validator("events")
+    @classmethod
+    def validate_events(cls, events: list[str] | None) -> list[str] | None:
+        """Validate a supplied webhook event allowlist."""
+
+        return validate_webhook_events(events)
 
 
 @form_model
 class UpdateWebhookForm(BaseFormModel):
+    """Partial webhook update input."""
+
     name: str | None = None
     url: str | None = None
+    events: list[str] | None = None
+
+    @field_validator("url")
+    @classmethod
+    def validate_url(cls, url: str | None) -> str | None:
+        """Validate a replacement webhook URL when supplied."""
+
+        return validate_webhook_url(url) if url is not None else None
+
+    @field_validator("events")
+    @classmethod
+    def validate_events(cls, events: list[str] | None) -> list[str] | None:
+        """Validate a supplied webhook event allowlist."""
+
+        return validate_webhook_events(events)
 
 
 @form_model
 class DeleteSelectedWebhooksForm(BaseFormModel):
     webhook_uids: list[str]
+
+
+@form_model
+class SetDefaultProjectTemplateForm(BaseFormModel):
+    template_name: str
 
 
 @form_model

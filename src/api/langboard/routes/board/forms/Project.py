@@ -3,8 +3,9 @@ from langboard_shared.core.routing import BaseFormModel, form_model
 from langboard_shared.core.schema import TimeBasedPagination
 from langboard_shared.domain.models.GraphApprovalRequest import GraphApprovalOriginType, GraphApprovalStatus
 from langboard_shared.domain.models.InternalBot import InternalBotType
+from langboard_shared.domain.models.ProjectEmailNotificationPolicy import ProjectEmailNotificationCategory
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field
 
 
 @form_model
@@ -48,6 +49,16 @@ class UpdateRolesForm(BaseFormModel):
 
 
 @form_model
+class UpdateProjectEmailNotificationPolicyForm(BaseFormModel):
+    is_enabled: bool
+    notify_all_members: bool = False
+    categories: list[ProjectEmailNotificationCategory]
+    recipient_user_uids: list[str]
+    external_recipient_emails: list[EmailStr] = Field(default_factory=list, max_length=50)
+    card_move_target_columns: list[str] = Field(default_factory=list, max_length=20)
+
+
+@form_model
 class ChangeInternalBotForm(BaseFormModel):
     internal_bot_uid: str
 
@@ -57,6 +68,11 @@ class ChangeInternalBotSettingsForm(BaseFormModel):
     bot_type: InternalBotType
     use_default_prompt: bool | None = None
     prompt: str | None = None
+
+
+@form_model
+class CopyProjectTemplateForm(BaseFormModel):
+    name: str
 
 
 @form_model

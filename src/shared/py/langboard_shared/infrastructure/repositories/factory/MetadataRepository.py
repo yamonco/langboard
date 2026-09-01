@@ -2,7 +2,6 @@ from typing import Any, Callable, TypeVar
 from ....core.db import BaseDbModel, DbSession, SqlBuilder
 from ....core.domain import BaseRepository
 from ....domain.models.bases import BaseMetadataModel
-from ....helpers import InfraHelper
 
 
 _TMetadata = TypeVar("_TMetadata", bound=BaseMetadataModel)
@@ -13,13 +12,23 @@ class MetadataRepository(BaseRepository):
     def name() -> str:
         return "metadata"
 
-    def get_list(self, model_cls: type[_TMetadata], foreign_model: BaseDbModel) -> list[_TMetadata]:
+    def get_list(
+        self, model_cls: type[_TMetadata], foreign_model: BaseDbModel, limit: int | None = None
+    ) -> list[_TMetadata]:
+        """Return metadata rows, optionally enforcing a deterministic database limit."""
+
         foreign_key = self.__get_foreign_key(foreign_model)
         if foreign_key not in model_cls.model_fields:
             return []
-
-        metadata_list = InfraHelper.get_all_by(model_cls, foreign_key, foreign_model.id)
-        return metadata_list
+        query = (
+            SqlBuilder.select.table(model_cls)
+            .where(model_cls.column(foreign_key) == foreign_model.id)
+            .order_by(model_cls.column("key").asc(), model_cls.column("id").asc())
+        )
+        if limit is not None:
+            query = query.limit(limit)
+        with DbSession.use(readonly=True) as db:
+            return list(db.exec(query).all())
 
     def get_by_key(self, model_cls: type[_TMetadata], foreign_model: BaseDbModel, key: str) -> _TMetadata | None:
         foreign_key = self.__get_foreign_key(foreign_model)

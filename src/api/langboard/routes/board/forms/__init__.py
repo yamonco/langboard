@@ -14,12 +14,14 @@ from .Project import (
     ChangeInternalBotForm,
     ChangeInternalBotSettingsForm,
     ChatHistoryPagination,
+    CopyProjectTemplateForm,
     GraphApprovalListForm,
     InviteProjectMemberForm,
     ProjectInvitationForm,
     RejectGraphApprovalForm,
     UpdateProjectChatSessionForm,
     UpdateProjectDetailsForm,
+    UpdateProjectEmailNotificationPolicyForm,
     UpdateRolesForm,
 )
 from .ProjectLabel import CreateProjectLabelForm, UpdateProjectLabelDetailsForm
@@ -41,6 +43,7 @@ __all__ = [
     "UpdateChatTemplate",
     "InviteProjectMemberForm",
     "UpdateProjectDetailsForm",
+    "UpdateProjectEmailNotificationPolicyForm",
     "UpdateRolesForm",
     "CreateProjectLabelForm",
     "UpdateProjectLabelDetailsForm",
@@ -60,5 +63,6 @@ __all__ = [
     "ChangeWikiPublicForm",
     "ChangeInternalBotForm",
     "ChangeInternalBotSettingsForm",
+    "CopyProjectTemplateForm",
     "UpdateProjectChatSessionForm",
 ]

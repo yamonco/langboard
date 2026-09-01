@@ -184,10 +184,10 @@ stop_docker: ## stop Docker in the production environment
 	docker compose $(COMPOSE_ARGS) down --rmi all --volumes --remove-orphans
 
 unit_tests: ## run unit tests
-	uv run pytest $(API_DIR)/tests/units
+	uv run pytest $(API_DIR)/tests
 
 cov_unit_tests: ## run unit tests with coverage
-	uv run pytest -vv --cov=$(API_DIR)/langboard $(API_DIR)/tests/units --cov-report=html:./$(API_DIR)/coverage
+	uv run pytest -vv --cov=$(API_DIR)/langboard $(API_DIR)/tests --cov-report=html:./$(API_DIR)/coverage
 	@printf "$(GREEN)Coverage report generated in $(API_DIR)/coverage directory.$(NC)"
 
 init_env: ## initialize the .env file from .env.example if it does not exist

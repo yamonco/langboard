@@ -14,8 +14,8 @@ from .utils.BotTaskHelper import logger
 @BotTaskSchemaHelper.schema(
     BotDefaultTrigger.BotCronScheduled,
     {
-        "project_uid?": "string",
-        "project_column_uid?": "string",
+        "project_uid": "string",
+        "project_column_uid": "string",
         "card_uid?": "string",
         "scope": "string",
     },

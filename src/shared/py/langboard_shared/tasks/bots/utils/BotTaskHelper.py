@@ -111,6 +111,8 @@ class BotTaskHelper:
         data: dict[str, Any],
         project: Project | None = None,
         scope_model: BaseDbModel | None = None,
+        *,
+        emit_webhook: bool = True,
     ): ...
     @overload
     @staticmethod
@@ -119,6 +121,8 @@ class BotTaskHelper:
         event: BotTriggerCondition | BotDefaultTrigger,
         data: dict[str, Any],
         project: Project | None = None,
+        *,
+        emit_webhook: bool = True,
     ): ...
     @staticmethod
     async def run(
@@ -127,11 +131,18 @@ class BotTaskHelper:
         data: dict[str, Any],
         project: Project | None = None,
         scope_model: BaseDbModel | None = None,
+        *,
+        emit_webhook: bool = True,
     ):
         if not isinstance(bots, list):
             bots = [bots]
 
-        WebhookTask.webhook_task(WebhookModel(event=event.value, data=data))
+        if emit_webhook:
+            WebhookTask.webhook_task(WebhookModel(event=event.value, data=data))
+
+        if BotTaskHelper.is_bot_authored_event(data):
+            logger.info("Skipped scoped bot cascade for bot-authored event: event=%s", event.value)
+            return
 
         for bot in bots:
             if isinstance(bot, tuple):
@@ -140,3 +151,12 @@ class BotTaskHelper:
             if not request:
                 continue
             await request.execute()
+
+    @staticmethod
+    def is_bot_authored_event(data: dict[str, Any]) -> bool:
+        """Prevent direct and multi-bot hook cycles without hiding the event."""
+
+        executor = data.get("executor")
+        return isinstance(executor, dict) and (
+            executor.get("type") == "bot" or isinstance(executor.get("bot_uname"), str)
+        )

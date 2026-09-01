@@ -56,9 +56,14 @@ def get_webhook(webhook_uid: str, service: DomainService = DomainService.scope()
 @RoleFilter.add(SettingRole, [SettingRoleAction.WebhookCreate], RoleFinder.setting, allowed_all_admin=False)
 @AuthFilter.add("admin")
 def create_webhook(form: CreateWebhookForm, service: DomainService = DomainService.scope()) -> JsonResponse:
-    setting = service.app_setting.create_webhook_setting(form.name, form.url)
+    """Create a webhook with an optional event allowlist."""
 
-    return JsonResponse(content={"webhook": setting.api_response()}, status_code=status.HTTP_201_CREATED)
+    setting, revealed_value = service.app_setting.create_webhook_setting(form.name, form.url, form.events)
+
+    return JsonResponse(
+        content={"webhook": setting.api_response(), "revealed_value": revealed_value},
+        status_code=status.HTTP_201_CREATED,
+    )
 
 
 @collaborative_edit(
@@ -83,7 +88,15 @@ def create_webhook(form: CreateWebhookForm, service: DomainService = DomainServi
 def update_webhook(
     webhook_uid: str, form: UpdateWebhookForm, service: DomainService = DomainService.scope()
 ) -> JsonResponse:
-    result = service.app_setting.update_webhook_setting(webhook_uid, form.name, form.url)
+    """Partially update a webhook and its optional event allowlist."""
+
+    result = service.app_setting.update_webhook_setting(
+        webhook_uid,
+        form.name,
+        form.url,
+        form.events,
+        replace_events="events" in form.model_fields_set,
+    )
     if not result:
         raise ApiException.NotFound_404(ApiErrorCode.NF3002)
 

@@ -6,6 +6,8 @@ from .ScopeForm import (
     DeleteBotScopeForm,
     ToggleBotScopeFreezeForm,
     ToggleBotTriggerConditionForm,
+    UpdateBotHookForm,
+    UpsertBotHookForm,
 )
 
 
@@ -20,4 +22,6 @@ __all__ = [
     "ToggleBotScopeFreezeForm",
     "ToggleBotTriggerConditionForm",
     "DeleteBotScopeForm",
+    "UpdateBotHookForm",
+    "UpsertBotHookForm",
 ]

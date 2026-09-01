@@ -101,6 +101,29 @@ class ProjectInvitationService(BaseDomainService):
 
         return invitation_result
 
+    def get_additive_invitation_related_data(self, project: Project, emails: list[str]) -> InvitationRelatedResult:
+        """Return only invitations that are not already assigned or pending."""
+
+        invitation_result = InvitationRelatedResult()
+        for email in emails:
+            user, _ = self.repo.user.get_by_email(email)
+            if user:
+                assigned_user = self.repo.project_assigned_user.get_by_user_and_project(user, project)
+                if assigned_user:
+                    invitation_result.already_assigned_ids.add(assigned_user.id)
+                    continue
+
+            invitation = self.repo.project_invitation.get_by_project_and_email(project, email)
+            if invitation:
+                invitation_result.already_sent_user_emails.add(email)
+                continue
+
+            if user:
+                invitation_result.users_by_email[email] = user
+            invitation_result.emails_should_invite.add(email)
+
+        return invitation_result
+
     def invite_emails(
         self, user: User, project: TProjectParam | None, invitation_result: InvitationRelatedResult
     ) -> bool:

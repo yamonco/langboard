@@ -27,6 +27,7 @@ import { AuthUser } from "@/core/models";
 import useRoleActionFilter from "@/core/hooks/useRoleActionFilter";
 import { ApiKeyRole, McpRole, SettingRole } from "@/core/models/roles";
 import useGetOllamaHealth from "@/controllers/api/settings/ollama/useGetOllamaHealth";
+import ProjectTemplatesPage from "@/pages/SettingsPage/ProjectTemplatesPage";
 
 function SettingsProxy(): React.JSX.Element {
     const { currentUser } = useAuth();
@@ -117,6 +118,9 @@ function SettingsProxy(): React.JSX.Element {
         case ROUTES.SETTINGS.API_KEYS:
             skeletonContent = <></>;
             break;
+        case ROUTES.SETTINGS.PROJECT_TEMPLATES:
+            skeletonContent = <></>;
+            break;
         case ROUTES.SETTINGS.USERS:
             skeletonContent = <></>;
             break;
@@ -173,6 +177,12 @@ function SettingsProxyDisplay({ currentUser, isOllamaAvailable }: { currentUser:
     const headerNavs: Record<string, IHeaderNavItem> = {};
 
     const sidebarNavs: Record<string, ISidebarNavItem> = {
+        [ROUTES.SETTINGS.PROJECT_TEMPLATES]: {
+            icon: "layout-template",
+            name: t("settings.Project templates"),
+            onClick: () => navigate(ROUTES.SETTINGS.PROJECT_TEMPLATES, { smooth: true }),
+            hidden: !currentUser.is_admin,
+        },
         [ROUTES.SETTINGS.API_KEYS]: {
             icon: "key-round",
             name: t("settings.API keys"),
@@ -264,6 +274,9 @@ function SettingsProxyDisplay({ currentUser, isOllamaAvailable }: { currentUser:
 
     let pageContent;
     switch (pathname) {
+        case ROUTES.SETTINGS.PROJECT_TEMPLATES:
+            pageContent = <ProjectTemplatesPage />;
+            break;
         case ROUTES.SETTINGS.API_KEYS:
             pageContent = <ApiKeysPage />;
             break;
@@ -299,6 +312,11 @@ function SettingsProxyDisplay({ currentUser, isOllamaAvailable }: { currentUser:
     useEffect(() => {
         const foundAvailableRoute = Object.entries(sidebarNavs).find(([_, nav]) => !nav.hidden)?.[0];
         switch (pathname) {
+            case ROUTES.SETTINGS.PROJECT_TEMPLATES:
+                if (!currentUser.is_admin) {
+                    navigate(foundAvailableRoute ?? ROUTES.DASHBOARD.PROJECTS.ALL, { replace: true });
+                }
+                break;
             case ROUTES.SETTINGS.API_KEYS:
                 if (!hasApiKeyRoleAction(...Object.values(ApiKeyRole.EAction))) {
                     navigate(foundAvailableRoute ?? ROUTES.DASHBOARD.PROJECTS.ALL, { replace: true });

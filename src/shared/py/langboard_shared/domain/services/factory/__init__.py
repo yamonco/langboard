@@ -21,9 +21,11 @@ from .MetadataService import MetadataService
 from .NotificationService import NotificationService
 from .OrchestrationTaskService import OrchestrationTaskService
 from .ProjectColumnService import ProjectColumnService
+from .ProjectEmailNotificationService import ProjectEmailNotificationService
 from .ProjectInvitationService import ProjectInvitationService
 from .ProjectLabelService import ProjectLabelService
 from .ProjectService import ProjectService
+from .ProjectTemplateService import ProjectTemplateService
 from .ProjectWikiService import ProjectWikiService
 from .ReactionService import ReactionService
 from .ScimProvisioningService import ScimProvisioningService
@@ -56,9 +58,11 @@ __all__ = [
     "NotificationService",
     "OrchestrationTaskService",
     "ProjectColumnService",
+    "ProjectEmailNotificationService",
     "ProjectInvitationService",
     "ProjectLabelService",
     "ProjectService",
+    "ProjectTemplateService",
     "ProjectWikiService",
     "ReactionService",
     "ScimProvisioningService",

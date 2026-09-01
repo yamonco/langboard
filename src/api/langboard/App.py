@@ -21,7 +21,7 @@ class App:
         self.app_config = FastAPIAppConfig(APP_CONFIG_FILE)
         self.config = self.app_config.load()
         self._init_mcp_server()
-        self.api = FastAPI(debug=True, lifespan=lambda app: self._lifespan())
+        self.api = FastAPI(debug=Env.ENVIRONMENT == "development", lifespan=self._lifespan)
         self._init_api_middlewares()
         self._init_api_routes()
 
@@ -39,8 +39,11 @@ class App:
 
     def _init_api_middlewares(self):
         origins = [Env.PUBLIC_UI_URL, "http://localhost:6274"]
-        self.api.add_middleware(RoleMiddleware, routes=self.api.routes)
-        self.api.add_middleware(ApiAuthMiddleware, routes=self.api.routes)
+        # FastAPI 0.141+ keeps included routers behind an internal wrapper.
+        # Authorization filters are registered on the original API routes, so
+        # middleware must inspect that stable route collection directly.
+        self.api.add_middleware(RoleMiddleware, routes=AppRouter.api.routes)
+        self.api.add_middleware(ApiAuthMiddleware, routes=AppRouter.api.routes)
         self.api.add_middleware(CollaborativeEditMiddleware)
         self.api.add_middleware(GZipMiddleware, minimum_size=1024, compresslevel=5)
         self.api.add_middleware(
@@ -87,10 +90,7 @@ class App:
 
     def _init_mcp_server(self):
         ModuleLoader.load("mcp_tools", "Mcp", log=not self.config.is_restarting)
-        result = McpServer.get_http_app()
-        if not result:
-            raise RuntimeError("Failed to initialize MCP server")
-        mcp_http_app, mcp_app = result
+        mcp_http_app, mcp_app = McpServer.get_http_app()
         self.mcp_http_app = mcp_http_app
         self.mcp_app = mcp_app
 
@@ -100,7 +100,7 @@ class App:
         return json_loads(content)
 
     @asynccontextmanager
-    async def _lifespan(self):
+    async def _lifespan(self, _: FastAPI):
         """Manage application lifespan events."""
         # Startup
         try:
@@ -112,5 +112,5 @@ class App:
         except Exception:
             raise
 
-        async with self.mcp_app.session_manager.run():
+        async with self.mcp_http_app.router.lifespan_context(self.mcp_http_app):
             yield

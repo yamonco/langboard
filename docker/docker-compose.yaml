@@ -4,5 +4,7 @@ networks:
   net:
     name: ${PROJECT_NAME}_network
     driver: bridge
+    driver_opts:
+      com.docker.network.driver.mtu: "${DOCKER_NETWORK_MTU:-1500}"
     ipam:
       driver: default

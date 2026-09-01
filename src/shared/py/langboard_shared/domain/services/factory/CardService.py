@@ -166,6 +166,32 @@ class CardService(BaseDomainService):
             )
         return cards
 
+    def get_api_page_by_project(
+        self,
+        project: TProjectParam | None,
+        limit: int,
+        before_updated_at: SafeDateTime | None = None,
+        before_card: TCardParam | None = None,
+    ) -> tuple[list[dict[str, Any]], int, tuple[str, str] | None] | None:
+        """Return a bounded newest-updated-first card page and opaque cursor fields."""
+
+        project = InfraHelper.get_by_id_like(Project, project)
+        if not project:
+            return None
+        records = self.repo.card.get_page_by_project(project, limit, before_updated_at, before_card)
+        has_more = len(records) > limit
+        page = records[:limit]
+        cards: list[dict[str, Any]] = []
+        for card, column in page:
+            api_card = card.api_response()
+            api_card["project_column_name"] = column.name
+            cards.append(api_card)
+        next_fields = None
+        if has_more and page:
+            last_card = page[-1][0]
+            next_fields = (last_card.updated_at.isoformat(), last_card.get_uid())
+        return cards, self.repo.card.count_by_project(project), next_fields
+
     def get_api_list_by_column(self, column: TColumnParam | None) -> list[dict[str, Any]]:
         column = InfraHelper.get_by_id_like(ProjectColumn, column)
         if not column:
@@ -176,40 +202,68 @@ class CardService(BaseDomainService):
 
     @overload
     def get_api_assigned_user_list(
-        self, card: TCardParam | None, only_uids: Literal[False] = False
+        self,
+        card: TCardParam | None,
+        only_uids: Literal[False] = False,
+        limit: int | None = None,
     ) -> list[dict[str, Any]]: ...
     @overload
-    def get_api_assigned_user_list(self, card: TCardParam | None, only_uids: Literal[True]) -> list[str]: ...
     def get_api_assigned_user_list(
-        self, card: TCardParam | None, only_uids: bool = False
+        self,
+        card: TCardParam | None,
+        only_uids: Literal[True],
+        limit: int | None = None,
+    ) -> list[str]: ...
+    def get_api_assigned_user_list(
+        self,
+        card: TCardParam | None,
+        only_uids: bool = False,
+        limit: int | None = None,
     ) -> list[dict[str, Any]] | list[str]:
+        """Return assigned users, optionally enforcing a repository row limit."""
+
         card = InfraHelper.get_by_id_like(Card, card)
         if not card:
             return []
 
-        raw_users = self.repo.card_assigned_user.get_all_by_card(card, only_ids=only_uids)
+        raw_users = self.repo.card_assigned_user.get_all_by_card(card, only_ids=only_uids, limit=limit)
         if only_uids:
             users = [cast(SnowflakeID, user).to_short_code() for user, _ in raw_users]
         else:
             users = [cast(User, user).api_response() for user, _ in raw_users]
         return users
 
-    def get_api_bot_scope_list(self, project: TProjectParam | None, card: TCardParam | None) -> list[dict[str, Any]]:
+    def get_api_bot_scope_list(
+        self,
+        project: TProjectParam | None,
+        card: TCardParam | None,
+        limit: int | None = None,
+    ) -> list[dict[str, Any]]:
+        """Return card bot scopes, optionally enforcing a database row limit."""
+
         params = InfraHelper.get_records_with_foreign_by_params((Project, project), (Card, card))
         if not params:
             return []
         project, card = params
 
-        scopes = BotScopeHelper.get_list(CardBotScope, card_id=card.id)
+        scopes = BotScopeHelper.get_list(CardBotScope, limit=limit, card_id=card.id)
         return [scope.api_response() for scope in scopes]
 
-    def get_api_bot_schedule_list(self, project: TProjectParam | None, card: TCardParam | None) -> list[dict[str, Any]]:
+    def get_api_bot_schedule_list(
+        self,
+        project: TProjectParam | None,
+        card: TCardParam | None,
+        limit: int | None = None,
+    ) -> list[dict[str, Any]]:
+        """Return card bot schedules, optionally enforcing a database row limit."""
+
         params = InfraHelper.get_records_with_foreign_by_params((Project, project), (Card, card))
         if not params:
             return []
         project, card = params
 
-        schedules = BotScheduleHelper.get_all_by_scope(CardBotSchedule, None, card, as_api=True)
+        pagination = TimeBasedPagination(page=1, limit=limit) if limit is not None else None
+        schedules = BotScheduleHelper.get_all_by_scope(CardBotSchedule, None, card, as_api=True, pagination=pagination)
 
         return schedules
 
@@ -264,7 +318,7 @@ class CardService(BaseDomainService):
         return card, api_card
 
     def update(
-        self, user_or_bot: TUserOrBot, project: TProjectParam | None, card: TCardParam | None, form: dict
+        self, user_or_bot: TUserOrBot, project: TProjectParam | None, card: TCardParam | None, form: dict[str, Any]
     ) -> dict[str, Any] | Literal[True] | None:
         params = InfraHelper.get_records_with_foreign_by_params((Project, project), (Card, card))
         if not params:
@@ -344,8 +398,11 @@ class CardService(BaseDomainService):
         CardPublisher.order_changed(project, card, old_column, cast(ProjectColumn, new_column))
 
         if new_column:
+            CardBotTask.enqueue_card_moved_webhook(
+                user_or_bot, project, card, old_column, cast(ProjectColumn, new_column)
+            )
             CardActivityTask.card_moved(user_or_bot, project, card, old_column)
-            CardBotTask.card_moved(user_or_bot, project, card, old_column)
+            CardBotTask.card_moved(user_or_bot, project, card, old_column, False)
 
         return True
 

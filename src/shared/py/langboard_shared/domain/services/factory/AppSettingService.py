@@ -1,11 +1,14 @@
 from typing import Any, Literal, Sequence
+from uuid import uuid4
 from ....ai import BotScheduleHelper
 from ....core.domain import BaseDomainService
 from ....core.domain.BaseDomainService import TMutableValidatorMap
+from ....core.security import KeyVault
 from ....core.types.ParamTypes import TGlobalCardRelationshipTypeParam
 from ....core.utils.Converter import convert_python_data
 from ....helpers import InfraHelper, ModelHelper
 from ....publishers import AppSettingPublisher
+from ....tasks.webhooks.utils import validate_webhook_events, validate_webhook_url
 from ...models import ApiComfortTool, GlobalCardRelationshipType, NotificationScheduleRule, WebhookSetting
 from ...models.ApiComfortTool import ApiComfortToolMap
 from ...models.BaseNotificationScheduleModel import BaseNotificationScheduleModel
@@ -119,21 +122,41 @@ class AppSettingService(BaseDomainService):
             return None
         return setting.api_response()
 
-    def create_webhook_setting(self, name: str, url: str) -> WebhookSetting:
+    def create_webhook_setting(
+        self, name: str, url: str, events: list[str] | None = None
+    ) -> tuple[WebhookSetting, str]:
+        """Create a webhook and return its one-time signing secret."""
+
+        events = validate_webhook_events(events)
+        secret_id = str(uuid4())
+        secret = KeyVault.create_key(secret_id)
         webhook_setting = WebhookSetting(
             name=name,
-            url=url.strip(),
+            url=validate_webhook_url(url),
+            secret_id=secret_id,
+            events=events,
         )
-
-        self.repo.webhook_setting.insert(webhook_setting)
+        try:
+            self.repo.webhook_setting.insert(webhook_setting)
+        except Exception:
+            KeyVault.delete_key(secret_id)
+            raise
 
         AppSettingPublisher.webhook_setting_created(webhook_setting)
 
-        return webhook_setting
+        return webhook_setting, secret
 
     def update_webhook_setting(
-        self, webhook_setting_uid: str, name: str | None = None, url: str | None = None
+        self,
+        webhook_setting_uid: str,
+        name: str | None = None,
+        url: str | None = None,
+        events: list[str] | None = None,
+        *,
+        replace_events: bool = False,
     ) -> WebhookSetting | None:
+        """Update a webhook, distinguishing omitted events from explicit null."""
+
         setting = InfraHelper.get_by_id_like(WebhookSetting, webhook_setting_uid)
         if not setting:
             return None
@@ -141,13 +164,17 @@ class AppSettingService(BaseDomainService):
         if name is not None:
             setting.name = name
         if url is not None:
-            setting.url = url.strip()
+            setting.url = validate_webhook_url(url)
+        if replace_events or events is not None:
+            setting.events = validate_webhook_events(events)
 
         model = {}
         if name is not None:
             model["name"] = setting.name
         if url is not None:
             model["url"] = setting.url
+        if replace_events or events is not None:
+            model["events"] = setting.events
 
         if not setting.has_changes():
             return setting
@@ -163,17 +190,27 @@ class AppSettingService(BaseDomainService):
         if not setting:
             return False
 
+        secret_id = setting.secret_id
         self.repo.webhook_setting.delete(setting)
+        if secret_id:
+            KeyVault.delete_key(secret_id)
 
         AppSettingPublisher.webhook_setting_deleted(setting.get_uid())
 
         return True
 
     def delete_selected_webhook_settings(self, webhook_setting_uids: Sequence[str]) -> bool:
-        self.repo.webhook_setting.delete(webhook_setting_uids)
-
         if isinstance(webhook_setting_uids, str):
             webhook_setting_uids = [webhook_setting_uids]
+        secret_ids: list[str] = []
+        for webhook_setting_uid in webhook_setting_uids:
+            setting = InfraHelper.get_by_id_like(WebhookSetting, webhook_setting_uid)
+            if setting and setting.secret_id:
+                secret_ids.append(setting.secret_id)
+        self.repo.webhook_setting.delete(webhook_setting_uids)
+        for secret_id in secret_ids:
+            KeyVault.delete_key(secret_id)
+
         uids = [InfraHelper.convert_uid(r) for r in webhook_setting_uids]
         AppSettingPublisher.selected_webhook_settings_deleted(uids)
 

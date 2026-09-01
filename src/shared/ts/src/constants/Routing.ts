@@ -110,6 +110,7 @@ const API = {
             CREATE_SUGGESTION_TASK: "/board/{uid}/orchestration/card/{card_uid}/suggestion-task",
             RECORD_BYPASS: "/board/{uid}/orchestration/card/{card_uid}/bypass",
         },
+        COPY_AS_TEMPLATE: "/board/{uid}/settings/copy-as-template",
         COLUMN: {
             CREATE: "/board/{uid}/column",
             CHANGE_NAME: "/board/{uid}/column/{project_column_uid}/name",
@@ -175,6 +176,7 @@ const API = {
         },
         SETTINGS: {
             UPDATE_DETAILS: "/board/{uid}/settings/details",
+            EMAIL_NOTIFICATIONS: "/board/{uid}/settings/email-notifications",
             UPDATE_USER_ROLES: "/board/{uid}/settings/roles/user/{user_uid}",
             DELETE_PROJECT: "/board/{uid}/settings/delete",
             LABEL: {
@@ -201,9 +203,9 @@ const API = {
             GET_ALL_BY_PROJECT: "/bot/{bot_uid}/project/{project_uid}/schedules",
             GET_ALL_BY_CARD: "/bot/{bot_uid}/card/{card_uid}/schedules",
             GET_ALL_BY_COLUMN: "/bot/{bot_uid}/column/{project_column_uid}/schedules",
-            SCHEDULE: "/bot/{bot_uid}/schedule",
-            RESCHEDULE: "/bot/{bot_uid}/reschedule/{schedule_uid}",
-            UNSCHEDULE: "/bot/{bot_uid}/unschedule/{schedule_uid}",
+            PROJECT_SCHEDULE: "/projects/{project_uid}/bots/{bot_uid}/schedules",
+            PROJECT_RESCHEDULE: "/projects/{project_uid}/bots/{bot_uid}/schedules/{schedule_uid}",
+            PROJECT_UNSCHEDULE: "/projects/{project_uid}/bots/{bot_uid}/schedules/{schedule_uid}",
         },
         LOG: {
             GET_ALL_BY_PROJECT: "/bot/{bot_uid}/project/{project_uid}/logs",
@@ -221,6 +223,10 @@ const API = {
     },
     SETTINGS: {
         GET_SETTING_ROLES: "/settings/roles",
+        PROJECT_TEMPLATES: {
+            GET_LIST: "/settings/project-templates",
+            SET_DEFAULT: "/settings/project-templates/default",
+        },
         USERS: {
             GET_LIST: "/settings/users",
             CREATE: "/settings/users",
@@ -268,6 +274,7 @@ const API = {
             API_LIST: "/schema/api",
             API_COMFORT_TOOLS: "/schema/api/comfort",
             API_COMFORT_TOOL: "/schema/api/comfort/{comfort_tool_name}",
+            WEBHOOK: "/schema/webhook.json",
         },
         OLLAMA: {
             HEALTH: "/settings/ollama/health",
