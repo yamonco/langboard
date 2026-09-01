@@ -1,3 +1,5 @@
+"""MCP REST compatibility adapter tests."""
+
 from types import SimpleNamespace
 import pytest
 from langboard.mcp_integration import Server

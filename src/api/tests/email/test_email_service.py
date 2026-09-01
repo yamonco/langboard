@@ -1,8 +1,8 @@
 from email.message import EmailMessage
 from typing import Any
 import pytest
-from ....Env import Env
-from .EmailService import EmailService
+from langboard_shared.domain.services.factory.EmailService import EmailService
+from langboard_shared.Env import Env
 
 
 def test_send_template_preserves_smtp_contract(monkeypatch: pytest.MonkeyPatch) -> None:

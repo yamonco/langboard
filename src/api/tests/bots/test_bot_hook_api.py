@@ -1,4 +1,4 @@
-"""Canonical REST and MCP Bot Hook contract tests."""
+"""Bot Hook REST and MCP adapter contract tests."""
 
 import json
 from types import SimpleNamespace

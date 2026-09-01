@@ -21,7 +21,7 @@ class App:
         self.app_config = FastAPIAppConfig(APP_CONFIG_FILE)
         self.config = self.app_config.load()
         self._init_mcp_server()
-        self.api = FastAPI(debug=True, lifespan=lambda app: self._lifespan())
+        self.api = FastAPI(debug=Env.ENVIRONMENT == "development", lifespan=self._lifespan)
         self._init_api_middlewares()
         self._init_api_routes()
 
@@ -100,7 +100,7 @@ class App:
         return json_loads(content)
 
     @asynccontextmanager
-    async def _lifespan(self):
+    async def _lifespan(self, _: FastAPI):
         """Manage application lifespan events."""
         # Startup
         try:

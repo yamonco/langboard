@@ -1,4 +1,4 @@
-"""MCP transport contract tests for card workspace tools."""
+"""Card workspace MCP transport contract tests."""
 
 import pytest
 from langboard.card_workspace.domain import CardBundleInclude, ChecklistProjectionItem
