@@ -148,7 +148,6 @@ function BoardProxyDisplay({ pageRoute, isFetching, project }: IBoardProxyDispla
     const socket = useSocket();
     const { currentUser } = useAuth();
     const navigate = usePageNavigateRef();
-    const [isReady, setIsReady] = useState(false);
     const [isCardExpanded, setIsCardExpanded] = useState(false);
     const [isActivityDialogOpened, setIsActivityDialogOpened] = useState(false);
     const [activeSidePanel, setActiveSidePanel] = useState<TBoardSidePanel>();
@@ -233,10 +232,9 @@ function BoardProxyDisplay({ pageRoute, isFetching, project }: IBoardProxyDispla
                             hidden: true,
                         }));
                     }
-                    setIsReady(() => true);
                 },
             }),
-        [project, setBoardChat, setChatResizableSidebar, setIsReady]
+        [project, setBoardChat, setChatResizableSidebar]
     );
     const boardAssignedUsersUpdatedHandlers = useMemo(
         () =>
@@ -567,7 +565,7 @@ function BoardProxyDisplay({ pageRoute, isFetching, project }: IBoardProxyDispla
                 }
                 className="!p-0"
             >
-                {isReady && currentUser && project ? (
+                {currentUser && project ? (
                     <Flex
                         position="relative"
                         w="full"
