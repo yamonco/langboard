@@ -3,9 +3,13 @@ import pytest
 from fastmcp import Client
 from fastmcp.exceptions import AuthorizationError, ToolError
 from fastmcp.tools import Tool
-from ..middlewares.McpAuthMiddleware import mcp_auth_context
-from . import Server
-from .Server import _create_fastmcp, _get_transport_security_allowlists, _reject_global_wildcards
+from langboard.mcp_integration import Server
+from langboard.mcp_integration.Server import (
+    _create_fastmcp,
+    _get_transport_security_allowlists,
+    _reject_global_wildcards,
+)
+from langboard.middlewares.McpAuthMiddleware import mcp_auth_context
 
 
 def test_transport_allowlists_remain_bounded() -> None:

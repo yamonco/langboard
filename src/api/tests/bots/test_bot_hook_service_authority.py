@@ -1,12 +1,12 @@
-"""Focused Bot Hook authority tests colocated with the owning service."""
+"""Focused Bot Hook authority tests for the owning service."""
 
 from types import SimpleNamespace
 import pytest
-from ....ai import BotScopeHelper
-from ....helpers import BotHelper, InfraHelper
-from ...models import Bot, Project
-from ...models.bases import BotTriggerCondition
-from .BotService import BotService, BotServiceError
+from langboard_shared.ai import BotScopeHelper
+from langboard_shared.domain.models import Bot, Project
+from langboard_shared.domain.models.bases import BotTriggerCondition
+from langboard_shared.domain.services.factory.BotService import BotService, BotServiceError
+from langboard_shared.helpers import BotHelper, InfraHelper
 
 
 class FakeScopeModel:

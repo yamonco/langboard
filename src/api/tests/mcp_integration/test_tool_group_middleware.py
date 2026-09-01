@@ -3,8 +3,8 @@ from types import SimpleNamespace
 from typing import Any
 import pytest
 from fastmcp.exceptions import AuthorizationError
-from ..middlewares.McpAuthMiddleware import mcp_auth_context
-from .ToolGroupMiddleware import ToolGroupMiddleware
+from langboard.mcp_integration.ToolGroupMiddleware import ToolGroupMiddleware
+from langboard.middlewares.McpAuthMiddleware import mcp_auth_context
 
 
 def test_tool_group_filters_discovery_and_blocks_ungranted_calls() -> None:

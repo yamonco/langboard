@@ -1,4 +1,4 @@
-"""Project-scoped Bot Schedule REST adapter tests."""
+"""Bot Schedule REST adapter tests."""
 
 from collections.abc import Callable
 from types import SimpleNamespace
