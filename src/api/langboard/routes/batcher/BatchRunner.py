@@ -9,6 +9,7 @@ from langboard_shared.core.routing import AppRouter
 from langboard_shared.core.routing.ApiSchemaHelper import ApiSchemaMap
 from langboard_shared.core.utils.Converter import json_default
 from langboard_shared.domain.models import Bot, User
+from langboard_shared.Env import Env
 from starlette.types import Message
 from .BatchForm import BatchFormRequestSchema
 
@@ -21,6 +22,8 @@ async def execute_batch_request_schemas(
 ) -> list[dict]:
     api_methods = {"GET", "POST", "PUT", "DELETE"}
     responses = []
+    response_size_limit = Env.BATCH_MAX_RESPONSE_SIZE_MB * 1024 * 1024
+    response_size = 0
     for request_schema in request_schemas:
         if request_schema.method.upper() not in api_methods:
             responses.append(create_batch_response({}, status.HTTP_400_BAD_REQUEST))
@@ -48,6 +51,7 @@ async def execute_batch_request_schemas(
 
         response = {}
         response_body_parts: list[bytes] = []
+        response_limit_exceeded = False
         responses.append(response)
 
         async def receive():
@@ -57,6 +61,8 @@ async def execute_batch_request_schemas(
             return {"type": "http.request", "body": message, "more_body": False}
 
         async def send(message: Message):
+            nonlocal response_limit_exceeded, response_size
+
             message_type = message.get("type")
             if message_type == "http.response.start":
                 response["status"] = message.get("status", status.HTTP_200_OK)
@@ -66,6 +72,16 @@ async def execute_batch_request_schemas(
                 return
 
             body = message.get("body", b"{}")
+            response_size += len(body)
+            if response_size > response_size_limit:
+                response_body_parts.clear()
+                response_limit_exceeded = True
+                response["status"] = status.HTTP_413_REQUEST_ENTITY_TOO_LARGE
+                response["body"] = {"message": f"Batch response exceeds the {Env.BATCH_MAX_RESPONSE_SIZE_MB} MB limit."}
+                return
+            if response_limit_exceeded:
+                return
+
             response_body_parts.append(body)
             if message.get("more_body", False):
                 return
@@ -77,6 +93,8 @@ async def execute_batch_request_schemas(
                 response["body"] = {"error": "Invalid JSON response"}
 
         await AppRouter.get_app()(scope, receive, send)
+        if response_limit_exceeded:
+            break
 
     return responses
 

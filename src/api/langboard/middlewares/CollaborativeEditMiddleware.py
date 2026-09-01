@@ -67,8 +67,22 @@ class CollaborativeEditMiddleware:
             await response(scope, receive, send)
             return
 
-        body_messages = await self._read_body_messages(receive)
-        body = b"".join(message.get("body", b"") for message in body_messages if message["type"] == "http.request")
+        try:
+            body, disconnected = await self._read_body(receive)
+        except ValueError as error:
+            response = JsonResponse(
+                content={"message": str(error)},
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            )
+            await response(scope, receive, send)
+            return
+
+        body_messages = cast(
+            list[Message],
+            [{"type": "http.request", "body": body, "more_body": False}],
+        )
+        if disconnected:
+            body_messages.append({"type": "http.disconnect"})
         request_schema = BatchFormRequestSchema(
             path_or_api_name=request_path,
             method=method,
@@ -493,13 +507,18 @@ class CollaborativeEditMiddleware:
         return form if isinstance(form, dict) else None
 
     @staticmethod
-    async def _read_body_messages(receive: Receive) -> list[Message]:
-        messages: list[Message] = []
+    async def _read_body(receive: Receive) -> tuple[bytes, bool]:
+        body = bytearray()
+        max_body_bytes = Env.MAX_FILE_SIZE_MB * 1024 * 1024
         while True:
             message = await receive()
-            messages.append(message)
+            if message["type"] == "http.request":
+                body.extend(message.get("body", b""))
+                if len(body) > max_body_bytes:
+                    body.clear()
+                    raise ValueError(f"Request body exceeds the {Env.MAX_FILE_SIZE_MB} MB limit")
             if message["type"] != "http.request" or not message.get("more_body", False):
-                return messages
+                return bytes(body), message["type"] == "http.disconnect"
 
     @staticmethod
     def _replay_body_messages(messages: list[Message]) -> Receive:

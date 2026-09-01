@@ -72,6 +72,9 @@ class UserService(BaseDomainService):
 
         return api_list
 
+    def count_not_deleted(self) -> int:
+        return self.repo.user.count_not_deleted()
+
     def get_by_email(self, email: str | None):
         if not email:
             return None, None

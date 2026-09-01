@@ -75,15 +75,19 @@ class InMemoryConsumer extends BaseConsumer {
     }
 
     async #tryDeleteFile(filePath: string) {
-        try {
-            fs.unlinkSync(filePath);
-        } catch {
+        for (let attempt = 0; attempt < 5; ++attempt) {
+            try {
+                fs.unlinkSync(filePath);
+                return;
+            } catch {
+                if (!fs.existsSync(filePath)) {
+                    return;
+                }
+            }
+
             await new Promise<void>((resolve) => {
-                setTimeout(() => {
-                    resolve();
-                }, 1000);
+                setTimeout(resolve, 1000);
             });
-            await this.#tryDeleteFile(filePath);
         }
     }
 }

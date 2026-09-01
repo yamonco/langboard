@@ -7,7 +7,6 @@ from langboard_shared.domain.models import McpRole, User
 from langboard_shared.domain.models.McpRole import McpRoleAction
 from langboard_shared.domain.services import DomainService
 from langboard_shared.filter import RoleFilter
-from langboard_shared.infrastructure.repositories import Repository
 from langboard_shared.security import RoleFinder
 from ...mcp_integration import McpTool
 from ...mcp_tools.RoleChecker import McpRoleChecker
@@ -51,45 +50,44 @@ async def execute_mcp_tool(tool_name: str, request: Request):
         raise ApiException.BadRequest_400(ApiErrorCode.VA0000)
 
     # Get MCP tool group and validate access
-    repo = Repository()
     service = DomainService()
-    service.initialize(repo)
+    try:
+        tool_group = service.mcp_tool_group.get_by_id_like(mcp_tool_group_uid)
+        if not tool_group:
+            raise ApiException.NotFound_404(ApiErrorCode.NF3006)
 
-    tool_group = service.mcp_tool_group.get_by_id_like(mcp_tool_group_uid)
-    if not tool_group:
-        raise ApiException.NotFound_404(ApiErrorCode.NF3006)
+        # Check if it's a personal tool group and validate ownership
+        if tool_group.user_id is not None:
+            api_key = request.scope.get("api_key")
+            if not api_key:
+                raise ApiException.Forbidden_403(ApiErrorCode.PE1001)
 
-    # Check if it's a personal tool group and validate ownership
-    if tool_group.user_id is not None:
-        api_key = request.scope.get("api_key")
-        if not api_key:
+            # Validate that the API key belongs to the same user as the tool group
+            if api_key.user_id != tool_group.user_id:
+                raise ApiException.Forbidden_403(ApiErrorCode.PE1001)
+
+        handler = tool["handler"]
+        sig = inspect.signature(handler)
+
+        role_checker = McpRoleChecker(service)
+
+        if not role_checker.check_permission(handler, user_or_bot, arguments):
             raise ApiException.Forbidden_403(ApiErrorCode.PE1001)
 
-        # Validate that the API key belongs to the same user as the tool group
-        if api_key.user_id != tool_group.user_id:
-            raise ApiException.Forbidden_403(ApiErrorCode.PE1001)
+        if "user_or_bot" in sig.parameters:
+            arguments["user_or_bot"] = user_or_bot
+        elif "user" in sig.parameters:
+            authenticated_user = user_or_bot if isinstance(user_or_bot, User) else None
+            if not authenticated_user:
+                raise ApiException.Forbidden_403(ApiErrorCode.PE1001)
+            arguments["user"] = authenticated_user
 
-    handler = tool["handler"]
-    sig = inspect.signature(handler)
+        for param_name, param in sig.parameters.items():
+            if param_name == "service" and param.annotation == DomainService:
+                arguments["service"] = service
+                break
 
-    role_checker = McpRoleChecker()
-
-    if not role_checker.check_permission(handler, user_or_bot, arguments):
-        raise ApiException.Forbidden_403(ApiErrorCode.PE1001)
-
-    if "user_or_bot" in sig.parameters:
-        arguments["user_or_bot"] = user_or_bot
-    elif "user" in sig.parameters:
-        authenticated_user = user_or_bot if isinstance(user_or_bot, User) else None
-        if not authenticated_user:
-            raise ApiException.Forbidden_403(ApiErrorCode.PE1001)
-        arguments["user"] = authenticated_user
-
-    for param_name, param in sig.parameters.items():
-        if param_name == "service" and param.annotation == DomainService:
-            arguments["service"] = service
-            break
-
-    handler = tool["handler"]
-    result = await handler(**arguments) if inspect.iscoroutinefunction(handler) else handler(**arguments)
-    return JsonResponse(content={"result": result})
+        result = await handler(**arguments) if inspect.iscoroutinefunction(handler) else handler(**arguments)
+        return JsonResponse(content={"result": result})
+    finally:
+        service.close()

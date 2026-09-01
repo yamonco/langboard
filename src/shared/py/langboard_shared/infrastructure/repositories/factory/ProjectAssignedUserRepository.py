@@ -48,10 +48,12 @@ class ProjectAssignedUserRepository(BaseRepository[ProjectAssignedUser]):
         assigned_user = None
         with DbSession.use(readonly=True) as db:
             result = db.exec(
-                SqlBuilder.select.table(ProjectAssignedUser).where(
+                SqlBuilder.select.table(ProjectAssignedUser)
+                .where(
                     (ProjectAssignedUser.column("project_id") == project_id)
                     & (ProjectAssignedUser.column("user_id") == user_id)
                 )
+                .limit(1)
             )
             assigned_user = result.first()
         return assigned_user

@@ -65,6 +65,9 @@ from .Form import (
 @RoleFilter.add(SettingRole, [SettingRoleAction.UserRead], RoleFinder.setting, allowed_all_admin=False)
 @AuthFilter.add("admin")
 def get_users_in_settings(service: DomainService = DomainService.scope()) -> JsonResponse:
+    if service.user.count_not_deleted() > Env.SETTINGS_USER_LIST_MAX_ITEMS:
+        raise ApiException.ContentTooLarge_413()
+
     users = service.user.get_api_list_in_settings()
     full_access_emails = Env.FULL_ADMIN_ACCESS_EMAILS
 

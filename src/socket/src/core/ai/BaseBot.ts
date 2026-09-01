@@ -12,6 +12,9 @@ interface IBaseBotOptions {
     internalBotSettings?: IProjectAssignedInternalBotSettings;
 }
 
+const ABORT_RACE_WINDOW_MS = 5000;
+const MAX_PENDING_ABORTS = 1024;
+
 export interface IBotRunOptions extends IBaseBotOptions {
     data: Record<string, any>;
 }
@@ -37,9 +40,11 @@ abstract class BaseBot {
         return null!;
     }
     #abortableTasks: Map<string, AbortController>;
+    #pendingAborts: Map<string, NodeJS.Timeout>;
 
     constructor() {
         this.#abortableTasks = new Map();
+        this.#pendingAborts = new Map();
     }
 
     public abstract run(options: IBotRunOptions): Promise<string | BaseStreamResponse | null>;
@@ -49,6 +54,8 @@ abstract class BaseBot {
     public abstract upload(options: IBotUploadOptions): Promise<string | null>;
 
     public async abort(taskID: string): Promise<void> {
+        this.#rememberPendingAbort(taskID);
+
         const task = this.#abortableTasks.get(taskID);
         if (!task) {
             return;
@@ -94,31 +101,49 @@ abstract class BaseBot {
         }) as any;
     }
 
-    protected requestAbortable<TOptions extends IBaseBotOptions & IBotRequestOptions & { taskID: string }>({
+    protected async requestAbortable<TOptions extends IBaseBotOptions & IBotRequestOptions & { taskID: string }>({
         internalBot,
         internalBotSettings,
         taskID,
         requestModel,
         useStream = false,
     }: TOptions): Promise<TOptions["useStream"] extends true ? BaseStreamResponse | null : string | null> {
+        if (this.#pendingAborts.has(taskID)) {
+            return null;
+        }
+
         const request = createRequest(internalBot, internalBotSettings);
         if (!request) {
             return Promise.resolve(null);
         }
 
         const abortController = new AbortController();
-        const onAbort = () => {
-            this.#abortableTasks.delete(taskID);
+        const finishTask = () => {
+            if (this.#abortableTasks.get(taskID) === abortController) {
+                this.#abortableTasks.delete(taskID);
+            }
             abortController.signal.removeEventListener("abort", onAbort);
         };
+        const onAbort = () => finishTask();
         abortController.signal.addEventListener("abort", onAbort);
+
+        this.#abortableTasks.get(taskID)?.abort();
         this.#abortableTasks.set(taskID, abortController);
 
-        return request.execute({
-            requestModel,
-            task: [abortController, onAbort],
-            useStream,
-        }) as any;
+        try {
+            const response = await request.execute({
+                requestModel,
+                task: [abortController, finishTask],
+                useStream,
+            });
+            if (!response) {
+                finishTask();
+            }
+            return response as any;
+        } catch (error) {
+            finishTask();
+            throw error;
+        }
     }
 
     protected async uploadFile({ internalBot, internalBotSettings, file }: IBaseBotOptions & { file: formidable.File }): Promise<string | null> {
@@ -128,6 +153,21 @@ abstract class BaseBot {
         }
 
         return await request.upload(file);
+    }
+
+    #rememberPendingAbort(taskID: string): void {
+        const existingTimeout = this.#pendingAborts.get(taskID);
+        if (existingTimeout) {
+            clearTimeout(existingTimeout);
+        } else if (this.#pendingAborts.size >= MAX_PENDING_ABORTS) {
+            const oldestTaskID = this.#pendingAborts.keys().next().value!;
+            clearTimeout(this.#pendingAborts.get(oldestTaskID));
+            this.#pendingAborts.delete(oldestTaskID);
+        }
+
+        const timeout = setTimeout(() => this.#pendingAborts.delete(taskID), ABORT_RACE_WINDOW_MS);
+        timeout.unref();
+        this.#pendingAborts.set(taskID, timeout);
     }
 }
 

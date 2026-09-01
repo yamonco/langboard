@@ -1,4 +1,5 @@
 from inspect import Parameter, signature
+from json import dumps as json_dumps
 from types import UnionType
 from typing import (
     Any,
@@ -9,6 +10,7 @@ from typing import (
 )
 from pydantic import BaseModel
 from pydantic_core import from_json
+from ...Env import Env
 
 
 class TaskParameters:
@@ -28,6 +30,10 @@ class TaskParameters:
             new_kwargs[key] = self.__pack_value(value)
 
         new_args = tuple(new_args)
+
+        payload = json_dumps([new_args, new_kwargs], ensure_ascii=False, separators=(",", ":"), default=str).encode()
+        if len(payload) > Env.BROKER_TASK_MAX_PAYLOAD_KB * 1024:
+            raise ValueError(f"Broker task payload exceeds the {Env.BROKER_TASK_MAX_PAYLOAD_KB} KB limit")
 
         return new_args, new_kwargs
 

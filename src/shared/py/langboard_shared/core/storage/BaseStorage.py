@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from os import urandom
-from typing import BinaryIO
+from typing import IO, BinaryIO
 from ..types import SafeDateTime
 from ..utils.Encryptor import Encryptor
 from ..utils.String import concat
@@ -21,6 +21,10 @@ class BaseStorage(ABC):
 
         :param file_model: The :class:`FileModel` object to get.
         """
+
+    @abstractmethod
+    def download(self, storage_name: str, filename: str, destination: IO[bytes]) -> bool:
+        """Download a stored file into an open binary destination."""
 
     @abstractmethod
     def upload(self, file: BinaryIO, filename: str, storage_name: StorageName) -> FileModel | None:

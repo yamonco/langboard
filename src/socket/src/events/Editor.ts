@@ -127,6 +127,7 @@ const registerEditorEvents = ({ eventPrefix, chatType, copilotType, getInternalB
         const response = await BotRunner.runAbortable({
             internalBot,
             internalBotSettings,
+            client: context.client,
             taskID: task_id,
             data: {
                 ...context.data,
@@ -232,6 +233,7 @@ const registerEditorEvents = ({ eventPrefix, chatType, copilotType, getInternalB
         const response = await BotRunner.runAbortable({
             internalBot,
             internalBotSettings,
+            client: context.client,
             taskID: task_id,
             data: {
                 ...context.data,

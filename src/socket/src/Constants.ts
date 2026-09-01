@@ -44,6 +44,15 @@ export const FULL_ADMIN_ACCESS_EMAILS = getEnv<string>({ key: "FULL_ADMIN_ACCESS
 export const MAX_FILE_SIZE_MB = parseInt(getEnv<string>({ key: "MAX_FILE_SIZE_MB", defaultValue: "50" }));
 export const AI_REQUEST_TIMEOUT = parseInt(getEnv<string>({ key: "AI_REQUEST_TIMEOUT", defaultValue: "120" }));
 export const AI_REQUEST_TRIALS = parseInt(getEnv<string>({ key: "AI_REQUEST_TRIALS", defaultValue: "5" }));
+export const AI_TITLE_MAX_CONCURRENCY = parseInt(getEnv<string>({ key: "AI_TITLE_MAX_CONCURRENCY", defaultValue: "4" }));
+export const CHAT_UPLOAD_MAX_CONCURRENCY = parseInt(getEnv<string>({ key: "CHAT_UPLOAD_MAX_CONCURRENCY", defaultValue: "2" }));
+export const AI_STREAM_MAX_BUFFER_MB = parseInt(getEnv<string>({ key: "AI_STREAM_MAX_BUFFER_MB", defaultValue: "4" }));
+export const EDITOR_SYNC_MAX_REQUEST_SIZE_MB = parseInt(getEnv<string>({ key: "EDITOR_SYNC_MAX_REQUEST_SIZE_MB", defaultValue: "8" }));
+export const EDITOR_SYNC_MAX_CONCURRENCY = parseInt(getEnv<string>({ key: "EDITOR_SYNC_MAX_CONCURRENCY", defaultValue: "8" }));
+export const SOCKET_MAX_BUFFER_MB = parseInt(getEnv<string>({ key: "SOCKET_MAX_BUFFER_MB", defaultValue: "8" }));
+export const SOCKET_MAX_PAYLOAD_MB = parseInt(getEnv<string>({ key: "SOCKET_MAX_PAYLOAD_MB", defaultValue: "8" }));
+export const SOCKET_MAX_IN_FLIGHT_MB = parseInt(getEnv<string>({ key: "SOCKET_MAX_IN_FLIGHT_MB", defaultValue: "128" }));
+export const SOCKET_MAX_IN_FLIGHT_MESSAGES = parseInt(getEnv<string>({ key: "SOCKET_MAX_IN_FLIGHT_MESSAGES", defaultValue: "32" }));
 
 export const BASE_DIR = path.dirname(fileURLToPath(import.meta.url));
 export const ROOT_DIR = path.join(BASE_DIR, "..", "..", "..");

@@ -26,8 +26,9 @@ async def run_default_graph(
     thread_id: str,
     resume: Any | None = None,
 ) -> GraphRunResult:
-    async with open_graph_checkpointer() as checkpointer:
-        if _requires_checkpoint(tweaks, resume) and checkpointer is None:
+    requires_checkpoint = _requires_checkpoint(tweaks, resume)
+    async with open_graph_checkpointer(enabled=requires_checkpoint) as checkpointer:
+        if requires_checkpoint and checkpointer is None:
             raise RuntimeError("Graph checkpoint storage requires a PostgreSQL MAIN_DATABASE_URL.")
 
         graph = build_default_graph(checkpointer)
@@ -46,7 +47,10 @@ async def run_default_graph(
             graph_input = state
 
         result = await graph.ainvoke(graph_input, config={"configurable": {"thread_id": thread_id}})
-        return _create_graph_run_result(result)
+        graph_result = _create_graph_run_result(result)
+        if checkpointer is not None and resume is None and not graph_result.interrupts:
+            await checkpointer.adelete_thread(thread_id)
+        return graph_result
 
 
 async def get_default_graph_status(thread_id: str) -> dict[str, Any]:
@@ -56,12 +60,27 @@ async def get_default_graph_status(thread_id: str) -> dict[str, Any]:
 
         graph = build_default_graph(checkpointer)
         snapshot = await graph.aget_state({"configurable": {"thread_id": thread_id}})
-        return {
-            "thread_id": thread_id,
-            "interrupts": _serialize_interrupts(getattr(snapshot, "interrupts", []) or []),
-            "values": getattr(snapshot, "values", {}) or {},
-            "next": list(getattr(snapshot, "next", []) or []),
-        }
+        return _create_graph_status_response(thread_id, snapshot)
+
+
+async def delete_default_graph_thread(thread_id: str) -> None:
+    async with open_graph_checkpointer() as checkpointer:
+        if checkpointer is not None:
+            await checkpointer.adelete_thread(thread_id)
+
+
+def _create_graph_status_response(thread_id: str, snapshot: Any) -> dict[str, Any]:
+    values = getattr(snapshot, "values", {}) or {}
+    return {
+        "thread_id": thread_id,
+        "interrupts": _serialize_interrupts(getattr(snapshot, "interrupts", []) or []),
+        "values": {
+            key: values[key]
+            for key in ("session_id", "thread_id", "approval_requests", "approval_result", "response")
+            if key in values
+        },
+        "next": list(getattr(snapshot, "next", []) or []),
+    }
 
 
 def _requires_checkpoint(tweaks: dict[str, Any] | None, resume: Any | None) -> bool:

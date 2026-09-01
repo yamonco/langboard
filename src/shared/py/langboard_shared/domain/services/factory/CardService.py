@@ -32,6 +32,8 @@ from .ProjectService import ProjectService
 
 
 class CardService(BaseDomainService):
+    CONTEXT_DESCRIPTION_MAX_LENGTH = 1200
+
     @staticmethod
     def name() -> str:
         """DO NOT EDIT THIS METHOD"""
@@ -142,6 +144,26 @@ class CardService(BaseDomainService):
             api_card = card.api_response()
             api_card["project_column_name"] = column.name
             cards.append(api_card)
+        return cards
+
+    def search_context_by_project(self, project: TProjectParam | None, input_value: str) -> list[dict[str, Any]]:
+        project = InfraHelper.get_by_id_like(Project, project)
+        if not project:
+            return []
+
+        cards = []
+        for card, column in self.repo.card.search_context_by_project(project, input_value):
+            description = card.description.content
+            if len(description) > self.CONTEXT_DESCRIPTION_MAX_LENGTH:
+                description = f"{description[: self.CONTEXT_DESCRIPTION_MAX_LENGTH - 3]}..."
+            cards.append(
+                {
+                    "uid": card.get_uid(),
+                    "title": card.title,
+                    "description": {"content": description},
+                    "project_column_name": column.name,
+                }
+            )
         return cards
 
     def get_api_list_by_column(self, column: TColumnParam | None) -> list[dict[str, Any]]:

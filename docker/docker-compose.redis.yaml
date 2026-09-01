@@ -2,7 +2,7 @@ services:
   redis:
     init: true
     container_name: ${PROJECT_NAME}_redis
-    command: redis-server --port 6379 --requirepass ${REDIS_PASSWORD}
+    command: redis-server --port 6379 --requirepass ${REDIS_PASSWORD} --maxmemory ${REDIS_CACHE_MAXMEMORY:-512mb} --maxmemory-policy volatile-lru
     image: redis:latest
     environment:
       - REQUIREPASS=${REDIS_PASSWORD}
@@ -15,6 +15,20 @@ services:
       - ./cache/redis.conf:/usr/local/bin/redis.conf
     ports:
       - ${REDIS_PORT}:6379
+    networks:
+      - net
+    restart: always
+
+  redis-broker:
+    init: true
+    container_name: ${PROJECT_NAME}_redis_broker
+    command: redis-server --port 6379 --requirepass ${REDIS_PASSWORD} --appendonly yes --appendfsync always --maxmemory-policy noeviction
+    image: redis:latest
+    environment:
+      - REQUIREPASS=${REDIS_PASSWORD}
+      - CLIENTPORT=6379
+    volumes:
+      - ./volumes/broker:/data
     networks:
       - net
     restart: always

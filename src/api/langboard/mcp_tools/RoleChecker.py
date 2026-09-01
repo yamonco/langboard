@@ -5,8 +5,8 @@ from ..mcp_integration import McpRoleFilter
 
 
 class McpRoleChecker:
-    def __init__(self):
-        self.service = DomainService()
+    def __init__(self, service: DomainService):
+        self.service = service
 
     def check_permission(
         self,

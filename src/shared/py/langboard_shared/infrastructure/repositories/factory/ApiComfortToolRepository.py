@@ -19,5 +19,7 @@ class ApiComfortToolRepository(BaseRepository[ApiComfortTool]):
 
     def get_by_name(self, name: str) -> ApiComfortTool | None:
         with DbSession.use(readonly=True) as db:
-            result = db.exec(SqlBuilder.select.table(ApiComfortTool).where(ApiComfortTool.column("name") == name))
+            result = db.exec(
+                SqlBuilder.select.table(ApiComfortTool).where(ApiComfortTool.column("name") == name).limit(1)
+            )
             return result.first()

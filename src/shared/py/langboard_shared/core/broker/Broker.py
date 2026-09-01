@@ -50,17 +50,15 @@ class Broker:
     def __init__(self):
         if Env.CACHE_TYPE == "in-memory":
             self.broker_url = "memory://"
-            self.api_url = "cache+memory://"
         else:
-            self.broker_url = Env.CACHE_URL
-            self.api_url = Env.CACHE_URL
+            self.broker_url = Env.BROKER_URL
 
         self.celery = Celery(Env.PROJECT_NAME)
 
         self.celery.conf.update(
             broker_url=self.broker_url,
-            result_api=self.api_url,
-            task_track_started=True,
+            task_ignore_result=True,
+            worker_prefetch_multiplier=1,
             timezone="UTC",
         )
 
@@ -173,7 +171,7 @@ class Broker:
             if self.is_in_memory():
                 self.logger.info("Broker started with in-memory cache.")
             else:
-                self.logger.info("Broker started with cache: %s", Env.CACHE_URL)
+                self.logger.info("Broker started with Redis.")
             self.celery.worker_main(argv)
         except Exception:
             self.celery.close()

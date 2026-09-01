@@ -21,6 +21,7 @@ class BatchFormRequestSchema(BaseModel):
 class BatchForm(BaseFormModel):
     request_schemas: list[BatchFormRequestSchema] = Field(
         ...,
+        max_length=50,
         title="Request Schemas",
         description="""The schema of the request to be processed in the batch.
     - Example: [

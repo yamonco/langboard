@@ -108,13 +108,7 @@ class _Subscription {
 
         topicIds = Utils.Type.isArray(topicIds) ? topicIds : [topicIds];
         for (let i = 0; i < topicIds.length; ++i) {
-            const topicId = topicIds[i];
-            const subscribers = subscriptions.get(topicId);
-            if (!subscribers) {
-                continue;
-            }
-
-            subscribers.delete(ws);
+            this.#deleteSubscriber(subscriptions, topicIds[i], ws);
         }
 
         if (!subscriptions.size) {
@@ -139,19 +133,24 @@ class _Subscription {
 
             const topicIds = Array.from(subscriptions.keys());
             for (let j = 0; j < topicIds.length; ++j) {
-                const topicId = topicIds[j];
-                const subscribers = subscriptions.get(topicId);
-                if (!subscribers?.size) {
-                    subscriptions.delete(topicId);
-                    continue;
-                }
-
-                subscribers.delete(ws);
+                this.#deleteSubscriber(subscriptions, topicIds[j], ws);
             }
 
             if (!subscriptions.size) {
                 this.#subscriptions.delete(topic);
             }
+        }
+    }
+
+    #deleteSubscriber(subscriptions: Map<string, Set<ISocketClient>>, topicId: string, ws: ISocketClient): void {
+        const subscribers = subscriptions.get(topicId);
+        if (!subscribers) {
+            return;
+        }
+
+        subscribers.delete(ws);
+        if (!subscribers.size) {
+            subscriptions.delete(topicId);
         }
     }
 }

@@ -110,9 +110,11 @@ class CheckitemRepository(BaseOrderRepository[Checkitem, Checklist]):
         record = None
         with DbSession.use(readonly=True) as db:
             result = db.exec(
-                SqlBuilder.select.table(Checkitem).where(
+                SqlBuilder.select.table(Checkitem)
+                .where(
                     (Checkitem.column("user_id") == user_id) & (Checkitem.column("status") == CheckitemStatus.Started)
                 )
+                .limit(1)
             )
             record = result.first()
         return record

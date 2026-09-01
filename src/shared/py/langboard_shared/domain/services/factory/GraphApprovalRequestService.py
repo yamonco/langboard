@@ -1,8 +1,9 @@
 from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import quote
-from httpx import HTTPError, post
+from httpx import HTTPError, delete, post
 from ....core.domain import BaseDomainService
+from ....core.logger import Logger
 from ....core.types import SafeDateTime, SnowflakeID
 from ....core.types.ParamTypes import TProjectParam
 from ....domain.models import (
@@ -19,7 +20,7 @@ from ....domain.models import (
     User,
 )
 from ....domain.models.bases import BaseGraphApprovalBotRequest, BaseGraphApprovalRequestModel
-from ....domain.models.BotLog import BotLogMessage, BotLogType
+from ....domain.models.BotLog import BotLogType
 from ....domain.models.GraphApprovalRequest import GraphApprovalOriginType, GraphApprovalStatus
 from ....Env import Env
 from ....helpers import InfraHelper
@@ -47,25 +48,26 @@ class GraphApprovalRequestService(BaseDomainService):
         self.expire_pending()
         project_id = InfraHelper.convert_id(project)
         scope_id = InfraHelper.convert_id(scope_uid) if scope_uid else None
-        approvals = self.repo.graph_approval_request.get_all_ordered(status, origin_type)
+        approvals = self.repo.graph_approval_request.get_ordered_by_project(
+            project_id,
+            status=status,
+            origin_type=origin_type,
+            scope_table=scope_table,
+            scope_id=scope_id,
+            limit=limit,
+        )
         results: list[dict[str, Any]] = []
-        for approval in approvals:
-            detail = self.repo.graph_approval_request.get_detail(approval)
-            if not detail or self.__get_project_id(detail) != project_id:
-                continue
-            if scope_table and detail.scope_table != scope_table:
-                continue
-            if scope_id and detail.scope_id != scope_id:
-                continue
-
-            results.append(self.get_api_response(approval))
+        for approval, detail in approvals:
+            results.append(self.get_api_response(approval, detail))
             if len(results) >= limit:
                 break
         return results
 
-    def get_api_response(self, approval: GraphApprovalRequest) -> dict[str, Any]:
+    def get_api_response(
+        self, approval: GraphApprovalRequest, detail: BaseGraphApprovalRequestModel | None = None
+    ) -> dict[str, Any]:
         response = approval.api_response()
-        detail = self.repo.graph_approval_request.get_detail(approval)
+        detail = detail or self.repo.graph_approval_request.get_detail(approval)
         if detail:
             detail_response = detail.api_response(is_graph_approval_request=True)
             for base_key in ("uid", "created_at", "updated_at", "approval_request_uid"):
@@ -81,12 +83,7 @@ class GraphApprovalRequestService(BaseDomainService):
     def count_pending_by_project(self, project: TProjectParam) -> int:
         self.expire_pending()
         project_id = InfraHelper.convert_id(project)
-        return sum(
-            1
-            for approval in self.repo.graph_approval_request.get_pending()
-            if (detail := self.repo.graph_approval_request.get_detail(approval))
-            and self.__get_project_id(detail) == project_id
-        )
+        return self.repo.graph_approval_request.count_pending_by_project(project_id)
 
     def create_from_interrupt(
         self,
@@ -177,6 +174,7 @@ class GraphApprovalRequestService(BaseDomainService):
             log_type=BotLogType.Success,
             project=project_obj,
         )
+        self.__acknowledge_graph(approval, resume_result)
         return approval
 
     def reject(
@@ -208,6 +206,7 @@ class GraphApprovalRequestService(BaseDomainService):
             log_type=BotLogType.Info,
             project=project_obj,
         )
+        self.__acknowledge_graph(approval, resume_result)
         return approval
 
     def expire_pending(self) -> list[GraphApprovalRequest]:
@@ -428,6 +427,7 @@ class GraphApprovalRequestService(BaseDomainService):
                 {"approved": False, "rejected": True, "cancelled": True, "reason": reason},
             )
             resume_message = self.__get_resume_log_message(resume_result, "Graph resumed after approval cancellation")
+            self.__acknowledge_graph(approval, resume_result)
         except GraphApprovalResumeError as error:
             resume_message = f"Graph resumed after approval cancellation failed: {error}"
 
@@ -447,6 +447,7 @@ class GraphApprovalRequestService(BaseDomainService):
         if approval.status != GraphApprovalStatus.Pending:
             return
 
+        resume_result: dict[str, Any] | None = None
         try:
             resume_result = self.__resume_graph(approval, resume)
             resume_message = self.__get_resume_log_message(resume_result, resume_fallback)
@@ -460,6 +461,8 @@ class GraphApprovalRequestService(BaseDomainService):
         self.__append_bot_log(approval, resume_message, project=project)
         if project:
             GraphApprovalPublisher.updated(project, self.get_api_response(approval))
+        if resume_result is not None:
+            self.__acknowledge_graph(approval, resume_result)
 
     def __get_project(self, approval: GraphApprovalRequest) -> Project | None:
         project_id = self.__get_project_id(approval)
@@ -533,8 +536,7 @@ class GraphApprovalRequestService(BaseDomainService):
         self, bot_log: BotLog, message: str, *, log_type: BotLogType = BotLogType.Info, project: Project | None = None
     ) -> None:
         bot_log.log_type = log_type
-        log_stack = BotLogMessage(message=message, log_type=log_type)
-        bot_log.message_stack = [*bot_log.message_stack, log_stack]
+        log_stack = bot_log.append_message(message, log_type)
         self.repo.bot_log.update(bot_log)
 
         if project:
@@ -566,3 +568,17 @@ class GraphApprovalRequestService(BaseDomainService):
             return data if isinstance(data, dict) else {}
         except HTTPError as error:
             raise GraphApprovalResumeError(str(error)) from error
+
+    @staticmethod
+    def __acknowledge_graph(approval: GraphApprovalRequest, resume_result: dict[str, Any]) -> None:
+        if not approval.thread_id or resume_result.get("interrupts"):
+            return
+
+        try:
+            response = delete(
+                f"{Env.DEFAULT_GRAPH_URL}/api/v1/graph/status/{quote(approval.thread_id, safe='')}",
+                timeout=Env.AI_REQUEST_TIMEOUT,
+            )
+            response.raise_for_status()
+        except HTTPError as error:
+            Logger.main.warning("Failed to clean completed graph checkpoint: %s", error)

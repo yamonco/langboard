@@ -98,7 +98,7 @@ class ApiKeyService(BaseDomainService):
         )
         self.repo.api_key.insert(api_key_setting)
 
-        return api_key_setting, f"sk-{key_material}"
+        return api_key_setting, f"sk-{api_key_setting.get_uid()}.{key_material}"
 
     def update(self, api_key: TApiKeyParam | None, form: dict) -> dict[str, Any] | Literal[True] | None:
         """Update API key"""

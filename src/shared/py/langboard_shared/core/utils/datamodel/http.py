@@ -24,6 +24,7 @@ def get_body(
         verify=not ignore_tls,
         follow_redirects=True,
         params=query_parameters,  # pyright: ignore[reportArgumentType]
+        timeout=30,
         # TODO: Improve params type
     ).text
 

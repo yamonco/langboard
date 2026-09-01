@@ -45,7 +45,6 @@ default_registry = registry(metadata=MODEL_METADATA)
 class BaseDbModel(ABC, BaseModel):
     """Base class for application models mapped with SQLAlchemy."""
 
-    __changes__: ClassVar[dict[str, dict[str, Any]]] = {}
     __db_table__: ClassVar[bool] = False
     __table_args__: ClassVar[tuple[Any, ...]] = ()
     __table__: ClassVar[Table]
@@ -60,12 +59,12 @@ class BaseDbModel(ABC, BaseModel):
     )
 
     @property
-    def __change_key(self) -> str:
-        return f"{self.__tablename__}:{self.id}"
-
-    @property
     def __changes(self) -> dict[str, Any]:
-        return self.__changes__[self.__change_key] if self.__change_key in self.__changes__ else {}
+        changes = getattr(self, "_changes", None)
+        if changes is None:
+            changes = {}
+            object.__setattr__(self, "_changes", changes)
+        return changes
 
     @property
     def changes(self) -> dict[str, Any]:
@@ -130,8 +129,6 @@ class BaseDbModel(ABC, BaseModel):
 
         if not self.is_new() and name in self.model_fields.keys():
             old_value = getattr(self, name)
-            if self.__change_key not in self.__changes__:
-                self.__changes__[self.__change_key] = {}
             if old_value != value:
                 if name not in self.__changes:
                     self.__changes[name] = old_value
@@ -181,6 +178,7 @@ class BaseDbModel(ABC, BaseModel):
     def model_post_init(self, *args: Any, **kwargs: Any) -> None:
         if self.__db_table__:
             instrumentation.manager_of_class(type(self)).setup_instance(self)
+        object.__setattr__(self, "_changes", {})
         object.__setattr__(self, "_initiated", True)
 
     def is_new(self) -> bool:
@@ -207,7 +205,7 @@ class BaseDbModel(ABC, BaseModel):
         """Clear the changes made to the object."""
         if not isinstance(self, BaseDbModel) or not self.__changes:
             return
-        self.__changes__.pop(self.__change_key)
+        self.__changes.clear()
 
     @model_serializer
     def serialize(self) -> dict[str, Any]:

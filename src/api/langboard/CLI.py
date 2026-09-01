@@ -141,7 +141,7 @@ def _set_full_admin_access():
         ).all()
         for admin in admin_users:
             setting_role = db.exec(
-                SqlBuilder.select.table(SettingRole).where(SettingRole.column("user_id") == admin.id)
+                SqlBuilder.select.table(SettingRole).where(SettingRole.column("user_id") == admin.id).limit(1)
             ).first()
             if not setting_role:
                 setting_role = SettingRole(user_id=admin.id, actions=[ALL_GRANTED])
@@ -151,7 +151,7 @@ def _set_full_admin_access():
                 db.update(setting_role)
 
             api_key_role = db.exec(
-                SqlBuilder.select.table(ApiKeyRole).where(ApiKeyRole.column("user_id") == admin.id)
+                SqlBuilder.select.table(ApiKeyRole).where(ApiKeyRole.column("user_id") == admin.id).limit(1)
             ).first()
             if not api_key_role:
                 api_key_role = ApiKeyRole(user_id=admin.id, actions=[ALL_GRANTED])
@@ -160,7 +160,9 @@ def _set_full_admin_access():
                 api_key_role.set_all_actions()
                 db.update(api_key_role)
 
-            mcp_role = db.exec(SqlBuilder.select.table(McpRole).where(McpRole.column("user_id") == admin.id)).first()
+            mcp_role = db.exec(
+                SqlBuilder.select.table(McpRole).where(McpRole.column("user_id") == admin.id).limit(1)
+            ).first()
             if not mcp_role:
                 mcp_role = McpRole(user_id=admin.id, actions=[ALL_GRANTED])
                 db.insert(mcp_role)

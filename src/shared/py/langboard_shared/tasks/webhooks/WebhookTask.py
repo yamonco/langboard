@@ -1,10 +1,11 @@
 from typing import Any
-from httpx import post
+from httpx import stream
 from ...core.broker import Broker
 from ...core.db import DbSession, SqlBuilder
 from ...core.types import SafeDateTime
 from ...core.utils.Converter import convert_python_data
 from ...domain.models import WebhookSetting
+from ...Env import Env
 from ...publishers import AppSettingPublisher
 from .utils import WebhookModel
 
@@ -21,27 +22,25 @@ async def run_webhook(event: str, data: dict[str, Any]):
 
     payload = {"event": event, "data": convert_python_data(data, recursive=True)}
     for setting in settings:
-        res = None
+        succeeded = False
         try:
-            res = post(
+            with stream(
+                "POST",
                 setting.url,
                 json=payload,
-            )
-            res.raise_for_status()
-
-            res = True
+                timeout=Env.AI_REQUEST_TIMEOUT,
+            ) as response:
+                response.raise_for_status()
+            succeeded = True
         except Exception as error:
-            if res:
-                Broker.logger.error("Failed to request webhook: \nURL: %s\nResponse: %s", setting.url, res.text)
-            else:
-                Broker.logger.error(
-                    "Failed to request webhook: \nURL: %s\nError: %s: %s",
-                    setting.url,
-                    type(error).__name__,
-                    error,
-                )
+            Broker.logger.error(
+                "Failed to request webhook: \nURL: %s\nError: %s: %s",
+                setting.url,
+                type(error).__name__,
+                error,
+            )
 
-        if res:
+        if succeeded:
             setting.last_used_at = SafeDateTime.now()
             setting.total_used_count += 1
             with DbSession.use(readonly=False) as db:

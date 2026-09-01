@@ -26,6 +26,7 @@ import {
 } from "@/models/GraphApprovalRequestTypes";
 import ChatGraphApprovalRequest from "@/models/ChatGraphApprovalRequest";
 import Subscription from "@/core/server/Subscription";
+import Logger from "@/core/utils/Logger";
 
 const parseEditorSyncDocumentName = (documentName: string) => {
     const [type, entityUID, section, ...extraParts] = documentName.split(":");
@@ -331,7 +332,7 @@ EventManager.on(ESocketTopic.Board, SocketEvents.CLIENT.BOARD.CHAT.SEND, async (
             },
         });
 
-        BotRunner.createTitle({
+        void BotRunner.createTitle({
             internalBot,
             internalBotSettings,
             data: {
@@ -339,29 +340,31 @@ EventManager.on(ESocketTopic.Board, SocketEvents.CLIENT.BOARD.CHAT.SEND, async (
                 user_id: client.user.id,
                 project_uid: topicId,
             },
-        }).then(async (title) => {
-            title ||= "Untitled";
-            if (!chatSession || !session || chatSession.title === title) {
-                return;
-            }
+        })
+            .then(async (title) => {
+                title ||= "Untitled";
+                if (!chatSession || !session || chatSession.title === title) {
+                    return;
+                }
 
-            chatSession.title = title;
-            await ChatSession.update(chatSession.id, {
-                title,
-            });
+                chatSession.title = title;
+                await ChatSession.update(chatSession.id, {
+                    title,
+                });
 
-            client.send({
-                event: SocketEvents.SERVER.BOARD.CHAT.SESSION,
-                topic: ESocketTopic.Board,
-                topic_id: topicId,
-                data: {
-                    session: {
-                        ...chatSession.apiResponse,
-                        ...session.apiResponse,
+                client.send({
+                    event: SocketEvents.SERVER.BOARD.CHAT.SESSION,
+                    topic: ESocketTopic.Board,
+                    topic_id: topicId,
+                    data: {
+                        session: {
+                            ...chatSession.apiResponse,
+                            ...session.apiResponse,
+                        },
                     },
-                },
-            });
-        });
+                });
+            })
+            .catch((error) => Logger.error(error, "\n"));
     } else {
         session = await ProjectChatSession.findByUID(session_uid);
         if (!session) {
@@ -402,6 +405,7 @@ EventManager.on(ESocketTopic.Board, SocketEvents.CLIENT.BOARD.CHAT.SEND, async (
     const response = await BotRunner.runAbortable({
         internalBot,
         internalBotSettings,
+        client,
         taskID: task_id,
         data: {
             message,

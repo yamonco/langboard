@@ -1,3 +1,4 @@
+from fastapi import Query
 from langboard_shared.core.filter import AuthFilter
 from langboard_shared.core.routing import (
     ApiErrorCode,
@@ -180,6 +181,42 @@ def get_project_labels(project_uid: str, service: DomainService = DomainService.
         raise ApiException.NotFound_404(ApiErrorCode.NF2001)
     labels = service.project_label.get_api_list_by_project(project)
     return JsonResponse(content={"labels": labels})
+
+
+@AppRouter.schema(permission=ApiPermission.Read)
+@AppRouter.api.get(
+    "/board/{project_uid}/cards/context",
+    tags=["Board"],
+    description="Find bounded project card context.",
+    responses=OpenApiSchema()
+    .suc(
+        {
+            "cards": [
+                {
+                    "uid": "string",
+                    "title": "string",
+                    "description": {"content": "string"},
+                    "project_column_name": "string",
+                }
+            ]
+        }
+    )
+    .auth()
+    .forbidden()
+    .err(404, ApiErrorCode.NF2001)
+    .get(),
+)
+@RoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+@AuthFilter.add()
+def get_project_card_context(
+    project_uid: str,
+    input_value: str = Query(min_length=1, max_length=1000),
+    service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    project = service.project.get_by_id_like(project_uid)
+    if project is None:
+        raise ApiException.NotFound_404(ApiErrorCode.NF2001)
+    return JsonResponse(content={"cards": service.card.search_context_by_project(project, input_value)})
 
 
 @AppRouter.schema(permission=ApiPermission.Read)

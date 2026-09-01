@@ -1,3 +1,4 @@
+import asyncio
 from json import JSONDecodeError
 from json import dumps as json_dumps
 from json import loads as json_loads
@@ -5,15 +6,23 @@ from re import DOTALL
 from re import search as re_search
 from typing import Any
 from langboard_shared.core.routing import AppRouter, JsonResponse
+from langboard_shared.Env import Env
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from ..core.graph.default.chat_model import create_default_chat_model
+from ..core.schema.GraphRequestModel import validate_graph_payload
 
 
 class BotDraftGraphForm(BaseModel):
-    instruction: str
+    instruction: str = Field(min_length=1, max_length=30_000)
     current_value: dict[str, Any] = Field(default_factory=dict)
-    suggestions: list[dict[str, Any]] = Field(default_factory=list)
+    suggestions: list[dict[str, Any]] = Field(default_factory=list, max_length=20)
+
+    @model_validator(mode="after")
+    def validate_nested_values(self) -> "BotDraftGraphForm":
+        validate_graph_payload(self.current_value)
+        validate_graph_payload(self.suggestions)
+        return self
 
 
 @AppRouter.api.post("/api/v1/graph/bot/draft")
@@ -23,11 +32,14 @@ async def create_bot_draft_with_graph(form: BotDraftGraphForm):
         return JsonResponse(content={"draft": None, "generated": False})
 
     try:
-        result = await chat_model.ainvoke(
-            [
-                SystemMessage(content=_create_system_prompt()),
-                HumanMessage(content=_create_user_prompt(form)),
-            ]
+        result = await asyncio.wait_for(
+            chat_model.ainvoke(
+                [
+                    SystemMessage(content=_create_system_prompt()),
+                    HumanMessage(content=_create_user_prompt(form)),
+                ]
+            ),
+            timeout=Env.AI_REQUEST_TIMEOUT,
         )
     except Exception:
         return JsonResponse(content={"draft": None, "generated": False})

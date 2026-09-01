@@ -29,9 +29,9 @@ class MetadataRepository(BaseRepository):
         metadata = None
         with DbSession.use(readonly=True) as db:
             result = db.exec(
-                SqlBuilder.select.table(model_cls).where(
-                    (model_cls.column(foreign_key) == foreign_model.id) & (model_cls.column("key") == key)
-                )
+                SqlBuilder.select.table(model_cls)
+                .where((model_cls.column(foreign_key) == foreign_model.id) & (model_cls.column("key") == key))
+                .limit(1)
             )
             metadata = result.first()
 
@@ -71,9 +71,11 @@ class MetadataRepository(BaseRepository):
         metadata = None
         with DbSession.use(readonly=True) as db:
             result = db.exec(
-                SqlBuilder.select.table(model_cls).where(
+                SqlBuilder.select.table(model_cls)
+                .where(
                     (model_cls.column(foreign_key) == foreign_model.id) & (model_cls.column("key") == (old_key or key))
                 )
+                .limit(1)
             )
             metadata = result.first()
 
@@ -109,6 +111,7 @@ class MetadataRepository(BaseRepository):
             result = db.exec(
                 SqlBuilder.select.table(model_cls)
                 .where((model_cls.column(foreign_key) == foreign_model.id) & (model_cls.column("key") == key))
+                .limit(1)
                 .with_for_update()
             )
             metadata = result.first()
@@ -132,7 +135,7 @@ class MetadataRepository(BaseRepository):
 
         return metadata
 
-    def delete(self, model_cls: type[_TMetadata], foreign_model: BaseDbModel, keys: str | list[str]) -> bool:
+    def delete_keys(self, model_cls: type[_TMetadata], foreign_model: BaseDbModel, keys: str | list[str]) -> bool:
         foreign_key = self.__get_foreign_key(foreign_model)
         if foreign_key not in model_cls.model_fields:
             return False

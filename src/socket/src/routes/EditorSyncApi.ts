@@ -1,5 +1,6 @@
+import { EDITOR_SYNC_MAX_CONCURRENCY, EDITOR_SYNC_MAX_REQUEST_SIZE_MB } from "@/Constants";
 import { JsonResponse } from "@/core/server/ApiResponse";
-import Routes from "@/core/server/Routes";
+import Routes, { TRouteHandler } from "@/core/server/Routes";
 import {
     clearInactiveEditorSyncDocument,
     getEditorSyncText,
@@ -11,10 +12,35 @@ import { EHttpStatus } from "@langboard/core/enums";
 import { Utils } from "@langboard/core/utils";
 import { IncomingMessage } from "http";
 
+let activeRequests = 0;
+
+const registerEditorSyncRoute = (path: string, handler: TRouteHandler) => {
+    Routes.post(path, async (context) => {
+        if (activeRequests >= EDITOR_SYNC_MAX_CONCURRENCY) {
+            context.req.resume();
+            return JsonResponse({ message: "Too many concurrent editor sync requests." }, EHttpStatus.HTTP_503_SERVICE_UNAVAILABLE);
+        }
+
+        activeRequests++;
+        try {
+            return await handler(context);
+        } finally {
+            activeRequests--;
+        }
+    });
+};
+
 const readJsonBody = async (req: IncomingMessage) => {
     const chunks: Buffer[] = [];
+    let bodyBytes = 0;
     for await (const chunk of req) {
-        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+        bodyBytes += buffer.byteLength;
+        if (bodyBytes > EDITOR_SYNC_MAX_REQUEST_SIZE_MB * 1024 * 1024) {
+            req.resume();
+            throw new Error(`Editor sync request exceeded ${EDITOR_SYNC_MAX_REQUEST_SIZE_MB} MB`);
+        }
+        chunks.push(buffer);
     }
 
     const rawBody = Buffer.concat(chunks).toString("utf-8");
@@ -40,7 +66,7 @@ const validateTextPayload = (body: unknown) => {
     return { documentName, field, record };
 };
 
-Routes.post("/editor-sync/text", async ({ req, user }) => {
+registerEditorSyncRoute("/editor-sync/text", async ({ req, user }) => {
     try {
         const body = await readJsonBody(req);
         const payload = validateTextPayload(body);
@@ -59,7 +85,7 @@ Routes.post("/editor-sync/text", async ({ req, user }) => {
     }
 });
 
-Routes.post("/editor-sync/active", async ({ req }) => {
+registerEditorSyncRoute("/editor-sync/active", async ({ req }) => {
     try {
         const body = await readJsonBody(req);
         if (!Utils.Type.isObject(body)) {
@@ -87,7 +113,7 @@ Routes.post("/editor-sync/active", async ({ req }) => {
     }
 });
 
-Routes.post("/editor-sync/text/patch", async ({ req, user }) => {
+registerEditorSyncRoute("/editor-sync/text/patch", async ({ req, user }) => {
     try {
         const body = await readJsonBody(req);
         const payload = validateTextPayload(body);
@@ -99,14 +125,14 @@ Routes.post("/editor-sync/text/patch", async ({ req, user }) => {
         }
 
         await patchEditorSyncText(payload.documentName, payload.field, payload.record.value, user);
-        return JsonResponse();
+        return JsonResponse({});
     } catch (error) {
         const reason = error instanceof Error ? error.message : "Failed to patch editor sync text.";
         return JsonResponse({ message: reason }, EHttpStatus.HTTP_403_FORBIDDEN);
     }
 });
 
-Routes.post("/editor-sync/rich/patch-request", async ({ req, user }) => {
+registerEditorSyncRoute("/editor-sync/rich/patch-request", async ({ req, user }) => {
     try {
         const body = await readJsonBody(req);
         if (!Utils.Type.isObject(body)) {
@@ -122,14 +148,14 @@ Routes.post("/editor-sync/rich/patch-request", async ({ req, user }) => {
         }
 
         await requestEditorSyncRichPatch(record.document_name, record.value, user);
-        return JsonResponse();
+        return JsonResponse({});
     } catch (error) {
         const reason = error instanceof Error ? error.message : "Failed to request editor sync rich patch.";
         return JsonResponse({ message: reason }, EHttpStatus.HTTP_403_FORBIDDEN);
     }
 });
 
-Routes.post("/editor-sync/clear", async ({ req, user }) => {
+registerEditorSyncRoute("/editor-sync/clear", async ({ req, user }) => {
     try {
         const body = await readJsonBody(req);
         if (!Utils.Type.isObject(body)) {
@@ -146,7 +172,7 @@ Routes.post("/editor-sync/clear", async ({ req, user }) => {
             await clearInactiveEditorSyncDocument(documentName, user);
         }
 
-        return JsonResponse();
+        return JsonResponse({});
     } catch (error) {
         const reason = error instanceof Error ? error.message : "Failed to clear editor sync documents.";
         return JsonResponse({ message: reason }, EHttpStatus.HTTP_403_FORBIDDEN);

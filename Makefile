@@ -1,4 +1,4 @@
-.PHONY: help init format lint start_docker stop_docker rebuild_docker update_docker
+.PHONY: help init format lint start_docker stop_docker rebuild_docker update_docker clean_docker_build_cache
 
 # Function to get compose args from script
 get_compose_args = $(shell WITH_DOCS=$(WITH_DOCS) WITH_UI_WATCHER=$(WITH_UI_WATCHER) WITH_OLLAMA_CPU=$(WITH_OLLAMA_CPU) WITH_OLLAMA_GPU=$(WITH_OLLAMA_GPU) WITH_DB_BACKUP=$(WITH_DB_BACKUP) bash scripts/utils/get-compose-args.sh)
@@ -21,6 +21,7 @@ WITH_UI_WATCHER ?= false
 WITH_OLLAMA_CPU ?= false
 WITH_OLLAMA_GPU ?= false
 WITH_DB_BACKUP ?= true
+DOCKER_BUILD_CACHE_MAX ?= 40GB
 
 # Get compose args from script
 COMPOSE_ARGS := $(call get_compose_args)
@@ -156,6 +157,7 @@ start_docker: ## run Docker in the production environment
 	mkdir -p ./docker/volumes
 	make update_docker_settings
 	docker compose $(COMPOSE_ARGS) up -d --build --remove-orphans
+	make clean_docker_build_cache
 
 rebuild_docker: ## run Docker in the production environment (e.g. make rebuild_docker IMAGES=image_name or IMAGES="image_name1 image_name2")
 	if [ "$(IMAGES)" = "" ]; then \
@@ -167,6 +169,11 @@ rebuild_docker: ## run Docker in the production environment (e.g. make rebuild_d
 	mkdir -p ./docker/volumes
 	make update_docker_settings
 	docker compose $(COMPOSE_ARGS) up -d --build ${IMAGES} --remove-orphans
+	make clean_docker_build_cache
+
+clean_docker_build_cache: ## remove dangling images and cap unused Docker build cache
+	docker image prune --force
+	docker builder prune --all --force --max-used-space $(DOCKER_BUILD_CACHE_MAX)
 
 update_docker: ## update Docker in the production environment
 	make init_env

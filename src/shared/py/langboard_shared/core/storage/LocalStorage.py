@@ -1,6 +1,7 @@
 from os import path, unlink
 from pathlib import Path
-from typing import BinaryIO
+from shutil import copyfileobj
+from typing import IO, BinaryIO
 from ...Env import Env
 from .BaseStorage import BaseStorage
 from .FileModel import FileModel
@@ -18,6 +19,18 @@ class LocalStorage(BaseStorage):
         with open(file_path, "rb") as f:
             return f.read()
 
+    def download(self, storage_name: str, filename: str, destination: IO[bytes]) -> bool:
+        file_path = Env.LOCAL_STORAGE_DIR / storage_name / filename
+        if not path.exists(file_path):
+            return False
+
+        try:
+            with open(file_path, "rb") as source:
+                copyfileobj(source, destination)
+            return True
+        except OSError:
+            return False
+
     def upload(self, file: BinaryIO, filename: str, storage_name: StorageName) -> FileModel | None:
         if not filename:
             return None
@@ -27,7 +40,7 @@ class LocalStorage(BaseStorage):
 
         new_filename = self.get_random_filename(filename)
         with open(storage_path / new_filename, "wb") as f:
-            f.write(file.read())
+            copyfileobj(file, f)
 
         return FileModel(
             storage_type=LocalStorage.storage_type,

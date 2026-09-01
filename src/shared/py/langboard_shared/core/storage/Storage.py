@@ -1,4 +1,4 @@
-from typing import BinaryIO, overload
+from typing import IO, BinaryIO, overload
 from starlette.datastructures import UploadFile
 from ..utils.decorators import class_instance
 from .BaseStorage import BaseStorage
@@ -30,6 +30,21 @@ class Storage:
 
         storage = self._storages[file_model.storage_type]
         return storage.get(file_model.storage_name, file_model.filename)
+
+    def download(self, storage_type: str, storage_name: str, filename: str, destination: IO[bytes]) -> bool:
+        storage_type = BaseStorage.decrypt_storage_type(storage_type)
+        if not storage_type or storage_type not in self._storages:
+            return False
+
+        storage = self._storages[storage_type]
+        return storage.download(storage_name, filename, destination)
+
+    def download_file(self, file_model: FileModel, destination: IO[bytes]) -> bool:
+        if file_model.storage_type not in self._storages:
+            return False
+
+        storage = self._storages[file_model.storage_type]
+        return storage.download(file_model.storage_name, file_model.filename, destination)
 
     @overload
     def upload(self, file: UploadFile, storage_name: StorageName) -> FileModel | None: ...

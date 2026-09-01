@@ -1,4 +1,4 @@
-from sqlalchemy import func
+from sqlalchemy import func, literal, or_
 from ....core.db import DbSession, SqlBuilder
 from ....core.domain import BaseOrderRepository
 from ....core.schema import TimeBasedPagination
@@ -104,6 +104,28 @@ class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
             )
             records = result.all()
         return records
+
+    def search_context_by_project(
+        self, project: TProjectParam, input_value: str, limit: int = 20
+    ) -> list[tuple[Card, ProjectColumn]]:
+        project_id = InfraHelper.convert_id(project)
+        escaped_input = input_value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        title = Card.column("title")
+        query = (
+            SqlBuilder.select.tables(Card, ProjectColumn)
+            .join(ProjectColumn, Card.column("project_column_id") == ProjectColumn.column("id"))
+            .where(Card.column("project_id") == project_id)
+            .where(
+                or_(
+                    literal(input_value).ilike("%" + title + "%"),
+                    title.ilike(f"%{escaped_input}%", escape="\\"),
+                )
+            )
+            .order_by(Card.column("updated_at").desc(), Card.column("id").desc())
+            .limit(limit)
+        )
+        with DbSession.use(readonly=True) as db:
+            return db.exec(query).all()
 
     def get_all_by_column(self, column: TColumnParam):
         column_id = InfraHelper.convert_id(column)

@@ -141,7 +141,7 @@ class DoclingMetadataService(BaseDomainService):
             self.repo.metadata.save(model_cls, foreign_model, DOCLING_DOCUMENTS_METADATA_KEY, value)
             return
 
-        self.repo.metadata.delete(model_cls, foreign_model, DOCLING_DOCUMENTS_METADATA_KEY)
+        self.repo.metadata.delete_keys(model_cls, foreign_model, DOCLING_DOCUMENTS_METADATA_KEY)
 
     def get_document_by_attachment_uid(
         self, model_cls: type[BaseMetadataModel], foreign_model: BaseDbModel, attachment_uid: str

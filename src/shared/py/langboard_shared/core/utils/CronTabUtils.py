@@ -1,16 +1,24 @@
+from contextlib import contextmanager
 from os import environ
 from pathlib import Path
 from subprocess import run as subprocess_run
-from typing import Callable
+from threading import Lock
+from typing import Callable, Iterator
 from zoneinfo import ZoneInfo
 import crontab
-from crontab import SPECIALS, CronItem, CronTab, OrderedVariableList
+from crontab import SPECIALS, CronItem, CronTab
 from psutil import process_iter
 from ...Env import Env
 from ..types import SafeDateTime
 
 
 crontab.SPECIALS_CONVERSION = False
+_cron_lock = Lock()
+
+try:
+    import fcntl as _fcntl
+except ImportError:
+    _fcntl = None
 
 
 class CronTabUtils:
@@ -20,14 +28,9 @@ class CronTabUtils:
     def reload_cron(self):
         if Env.ENVIRONMENT == "development":
             return
-        for process in process_iter(["pid", "name"]):
-            if process.name() != "cron":
-                continue
-            process.terminate()
-            process.kill()
-        subprocess_run(["crontab", "-r"])
-        subprocess_run(["crontab", str(self.file_path)], check=True)
-        subprocess_run(["cron"], check=True)
+        with self.__lock():
+            self.get_cron().write(filename=str(self.file_path))
+            self.__reload_cron()
 
     def convert_valid_interval_str(self, interval_str: str) -> str:
         """Convert a string to a valid cron interval string.
@@ -50,13 +53,14 @@ class CronTabUtils:
             self.file_path.parent.mkdir(parents=True, exist_ok=True)
             self.file_path.touch()
         cron = CronTab(user=False, tabfile=str(self.file_path))
+        cron_environment = cron.env
+        if cron_environment is None:
+            raise RuntimeError("Cron environment was not initialized")
+        cron_environment.clear()
+        for job in cron:
+            job.env.clear()
         if Env.ENVIRONMENT != "development":
-            if cron.env is None:
-                cron.env = OrderedVariableList()
-            cron.env.update(environ)
-
-        if Env.ENVIRONMENT == "development":
-            cron.env = OrderedVariableList()
+            cron_environment.update(environ)
 
         return cron
 
@@ -81,8 +85,32 @@ class CronTabUtils:
         cron.remove_all(comment=filterable_comment)
 
     def save_cron(self, cron: CronTab):
-        cron.write()
-        self.reload_cron()
+        if Env.ENVIRONMENT == "development":
+            cron.write(filename=str(self.file_path))
+            return
+        with self.__lock():
+            cron.write(filename=str(self.file_path))
+            self.__reload_cron()
+
+    def __reload_cron(self) -> None:
+        subprocess_run(["crontab", str(self.file_path)], check=True)
+        if any(process.info.get("name") == "cron" for process in process_iter(["pid", "name"])):
+            return
+        subprocess_run(["cron"], check=True)
+
+    @contextmanager
+    def __lock(self) -> Iterator[None]:
+        lock_path = self.file_path.with_suffix(f"{self.file_path.suffix}.lock")
+        with _cron_lock:
+            lock_path.parent.mkdir(parents=True, exist_ok=True)
+            with lock_path.open("a+") as lock_file:
+                if _fcntl is not None:
+                    _fcntl.flock(lock_file.fileno(), _fcntl.LOCK_EX)
+                try:
+                    yield
+                finally:
+                    if _fcntl is not None:
+                        _fcntl.flock(lock_file.fileno(), _fcntl.LOCK_UN)
 
     def adjust_interval_for_utc(self, interval_str: str, tz: str | float) -> str:
         if isinstance(tz, str):

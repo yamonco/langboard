@@ -129,6 +129,34 @@ class Env:
         return int(self.__get_from_cache("AI_REQUEST_TRIALS", "5"))
 
     @property
+    def MAX_FILE_SIZE_MB(self) -> int:
+        return int(self.__get_from_cache("MAX_FILE_SIZE_MB", "50"))
+
+    @property
+    def BATCH_MAX_RESPONSE_SIZE_MB(self) -> int:
+        return int(self.__get_from_cache("BATCH_MAX_RESPONSE_SIZE_MB", "10"))
+
+    @property
+    def SETTINGS_USER_LIST_MAX_ITEMS(self) -> int:
+        return int(self.__get_from_cache("SETTINGS_USER_LIST_MAX_ITEMS", "5000"))
+
+    @property
+    def GRAPH_TOOL_MAX_RESPONSE_SIZE_KB(self) -> int:
+        return int(self.__get_from_cache("GRAPH_TOOL_MAX_RESPONSE_SIZE_KB", "256"))
+
+    @property
+    def GRAPH_BACKGROUND_MAX_CONCURRENCY(self) -> int:
+        return int(self.__get_from_cache("GRAPH_BACKGROUND_MAX_CONCURRENCY", "2"))
+
+    @property
+    def BROKER_TASK_MAX_PAYLOAD_KB(self) -> int:
+        return int(self.__get_from_cache("BROKER_TASK_MAX_PAYLOAD_KB", "1024"))
+
+    @property
+    def DOCLING_CONVERSION_TIMEOUT_SECONDS(self) -> int:
+        return int(self.__get_from_cache("DOCLING_CONVERSION_TIMEOUT_SECONDS", "900"))
+
+    @property
     def MAIN_DATABASE_URL(self) -> str:
         return self.__get_from_cache(
             "MAIN_DATABASE_URL", f"sqlite:///{(self.ROOT_DIR / f'{self.PROJECT_NAME}.db').as_posix()}"
@@ -210,6 +238,10 @@ class Env:
     @property
     def CACHE_URL(self) -> str:
         return self.__get_from_cache("CACHE_URL", "")
+
+    @property
+    def BROKER_URL(self) -> str:
+        return self.__get_from_cache("BROKER_URL", self.CACHE_URL)
 
     @property
     def COMMON_SECRET_KEY(self) -> str:

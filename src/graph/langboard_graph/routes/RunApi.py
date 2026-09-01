@@ -11,18 +11,33 @@ from langboard_shared.domain.models.bases import BaseBotLogModel
 from langboard_shared.domain.models.Bot import Bot
 from langboard_shared.domain.models.InternalBot import InternalBot
 from langboard_shared.domain.services import DomainService
+from langboard_shared.Env import Env
 from langboard_shared.helpers import ModelHelper
-from pydantic import BaseModel, Field
+from psycopg import AsyncConnection
+from psycopg.rows import TupleRow
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import Row
 from ..core.graph import GraphRunner
-from ..core.graph.registry import get_default_graph_status, run_default_graph
+from ..core.graph.checkpoint import lock_graph_thread
+from ..core.graph.registry import delete_default_graph_thread, get_default_graph_status, run_default_graph
 from ..core.schema import GraphRequestModel, RunResponse
 from ..core.schema.Exception import APIException
+from ..core.schema.GraphRequestModel import validate_graph_payload
+
+
+_GRAPH_BACKGROUND_LOCK_NAMESPACE = 473918503
 
 
 class GraphResumeRequest(BaseModel):
     resume: Any = Field(..., description="Value to resume the interrupted graph with")
-    session_id: str | None = Field(default=None, description="Optional session id for response compatibility")
+    session_id: str | None = Field(
+        default=None, max_length=512, description="Optional session id for response compatibility"
+    )
+
+    @model_validator(mode="after")
+    def validate_resume_size(self) -> "GraphResumeRequest":
+        validate_graph_payload(self.resume)
+        return self
 
 
 @AppRouter.api.post("/api/v1/graph/run/{session_id}")
@@ -79,44 +94,99 @@ async def webhook_run_graph(
     if isinstance(result, ApiErrorCode):
         return JsonResponse(content=result, status_code=status.HTTP_404_NOT_FOUND)
 
-    bot = result
-    project = await _get_raw_project(service, api_request)
-    bot_log = _get_raw_bot_log(api_request)
-
-    runner = GraphRunner(
-        api_request,
-        raw_project=project,
-        raw_bot=(cast(Literal["bot", "internal_bot"], bot.__tablename__), bot.model_dump()),
-        raw_bot_log=bot_log,
-    )
+    background_slot = await _acquire_background_slot()
+    if background_slot is None:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Graph webhook capacity exceeded")
 
     try:
-        background_tasks.add_task(runner.run)
+        bot = result
+        project = await _get_raw_project(service, api_request)
+        bot_log = _get_raw_bot_log(api_request)
+        runner = GraphRunner(
+            api_request,
+            raw_project=project,
+            raw_bot=(cast(Literal["bot", "internal_bot"], bot.__tablename__), bot.model_dump()),
+            raw_bot_log=bot_log,
+        )
+    except Exception:
+        await _release_background_slot(background_slot)
+        raise
+
+    async def run_background() -> None:
+        try:
+            await runner.run()
+        finally:
+            await _release_background_slot(background_slot)
+
+    try:
+        background_tasks.add_task(run_background)
     except Exception as exc:
+        await _release_background_slot(background_slot)
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     return JsonResponse(content={"message": "Task started in the background", "status": "in progress"})
 
 
+async def _acquire_background_slot() -> AsyncConnection[TupleRow] | None:
+    connection = await AsyncConnection.connect(Env.MAIN_DATABASE_URL)
+    try:
+        for slot in range(Env.GRAPH_BACKGROUND_MAX_CONCURRENCY):
+            cursor = await connection.execute(
+                "SELECT pg_try_advisory_xact_lock(%s, %s)",
+                (_GRAPH_BACKGROUND_LOCK_NAMESPACE, slot),
+            )
+            row = await cursor.fetchone()
+            if row and row[0]:
+                return connection
+        await connection.rollback()
+    except Exception:
+        await connection.close()
+        raise
+
+    await connection.close()
+    return None
+
+
+async def _release_background_slot(connection: AsyncConnection[TupleRow]) -> None:
+    try:
+        await connection.rollback()
+    finally:
+        await connection.close()
+
+
 @AppRouter.api.post("/api/v1/graph/resume/{thread_id}")
 async def resume_graph(thread_id: str, resume_request: GraphResumeRequest):
-    try:
-        graph_result = await run_default_graph(
-            input_value=None,
-            tweaks=None,
-            session_id=resume_request.session_id or thread_id,
-            thread_id=thread_id,
-            resume=resume_request.resume,
-        )
-        return RunResponse.from_graph_result(
-            graph_result,
-            session_id=resume_request.session_id or thread_id,
-            thread_id=thread_id,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    except Exception as exc:
-        raise APIException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, exception=exc) from exc
+    async with lock_graph_thread(thread_id):
+        graph_status = await get_default_graph_status(thread_id)
+        if not graph_status["interrupts"] or not graph_status["next"]:
+            recovered = _get_completed_resume_response(thread_id, resume_request, graph_status)
+            if recovered is not None:
+                return recovered
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Graph thread is not awaiting input.")
+        try:
+            graph_result = await run_default_graph(
+                input_value=None,
+                tweaks=None,
+                session_id=resume_request.session_id or thread_id,
+                thread_id=thread_id,
+                resume=resume_request.resume,
+            )
+            return RunResponse.from_graph_result(
+                graph_result,
+                session_id=resume_request.session_id or thread_id,
+                thread_id=thread_id,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        except Exception as exc:
+            raise APIException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, exception=exc) from exc
+
+
+@AppRouter.api.delete("/api/v1/graph/status/{thread_id}")
+async def delete_graph_status(thread_id: str):
+    async with lock_graph_thread(thread_id):
+        await delete_default_graph_thread(thread_id)
+    return JsonResponse(content={"thread_id": thread_id, "deleted": True})
 
 
 @AppRouter.api.get("/api/v1/graph/status/{thread_id}")
@@ -125,6 +195,24 @@ async def get_graph_status(thread_id: str):
         return JsonResponse(content=await get_default_graph_status(thread_id))
     except Exception as exc:
         raise APIException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, exception=exc) from exc
+
+
+def _get_completed_resume_response(
+    thread_id: str, resume_request: GraphResumeRequest, graph_status: dict[str, Any]
+) -> RunResponse | None:
+    values = graph_status.get("values")
+    if not isinstance(values, dict) or values.get("approval_result") != resume_request.resume:
+        return None
+
+    message = values.get("response")
+    if not isinstance(message, str):
+        return None
+
+    return RunResponse.from_message(
+        message,
+        session_id=resume_request.session_id or thread_id,
+        thread_id=thread_id,
+    )
 
 
 def _validate_session_id(session_id: str, api_request: GraphRequestModel) -> None:
@@ -144,7 +232,9 @@ def _get_bot(api_request: GraphRequestModel) -> ApiErrorCode | InternalBot | Bot
 
     with DbSession.use(readonly=True) as db:
         result = db.exec(
-            SqlBuilder.select.table(bot_class).where((bot_class.id == SnowflakeID.from_short_code(api_request.uid)))
+            SqlBuilder.select.table(bot_class)
+            .where(bot_class.id == SnowflakeID.from_short_code(api_request.uid))
+            .limit(1)
         )
         bot = result.first()
 
@@ -173,7 +263,7 @@ def _get_raw_bot_log(api_request: GraphRequestModel) -> tuple[dict | None, dict 
             query = SqlBuilder.select.tables(BotLog, scope_log_class).join(
                 scope_log_class, scope_log_class.column("bot_log_id") == BotLog.id
             )
-    query = query.where(BotLog.id == SnowflakeID.from_short_code(api_request.log_uid))
+    query = query.where(BotLog.id == SnowflakeID.from_short_code(api_request.log_uid)).limit(1)
 
     with DbSession.use(readonly=True) as db:
         result = db.exec(query)

@@ -71,13 +71,13 @@ class ActivityTaskHelper(Generic[_TActivityModel]):
             related_card = None
             with DbSession.use(readonly=True) as db:
                 result = db.exec(
-                    SqlBuilder.select.table(GlobalCardRelationshipType).where(
-                        GlobalCardRelationshipType.column("id") == relationship.relationship_type_id
-                    )
+                    SqlBuilder.select.table(GlobalCardRelationshipType)
+                    .where(GlobalCardRelationshipType.column("id") == relationship.relationship_type_id)
+                    .limit(1)
                 )
                 global_relationship = cast(GlobalCardRelationshipType, result.first())
                 target_card_id = relationship.card_id_parent if is_parent else relationship.card_id_child
-                result = db.exec(SqlBuilder.select.table(Card).where(Card.column("id") == target_card_id))
+                result = db.exec(SqlBuilder.select.table(Card).where(Card.column("id") == target_card_id).limit(1))
                 related_card = cast(Card, result.first())
 
             return ActivityHistoryHelper.create_card_relationship(global_relationship, related_card, is_parent)
@@ -100,7 +100,9 @@ class ActivityTaskHelper(Generic[_TActivityModel]):
         if not column:
             with DbSession.use(readonly=True) as db:
                 result = db.exec(
-                    SqlBuilder.select.table(ProjectColumn).where(ProjectColumn.column("id") == card.project_column_id)
+                    SqlBuilder.select.table(ProjectColumn)
+                    .where(ProjectColumn.column("id") == card.project_column_id)
+                    .limit(1)
                 )
                 column = cast(ProjectColumn, result.first())
 

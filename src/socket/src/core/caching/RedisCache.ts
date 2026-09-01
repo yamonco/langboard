@@ -7,12 +7,13 @@ import { createClient } from "redis";
 type TRedisClient = ReturnType<typeof createClient>;
 
 class RedisCache extends BaseCache {
-    #redisClient!: TRedisClient;
+    #redisClient?: TRedisClient;
+    #connectPromise?: Promise<TRedisClient>;
 
     public async get<T>(key: string): Promise<T | null> {
-        await this.#setClient();
+        const redisClient = await this.#getClient();
 
-        const cachedData = await this.#redisClient.get(key);
+        const cachedData = await redisClient.get(key);
         let data;
         if (cachedData) {
             const cachedModel = Utils.Json.Parse(cachedData);
@@ -25,46 +26,75 @@ class RedisCache extends BaseCache {
     }
 
     public async has(key: string): Promise<bool> {
-        await this.#setClient();
+        const redisClient = await this.#getClient();
 
-        const exists = await this.#redisClient.exists(key);
+        const exists = await redisClient.exists(key);
         return exists > 0;
     }
 
     public async set<T>(key: string, value: T, ttl?: number): Promise<void> {
-        await this.#setClient();
+        const redisClient = await this.#getClient();
 
         if (ttl && ttl > 0) {
-            await this.#redisClient.setEx(key, ttl, JSON.stringify(value));
+            await redisClient.setEx(key, ttl, JSON.stringify(value));
             return;
         }
 
-        await this.#redisClient.set(key, JSON.stringify(value));
+        await redisClient.set(key, JSON.stringify(value));
     }
 
     public async delete(key: string): Promise<void> {
-        await this.#setClient();
+        const redisClient = await this.#getClient();
 
-        await this.#redisClient.del(key);
+        await redisClient.del(key);
     }
 
     public async clear(): Promise<void> {
-        await this.#setClient();
+        const redisClient = await this.#getClient();
 
-        await this.#redisClient.flushAll();
+        await redisClient.flushAll();
     }
 
     public async stop(): Promise<void> {
-        await this.#redisClient?.quit();
+        const redisClient = this.#redisClient;
+        this.#redisClient = undefined;
+        this.#connectPromise = undefined;
+
+        if (redisClient?.isOpen) {
+            await redisClient.quit();
+        } else {
+            redisClient?.destroy();
+        }
     }
 
-    async #setClient() {
-        this.#redisClient = await createClient({
+    async #getClient(): Promise<TRedisClient> {
+        if (this.#redisClient?.isOpen) {
+            return this.#redisClient;
+        }
+        if (this.#connectPromise) {
+            return this.#connectPromise;
+        }
+
+        const redisClient = createClient({
             url: CACHE_URL,
             pingInterval: 10000,
-        })
-            .on("error", (err) => Logger.red("Redis Client Error", err, "\n"))
-            .connect();
+        }).on("error", (err) => Logger.red("Redis Client Error", err, "\n"));
+        this.#redisClient = redisClient;
+        this.#connectPromise = redisClient
+            .connect()
+            .then(() => redisClient)
+            .catch((error) => {
+                redisClient.destroy();
+                if (this.#redisClient === redisClient) {
+                    this.#redisClient = undefined;
+                }
+                throw error;
+            })
+            .finally(() => {
+                this.#connectPromise = undefined;
+            });
+
+        return this.#connectPromise;
     }
 }
 

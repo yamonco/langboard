@@ -40,50 +40,10 @@ class Result(Generic[_TResult]):
         return self.__records[0] if self.__records else None
 
     def __prepare_records(self, records: Sequence[Any]) -> list[Any]:
-        if not records:
-            return []
-
-        first_record = records[0]
-        if isinstance(first_record, BaseDbModel):
-            return self.__prepare_model_records(records, first_record.__class__)
-        if isinstance(first_record, (tuple, Row)):
-            return self.__prepare_tuple_records(records)
-
-        return [self.__prepare_record(record) for record in records]
-
-    def __prepare_model_records(self, records: Sequence[Any], model_cls: type[BaseDbModel]) -> list[BaseDbModel | Any]:
-        field_set = self.__get_model_field_set(model_cls)
-        prepared = []
-        for record in records:
-            if isinstance(record, model_cls):
-                prepared.append(self.__prepare_model_with_fields(record, field_set))
-                continue
-            prepared.append(self.__prepare_record(record))
+        prepared = records if isinstance(records, list) else list(records)
+        for index, record in enumerate(prepared):
+            prepared[index] = self.__prepare_record(record)
         return prepared
-
-    def __prepare_tuple_records(self, records: Sequence[Any]) -> list[tuple[Any, ...]]:
-        first_record = tuple(records[0])
-        if not any(isinstance(item, BaseDbModel) for item in first_record):
-            return [tuple(record) for record in records]
-
-        field_sets: dict[type[BaseDbModel], set[str]] = {}
-        prepared = []
-        for record in records:
-            prepared.append(
-                tuple(
-                    self.__prepare_tuple_item(item, field_sets) if isinstance(item, BaseDbModel) else item
-                    for item in tuple(record)
-                )
-            )
-        return prepared
-
-    def __prepare_tuple_item(self, record: BaseDbModel, field_sets: dict[type[BaseDbModel], set[str]]) -> BaseDbModel:
-        model_cls = record.__class__
-        field_set = field_sets.get(model_cls)
-        if field_set is None:
-            field_set = self.__get_model_field_set(model_cls)
-            field_sets[model_cls] = field_set
-        return self.__prepare_model_with_fields(record, field_set)
 
     def __prepare_record(self, record: Any):
         if isinstance(record, BaseDbModel):

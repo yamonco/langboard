@@ -50,9 +50,9 @@ class ProjectInvitationRepository(BaseRepository[ProjectInvitation]):
         invitation = None
         with DbSession.use(readonly=True) as db:
             result = db.exec(
-                SqlBuilder.select.table(ProjectInvitation).where(
-                    (ProjectInvitation.column("id") == invitation_id) & (ProjectInvitation.column("token") == token)
-                )
+                SqlBuilder.select.table(ProjectInvitation)
+                .where((ProjectInvitation.column("id") == invitation_id) & (ProjectInvitation.column("token") == token))
+                .limit(1)
             )
             invitation = result.first()
         return invitation
@@ -62,10 +62,12 @@ class ProjectInvitationRepository(BaseRepository[ProjectInvitation]):
         invitation = None
         with DbSession.use(readonly=True) as db:
             result = db.exec(
-                SqlBuilder.select.table(ProjectInvitation).where(
+                SqlBuilder.select.table(ProjectInvitation)
+                .where(
                     (ProjectInvitation.column("project_id") == project_id)
                     & (ProjectInvitation.column("email") == email)
                 )
+                .limit(1)
             )
             invitation = result.first()
         return invitation

@@ -1,5 +1,7 @@
+from collections.abc import Iterator
 from datetime import datetime, timedelta
 from typing import Any, NotRequired, TypedDict
+from sqlalchemy import func
 from ...core.db import DbSession, SqlBuilder
 from ...core.types import SafeDateTime
 from ...domain.models import (
@@ -20,6 +22,7 @@ from ...infrastructure.repositories import Repository
 
 
 DEFAULT_NOTIFICATION_REPEAT_AFTER_HOURS = 24
+NOTIFICATION_CANDIDATE_BATCH_SIZE = 500
 SCHEDULED_RULE_NOTIFICATION_TYPE = NotificationType.ScheduledRule
 TARGET_MODELS: dict[str, type[BaseNotificationScheduleModel]] = {
     str(model.__tablename__): model for model in ModelHelper.get_models_by_base_class(BaseNotificationScheduleModel)
@@ -34,24 +37,36 @@ class ScheduledRuleCandidate(TypedDict):
 
 
 async def run_scheduled_notifications(interval_str: str):
-    rules = _get_due_notification_rules(interval_str)
-    if not rules:
-        return
+    with DbSession.use(readonly=False) as lock_db:
+        lock_acquired = lock_db.exec(
+            SqlBuilder.select.column(
+                func.pg_try_advisory_xact_lock(func.hashtextextended(f"notification:{interval_str}", 0))
+            )
+        ).first()
+        if not lock_acquired:
+            return
 
-    ran_rule_uids = _run_notification_rules(rules)
-    if not ran_rule_uids:
-        return
+        rules = _get_due_notification_rules(interval_str)
+        if not rules:
+            return
 
-    with DbSession.use(readonly=False) as db:
-        for rule in rules:
-            if rule.get_uid() not in ran_rule_uids:
-                continue
-            rule.last_run_at = SafeDateTime.now()
-            db.update(rule)
+        ran_rule_uids = _run_notification_rules(rules)
+        if not ran_rule_uids:
+            return
+
+        with DbSession.use(readonly=False) as db:
+            for rule in rules:
+                if rule.get_uid() not in ran_rule_uids:
+                    continue
+                rule.last_run_at = SafeDateTime.now()
+                db.update(rule)
 
 
 def _get_due_notification_rules(interval_str: str) -> list[NotificationScheduleRule]:
-    return [rule for rule in Repository().notification_schedule_rule.get_enabled() if rule.interval_str == interval_str]
+    with Repository.use() as repository:
+        return [
+            rule for rule in repository.notification_schedule_rule.get_enabled() if rule.interval_str == interval_str
+        ]
 
 
 def _run_notification_rules(notification_rules: list[NotificationScheduleRule]) -> set[str]:
@@ -59,8 +74,20 @@ def _run_notification_rules(notification_rules: list[NotificationScheduleRule]) 
     if not rules:
         return set()
 
+    with DomainService.use() as service:
+        return _run_notification_rules_with_service(rules, service)
+
+
+def _run_notification_rules_with_service(rules: list[dict[str, Any]], service: DomainService) -> set[str]:
+    with Repository.use() as repository:
+        return _run_notification_rules_with_resources(rules, service, repository)
+
+
+def _run_notification_rules_with_resources(
+    rules: list[dict[str, Any]], service: DomainService, repository: Repository
+) -> set[str]:
     now = SafeDateTime.now()
-    notification_service = DomainService().notification
+    notification_service = service.notification
     sent_keys: set[tuple[str, int, int, str]] = set()
 
     ran_rule_uids: set[str] = set()
@@ -81,7 +108,7 @@ def _run_notification_rules(notification_rules: list[NotificationScheduleRule]) 
 
             target_table_name = type(candidate["target_model"]).__tablename__
             target_record_id = int(candidate["target_model"].id)
-            for target_user in _resolve_rule_recipients(rule, candidate):
+            for target_user in _resolve_rule_recipients(rule, candidate, repository):
                 key = (rule_uid, int(target_user.id), target_record_id, target_table_name)
                 if key in recent_keys or key in sent_keys:
                     continue
@@ -132,7 +159,7 @@ def _get_rule_notification_type(rule: dict[str, Any]) -> NotificationType:
     return SCHEDULED_RULE_NOTIFICATION_TYPE
 
 
-def _get_scheduled_rule_candidates(rule: dict[str, Any], now: SafeDateTime) -> list[ScheduledRuleCandidate]:
+def _get_scheduled_rule_candidates(rule: dict[str, Any], now: SafeDateTime) -> Iterator[ScheduledRuleCandidate]:
     target = rule.get("target")
     if target == Project.__tablename__:
         rows = _get_project_rule_candidates()
@@ -141,43 +168,73 @@ def _get_scheduled_rule_candidates(rule: dict[str, Any], now: SafeDateTime) -> l
     elif target == Checkitem.__tablename__:
         rows = _get_checkitem_rule_candidates()
     else:
-        return []
+        return
 
-    return [candidate for candidate in rows if _does_rule_match(rule, candidate["target_model"], now)]
-
-
-def _get_project_rule_candidates() -> list[ScheduledRuleCandidate]:
-    with DbSession.use(readonly=True) as db:
-        projects = db.exec(SqlBuilder.select.table(Project)).all()
-
-    return [ScheduledRuleCandidate(project=project, target_model=project) for project in projects]
+    for candidate in rows:
+        if _does_rule_match(rule, candidate["target_model"], now):
+            yield candidate
 
 
-def _get_card_rule_candidates() -> list[ScheduledRuleCandidate]:
-    with DbSession.use(readonly=True) as db:
-        rows = db.exec(
-            SqlBuilder.select.tables(Card, Project)
-            .join(ProjectColumn, ProjectColumn.column("id") == Card.column("project_column_id"))
-            .join(Project, Project.column("id") == Card.column("project_id"))
-            .where(ProjectColumn.column("deleted_at") == None)  # noqa
-        ).all()
+def _get_project_rule_candidates() -> Iterator[ScheduledRuleCandidate]:
+    last_id = 0
+    while True:
+        with DbSession.use(readonly=True) as db:
+            projects = db.exec(
+                SqlBuilder.select.table(Project)
+                .where(Project.column("id") > last_id)
+                .order_by(Project.column("id").asc())
+                .limit(NOTIFICATION_CANDIDATE_BATCH_SIZE)
+            ).all()
+        if not projects:
+            return
+        for project in projects:
+            yield ScheduledRuleCandidate(project=project, target_model=project)
+        last_id = int(projects[-1].id)
 
-    return [ScheduledRuleCandidate(project=project, target_model=card, card=card) for card, project in rows]
+
+def _get_card_rule_candidates() -> Iterator[ScheduledRuleCandidate]:
+    last_id = 0
+    while True:
+        with DbSession.use(readonly=True) as db:
+            rows = db.exec(
+                SqlBuilder.select.tables(Card, Project)
+                .join(ProjectColumn, ProjectColumn.column("id") == Card.column("project_column_id"))
+                .join(Project, Project.column("id") == Card.column("project_id"))
+                .where(ProjectColumn.column("deleted_at") == None)  # noqa
+                .where(Card.column("id") > last_id)
+                .order_by(Card.column("id").asc())
+                .limit(NOTIFICATION_CANDIDATE_BATCH_SIZE)
+            ).all()
+        if not rows:
+            return
+        for card, project in rows:
+            yield ScheduledRuleCandidate(project=project, target_model=card, card=card)
+        last_id = int(rows[-1][0].id)
 
 
-def _get_checkitem_rule_candidates() -> list[ScheduledRuleCandidate]:
-    with DbSession.use(readonly=True) as db:
-        rows = db.exec(
-            SqlBuilder.select.tables(Checkitem, Checklist, Card, Project)
-            .join(Checklist, Checklist.column("id") == Checkitem.column("checklist_id"))
-            .join(Card, Card.column("id") == Checklist.column("card_id"))
-            .join(Project, Project.column("id") == Card.column("project_id"))
-        ).all()
-
-    return [
-        ScheduledRuleCandidate(project=project, target_model=checkitem, card=card, checkitem=checkitem)
-        for checkitem, _, card, project in rows
-    ]
+def _get_checkitem_rule_candidates() -> Iterator[ScheduledRuleCandidate]:
+    last_id = 0
+    while True:
+        with DbSession.use(readonly=True) as db:
+            rows = db.exec(
+                SqlBuilder.select.tables(Checkitem, Checklist, Card, Project)
+                .join(Checklist, Checklist.column("id") == Checkitem.column("checklist_id"))
+                .join(Card, Card.column("id") == Checklist.column("card_id"))
+                .join(Project, Project.column("id") == Card.column("project_id"))
+                .where(Checkitem.column("id") > last_id)
+                .order_by(Checkitem.column("id").asc())
+                .limit(NOTIFICATION_CANDIDATE_BATCH_SIZE)
+            ).all()
+        if not rows:
+            return
+        for checkitem, _, card, project in rows:
+            yield ScheduledRuleCandidate(
+                project=project,
+                target_model=checkitem,
+                card=card,
+                checkitem=checkitem,
+            )
+        last_id = int(rows[-1][0].id)
 
 
 def _does_rule_match(rule: dict[str, Any], target_model: BaseNotificationScheduleModel, now: SafeDateTime) -> bool:
@@ -221,7 +278,9 @@ def _does_rule_match(rule: dict[str, Any], target_model: BaseNotificationSchedul
     return False
 
 
-def _resolve_rule_recipients(rule: dict[str, Any], candidate: ScheduledRuleCandidate) -> list[User]:
+def _resolve_rule_recipients(
+    rule: dict[str, Any], candidate: ScheduledRuleCandidate, repository: Repository
+) -> list[User]:
     recipient_keys = rule.get("recipients")
     if not isinstance(recipient_keys, list):
         recipient_keys = [BaseNotificationScheduleModel.RECIPIENT_PROJECT_OWNER]
@@ -233,12 +292,12 @@ def _resolve_rule_recipients(rule: dict[str, Any], candidate: ScheduledRuleCandi
             if owner:
                 users.append(owner)
         elif recipient_key == BaseNotificationScheduleModel.RECIPIENT_PROJECT_MEMBERS:
-            for user, _ in _get_repository().project_assigned_user.get_all_by_project(candidate["project"]):
+            for user, _ in repository.project_assigned_user.get_all_by_project(candidate["project"]):
                 users.append(user)
         elif recipient_key == BaseNotificationScheduleModel.RECIPIENT_CARD_ASSIGNEES:
             card = candidate.get("card")
             if card:
-                for user, _ in _get_repository().card_assigned_user.get_all_by_card(card):
+                for user, _ in repository.card_assigned_user.get_all_by_card(card):
                     users.append(user)
         elif recipient_key == BaseNotificationScheduleModel.RECIPIENT_CHECKITEM_USER:
             checkitem = candidate.get("checkitem")
@@ -263,8 +322,10 @@ def _get_recent_scheduled_rule_notification_keys(
     notification_type: NotificationType,
     created_after: SafeDateTime,
 ) -> set[tuple[str, int, int, str]]:
-    condition = (UserNotification.column("notification_type") == notification_type) & (
-        UserNotification.column("created_at") >= created_after
+    condition = (
+        (UserNotification.column("notification_type") == notification_type)
+        & (UserNotification.column("created_at") >= created_after)
+        & (UserNotification.column("message_vars")["rule_uid"].as_string() == rule_uid)
     )
 
     with DbSession.use(readonly=True) as db:
@@ -284,10 +345,6 @@ def _get_recent_scheduled_rule_notification_keys(
         keys.add((rule_uid, int(notification.receiver_id), target_id, target_table))
 
     return keys
-
-
-def _get_repository() -> Repository:
-    return Repository()
 
 
 def _get_int_option(options: dict[str, Any], key: str, default: int, min_value: int) -> int:

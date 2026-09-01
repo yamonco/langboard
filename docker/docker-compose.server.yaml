@@ -55,6 +55,7 @@ services:
       WORKER: main
     working_dir: /app
     command: uv run --no-sync ${PROJECT_NAME} run --workers ${API_WORKERS_COUNT:-1}
+    stop_grace_period: 16m
     volumes:
       - ../src/api/${PROJECT_NAME}:/app/src/api/${PROJECT_NAME}
       - ../src/shared/py:/app/src/shared/py
@@ -74,6 +75,8 @@ services:
       - kafka0
       - kafka1
       - kafka2
+      - redis
+      - redis-broker
     networks:
       - net
     restart: always
@@ -86,6 +89,7 @@ services:
       context: ../
       target: base
     command: uv run --no-sync ${PROJECT_NAME} run:broker
+    stop_grace_period: 16m
 
   socket:
     init: true
@@ -96,6 +100,7 @@ services:
     env_file:
       - ./envs/.socket.env
     working_dir: /app
+    stop_grace_period: 16m
     volumes:
       - ../src/socket/package.json:/app/package.json
       - ../src/socket/yarn.lock:/app/yarn.lock
@@ -110,6 +115,8 @@ services:
       - kafka1
       - kafka2
       - graph
+      - redis
+      - redis-broker
     networks:
       - net
     restart: always
@@ -124,6 +131,7 @@ services:
       - ./envs/.graph.env
     working_dir: /app/src/graph
     command: uv run --no-sync graph run --workers ${GRAPH_WORKERS_COUNT:-1}
+    stop_grace_period: 16m
     volumes:
       - ../src/graph/${PROJECT_NAME}_graph:/app/src/graph/${PROJECT_NAME}_graph
       - ../src/shared/py:/app/src/shared/py
@@ -138,6 +146,8 @@ services:
       - kafka1
       - kafka2
       - api
+      - redis
+      - redis-broker
     networks:
       - net
     restart: always

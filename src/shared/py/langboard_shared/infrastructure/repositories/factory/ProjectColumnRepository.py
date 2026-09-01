@@ -62,9 +62,11 @@ class ProjectColumnRepository(BaseOrderRepository[ProjectColumn, Project]):
         archive_column = None
         with DbSession.use(readonly=True) as db:
             result = db.exec(
-                SqlBuilder.select.table(ProjectColumn).where(
+                SqlBuilder.select.table(ProjectColumn)
+                .where(
                     (ProjectColumn.column("project_id") == project_id) & ProjectColumn.column("is_archive") == True  # noqa
                 )
+                .limit(1)
             )
             archive_column = result.first()
         if archive_column:

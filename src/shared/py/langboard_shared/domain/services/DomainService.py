@@ -1,14 +1,8 @@
-from typing import TYPE_CHECKING, TypeVar
-from ...core.types import Factory
+from collections.abc import Callable
+from typing import cast
+from ...core.types import Factory, IFactoryProduct
 from ...infrastructure.repositories import Repository
 from . import factory
-
-
-if TYPE_CHECKING:
-    from ...core.domain import BaseDomainService
-
-
-_TBaseDomainService = TypeVar("_TBaseDomainService", bound="BaseDomainService")
 
 
 class DomainService(Factory):
@@ -16,19 +10,21 @@ class DomainService(Factory):
         super().__init__()
         self.__repo: Repository | None = None
 
-    def _create_or_get_product(self, product: type[_TBaseDomainService]):
+    def _create_product(self, product: type[IFactoryProduct]) -> IFactoryProduct:
         if self.__repo is None:
             self.__repo = Repository()
 
-        product_name = product.name()
-        if product_name not in self._products:
-            self._products[product_name] = product(self._create_or_get_product, self._get_product_by_name, self.__repo)
-        target_product: _TBaseDomainService = self._products[product_name]  # type: ignore
-
-        return target_product
+        product_factory = cast(Callable[..., IFactoryProduct], product)
+        return product_factory(self._create_or_get_product, self._get_product_by_name, self.__repo)
 
     def initialize(self, repository: Repository):
         self.__repo = repository
+
+    def close(self):
+        super().close()
+        if self.__repo is not None:
+            self.__repo.close()
+            self.__repo = None
 
     @property
     def user(self):

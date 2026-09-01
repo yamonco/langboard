@@ -58,7 +58,7 @@ async def create_langboard_entity_context_prompt(tweaks: dict[str, Any], input_v
     if not isinstance(project_uid, str) or not project_uid or not isinstance(app_api_token, str) or not app_api_token:
         return ""
 
-    cards = await _fetch_project_cards(tweaks, variables, project_uid, app_api_token)
+    cards = await _fetch_project_cards(tweaks, variables, project_uid, app_api_token, input_value)
     matched_cards = _filter_mentioned_cards(cards, input_value)
     if not matched_cards:
         return ""
@@ -101,14 +101,23 @@ def create_langboard_event_input(input_value: str, tweaks: dict[str, Any]) -> st
 
 
 async def _fetch_project_cards(
-    tweaks: dict[str, Any], variables: dict[str, Any], project_uid: str, app_api_token: str
+    tweaks: dict[str, Any],
+    variables: dict[str, Any],
+    project_uid: str,
+    app_api_token: str,
+    input_value: str,
 ) -> list[dict[str, Any]]:
     base_url = _get_base_url(tweaks, variables)
     try:
         async with httpx.AsyncClient(timeout=10) as client:
-            response = await client.get(f"{base_url}/board/{project_uid}/cards", headers=_get_headers(app_api_token))
-            response.raise_for_status()
-            data = response.json()
+            async with client.stream(
+                "GET",
+                f"{base_url}/board/{project_uid}/cards/context",
+                headers=_get_headers(app_api_token),
+                params={"input_value": input_value},
+            ) as response:
+                response.raise_for_status()
+                data = json_loads(await _read_limited_response(response))
     except Exception:
         return []
 
@@ -565,30 +574,41 @@ async def _call_api_tool(
         if path_param not in query and path_param in rest_data:
             query[path_param] = rest_data[path_param]
 
-    async with httpx.AsyncClient(timeout=30) as client:
-        if str(schema.get("path", "")).startswith("/api/comfort/"):
-            response = await client.post(
-                f"{base_url}/api/comfort/{api_name}",
-                headers=headers,
-                json={"query": query or None, "form": form or None},
-            )
-        else:
-            request_schema = {
-                "path_or_api_name": api_name,
-                "method": str(schema.get("method") or "GET"),
-                "query": query or None,
-                "form": form or None,
-            }
-            response = await client.post(
-                f"{base_url}/batch",
-                headers=headers,
-                json={"request_schemas": [request_schema]},
-            )
+    if str(schema.get("path", "")).startswith("/api/comfort/"):
+        request_url = f"{base_url}/api/comfort/{api_name}"
+        request_body = {"query": query or None, "form": form or None}
+    else:
+        request_url = f"{base_url}/batch"
+        request_body = {
+            "request_schemas": [
+                {
+                    "path_or_api_name": api_name,
+                    "method": str(schema.get("method") or "GET"),
+                    "query": query or None,
+                    "form": form or None,
+                }
+            ]
+        }
 
-    content_type = response.headers.get("content-type", "")
+    async with httpx.AsyncClient(timeout=30) as client:
+        async with client.stream("POST", request_url, headers=headers, json=request_body) as response:
+            response.raise_for_status()
+            content_type = response.headers.get("content-type", "")
+            content = await _read_limited_response(response)
+
     if "application/json" in content_type:
-        return json_dumps(response.json(), ensure_ascii=False)
-    return response.text
+        return json_dumps(json_loads(content), ensure_ascii=False)
+    return content.decode(response.encoding or "utf-8", errors="replace")
+
+
+async def _read_limited_response(response: httpx.Response) -> bytes:
+    limit = Env.GRAPH_TOOL_MAX_RESPONSE_SIZE_KB * 1024
+    content = bytearray()
+    async for chunk in response.aiter_bytes():
+        if len(content) + len(chunk) > limit:
+            raise ValueError(f"Graph tool response exceeds the {Env.GRAPH_TOOL_MAX_RESPONSE_SIZE_KB} KB limit")
+        content.extend(chunk)
+    return bytes(content)
 
 
 def _split_tool_args(

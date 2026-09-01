@@ -7,7 +7,7 @@ from .....core.utils.Converter import convert_python_data
 from .....domain.models import Bot, BotLog, Project
 from .....domain.models.BaseBotModel import BotPlatform, BotPlatformRunningType
 from .....domain.models.bases import BaseBotLogModel
-from .....domain.models.BotLog import BotLogMessage, BotLogType
+from .....domain.models.BotLog import BotLogType
 from .....Env import Env
 from .....helpers import BotHelper
 from .....publishers import ProjectBotPublisher
@@ -111,11 +111,8 @@ class BaseBotRequest(ABC):
         return headers
 
     async def _create_log(self, log_type: BotLogType, message: str):
-        bot_log = BotLog(
-            bot_id=self._bot.id,
-            log_type=log_type,
-            message_stack=[BotLogMessage(message=message, log_type=log_type)],
-        )
+        bot_log = BotLog(bot_id=self._bot.id, log_type=log_type)
+        bot_log.append_message(message, log_type)
 
         with DbSession.use(readonly=False) as db:
             db.insert(bot_log)
@@ -148,8 +145,7 @@ class BaseBotRequest(ABC):
     ) -> None:
         log, scope_log = bot_log
         log.log_type = log_type
-        log_stack = BotLogMessage(message=stack, log_type=log_type)
-        log.message_stack = [*log.message_stack, log_stack]
+        log_stack = log.append_message(stack, log_type)
 
         with DbSession.use(readonly=False) as db:
             db.update(log)

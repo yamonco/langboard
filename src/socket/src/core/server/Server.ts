@@ -1,9 +1,11 @@
-import { PORT } from "@/Constants";
+import { PORT, SOCKET_MAX_PAYLOAD_MB } from "@/Constants";
 import * as http from "http";
 import { WebSocketServer } from "ws";
 import Logger from "@/core/utils/Logger";
 import Routes from "@/core/server/Routes";
 import SocketManager from "@/core/server/SocketManager";
+import Hocus from "@/core/server/Hocus";
+import { ESocketStatus } from "@langboard/core/enums";
 
 class _Server {
     #webSocketServer!: WebSocketServer;
@@ -31,23 +33,30 @@ class _Server {
         });
     }
 
-    public restart() {
-        this.destroy();
-        this.#createServers();
-        this.run();
-    }
-
-    public destroy() {
+    public async destroy(): Promise<void> {
         if (this.#socketManager) {
-            this.#socketManager.destroy();
+            await this.#socketManager.destroy();
             this.#socketManager = null!;
         }
         if (this.#webSocketServer) {
-            this.#webSocketServer.close();
+            const server = this.#webSocketServer;
+            Hocus.closeConnections();
+            server.clients.forEach((client) => client.close(ESocketStatus.WS_1012_SERVICE_RESTART));
+            await new Promise<void>((resolve) => {
+                const closeTimeout = setTimeout(() => {
+                    server.clients.forEach((client) => client.terminate());
+                }, 5000);
+                closeTimeout.unref();
+                server.close(() => {
+                    clearTimeout(closeTimeout);
+                    resolve();
+                });
+            });
             this.#webSocketServer = null!;
         }
         if (this.#httpServer) {
-            this.#httpServer.close();
+            const server = this.#httpServer;
+            await new Promise<void>((resolve) => server.close(() => resolve()));
             this.#httpServer = null!;
         }
     }
@@ -58,6 +67,7 @@ class _Server {
         });
         this.#webSocketServer = new WebSocketServer({
             server: this.#httpServer,
+            maxPayload: SOCKET_MAX_PAYLOAD_MB * 1024 * 1024,
         });
         this.#socketManager = new SocketManager(this.#webSocketServer);
     }

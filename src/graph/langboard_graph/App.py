@@ -3,6 +3,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from langboard_shared.core.routing import AppExceptionHandlingRoute, AppRouter, BaseMiddleware
 from langboard_shared.FastAPIAppConfig import FastAPIAppConfig
 from .Constants import APP_CONFIG_FILE
+from .core.graph.checkpoint import close_graph_checkpointer
 from .Loader import ModuleLoader
 
 
@@ -13,6 +14,7 @@ class App:
         self.app_config = FastAPIAppConfig(APP_CONFIG_FILE)
         self.config = self.app_config.load()
         self.api = FastAPI(debug=True)
+        self.api.add_event_handler("shutdown", close_graph_checkpointer)
         self._init_api_middlewares()
         self._init_api_routes()
 

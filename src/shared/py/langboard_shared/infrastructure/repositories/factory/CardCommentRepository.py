@@ -28,7 +28,9 @@ class CardCommentRepository(BaseRepository[CardComment]):
         comment_id = InfraHelper.convert_id(comment)
         record = None
         with DbSession.use(readonly=True) as db:
-            result = db.exec(self.__get_board_comment_api_query(card_id).where(CardComment.column("id") == comment_id))
+            result = db.exec(
+                self.__get_board_comment_api_query(card_id).where(CardComment.column("id") == comment_id).limit(1)
+            )
             record = result.first()
         return record
 

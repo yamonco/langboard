@@ -1,8 +1,11 @@
+import asyncio
 from json import dumps as json_dumps
 from re import compile as re_compile
 from re import sub as re_sub
 from typing import Any, cast
 import httpx
+from langboard_shared.Env import Env
+from langchain.chat_models.base import BaseChatModel, _ConfigurableModel
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_core.tools import StructuredTool
 from langgraph.types import interrupt
@@ -662,8 +665,10 @@ def _is_langboard_uid_like(value: str) -> bool:
     return bool(_LANGBOARD_UID_PATTERN.fullmatch(value)) or (value.isdigit() and len(value) >= 15)
 
 
-async def _invoke_chat_model(chat_model: Any, messages: list[BaseMessage]) -> BaseMessage:
-    result = await chat_model.ainvoke(messages)
+async def _invoke_chat_model(
+    chat_model: BaseChatModel | _ConfigurableModel, messages: list[BaseMessage]
+) -> BaseMessage:
+    result = await asyncio.wait_for(chat_model.ainvoke(messages), timeout=Env.AI_REQUEST_TIMEOUT)
     if result is None:
         raise RuntimeError("Graph chat model returned no result.")
     return cast(BaseMessage, result)

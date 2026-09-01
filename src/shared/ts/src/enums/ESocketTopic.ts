@@ -23,6 +23,7 @@ export enum ESettingSocketTopicID {
     NotificationSchedule = "notification_schedule",
     Ollama = "ollama",
     ApiComfortTool = "api_comfort_tool",
+    ApiKey = "api_key",
 
     // MCP Server management
     McpToolGroup = "mcp_tool_group",

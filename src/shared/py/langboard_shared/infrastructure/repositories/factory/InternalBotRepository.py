@@ -28,9 +28,11 @@ class InternalBotRepository(BaseRepository[InternalBot]):
         internal_bot = None
         with DbSession.use(readonly=True) as db:
             result = db.exec(
-                SqlBuilder.select.table(InternalBot).where(
+                SqlBuilder.select.table(InternalBot)
+                .where(
                     (InternalBot.column("bot_type") == bot_type) & (InternalBot.is_default == True)  # noqa: E712
                 )
+                .limit(1)
             )
             internal_bot = result.first()
         return internal_bot

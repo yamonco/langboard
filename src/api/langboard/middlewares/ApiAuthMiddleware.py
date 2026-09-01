@@ -57,4 +57,7 @@ class ApiAuthMiddleware(AuthenticationMiddleware, FilterMiddleware):
                 return
 
         service = DomainService()
-        await MiddlewareHelper.log_api_key_usage(self.app, scope, receive, send, service)
+        try:
+            await MiddlewareHelper.log_api_key_usage(self.app, scope, receive, send, service)
+        finally:
+            service.close()

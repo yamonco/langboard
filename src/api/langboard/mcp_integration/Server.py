@@ -82,18 +82,19 @@ class McpServer:
                 raise PermissionError("Insufficient permissions")
 
             factories: list[Factory] = []
-            for param_name, param in sig.parameters.items():
-                kwargs, factory = self._inject_kwargs(param_name, param, auth_value, kwargs)
-                if factory:
-                    factories.append(factory)
+            try:
+                for param_name, param in sig.parameters.items():
+                    kwargs, factory = self._inject_kwargs(param_name, param, auth_value, kwargs)
+                    if factory:
+                        factories.append(factory)
 
-            result = await handler(**kwargs) if iscoroutinefunction(handler) else handler(**kwargs)
-            for factory in factories:
-                factory.close()
-            return result
+                return await handler(**kwargs) if iscoroutinefunction(handler) else handler(**kwargs)
+            finally:
+                for factory in factories:
+                    factory.close()
 
         # Use the filtered signature so FastMCP only sees the non-excluded parameters
-        wrapper.__signature__ = filtered_sig
+        setattr(wrapper, "__signature__", filtered_sig)
 
         return wrapper
 

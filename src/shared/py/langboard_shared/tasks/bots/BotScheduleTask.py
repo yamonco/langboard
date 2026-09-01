@@ -117,7 +117,9 @@ async def _check_bot_schedule_runnable(interval_str: str):
         project = None
         if isinstance(model, ProjectColumn) or isinstance(model, Card):
             with DbSession.use(readonly=True) as db:
-                result = db.exec(SqlBuilder.select.table(Project).where(Project.column("id") == model.project_id))
+                result = db.exec(
+                    SqlBuilder.select.table(Project).where(Project.column("id") == model.project_id).limit(1)
+                )
                 project = result.first()
 
         if project:
@@ -141,7 +143,7 @@ async def _run_scheduler(
     data = {}
     with DbSession.use(readonly=True) as db:
         if isinstance(model, ProjectColumn):
-            result = db.exec(SqlBuilder.select.table(Project).where(Project.column("id") == model.project_id))
+            result = db.exec(SqlBuilder.select.table(Project).where(Project.column("id") == model.project_id).limit(1))
             project = result.first()
             if not project:
                 return
@@ -155,6 +157,7 @@ async def _run_scheduler(
                 SqlBuilder.select.tables(ProjectColumn, Project)
                 .join(Project, ProjectColumn.column("project_id") == Project.column("id"))
                 .where(ProjectColumn.column("id") == model.project_column_id)
+                .limit(1)
             )
             column, project = result.first() or (None, None)
             if not column or not project:

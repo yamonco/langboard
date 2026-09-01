@@ -56,7 +56,29 @@ class McpAuthMiddleware(BaseMiddleware):
         # Validate MCP tool group and user ownership
         api_key: ApiKeySetting | None = scope.get("api_key")
         service = DomainService()
+        try:
+            await self._validate_and_dispatch(
+                scope,
+                receive,
+                send,
+                validation_result,
+                api_key,
+                mcp_tool_group_uid,
+                service,
+            )
+        finally:
+            service.close()
 
+    async def _validate_and_dispatch(
+        self,
+        scope,
+        receive,
+        send,
+        validation_result,
+        api_key: ApiKeySetting | None,
+        mcp_tool_group_uid: str,
+        service: DomainService,
+    ) -> None:
         tool_group = service.mcp_tool_group.get_by_id_like(mcp_tool_group_uid)
         if not tool_group:
             response = JsonResponse(ApiErrorCode.NF3006, status_code=status.HTTP_404_NOT_FOUND)
@@ -85,6 +107,8 @@ class McpAuthMiddleware(BaseMiddleware):
 
         # Store auth data and validated tool group in context
         auth_data = {"user_or_bot": validation_result, "api_key": api_key, "tool_group": tool_group}
-        mcp_auth_context.set(auth_data)
-
-        await MiddlewareHelper.log_api_key_usage(self.app, scope, receive, send, service)
+        context_token = mcp_auth_context.set(auth_data)
+        try:
+            await MiddlewareHelper.log_api_key_usage(self.app, scope, receive, send, service)
+        finally:
+            mcp_auth_context.reset(context_token)

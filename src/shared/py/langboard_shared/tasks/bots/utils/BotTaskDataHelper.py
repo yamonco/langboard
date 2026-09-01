@@ -37,9 +37,9 @@ class BotTaskDataHelper:
         if not column:
             with DbSession.use(readonly=True) as db:
                 result = db.exec(
-                    SqlBuilder.select.table(ProjectColumn, with_deleted=True).where(
-                        ProjectColumn.column("id") == card.project_column_id
-                    )
+                    SqlBuilder.select.table(ProjectColumn, with_deleted=True)
+                    .where(ProjectColumn.column("id") == card.project_column_id)
+                    .limit(1)
                 )
                 column = cast(ProjectColumn, result.first())
         if not column:
@@ -115,9 +115,9 @@ class BotTaskDataHelper:
         column = None
         with DbSession.use(readonly=True) as db:
             column = db.exec(
-                SqlBuilder.select.table(ProjectColumn, with_deleted=True).where(
-                    ProjectColumn.column("id") == card.project_column_id
-                )
+                SqlBuilder.select.table(ProjectColumn, with_deleted=True)
+                .where(ProjectColumn.column("id") == card.project_column_id)
+                .limit(1)
             )
             column = cast(ProjectColumn, column.first())
         return column

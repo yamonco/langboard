@@ -18,6 +18,11 @@ _DEFAULT_HISTORY_MESSAGE_LIMIT = 40
 _DEFAULT_HISTORY_MESSAGE_MAX_CHARS = 600
 _DEFAULT_HISTORY_PROMPT_MAX_CHARS = 6000
 _DEFAULT_HISTORY_SUMMARY_MAX_CHARS = 1200
+_MAX_HISTORY_SOURCE_LIMIT = 100
+_MAX_HISTORY_MESSAGE_LIMIT = 200
+_MAX_HISTORY_MESSAGE_MAX_CHARS = 4000
+_MAX_HISTORY_PROMPT_MAX_CHARS = 30000
+_MAX_HISTORY_SUMMARY_MAX_CHARS = 5000
 
 
 class GraphHistoryMessage(TypedDict, total=False):
@@ -241,20 +246,27 @@ def _get_history_config(tweaks: dict[str, Any]) -> dict[str, Any]:
     graph_config = graph_config if isinstance(graph_config, dict) else {}
     return {
         "enabled": graph_config.get("history_context_enabled", True) is not False,
-        "source_limit": _get_positive_int(graph_config.get("history_source_limit"), _DEFAULT_HISTORY_SOURCE_LIMIT),
-        "message_limit": _get_positive_int(graph_config.get("history_message_limit"), _DEFAULT_HISTORY_MESSAGE_LIMIT),
-        "message_max_chars": _get_positive_int(
+        "source_limit": _get_bounded_positive_int(
+            graph_config.get("history_source_limit"), _DEFAULT_HISTORY_SOURCE_LIMIT, _MAX_HISTORY_SOURCE_LIMIT
+        ),
+        "message_limit": _get_bounded_positive_int(
+            graph_config.get("history_message_limit"), _DEFAULT_HISTORY_MESSAGE_LIMIT, _MAX_HISTORY_MESSAGE_LIMIT
+        ),
+        "message_max_chars": _get_bounded_positive_int(
             graph_config.get("history_message_max_chars"),
             _DEFAULT_HISTORY_MESSAGE_MAX_CHARS,
+            _MAX_HISTORY_MESSAGE_MAX_CHARS,
         ),
-        "prompt_max_chars": _get_positive_int(
+        "prompt_max_chars": _get_bounded_positive_int(
             graph_config.get("history_prompt_max_chars"),
             _DEFAULT_HISTORY_PROMPT_MAX_CHARS,
+            _MAX_HISTORY_PROMPT_MAX_CHARS,
         ),
         "summary_enabled": graph_config.get("history_summary_enabled") is True,
-        "summary_max_chars": _get_positive_int(
+        "summary_max_chars": _get_bounded_positive_int(
             graph_config.get("history_summary_max_chars"),
             _DEFAULT_HISTORY_SUMMARY_MAX_CHARS,
+            _MAX_HISTORY_SUMMARY_MAX_CHARS,
         ),
     }
 
@@ -518,12 +530,12 @@ def _has_chat_history_content(history: ChatHistory) -> bool:
     return bool(_trim_text(history.message.content))
 
 
-def _get_positive_int(value: Any, default: int) -> int:
+def _get_bounded_positive_int(value: Any, default: int, maximum: int) -> int:
     try:
         parsed = int(value)
     except (TypeError, ValueError):
         return default
-    return parsed if parsed > 0 else default
+    return min(parsed, maximum) if parsed > 0 else default
 
 
 def _redact_internal_keys(value: Any) -> Any:

@@ -71,7 +71,7 @@ class UserNotificationSettingRepository(BaseRepository[UserNotificationUnsubscri
             def first(self):
                 record = None
                 with DbSession.use(readonly=True) as db:
-                    result = db.exec(self.__query)
+                    result = db.exec(self.__query.limit(1))
                     record = result.first()
                 return record
 

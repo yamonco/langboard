@@ -58,11 +58,13 @@ class UserNotificationRepository(BaseRepository[UserNotification]):
         notification = None
         with DbSession.use(readonly=True) as db:
             result = db.exec(
-                SqlBuilder.select.table(UserNotification).where(
+                SqlBuilder.select.table(UserNotification)
+                .where(
                     (UserNotification.column("receiver_id") == user_id)
                     & (UserNotification.column("notification_type") == NotificationType.ProjectInvited)
                     & (sql_cast(UserNotification.column("record_list"), String) == record_list)
                 )
+                .limit(1)
             )
             notification = result.first()
         return notification

@@ -8,6 +8,7 @@ import User from "@/models/User";
 import { ESettingSocketTopicID, ESocketTopic } from "@langboard/core/enums";
 import { EEditorCollaborationType } from "@langboard/core/constants";
 import * as Y from "yjs";
+import Logger from "@/core/utils/Logger";
 
 const EDITOR_SYNC_ACTIVE_DOCUMENT_CACHE_TTL_SECONDS = 60 * 60;
 const EDITOR_SYNC_RECENT_ACTIVE_DOCUMENT_CACHE_TTL_SECONDS = 60;
@@ -182,6 +183,7 @@ const createValidatorClient = (user: User): ISocketClient => {
         subscribe: async () => {},
         unsubscribe: async () => {},
         send: () => {},
+        registerCloseHandler: () => () => {},
         onClose: () => {},
     };
 };
@@ -230,6 +232,8 @@ const getAppSettingsTopicID = (sectionName: string | null): ESettingSocketTopicI
             return ESettingSocketTopicID.GlobalRelationship;
         case "api-comfort-tool":
             return ESettingSocketTopicID.ApiComfortTool;
+        case "api-key":
+            return ESettingSocketTopicID.ApiKey;
         case "internal-bot":
         case "internal-bot-value":
             return ESettingSocketTopicID.InternalBot;
@@ -297,12 +301,23 @@ const Hocus = new Hocuspocus({
         await EditorSyncStorage.save(documentName, Y.encodeStateAsUpdate(document));
     },
     async onDisconnect({ clientsCount, documentName }) {
-        if (clientsCount > 0) {
-            await setActiveDocument(documentName, clientsCount);
+        try {
+            if (clientsCount > 0) {
+                await setActiveDocument(documentName, clientsCount);
+                return;
+            }
+
+            await setActiveDocument(documentName, 0, EDITOR_SYNC_RECENT_ACTIVE_DOCUMENT_CACHE_TTL_SECONDS);
+        } catch (error) {
+            Logger.error(error, "\n");
         }
     },
     async beforeUnloadDocument({ documentName }) {
-        await setActiveDocument(documentName, 0, EDITOR_SYNC_RECENT_ACTIVE_DOCUMENT_CACHE_TTL_SECONDS);
+        try {
+            await setActiveDocument(documentName, 0, EDITOR_SYNC_RECENT_ACTIVE_DOCUMENT_CACHE_TTL_SECONDS);
+        } catch (error) {
+            Logger.error(error, "\n");
+        }
     },
 });
 

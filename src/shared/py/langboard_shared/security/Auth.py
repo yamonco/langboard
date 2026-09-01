@@ -1,3 +1,4 @@
+from hmac import compare_digest
 from typing import Any, Literal, TypeVar, overload
 from fastapi import Depends, Request, status
 from jwt import ExpiredSignatureError, InvalidTokenError
@@ -7,6 +8,7 @@ from ..core.caching import Cache
 from ..core.db import BaseDbModel, DbSession, SqlBuilder
 from ..core.routing import ApiErrorCode, ApiException
 from ..core.security import AuthSecurity, KeyVault
+from ..core.types import SnowflakeID
 from ..core.utils.decorators import staticclass
 from ..core.utils.IpAddress import has_allowed_ips
 from ..domain.models import ApiKeySetting, Bot, User
@@ -259,20 +261,31 @@ class Auth:
         if not key_material.startswith("sk-"):
             return status.HTTP_401_UNAUTHORIZED
 
-        actual_key = key_material[3:]
+        key_reference, separator, actual_key = key_material[3:].partition(".")
 
         try:
             with DbSession.use(readonly=True) as db:
-                result = db.exec(
-                    SqlBuilder.select.table(ApiKeySetting).where(ApiKeySetting.column("activated_at").is_not(None))
-                )
-                api_keys = result.all()
+                if separator:
+                    key_id = SnowflakeID.from_short_code(key_reference)
+                    result = db.exec(
+                        SqlBuilder.select.table(ApiKeySetting)
+                        .where(ApiKeySetting.column("id") == key_id)
+                        .where(ApiKeySetting.column("activated_at").is_not(None))
+                        .limit(1)
+                    )
+                    candidate = result.first()
+                    api_keys = [candidate] if isinstance(candidate, ApiKeySetting) else []
+                else:
+                    result = db.exec(
+                        SqlBuilder.select.table(ApiKeySetting).where(ApiKeySetting.column("activated_at").is_not(None))
+                    )
+                    api_keys = result.all()
 
                 api_key_setting = None
                 for api_key in api_keys:
                     try:
                         stored_key = KeyVault.get_key(api_key.value)
-                        if stored_key != actual_key:
+                        if not compare_digest(stored_key, actual_key):
                             continue
                         if api_key.is_expired():
                             return status.HTTP_401_UNAUTHORIZED

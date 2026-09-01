@@ -1,5 +1,5 @@
 from typing import Callable
-from fastapi import Request, Response, status
+from fastapi import HTTPException, Request, Response, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.routing import APIRoute
 from ..logger import Logger
@@ -21,9 +21,9 @@ class AppExceptionHandlingRoute(APIRoute):
                 return self.handle_validation_error(e)
             except ApiErrorCodeException as e:
                 return self.handle_api_error_code_exception(e)
+            except HTTPException as e:
+                return JsonResponse(content={"detail": e.detail}, status_code=e.status_code, headers=e.headers)
             except Exception as e:
-                Logger.main.exception(e)
-
                 return self.handle_generic_exception(e)
 
         return route_handler

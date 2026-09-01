@@ -6,14 +6,14 @@ import ISocketClient, { TSocketSendParams } from "@/core/server/ISocketClient";
 import { Utils } from "@langboard/core/utils";
 import { ESocketStatus, ESocketTopic } from "@langboard/core/enums";
 import Logger from "@/core/utils/Logger";
-
-// Lifetime management for socket clients
-const clients = new Set<ISocketClient>();
+import { SOCKET_MAX_BUFFER_MB } from "@/Constants";
 
 class SocketClient implements ISocketClient {
     #ws: WebSocket;
     #user: User;
     #eventListeners: Partial<Record<keyof WebSocket.WebSocketEventMap, ((...args: any[]) => void)[]>>;
+    #closeHandlers: Set<() => void>;
+    #closed: boolean;
 
     public get user(): User {
         return this.#user;
@@ -22,6 +22,8 @@ class SocketClient implements ISocketClient {
     constructor(ws: WebSocket, user: User) {
         this.#ws = ws;
         this.#user = user;
+        this.#closeHandlers = new Set();
+        this.#closed = false;
         this.#eventListeners = {
             close: [() => this.onClose()],
         };
@@ -35,12 +37,17 @@ class SocketClient implements ISocketClient {
                 this.#ws.addEventListener(event, listener);
             });
         });
-
-        clients.add(this);
     }
 
     public async subscribe(topic: ESocketTopic | string, topicId: string | string[]) {
+        if (this.#closed) {
+            return;
+        }
+
         await Subscription.subscribe(this, topic, topicId);
+        if (this.#closed) {
+            Subscription.unsubscribeAll(this);
+        }
     }
 
     public async unsubscribe(topic: ESocketTopic | string, topicId: string | string[]) {
@@ -48,6 +55,10 @@ class SocketClient implements ISocketClient {
     }
 
     public send<TData = unknown>(event: TSocketSendParams<TData>): void {
+        if (this.#closed) {
+            return;
+        }
+
         event.topic = Utils.String.convertSafeEnum(ESocketTopic, event.topic);
 
         if (this.#ws.readyState === WebSocket.CONNECTING) {
@@ -60,6 +71,11 @@ class SocketClient implements ISocketClient {
         if (this.#ws.readyState !== WebSocket.OPEN) {
             return;
         }
+        if (this.#ws.bufferedAmount > SOCKET_MAX_BUFFER_MB * 1024 * 1024) {
+            Logger.red(`Closing slow WebSocket client after exceeding ${SOCKET_MAX_BUFFER_MB} MB send buffer.\n`);
+            this.#ws.close(ESocketStatus.WS_1013_TRY_AGAIN_LATER, "WebSocket send buffer limit exceeded");
+            return;
+        }
 
         this.#ws.send(
             JSON.stringify(event),
@@ -67,7 +83,7 @@ class SocketClient implements ISocketClient {
                 fin: true,
             },
             (error) => {
-                if (error) {
+                if (error && !["EPIPE", "ECONNRESET"].includes((error as NodeJS.ErrnoException).code ?? "")) {
                     Logger.red(error, "\n");
                 }
             }
@@ -75,6 +91,10 @@ class SocketClient implements ISocketClient {
     }
 
     public sendError(errorCode: ESocketStatus | number, message: string, shouldClose: bool = false) {
+        if (this.#closed || this.#ws.readyState !== WebSocket.OPEN) {
+            return;
+        }
+
         this.#ws.send(
             JSON.stringify({
                 event: "error",
@@ -122,22 +142,43 @@ class SocketClient implements ISocketClient {
         };
     }
 
+    public registerCloseHandler(handler: () => void): () => void {
+        if (this.#closed) {
+            handler();
+            return () => {};
+        }
+
+        this.#closeHandlers.add(handler);
+        return () => this.#closeHandlers.delete(handler);
+    }
+
     public onClose() {
+        if (this.#closed) {
+            return;
+        }
+        this.#closed = true;
+
+        this.#closeHandlers.forEach((handler) => {
+            try {
+                handler();
+            } catch {
+                // Continue closing remaining client resources.
+            }
+        });
+        this.#closeHandlers.clear();
+
         Object.entries(this.#eventListeners).forEach(([event, listeners]) => {
             if (!listeners) {
                 return;
             }
 
             listeners.forEach((listener) => {
-                this.#ws.addEventListener(event, listener);
+                this.#ws.removeEventListener(event, listener);
             });
         });
 
         Subscription.unsubscribeAll(this);
 
-        clients.delete(this);
-        this.#ws = undefined!;
-        this.#user = undefined!;
         this.#eventListeners = {};
     }
 }

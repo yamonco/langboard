@@ -1,6 +1,8 @@
 import { getBot, IBotIsAvailableOptions, IBotRunAbortableOptions, IBotRunOptions, IBotUploadOptions } from "@/core/ai/BaseBot";
+import BaseStreamResponse from "@/core/ai/responses/BaseStreamResponse";
 import ISocketClient from "@/core/server/ISocketClient";
 import { EInternalBotType } from "@/models/InternalBot";
+import { AI_TITLE_MAX_CONCURRENCY } from "@/Constants";
 import { ESocketTopic, GLOBAL_TOPIC_ID } from "@langboard/core/enums";
 
 export interface IBotAbortOptions {
@@ -10,6 +12,8 @@ export interface IBotAbortOptions {
 }
 
 class BotRunner {
+    static #activeTitleRequests = 0;
+
     public static async run({ internalBot, data }: IBotRunOptions) {
         const bot = getBot(internalBot.bot_type);
         if (!bot) {
@@ -18,20 +22,52 @@ class BotRunner {
         return await bot.run({ internalBot, data });
     }
 
-    public static async runAbortable({ internalBot, ...options }: IBotRunAbortableOptions) {
+    public static async runAbortable({
+        internalBot,
+        client,
+        ...options
+    }: IBotRunAbortableOptions & { client?: ISocketClient }): Promise<string | BaseStreamResponse | null> {
         const bot = getBot(internalBot.bot_type);
         if (!bot) {
             return null;
         }
-        return await bot.runAbortable({ internalBot, ...options });
+
+        let isClientClosed = false;
+        const unregisterCloseHandler = client?.registerCloseHandler(() => {
+            isClientClosed = true;
+            void bot.abort(options.taskID);
+        });
+        try {
+            const response = await bot.runAbortable({ internalBot, ...options });
+            if (isClientClosed) {
+                await bot.abort(options.taskID);
+            }
+            if (response instanceof BaseStreamResponse) {
+                if (unregisterCloseHandler) {
+                    response.onFinished(unregisterCloseHandler);
+                }
+            } else {
+                unregisterCloseHandler?.();
+            }
+            return response;
+        } catch (error) {
+            unregisterCloseHandler?.();
+            throw error;
+        }
     }
 
     public static async createTitle({ internalBot, data }: IBotRunOptions) {
         const bot = getBot(internalBot.bot_type);
-        if (!bot) {
+        if (!bot || this.#activeTitleRequests >= AI_TITLE_MAX_CONCURRENCY) {
             return null;
         }
-        return await bot.createTitle({ internalBot, data });
+
+        this.#activeTitleRequests++;
+        try {
+            return await bot.createTitle({ internalBot, data });
+        } finally {
+            this.#activeTitleRequests--;
+        }
     }
 
     public static async abort({ botType, taskID, client }: IBotAbortOptions): Promise<void> {

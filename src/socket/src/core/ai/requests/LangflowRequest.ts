@@ -12,6 +12,7 @@ import fs from "fs";
 import { LangflowStreamResponse } from "@/core/ai/responses/LangflowResponse";
 import BaseStreamResponse from "@/core/ai/responses/BaseStreamResponse";
 import { EAgentPermissionLevel, EBotPlatform, EBotPlatformRunningType } from "@langboard/core/ai";
+import FormData from "form-data";
 
 class LangflowRequest extends BaseRequest {
     protected createRequestData({ requestModel, useStream }: IRequestExecuteParams): IRequestData | null {
@@ -109,23 +110,22 @@ class LangflowRequest extends BaseRequest {
             return null;
         }
 
-        const headers = {
-            "Content-Type": "multipart/form-data",
-            ...this.getBotRequestHeaders(),
-        };
-
         const url = `${this.baseURL}/api/v2/files`;
 
         const formData = new FormData();
-        const blob = new Blob([fs.readFileSync(file.filepath)], { type: file.mimetype ?? undefined });
-        formData.append("file", blob, filename);
+        formData.append("file", fs.createReadStream(file.filepath), {
+            filename,
+            contentType: file.mimetype ?? undefined,
+            knownLength: file.size,
+        });
 
         try {
             const response = await api.post(url, formData, {
                 headers: {
-                    ...headers,
+                    ...this.getBotRequestHeaders(),
+                    ...formData.getHeaders(),
                 },
-                data: formData,
+                maxBodyLength: formData.getLengthSync(),
             });
 
             if (![EHttpStatus.HTTP_200_OK, EHttpStatus.HTTP_201_CREATED].includes(response.status)) {

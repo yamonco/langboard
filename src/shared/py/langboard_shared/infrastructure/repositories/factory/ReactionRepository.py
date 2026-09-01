@@ -49,11 +49,13 @@ class ReactionRepository(BaseRepository):
         reaction = None
         with DbSession.use(readonly=True) as db:
             result = db.exec(
-                SqlBuilder.select.table(model_cls).where(
+                SqlBuilder.select.table(model_cls)
+                .where(
                     (user_or_bot_column == user_or_bot.id)
                     & (model_cls.column(model_cls.get_target_column_name()) == target_id)
                     & (model_cls.column("reaction_type") == reaction_type)
                 )
+                .limit(1)
             )
             reaction = result.first()
         return reaction

@@ -63,4 +63,4 @@ class MetadataService(BaseDomainService):
         return metadata
 
     def delete(self, model: type[_TMetadata], foreign_model: BaseDbModel, keys: str | list[str]) -> bool:
-        return self.repo.metadata.delete(model, foreign_model, keys)
+        return self.repo.metadata.delete_keys(model, foreign_model, keys)

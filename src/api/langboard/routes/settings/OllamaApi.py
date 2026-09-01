@@ -56,7 +56,7 @@ def get_ollama_models() -> JsonResponse:
         return JsonResponse(content={"models": [], "pulling_models": {}})
 
     try:
-        response = requests.get(f"{Env.OLLAMA_API_URL}/api/tags")
+        response = requests.get(f"{Env.OLLAMA_API_URL}/api/tags", timeout=Env.AI_REQUEST_TIMEOUT)
         response.raise_for_status()
         data = response.json()
         data["pulling_models"] = []
@@ -94,7 +94,11 @@ def get_ollama_model_details(form: OllamaModelForm) -> JsonResponse:
         raise ApiException.NotFound_404(ApiErrorCode.NF9000)
 
     try:
-        response = requests.post(f"{Env.OLLAMA_API_URL}/api/show", json={"model": form.model})
+        response = requests.post(
+            f"{Env.OLLAMA_API_URL}/api/show",
+            json={"model": form.model},
+            timeout=Env.AI_REQUEST_TIMEOUT,
+        )
         response.raise_for_status()
         data = response.json()
         return JsonResponse(content=data)
@@ -116,7 +120,7 @@ def get_ollama_running_models() -> JsonResponse:
         return JsonResponse(content={"models": []})
 
     try:
-        response = requests.get(f"{Env.OLLAMA_API_URL}/api/ps")
+        response = requests.get(f"{Env.OLLAMA_API_URL}/api/ps", timeout=Env.AI_REQUEST_TIMEOUT)
         response.raise_for_status()
         data = response.json()
         return JsonResponse(content=data)

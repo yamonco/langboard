@@ -6,7 +6,7 @@ from langboard_shared.core.caching import Cache
 from langboard_shared.core.db import DbSession, SqlBuilder
 from langboard_shared.core.logger import Logger
 from langboard_shared.domain.models import Bot, BotLog, InternalBot, Project
-from langboard_shared.domain.models.BotLog import BotLogMessage, BotLogType
+from langboard_shared.domain.models.BotLog import BotLogType
 from langboard_shared.domain.services import DomainService
 from langboard_shared.publishers import (
     CardPublisher,
@@ -50,6 +50,13 @@ class GraphRunner:
             except Exception as e:
                 Logger.main.exception(e)
                 yield self._create_stream_event("error", {"error": str(e)})
+            finally:
+                if not main_task.done():
+                    main_task.cancel()
+                    try:
+                        await main_task
+                    except asyncio.CancelledError:
+                        pass
 
         return main_task, response_generator()
 
@@ -189,13 +196,12 @@ class GraphRunner:
 
         log = BotLog(**log)
         with DbSession.use(readonly=True) as db:
-            latest_log = db.exec(SqlBuilder.select.table(BotLog).where(BotLog.id == log.id)).first()
+            latest_log = db.exec(SqlBuilder.select.table(BotLog).where(BotLog.id == log.id).limit(1)).first()
             if latest_log:
                 log = latest_log
 
         log.log_type = log_type
-        log_stack = BotLogMessage(message=stack, log_type=log_type)
-        log.message_stack = [*log.message_stack, log_stack]
+        log_stack = log.append_message(stack, log_type)
 
         with DbSession.use(readonly=False) as db:
             db.update(log)

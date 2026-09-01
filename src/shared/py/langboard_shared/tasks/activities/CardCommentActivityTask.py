@@ -89,7 +89,9 @@ def _get_default_history(helper: ActivityTaskHelper, project: Project, card: Car
     user_or_bot = None
     with DbSession.use(readonly=True) as db:
         result = db.exec(
-            SqlBuilder.select.table(target_model, with_deleted=True).where(target_model.column("id") == target_id)
+            SqlBuilder.select.table(target_model, with_deleted=True)
+            .where(target_model.column("id") == target_id)
+            .limit(1)
         )
         user_or_bot = cast(User | Bot, result.first())
 

@@ -3,69 +3,55 @@ import Cache from "@/core/caching/Cache";
 import DB from "@/core/db/DB";
 import Server from "@/core/server/Server";
 import Logger from "@/core/utils/Logger";
-import { Utils } from "@langboard/core/utils";
 
-const EXIT_SIGNALS = [
-    "SIGABRT",
-    "SIGALRM",
-    "SIGBUS",
-    "SIGCHLD",
-    "SIGCONT",
-    "SIGFPE",
-    "SIGHUP",
-    "SIGILL",
-    "SIGINT",
-    "SIGIO",
-    "SIGIOT",
-    "SIGKILL",
-    "SIGPIPE",
-    "SIGPOLL",
-    "SIGPROF",
-    "SIGPWR",
-    "SIGQUIT",
-    "SIGSEGV",
-    "SIGSTKFLT",
-    "SIGSTOP",
-    "SIGSYS",
-    "SIGTERM",
-    "SIGTRAP",
-    "SIGTSTP",
-    "SIGTTIN",
-    "SIGTTOU",
-    "SIGUNUSED",
-    "SIGURG",
-    "SIGUSR1",
-    "SIGUSR2",
-    "SIGVTALRM",
-    "SIGWINCH",
-    "SIGXCPU",
-    "SIGXFSZ",
-    "SIGBREAK",
-    "SIGLOST",
-    "SIGINFO",
-    "beforeExit",
-];
+const EXIT_SIGNALS: NodeJS.Signals[] = ["SIGINT", "SIGTERM", "SIGHUP", "SIGBREAK"];
+
+let isShuttingDown = false;
+
+const runShutdownStep = async (name: string, stop: () => Promise<void>, timeoutMs?: number): Promise<void> => {
+    let timeout: NodeJS.Timeout | undefined;
+    try {
+        const operation = stop();
+        if (!timeoutMs) {
+            await operation;
+            return;
+        }
+
+        await Promise.race([
+            operation,
+            new Promise<void>((_, reject) => {
+                timeout = setTimeout(() => reject(new Error(`${name} shutdown timed out`)), timeoutMs);
+                timeout.unref();
+            }),
+        ]);
+    } catch (error) {
+        Logger.red(`Shutdown step failed: ${error}\n`);
+    } finally {
+        if (timeout) {
+            clearTimeout(timeout);
+        }
+    }
+};
+
+const shutdown = async (exitCode: number): Promise<void> => {
+    if (isShuttingDown) {
+        return;
+    }
+    isShuttingDown = true;
+
+    await runShutdownStep("server", () => Server.destroy());
+    await runShutdownStep("consumer", () => Consumer.stop(), 10000);
+    await runShutdownStep("cache", () => Cache.stop(), 10000);
+    await runShutdownStep("database", () => DB.destroy(), 10000);
+    process.exit(exitCode);
+};
 
 for (let i = 0; i < EXIT_SIGNALS.length; ++i) {
     const signal = EXIT_SIGNALS[i];
     try {
         process.on(signal, async () => {
             Logger.green("Shutting down gracefully...\n");
-
-            await Consumer.stop();
-            await Cache.stop();
-            try {
-                Server.destroy();
-            } catch {
-                // Silently ignore any errors during DB shutdown
-            }
-            try {
-                await DB.destroy();
-            } catch {
-                // Silently ignore any errors during DB shutdown
-            }
-
-            process.exit(0);
+            await shutdown(0);
         });
     } catch {
         continue;
@@ -77,15 +63,8 @@ const ERROR_SIGNALS = ["uncaughtException", "unhandledRejection"];
 for (let i = 0; i < ERROR_SIGNALS.length; ++i) {
     const signal = ERROR_SIGNALS[i];
     process.on(signal, (error) => {
-        if (Utils.Type.isError(error)) {
-            if (error.message.includes("address already in use")) {
-                Logger.red("Port is already in use. Please stop the server before restarting.\n");
-                return;
-            }
-        }
         Logger.red(`Error occurred: ${error}\n`);
-        Logger.cyan("Restarting the server...\n");
-
-        Server.restart();
+        Logger.cyan("Stopping process for a clean supervisor restart...\n");
+        void shutdown(1);
     });
 }

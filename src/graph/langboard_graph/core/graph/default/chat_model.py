@@ -1,7 +1,11 @@
+from functools import lru_cache
+from json import dumps as json_dumps
+from json import loads as json_loads
 from typing import Any
 from langboard_shared.core.logger import Logger
 from langboard_shared.Env import Env
 from langchain.chat_models import init_chat_model
+from langchain.chat_models.base import BaseChatModel, _ConfigurableModel
 
 
 PROVIDER_MAP = {
@@ -32,11 +36,25 @@ NON_MODEL_SETTING_KEYS = {
 def create_default_chat_model(agent_llm: str | None, settings: dict[str, Any]):
     if not agent_llm:
         return None
+    try:
+        settings_json = json_dumps(settings, sort_keys=True, separators=(",", ":"))
+    except (TypeError, ValueError) as exc:
+        Logger.main.exception(exc)
+        return None
+    try:
+        return _create_cached_default_chat_model(agent_llm, settings_json)
+    except Exception as exc:
+        Logger.main.exception(exc)
+        return None
 
+
+@lru_cache(maxsize=32)
+def _create_cached_default_chat_model(agent_llm: str, settings_json: str) -> BaseChatModel | _ConfigurableModel | None:
     provider = PROVIDER_MAP.get(agent_llm)
     if not provider:
         return None
 
+    settings = json_loads(settings_json)
     model_name = settings.get("model_name") or settings.get("model") or settings.get("model_id")
     if not model_name:
         return None
@@ -52,8 +70,4 @@ def create_default_chat_model(agent_llm: str | None, settings: dict[str, Any]):
     if agent_llm == "LM Studio":
         kwargs.setdefault("api_key", "lm-studio")
 
-    try:
-        return init_chat_model(str(model_name), model_provider=provider, **kwargs)
-    except Exception as exc:
-        Logger.main.exception(exc)
-        return None
+    return init_chat_model(str(model_name), model_provider=provider, **kwargs)

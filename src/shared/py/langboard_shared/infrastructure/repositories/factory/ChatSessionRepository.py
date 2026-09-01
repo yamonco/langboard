@@ -38,6 +38,7 @@ class ChatSessionRepository(BaseRepository[ChatSession]):
                     (session_model.column(session_model.get_filterable_column()) == filterable_id)
                     & (session_model.column("id") == session_id)
                 )
+                .limit(1)
             )
 
             result = result.first()

@@ -1,5 +1,6 @@
 import base64
 import io
+from binascii import Error as Base64Error
 from langboard_shared.core.db import EditorContentModel
 from langboard_shared.core.storage import Storage, StorageName
 from langboard_shared.core.types import SafeDateTime
@@ -8,6 +9,7 @@ from langboard_shared.domain.models import Bot, Card, Project, ProjectRole, User
 from langboard_shared.domain.models.bases import ALL_GRANTED
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.domain.services.DomainService import DomainService
+from langboard_shared.Env import Env
 from langboard_shared.helpers import InfraHelper
 from langboard_shared.security import RoleFinder
 from ..mcp_integration import McpRoleFilter, McpTool
@@ -178,10 +180,18 @@ def upload_card_attachment(
     user: User,
     service: DomainService,
 ) -> dict:
+    max_file_bytes = Env.MAX_FILE_SIZE_MB * 1024 * 1024
+    max_base64_length = ((max_file_bytes + 2) // 3) * 4
+    if len(file_data_base64) > max_base64_length:
+        raise ValueError(f"Attachment exceeds the {Env.MAX_FILE_SIZE_MB} MB upload limit")
+
     try:
-        file_content = base64.b64decode(file_data_base64)
-    except Exception as e:
+        file_content = base64.b64decode(file_data_base64, validate=True)
+    except (Base64Error, ValueError) as e:
         raise ValueError(f"Invalid base64 data: {str(e)}")
+
+    if len(file_content) > max_file_bytes:
+        raise ValueError(f"Attachment exceeds the {Env.MAX_FILE_SIZE_MB} MB upload limit")
 
     file_object = io.BytesIO(file_content)
     file_object.name = filename
