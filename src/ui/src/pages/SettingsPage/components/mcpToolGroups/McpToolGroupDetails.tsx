@@ -41,10 +41,8 @@ function McpToolGroupDetailsDisplay() {
     const mcpServerConfig = {
         mcpServers: {
             [`${APP_NAME}-${toolGroup.name}-${toolGroup.uid}`]: {
-                transport: {
-                    type: "http",
-                    url: mcpEndpoint,
-                },
+                transport: "http",
+                url: mcpEndpoint,
                 headers: {
                     "X-Api-Key": "YOUR_API_KEY_HERE",
                     "X-MCP-Tool-Group-UID": toolGroup.uid,

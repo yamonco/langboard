@@ -62,7 +62,7 @@ export default defineConfig(({ mode }) => {
             },
         },
         define: {
-            "process.env.IS_PRODUCTION": JSON.stringify(mode === "production"),
+            "process.env.IS_PRODUCTION": JSON.stringify(String(mode === "production")),
             "process.env.PROJECT_NAME": JSON.stringify(process.env.PROJECT_NAME),
             "process.env.PROJECT_SHORT_NAME": JSON.stringify(process.env.PROJECT_SHORT_NAME),
             "process.env.API_URL": JSON.stringify(isLocal ? API_SERVER : process.env.API_URL),

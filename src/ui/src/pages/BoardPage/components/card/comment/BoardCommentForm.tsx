@@ -22,6 +22,7 @@ import { getEditorStore, useIsCurrentEditor } from "@/core/stores/EditorStore";
 import { getCardCommentDraftStore } from "@/core/stores/CardCommentDraftStore";
 import { TEditor } from "@/components/Editor/editor-kit";
 import { EEditorType } from "@langboard/core/constants";
+import { getMentionOnSelectItem } from "@platejs/mention";
 
 export function SkeletonBoardCommentForm() {
     return (
@@ -43,6 +44,8 @@ export interface IBoardCommentFormProps {
     variant?: "mobile" | "panel";
 }
 
+const insertMention = getMentionOnSelectItem();
+
 const BoardCommentForm = memo(({ variant = "mobile" }: IBoardCommentFormProps): React.JSX.Element | null => {
     const { projectUID, card, currentUser, replyRef } = useBoardCard();
     const { isCommentPanelOpen, setIsCommentPanelOpen, commentLayoutMode } = useBoardCardPanel();
@@ -58,11 +61,11 @@ const BoardCommentForm = memo(({ variant = "mobile" }: IBoardCommentFormProps): 
         valueRef.current = value;
     }, []);
     const drawerRef = useRef<HTMLDivElement>(null);
-    const editorRef = useRef<TEditor>(null);
     const editorName = `${card.uid}-comment-form`;
     const isCurrentEditor = useIsCurrentEditor(editorName);
     const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
     const [isPanelEditorOpen, setIsPanelEditorOpen] = useState(false);
+    const [pendingReplyMention, setPendingReplyMention] = useState<{ uid: string; username: string } | null>(null);
     const [isValidating, setIsValidating] = useState(false);
     const { mutate: addCommentMutate } = useAddCardComment();
     const isClickedRef = useRef(false);
@@ -85,15 +88,13 @@ const BoardCommentForm = memo(({ variant = "mobile" }: IBoardCommentFormProps): 
     const clearDraftFromStorage = useCallback(() => {
         getCardCommentDraftStore().clearDraft(projectUID, card.uid);
     }, [projectUID, card]);
-    const openEditor = useCallback(
-        (initialContent?: string) => {
-            setValue({ content: initialContent ?? readDraftFromStorage() });
-            getEditorStore().setCurrentEditor(editorName);
-        },
-        [editorName, readDraftFromStorage, setValue]
-    );
+    const openEditor = useCallback(() => {
+        setValue({ content: readDraftFromStorage() });
+        getEditorStore().setCurrentEditor(editorName);
+    }, [editorName, readDraftFromStorage, setValue]);
     const clearEditor = useCallback(() => {
         setValue({ content: "" });
+        setPendingReplyMention(null);
         clearDraftFromStorage();
     }, [clearDraftFromStorage, setValue]);
 
@@ -102,26 +103,22 @@ const BoardCommentForm = memo(({ variant = "mobile" }: IBoardCommentFormProps): 
         setIsPanelEditorOpen(false);
         getEditorStore().setCurrentEditor(null);
     }, [clearEditor]);
-    const insertReplyMention = useCallback((uid: string, username: string) => {
-        const editor = editorRef.current as TEditor & {
-            tf: TEditor["tf"] & {
-                insert?: {
-                    mention?: (options: { key: string; search?: string; value: string }) => void;
-                };
-            };
-        };
+    const handleEditorReady = useCallback(
+        (editor: TEditor) => {
+            if (!pendingReplyMention) {
+                return;
+            }
 
-        if (!editor?.tf.insert?.mention) {
-            return;
-        }
-
-        editor.tf.insert.mention({
-            key: uid,
-            search: "",
-            value: username,
-        });
-        editor.tf.insertText(" ");
-    }, []);
+            editor.tf.focus({ edge: "endEditor", retries: 3 });
+            insertMention(editor, {
+                key: pendingReplyMention.uid,
+                text: pendingReplyMention.username,
+            });
+            editor.tf.insertText(" ");
+            setPendingReplyMention(null);
+        },
+        [pendingReplyMention]
+    );
 
     const closeMobileDrawer = useCallback(() => {
         setIsMobileDrawerOpen(false);
@@ -195,12 +192,10 @@ const BoardCommentForm = memo(({ variant = "mobile" }: IBoardCommentFormProps): 
                 return;
             }
 
-            if (!isCurrentEditor || !editorRef.current) {
-                openEditor(`[**@${username}**](${target.uid}) `);
-                return;
+            setPendingReplyMention({ uid: target.uid, username });
+            if (!isCurrentEditor) {
+                openEditor();
             }
-
-            insertReplyMention(target.uid, username);
         };
 
         replyRef.current = handleReply;
@@ -210,7 +205,7 @@ const BoardCommentForm = memo(({ variant = "mobile" }: IBoardCommentFormProps): 
                 replyRef.current = () => {};
             }
         };
-    }, [insertReplyMention, isCurrentEditor, isReplyOwner, isValidating, openEditor, setIsCommentPanelOpen, variant]);
+    }, [isCurrentEditor, isReplyOwner, isValidating, openEditor, setIsCommentPanelOpen, variant]);
 
     useEffect(() => {
         if (!isCurrentEditor) {
@@ -355,7 +350,7 @@ const BoardCommentForm = memo(({ variant = "mobile" }: IBoardCommentFormProps): 
                                     card_uid: card.uid,
                                 }}
                                 setValue={setValue}
-                                editorRef={editorRef}
+                                onEditorReady={handleEditorReady}
                             />
                             <Flex items="center" gap="2" justify="end" p="2" className="border-t">
                                 <Button variant="secondary" onClick={closePanelEditor} disabled={isValidating}>
@@ -446,7 +441,7 @@ const BoardCommentForm = memo(({ variant = "mobile" }: IBoardCommentFormProps): 
                                     card_uid: card.uid,
                                 }}
                                 setValue={setValue}
-                                editorRef={editorRef}
+                                onEditorReady={handleEditorReady}
                             />
                         </Box>
                         <Flex items="center" gap="2" justify="start" p="1">

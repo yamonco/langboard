@@ -71,7 +71,13 @@ class App:
                 AuthSecurity.API_TOKEN_HEADER,
                 AuthSecurity.API_KEY_HEADER,
                 AuthSecurity.MCP_TOOL_GROUP_UID_HEADER,
+                "Mcp-Method",
+                "Mcp-Name",
+                "Mcp-Protocol-Version",
+                "Mcp-Session-Id",
+                "Last-Event-ID",
             ],
+            expose_headers=["Mcp-Session-Id"],
         )
 
         middleware_modules = ModuleLoader.load(

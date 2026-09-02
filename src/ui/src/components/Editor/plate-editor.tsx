@@ -60,6 +60,7 @@ const isYjsSelectionMismatchError = (error: unknown) => {
 interface IBasePlateEditorProps extends Omit<TUseCreateEditor, "plugins"> {
     setValue?: (value: IEditorContent) => void;
     onEditorChange?: (editor: TEditor) => void;
+    onEditorReady?: (editor: TEditor) => void;
     serializeOnChange?: bool;
     focusOnReady?: bool;
     variant?: React.ComponentProps<typeof Editor>["variant"];
@@ -103,6 +104,7 @@ function EditorWrapper({
     containerClassName,
     setValue,
     onEditorChange,
+    onEditorReady,
     editorRef,
     editorComponentRef,
     placeholder,
@@ -416,6 +418,14 @@ function EditorWrapper({
             focusEditor();
         }
     }, [focusEditor, isCollaborativeReady]);
+
+    useEffect(() => {
+        if (!isCollaborativeReady) {
+            return;
+        }
+
+        onEditorReady?.(editor);
+    }, [editor, isCollaborativeReady, onEditorReady]);
 
     useEffect(() => {
         if (!isWaitingForCollaborativeReady) {
