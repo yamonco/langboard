@@ -108,6 +108,7 @@ class MiddlewareHelper:
             return None
         authorization = headers.get(AuthSecurity.AUTHORIZATION_HEADER, "")
         scheme, separator, token = authorization.partition(" ")
+        token = token.strip()
         if not separator or scheme.lower() != "bearer" or not token:
             return None
         try:

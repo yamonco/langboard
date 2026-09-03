@@ -48,10 +48,12 @@ def test_bearer_identity_is_resolved_by_normalized_issuer_and_subject(monkeypatc
     """Email is profile metadata, not the durable bearer-authentication key."""
 
     Env.update_env("OIDC_BEARER_ENABLED", "true")
+    validated_tokens: list[str] = []
     monkeypatch.setattr(
         OidcClient,
         "validate_access_token",
-        lambda _token: {"iss": "https://issuer.example/", "sub": "employee-1", "email": "changed@example.com"},
+        lambda token: validated_tokens.append(token)
+        or {"iss": "https://issuer.example/", "sub": "employee-1", "email": "changed@example.com"},
     )
     calls: list[tuple[Any, ...]] = []
     user = SimpleNamespace(activated_at=object(), deleted_at=None)
@@ -64,9 +66,10 @@ def test_bearer_identity_is_resolved_by_normalized_issuer_and_subject(monkeypatc
     services_module = __import__("langboard_shared.domain.services", fromlist=["DomainService"])
     monkeypatch.setattr(services_module, "DomainService", lambda: service)
 
-    result = MiddlewareHelper._validate_oidc_user(Headers({"Authorization": "Bearer upstream-token"}))
+    result = MiddlewareHelper._validate_oidc_user(Headers({"Authorization": "Bearer   upstream-token  "}))
 
     assert result is user
+    assert validated_tokens == ["upstream-token"]
     assert calls[0][1:] == ("employee-1", "https://issuer.example")
 
 

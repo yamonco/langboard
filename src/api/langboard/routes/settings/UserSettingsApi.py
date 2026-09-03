@@ -37,7 +37,15 @@ from .Form import (
 @AppRouter.api.put(
     "/settings/users/{user_uid}/identity-links/oidc",
     tags=["AppSettings.User"],
-    responses=OpenApiSchema().suc({"identity_link": "object"}).auth().forbidden().err(404, ApiErrorCode.NF1004).get(),
+    responses=(
+        OpenApiSchema()
+        .suc({"identity_link": "object"})
+        .auth()
+        .forbidden()
+        .err(404, ApiErrorCode.NF1004)
+        .err(409, ApiErrorCode.EX1003)
+        .get()
+    ),
 )
 @RoleFilter.add(SettingRole, [SettingRoleAction.UserUpdate], RoleFinder.setting, allowed_all_admin=False)
 @AuthFilter.add("admin")
