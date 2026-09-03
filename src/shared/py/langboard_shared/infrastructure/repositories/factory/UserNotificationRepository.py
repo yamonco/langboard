@@ -27,9 +27,15 @@ class UserNotificationRepository(BaseRepository[UserNotification]):
         time_range: Literal["3d", "7d", "1m", "all"] = "3d",
         page: int = 1,
         limit: int = 20,
+        unread_only: bool = False,
     ):
+        """Return one ordered notification page for a user."""
+
         user_id = InfraHelper.convert_id(user)
         query = SqlBuilder.select.table(UserNotification).where((UserNotification.column("receiver_id") == user_id))
+
+        if unread_only:
+            query = query.where(UserNotification.column("read_at") == None)  # noqa
 
         if time_range.endswith("d"):
             days = int(time_range[:-1])
