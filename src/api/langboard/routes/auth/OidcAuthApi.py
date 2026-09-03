@@ -65,6 +65,10 @@ def oidc_callback(
             raise RuntimeError("id_token is missing")
 
         claims = OidcClient.validate_id_token(id_token, nonce=nonce)
+        subject = str(claims.get("sub", "")).strip()
+        issuer = str(claims.get("iss", Env.OIDC_ISSUER)).strip().rstrip("/")
+        if not subject or not issuer:
+            raise RuntimeError("OIDC subject or issuer is missing")
 
         claim_name = Env.OIDC_EMAIL_CLAIM or "email"
         email = claims.get(claim_name, claims.get("email", ""))
@@ -95,8 +99,17 @@ def oidc_callback(
         firstname = firstname or "OIDC"
         lastname = lastname or "User"
 
-        user, _ = service.user.get_by_email(email)
+        user = service.identity_link.get_user_by_provider_external_id(
+            IdentityProvider.Oidc,
+            subject,
+            issuer,
+        )
+        if not user and Env.OIDC_AUTO_LINK_BY_EMAIL:
+            user, _ = service.user.get_by_email(email)
         if not user:
+            existing_user, _ = service.user.get_by_email(email)
+            if existing_user or not Env.OIDC_AUTO_PROVISION:
+                raise RuntimeError("OIDC identity requires an explicit account link")
             now = SafeDateTime.now()
             form = {
                 "firstname": firstname,
@@ -123,16 +136,13 @@ def oidc_callback(
             if not user.activated_at:
                 service.user.activate(user)
 
-        sub = str(claims.get("sub", "")).strip()
-        issuer = str(claims.get("iss", Env.OIDC_ISSUER)).strip() or None
-        if sub:
-            service.identity_link.upsert_user_link(
-                user=user,
-                provider=IdentityProvider.Oidc,
-                external_id=sub,
-                issuer=issuer,
-                email=email,
-            )
+        service.identity_link.upsert_user_link(
+            user=user,
+            provider=IdentityProvider.Oidc,
+            external_id=subject,
+            issuer=issuer,
+            email=email,
+        )
 
         access_token, refresh_token = AuthSecurity.authenticate(user.id)
 
