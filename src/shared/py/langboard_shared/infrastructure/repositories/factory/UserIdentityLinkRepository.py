@@ -25,8 +25,7 @@ class UserIdentityLinkRepository(BaseRepository[UserIdentityLink]):
         condition = (UserIdentityLink.column("provider") == provider) & (
             UserIdentityLink.column("external_id") == external_id
         )
-        if issuer is not None:
-            condition &= UserIdentityLink.column("issuer") == issuer
+        condition &= UserIdentityLink.column("issuer") == (issuer or "")
         with DbSession.use(readonly=True) as db:
             result = db.exec(SqlBuilder.select.table(UserIdentityLink).where(condition).limit(1))
             return result.first()
