@@ -80,7 +80,7 @@ class OidcClient:
 
     @staticmethod
     def _validate_jwt(token: str, audience: str, nonce: str | None = None) -> dict[str, Any]:
-        """Validate one asymmetric OIDC JWT against discovery metadata."""
+        """Validate one supported OIDC JWT against discovery metadata."""
 
         discovery = OidcClient.get_discovery()
         unverified_header = get_unverified_header(token)
