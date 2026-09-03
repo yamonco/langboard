@@ -20,12 +20,15 @@ class IdentityLinkService(BaseDomainService):
         return None
 
     def get_by_provider_external_id(
-        self, provider: IdentityProvider | str, external_id: str
+        self,
+        provider: IdentityProvider | str,
+        external_id: str,
+        issuer: str | None = None,
     ) -> UserIdentityLink | None:
         provider_enum = self._to_provider_enum(provider)
         if provider_enum is None or not external_id:
             return None
-        return self.repo.user_identity_link.get_by_provider_external_id(provider_enum, external_id)
+        return self.repo.user_identity_link.get_by_provider_external_id(provider_enum, external_id, issuer)
 
     def get_by_user_provider(self, user: TUserParam, provider: IdentityProvider | str) -> UserIdentityLink | None:
         provider_enum = self._to_provider_enum(provider)
@@ -33,8 +36,13 @@ class IdentityLinkService(BaseDomainService):
             return None
         return self.repo.user_identity_link.get_by_user_provider(user, provider_enum)
 
-    def get_user_by_provider_external_id(self, provider: IdentityProvider | str, external_id: str) -> User | None:
-        link = self.get_by_provider_external_id(provider, external_id)
+    def get_user_by_provider_external_id(
+        self,
+        provider: IdentityProvider | str,
+        external_id: str,
+        issuer: str | None = None,
+    ) -> User | None:
+        link = self.get_by_provider_external_id(provider, external_id, issuer)
         if not link:
             return None
         return InfraHelper.get_by_id_like(User, link.user_id)
@@ -53,7 +61,8 @@ class IdentityLinkService(BaseDomainService):
             raise ValueError("Unsupported identity provider")
 
         current_link = self.get_by_user_provider(user_id, provider_enum)
-        external_link = self.get_by_provider_external_id(provider_enum, external_id)
+        normalized_issuer = issuer.strip().rstrip("/") if issuer else ""
+        external_link = self.get_by_provider_external_id(provider_enum, external_id, normalized_issuer)
 
         if external_link and current_link and external_link.id != current_link.id:
             # Keep a single record per user/provider pair.
@@ -63,7 +72,7 @@ class IdentityLinkService(BaseDomainService):
         target = external_link or current_link
         if not target:
             target = UserIdentityLink(user_id=user_id, provider=provider_enum, external_id=external_id)
-            target.issuer = issuer
+            target.issuer = normalized_issuer
             target.email = email
             self.repo.user_identity_link.insert(target)
             return target
@@ -71,7 +80,7 @@ class IdentityLinkService(BaseDomainService):
         target.user_id = user_id
         target.provider = provider_enum
         target.external_id = external_id
-        target.issuer = issuer
+        target.issuer = normalized_issuer
         target.email = email
         self.repo.user_identity_link.update(target)
         return target

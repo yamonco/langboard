@@ -32,7 +32,11 @@ class ScimProvisioningService(BaseDomainService):
 
     def resolve_user(self, identifier: str) -> User | None:
         identity_link = self._get_service(IdentityLinkService)
-        user = identity_link.get_user_by_provider_external_id(IdentityProvider.Scim, identifier)
+        user = identity_link.get_user_by_provider_external_id(
+            IdentityProvider.Scim,
+            identifier,
+            (Env.SCIM_ISSUER or "").rstrip("/"),
+        )
         if user:
             return user
 
