@@ -92,7 +92,11 @@ class CardGraphNewCard:
     description: str | None = None
 
     def __post_init__(self) -> None:
-        if not isinstance(self.client_ref, str) or not self.client_ref.startswith("new:"):
+        if (
+            not isinstance(self.client_ref, str)
+            or self.client_ref != self.client_ref.strip()
+            or not self.client_ref.startswith("new:")
+        ):
             raise ValueError("New card client_ref must start with 'new:'")
         if len(self.client_ref) > 80 or not self.client_ref[4:]:
             raise ValueError("New card client_ref is invalid")
@@ -109,7 +113,9 @@ class CardGraphEdge:
     relationship_type_uid: str
 
     def __post_init__(self) -> None:
-        if not all(isinstance(value, str) and value.strip() for value in self.__dict__.values()):
+        if not all(
+            isinstance(value, str) and value and value == value.strip() for value in self.__dict__.values()
+        ):
             raise ValueError("Graph edge references and relationship type are required")
         if self.parent_ref == self.child_ref:
             raise ValueError("A card cannot relate to itself")
