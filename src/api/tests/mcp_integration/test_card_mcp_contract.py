@@ -52,6 +52,26 @@ def test_card_bundle_schema_exposes_opt_in_sections() -> None:
     assert schema["properties"]["include"]["default"] is None
 
 
+def test_graph_patch_schema_exposes_typed_request_local_references() -> None:
+    """Clients can mix existing UIDs and request-local cards in one explicit patch."""
+
+    schema = McpTool.get_tool("apply_card_graph_patch")["input_schema"]
+
+    assert schema["required"] == [
+        "project_uid",
+        "anchor_card_uid",
+        "new_cards",
+        "add_edges",
+        "remove_relationship_uids",
+    ]
+    assert schema["$defs"]["CardGraphNewCard"]["required"] == ["client_ref", "title"]
+    assert schema["$defs"]["CardGraphEdge"]["required"] == [
+        "parent_ref",
+        "child_ref",
+        "relationship_type_uid",
+    ]
+
+
 def test_mcp_serializer_omits_unrequested_card_sections() -> None:
     """The real MCP response path does not leak optional sections as null placeholders."""
 

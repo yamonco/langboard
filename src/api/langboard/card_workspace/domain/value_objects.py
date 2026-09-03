@@ -14,6 +14,8 @@ MAX_TEXT_CHARS = 8_000
 MAX_METADATA_VALUE_CHARS = 4_000
 MAX_METADATA_KEY_CHARS = 128
 MAX_PROJECTION_KEY_CHARS = 64
+MAX_GRAPH_NEW_CARDS = 7
+MAX_GRAPH_EDGE_CHANGES = 25
 
 _COMPACT_SECRET_FRAGMENTS = (
     "accesskey",
@@ -79,6 +81,38 @@ class ChecklistProjectionItem:
             raise ValueError("Checklist projection item checked state must be boolean")
         if self.deadline_at is not None:
             datetime.fromisoformat(self.deadline_at)
+
+
+@dataclass(frozen=True)
+class CardGraphNewCard:
+    """One not-yet-persisted card addressed by a request-local reference."""
+
+    client_ref: str
+    title: str
+    description: str | None = None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.client_ref, str) or not self.client_ref.startswith("new:"):
+            raise ValueError("New card client_ref must start with 'new:'")
+        if len(self.client_ref) > 80 or not self.client_ref[4:]:
+            raise ValueError("New card client_ref is invalid")
+        if not isinstance(self.title, str) or not self.title.strip() or len(self.title) > 500:
+            raise ValueError("New card title is invalid")
+
+
+@dataclass(frozen=True)
+class CardGraphEdge:
+    """One typed parent-to-child relationship between existing or new cards."""
+
+    parent_ref: str
+    child_ref: str
+    relationship_type_uid: str
+
+    def __post_init__(self) -> None:
+        if not all(isinstance(value, str) and value.strip() for value in self.__dict__.values()):
+            raise ValueError("Graph edge references and relationship type are required")
+        if self.parent_ref == self.child_ref:
+            raise ValueError("A card cannot relate to itself")
 
 
 def require_projection_key(value: str) -> str:
