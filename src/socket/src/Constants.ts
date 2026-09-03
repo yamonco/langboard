@@ -79,6 +79,7 @@ When using kafka for broadcasting, you must use redis for caching, and vice vers
 
 export const API_URL =
     ENVIRONMENT !== "development" ? getEnv<string>({ key: "API_URL", defaultValue: `http://localhost:${API_PORT}` }) : `http://localhost:${API_PORT}`;
+export const API_INTERNAL_URL = getEnv<string>({ key: "API_INTERNAL_URL", defaultValue: API_URL }).replace(/\/$/, "");
 export const PUBLIC_UI_URL =
     ENVIRONMENT !== "development"
         ? getEnv<string>({ key: "PUBLIC_UI_URL", defaultValue: `http://localhost:${UI_PORT}` })

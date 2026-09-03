@@ -15,7 +15,7 @@ function ChatInputScopePreview({ scope }: IChatInputScopePreviewProps) {
     const { lockedScope, selectedScope } = useBoardChat();
     const [t] = useTranslation();
     const [scopeField, scopeBadge] = useMemo(() => {
-        const [scopeTable] = selectedScope ?? lockedScope ?? [undefined, undefined];
+        const [scopeTable] = lockedScope ?? selectedScope ?? [undefined, undefined];
         switch (scopeTable) {
             case "card":
                 return ["title", scopeTable];

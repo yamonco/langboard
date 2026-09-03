@@ -117,7 +117,7 @@ class FakeQueryPort:
             "uid": "p1",
             "title": "Delivery",
             "project_type": "Other",
-            "url": "https://langboard.yamon.io/board/p1",
+            "url": "http://localhost/board/p1",
             "columns": {
                 "items": [
                     {"uid": "backlog", "name": "Backlog", "order": 0},

@@ -12,8 +12,8 @@ import ChatInputFilePreview from "@/pages/BoardPage/components/chat/ChatInputFil
 function ChatInputPreviewList() {
     const { isSending, selectedScope, setSelectedScope, lockedScope } = useBoardChat();
     const { clearAttachmentPreview, file } = useChatInput();
-    const effectiveScope = selectedScope ?? lockedScope;
-    const isLockedScope = !selectedScope && !!lockedScope;
+    const effectiveScope = lockedScope ?? selectedScope;
+    const isLockedScope = !!lockedScope;
     const scope = useMemo(() => {
         const [scopeTable, scopeUID] = effectiveScope || [undefined, undefined];
         if (!scopeTable || !scopeUID) {

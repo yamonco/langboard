@@ -8,15 +8,14 @@ import { ESocketStatus, ESocketTopic } from "@langboard/core/enums";
 import ChatHistory from "@/models/ChatHistory";
 import { EInternalBotType } from "@/models/InternalBot";
 import ProjectAssignedInternalBot from "@/models/ProjectAssignedInternalBot";
-import { SocketEvents } from "@langboard/core/constants";
+import { EEditorCollaborationType, Routing, SocketEvents } from "@langboard/core/constants";
 import ChatSession from "@/models/ChatSession";
 import { TChatScope } from "@langboard/core/types";
 import ProjectChatSession from "@/models/ProjectChatSession";
 import { AGENT_PERMISSION_LEVEL_APPROVAL_POLICY, EAgentApprovalPolicy, EAgentPermissionLevel, EApiPermission } from "@langboard/core/ai";
 import { createOneTimeToken } from "@/core/ai/BotOneTimeToken";
-import { EEditorCollaborationType } from "@langboard/core/constants";
 import { getActiveEditorSyncDocumentNames } from "@/core/server/Hocus";
-import { AI_REQUEST_TIMEOUT, DEFAULT_GRAPH_URL } from "@/Constants";
+import { AI_REQUEST_TIMEOUT, API_INTERNAL_URL, DEFAULT_GRAPH_URL } from "@/Constants";
 import GraphApprovalRequest from "@/models/GraphApprovalRequest";
 import {
     EGraphApprovalOriginType,
@@ -139,6 +138,29 @@ const toApprovalScopeTable = (value: unknown): EGraphApprovalScopeTable => {
 
 const toRecord = (value: unknown): Record<string, unknown> => {
     return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+};
+
+const getChatScopeContext = async (
+    projectUID: string,
+    scopeTable: TChatScope | undefined,
+    scopeUID: string | undefined,
+    userID: string
+): Promise<Record<string, unknown> | undefined> => {
+    if (scopeTable !== "card" || !scopeUID) {
+        return undefined;
+    }
+
+    const path = Utils.String.format(Routing.API.BOARD.CARD.GET_CONTEXT, {
+        uid: projectUID,
+        card_uid: scopeUID,
+    });
+    const response = await api.get(`${API_INTERNAL_URL}${path}`, {
+        headers: {
+            "X-Api-Token": createOneTimeToken(new SnowflakeID(userID), EAgentPermissionLevel.Read),
+        },
+    });
+    const scopeContext = toRecord(response.data).scope_context;
+    return Utils.Type.isObject<Record<string, unknown>>(scopeContext) ? scopeContext : undefined;
 };
 
 interface IGraphResumeInputPayload {
@@ -291,6 +313,21 @@ EventManager.on(ESocketTopic.Board, SocketEvents.CLIENT.BOARD.CHAT.SEND, async (
             default:
                 restData.chat_scope = "project";
                 break;
+        }
+    }
+
+    if (scopeTable === "card") {
+        try {
+            const scopeContext = await getChatScopeContext(topicId, scopeTable, scopeUID, client.user.id);
+            if (!scopeContext) {
+                client.sendError(ESocketStatus.WS_4001_INVALID_DATA, "Invalid chat scope", false);
+                return;
+            }
+            restData.scope_context = scopeContext;
+        } catch (error) {
+            Logger.error(error, "\n");
+            client.sendError(ESocketStatus.WS_4001_INVALID_DATA, "Invalid chat scope", false);
+            return;
         }
     }
 

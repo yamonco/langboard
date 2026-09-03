@@ -16,9 +16,12 @@ services:
       - ../src/ui/dist:/usr/share/nginx/html
     command: [nginx-debug, "-g", "daemon off;"]
     depends_on:
-      - ui
-      - api
-      - socket
+      ui:
+        condition: service_completed_successfully
+      api:
+        condition: service_healthy
+      socket:
+        condition: service_healthy
     networks:
       - net
     restart: always
@@ -71,12 +74,28 @@ services:
       - ../scripts/run_notification_cron.sh:/app/scripts/run_notification_cron.sh:x
       - ./volumes/.vault-credentials:/app/.vault-credentials:ro
     depends_on:
-      - db-bouncer
-      - kafka0
-      - kafka1
-      - kafka2
-      - redis
-      - redis-broker
+      db-bouncer:
+        condition: service_healthy
+      kafka0:
+        condition: service_healthy
+      kafka1:
+        condition: service_healthy
+      kafka2:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      redis-broker:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - /app/.venv/bin/python
+        - -c
+        - import urllib.request; urllib.request.urlopen("http://${PROJECT_NAME}_api:5381/health", timeout=2)
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 30s
     networks:
       - net
     restart: always
@@ -89,6 +108,8 @@ services:
       context: ../
       target: with-document-processing
     command: uv run --no-sync ${PROJECT_NAME} run:broker
+    healthcheck:
+      disable: true
     stop_grace_period: 16m
 
   socket:
@@ -110,13 +131,30 @@ services:
       - ../.env:/app/.env
       - ./volumes/.vault-credentials:/app/.vault-credentials:ro
     depends_on:
-      - db-bouncer
-      - kafka0
-      - kafka1
-      - kafka2
-      - graph
-      - redis
-      - redis-broker
+      db-bouncer:
+        condition: service_healthy
+      kafka0:
+        condition: service_healthy
+      kafka1:
+        condition: service_healthy
+      kafka2:
+        condition: service_healthy
+      graph:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      redis-broker:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - const net=require("net");const socket=net.connect(5690,"127.0.0.1",()=>{socket.end();process.exit(0)});socket.on("error",()=>process.exit(1));setTimeout(()=>process.exit(1),2000)
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 20s
     networks:
       - net
     restart: always
@@ -141,13 +179,30 @@ services:
       - ../local:/app/local
       - ./volumes/.vault-credentials:/app/.vault-credentials:ro
     depends_on:
-      - db-bouncer
-      - kafka0
-      - kafka1
-      - kafka2
-      - api
-      - redis
-      - redis-broker
+      db-bouncer:
+        condition: service_healthy
+      kafka0:
+        condition: service_healthy
+      kafka1:
+        condition: service_healthy
+      kafka2:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      redis-broker:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - /app/src/graph/.venv/bin/python
+        - -c
+        - import urllib.request; urllib.request.urlopen("http://${PROJECT_NAME}_graph:5020/health", timeout=2)
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 30s
     networks:
       - net
     restart: always

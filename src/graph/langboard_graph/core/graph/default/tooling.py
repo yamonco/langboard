@@ -16,7 +16,6 @@ _API_TOOLS_COMPONENT = "LangboardCalledAPIToolsComponent"
 _VARIABLES_COMPONENT = "LangboardCalledVariablesComponent"
 _LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "0.0.0.0", "::1"}
 _API_APPROVAL_POLICIES = {"allow", "ask", "deny"}
-_MAX_CARD_DESCRIPTION_PROMPT_LENGTH = 1200
 _DEFAULT_API_APPROVAL_POLICY = {
     "read": "allow",
     "create": "ask",
@@ -48,39 +47,6 @@ def create_langboard_context_prompt(tweaks: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-async def create_langboard_entity_context_prompt(tweaks: dict[str, Any], input_value: str) -> str:
-    if "card" not in input_value.lower():
-        return ""
-
-    variables = _get_variables(tweaks)
-    project_uid = variables.get("project_uid")
-    app_api_token = variables.get("app_api_token")
-    if not isinstance(project_uid, str) or not project_uid or not isinstance(app_api_token, str) or not app_api_token:
-        return ""
-
-    cards = await _fetch_project_cards(tweaks, variables, project_uid, app_api_token, input_value)
-    matched_cards = _filter_mentioned_cards(cards, input_value)
-    if not matched_cards:
-        return ""
-
-    lines = [
-        "Langboard current project card matches:",
-        "- Use these uid values internally for tool arguments, but do not expose them in normal user-facing answers.",
-    ]
-    for card in matched_cards[:20]:
-        title = card.get("title")
-        uid = card.get("uid")
-        column_name = card.get("project_column_name")
-        if isinstance(title, str) and isinstance(uid, str):
-            column_part = f", column={column_name}" if isinstance(column_name, str) and column_name else ""
-            description = _get_card_description_prompt(card.get("description"))
-            lines.append(
-                f"- title={title}, uid={uid}{column_part}, description={json_dumps(description, ensure_ascii=False)}"
-            )
-
-    return "\n".join(lines)
-
-
 def create_langboard_event_input(input_value: str, tweaks: dict[str, Any]) -> str:
     if input_value.strip():
         return input_value
@@ -98,74 +64,6 @@ def create_langboard_event_input(input_value: str, tweaks: dict[str, Any]) -> st
             f"Event data: {json_dumps(rest_data, ensure_ascii=False)}" if rest_data else "Event data: {}",
         ]
     )
-
-
-async def _fetch_project_cards(
-    tweaks: dict[str, Any],
-    variables: dict[str, Any],
-    project_uid: str,
-    app_api_token: str,
-    input_value: str,
-) -> list[dict[str, Any]]:
-    base_url = _get_base_url(tweaks, variables)
-    try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            async with client.stream(
-                "GET",
-                f"{base_url}/board/{project_uid}/cards/context",
-                headers=_get_headers(app_api_token),
-                params={"input_value": input_value},
-            ) as response:
-                response.raise_for_status()
-                data = json_loads(await _read_limited_response(response))
-    except Exception:
-        return []
-
-    cards = data.get("cards")
-    return [card for card in cards if isinstance(card, dict)] if isinstance(cards, list) else []
-
-
-def _filter_mentioned_cards(cards: list[dict[str, Any]], input_value: str) -> list[dict[str, Any]]:
-    normalized_input = input_value.casefold()
-    matched_cards: list[dict[str, Any]] = []
-    for card in cards:
-        title = card.get("title")
-        if not isinstance(title, str) or not title:
-            continue
-        normalized_title = title.casefold()
-        if normalized_title in normalized_input or normalized_input in normalized_title:
-            matched_cards.append(card)
-
-    return matched_cards
-
-
-def _get_card_description_prompt(value: Any) -> str:
-    content = _get_editor_content(value)
-    if len(content) <= _MAX_CARD_DESCRIPTION_PROMPT_LENGTH:
-        return content
-    return f"{content[:_MAX_CARD_DESCRIPTION_PROMPT_LENGTH]}..."
-
-
-def _get_editor_content(value: Any) -> str:
-    if isinstance(value, BaseModel):
-        value = value.model_dump()
-
-    if isinstance(value, dict):
-        content = value.get("content")
-        return content if isinstance(content, str) else ""
-
-    if isinstance(value, str):
-        stripped_value = value.strip()
-        if not stripped_value:
-            return ""
-        if stripped_value.startswith("{"):
-            try:
-                return _get_editor_content(json_loads(stripped_value))
-            except ValueError:
-                return stripped_value
-        return stripped_value
-
-    return ""
 
 
 async def create_langboard_api_tools(tweaks: dict[str, Any]) -> list[StructuredTool]:
@@ -565,14 +463,7 @@ async def _call_api_tool(
 ) -> str:
     query, form = _split_tool_args(kwargs, field_sources)
     _normalize_editor_content_form(schema, form)
-    project_uid = variables.get("project_uid")
-    if project_uid:
-        query.setdefault("project_uid", project_uid)
-
-    rest_data = _get_rest_data(variables)
-    for path_param in schema.get("path_params") or []:
-        if path_param not in query and path_param in rest_data:
-            query[path_param] = rest_data[path_param]
+    _apply_runtime_path_params(schema, variables, query)
 
     if str(schema.get("path", "")).startswith("/api/comfort/"):
         request_url = f"{base_url}/api/comfort/{api_name}"
@@ -599,6 +490,20 @@ async def _call_api_tool(
     if "application/json" in content_type:
         return json_dumps(json_loads(content), ensure_ascii=False)
     return content.decode(response.encoding or "utf-8", errors="replace")
+
+
+def _apply_runtime_path_params(schema: dict[str, Any], variables: dict[str, Any], query: dict[str, Any]) -> None:
+    project_uid = variables.get("project_uid")
+    if isinstance(project_uid, str) and project_uid:
+        query["project_uid"] = project_uid
+
+    rest_data = _get_rest_data(variables)
+    for path_param in schema.get("path_params") or []:
+        if path_param == "project_uid":
+            continue
+        value = rest_data.get(path_param)
+        if isinstance(value, str) and value:
+            query[path_param] = value
 
 
 async def _read_limited_response(response: httpx.Response) -> bytes:

@@ -168,7 +168,7 @@ class ProjectInvitationService(BaseDomainService):
 
         return True
 
-    def update_by_signed_up(self, user: User):
+    def update_by_signed_up(self, user: User) -> None:
         invitations = self.repo.project_invitation.get_all_with_projects_by_email(user.email)
         if not invitations:
             return
@@ -181,10 +181,16 @@ class ProjectInvitationService(BaseDomainService):
                 invitation_map[project.id] = project, []
             invitation_map[project.id][1].append(invitation)
 
-        for project, invitations in invitation_map.values():
-            self.repo.project_invitation.delete(invitations)
-
-            notification_service.notify_project_invited(user, user, project, invitation)
+        for project, project_invitations in invitation_map.values():
+            owner = InfraHelper.get_by_id_like(User, project.owner_id)
+            if owner:
+                for invitation in project_invitations:
+                    record_list = json_dumps(notification_service.create_record_list([project, invitation]))
+                    existing_notification = self.repo.user_notification.get_project_invitation_notification(
+                        user, record_list
+                    )
+                    if not existing_notification:
+                        notification_service.notify_project_invited(owner, user, project, invitation)
 
             model = {
                 "assigned_members": project_service.get_api_assigned_user_list(project),

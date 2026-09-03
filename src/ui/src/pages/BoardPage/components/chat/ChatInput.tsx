@@ -160,7 +160,7 @@ function ChatInputDisplay() {
 
             chatTaskIdRef.current = Utils.String.Token.uuid();
 
-            const [scopeTable, scopeUID] = selectedScope || lockedScope || [undefined, undefined];
+            const [scopeTable, scopeUID] = lockedScope || selectedScope || [undefined, undefined];
 
             return sendChat({
                 message: chatMessage,

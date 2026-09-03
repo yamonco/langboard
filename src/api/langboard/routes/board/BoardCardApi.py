@@ -39,6 +39,9 @@ from langboard_shared.domain.services import DomainService
 from langboard_shared.filter import RoleFilter
 from langboard_shared.helpers import InfraHelper
 from langboard_shared.security import Auth, RoleFinder
+from ...card_workspace.application import get_card_bundle
+from ...card_workspace.domain import CardBundleInclude, CommentPage, SectionPage
+from ...card_workspace.infrastructure import NativeCardWorkspaceAdapter
 from .forms import (
     AssignUsersForm,
     ChangeCardDetailsForm,
@@ -149,6 +152,42 @@ def get_card_details(
             "bot_scopes": bot_scopes,
         }
     )
+
+
+@AppRouter.schema(permission=ApiPermission.Read)
+@AppRouter.api.get(
+    "/board/{project_uid}/card/{card_uid}/context",
+    tags=["Board.Card"],
+    description="Get bounded card context for project chat.",
+    responses=(OpenApiSchema().suc({"scope_context": "object"}).auth().forbidden().err(404, ApiErrorCode.NF2003).get()),
+)
+@RoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+@AuthFilter.add()
+def get_card_context(
+    project_uid: str,
+    card_uid: str,
+    user_or_bot: User | Bot = Auth.scope("all"),
+    service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    if not InfraHelper.get_records_with_foreign_by_params((Project, project_uid), (Card, card_uid)):
+        raise ApiException.NotFound_404(ApiErrorCode.NF2003)
+
+    context = get_card_bundle(
+        NativeCardWorkspaceAdapter(user_or_bot, service),
+        project_uid,
+        card_uid,
+        CommentPage(),
+        SectionPage(),
+        [
+            CardBundleInclude.Description,
+            CardBundleInclude.People,
+            CardBundleInclude.Classification,
+            CardBundleInclude.Checklists,
+            CardBundleInclude.Attachments,
+            CardBundleInclude.Metadata,
+        ],
+    )
+    return JsonResponse(content={"scope_context": context.model_dump(mode="json")})
 
 
 @AppRouter.schema(permission=ApiPermission.Read)

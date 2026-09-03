@@ -17,7 +17,6 @@ from .tooling import (
     create_langboard_api_tool_approval_request,
     create_langboard_api_tool_context,
     create_langboard_context_prompt,
-    create_langboard_entity_context_prompt,
     create_langboard_event_input,
 )
 
@@ -110,8 +109,7 @@ async def run_default_agent(state: DefaultGraphState) -> DefaultGraphState:
     input_value = create_langboard_event_input(input_value, tweaks)
 
     if chat_model is None:
-        state["response"] = input_value or "Graph request received."
-        return state
+        raise RuntimeError("Default graph model is not configured.")
 
     messages: list[BaseMessage] = []
     if system_prompt:
@@ -120,9 +118,6 @@ async def run_default_agent(state: DefaultGraphState) -> DefaultGraphState:
     context_prompt = create_langboard_context_prompt(tweaks)
     if context_prompt:
         messages.append(SystemMessage(content=context_prompt))
-    entity_context_prompt = await create_langboard_entity_context_prompt(tweaks, input_value)
-    if entity_context_prompt:
-        messages.append(SystemMessage(content=entity_context_prompt))
     history_context_prompt = state.get("history_context_prompt")
     if history_context_prompt is None:
         history_context_prompt = create_langboard_history_context_prompt(tweaks, state)

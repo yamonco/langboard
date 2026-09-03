@@ -33,8 +33,18 @@ services:
     volumes:
       - ./db_bouncer/userlists.txt:/bitnami/userlists.txt
     depends_on:
-      - db
-      - db-replica
+      db:
+        condition: service_healthy
+      db-replica:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - /opt/bitnami/postgresql/bin/psql -h 127.0.0.1 -p 6432 -U "$${POSTGRESQL_USERNAME}" master -Atc "SELECT 1" >/dev/null 2>&1 && /opt/bitnami/postgresql/bin/psql -h 127.0.0.1 -p 6432 -U "$${POSTGRESQL_USERNAME}" readonly -Atc "SELECT 1" >/dev/null 2>&1
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 10s
     networks:
       - net
     restart: always
@@ -52,6 +62,14 @@ services:
     volumes:
       - pgdata:/bitnami/postgresql
       - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - test "$$(PGPASSWORD="$${POSTGRESQL_PASSWORD}" /opt/bitnami/postgresql/bin/psql -U "$${POSTGRESQL_USERNAME}" -d postgres -Atc "SELECT NOT pg_is_in_recovery()" 2>/dev/null)" = t
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 10s
     networks:
       - net
     restart: always
@@ -70,7 +88,16 @@ services:
     networks:
       - net
     depends_on:
-      - db
+      db:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - test "$$(PGPASSWORD="$${POSTGRESQL_PASSWORD}" /opt/bitnami/postgresql/bin/psql -U "$${POSTGRESQL_USERNAME}" -d postgres -Atc "SELECT pg_is_in_recovery()" 2>/dev/null)" = t
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 10s
     restart: always
 
 volumes:

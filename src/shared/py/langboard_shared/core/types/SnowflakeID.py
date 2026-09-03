@@ -7,6 +7,7 @@ from ..utils.String import BASE62_ALPHABET
 
 class SnowflakeID(int):
     FIXED_SHORT_CODE_LENGTH = 11
+    MAX_VALUE = 2**63 - 1
     EPOCH = 1704067200000  # 2024-01-01 00:00:00 UTC
     _lock = Lock()
     _sequence = 0
@@ -45,7 +46,7 @@ class SnowflakeID(int):
             return SnowflakeID(0)
         decoded_int = SnowflakeID.__base62_decode(short_code)
         original_value = SnowflakeID.__feistel_unshuffle(decoded_int)
-        return SnowflakeID(original_value)
+        return SnowflakeID(original_value if original_value <= SnowflakeID.MAX_VALUE else 0)
 
     @classmethod
     def _current_millis(cls):

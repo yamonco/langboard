@@ -24,6 +24,14 @@ services:
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://${PROJECT_NAME}_kafka0:9092
     volumes:
       - kfdata0:/var/lib/kafka/data
+    healthcheck: &kafka-healthcheck
+      test:
+        - CMD-SHELL
+        - /opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server 127.0.0.1:9092 >/dev/null 2>&1
+      interval: 5s
+      timeout: 10s
+      retries: 24
+      start_period: 20s
     networks:
       - net
     restart: always
@@ -37,6 +45,7 @@ services:
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://${PROJECT_NAME}_kafka1:9092
     volumes:
       - kfdata1:/var/lib/kafka/data
+    healthcheck: *kafka-healthcheck
     networks:
       - net
     restart: always
@@ -50,6 +59,7 @@ services:
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://${PROJECT_NAME}_kafka2:9092
     volumes:
       - kfdata2:/var/lib/kafka/data
+    healthcheck: *kafka-healthcheck
     networks:
       - net
     restart: always

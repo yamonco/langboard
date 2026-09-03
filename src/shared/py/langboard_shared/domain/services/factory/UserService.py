@@ -1,6 +1,6 @@
 from json import dumps as json_dumps
 from json import loads as json_loads
-from typing import Any, Sequence, cast
+from typing import TYPE_CHECKING, Any, Sequence, cast
 from urllib.parse import urlparse
 from ....core.caching import Cache
 from ....core.domain import BaseDomainService
@@ -19,6 +19,10 @@ from ....security import Auth
 from ...models import SettingRole, User, UserEmail, UserProfile, UserSignInHistory
 from ...models.SettingRole import SettingRoleAction, SettingRoleCategory
 from ...models.UserSignInHistory import SignInErrorCode
+
+
+if TYPE_CHECKING:
+    from .ProjectInvitationService import ProjectInvitationService
 
 
 class UserService(BaseDomainService):
@@ -177,6 +181,9 @@ class UserService(BaseDomainService):
     def activate(self, user: User) -> None:
         user.activated_at = SafeDateTime.now()
         self.repo.user.update(user)
+
+        invitation_service: "ProjectInvitationService" = self._get_service_by_name("project_invitation")
+        invitation_service.update_by_signed_up(user)
 
     def verify_subemail(self, subemail: UserEmail) -> None:
         subemail.verified_at = SafeDateTime.now()

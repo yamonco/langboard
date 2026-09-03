@@ -287,6 +287,7 @@ function BoardCardResult({ isExpanded, setIsExpanded, onClose, onEditModeStateCh
                                             size="icon"
                                             className="size-8"
                                             title={t(isExpanded ? "common.Collapse" : "common.Expand")}
+                                            aria-label={t(isExpanded ? "common.Collapse" : "common.Expand")}
                                             onClick={() => setIsExpanded((value) => !value)}
                                         >
                                             <IconComponent icon={isExpanded ? "minimize-2" : "maximize-2"} size="4" />
@@ -299,6 +300,7 @@ function BoardCardResult({ isExpanded, setIsExpanded, onClose, onEditModeStateCh
                                             size="icon"
                                             className="size-8"
                                             title={t("common.Close")}
+                                            aria-label={t("common.Close")}
                                             onClick={onClose}
                                         >
                                             <IconComponent icon="x" size="4" />

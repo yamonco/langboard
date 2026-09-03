@@ -3,8 +3,8 @@ from json import dumps as json_dumps
 from typing import Any, Literal, TypedDict
 from langboard_shared.core.db import DbSession, SqlBuilder
 from langboard_shared.core.logger import Logger
-from langboard_shared.core.types import SafeDateTime
-from langboard_shared.domain.models import Bot, CardComment, ChatHistory, ProjectActivity, User
+from langboard_shared.core.types import SafeDateTime, SnowflakeID
+from langboard_shared.domain.models import Bot, Card, CardComment, ChatHistory, ProjectActivity, User
 from langboard_shared.helpers import InfraHelper
 from .state import DefaultGraphState
 
@@ -86,9 +86,40 @@ def collect_langboard_history_messages(tweaks: dict[str, Any], config: dict[str,
     messages: list[GraphHistoryMessage] = []
 
     messages.extend(collect_chat_history_messages(variables, rest_data, source_limit))
+    card_uid = _first_string(rest_data.get("card_uid"))
+    project_uid = _first_string(variables.get("project_uid"), rest_data.get("project_uid"))
+    if card_uid and not _card_belongs_to_project(card_uid, project_uid):
+        return messages
+
     messages.extend(collect_card_comment_messages(rest_data, source_limit))
     messages.extend(collect_project_activity_messages(variables, rest_data, source_limit))
     return messages
+
+
+def _card_belongs_to_project(card_uid: str, project_uid: str) -> bool:
+    if not project_uid:
+        return False
+
+    try:
+        card_id = InfraHelper.convert_id(card_uid)
+        project_id = InfraHelper.convert_id(project_uid)
+    except (TypeError, ValueError):
+        return False
+    if not 0 < card_id <= SnowflakeID.MAX_VALUE or not 0 < project_id <= SnowflakeID.MAX_VALUE:
+        return False
+
+    try:
+        query = (
+            SqlBuilder.select.table(Card)
+            .where(Card.column("id") == card_id)
+            .where(Card.column("project_id") == project_id)
+            .limit(1)
+        )
+        with DbSession.use(readonly=True) as db:
+            return db.exec(query).first() is not None
+    except Exception as exc:
+        Logger.main.exception(exc)
+        return False
 
 
 def collect_chat_history_messages(
@@ -156,7 +187,7 @@ def collect_card_comment_messages(rest_data: dict[str, Any], limit: int) -> list
 def collect_project_activity_messages(
     variables: dict[str, Any], rest_data: dict[str, Any], limit: int
 ) -> list[GraphHistoryMessage]:
-    project_uid = _first_string(rest_data.get("project_uid"), variables.get("project_uid"))
+    project_uid = _first_string(variables.get("project_uid"), rest_data.get("project_uid"))
     card_uid = _first_string(rest_data.get("card_uid"))
     column_uid = _first_string(rest_data.get("project_column_uid"))
     if not project_uid and not card_uid and not column_uid:
