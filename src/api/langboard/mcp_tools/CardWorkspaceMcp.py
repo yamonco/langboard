@@ -1,6 +1,6 @@
 """Safe native MCP tools for room-bound Langboard project workspaces."""
 
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 from langboard_shared.domain.models import Bot, ProjectRole, User
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.domain.services import DomainService
@@ -67,6 +67,18 @@ def _as_checklist_projection_item(
 JsonChecklistProjectionItem = Annotated[
     ChecklistProjectionItem,
     BeforeValidator(_as_checklist_projection_item),
+]
+
+CardCommentReactionType = Literal[
+    "check-mark",
+    "confusing",
+    "eyes",
+    "heart",
+    "laughing",
+    "party-popper",
+    "rocket",
+    "thumbs-down",
+    "thumbs-up",
 ]
 
 
@@ -193,6 +205,27 @@ def add_card_comment(
     """Add a native card comment."""
 
     return add_comment(_adapter(user_or_bot, service), project_uid, card_uid, content)
+
+
+@McpTool.add(description="Toggle one reaction supported by Langboard on a card comment.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+def toggle_card_comment_reaction(
+    project_uid: str,
+    card_uid: str,
+    comment_uid: str,
+    reaction: CardCommentReactionType,
+    user_or_bot: User | Bot,
+    service: DomainService,
+) -> dict[str, bool]:
+    """Toggle a native comment reaction after project-card-comment validation."""
+
+    comment = service.card_comment.get_by_id_like(comment_uid)
+    if not comment:
+        raise ValueError("Card comment not found")
+    is_reacted = service.card_comment.toggle_reaction(user_or_bot, project_uid, card_uid, comment, reaction)
+    if is_reacted is None:
+        raise ValueError("Card comment not found")
+    return {"is_reacted": is_reacted}
 
 
 @McpTool.add(description="Update a card comment owned by the current actor.")

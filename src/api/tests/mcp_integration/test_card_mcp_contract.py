@@ -52,6 +52,24 @@ def test_card_bundle_schema_exposes_opt_in_sections() -> None:
     assert schema["properties"]["include"]["default"] is None
 
 
+def test_comment_reaction_schema_exposes_only_native_reactions() -> None:
+    """Agents cannot invent reaction values unsupported by Langboard clients."""
+
+    schema = McpTool.get_tool("toggle_card_comment_reaction")["input_schema"]
+
+    assert schema["properties"]["reaction"]["enum"] == [
+        "check-mark",
+        "confusing",
+        "eyes",
+        "heart",
+        "laughing",
+        "party-popper",
+        "rocket",
+        "thumbs-down",
+        "thumbs-up",
+    ]
+
+
 def test_mcp_serializer_omits_unrequested_card_sections() -> None:
     """The real MCP response path does not leak optional sections as null placeholders."""
 
