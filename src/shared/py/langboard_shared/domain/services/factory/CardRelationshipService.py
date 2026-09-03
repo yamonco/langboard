@@ -148,9 +148,12 @@ class CardRelationshipService(BaseDomainService):
                 raise ValueError(f"Unknown project card: {card_uid}")
             existing_cards[card_uid] = card
 
-        raw_relationships = self.repo.card_relationship.get_all_by_project(project)
-        relationship_by_uid = {relationship.get_uid(): relationship for relationship, _ in raw_relationships}
-        remove_relationships: list[CardRelationship] = []
+        graph_snapshot = self.repo.card_relationship.get_graph_snapshot(project)
+        relationship_by_uid = {
+            SnowflakeID(relationship_id).to_short_code(): (relationship_id, parent_id, child_id)
+            for relationship_id, parent_id, child_id in graph_snapshot
+        }
+        remove_relationships: list[tuple[int, int, int]] = []
         for relationship_uid in remove_relationship_uids:
             relationship = relationship_by_uid.get(relationship_uid)
             if not relationship:
@@ -164,11 +167,11 @@ class CardRelationshipService(BaseDomainService):
         if len(relationship_types) != len(relationship_type_ids):
             raise ValueError("Unknown relationship type")
 
-        removed_ids = {relationship.id for relationship in remove_relationships}
+        removed_ids = {relationship_id for relationship_id, _, _ in remove_relationships}
         current_edges = {
-            (relationship.card_id_parent, relationship.card_id_child)
-            for relationship, _ in raw_relationships
-            if relationship.id not in removed_ids
+            (parent_id, child_id)
+            for relationship_id, parent_id, child_id in graph_snapshot
+            if relationship_id not in removed_ids
         }
         ref_ids = {uid: card.id for uid, card in existing_cards.items()}
         symbolic_edges: set[tuple[str | int, str | int]] = set(current_edges)
@@ -177,9 +180,10 @@ class CardRelationshipService(BaseDomainService):
             child: str | int = child_ref if child_ref in new_refs else ref_ids[child_ref]
             if (parent, child) in symbolic_edges:
                 raise ValueError("Relationship already exists")
-            if self._has_path(symbolic_edges, child, parent):
-                raise ValueError("Graph patch would create a relationship cycle")
             symbolic_edges.add((parent, child))
+
+        if self._has_cycle(symbolic_edges):
+            raise ValueError("Graph patch would create a relationship cycle")
 
         anchor_id = anchor_card.id
         if new_refs and not self._all_connected(symbolic_edges, anchor_id, new_refs):
@@ -216,8 +220,15 @@ class CardRelationshipService(BaseDomainService):
             CardBotTask.card_created(user_or_bot, project, card)
 
         affected_ids = {
-            relationship.card_id_parent for relationship in remove_relationships + created_relationships
-        } | {relationship.card_id_child for relationship in remove_relationships + created_relationships}
+            parent_id for _, parent_id, _ in remove_relationships
+        } | {child_id for _, _, child_id in remove_relationships}
+        affected_ids |= {relationship.card_id_parent for relationship in created_relationships}
+        affected_ids |= {relationship.card_id_child for relationship in created_relationships}
+        known_card_ids = {card.id for card in existing_cards.values()}
+        for card_id in affected_ids - known_card_ids:
+            affected_card = InfraHelper.get_by_id_like(Card, card_id)
+            if affected_card and affected_card.project_id == project.id:
+                existing_cards[affected_card.get_uid()] = affected_card
         affected_cards = [
             card for card in [*existing_cards.values(), *cards_to_create.values()] if card.id in affected_ids
         ]
@@ -237,6 +248,9 @@ class CardRelationshipService(BaseDomainService):
     def _has_path(edges: set[tuple[str | int, str | int]], start: str | int, target: str | int) -> bool:
         """Return whether a directed path already reaches the target."""
 
+        children_by_parent: dict[str | int, set[str | int]] = {}
+        for parent, child in edges:
+            children_by_parent.setdefault(parent, set()).add(child)
         pending = [start]
         visited: set[str | int] = set()
         while pending:
@@ -246,13 +260,38 @@ class CardRelationshipService(BaseDomainService):
             if node in visited:
                 continue
             visited.add(node)
-            pending.extend(child for parent, child in edges if parent == node)
+            pending.extend(children_by_parent.get(node, ()))
         return False
+
+    @staticmethod
+    def _has_cycle(edges: set[tuple[str | int, str | int]]) -> bool:
+        """Detect a directed cycle in one linear pass over the graph snapshot."""
+
+        children_by_parent: dict[str | int, set[str | int]] = {}
+        indegree: dict[str | int, int] = {}
+        for parent, child in edges:
+            children_by_parent.setdefault(parent, set()).add(child)
+            indegree.setdefault(parent, 0)
+            indegree[child] = indegree.get(child, 0) + 1
+        pending = [node for node, degree in indegree.items() if degree == 0]
+        visited_count = 0
+        while pending:
+            node = pending.pop()
+            visited_count += 1
+            for child in children_by_parent.get(node, ()):
+                indegree[child] -= 1
+                if indegree[child] == 0:
+                    pending.append(child)
+        return visited_count != len(indegree)
 
     @staticmethod
     def _all_connected(edges: set[tuple[str | int, str | int]], anchor: str | int, required: set[str]) -> bool:
         """Return whether every new request-local node joins the anchor component."""
 
+        neighbors: dict[str | int, set[str | int]] = {}
+        for left, right in edges:
+            neighbors.setdefault(left, set()).add(right)
+            neighbors.setdefault(right, set()).add(left)
         pending = [anchor]
         visited: set[str | int] = set()
         while pending:
@@ -260,5 +299,5 @@ class CardRelationshipService(BaseDomainService):
             if node in visited:
                 continue
             visited.add(node)
-            pending.extend(right if left == node else left for left, right in edges if node in (left, right))
+            pending.extend(neighbors.get(node, ()))
         return required <= visited
