@@ -86,8 +86,50 @@ class MiddlewareHelper:
         validation_result = Auth.validate(headers)
         if isinstance(validation_result, User):
             scope["auth"] = validation_result
+            return validation_result
+
+        oidc_user = MiddlewareHelper._validate_oidc_user(headers)
+        if oidc_user:
+            scope["auth"] = oidc_user
+            return oidc_user
 
         return validation_result
+
+    @staticmethod
+    def _validate_oidc_user(headers: Headers) -> User | None:
+        """Resolve a resource-scoped OIDC token through an explicit identity link."""
+
+        from ..core.security import OidcClient
+        from ..domain.models import IdentityProvider
+        from ..domain.services import DomainService
+        from ..Env import Env
+
+        if not Env.OIDC_BEARER_ENABLED:
+            return None
+        authorization = headers.get(AuthSecurity.AUTHORIZATION_HEADER, "")
+        scheme, separator, token = authorization.partition(" ")
+        if not separator or scheme.lower() != "bearer" or not token:
+            return None
+        try:
+            claims = OidcClient.validate_access_token(token)
+            subject = str(claims.get("sub", "")).strip()
+            issuer = str(claims.get("iss", "")).strip().rstrip("/")
+            if not subject or not issuer:
+                return None
+            service = DomainService()
+            try:
+                user = service.identity_link.get_user_by_provider_external_id(
+                    IdentityProvider.Oidc,
+                    subject,
+                    issuer,
+                )
+                if not user or not user.activated_at or user.deleted_at:
+                    return None
+                return user
+            finally:
+                service.close()
+        except Exception:
+            return None
 
     @staticmethod
     def _is_api_key_used(headers: Headers) -> bool:

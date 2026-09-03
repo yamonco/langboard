@@ -14,16 +14,21 @@ class UserIdentityLinkRepository(BaseRepository[UserIdentityLink]):
     def name() -> str:
         return "user_identity_link"
 
-    def get_by_provider_external_id(self, provider: IdentityProvider, external_id: str) -> UserIdentityLink | None:
+    def get_by_provider_external_id(
+        self,
+        provider: IdentityProvider,
+        external_id: str,
+        issuer: str | None = None,
+    ) -> UserIdentityLink | None:
+        """Resolve a provider subject, scoped to its issuer when supplied."""
+
+        condition = (UserIdentityLink.column("provider") == provider) & (
+            UserIdentityLink.column("external_id") == external_id
+        )
+        if issuer is not None:
+            condition &= UserIdentityLink.column("issuer") == issuer
         with DbSession.use(readonly=True) as db:
-            result = db.exec(
-                SqlBuilder.select.table(UserIdentityLink)
-                .where(
-                    (UserIdentityLink.column("provider") == provider)
-                    & (UserIdentityLink.column("external_id") == external_id)
-                )
-                .limit(1)
-            )
+            result = db.exec(SqlBuilder.select.table(UserIdentityLink).where(condition).limit(1))
             return result.first()
 
     def get_by_user_provider(self, user: TUserParam, provider: IdentityProvider) -> UserIdentityLink | None:
