@@ -27,7 +27,7 @@ def get_unread_notifications(
 
     if page < 1 or not 1 <= limit <= 50:
         raise ValueError("page must be positive and limit must be between 1 and 50")
-    notifications, has_more, _ = service.notification.get_api_list(
+    notifications, _, _ = service.notification.get_api_list(
         user,
         time_range,
         page,
@@ -44,7 +44,6 @@ def get_unread_notifications(
     ]
     return {
         "notifications": notifications,
-        "has_more": has_more,
         "returned_count": len(notifications),
     }
 
