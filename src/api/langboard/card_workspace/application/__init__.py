@@ -2,6 +2,7 @@
 
 from .commands import (
     add_card_comment,
+    apply_card_graph_patch,
     create_card_checkitem,
     create_card_checklist,
     create_card_in_leftmost_column,
@@ -35,6 +36,7 @@ __all__ = [
     "ProjectCardListResponse",
     "ProjectIdentityResponse",
     "add_card_comment",
+    "apply_card_graph_patch",
     "create_card_checkitem",
     "create_card_checklist",
     "create_card_in_leftmost_column",

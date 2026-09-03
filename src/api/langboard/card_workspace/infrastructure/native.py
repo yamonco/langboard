@@ -17,6 +17,8 @@ from ..application.ports import (
 )
 from ..domain import (
     MAX_METADATA_VALUE_CHARS,
+    CardGraphEdge,
+    CardGraphNewCard,
     ChecklistProjectionItem,
     projection_revision,
     require_public_metadata_key,
@@ -274,6 +276,28 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
             raise RuntimeError("Failed to create card")
         _, card = result
         return {"card": card, "column": {"uid": columns[0]["uid"], "name": columns[0]["name"]}}
+
+    def apply_card_graph_patch(
+        self,
+        project_uid: str,
+        anchor_card_uid: str,
+        new_cards: list[CardGraphNewCard],
+        add_edges: list[CardGraphEdge],
+        remove_relationship_uids: list[str],
+    ) -> dict[str, Any]:
+        """Apply one native card relationship graph transaction."""
+
+        result = self._service.card_relationship.apply_graph_patch(
+            self._actor,
+            project_uid,
+            anchor_card_uid,
+            [(card.client_ref, card.title, card.description) for card in new_cards],
+            [(edge.parent_ref, edge.child_ref, edge.relationship_type_uid) for edge in add_edges],
+            remove_relationship_uids,
+        )
+        if result is None:
+            raise ValueError("Anchor card not found in project")
+        return result
 
     def add_card_comment(self, project_uid: str, card_uid: str, content: str) -> dict[str, Any]:
         comment = self._service.card_comment.create(

@@ -12,6 +12,7 @@ from ..card_workspace.application import (
     ProjectIdentityResponse,
 )
 from ..card_workspace.application import add_card_comment as add_comment
+from ..card_workspace.application import apply_card_graph_patch as apply_graph_patch
 from ..card_workspace.application import create_card_checkitem as create_checkitem
 from ..card_workspace.application import create_card_checklist as create_checklist
 from ..card_workspace.application import create_card_in_leftmost_column as create_leftmost
@@ -37,6 +38,8 @@ from ..card_workspace.application import update_card_comment as update_comment
 from ..card_workspace.application.dtos import BoundedItemsDto
 from ..card_workspace.domain import (
     CardBundleInclude,
+    CardGraphEdge,
+    CardGraphNewCard,
     ChecklistProjectionItem,
     CommentPage,
     SectionPage,
@@ -82,6 +85,22 @@ CardCommentReactionType = Literal[
 ]
 
 
+def _as_card_graph_new_card(value: dict[str, Any] | CardGraphNewCard) -> CardGraphNewCard:
+    """Parse one request-local card without leaking transport types inward."""
+
+    return value if isinstance(value, CardGraphNewCard) else CardGraphNewCard(**value)
+
+
+def _as_card_graph_edge(value: dict[str, Any] | CardGraphEdge) -> CardGraphEdge:
+    """Parse one typed graph edge without leaking transport types inward."""
+
+    return value if isinstance(value, CardGraphEdge) else CardGraphEdge(**value)
+
+
+JsonCardGraphNewCard = Annotated[CardGraphNewCard, BeforeValidator(_as_card_graph_new_card)]
+JsonCardGraphEdge = Annotated[CardGraphEdge, BeforeValidator(_as_card_graph_edge)]
+
+
 def _adapter(actor: User | Bot, service: DomainService) -> NativeCardWorkspaceAdapter:
     """Build the native adapter at the MCP composition root."""
 
@@ -121,6 +140,34 @@ def create_card_in_leftmost_column(
     """Create a card without trusting a caller-provided destination column."""
 
     return create_leftmost(_adapter(user_or_bot, service), project_uid, title, description, assign_user_uids)
+
+
+@McpTool.add(
+    description=(
+        "Atomically create up to seven cards and add or remove typed parent-child relationships. "
+        "References beginning with 'new:' address cards created by this same request."
+    )
+)
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+def apply_card_graph_patch(
+    project_uid: str,
+    anchor_card_uid: str,
+    new_cards: list[JsonCardGraphNewCard],
+    add_edges: list[JsonCardGraphEdge],
+    remove_relationship_uids: list[str],
+    user_or_bot: User | Bot,
+    service: DomainService,
+) -> dict[str, Any]:
+    """Apply one approved card graph patch without partial persistence."""
+
+    return apply_graph_patch(
+        _adapter(user_or_bot, service),
+        project_uid,
+        anchor_card_uid,
+        new_cards,
+        add_edges,
+        remove_relationship_uids,
+    )
 
 
 @McpTool.add(
