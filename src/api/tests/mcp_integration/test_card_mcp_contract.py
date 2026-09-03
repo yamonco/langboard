@@ -11,6 +11,7 @@ from langboard.card_workspace.application.dtos import CardBundleDto, CardBundleR
 from langboard.mcp_integration import McpTool  # noqa: E402
 from langboard.mcp_tools import CardMcp, CardWorkspaceMcp  # noqa: E402, F401
 from langboard.routes.mcp.McpApi import serialize_mcp_result  # noqa: E402
+from langboard_shared.domain.models.bases import REACTION_TYPES  # noqa: E402
 from langboard_shared.domain.services.factory.CardService import CardService  # noqa: E402
 
 
@@ -57,17 +58,7 @@ def test_comment_reaction_schema_exposes_only_native_reactions() -> None:
 
     schema = McpTool.get_tool("toggle_card_comment_reaction")["input_schema"]
 
-    assert schema["properties"]["reaction"]["enum"] == [
-        "check-mark",
-        "confusing",
-        "eyes",
-        "heart",
-        "laughing",
-        "party-popper",
-        "rocket",
-        "thumbs-down",
-        "thumbs-up",
-    ]
+    assert schema["properties"]["reaction"]["enum"] == REACTION_TYPES
 
 
 def test_mcp_serializer_omits_unrequested_card_sections() -> None:
