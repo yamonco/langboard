@@ -38,6 +38,7 @@ def test_unread_query_is_bounded_side_effect_free_and_project_governed() -> None
 
     assert [notification["uid"] for notification in result["notifications"]] == ["n1", "n3"]
     assert result["returned_count"] == 2
+    assert "has_more" not in result
     assert "unread_count" not in result
     assert calls == [((user, "all", 1, 10), {"unread_only": True})]
 
