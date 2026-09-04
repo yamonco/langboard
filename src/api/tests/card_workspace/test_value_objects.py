@@ -4,6 +4,7 @@ from langboard.card_workspace.domain import (
     CommentCursor,
     CommentPage,
     ProjectCardCursor,
+    ExactTextReplacement,
     SectionCursor,
     is_public_metadata_key,
 )
@@ -20,6 +21,28 @@ def test_archived_card_cursor_round_trips_without_exposing_shape() -> None:
 def test_archived_card_cursor_rejects_invalid_payload() -> None:
     with pytest.raises(ValueError, match="Invalid archive cursor"):
         ArchivedCardCursor.decode("not-a-valid-cursor")
+
+
+def test_exact_text_replacement_changes_one_unique_fragment() -> None:
+    """A reviewed fragment can be changed without regenerating the whole description."""
+
+    replacement = ExactTextReplacement(old_text="owner: pending", new_text="owner: platform")
+
+    assert replacement.apply("scope\nowner: pending\nrisk") == "scope\nowner: platform\nrisk"
+
+
+@pytest.mark.parametrize(
+    ("content", "message"),
+    [
+        ("owner: changed", "changed after review"),
+        ("todo\ntodo", "ambiguous"),
+    ],
+)
+def test_exact_text_replacement_fails_closed_on_stale_or_ambiguous_text(content: str, message: str) -> None:
+    """No write is possible unless the reviewed fragment identifies exactly one location."""
+
+    with pytest.raises(ValueError, match=message):
+        ExactTextReplacement(old_text="todo", new_text="done").apply(content)
 
 
 def test_comment_cursor_round_trips_without_exposing_shape() -> None:
