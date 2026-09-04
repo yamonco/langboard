@@ -50,14 +50,14 @@ const BoardSettingsPage = memo(({ project, currentUser }: IBoardRelatedPageProps
     }, [error]);
 
     return (
-        <>
+        <Box className="h-full min-h-0 overflow-y-auto">
             <BoardSettingsUserList currentUser={currentUser} project={project} />
             {data && (
                 <BoardSettingsProvider project={project} currentUser={currentUser}>
                     <BoardSettingsList />
                 </BoardSettingsProvider>
             )}
-        </>
+        </Box>
     );
 });
 
