@@ -139,9 +139,7 @@ class CardGraphEdge:
     relationship_type_uid: str
 
     def __post_init__(self) -> None:
-        if not all(
-            isinstance(value, str) and value and value == value.strip() for value in self.__dict__.values()
-        ):
+        if not all(isinstance(value, str) and value and value == value.strip() for value in self.__dict__.values()):
             raise ValueError("Graph edge references and relationship type are required")
         if self.parent_ref == self.child_ref:
             raise ValueError("A card cannot relate to itself")

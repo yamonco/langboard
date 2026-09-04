@@ -77,7 +77,9 @@ def test_unread_service_query_does_not_cleanup_missing_references(monkeypatch: p
         count_unread=lambda _user: 1,
         delete_all_by_ids=lambda ids: deleted.append(ids),
     )
-    service = NotificationService(lambda *_: None, lambda *_: None, SimpleNamespace(user_notification=user_notification))
+    service = NotificationService(
+        lambda *_: None, lambda *_: None, SimpleNamespace(user_notification=user_notification)
+    )
     monkeypatch.setattr(InfraHelper, "get_references", lambda *_args, **_kwargs: {})
 
     assert service.get_api_list(SimpleNamespace(), "all", unread_only=True) == ([], False, 1)
