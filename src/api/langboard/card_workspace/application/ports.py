@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from typing import Any, Protocol
-from ..domain import ChecklistProjectionItem
+from ..domain import ChecklistProjectionItem, ExactTextReplacement
 
 
 @dataclass(frozen=True)
@@ -89,6 +89,14 @@ class CardWorkspaceCommandPort(Protocol):
         assign_user_uids: list[str] | None,
     ) -> dict[str, Any]:
         """Create a card in the server-selected leftmost active column."""
+
+    def patch_card_description(
+        self,
+        project_uid: str,
+        card_uid: str,
+        replacement: ExactTextReplacement,
+    ) -> str:
+        """Conditionally replace one exact description fragment."""
 
     def add_card_comment(self, project_uid: str, card_uid: str, content: str) -> dict[str, Any]:
         """Create a comment."""

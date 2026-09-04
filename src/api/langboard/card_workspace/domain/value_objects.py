@@ -62,6 +62,32 @@ class CardBundleSection(StrEnum):
 
 
 @dataclass(frozen=True)
+class ExactTextReplacement:
+    """One conflict-detecting replacement inside a card description."""
+
+    old_text: str
+    new_text: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.old_text, str) or not self.old_text:
+            raise ValueError("old_text must not be empty")
+        if not isinstance(self.new_text, str):
+            raise ValueError("new_text must be a string")
+        if self.old_text == self.new_text:
+            raise ValueError("old_text and new_text must differ")
+
+    def apply(self, content: str) -> str:
+        """Replace exactly one match or fail without changing content."""
+
+        matches = content.count(self.old_text)
+        if matches == 0:
+            raise ValueError("Card description changed after review: old_text was not found")
+        if matches > 1:
+            raise ValueError("Card description patch is ambiguous: old_text occurs more than once")
+        return content.replace(self.old_text, self.new_text, 1)
+
+
+@dataclass(frozen=True)
 class ChecklistProjectionItem:
     """One caller-owned desired item in an idempotent checklist projection."""
 

@@ -4,6 +4,7 @@ from langboard.card_workspace.application.commands import (
     create_card_in_leftmost_column,
     create_project_board,
     delete_public_card_metadata,
+    patch_card_description,
     set_card_people_and_labels,
     update_card_attachment,
 )
@@ -34,6 +35,10 @@ class FakeCommandPort:
     ) -> dict[str, Any]:
         self.calls.append(("create_card_in_leftmost_column", (project_uid, title, description, assign_user_uids)))
         return {"card": {"uid": "c1", "title": title}, "column": {"uid": "left"}}
+
+    def patch_card_description(self, project_uid: str, card_uid: str, replacement: Any) -> str:
+        self.calls.append(("patch_card_description", (project_uid, card_uid, replacement)))
+        return replacement.apply("before old after")
 
     def replace_card_people_and_labels(
         self,
@@ -80,6 +85,19 @@ def test_create_commands_normalize_before_calling_port() -> None:
         ("create_project_board", ("Delivery", None, None, False)),
         ("create_card_in_leftmost_column", ("p1", "Task", None, ["u1"])),
     ]
+
+
+def test_description_patch_returns_receipt_without_echoing_the_body() -> None:
+    """The mutation result is verifiable while the potentially large body stays bounded."""
+
+    port = FakeCommandPort()
+
+    result = patch_card_description(port, "p1", "c1", "old", "new")
+
+    assert result["changed"] is True
+    assert result["description_chars"] == len("before new after")
+    assert len(result["description_sha256"]) == 64
+    assert "description" not in result
 
 
 @pytest.mark.parametrize(

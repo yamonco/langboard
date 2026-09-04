@@ -1,10 +1,12 @@
 """State-changing use cases for the card workspace feature."""
 
+from hashlib import sha256
 from typing import Any
 from ...domain import (
     MAX_CHECKITEMS_PER_CHECKLIST,
     CardBundleSection,
     ChecklistProjectionItem,
+    ExactTextReplacement,
     require_projection_key,
     require_public_metadata_key,
 )
@@ -54,6 +56,27 @@ def create_card_in_leftmost_column(
         description,
         _unique_uids(assign_user_uids, "assign_user_uids") if assign_user_uids is not None else None,
     )
+
+
+def patch_card_description(
+    port: CardWorkspaceCommandPort,
+    project_uid: str,
+    card_uid: str,
+    old_text: str,
+    new_text: str,
+) -> dict[str, Any]:
+    """Apply one exact, conflict-detecting card description replacement."""
+
+    content = port.patch_card_description(
+        project_uid,
+        card_uid,
+        ExactTextReplacement(old_text=old_text, new_text=new_text),
+    )
+    return {
+        "changed": True,
+        "description_sha256": sha256(content.encode("utf-8")).hexdigest(),
+        "description_chars": len(content),
+    }
 
 
 def add_card_comment(port: CardWorkspaceCommandPort, project_uid: str, card_uid: str, content: str) -> dict[str, Any]:
