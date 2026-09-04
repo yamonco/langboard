@@ -262,3 +262,44 @@ def test_native_description_patch_compares_before_updating() -> None:
     assert result == "before new after"
     assert updates[0][1:3] == (project, card)
     assert updates[0][3]["description"].content == "before new after"
+
+
+def test_native_description_read_revision_can_be_used_for_multi_hunk_patch() -> None:
+    """A native editor wrapper must not produce a revision of its JSON envelope."""
+
+    from langboard.card_workspace.application.projections import bounded_text
+    from langboard.card_workspace.domain import CardBundleSection
+    from langboard_shared.core.db import EditorContentModel
+
+    original = "ALPHA=before\nBETA=keep\nGAMMA=before"
+    editor = EditorContentModel(content=original)
+    service, _ = _service()
+    card = SimpleNamespace(
+        project_id=1,
+        project_column_id=2,
+        description=editor,
+        api_response=lambda: {"uid": "c1", "description": editor.model_dump()},
+    )
+    service.card.get_by_id_like = lambda _uid: card
+    updates: list[tuple[Any, ...]] = []
+    service.card.update = lambda *args: (updates.append(args), True)[1]
+    adapter = NativeCardWorkspaceAdapter(object(), service)
+    source = adapter.get_card_bundle_source("p1", "c1", frozenset({"description"}))
+    assert source is not None
+    text = bounded_text(source.details["description"], CardBundleSection.CoreDescription)
+    assert text.content == original
+    assert text.format == "text"
+
+    result = adapter.patch_card_description(
+        "p1",
+        "c1",
+        CardDescriptionPatch(
+            (
+                ExactTextReplacement(old_text="ALPHA=before", new_text="ALPHA=after"),
+                ExactTextReplacement(old_text="GAMMA=before", new_text="GAMMA=after"),
+            ),
+            expected_revision=text.revision,
+        ),
+    )
+    assert result == "ALPHA=after\nBETA=keep\nGAMMA=after"
+    assert len(updates) == 1
