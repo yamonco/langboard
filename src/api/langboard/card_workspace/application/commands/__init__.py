@@ -12,6 +12,7 @@ from ..ports import CardWorkspaceCommandPort
 from ..projections import (
     bounded_items,
     public_attachment,
+    public_card_summary,
     public_checkitem,
     public_checklist,
     public_comment,
@@ -142,6 +143,25 @@ def create_card_checkitem(
             port.create_card_checkitem(project_uid, card_uid, checklist_uid, _required_text(title, "Checkitem title"))
         )
     }
+
+
+def cardify_card_checkitem(
+    port: CardWorkspaceCommandPort,
+    project_uid: str,
+    card_uid: str,
+    checkitem_uid: str,
+    project_column_uid: str,
+) -> dict[str, Any]:
+    """Create and return a bounded card from one existing checkitem."""
+
+    normalized_checkitem_uid = _required_text(checkitem_uid, "Checkitem UID")
+    card = port.cardify_card_checkitem(
+        _required_text(project_uid, "Project UID"),
+        _required_text(card_uid, "Card UID"),
+        normalized_checkitem_uid,
+        _required_text(project_column_uid, "Project column UID"),
+    )
+    return {"card": public_card_summary(card), "source_checkitem_uid": normalized_checkitem_uid}
 
 
 def update_card_checkitem(

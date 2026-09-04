@@ -1,6 +1,7 @@
 from typing import Any
 import pytest
 from langboard.card_workspace.application.commands import (
+    cardify_card_checkitem,
     create_card_in_leftmost_column,
     create_project_board,
     delete_public_card_metadata,
@@ -34,6 +35,16 @@ class FakeCommandPort:
     ) -> dict[str, Any]:
         self.calls.append(("create_card_in_leftmost_column", (project_uid, title, description, assign_user_uids)))
         return {"card": {"uid": "c1", "title": title}, "column": {"uid": "left"}}
+
+    def cardify_card_checkitem(
+        self,
+        project_uid: str,
+        card_uid: str,
+        checkitem_uid: str,
+        project_column_uid: str,
+    ) -> dict[str, Any]:
+        self.calls.append(("cardify_card_checkitem", (project_uid, card_uid, checkitem_uid, project_column_uid)))
+        return {"uid": "promoted", "title": "Promoted", "private": "hidden"}
 
     def replace_card_people_and_labels(
         self,
@@ -80,6 +91,20 @@ def test_create_commands_normalize_before_calling_port() -> None:
         ("create_project_board", ("Delivery", None, None, False)),
         ("create_card_in_leftmost_column", ("p1", "Task", None, ["u1"])),
     ]
+
+
+def test_cardify_checkitem_returns_bounded_created_card() -> None:
+    """Cardification returns the new card identity without leaking unknown native fields."""
+
+    port = FakeCommandPort()
+
+    result = cardify_card_checkitem(port, " project ", " card ", " item ", " column ")
+
+    assert result == {
+        "card": {"uid": "promoted", "title": "Promoted"},
+        "source_checkitem_uid": "item",
+    }
+    assert port.calls == [("cardify_card_checkitem", ("project", "card", "item", "column"))]
 
 
 @pytest.mark.parametrize(
