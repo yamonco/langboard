@@ -51,6 +51,11 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
         if column is None or column.project_id != project.id:
             return None
         details = card.api_response()
+        # Native REST wraps Markdown in EditorContentModel; MCP projects the
+        # editable text so read revisions match the patch command's input.
+        description = details.get("description")
+        if isinstance(description, dict) and isinstance(description.get("content"), str):
+            details["description"] = description["content"]
         details["project_column_name"] = column.name
 
         if "people" in requested_sections:
