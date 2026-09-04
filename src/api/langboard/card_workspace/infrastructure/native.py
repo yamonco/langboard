@@ -403,6 +403,9 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
             project_column_uid,
         ):
             raise ValueError("Checkitem could not be cardified in the requested column")
+        # The native service resolves its own model instance before persisting.
+        # Re-read the source instead of relying on mutation of our stale object.
+        item = self._ensure_checkitem(project_uid, card_uid, checkitem_uid)
         card = self._service.card.get_by_id_like(item.cardified_id)
         if card is None:
             raise RuntimeError("Cardified card could not be read back")
