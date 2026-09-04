@@ -81,7 +81,10 @@ class FakeQueryPort:
                 "content": "y" * 9_000 if i == 0 else f"Comment {i}",
                 "created_at": f"2026-08-04T10:0{i}:00+09:00",
                 "user": {"uid": "assigned", "email": "member@example.com"},
-                "reactions": {"secret": ["u1"]},
+                "reactions": {
+                    "thumbs-up": ["u1", "u2"],
+                    "secret": ["must-not-leak"],
+                },
             }
             for i in range(limit)
         ]
@@ -169,6 +172,8 @@ def test_initial_card_bundle_is_bounded_and_privacy_preserving() -> None:
     assert response.card.comments.items[0]["content_total_chars"] == 9_000
     assert len(response.card.comments.items[0]["content"]) == 8_000
     assert response.card.comments.items[0]["content_truncated"] is True
+    assert response.card.comments.items[0]["reactions"] == {"thumbs-up": ["u1", "u2"]}
+    assert response.card.comments.items[0]["reaction_counts"] == {"thumbs-up": 2}
     attachment = response.card.attachments.items[0]  # type: ignore[union-attr]
     assert attachment["user"] == {"uid": "assigned", "username": "member"}
     assert "storage_key" not in attachment
@@ -192,6 +197,34 @@ def test_project_identity_exposes_only_bounded_move_destinations() -> None:
     ]
     assert response.columns.total_count == 3
     assert response.columns.next_cursor is None
+
+
+def test_checkitem_projection_exposes_only_cardified_card_identity() -> None:
+    """Cardification can be read back without leaking the generated card body."""
+
+    port = FakeQueryPort()
+    port.source.checklists[0]["checkitems"][0]["cardified_card"] = {
+        "uid": "promoted-card",
+        "title": "Promoted task",
+        "description": "must-not-leak",
+        "created_at": "2026-08-04T12:00:00+09:00",
+    }
+
+    response = get_card_bundle(
+        port,
+        "p1",
+        "c1",
+        CommentPage(),
+        SectionPage(),
+        [CardBundleInclude.Checklists],
+    )
+
+    assert response.card is not None
+    assert response.card.checklists.items[0]["checkitems"][0]["cardified_card"] == {
+        "uid": "promoted-card",
+        "title": "Promoted task",
+        "created_at": "2026-08-04T12:00:00+09:00",
+    }
 
 
 def test_section_continuation_rejects_changed_projection() -> None:
