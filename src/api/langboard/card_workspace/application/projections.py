@@ -251,6 +251,7 @@ def bounded_text(
         content=fragment,
         format=content_format,
         total_chars=len(content),
+        revision=revision,
         next_cursor=next_cursor,
     )
 

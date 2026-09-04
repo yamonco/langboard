@@ -1,12 +1,14 @@
 import pytest
 from langboard.card_workspace.domain import (
     ArchivedCardCursor,
+    CardDescriptionPatch,
     CommentCursor,
     CommentPage,
     ProjectCardCursor,
     ExactTextReplacement,
     SectionCursor,
     is_public_metadata_key,
+    projection_revision,
 )
 
 
@@ -43,6 +45,24 @@ def test_exact_text_replacement_fails_closed_on_stale_or_ambiguous_text(content:
 
     with pytest.raises(ValueError, match=message):
         ExactTextReplacement(old_text="todo", new_text="done").apply(content)
+
+
+def test_description_patch_applies_multiple_edits_atomically_against_revision() -> None:
+    """One reviewed revision supports coding-agent-style multi-hunk Markdown edits."""
+
+    content = "# Scope\n\nowner: pending\n\n- [ ] verify"
+    patch = CardDescriptionPatch(
+        (
+            ExactTextReplacement("owner: pending", "owner: platform"),
+            ExactTextReplacement("- [ ] verify", "- [x] verify"),
+        ),
+        projection_revision(content),
+    )
+
+    assert patch.apply(content) == "# Scope\n\nowner: platform\n\n- [x] verify"
+
+    with pytest.raises(ValueError, match="revision"):
+        patch.apply(f"{content}\nconcurrent change")
 
 
 def test_comment_cursor_round_trips_without_exposing_shape() -> None:
