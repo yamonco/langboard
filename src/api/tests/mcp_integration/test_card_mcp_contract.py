@@ -81,6 +81,19 @@ def test_graph_patch_schema_exposes_typed_request_local_references() -> None:
     ]
 
 
+def test_cardify_checkitem_schema_requires_explicit_source_and_destination() -> None:
+    """Agents cannot cardify an ambiguous checklist item or choose an implicit column."""
+
+    schema = McpTool.get_tool("cardify_card_checkitem")["input_schema"]
+
+    assert schema["required"] == [
+        "project_uid",
+        "card_uid",
+        "checkitem_uid",
+        "project_column_uid",
+    ]
+
+
 def test_mcp_serializer_omits_unrequested_card_sections() -> None:
     """The real MCP response path does not leak optional sections as null placeholders."""
 

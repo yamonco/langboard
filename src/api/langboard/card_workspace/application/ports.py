@@ -151,6 +151,15 @@ class CardWorkspaceCommandPort(Protocol):
         """Create a checkitem."""
         ...
 
+    def cardify_card_checkitem(
+        self,
+        project_uid: str,
+        card_uid: str,
+        checkitem_uid: str,
+        project_column_uid: str,
+    ) -> dict[str, Any]:
+        """Create a card from one existing checkitem."""
+
     def update_card_checkitem(
         self,
         project_uid: str,
