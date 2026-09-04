@@ -17,10 +17,10 @@ from ..application.ports import (
 )
 from ..domain import (
     MAX_METADATA_VALUE_CHARS,
+    CardDescriptionPatch,
     CardGraphEdge,
     CardGraphNewCard,
     ChecklistProjectionItem,
-    ExactTextReplacement,
     projection_revision,
     require_public_metadata_key,
 )
@@ -304,11 +304,11 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
         self,
         project_uid: str,
         card_uid: str,
-        replacement: ExactTextReplacement,
+        patch: CardDescriptionPatch,
     ) -> str:
         project, card = self._ensure_project_card(project_uid, card_uid)
         current = card.description.content if card.description is not None else ""
-        patched = replacement.apply(current)
+        patched = patch.apply(current)
         result = self._service.card.update(
             self._actor,
             project,

@@ -1,10 +1,10 @@
 from dataclasses import dataclass
 from typing import Any, Protocol
 from ..domain import (
+    CardDescriptionPatch,
     CardGraphEdge,
     CardGraphNewCard,
     ChecklistProjectionItem,
-    ExactTextReplacement,
 )
 
 
@@ -109,9 +109,9 @@ class CardWorkspaceCommandPort(Protocol):
         self,
         project_uid: str,
         card_uid: str,
-        replacement: ExactTextReplacement,
+        patch: CardDescriptionPatch,
     ) -> str:
-        """Conditionally replace one exact description fragment."""
+        """Atomically apply one revision-bound description patch."""
 
     def add_card_comment(self, project_uid: str, card_uid: str, content: str) -> dict[str, Any]:
         """Create a comment."""

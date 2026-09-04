@@ -26,6 +26,17 @@ def test_card_partial_edit_schema_requires_only_card_identity() -> None:
     assert schema["properties"]["deadline_at"]["default"] is None
 
 
+def test_description_patch_schema_supports_atomic_multi_hunk_edits() -> None:
+    """The agent contract keeps legacy edits while exposing bounded structured patches."""
+
+    schema = McpTool.get_tool("patch_card_description")["input_schema"]
+
+    assert schema["required"] == ["project_uid", "card_uid"]
+    assert schema["properties"]["old_text"]["default"] is None
+    assert schema["properties"]["edits"]["default"] is None
+    assert schema["$defs"]["ExactTextReplacement"]["required"] == ["old_text", "new_text"]
+
+
 def test_card_move_schema_makes_column_an_optional_destination() -> None:
     """Reordering in place requires no synthetic nullable column argument."""
 
