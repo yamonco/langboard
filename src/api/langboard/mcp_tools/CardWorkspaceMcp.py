@@ -28,6 +28,7 @@ from ..card_workspace.application import get_project_identity as query_project_i
 from ..card_workspace.application import get_public_card_metadata as query_public_metadata
 from ..card_workspace.application import get_public_card_metadata_by_key as query_public_metadata_key
 from ..card_workspace.application import list_project_cards as query_project_cards
+from ..card_workspace.application import patch_card_description as replace_description_text
 from ..card_workspace.application import reconcile_card_checklist_projection as reconcile_checklist
 from ..card_workspace.application import save_public_card_metadata as save_public_metadata
 from ..card_workspace.application import set_card_people_and_labels as replace_people_and_labels
@@ -239,6 +240,32 @@ def list_project_cards(
     """Read one safe project card page with an opaque keyset cursor."""
 
     return query_project_cards(_adapter(user_or_bot, service), project_uid, limit, cursor)
+
+
+@McpTool.add(
+    description=(
+        "Replace one exact, unique fragment of a card description. Fails without writing when the reviewed text "
+        "is missing or ambiguous; read the description again before retrying."
+    )
+)
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+def patch_card_description(
+    project_uid: str,
+    card_uid: str,
+    old_text: str,
+    new_text: str,
+    user_or_bot: User | Bot,
+    service: DomainService,
+) -> dict[str, Any]:
+    """Conditionally replace one approved description fragment."""
+
+    return replace_description_text(
+        _adapter(user_or_bot, service),
+        project_uid,
+        card_uid,
+        old_text,
+        new_text,
+    )
 
 
 @McpTool.add(description="Add a rich-text comment to a card.")

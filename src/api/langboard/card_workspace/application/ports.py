@@ -1,6 +1,11 @@
 from dataclasses import dataclass
 from typing import Any, Protocol
-from ..domain import CardGraphEdge, CardGraphNewCard, ChecklistProjectionItem
+from ..domain import (
+    CardGraphEdge,
+    CardGraphNewCard,
+    ChecklistProjectionItem,
+    ExactTextReplacement,
+)
 
 
 @dataclass(frozen=True)
@@ -99,6 +104,14 @@ class CardWorkspaceCommandPort(Protocol):
         remove_relationship_uids: list[str],
     ) -> dict[str, Any]:
         """Atomically create cards and add or remove typed relationship edges."""
+
+    def patch_card_description(
+        self,
+        project_uid: str,
+        card_uid: str,
+        replacement: ExactTextReplacement,
+    ) -> str:
+        """Conditionally replace one exact description fragment."""
 
     def add_card_comment(self, project_uid: str, card_uid: str, content: str) -> dict[str, Any]:
         """Create a comment."""

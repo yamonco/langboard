@@ -6,6 +6,7 @@ import pytest
 
 os.environ.setdefault("PROJECT_NAME", "langboard")
 
+from langboard.card_workspace.domain import ExactTextReplacement  # noqa: E402
 from langboard.card_workspace.infrastructure.native import (  # noqa: E402
     MAX_NATIVE_SECTION_SOURCE,
     NativeCardWorkspaceAdapter,
@@ -236,3 +237,28 @@ def test_native_card_creation_selects_server_side_leftmost_active_column() -> No
         "card": card,
         "column": {"uid": "backlog", "name": "Backlog"},
     }
+
+
+def test_native_description_patch_compares_before_updating() -> None:
+    """The adapter passes only the locally patched rich-text value to the native service."""
+
+    project = SimpleNamespace(id=1)
+    card = SimpleNamespace(project_id=1, description=SimpleNamespace(content="before old after"))
+    updates: list[tuple[Any, ...]] = []
+    service = SimpleNamespace(
+        project=SimpleNamespace(get_by_id_like=lambda _uid: project),
+        card=SimpleNamespace(
+            get_by_id_like=lambda _uid: card,
+            update=lambda *args: (updates.append(args), {"description": True})[1],
+        ),
+    )
+
+    result = NativeCardWorkspaceAdapter(object(), service).patch_card_description(
+        "project-one",
+        "card-one",
+        ExactTextReplacement(old_text="old", new_text="new"),
+    )
+
+    assert result == "before new after"
+    assert updates[0][1:3] == (project, card)
+    assert updates[0][3]["description"].content == "before new after"

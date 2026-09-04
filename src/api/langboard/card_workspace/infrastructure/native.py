@@ -20,6 +20,7 @@ from ..domain import (
     CardGraphEdge,
     CardGraphNewCard,
     ChecklistProjectionItem,
+    ExactTextReplacement,
     projection_revision,
     require_public_metadata_key,
 )
@@ -298,6 +299,25 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
         if result is None:
             raise ValueError("Anchor card not found in project")
         return result
+
+    def patch_card_description(
+        self,
+        project_uid: str,
+        card_uid: str,
+        replacement: ExactTextReplacement,
+    ) -> str:
+        project, card = self._ensure_project_card(project_uid, card_uid)
+        current = card.description.content if card.description is not None else ""
+        patched = replacement.apply(current)
+        result = self._service.card.update(
+            self._actor,
+            project,
+            card,
+            {"description": EditorContentModel(content=patched)},
+        )
+        if not result:
+            raise RuntimeError("Validated card description patch failed")
+        return patched
 
     def add_card_comment(self, project_uid: str, card_uid: str, content: str) -> dict[str, Any]:
         comment = self._service.card_comment.create(
