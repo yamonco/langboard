@@ -44,6 +44,7 @@ from ..card_workspace.domain import (
     CardGraphNewCard,
     ChecklistProjectionItem,
     CommentPage,
+    ExactTextReplacement,
     SectionPage,
 )
 from ..card_workspace.infrastructure import NativeCardWorkspaceAdapter
@@ -101,6 +102,20 @@ def _as_card_graph_edge(value: dict[str, Any] | CardGraphEdge) -> CardGraphEdge:
 
 JsonCardGraphNewCard = Annotated[CardGraphNewCard, BeforeValidator(_as_card_graph_new_card)]
 JsonCardGraphEdge = Annotated[CardGraphEdge, BeforeValidator(_as_card_graph_edge)]
+
+
+def _as_exact_text_replacement(
+    value: dict[str, Any] | ExactTextReplacement,
+) -> ExactTextReplacement:
+    """Parse one transport edit into the immutable domain value."""
+
+    return value if isinstance(value, ExactTextReplacement) else ExactTextReplacement(**value)
+
+
+JsonExactTextReplacement = Annotated[
+    ExactTextReplacement,
+    BeforeValidator(_as_exact_text_replacement),
+]
 
 
 def _adapter(actor: User | Bot, service: DomainService) -> NativeCardWorkspaceAdapter:
@@ -244,27 +259,39 @@ def list_project_cards(
 
 @McpTool.add(
     description=(
-        "Replace one exact, unique fragment of a card description. Fails without writing when the reviewed text "
-        "is missing or ambiguous; read the description again before retrying."
+        "Atomically apply one or more exact edits to Plate-compatible Markdown. Pass edits for a multi-hunk patch, "
+        "or old_text/new_text for backwards compatibility. Fails without writing when the revision or any reviewed "
+        "fragment is stale or ambiguous."
     )
 )
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
 def patch_card_description(
     project_uid: str,
     card_uid: str,
-    old_text: str,
-    new_text: str,
     user_or_bot: User | Bot,
     service: DomainService,
+    old_text: str | None = None,
+    new_text: str | None = None,
+    edits: list[JsonExactTextReplacement] | None = None,
+    expected_revision: str | None = None,
 ) -> dict[str, Any]:
-    """Conditionally replace one approved description fragment."""
+    """Conditionally apply one approved Markdown patch."""
+
+    if edits is not None:
+        if old_text is not None or new_text is not None:
+            raise ValueError("Pass either edits or old_text/new_text, not both")
+        replacements = edits
+    else:
+        if old_text is None or new_text is None:
+            raise ValueError("old_text and new_text are required when edits is omitted")
+        replacements = [ExactTextReplacement(old_text=old_text, new_text=new_text)]
 
     return replace_description_text(
         _adapter(user_or_bot, service),
         project_uid,
         card_uid,
-        old_text,
-        new_text,
+        replacements,
+        expected_revision,
     )
 
 

@@ -10,7 +10,7 @@ from langboard.card_workspace.application.commands import (
     set_card_people_and_labels,
     update_card_attachment,
 )
-from langboard.card_workspace.domain import CardGraphEdge, CardGraphNewCard
+from langboard.card_workspace.domain import CardGraphEdge, CardGraphNewCard, ExactTextReplacement
 
 
 class FakeCommandPort:
@@ -65,9 +65,9 @@ class FakeCommandPort:
         self.calls.append(("cardify_card_checkitem", (project_uid, card_uid, checkitem_uid, project_column_uid)))
         return {"uid": "promoted", "title": "Promoted", "private": "hidden"}
 
-    def patch_card_description(self, project_uid: str, card_uid: str, replacement: Any) -> str:
-        self.calls.append(("patch_card_description", (project_uid, card_uid, replacement)))
-        return replacement.apply("before old after")
+    def patch_card_description(self, project_uid: str, card_uid: str, patch: Any) -> str:
+        self.calls.append(("patch_card_description", (project_uid, card_uid, patch)))
+        return patch.apply("before old after tail")
 
     def replace_card_people_and_labels(
         self,
@@ -135,11 +135,20 @@ def test_description_patch_returns_receipt_without_echoing_the_body() -> None:
 
     port = FakeCommandPort()
 
-    result = patch_card_description(port, "p1", "c1", "old", "new")
+    result = patch_card_description(
+        port,
+        "p1",
+        "c1",
+        [
+            ExactTextReplacement("old", "new"),
+            ExactTextReplacement("tail", "done"),
+        ],
+    )
 
     assert result["changed"] is True
-    assert result["description_chars"] == len("before new after")
-    assert len(result["description_sha256"]) == 64
+    assert result["description_chars"] == len("before new after done")
+    assert result["applied_edits"] == 2
+    assert len(result["description_revision"]) == 64
     assert "description" not in result
 
 

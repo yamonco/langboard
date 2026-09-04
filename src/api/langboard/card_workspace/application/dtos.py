@@ -21,6 +21,7 @@ class BoundedTextDto(BaseModel):
     content: str
     format: str
     total_chars: int
+    revision: str
     next_cursor: str | None
 
 

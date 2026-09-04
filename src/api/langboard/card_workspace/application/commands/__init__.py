@@ -1,16 +1,17 @@
 """State-changing use cases for the card workspace feature."""
 
-from hashlib import sha256
 from typing import Any
 from ...domain import (
     MAX_CHECKITEMS_PER_CHECKLIST,
     MAX_GRAPH_EDGE_CHANGES,
     MAX_GRAPH_NEW_CARDS,
     CardBundleSection,
+    CardDescriptionPatch,
     CardGraphEdge,
     CardGraphNewCard,
     ChecklistProjectionItem,
     ExactTextReplacement,
+    projection_revision,
     require_projection_key,
     require_public_metadata_key,
 )
@@ -103,20 +104,21 @@ def patch_card_description(
     port: CardWorkspaceCommandPort,
     project_uid: str,
     card_uid: str,
-    old_text: str,
-    new_text: str,
+    edits: list[ExactTextReplacement],
+    expected_revision: str | None = None,
 ) -> dict[str, Any]:
-    """Apply one exact, conflict-detecting card description replacement."""
+    """Apply one atomic, conflict-detecting Markdown patch."""
 
     content = port.patch_card_description(
         project_uid,
         card_uid,
-        ExactTextReplacement(old_text=old_text, new_text=new_text),
+        CardDescriptionPatch(tuple(edits), expected_revision),
     )
     return {
         "changed": True,
-        "description_sha256": sha256(content.encode("utf-8")).hexdigest(),
+        "description_revision": projection_revision(content),
         "description_chars": len(content),
+        "applied_edits": len(edits),
     }
 
 

@@ -16,6 +16,7 @@ MAX_METADATA_KEY_CHARS = 128
 MAX_PROJECTION_KEY_CHARS = 64
 MAX_GRAPH_NEW_CARDS = 7
 MAX_GRAPH_EDGE_CHANGES = 25
+MAX_DESCRIPTION_PATCH_EDITS = 20
 
 _COMPACT_SECRET_FRAGMENTS = (
     "accesskey",
@@ -87,6 +88,35 @@ class ExactTextReplacement:
         if matches > 1:
             raise ValueError("Card description patch is ambiguous: old_text occurs more than once")
         return content.replace(self.old_text, self.new_text, 1)
+
+
+@dataclass(frozen=True)
+class CardDescriptionPatch:
+    """One atomic, revision-bound set of exact Markdown replacements."""
+
+    edits: tuple[ExactTextReplacement, ...]
+    expected_revision: str | None = None
+
+    def __post_init__(self) -> None:
+        if not self.edits:
+            raise ValueError("Description patch must contain at least one edit")
+        if len(self.edits) > MAX_DESCRIPTION_PATCH_EDITS:
+            raise ValueError(f"Description patch cannot contain more than {MAX_DESCRIPTION_PATCH_EDITS} edits")
+        if self.expected_revision is not None and (
+            len(self.expected_revision) != 64
+            or any(character not in "0123456789abcdef" for character in self.expected_revision.lower())
+        ):
+            raise ValueError("expected_revision must be a SHA-256 hex digest")
+
+    def apply(self, content: str) -> str:
+        """Apply every edit in memory or fail before the caller persists anything."""
+
+        if self.expected_revision is not None and projection_revision(content) != self.expected_revision.lower():
+            raise ValueError("Card description changed after review: revision does not match")
+        patched = content
+        for edit in self.edits:
+            patched = edit.apply(patched)
+        return patched
 
 
 @dataclass(frozen=True)

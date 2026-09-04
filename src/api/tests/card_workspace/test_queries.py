@@ -164,6 +164,7 @@ def test_initial_card_bundle_is_bounded_and_privacy_preserving() -> None:
     assert len(response.card.classification.labels.items) == 10
     assert response.card.classification.labels.next_cursor
     assert response.card.core["description"]["total_chars"] == 8_050
+    assert len(response.card.core["description"]["revision"]) == 64
     assert response.card.core["description"]["next_cursor"]
     checklist = response.card.checklists.items[0]
     assert len(checklist["checkitems"]) == 25
