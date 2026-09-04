@@ -97,11 +97,12 @@ def test_native_cardify_reads_back_created_card() -> None:
 
     calls: list[tuple[Any, ...]] = []
     item = SimpleNamespace(cardified_id=None)
+    persisted_item = SimpleNamespace(cardified_id=None)
     created = SimpleNamespace(board_api_response=lambda *_args: {"uid": "created-card", "title": "Promoted task"})
 
     def cardify(*args: Any) -> bool:
         calls.append(args)
-        item.cardified_id = 42
+        persisted_item.cardified_id = 42
         return True
 
     project = SimpleNamespace(id=7)
@@ -114,12 +115,13 @@ def test_native_cardify_reads_back_created_card() -> None:
     actor = object()
     adapter = NativeCardWorkspaceAdapter(actor, service)
     adapter._ensure_project_card = lambda *_args: (project, source_card)  # type: ignore[method-assign]
-    adapter._ensure_checkitem = lambda *_args: item  # type: ignore[method-assign]
+    adapter._ensure_checkitem = lambda *_args: persisted_item if calls else item  # type: ignore[method-assign]
 
     result = adapter.cardify_card_checkitem("project", "card", "item", "column")
 
     assert result == {"uid": "created-card", "title": "Promoted task"}
     assert calls == [(actor, "project", "card", item, "column")]
+    assert item.cardified_id is None
 
 
 def test_native_cardify_rejects_column_from_another_project() -> None:
