@@ -6,6 +6,7 @@ const SERVER = {
             COLUMN: {
                 CREATED: "dashboard:project:column:created:{uid}",
                 NAME_CHANGED: "dashboard:project:column:name:changed:{uid}",
+                DESCRIPTION_CHANGED: "dashboard:project:column:description:changed:{uid}",
                 ORDER_CHANGED: "dashboard:project:column:order:changed:{uid}",
                 DELETED: "dashboard:project:column:deleted:{uid}",
             },
@@ -54,6 +55,7 @@ const SERVER = {
         COLUMN: {
             CREATED: "board:column:created:{uid}",
             NAME_CHANGED: "board:column:name:changed:{uid}",
+            DESCRIPTION_CHANGED: "board:column:description:changed:{uid}",
             ORDER_CHANGED: "board:column:order:changed:{uid}",
             DELETED: "board:column:deleted:{uid}",
         },
