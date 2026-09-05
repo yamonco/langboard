@@ -325,7 +325,7 @@ def test_native_description_patch_requires_revision_before_lookup() -> None:
 def test_description_repository_rejects_stale_writer_and_preserves_other_fields(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Exercise real SQL writes against an isolated DB; SQLite does not prove PostgreSQL locking."""
+    """Check SQL preservation; the explicit isolated PostgreSQL mode also races two writers."""
 
     from collections.abc import Iterator
     from contextlib import contextmanager
@@ -334,9 +334,17 @@ def test_description_repository_rejects_stale_writer_and_preserves_other_fields(
     from langboard_shared.infrastructure.repositories.factory.CardRepository import CardRepository
     from sqlalchemy import create_engine, select
     from sqlalchemy.orm import Session
+    from sqlalchemy.schema import CreateTable
 
-    engine = create_engine("sqlite://")
-    NativeCard.__table__.create(engine)
+    database_url = os.environ.get("LANGBOARD_DESCRIPTION_TEST_DATABASE_URL", "sqlite://")
+    if database_url != "sqlite://":
+        from sqlalchemy.engine import make_url
+
+        target = make_url(database_url)
+        assert target.host == "127.0.0.1" and target.database == "langboard_description_test"
+    engine = create_engine(database_url)
+    with engine.begin() as connection:
+        connection.execute(CreateTable(NativeCard.__table__, include_foreign_key_constraints=[]))
     with engine.begin() as connection:
         connection.execute(
             NativeCard.__table__.insert().values(
@@ -377,4 +385,78 @@ def test_description_repository_rejects_stale_writer_and_preserves_other_fields(
         row = connection.execute(select(NativeCard.__table__.c.title, NativeCard.__table__.c.description)).one()
     assert row.title == "preserved title"
     assert row.description.content == "first edit"
+    if engine.dialect.name == "postgresql":
+        from concurrent.futures import ThreadPoolExecutor
+        from threading import Barrier
+        from sqlalchemy import update
+
+        with engine.begin() as connection:
+            connection.execute(update(NativeCard.__table__).values(description=EditorContentModel(content="original")))
+        barrier = Barrier(2, timeout=10)
+
+        def write(candidate: NativeCard) -> bool:
+            barrier.wait()
+            return repository.update_description_if_current(candidate, "original")
+
+        with ThreadPoolExecutor(max_workers=2) as workers:
+            results = list(workers.map(write, (first, second)))
+        assert sorted(results) == [False, True]
+        with engine.connect() as connection:
+            final = connection.execute(select(NativeCard.__table__.c.title, NativeCard.__table__.c.description)).one()
+        assert final.title == "preserved title"
+        assert final.description.content == ("first edit" if results[0] else "second edit")
     engine.dispose()
+
+
+@pytest.mark.parametrize("saved", [False, True])
+def test_conditional_description_emits_effects_only_after_save(monkeypatch: pytest.MonkeyPatch, saved: bool) -> None:
+    """Rejected writes emit no notifications, activities, bot events or realtime updates."""
+
+    from unittest.mock import Mock
+    from langboard_shared.core.db import EditorContentModel
+    from langboard_shared.domain.services.factory.CardService import CardService
+    from langboard_shared.helpers import InfraHelper
+    from langboard_shared.publishers import CardPublisher
+    from langboard_shared.tasks.activities import CardActivityTask
+    from langboard_shared.tasks.bots import CardBotTask
+
+    project = SimpleNamespace(id=1)
+    card = SimpleNamespace(description=EditorContentModel(content="before"))
+    conditional = Mock(return_value=saved)
+    unconditional = Mock()
+    service = CardService(
+        Mock(),
+        Mock(),
+        SimpleNamespace(
+            card=SimpleNamespace(
+                update_description_if_current=conditional,
+                update=unconditional,
+            )
+        ),
+    )
+    notifications = Mock()
+    service._get_service = Mock(return_value=notifications)
+    monkeypatch.setattr(InfraHelper, "get_records_with_foreign_by_params", lambda *_args: (project, card))
+    effects = [Mock(), Mock(), Mock()]
+    monkeypatch.setattr(CardPublisher, "updated", effects[0])
+    monkeypatch.setattr(CardActivityTask, "card_updated", effects[1])
+    monkeypatch.setattr(CardBotTask, "card_updated", effects[2])
+
+    def execute() -> Any:
+        return service.update(
+            object(), project, card, {"description": EditorContentModel(content="after")}, expected_description="before"
+        )
+
+    if saved:
+        assert execute() is not None
+        for effect in effects:
+            effect.assert_called_once()
+        notifications.notify_mentioned_in_card.assert_called_once()
+    else:
+        with pytest.raises(ValueError, match="concurrent update"):
+            execute()
+        for effect in effects:
+            effect.assert_not_called()
+        notifications.notify_mentioned_in_card.assert_not_called()
+    conditional.assert_called_once_with(card, "before")
+    unconditional.assert_not_called()
