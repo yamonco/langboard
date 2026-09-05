@@ -1,6 +1,7 @@
 """Safe native MCP tools for room-bound Langboard project workspaces."""
 
 from typing import Annotated, Any, Literal
+from fastmcp.exceptions import ValidationError
 from langboard_shared.domain.models import Bot, ProjectRole, User
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.domain.services import DomainService
@@ -44,6 +45,7 @@ from ..card_workspace.domain import (
     CardGraphNewCard,
     ChecklistProjectionItem,
     CommentPage,
+    DescriptionPatchConflict,
     ExactTextReplacement,
     SectionPage,
 )
@@ -286,13 +288,16 @@ def patch_card_description(
             raise ValueError("old_text and new_text are required when edits is omitted")
         replacements = [ExactTextReplacement(old_text=old_text, new_text=new_text)]
 
-    return replace_description_text(
-        _adapter(user_or_bot, service),
-        project_uid,
-        card_uid,
-        replacements,
-        expected_revision,
-    )
+    try:
+        return replace_description_text(
+            _adapter(user_or_bot, service),
+            project_uid,
+            card_uid,
+            replacements,
+            expected_revision,
+        )
+    except DescriptionPatchConflict as exc:
+        raise ValidationError(f"{exc}. No changes saved; read the description and review a new patch.") from exc
 
 
 @McpTool.add(description="Add a rich-text comment to a card.")
