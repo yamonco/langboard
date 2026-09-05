@@ -3,6 +3,7 @@ from ....ai import BotScheduleHelper, BotScopeHelper
 from ....core.db import EditorContentModel
 from ....core.domain import BaseDomainService
 from ....core.domain.BaseDomainService import TMutableValidatorMap
+from ....core.exceptions.CardDescriptionConflict import CardDescriptionConflict
 from ....core.schema import TimeBasedPagination
 from ....core.types import SafeDateTime, SnowflakeID
 from ....core.types.ParamTypes import TCardParam, TColumnParam, TProjectLabelParam, TProjectParam, TUserOrBot
@@ -354,7 +355,7 @@ class CardService(BaseDomainService):
         if expected_description is None:
             self.repo.card.update(card)
         elif not self.repo.card.update_description_if_current(card, expected_description):
-            raise ValueError("Card description changed after review: concurrent update")
+            raise CardDescriptionConflict("Card description changed after review: concurrent update")
 
         model: dict[str, Any] = {}
         for key in form:
