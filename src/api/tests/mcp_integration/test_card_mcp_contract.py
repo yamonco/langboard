@@ -73,6 +73,61 @@ def test_description_unexpected_failure_is_not_claimed_unsaved(monkeypatch: pyte
         CardWorkspaceMcp.patch_card_description("project", "card", None, None, old_text="old", new_text="new")
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("reason", ["stale revision", "missing fragment", "ambiguous fragment", "effect failure"])
+async def test_description_conflict_through_http_route(monkeypatch: pytest.MonkeyPatch, reason: str) -> None:
+    """The HTTP dispatcher preserves safe validation errors and unknown outcomes separately."""
+    from fastapi import FastAPI, Request
+    from fastmcp import FastMCP
+    from httpx import ASGITransport, AsyncClient
+    from langboard.card_workspace.domain import DescriptionPatchConflict
+
+    route = importlib.import_module("langboard.routes.mcp.McpApi")
+    closed: list[bool] = []
+    group = SimpleNamespace(activated_at=True, tools=["patch_card_description"], user_id=None)
+    service = SimpleNamespace(
+        mcp_tool_group=SimpleNamespace(get_by_id_like=lambda _uid: group),
+        close=lambda: closed.append(True),
+    )
+    monkeypatch.setattr(route, "DomainService", lambda: service)
+    monkeypatch.setattr(route, "User", SimpleNamespace)
+    monkeypatch.setattr(CardWorkspaceMcp, "_adapter", lambda *args: object())
+
+    def reject(*args: Any, **kwargs: Any) -> None:
+        if reason == "effect failure":
+            raise ValueError("effect failure")
+        raise DescriptionPatchConflict(reason)
+
+    monkeypatch.setattr(CardWorkspaceMcp, "replace_description_text", reject)
+    mcp = FastMCP("description-http-test")
+
+    @mcp.tool(name="patch_card_description")
+    def patch() -> Any:
+        """Run the real MCP boundary without database or external effects."""
+        return CardWorkspaceMcp.patch_card_description("project", "card", None, None, old_text="old", new_text="new")
+
+    monkeypatch.setattr(route.McpServer, "mcp", mcp)
+    app = FastAPI()
+
+    @app.post("/mcp/tools/{tool_name}")
+    async def dispatch(tool_name: str, request: Request) -> Any:
+        """Inject an isolated authenticated actor before the real route dispatcher."""
+        request.scope["auth"] = SimpleNamespace(id=1)
+        return await route.execute_mcp_tool(tool_name, request)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app, raise_app_exceptions=False), base_url="http://test"
+    ) as client:
+        response = await client.post(
+            "/mcp/tools/patch_card_description",
+            json={},
+            headers={route.AuthSecurity.MCP_TOOL_GROUP_UID_HEADER: "test-group"},
+        )
+    assert response.status_code == (500 if reason == "effect failure" else 400)
+    assert closed == [True]
+    assert route.mcp_auth_context.get() is None
+
+
 def test_card_bundle_schema_exposes_opt_in_sections() -> None:
     """Agents can request rich sections without paying for them by default."""
 
