@@ -245,7 +245,13 @@ def list_project_members(project_uid: str, service: DomainService) -> dict[str, 
         raise ValueError("Project not found")
     members = service.project.get_api_assigned_user_list(project, limit=MAX_PROJECT_MEMBER_ITEMS)
     total_count = service.project.count_assigned_users(project)
-    items = [{key: member[key] for key in ("uid", "username") if key in member} for member in members]
+    items = []
+    for member in members:
+        fields = ("uid", "username")
+        # Invitation placeholders store an email in firstname; expose names only for real users.
+        if member.get("type") == User.USER_TYPE:
+            fields += ("firstname", "lastname")
+        items.append({key: member[key] for key in fields if key in member})
     return {"items": items, "total_count": total_count, "truncated": total_count > len(items)}
 
 
