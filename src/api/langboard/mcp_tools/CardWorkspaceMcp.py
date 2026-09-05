@@ -57,7 +57,12 @@ from ..mcp_integration import McpRoleFilter, McpTool
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
 def assign_card_to_me(project_uid: str, card_uid: str, user: User, service: DomainService) -> dict[str, Any]:
     """Use the server-authenticated identity, never a caller-supplied user UID."""
-    return service.card.assign_self(user, project_uid, card_uid)
+    try:
+        return service.card.assign_self(user, project_uid, card_uid)
+    except ValueError as exc:
+        raise ValidationError(
+            f"{exc}. No assignment was made. Ask a board updater to onboard you as a member, then retry once."
+        ) from exc
 
 
 def _as_card_bundle_include(value: str | CardBundleInclude) -> CardBundleInclude:

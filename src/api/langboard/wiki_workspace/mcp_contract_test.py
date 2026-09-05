@@ -26,6 +26,18 @@ def test_self_assignment_identity_is_never_a_caller_argument() -> None:
     service.card.assign_self.assert_called_once_with(user, "p", "c")
 
 
+def test_self_assignment_returns_onboarding_guidance_instead_of_an_internal_error() -> None:
+    """A non-member receives an actionable validation result and no hidden retry."""
+    service = SimpleNamespace(
+        card=SimpleNamespace(assign_self=Mock(side_effect=ValueError("Current user must first be onboarded to this project")))
+    )
+
+    with pytest.raises(ValidationError, match="Ask a board updater to onboard you"):
+        CardWorkspaceMcp.assign_card_to_me("p", "c", object(), service)
+
+    service.card.assign_self.assert_called_once()
+
+
 def test_additive_self_assignment_is_noop_when_already_assigned() -> None:
     """Do not replace the entire member set or emit duplicate events on replay."""
     user = SimpleNamespace(id=1, get_uid=lambda: "me")
