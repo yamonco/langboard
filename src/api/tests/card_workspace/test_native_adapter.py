@@ -433,6 +433,40 @@ def test_native_description_patch_compares_before_updating() -> None:
     assert updates[0][4] == {"expected_description": "before old after"}
 
 
+def test_native_description_missing_revision_stops_before_lookup() -> None:
+    """A revision-less patch is safely rejected before touching persistence."""
+    from langboard.card_workspace.domain import DescriptionPatchConflict
+
+    adapter = NativeCardWorkspaceAdapter(object(), SimpleNamespace())
+    with pytest.raises(DescriptionPatchConflict, match="expected_revision is required"):
+        adapter.patch_card_description("p", "c", CardDescriptionPatch((ExactTextReplacement("old", "new"),)))
+
+
+@pytest.mark.parametrize("conflict", [True, False])
+def test_native_description_classifies_only_conditional_save_conflicts(conflict: bool) -> None:
+    """Only a known pre-commit race is translated; downstream failures remain unknown."""
+    from langboard.card_workspace.domain import DescriptionPatchConflict
+    from langboard_shared.core.exceptions.CardDescriptionConflict import CardDescriptionConflict
+
+    project = SimpleNamespace(id=1)
+    card = SimpleNamespace(project_id=1, description=SimpleNamespace(content="old"))
+
+    def fail(*args: Any, **kwargs: Any) -> None:
+        if conflict:
+            raise CardDescriptionConflict("concurrent update")
+        raise ValueError("post-save effect failed")
+
+    service = SimpleNamespace(
+        project=SimpleNamespace(get_by_id_like=lambda _uid: project),
+        card=SimpleNamespace(get_by_id_like=lambda _uid: card, update=fail),
+    )
+    with pytest.raises(ValueError) as error:
+        NativeCardWorkspaceAdapter(object(), service).patch_card_description(
+            "p", "c", CardDescriptionPatch((ExactTextReplacement("old", "new"),), projection_revision("old"))
+        )
+    assert isinstance(error.value, DescriptionPatchConflict) is conflict
+
+
 def test_native_description_read_revision_can_be_used_for_multi_hunk_patch() -> None:
     """A native editor wrapper must not produce a revision of its JSON envelope."""
 
@@ -538,3 +572,58 @@ def test_description_repository_rejects_stale_writer_and_preserves_other_fields(
     assert row.title == "preserved title"
     assert row.description.content == "first edit"
     engine.dispose()
+
+
+@pytest.mark.parametrize("saved", [False, True])
+def test_conditional_description_emits_effects_only_after_save(monkeypatch: pytest.MonkeyPatch, saved: bool) -> None:
+    """Rejected writes emit no notifications, activities, bot events or realtime updates."""
+
+    from unittest.mock import Mock
+    from langboard_shared.core.db import EditorContentModel
+    from langboard_shared.core.exceptions.CardDescriptionConflict import CardDescriptionConflict
+    from langboard_shared.domain.services.factory.CardService import CardService
+    from langboard_shared.helpers import InfraHelper
+    from langboard_shared.publishers import CardPublisher
+    from langboard_shared.tasks.activities import CardActivityTask
+    from langboard_shared.tasks.bots import CardBotTask
+
+    project = SimpleNamespace(id=1)
+    card = SimpleNamespace(description=EditorContentModel(content="before"), is_linked_resource=False)
+    conditional = Mock(return_value=saved)
+    unconditional = Mock()
+    service = CardService(
+        Mock(),
+        Mock(),
+        SimpleNamespace(
+            card=SimpleNamespace(
+                update_description_if_current=conditional,
+                update=unconditional,
+            )
+        ),
+    )
+    notifications = Mock()
+    service._get_service = Mock(return_value=notifications)
+    monkeypatch.setattr(InfraHelper, "get_records_with_foreign_by_params", lambda *_args: (project, card))
+    effects = [Mock(), Mock(), Mock()]
+    monkeypatch.setattr(CardPublisher, "updated", effects[0])
+    monkeypatch.setattr(CardActivityTask, "card_updated", effects[1])
+    monkeypatch.setattr(CardBotTask, "card_updated", effects[2])
+
+    def execute() -> Any:
+        return service.update(
+            object(), project, card, {"description": EditorContentModel(content="after")}, expected_description="before"
+        )
+
+    if saved:
+        assert execute() is not None
+        for effect in effects:
+            effect.assert_called_once()
+        notifications.notify_mentioned_in_card.assert_called_once()
+    else:
+        with pytest.raises(CardDescriptionConflict, match="concurrent update"):
+            execute()
+        for effect in effects:
+            effect.assert_not_called()
+        notifications.notify_mentioned_in_card.assert_not_called()
+    conditional.assert_called_once_with(card, "before")
+    unconditional.assert_not_called()
