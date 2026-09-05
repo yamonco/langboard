@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 from typing import Any
 from langboard_shared.core.db import EditorContentModel
+from langboard_shared.core.exceptions.CardDescriptionConflict import CardDescriptionConflict
 from langboard_shared.core.types import SafeDateTime
 from langboard_shared.domain.models import Bot, CardMetadata, User
 from langboard_shared.domain.services import DomainService
@@ -21,6 +22,7 @@ from ..domain import (
     CardGraphEdge,
     CardGraphNewCard,
     ChecklistProjectionItem,
+    DescriptionPatchConflict,
     projection_revision,
     require_public_metadata_key,
 )
@@ -312,17 +314,20 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
         patch: CardDescriptionPatch,
     ) -> str:
         if patch.expected_revision is None:
-            raise ValueError("expected_revision is required; read the card description before editing")
+            raise DescriptionPatchConflict("expected_revision is required; read the card description before editing")
         project, card = self._ensure_project_card(project_uid, card_uid)
         current = card.description.content if card.description is not None else ""
         patched = patch.apply(current)
-        result = self._service.card.update(
-            self._actor,
-            project,
-            card,
-            {"description": EditorContentModel(content=patched)},
-            expected_description=current,
-        )
+        try:
+            result = self._service.card.update(
+                self._actor,
+                project,
+                card,
+                {"description": EditorContentModel(content=patched)},
+                expected_description=current,
+            )
+        except CardDescriptionConflict as exc:
+            raise DescriptionPatchConflict(str(exc)) from exc
         if not result:
             raise RuntimeError("Validated card description patch failed")
         return patched
