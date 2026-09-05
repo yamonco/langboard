@@ -63,6 +63,7 @@ members = ["."]
 
 [tool.hatch.build.targets.wheel]
 packages = ["langboard_shared"]
+exclude = ["**/*_test.py"]
 
 
 [tool.ruff]

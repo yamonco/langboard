@@ -75,6 +75,7 @@ members = ["."]
 
 [tool.hatch.build.targets.wheel]
 packages = ["./src/api/langboard"]
+exclude = ["**/*_test.py"]
 
 
 [project.scripts]
@@ -83,8 +84,8 @@ langboard = "langboard.CLI:execute"
 
 [tool.pytest.ini_options]
 minversion = "6.0"
-testpaths = ["src/api/tests"]
-python_files = ["test_*.py"]
+testpaths = ["src/api/tests", "src/api/langboard/wiki_workspace"]
+python_files = ["test_*.py", "*_test.py"]
 console_output_style = "progress"
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"

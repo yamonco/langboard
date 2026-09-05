@@ -56,6 +56,13 @@ from ..mcp_integration import McpRoleFilter, McpTool
 MAX_PROJECT_MEMBER_ITEMS = 50
 
 
+@McpTool.add("user", description="Assign the authenticated user to this card, preserving every existing assignee.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+def assign_card_to_me(project_uid: str, card_uid: str, user: User, service: DomainService) -> dict[str, Any]:
+    """Use the server-authenticated identity, never a caller-supplied user UID."""
+    return service.card.assign_self(user, project_uid, card_uid)
+
+
 def _as_card_bundle_include(value: str | CardBundleInclude) -> CardBundleInclude:
     """Parse one JSON enum value without weakening the domain type."""
 
