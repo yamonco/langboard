@@ -2,6 +2,7 @@ from typing import Any, Literal
 from ....core.db import EditorContentModel
 from ....core.domain import BaseDomainService
 from ....core.domain.BaseDomainService import TMutableValidatorMap
+from ....core.exceptions.WikiContentConflict import WikiContentConflict
 from ....core.storage import FileModel
 from ....core.types.ParamTypes import TProjectParam, TUserOrBot, TWikiParam
 from ....core.utils.Converter import convert_python_data
@@ -112,8 +113,16 @@ class ProjectWikiService(BaseDomainService):
         return wiki, api_wiki
 
     def update(
-        self, user_or_bot: TUserOrBot, project: TProjectParam | None, wiki: TWikiParam | None, form: dict
+        self,
+        user_or_bot: TUserOrBot,
+        project: TProjectParam | None,
+        wiki: TWikiParam | None,
+        form: dict,
+        *,
+        expected_content: str | None = None,
     ) -> dict[str, Any] | Literal[True] | None:
+        if expected_content is not None and set(form) != {"content"}:
+            raise ValueError("Conditional wiki edits may change only content")
         params = InfraHelper.get_records_with_foreign_by_params((Project, project), (ProjectWiki, wiki))
         if not params:
             return None
@@ -125,7 +134,10 @@ class ProjectWikiService(BaseDomainService):
         if not old_record:
             return True
 
-        self.repo.project_wiki.update(wiki)
+        if expected_content is None:
+            self.repo.project_wiki.update(wiki)
+        elif not self.repo.project_wiki.update_content_if_current(wiki, expected_content):
+            raise WikiContentConflict("Wiki changed after review; no append saved")
 
         model: dict[str, Any] = {}
         for key in form:

@@ -420,6 +420,25 @@ class CardService(BaseDomainService):
 
         return True
 
+    def assign_self(self, user: User, project: TProjectParam, card: TCardParam) -> dict[str, Any]:
+        """Assign the authenticated project member additively; never infer an identity."""
+        params = InfraHelper.get_records_with_foreign_by_params((Project, project), (Card, card))
+        if not params:
+            raise ValueError("Card not found in project")
+        project, card = params
+        member = self.repo.project_assigned_user.find_by_user_and_project(user, project)
+        if member is None:
+            raise ValueError("Current user must first be onboarded to this project")
+        previous = self.repo.card_assigned_user.get_all_by_card(card, only_ids=True)
+        changed = self.repo.card_assigned_user.add_member(card, member)
+        if changed:
+            users = [assigned for assigned, _ in self.repo.card_assigned_user.get_all_by_card(card)]
+            CardPublisher.assigned_users_updated(project, card, users)
+            CardActivityTask.card_assigned_users_updated(
+                user, project, card, [uid for uid, _ in previous], [item.id for item in users]
+            )
+        return {"card_uid": card.get_uid(), "assigned_user_uid": user.get_uid(), "changed": changed}
+
     def update_assigned_users(
         self,
         user_or_bot: TUserOrBot,
