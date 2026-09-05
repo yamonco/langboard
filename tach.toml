@@ -33,3 +33,27 @@ depends_on = [
     "langboard.card_workspace.infrastructure",
 ]
 visibility = []
+
+[[modules]]
+path = "langboard.wiki_workspace.domain"
+depends_on = []
+
+[[modules]]
+path = "langboard.wiki_workspace.application"
+depends_on = ["langboard.wiki_workspace.domain", "langboard.wiki_workspace.application.commands", "langboard.wiki_workspace.application.queries"]
+
+[[modules]]
+path = "langboard.wiki_workspace.application.commands"
+depends_on = ["langboard.wiki_workspace.domain"]
+
+[[modules]]
+path = "langboard.wiki_workspace.application.queries"
+depends_on = ["langboard.wiki_workspace.domain"]
+
+[[modules]]
+path = "langboard.wiki_workspace.infrastructure"
+depends_on = ["langboard.wiki_workspace.domain"]
+
+[[modules]]
+path = "langboard.mcp_tools.WikiWorkspaceMcp"
+depends_on = ["langboard.wiki_workspace.domain", "langboard.wiki_workspace.application", "langboard.wiki_workspace.infrastructure"]

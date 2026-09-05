@@ -3,7 +3,7 @@ from ....core.db import DbSession, SqlBuilder
 from ....core.domain import BaseRepository
 from ....core.types import SnowflakeID
 from ....core.types.ParamTypes import TCardParam, TProjectParam
-from ....domain.models import Card, CardAssignedUser, User
+from ....domain.models import Card, CardAssignedUser, ProjectAssignedUser, User
 from ....helpers import InfraHelper
 
 
@@ -15,6 +15,25 @@ class CardAssignedUserRepository(BaseRepository[CardAssignedUser]):
     @staticmethod
     def name() -> str:
         return "card_assigned_user"
+
+    def add_member(self, card: Card, member: ProjectAssignedUser) -> bool:
+        """Add one member under the card lock without replacing other assignments."""
+        with DbSession.use(readonly=False) as db:
+            locked = db.exec(
+                SqlBuilder.select.table(Card).where(Card.column("id") == card.id).with_for_update()
+            ).first()
+            if locked is None or locked.project_id != member.project_id:
+                raise ValueError("Card and membership must belong to the same project")
+            existing = db.exec(
+                SqlBuilder.select.table(CardAssignedUser).where(
+                    (CardAssignedUser.column("card_id") == card.id)
+                    & (CardAssignedUser.column("user_id") == member.user_id)
+                )
+            ).first()
+            if existing is not None:
+                return False
+            db.insert(CardAssignedUser(card_id=card.id, user_id=member.user_id, project_assigned_id=member.id))
+        return True
 
     @overload
     def get_all_by_card(
