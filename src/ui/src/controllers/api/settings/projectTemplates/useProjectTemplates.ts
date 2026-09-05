@@ -6,6 +6,7 @@ export interface IProjectTemplate {
     uid: string;
     name: string;
     columns: string[];
+    column_descriptions?: string[];
     is_builtin: boolean;
     is_default: boolean;
 }

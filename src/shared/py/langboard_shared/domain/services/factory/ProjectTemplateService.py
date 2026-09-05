@@ -19,6 +19,13 @@ from ...models.ProjectEmailNotificationPolicy import ProjectEmailNotificationCat
 
 
 SI_COLUMNS = ["Backlog", "Ready", "In Progress", "Review", "Done"]
+SI_COLUMN_DESCRIPTIONS = [
+    "Untriaged or uncommitted work. Claiming ownership alone does not mean work has started.",
+    "Owned, prepared work waiting to start. Suggest this stage when someone commits to take a backlog item.",
+    "Work actively being executed. Enter when the assignee explicitly starts work, not merely when assigned.",
+    "Implementation is ready for review or acceptance. Do not infer approval from assignment.",
+    "Completed and accepted work. Move here only when completion is explicitly confirmed.",
+]
 SI_EMAIL_NOTIFICATION_POLICY = {
     "is_enabled": True,
     "notify_all_members": True,
@@ -45,10 +52,14 @@ class ProjectTemplateService(BaseDomainService):
             if not template.email_notification_policy:
                 template.email_notification_policy = SI_EMAIL_NOTIFICATION_POLICY
                 self.repo.project_template.update(template)
+            if not template.column_descriptions and template.columns == SI_COLUMNS:
+                template.column_descriptions = SI_COLUMN_DESCRIPTIONS
+                self.repo.project_template.update(template)
             return template
         template = ProjectTemplate(
             name="SI",
             columns=SI_COLUMNS,
+            column_descriptions=SI_COLUMN_DESCRIPTIONS,
             email_notification_policy=SI_EMAIL_NOTIFICATION_POLICY,
             is_builtin=True,
             is_default=True,
@@ -105,6 +116,7 @@ class ProjectTemplateService(BaseDomainService):
         template = ProjectTemplate(
             name=clean_name,
             columns=[column.name for column in columns],
+            column_descriptions=[column.description for column in columns],
             internal_bots=internal_bots,
             project_bot_scopes=project_scopes,
             column_bot_scopes=column_scopes,
@@ -133,8 +145,11 @@ class ProjectTemplateService(BaseDomainService):
         project = project_service.create(user, title, description, project_type)
         columns: list[ProjectColumn] = []
         try:
-            for column_name in template.columns:
-                column = column_service.create(user, project, column_name)
+            for index, column_name in enumerate(template.columns):
+                column_description = (
+                    template.column_descriptions[index] if index < len(template.column_descriptions) else ""
+                )
+                column = column_service.create(user, project, column_name, description=column_description)
                 if not column:
                     raise RuntimeError(f"Failed to create project column: {column_name}")
                 columns.append(column)
