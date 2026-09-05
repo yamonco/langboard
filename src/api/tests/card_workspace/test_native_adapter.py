@@ -6,7 +6,11 @@ import pytest
 
 os.environ.setdefault("PROJECT_NAME", "langboard")
 
-from langboard.card_workspace.domain import CardDescriptionPatch, ExactTextReplacement  # noqa: E402
+from langboard.card_workspace.domain import (  # noqa: E402
+    CardDescriptionPatch,
+    ExactTextReplacement,
+    projection_revision,
+)
 from langboard.card_workspace.infrastructure.native import (  # noqa: E402
     MAX_NATIVE_SECTION_SOURCE,
     NativeCardWorkspaceAdapter,
@@ -251,19 +255,22 @@ def test_native_description_patch_compares_before_updating() -> None:
         project=SimpleNamespace(get_by_id_like=lambda _uid: project),
         card=SimpleNamespace(
             get_by_id_like=lambda _uid: card,
-            update=lambda *args: (updates.append(args), {"description": True})[1],
+            update=lambda *args, **kwargs: (updates.append((*args, kwargs)), {"description": True})[1],
         ),
     )
 
     result = NativeCardWorkspaceAdapter(object(), service).patch_card_description(
         "project-one",
         "card-one",
-        CardDescriptionPatch((ExactTextReplacement(old_text="old", new_text="new"),)),
+        CardDescriptionPatch(
+            (ExactTextReplacement(old_text="old", new_text="new"),), projection_revision("before old after")
+        ),
     )
 
     assert result == "before new after"
     assert updates[0][1:3] == (project, card)
     assert updates[0][3]["description"].content == "before new after"
+    assert updates[0][4] == {"expected_description": "before old after"}
 
 
 def test_native_description_read_revision_can_be_used_for_multi_hunk_patch() -> None:
@@ -284,7 +291,7 @@ def test_native_description_read_revision_can_be_used_for_multi_hunk_patch() -> 
     )
     service.card.get_by_id_like = lambda _uid: card
     updates: list[tuple[Any, ...]] = []
-    service.card.update = lambda *args: (updates.append(args), True)[1]
+    service.card.update = lambda *args, **kwargs: (updates.append((*args, kwargs)), True)[1]
     adapter = NativeCardWorkspaceAdapter(object(), service)
     source = adapter.get_card_bundle_source("p1", "c1", frozenset({"description"}))
     assert source is not None
@@ -305,3 +312,69 @@ def test_native_description_read_revision_can_be_used_for_multi_hunk_patch() -> 
     )
     assert result == "ALPHA=after\nBETA=keep\nGAMMA=after"
     assert len(updates) == 1
+
+
+def test_native_description_patch_requires_revision_before_lookup() -> None:
+    """A direct native caller cannot bypass the gateway's required revision."""
+
+    adapter = NativeCardWorkspaceAdapter(object(), SimpleNamespace())
+    with pytest.raises(ValueError, match="expected_revision is required"):
+        adapter.patch_card_description("p", "c", CardDescriptionPatch((ExactTextReplacement("old", "new"),)))
+
+
+def test_description_repository_rejects_stale_writer_and_preserves_other_fields(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Exercise real SQL writes against an isolated DB; SQLite does not prove PostgreSQL locking."""
+
+    from collections.abc import Iterator
+    from contextlib import contextmanager
+    from langboard_shared.core.db import DbSession, EditorContentModel
+    from langboard_shared.domain.models import Card as NativeCard
+    from langboard_shared.infrastructure.repositories.factory.CardRepository import CardRepository
+    from sqlalchemy import create_engine, select
+    from sqlalchemy.orm import Session
+
+    engine = create_engine("sqlite://")
+    NativeCard.__table__.create(engine)
+    with engine.begin() as connection:
+        connection.execute(
+            NativeCard.__table__.insert().values(
+                id=101,
+                project_id=1,
+                project_column_id=2,
+                title="preserved title",
+                order=0,
+                description=EditorContentModel(content="original"),
+            )
+        )
+
+    @contextmanager
+    def isolated_session(readonly: bool) -> Iterator[DbSession]:
+        assert not readonly
+        with Session(engine, expire_on_commit=False) as session, session.begin():
+            yield DbSession(session, readonly=False)
+
+    monkeypatch.setattr(DbSession, "use", isolated_session)
+    repository = CardRepository.__new__(CardRepository)
+    first = NativeCard(
+        id=101,
+        project_id=1,
+        project_column_id=2,
+        title="stale title",
+        description=EditorContentModel(content="first edit"),
+    )
+    second = NativeCard(
+        id=101,
+        project_id=1,
+        project_column_id=2,
+        title="other stale title",
+        description=EditorContentModel(content="second edit"),
+    )
+    assert repository.update_description_if_current(first, "original") is True
+    assert repository.update_description_if_current(second, "original") is False
+    with engine.connect() as connection:
+        row = connection.execute(select(NativeCard.__table__.c.title, NativeCard.__table__.c.description)).one()
+    assert row.title == "preserved title"
+    assert row.description.content == "first edit"
+    engine.dispose()

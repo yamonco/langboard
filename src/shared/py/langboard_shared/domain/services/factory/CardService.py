@@ -318,8 +318,18 @@ class CardService(BaseDomainService):
         return card, api_card
 
     def update(
-        self, user_or_bot: TUserOrBot, project: TProjectParam | None, card: TCardParam | None, form: dict[str, Any]
+        self,
+        user_or_bot: TUserOrBot,
+        project: TProjectParam | None,
+        card: TCardParam | None,
+        form: dict[str, Any],
+        *,
+        expected_description: str | None = None,
     ) -> dict[str, Any] | Literal[True] | None:
+        """Update a card, optionally guarding a description-only edit against concurrent writes."""
+
+        if expected_description is not None and set(form) != {"description"}:
+            raise ValueError("Conditional description updates cannot change other card fields")
         params = InfraHelper.get_records_with_foreign_by_params((Project, project), (Card, card))
         if not params:
             return None
@@ -341,7 +351,10 @@ class CardService(BaseDomainService):
                 checkitem_cardified_from.title = card.title
                 self.repo.checkitem.update(checkitem_cardified_from)
 
-        self.repo.card.update(card)
+        if expected_description is None:
+            self.repo.card.update(card)
+        elif not self.repo.card.update_description_if_current(card, expected_description):
+            raise ValueError("Card description changed after review: concurrent update")
 
         model: dict[str, Any] = {}
         for key in form:
