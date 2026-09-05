@@ -46,6 +46,33 @@ def test_card_move_schema_makes_column_an_optional_destination() -> None:
     assert schema["properties"]["column_uid"]["default"] is None
 
 
+@pytest.mark.parametrize("reason", ["stale revision", "missing fragment", "ambiguous fragment"])
+def test_description_conflict_is_transport_validation(monkeypatch: pytest.MonkeyPatch, reason: str) -> None:
+    """Only a known pre-save conflict becomes a recoverable MCP validation error."""
+    from fastmcp.exceptions import ValidationError
+    from langboard.card_workspace.domain import DescriptionPatchConflict
+
+    def reject(*args: Any, **kwargs: Any) -> None:
+        raise DescriptionPatchConflict(reason)
+
+    monkeypatch.setattr(CardWorkspaceMcp, "_adapter", lambda *args: object())
+    monkeypatch.setattr(CardWorkspaceMcp, "replace_description_text", reject)
+    with pytest.raises(ValidationError, match="No changes saved"):
+        CardWorkspaceMcp.patch_card_description("project", "card", None, None, old_text="old", new_text="new")
+
+
+def test_description_unexpected_failure_is_not_claimed_unsaved(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A failure after persistence must not be disguised as a safe conflict."""
+
+    def fail(*args: Any, **kwargs: Any) -> None:
+        raise ValueError("downstream effect failed")
+
+    monkeypatch.setattr(CardWorkspaceMcp, "_adapter", lambda *args: object())
+    monkeypatch.setattr(CardWorkspaceMcp, "replace_description_text", fail)
+    with pytest.raises(ValueError, match="downstream effect failed"):
+        CardWorkspaceMcp.patch_card_description("project", "card", None, None, old_text="old", new_text="new")
+
+
 def test_card_bundle_schema_exposes_opt_in_sections() -> None:
     """Agents can request rich sections without paying for them by default."""
 

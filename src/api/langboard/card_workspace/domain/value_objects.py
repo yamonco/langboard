@@ -64,6 +64,10 @@ class CardBundleSection(StrEnum):
     BotSchedules = "automation.bot_schedules"
 
 
+class DescriptionPatchConflict(ValueError):
+    """A reviewed description patch was rejected before persistence."""
+
+
 @dataclass(frozen=True)
 class ExactTextReplacement:
     """One conflict-detecting replacement inside a card description."""
@@ -84,9 +88,9 @@ class ExactTextReplacement:
 
         matches = content.count(self.old_text)
         if matches == 0:
-            raise ValueError("Card description changed after review: old_text was not found")
+            raise DescriptionPatchConflict("Card description changed after review: old_text was not found")
         if matches > 1:
-            raise ValueError("Card description patch is ambiguous: old_text occurs more than once")
+            raise DescriptionPatchConflict("Card description patch is ambiguous: old_text occurs more than once")
         return content.replace(self.old_text, self.new_text, 1)
 
 
@@ -112,7 +116,7 @@ class CardDescriptionPatch:
         """Apply every edit in memory or fail before the caller persists anything."""
 
         if self.expected_revision is not None and projection_revision(content) != self.expected_revision.lower():
-            raise ValueError("Card description changed after review: revision does not match")
+            raise DescriptionPatchConflict("Card description changed after review: revision does not match")
         patched = content
         for edit in self.edits:
             patched = edit.apply(patched)
