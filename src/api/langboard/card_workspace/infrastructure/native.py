@@ -311,6 +311,8 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
         card_uid: str,
         patch: CardDescriptionPatch,
     ) -> str:
+        if patch.expected_revision is None:
+            raise ValueError("expected_revision is required; read the card description before editing")
         project, card = self._ensure_project_card(project_uid, card_uid)
         current = card.description.content if card.description is not None else ""
         patched = patch.apply(current)
@@ -319,6 +321,7 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
             project,
             card,
             {"description": EditorContentModel(content=patched)},
+            expected_description=current,
         )
         if not result:
             raise RuntimeError("Validated card description patch failed")
