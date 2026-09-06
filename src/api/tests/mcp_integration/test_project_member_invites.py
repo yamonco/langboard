@@ -87,6 +87,55 @@ def test_invite_tool_normalizes_bounds_and_returns_safe_aggregate() -> None:
         ProjectMcp.invite_project_members("missing", user, ["member@example.com"], missing_service)
 
 
+def test_project_people_search_hides_email_and_addition_is_immediate() -> None:
+    """Existing people can be selected and added without an invitation email."""
+
+    employee = SimpleNamespace(
+        firstname="Grace",
+        lastname="Lee",
+        username="grace",
+        email="grace@example.com",
+        deleted_at=None,
+        get_uid=lambda: "person-1",
+    )
+    calls: list[list[object]] = []
+    service = SimpleNamespace(
+        project=SimpleNamespace(
+            search_member_candidates=lambda _user, _project, query: [employee] if query == "Gr" else [],
+            add_existing_assigned_users=lambda _user, _project, users: calls.append(users)
+            or {"requested_count": len(users), "changed_count": 1, "status": "updated"},
+        ),
+        user=SimpleNamespace(get_by_id_like=lambda uid: employee if uid == "person-1" else None),
+    )
+    actor = User.model_construct()
+
+    found = ProjectMcp.search_project_people("project", " Gr ", actor, service)
+    added = ProjectMcp.add_project_people("project", ["person-1"], actor, service)
+
+    assert found == {"items": [{"uid": "person-1", "firstname": "Grace", "lastname": "Lee", "username": "grace"}]}
+    assert "example.com" not in str(found)
+    assert added == {"requested_count": 1, "changed_count": 1, "status": "updated"}
+    assert calls == [[employee]]
+
+
+def test_project_people_rejects_short_search_missing_or_deleted_selection() -> None:
+    """Directory actions stay bounded and cannot add a deleted account."""
+
+    actor = User.model_construct()
+    deleted = User.model_construct(deleted_at=object())
+    service = SimpleNamespace(
+        project=SimpleNamespace(search_member_candidates=lambda *_args: [], invite_assigned_users=lambda *_args: None),
+        user=SimpleNamespace(get_by_id_like=lambda uid: deleted if uid == "deleted" else None),
+    )
+
+    with pytest.raises(ValueError, match="at least two"):
+        ProjectMcp.search_project_people("project", "x", actor, service)
+    with pytest.raises(ValueError, match="no longer exist"):
+        ProjectMcp.add_project_people("project", ["missing"], actor, service)
+    with pytest.raises(ValueError, match="no longer exist"):
+        ProjectMcp.add_project_people("project", ["deleted"], actor, service)
+
+
 def test_additive_retry_is_a_complete_noop() -> None:
     """An already-assigned or pending request emits no repeated side effects."""
 
@@ -111,6 +160,45 @@ def test_additive_retry_is_a_complete_noop() -> None:
     assert result == {"requested_count": 1, "changed_count": 0, "status": "unchanged"}
     invitation_service.invite_emails.assert_not_called()
     assigned_users.assert_not_called()
+
+
+def test_existing_member_addition_bypasses_invitation_and_preserves_members() -> None:
+    """A known account receives project access immediately without an invite email."""
+
+    project = SimpleNamespace(id=10)
+    actor = User.model_construct()
+    employee = SimpleNamespace(id=20, api_response=lambda: {"name": "Grace"})
+    existing = SimpleNamespace(id=30, api_response=lambda: {"name": "Existing"})
+    assigned_rows = [(existing, object()), (employee, object())]
+    assigned_repository = SimpleNamespace(
+        get_all_by_project=Mock(side_effect=[[(existing, object())], assigned_rows]),
+        ensure_assigned=Mock(return_value=(object(), True)),
+    )
+    role_repository = SimpleNamespace(project=SimpleNamespace(grant_default=Mock()))
+    relationship_repository = SimpleNamespace(ensure_project_relationships=Mock())
+    invitation_service = SimpleNamespace(get_api_invited_user_list_by_project=Mock(return_value=[]))
+    repository = SimpleNamespace(
+        project_assigned_user=assigned_repository,
+        role=role_repository,
+        project_user_relationship=relationship_repository,
+    )
+    service = ProjectService(lambda _: None, lambda _: None, repository)
+
+    with (
+        patch(
+            "langboard_shared.domain.services.factory.ProjectService.InfraHelper.get_by_id_like", return_value=project
+        ),
+        patch.object(service, "_get_service_by_name", return_value=invitation_service),
+        patch("langboard_shared.domain.services.factory.ProjectService.ProjectPublisher.assigned_users_updated"),
+        patch("langboard_shared.domain.services.factory.ProjectService.ProjectPublisher.assigned_to_users"),
+        patch("langboard_shared.domain.services.factory.ProjectService.ProjectActivityTask.project_assigned_users_updated"),
+    ):
+        result = service.add_existing_assigned_users(actor, project, [employee])
+
+    assert result == {"requested_count": 1, "changed_count": 1, "status": "updated"}
+    assigned_repository.ensure_assigned.assert_called_once_with(project, employee)
+    role_repository.project.grant_default.assert_called_once_with(user_id=20, project_id=10)
+    invitation_service.get_api_invited_user_list_by_project.assert_called_once_with(project)
 
 
 def test_invite_tool_schema_and_legacy_replacement_tool_are_distinct() -> None:
