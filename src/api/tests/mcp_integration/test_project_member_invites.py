@@ -1,6 +1,6 @@
 import os
 from types import SimpleNamespace
-from unittest.mock import Mock, patch
+from unittest.mock import ANY, Mock, patch
 import pytest
 
 
@@ -8,7 +8,8 @@ os.environ.setdefault("PROJECT_NAME", "langboard")
 
 from langboard.mcp_integration import McpTool
 from langboard.mcp_tools import ProjectMcp
-from langboard_shared.domain.models import User
+from langboard_shared.domain.models import IdentityProvider, User
+from langboard_shared.domain.services.factory.IdentityLinkService import IdentityLinkService
 from langboard_shared.domain.services.factory.ProjectInvitationService import (
     InvitationRelatedResult,
     ProjectInvitationService,
@@ -118,6 +119,25 @@ def test_project_people_search_hides_email_and_addition_is_immediate() -> None:
     assert calls == [[employee]]
 
 
+def test_project_people_search_compacts_real_api_projection_without_email() -> None:
+    """The MCP path accepts the dict shape returned by the native candidate service."""
+
+    projection = {
+        "type": User.USER_TYPE,
+        "uid": "person-1",
+        "firstname": "Grace",
+        "lastname": "Lee",
+        "username": "grace",
+        "email": "grace@example.com",
+    }
+    service = SimpleNamespace(project=SimpleNamespace(search_member_candidates=lambda *_args: [projection]))
+
+    result = ProjectMcp.search_project_people("project", "Gr", User.model_construct(), service)
+
+    assert result == {"items": [{"uid": "person-1", "firstname": "Grace", "lastname": "Lee", "username": "grace"}]}
+    assert "example.com" not in str(result)
+
+
 def test_project_people_rejects_short_search_missing_or_deleted_selection() -> None:
     """Directory actions stay bounded and cannot add a deleted account."""
 
@@ -199,6 +219,35 @@ def test_existing_member_addition_bypasses_invitation_and_preserves_members() ->
     assigned_repository.ensure_assigned.assert_called_once_with(project, employee)
     role_repository.project.grant_default.assert_called_once_with(user_id=20, project_id=10)
     invitation_service.get_api_invited_user_list_by_project.assert_called_once_with(project)
+
+
+def test_federated_active_account_is_added_without_an_email_invitation() -> None:
+    """Federated accounts become members immediately while classic accounts retain the invite flow."""
+
+    target = User.model_construct(id=1, activated_at=object())
+    invitation = InvitationRelatedResult()
+    invitation.emails_should_invite.add("employee@example.com")
+    invitation.users_by_email["employee@example.com"] = target
+    assigned = Mock()
+    email_service = SimpleNamespace(send_template=Mock())
+    identity_link = SimpleNamespace(
+        get_by_user_provider=lambda _user, provider: object() if provider is IdentityProvider.Oidc else None
+    )
+    service = ProjectInvitationService(
+        lambda service_type: identity_link if service_type is IdentityLinkService else email_service,
+        lambda _name: None,
+        SimpleNamespace(),
+    )
+    setattr(service, "_ProjectInvitationService__assign_project_user", assigned)
+
+    with patch(
+        "langboard_shared.domain.services.factory.ProjectInvitationService.InfraHelper.get_by_id_like",
+        return_value=SimpleNamespace(),
+    ):
+        service.invite_emails(User.model_construct(), "project", invitation)
+
+    assigned.assert_called_once_with(ANY, target)
+    email_service.send_template.assert_not_called()
 
 
 def test_invite_tool_schema_and_legacy_replacement_tool_are_distinct() -> None:
