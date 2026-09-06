@@ -13,7 +13,7 @@ from langboard_shared.core.routing import (
 )
 from langboard_shared.core.schema import OpenApiSchema, PaginatedList
 from langboard_shared.core.types import SafeDateTime
-from langboard_shared.domain.models import ApiKeyRole, McpRole, SettingRole, User, UserProfile
+from langboard_shared.domain.models import ApiKeyRole, IdentityProvider, McpRole, SettingRole, User, UserProfile
 from langboard_shared.domain.models.ApiKeyRole import ApiKeyRoleAction
 from langboard_shared.domain.models.bases.BaseRoleModel import ALL_GRANTED
 from langboard_shared.domain.models.McpRole import McpRoleAction
@@ -26,11 +26,57 @@ from langboard_shared.security import Auth, RoleFinder
 from .Form import (
     CreateUserForm,
     DeleteSelectedUsersForm,
+    LinkOidcIdentityForm,
     UpdateApiKeyRoleForm,
     UpdateMcpRoleForm,
     UpdateSettingRoleForm,
     UpdateUserForm,
 )
+
+
+@AppRouter.api.put(
+    "/settings/users/{user_uid}/identity-links/oidc",
+    tags=["AppSettings.User"],
+    responses=(
+        OpenApiSchema()
+        .suc({"identity_link": "object"})
+        .auth()
+        .forbidden()
+        .err(404, ApiErrorCode.NF1004)
+        .err(409, ApiErrorCode.EX1003)
+        .get()
+    ),
+)
+@RoleFilter.add(SettingRole, [SettingRoleAction.UserUpdate], RoleFinder.setting, allowed_all_admin=False)
+@AuthFilter.add("admin")
+def link_user_oidc_identity(
+    user_uid: str,
+    form: LinkOidcIdentityForm,
+    service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    """Link one reviewed OIDC issuer and subject to an existing user account."""
+
+    target_user = service.user.get_by_id_like(user_uid)
+    if not target_user:
+        raise ApiException.NotFound_404(ApiErrorCode.NF1004)
+
+    issuer = form.issuer.strip().rstrip("/")
+    subject = form.subject.strip()
+    if not issuer.startswith("https://") or not subject:
+        raise ApiException.BadRequest_400()
+
+    current = service.identity_link.get_by_provider_external_id(IdentityProvider.Oidc, subject, issuer)
+    if current and current.user_id != target_user.id:
+        raise ApiException.Conflict_409(ApiErrorCode.EX1003)
+
+    identity_link = service.identity_link.upsert_user_link(
+        user=target_user,
+        provider=IdentityProvider.Oidc,
+        external_id=subject,
+        issuer=issuer,
+        email=form.email.strip().lower() if form.email else None,
+    )
+    return JsonResponse(content={"identity_link": identity_link.api_response()})
 
 
 @AppRouter.api.get(

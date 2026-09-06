@@ -2,6 +2,8 @@
 
 from .commands import (
     add_card_comment,
+    apply_card_graph_patch,
+    cardify_card_checkitem,
     create_card_checkitem,
     create_card_checklist,
     create_card_in_leftmost_column,
@@ -11,6 +13,7 @@ from .commands import (
     delete_card_checklist,
     delete_card_comment,
     delete_public_card_metadata,
+    patch_card_description,
     reconcile_card_checklist_projection,
     save_public_card_metadata,
     set_card_people_and_labels,
@@ -35,6 +38,8 @@ __all__ = [
     "ProjectCardListResponse",
     "ProjectIdentityResponse",
     "add_card_comment",
+    "apply_card_graph_patch",
+    "cardify_card_checkitem",
     "create_card_checkitem",
     "create_card_checklist",
     "create_card_in_leftmost_column",
@@ -49,6 +54,7 @@ __all__ = [
     "get_public_card_metadata",
     "get_public_card_metadata_by_key",
     "list_project_cards",
+    "patch_card_description",
     "reconcile_card_checklist_projection",
     "save_public_card_metadata",
     "set_card_people_and_labels",

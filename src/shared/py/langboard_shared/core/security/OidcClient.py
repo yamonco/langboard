@@ -65,8 +65,25 @@ class OidcClient:
 
     @staticmethod
     def validate_id_token(id_token: str, nonce: str | None = None) -> dict[str, Any]:
+        return OidcClient._validate_jwt(id_token, Env.OIDC_CLIENT_ID, nonce)
+
+    @staticmethod
+    def validate_access_token(access_token: str) -> dict[str, Any]:
+        """Validate an OIDC access token intended only for the Langboard resource."""
+
+        if not Env.OIDC_BEARER_ENABLED:
+            raise RuntimeError("OIDC bearer authentication is disabled")
+        audience = Env.OIDC_RESOURCE_AUDIENCE.strip()
+        if not audience:
+            raise RuntimeError("OIDC resource audience is missing")
+        return OidcClient._validate_jwt(access_token, audience)
+
+    @staticmethod
+    def _validate_jwt(token: str, audience: str, nonce: str | None = None) -> dict[str, Any]:
+        """Validate one supported OIDC JWT against discovery metadata."""
+
         discovery = OidcClient.get_discovery()
-        unverified_header = get_unverified_header(id_token)
+        unverified_header = get_unverified_header(token)
 
         algorithm = str(unverified_header.get("alg", "RS256"))
         if algorithm.lower() == "none":
@@ -86,10 +103,10 @@ class OidcClient:
             raise RuntimeError("OIDC issuer is missing")
 
         payload = jwt_decode(
-            id_token,
+            token,
             key=signing_key,
             algorithms=[algorithm],
-            audience=Env.OIDC_CLIENT_ID,
+            audience=audience,
             issuer=issuer,
             leeway=Env.OIDC_CLOCK_SKEW_SEC,
             options={"require": ["sub", "iss", "aud", "exp", "iat"]},

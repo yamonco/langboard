@@ -59,6 +59,15 @@ class UpdateUserForm(BaseFormModel):
 
 
 @form_model
+class LinkOidcIdentityForm(BaseFormModel):
+    """Explicit issuer-subject mapping for one existing Langboard user."""
+
+    issuer: str
+    subject: str
+    email: str | None = None
+
+
+@form_model
 class DeleteSelectedUsersForm(BaseFormModel):
     user_uids: list[str]
 

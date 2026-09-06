@@ -1,4 +1,5 @@
 import useBoardColumnDeletedHandlers from "@/controllers/socket/board/column/useBoardColumnDeletedHandlers";
+import useBoardColumnDescriptionChangedHandlers from "@/controllers/socket/board/column/useBoardColumnDescriptionChangedHandlers";
 import useBoardCardCreatedHandlers from "@/controllers/socket/board/useBoardCardCreatedHandlers";
 import { BaseModel, IBaseModel } from "@/core/models/Base";
 import { registerModel } from "@/core/models/ModelRegistry";
@@ -6,6 +7,7 @@ import { registerModel } from "@/core/models/ModelRegistry";
 export interface Interface extends IBaseModel {
     project_uid: string;
     name: string;
+    description?: string;
     order: number;
     is_archive: bool;
 }
@@ -22,7 +24,7 @@ class ProjectColumn extends BaseModel<IStore> {
     constructor(model: Record<string, unknown>) {
         super(model);
 
-        this.subscribeSocketEvents([useBoardCardCreatedHandlers, useBoardColumnDeletedHandlers], {
+        this.subscribeSocketEvents([useBoardCardCreatedHandlers, useBoardColumnDeletedHandlers, useBoardColumnDescriptionChangedHandlers], {
             projectUID: this.project_uid,
             columnUID: this.uid,
             column: this,
@@ -45,6 +47,13 @@ class ProjectColumn extends BaseModel<IStore> {
 
     public get order() {
         return this.getValue("order");
+    }
+
+    public get description() {
+        return this.getValue("description") ?? "";
+    }
+    public set description(value) {
+        this.update({ description: value });
     }
     public set order(value) {
         this.update({ order: value });

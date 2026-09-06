@@ -1,6 +1,11 @@
 from dataclasses import dataclass
 from typing import Any, Protocol
-from ..domain import ChecklistProjectionItem
+from ..domain import (
+    CardDescriptionPatch,
+    CardGraphEdge,
+    CardGraphNewCard,
+    ChecklistProjectionItem,
+)
 
 
 @dataclass(frozen=True)
@@ -90,6 +95,24 @@ class CardWorkspaceCommandPort(Protocol):
     ) -> dict[str, Any]:
         """Create a card in the server-selected leftmost active column."""
 
+    def apply_card_graph_patch(
+        self,
+        project_uid: str,
+        anchor_card_uid: str,
+        new_cards: list[CardGraphNewCard],
+        add_edges: list[CardGraphEdge],
+        remove_relationship_uids: list[str],
+    ) -> dict[str, Any]:
+        """Atomically create cards and add or remove typed relationship edges."""
+
+    def patch_card_description(
+        self,
+        project_uid: str,
+        card_uid: str,
+        patch: CardDescriptionPatch,
+    ) -> str:
+        """Atomically apply one revision-bound description patch."""
+
     def add_card_comment(self, project_uid: str, card_uid: str, content: str) -> dict[str, Any]:
         """Create a comment."""
 
@@ -117,6 +140,15 @@ class CardWorkspaceCommandPort(Protocol):
 
     def create_card_checkitem(self, project_uid: str, card_uid: str, checklist_uid: str, title: str) -> dict[str, Any]:
         """Create a checkitem."""
+
+    def cardify_card_checkitem(
+        self,
+        project_uid: str,
+        card_uid: str,
+        checkitem_uid: str,
+        project_column_uid: str,
+    ) -> dict[str, Any]:
+        """Create a card from one existing checkitem."""
 
     def update_card_checkitem(
         self,

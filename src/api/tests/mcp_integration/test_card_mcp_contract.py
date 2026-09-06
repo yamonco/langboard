@@ -8,9 +8,11 @@ import pytest
 os.environ.setdefault("PROJECT_NAME", "langboard")
 
 from langboard.card_workspace.application.dtos import CardBundleDto, CardBundleResponse  # noqa: E402
-from langboard.mcp_integration import McpTool  # noqa: E402
+from langboard.mcp_integration import McpRoleFilter, McpTool  # noqa: E402
 from langboard.mcp_tools import CardMcp, CardWorkspaceMcp  # noqa: E402, F401
 from langboard.routes.mcp.McpApi import serialize_mcp_result  # noqa: E402
+from langboard_shared.domain.models.bases import REACTION_TYPES  # noqa: E402
+from langboard_shared.domain.models.ProjectRole import ProjectRoleAction  # noqa: E402
 from langboard_shared.domain.services.factory.CardService import CardService  # noqa: E402
 
 
@@ -25,6 +27,17 @@ def test_card_partial_edit_schema_requires_only_card_identity() -> None:
     assert schema["properties"]["deadline_at"]["default"] is None
 
 
+def test_description_patch_schema_supports_atomic_multi_hunk_edits() -> None:
+    """The agent contract keeps legacy edits while exposing bounded structured patches."""
+
+    schema = McpTool.get_tool("patch_card_description")["input_schema"]
+
+    assert schema["required"] == ["project_uid", "card_uid"]
+    assert schema["properties"]["old_text"]["default"] is None
+    assert schema["properties"]["edits"]["default"] is None
+    assert schema["$defs"]["ExactTextReplacement"]["required"] == ["old_text", "new_text"]
+
+
 def test_card_move_schema_makes_column_an_optional_destination() -> None:
     """Reordering in place requires no synthetic nullable column argument."""
 
@@ -32,6 +45,96 @@ def test_card_move_schema_makes_column_an_optional_destination() -> None:
 
     assert schema["required"] == ["project_uid", "card_uid", "order"]
     assert schema["properties"]["column_uid"]["default"] is None
+
+
+def test_attachment_upload_requires_project_update_permission() -> None:
+    """Attachment bytes cannot be written by a read-only project member."""
+
+    _, actions, _, _ = McpRoleFilter.get_filtered(CardMcp.upload_card_attachment)
+
+    assert actions == [ProjectRoleAction.Update.value]
+
+
+@pytest.mark.parametrize("reason", ["stale revision", "missing fragment", "ambiguous fragment"])
+def test_description_conflict_is_transport_validation(monkeypatch: pytest.MonkeyPatch, reason: str) -> None:
+    """Only a known pre-save conflict becomes a recoverable MCP validation error."""
+    from fastmcp.exceptions import ValidationError
+    from langboard.card_workspace.domain import DescriptionPatchConflict
+
+    def reject(*args: Any, **kwargs: Any) -> None:
+        raise DescriptionPatchConflict(reason)
+
+    monkeypatch.setattr(CardWorkspaceMcp, "_adapter", lambda *args: object())
+    monkeypatch.setattr(CardWorkspaceMcp, "replace_description_text", reject)
+    with pytest.raises(ValidationError, match="No changes saved"):
+        CardWorkspaceMcp.patch_card_description("project", "card", None, None, old_text="old", new_text="new")
+
+
+def test_description_unexpected_failure_is_not_claimed_unsaved(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A failure after persistence must not be disguised as a safe conflict."""
+
+    def fail(*args: Any, **kwargs: Any) -> None:
+        raise ValueError("downstream effect failed")
+
+    monkeypatch.setattr(CardWorkspaceMcp, "_adapter", lambda *args: object())
+    monkeypatch.setattr(CardWorkspaceMcp, "replace_description_text", fail)
+    with pytest.raises(ValueError, match="downstream effect failed"):
+        CardWorkspaceMcp.patch_card_description("project", "card", None, None, old_text="old", new_text="new")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("reason", ["stale revision", "missing fragment", "ambiguous fragment", "effect failure"])
+async def test_description_conflict_through_http_route(monkeypatch: pytest.MonkeyPatch, reason: str) -> None:
+    """The HTTP dispatcher preserves safe validation errors and unknown outcomes separately."""
+    from fastapi import FastAPI, Request
+    from fastmcp import FastMCP
+    from httpx import ASGITransport, AsyncClient
+    from langboard.card_workspace.domain import DescriptionPatchConflict
+
+    route = importlib.import_module("langboard.routes.mcp.McpApi")
+    closed: list[bool] = []
+    group = SimpleNamespace(activated_at=True, tools=["patch_card_description"], user_id=None)
+    service = SimpleNamespace(
+        mcp_tool_group=SimpleNamespace(get_by_id_like=lambda _uid: group),
+        close=lambda: closed.append(True),
+    )
+    monkeypatch.setattr(route, "DomainService", lambda: service)
+    monkeypatch.setattr(route, "User", SimpleNamespace)
+    monkeypatch.setattr(CardWorkspaceMcp, "_adapter", lambda *args: object())
+
+    def reject(*args: Any, **kwargs: Any) -> None:
+        if reason == "effect failure":
+            raise ValueError("effect failure")
+        raise DescriptionPatchConflict(reason)
+
+    monkeypatch.setattr(CardWorkspaceMcp, "replace_description_text", reject)
+    mcp = FastMCP("description-http-test")
+
+    @mcp.tool(name="patch_card_description")
+    def patch() -> Any:
+        """Run the real MCP boundary without database or external effects."""
+        return CardWorkspaceMcp.patch_card_description("project", "card", None, None, old_text="old", new_text="new")
+
+    monkeypatch.setattr(route.McpServer, "mcp", mcp)
+    app = FastAPI()
+
+    @app.post("/mcp/tools/{tool_name}")
+    async def dispatch(tool_name: str, request: Request) -> Any:
+        """Inject an isolated authenticated actor before the real route dispatcher."""
+        request.scope["auth"] = SimpleNamespace(id=1)
+        return await route.execute_mcp_tool(tool_name, request)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app, raise_app_exceptions=False), base_url="http://test"
+    ) as client:
+        response = await client.post(
+            "/mcp/tools/patch_card_description",
+            json={},
+            headers={route.AuthSecurity.MCP_TOOL_GROUP_UID_HEADER: "test-group"},
+        )
+    assert response.status_code == (500 if reason == "effect failure" else 400)
+    assert closed == [True]
+    assert route.mcp_auth_context.get() is None
 
 
 def test_card_bundle_schema_exposes_opt_in_sections() -> None:
@@ -50,6 +153,47 @@ def test_card_bundle_schema_exposes_opt_in_sections() -> None:
         "automation",
     ]
     assert schema["properties"]["include"]["default"] is None
+
+
+def test_comment_reaction_schema_exposes_only_native_reactions() -> None:
+    """Agents cannot invent reaction values unsupported by Langboard clients."""
+
+    schema = McpTool.get_tool("toggle_card_comment_reaction")["input_schema"]
+
+    assert schema["properties"]["reaction"]["enum"] == REACTION_TYPES
+
+
+def test_graph_patch_schema_exposes_typed_request_local_references() -> None:
+    """Clients can mix existing UIDs and request-local cards in one explicit patch."""
+
+    schema = McpTool.get_tool("apply_card_graph_patch")["input_schema"]
+
+    assert schema["required"] == [
+        "project_uid",
+        "anchor_card_uid",
+        "new_cards",
+        "add_edges",
+        "remove_relationship_uids",
+    ]
+    assert schema["$defs"]["CardGraphNewCard"]["required"] == ["client_ref", "title"]
+    assert schema["$defs"]["CardGraphEdge"]["required"] == [
+        "parent_ref",
+        "child_ref",
+        "relationship_type_uid",
+    ]
+
+
+def test_cardify_checkitem_schema_requires_explicit_source_and_destination() -> None:
+    """Agents cannot cardify an ambiguous checklist item or choose an implicit column."""
+
+    schema = McpTool.get_tool("cardify_card_checkitem")["input_schema"]
+
+    assert schema["required"] == [
+        "project_uid",
+        "card_uid",
+        "checkitem_uid",
+        "project_column_uid",
+    ]
 
 
 def test_mcp_serializer_omits_unrequested_card_sections() -> None:
@@ -76,7 +220,15 @@ def test_project_member_projection_omits_email_and_is_bounded() -> None:
         project=SimpleNamespace(
             get_by_id_like=lambda _uid: object(),
             get_api_assigned_user_list=lambda _project: [
-                {"uid": str(index), "username": f"member-{index}", "email": "hidden@example.com"} for index in range(51)
+                {
+                    "uid": str(index),
+                    "username": f"member-{index}",
+                    "type": "user",
+                    "firstname": "Given",
+                    "lastname": "Family",
+                    "email": "hidden@example.com",
+                }
+                for index in range(51)
             ],
         )
     )
@@ -86,6 +238,33 @@ def test_project_member_projection_omits_email_and_is_bounded() -> None:
     assert len(result["items"]) == 50
     assert result["truncated"] is True
     assert "email" not in str(result)
+    assert result["items"][0] == {"uid": "0", "username": "member-0", "firstname": "Given", "lastname": "Family"}
+
+
+def test_project_member_projection_does_not_expose_invitation_email_as_name() -> None:
+    """Invitation and unknown identities cannot leak directory fields through names."""
+
+    service = SimpleNamespace(
+        project=SimpleNamespace(
+            get_by_id_like=lambda _uid: object(),
+            get_api_assigned_user_list=lambda _project: [
+                {
+                    "uid": identity_type,
+                    "username": "",
+                    "type": identity_type,
+                    "firstname": "hidden@example.com",
+                    "lastname": "Private",
+                    "email": "hidden@example.com",
+                }
+                for identity_type in ("group_email", "unknown")
+            ],
+        )
+    )
+
+    result = CardWorkspaceMcp.list_project_members("project", service)
+
+    assert result["items"] == [{"uid": "group_email", "username": ""}, {"uid": "unknown", "username": ""}]
+    assert "hidden@example.com" not in str(result)
 
 
 def test_empty_partial_edit_and_invalid_order_stop_before_service() -> None:
