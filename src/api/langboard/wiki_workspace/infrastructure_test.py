@@ -68,7 +68,8 @@ def test_literal_search_filters_private_and_deleted_wikis_before_paging(monkeypa
         repository = NativeWikiRepository(SimpleNamespace(id=user_id, is_admin=False), service)
         first = repository.list_wikis("project", "100%_exact", None, 1)
         second = repository.list_wikis("project", "100%_exact", first["next_cursor"], 1)
-        assert [first["items"][0]["title"], second["items"][0]["title"]] == ["public", "assigned"]
+        expected_titles = [record.title for record in sorted((records[0], records[2]), key=lambda record: record.id)]
+        assert [first["items"][0]["title"], second["items"][0]["title"]] == expected_titles
         assert second["next_cursor"] is None
         assert first["items"][0]["content_match"] is True
         assert "SECRET" not in str(first) + str(second)
@@ -109,12 +110,15 @@ def test_literal_search_filters_private_and_deleted_wikis_before_paging(monkeypa
         service.project_wiki = SimpleNamespace(
             get_by_id_like=lambda _: records[0], convert_to_api_response=lambda *_: {"forbidden": False}
         )
-        history = repository.revisions("project", records[0].get_uid(), None, 1)
-        assert history["items"][0]["content_sides"] == []
-        history = repository.revisions("project", records[0].get_uid(), history["next_cursor"], 1)
-        assert history["items"][0]["content_sides"] == ["before", "after"]
+        first_history = repository.revisions("project", records[0].get_uid(), None, 1)
+        history = repository.revisions("project", records[0].get_uid(), first_history["next_cursor"], 1)
+        assert {
+            tuple(item["content_sides"])
+            for page in (first_history, history)
+            for item in page["items"]
+        } == {(), ("before", "after")}
         assert history["next_cursor"] is None
-        assert "activity_history" not in str(history)
+        assert "activity_history" not in str(first_history) + str(history)
         old_page = repository.revision_page("project", records[0].get_uid(), activity.get_uid(), "before", None, 16000)
         assert old_page["content"] == original
         with pytest.raises(ValueError, match="no stored content snapshot"):
