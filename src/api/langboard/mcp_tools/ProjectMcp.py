@@ -158,8 +158,19 @@ def invite_project_members(
     return result
 
 
-def _compact_member(member: User) -> dict[str, str]:
-    """Return only the display fields needed to choose an existing person."""
+def _compact_member(member: User | dict[str, object]) -> dict[str, str] | None:
+    """Return safe display fields from either a native user or its API projection."""
+
+    if isinstance(member, dict):
+        if member.get("type") != User.USER_TYPE:
+            return None
+        uid = member.get("uid")
+        firstname = member.get("firstname")
+        lastname = member.get("lastname")
+        username = member.get("username")
+        if not all(isinstance(value, str) for value in (uid, firstname, lastname, username)):
+            return None
+        return {"uid": uid, "firstname": firstname, "lastname": lastname, "username": username}
 
     return {
         "uid": member.get_uid(),
@@ -184,7 +195,7 @@ def search_project_people(
     candidates = service.project.search_member_candidates(user_or_bot, project_uid, normalized_query)
     if candidates is None:
         raise ValueError("Project not found")
-    return {"items": [_compact_member(candidate) for candidate in candidates]}
+    return {"items": [compact for candidate in candidates if (compact := _compact_member(candidate)) is not None]}
 
 
 @McpTool.add(description="Add existing people to a project without replacing current members.")

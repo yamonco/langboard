@@ -9,8 +9,9 @@ from ....Env import UI_QUERY_NAMES, Env
 from ....helpers import InfraHelper
 from ....publishers import ProjectInvitationPublisher, ProjectPublisher
 from ....tasks.activities import ProjectActivityTask, UserActivityTask
-from ...models import Project, ProjectAssignedUser, ProjectInvitation, User, UserEmail
+from ...models import IdentityProvider, Project, ProjectAssignedUser, ProjectInvitation, User, UserEmail
 from .EmailService import EmailService
+from .IdentityLinkService import IdentityLinkService
 from .NotificationService import NotificationService
 from .ProjectService import ProjectService
 
@@ -142,7 +143,7 @@ class ProjectInvitationService(BaseDomainService):
         for email in invitation_result.emails_should_invite:
             preferred_lang = user.preferred_lang
             target_user = invitation_result.users_by_email.get(email)
-            if user.is_admin and target_user:
+            if target_user and (user.is_admin or self._is_federated_active_user(target_user)):
                 self.__assign_project_user(project, target_user)
                 continue
 
@@ -167,6 +168,17 @@ class ProjectInvitationService(BaseDomainService):
             )
 
         return True
+
+    def _is_federated_active_user(self, user: User) -> bool:
+        """Return whether an active account is managed by a federated identity provider."""
+
+        if not user.activated_at:
+            return False
+        identity_link = self._get_service(IdentityLinkService)
+        return any(
+            identity_link.get_by_user_provider(user, provider) is not None
+            for provider in (IdentityProvider.Oidc, IdentityProvider.Scim)
+        )
 
     def update_by_signed_up(self, user: User) -> None:
         invitations = self.repo.project_invitation.get_all_with_projects_by_email(user.email)
