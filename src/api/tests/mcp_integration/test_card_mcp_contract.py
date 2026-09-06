@@ -8,10 +8,11 @@ import pytest
 os.environ.setdefault("PROJECT_NAME", "langboard")
 
 from langboard.card_workspace.application.dtos import CardBundleDto, CardBundleResponse  # noqa: E402
-from langboard.mcp_integration import McpTool  # noqa: E402
+from langboard.mcp_integration import McpRoleFilter, McpTool  # noqa: E402
 from langboard.mcp_tools import CardMcp, CardWorkspaceMcp  # noqa: E402, F401
 from langboard.routes.mcp.McpApi import serialize_mcp_result  # noqa: E402
 from langboard_shared.domain.models.bases import REACTION_TYPES  # noqa: E402
+from langboard_shared.domain.models.ProjectRole import ProjectRoleAction  # noqa: E402
 from langboard_shared.domain.services.factory.CardService import CardService  # noqa: E402
 
 
@@ -44,6 +45,14 @@ def test_card_move_schema_makes_column_an_optional_destination() -> None:
 
     assert schema["required"] == ["project_uid", "card_uid", "order"]
     assert schema["properties"]["column_uid"]["default"] is None
+
+
+def test_attachment_upload_requires_project_update_permission() -> None:
+    """Attachment bytes cannot be written by a read-only project member."""
+
+    _, actions, _, _ = McpRoleFilter.get_filtered(CardMcp.upload_card_attachment)
+
+    assert actions == [ProjectRoleAction.Update.value]
 
 
 @pytest.mark.parametrize("reason", ["stale revision", "missing fragment", "ambiguous fragment"])
