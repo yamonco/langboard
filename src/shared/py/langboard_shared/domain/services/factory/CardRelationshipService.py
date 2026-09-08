@@ -219,9 +219,9 @@ class CardRelationshipService(BaseDomainService):
             CardActivityTask.card_created(user_or_bot, project, card)
             CardBotTask.card_created(user_or_bot, project, card)
 
-        affected_ids = {
-            parent_id for _, parent_id, _ in remove_relationships
-        } | {child_id for _, _, child_id in remove_relationships}
+        affected_ids = {parent_id for _, parent_id, _ in remove_relationships} | {
+            child_id for _, _, child_id in remove_relationships
+        }
         affected_ids |= {relationship.card_id_parent for relationship in created_relationships}
         affected_ids |= {relationship.card_id_child for relationship in created_relationships}
         known_card_ids = {card.id for card in existing_cards.values()}

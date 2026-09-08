@@ -1,6 +1,7 @@
 """Safe native MCP tools for room-bound Langboard project workspaces."""
 
 from typing import Annotated, Any, Literal
+from fastmcp.exceptions import ValidationError
 from langboard_shared.domain.models import Bot, ProjectRole, User
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.domain.services import DomainService
@@ -28,6 +29,7 @@ from ..card_workspace.application import get_project_identity as query_project_i
 from ..card_workspace.application import get_public_card_metadata as query_public_metadata
 from ..card_workspace.application import get_public_card_metadata_by_key as query_public_metadata_key
 from ..card_workspace.application import list_project_cards as query_project_cards
+from ..card_workspace.application import patch_card_description as replace_description_text
 from ..card_workspace.application import reconcile_card_checklist_projection as reconcile_checklist
 from ..card_workspace.application import save_public_card_metadata as save_public_metadata
 from ..card_workspace.application import set_card_people_and_labels as replace_people_and_labels
@@ -43,6 +45,8 @@ from ..card_workspace.domain import (
     CardGraphNewCard,
     ChecklistProjectionItem,
     CommentPage,
+    DescriptionPatchConflict,
+    ExactTextReplacement,
     SectionPage,
 )
 from ..card_workspace.infrastructure import NativeCardWorkspaceAdapter
@@ -100,6 +104,20 @@ def _as_card_graph_edge(value: dict[str, Any] | CardGraphEdge) -> CardGraphEdge:
 
 JsonCardGraphNewCard = Annotated[CardGraphNewCard, BeforeValidator(_as_card_graph_new_card)]
 JsonCardGraphEdge = Annotated[CardGraphEdge, BeforeValidator(_as_card_graph_edge)]
+
+
+def _as_exact_text_replacement(
+    value: dict[str, Any] | ExactTextReplacement,
+) -> ExactTextReplacement:
+    """Parse one transport edit into the immutable domain value."""
+
+    return value if isinstance(value, ExactTextReplacement) else ExactTextReplacement(**value)
+
+
+JsonExactTextReplacement = Annotated[
+    ExactTextReplacement,
+    BeforeValidator(_as_exact_text_replacement),
+]
 
 
 def _adapter(actor: User | Bot, service: DomainService) -> NativeCardWorkspaceAdapter:
@@ -239,6 +257,47 @@ def list_project_cards(
     """Read one safe project card page with an opaque keyset cursor."""
 
     return query_project_cards(_adapter(user_or_bot, service), project_uid, limit, cursor)
+
+
+@McpTool.add(
+    description=(
+        "Atomically apply one or more exact edits to Plate-compatible Markdown. Pass edits for a multi-hunk patch, "
+        "or old_text/new_text for backwards compatibility. Fails without writing when the revision or any reviewed "
+        "fragment is stale or ambiguous."
+    )
+)
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+def patch_card_description(
+    project_uid: str,
+    card_uid: str,
+    user_or_bot: User | Bot,
+    service: DomainService,
+    old_text: str | None = None,
+    new_text: str | None = None,
+    edits: list[JsonExactTextReplacement] | None = None,
+    expected_revision: str | None = None,
+) -> dict[str, Any]:
+    """Conditionally apply one approved Markdown patch."""
+
+    if edits is not None:
+        if old_text is not None or new_text is not None:
+            raise ValueError("Pass either edits or old_text/new_text, not both")
+        replacements = edits
+    else:
+        if old_text is None or new_text is None:
+            raise ValueError("old_text and new_text are required when edits is omitted")
+        replacements = [ExactTextReplacement(old_text=old_text, new_text=new_text)]
+
+    try:
+        return replace_description_text(
+            _adapter(user_or_bot, service),
+            project_uid,
+            card_uid,
+            replacements,
+            expected_revision,
+        )
+    except DescriptionPatchConflict as exc:
+        raise ValidationError(f"{exc}. No changes saved; read the description and review a new patch.") from exc
 
 
 @McpTool.add(description="Add a rich-text comment to a card.")

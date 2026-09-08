@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 from typing import Any
 from langboard_shared.core.db import EditorContentModel
+from langboard_shared.core.exceptions.CardDescriptionConflict import CardDescriptionConflict
 from langboard_shared.core.types import SafeDateTime
 from langboard_shared.domain.models import Bot, CardMetadata, User
 from langboard_shared.domain.services import DomainService
@@ -17,9 +18,11 @@ from ..application.ports import (
 )
 from ..domain import (
     MAX_METADATA_VALUE_CHARS,
+    CardDescriptionPatch,
     CardGraphEdge,
     CardGraphNewCard,
     ChecklistProjectionItem,
+    DescriptionPatchConflict,
     projection_revision,
     require_public_metadata_key,
 )
@@ -50,6 +53,11 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
         if column is None or column.project_id != project.id:
             return None
         details = card.api_response()
+        # Native REST wraps Markdown in EditorContentModel; MCP projects the
+        # editable text so read revisions match the patch command's input.
+        description = details.get("description")
+        if isinstance(description, dict) and isinstance(description.get("content"), str):
+            details["description"] = description["content"]
         details["project_column_name"] = column.name
 
         if "people" in requested_sections:
@@ -299,6 +307,31 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
             raise ValueError("Anchor card not found in project")
         return result
 
+    def patch_card_description(
+        self,
+        project_uid: str,
+        card_uid: str,
+        patch: CardDescriptionPatch,
+    ) -> str:
+        if patch.expected_revision is None:
+            raise DescriptionPatchConflict("expected_revision is required; read the card description before editing")
+        project, card = self._ensure_project_card(project_uid, card_uid)
+        current = card.description.content if card.description is not None else ""
+        patched = patch.apply(current)
+        try:
+            result = self._service.card.update(
+                self._actor,
+                project,
+                card,
+                {"description": EditorContentModel(content=patched)},
+                expected_description=current,
+            )
+        except CardDescriptionConflict as exc:
+            raise DescriptionPatchConflict(str(exc)) from exc
+        if not result:
+            raise RuntimeError("Validated card description patch failed")
+        return patched
+
     def add_card_comment(self, project_uid: str, card_uid: str, content: str) -> dict[str, Any]:
         comment = self._service.card_comment.create(
             self._actor, project_uid, card_uid, EditorContentModel(content=content)
@@ -378,6 +411,9 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
             project_column_uid,
         ):
             raise ValueError("Checkitem could not be cardified in the requested column")
+        # The native service resolves its own model instance before persisting.
+        # Re-read the source instead of relying on mutation of our stale object.
+        item = self._ensure_checkitem(project_uid, card_uid, checkitem_uid)
         card = self._service.card.get_by_id_like(item.cardified_id)
         if card is None:
             raise RuntimeError("Cardified card could not be read back")

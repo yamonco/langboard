@@ -3,6 +3,7 @@
 from __future__ import annotations
 from json import dumps
 from typing import Any, Iterable, Sequence
+from langboard_shared.domain.models.bases import REACTION_TYPES
 from ..domain import (
     MAX_CHECKITEMS_PER_CHECKLIST,
     MAX_METADATA_VALUE_CHARS,
@@ -91,6 +92,18 @@ def public_comment(comment: dict[str, Any]) -> dict[str, Any]:
     for actor_type in ("user", "bot"):
         if isinstance(comment.get(actor_type), dict):
             result[actor_type] = public_actor(comment[actor_type])
+    reactions = comment.get("reactions")
+    if isinstance(reactions, dict):
+        result["reactions"] = {
+            reaction_type: [str(actor_uid) for actor_uid in actor_uids[:100]]
+            for reaction_type in REACTION_TYPES
+            if isinstance((actor_uids := reactions.get(reaction_type)), list) and actor_uids
+        }
+        result["reaction_counts"] = {
+            reaction_type: len(actor_uids)
+            for reaction_type in REACTION_TYPES
+            if isinstance((actor_uids := reactions.get(reaction_type)), list) and actor_uids
+        }
     return result
 
 
@@ -118,7 +131,10 @@ def public_relationship(relationship: dict[str, Any]) -> dict[str, Any]:
 def public_checkitem(checkitem: dict[str, Any]) -> dict[str, Any]:
     """Project one bounded checklist item."""
 
-    return pick(checkitem, _CHECKITEM_KEYS)
+    result = pick(checkitem, _CHECKITEM_KEYS)
+    if isinstance(checkitem.get("cardified_card"), dict):
+        result["cardified_card"] = pick(checkitem["cardified_card"], _CARD_KEYS)
+    return result
 
 
 def public_checklist(checklist: dict[str, Any]) -> dict[str, Any]:
@@ -235,6 +251,7 @@ def bounded_text(
         content=fragment,
         format=content_format,
         total_chars=len(content),
+        revision=revision,
         next_cursor=next_cursor,
     )
 

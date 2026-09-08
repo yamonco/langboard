@@ -1,4 +1,4 @@
-from sqlalchemy import func, literal, or_
+from sqlalchemy import func, literal, or_, update
 from ....core.db import DbSession, SqlBuilder
 from ....core.domain import BaseOrderRepository
 from ....core.schema import TimeBasedPagination
@@ -23,6 +23,32 @@ class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
 
     def get_by_id_like(self, card: TCardParam | None) -> Card | None:
         return InfraHelper.get_by_id_like(Card, card)
+
+    def update_description_if_current(self, card: Card, expected_content: str) -> bool:
+        """Lock and compare the primary row before updating only its description."""
+
+        with DbSession.use(readonly=False) as db:
+            current = db.exec(
+                SqlBuilder.select.table(Card)
+                .where((Card.column("id") == card.id) & (Card.column("project_id") == card.project_id))
+                .with_for_update()
+            ).first()
+            if current is None:
+                return False
+            content = current.description.content if current.description is not None else ""
+            if content != expected_content:
+                return False
+            updated_at = SafeDateTime.now()
+            changed = db.exec(
+                update(Card.__table__)
+                .where(Card.column("id") == card.id)
+                .values(description=card.description, updated_at=updated_at)
+            )
+            if changed != 1:
+                return False
+        card.updated_at = updated_at
+        card.clear_changes()
+        return True
 
     def get_board_list(self, project: TProjectParam) -> list[tuple[Card, int]]:
         project_id = InfraHelper.convert_id(project)
