@@ -6,9 +6,12 @@ from ...domain import (
     MAX_GRAPH_EDGE_CHANGES,
     MAX_GRAPH_NEW_CARDS,
     CardBundleSection,
+    CardDescriptionPatch,
     CardGraphEdge,
     CardGraphNewCard,
     ChecklistProjectionItem,
+    ExactTextReplacement,
+    projection_revision,
     require_projection_key,
     require_public_metadata_key,
 )
@@ -95,6 +98,28 @@ def apply_card_graph_patch(
         add_edges,
         removals,
     )
+
+
+def patch_card_description(
+    port: CardWorkspaceCommandPort,
+    project_uid: str,
+    card_uid: str,
+    edits: list[ExactTextReplacement],
+    expected_revision: str | None = None,
+) -> dict[str, Any]:
+    """Apply one atomic, conflict-detecting Markdown patch."""
+
+    content = port.patch_card_description(
+        project_uid,
+        card_uid,
+        CardDescriptionPatch(tuple(edits), expected_revision),
+    )
+    return {
+        "changed": True,
+        "description_revision": projection_revision(content),
+        "description_chars": len(content),
+        "applied_edits": len(edits),
+    }
 
 
 def add_card_comment(port: CardWorkspaceCommandPort, project_uid: str, card_uid: str, content: str) -> dict[str, Any]:

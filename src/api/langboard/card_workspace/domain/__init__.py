@@ -2,6 +2,7 @@
 
 from .value_objects import (
     MAX_CHECKITEMS_PER_CHECKLIST,
+    MAX_DESCRIPTION_PATCH_EDITS,
     MAX_GRAPH_EDGE_CHANGES,
     MAX_GRAPH_NEW_CARDS,
     MAX_METADATA_VALUE_CHARS,
@@ -9,11 +10,14 @@ from .value_objects import (
     MAX_TEXT_CHARS,
     CardBundleInclude,
     CardBundleSection,
+    CardDescriptionPatch,
     CardGraphEdge,
     CardGraphNewCard,
     ChecklistProjectionItem,
     CommentCursor,
     CommentPage,
+    DescriptionPatchConflict,
+    ExactTextReplacement,
     ProjectCardCursor,
     SectionCursor,
     SectionPage,
@@ -26,6 +30,7 @@ from .value_objects import (
 
 __all__ = [
     "MAX_CHECKITEMS_PER_CHECKLIST",
+    "MAX_DESCRIPTION_PATCH_EDITS",
     "MAX_GRAPH_EDGE_CHANGES",
     "MAX_GRAPH_NEW_CARDS",
     "MAX_METADATA_VALUE_CHARS",
@@ -33,9 +38,12 @@ __all__ = [
     "MAX_TEXT_CHARS",
     "CardBundleInclude",
     "CardBundleSection",
+    "CardDescriptionPatch",
     "CardGraphEdge",
     "CardGraphNewCard",
     "ChecklistProjectionItem",
+    "ExactTextReplacement",
+    "DescriptionPatchConflict",
     "CommentCursor",
     "CommentPage",
     "ProjectCardCursor",
