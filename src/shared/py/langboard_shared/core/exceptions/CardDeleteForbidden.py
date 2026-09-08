@@ -1,4 +1,4 @@
 class CardDeleteForbidden(PermissionError):
-    """The authenticated actor is not the card's immutable original author."""
+    """The authenticated actor is neither an administrator nor the original author."""
 
-    code = "CARD_DELETE_ORIGINAL_AUTHOR_REQUIRED"
+    code = "CARD_DELETE_AUTHOR_OR_ADMIN_REQUIRED"
