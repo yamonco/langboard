@@ -158,6 +158,69 @@ def invite_project_members(
     return result
 
 
+def _compact_member(member: User | dict[str, object]) -> dict[str, str] | None:
+    """Return safe display fields from either a native user or its API projection."""
+
+    if isinstance(member, dict):
+        if member.get("type") != User.USER_TYPE:
+            return None
+        uid = member.get("uid")
+        firstname = member.get("firstname")
+        lastname = member.get("lastname")
+        username = member.get("username")
+        if not all(isinstance(value, str) for value in (uid, firstname, lastname, username)):
+            return None
+        return {"uid": uid, "firstname": firstname, "lastname": lastname, "username": username}
+
+    return {
+        "uid": member.get_uid(),
+        "firstname": member.firstname,
+        "lastname": member.lastname,
+        "username": member.username,
+    }
+
+
+@McpTool.add(description="Search existing people who can be added to a project without exposing email addresses.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Update], RoleFinder.project)
+def search_project_people(
+    project_uid: str, query: str, user_or_bot: User | Bot, service: DomainService
+) -> dict[str, list[dict[str, str]]]:
+    """Find bounded, permission-scoped people for one project updater."""
+
+    if not isinstance(user_or_bot, User):
+        raise ValueError("Only users can search project people")
+    normalized_query = query.strip()
+    if len(normalized_query) < 2:
+        raise ValueError("Use at least two characters to search people")
+    candidates = service.project.search_member_candidates(user_or_bot, project_uid, normalized_query)
+    if candidates is None:
+        raise ValueError("Project not found")
+    return {"items": [compact for candidate in candidates if (compact := _compact_member(candidate)) is not None]}
+
+
+@McpTool.add(description="Add existing people to a project without replacing current members.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Update], RoleFinder.project)
+def add_project_people(
+    project_uid: str, member_uids: list[str], user_or_bot: User | Bot, service: DomainService
+) -> dict[str, int | str]:
+    """Immediately add up to ten known people without invitations or member replacement."""
+
+    if not isinstance(user_or_bot, User):
+        raise ValueError("Only users can add project people")
+    if not 1 <= len(member_uids) <= 10:
+        raise ValueError("Provide between 1 and 10 people")
+    selected_uids = list(dict.fromkeys(member_uids))
+    selected_people = [service.user.get_by_id_like(member_uid) for member_uid in selected_uids]
+    if any(person is None or person.deleted_at is not None for person in selected_people):
+        raise ValueError("One or more selected people no longer exist")
+    result = service.project.add_existing_assigned_users(
+        user_or_bot, project_uid, [person for person in selected_people if person is not None]
+    )
+    if result is None:
+        raise ValueError("Project not found")
+    return result
+
+
 @McpTool.add(description="Unassign a member from a project.")
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Update], RoleFinder.project)
 def unassign_project_member(
