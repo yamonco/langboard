@@ -17,7 +17,7 @@ from .dtos import BoundedItemsDto, BoundedTextDto
 
 
 _ACTOR_KEYS = ("uid", "type", "firstname", "lastname", "username", "name", "bot_uname", "avatar")
-_CARD_KEYS = ("uid", "title", "created_at", "updated_at")
+_CARD_KEYS = ("uid", "title", "created_at", "updated_at", "can_delete")
 _WORKFLOW_KEYS = ("project_column_uid", "project_column_name", "order", "deadline_at", "archived_at")
 _LABEL_KEYS = ("uid", "name", "color", "description", "order")
 _RELATIONSHIP_KEYS = (

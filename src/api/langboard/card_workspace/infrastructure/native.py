@@ -79,6 +79,7 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
             )
 
         details = card.api_response()
+        details["can_delete"] = self._service.card.can_delete(self._actor, card)
         # Native REST wraps Markdown in EditorContentModel; MCP projects the
         # editable text so read revisions match the patch command's input.
         description = details.get("description")

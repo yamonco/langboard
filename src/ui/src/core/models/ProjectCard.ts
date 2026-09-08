@@ -42,6 +42,7 @@ export interface Interface extends IBaseModel {
         preview?: string;
         content?: IEditorContent;
     };
+    can_delete?: bool;
 }
 
 export interface IStore extends Interface {
@@ -173,6 +174,10 @@ class ProjectCard extends BaseModel<IStore> {
 
     public get archived_at(): Date | undefined {
         return this.getValue("archived_at");
+    }
+
+    public get can_delete() {
+        return this.getValue("can_delete") ?? false;
     }
     public set archived_at(value: string | Date | undefined) {
         this.update({ archived_at: value as unknown as Date });

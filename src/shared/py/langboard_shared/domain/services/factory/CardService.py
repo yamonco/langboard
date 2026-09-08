@@ -5,6 +5,7 @@ from ....ai import BotScheduleHelper, BotScopeHelper
 from ....core.db import EditorContentModel
 from ....core.domain import BaseDomainService
 from ....core.domain.BaseDomainService import TMutableValidatorMap
+from ....core.exceptions.CardDeleteForbidden import CardDeleteForbidden
 from ....core.exceptions.CardDescriptionConflict import CardDescriptionConflict
 from ....core.schema import TimeBasedPagination
 from ....core.types import SafeDateTime, SnowflakeID
@@ -563,6 +564,8 @@ class CardService(BaseDomainService):
             return None
 
         card = Card(
+            created_by_user_id=user_or_bot.id if isinstance(user_or_bot, User) else None,
+            created_by_bot_id=user_or_bot.id if isinstance(user_or_bot, Bot) else None,
             project_id=project.id,
             project_column_id=column.id,
             title=title,
@@ -841,6 +844,8 @@ class CardService(BaseDomainService):
 
     def _delete_card(self, user_or_bot: TUserOrBot, project: Project, card: Card) -> bool:
         """Delete only the board-side card and its dependent work records."""
+        if not self.can_delete(user_or_bot, card):
+            raise CardDeleteForbidden("Only the original card author can delete this card")
 
         started_checkitems = self.repo.checkitem.get_all_started_checkitem_by_card(card)
 
@@ -881,3 +886,11 @@ class CardService(BaseDomainService):
             CardBotTask.card_deleted(user_or_bot, project, card)
 
         return True
+
+    @staticmethod
+    def can_delete(user_or_bot: TUserOrBot, card: Card) -> bool:
+        """Match the immutable creator identity; unknown legacy authors fail closed."""
+
+        if isinstance(user_or_bot, User):
+            return card.created_by_user_id is not None and card.created_by_user_id == user_or_bot.id
+        return card.created_by_bot_id is not None and card.created_by_bot_id == user_or_bot.id
