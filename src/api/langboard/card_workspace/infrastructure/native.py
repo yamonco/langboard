@@ -354,6 +354,35 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
             raise ValueError("Checklist not found in card")
         return item.api_response()
 
+    def cardify_card_checkitem(
+        self,
+        project_uid: str,
+        card_uid: str,
+        checkitem_uid: str,
+        project_column_uid: str,
+    ) -> dict[str, Any]:
+        """Cardify an existing item and return the created native card."""
+
+        project, _ = self._ensure_project_card(project_uid, card_uid)
+        item = self._ensure_checkitem(project_uid, card_uid, checkitem_uid)
+        if item.cardified_id:
+            raise ValueError("Checkitem is already cardified")
+        column = self._service.project_column.get_by_id_like(project_column_uid)
+        if column is None or column.project_id != project.id or column.is_archive:
+            raise ValueError("Destination column is not active in the source project")
+        if not self._service.checkitem.cardify(
+            self._actor,
+            project_uid,
+            card_uid,
+            item,
+            project_column_uid,
+        ):
+            raise ValueError("Checkitem could not be cardified in the requested column")
+        card = self._service.card.get_by_id_like(item.cardified_id)
+        if card is None:
+            raise RuntimeError("Cardified card could not be read back")
+        return card.board_api_response(0, [], [], [])
+
     def update_card_checkitem(
         self,
         project_uid: str,
