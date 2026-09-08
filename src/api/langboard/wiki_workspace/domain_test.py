@@ -2,8 +2,8 @@
 
 from dataclasses import replace
 import pytest
-from .application import WikiRepository, append_wiki, read_wiki
-from .domain import WikiSnapshot, WikiValidationError, append_content, content_page
+from .application import WikiRepository, append_wiki, delete_wiki, patch_wiki, read_wiki
+from .domain import WikiSnapshot, WikiValidationError, append_content, content_page, replace_content
 
 
 def test_pages_reassemble_unicode_markdown_exactly() -> None:
@@ -43,6 +43,7 @@ class MemoryWiki(WikiRepository):
         self.value = WikiSnapshot("w", "rules", "KEEP\n![image](a.png)")
         self.allowed = True
         self.saves = 0
+        self.deletes = 0
 
     def snapshot(self, project_uid: str, wiki_uid: str) -> WikiSnapshot:
         """Simulate permission revocation between pages."""
@@ -55,6 +56,13 @@ class MemoryWiki(WikiRepository):
         assert self.value.content == before
         self.value = replace(self.value, content=after)
         self.saves += 1
+
+    def replace(self, project_uid: str, wiki_uid: str, before: str, after: str) -> None:
+        self.append(project_uid, wiki_uid, before, after)
+
+    def delete(self, project_uid: str, wiki_uid: str, before: str) -> None:
+        assert self.value.content == before
+        self.deletes += 1
 
 
 def test_append_preserves_document_and_stale_retry_is_not_duplicate() -> None:
@@ -78,3 +86,23 @@ def test_permission_is_rechecked_on_every_page() -> None:
     repository.allowed = False
     with pytest.raises(PermissionError):
         read_wiki(repository, "p", "w", first["next_cursor"], 2)
+
+
+def test_exact_patch_and_delete_each_use_one_reviewed_wiki_uow() -> None:
+    repository = MemoryWiki()
+    before = repository.value
+    result = patch_wiki(repository, "p", "w", before.revision, [("KEEP", "KEEP EXACT"), ("a.png", "b.png")])
+    assert repository.value.content == "KEEP EXACT\n![image](b.png)"
+    assert result["revision"] == repository.value.revision
+    assert repository.saves == 1
+
+    with pytest.raises(WikiValidationError, match="exactly once"):
+        replace_content(repository.value, repository.value.revision, [("missing", "value")])
+    with pytest.raises(WikiValidationError, match="must change"):
+        replace_content(repository.value, repository.value.revision, [("KEEP", "KEEP")])
+
+    delete_wiki(repository, "p", "w", repository.value.revision)
+    assert repository.deletes == 1
+    with pytest.raises(ValueError, match="changed after review"):
+        delete_wiki(repository, "p", "w", before.revision)
+    assert repository.deletes == 1

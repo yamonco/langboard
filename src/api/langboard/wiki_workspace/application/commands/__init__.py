@@ -1,6 +1,6 @@
 """Revision-guarded wiki append commands."""
 
-from ...domain import WikiRepository, WikiSnapshot, append_content
+from ...domain import WikiRepository, WikiSnapshot, append_content, replace_content
 
 
 def append_wiki(
@@ -11,3 +11,30 @@ def append_wiki(
     after = append_content(before, expected_revision, text)
     repository.append(project_uid, wiki_uid, before.content, after)
     return {"wiki_uid": wiki_uid, "revision": WikiSnapshot(wiki_uid, before.title, after).revision}
+
+
+def patch_wiki(
+    repository: WikiRepository,
+    project_uid: str,
+    wiki_uid: str,
+    expected_revision: str,
+    edits: list[tuple[str, str]],
+) -> dict[str, str]:
+    """Persist one reviewed multi-hunk edit as a single application command."""
+
+    before = repository.snapshot(project_uid, wiki_uid)
+    after = replace_content(before, expected_revision, edits)
+    repository.replace(project_uid, wiki_uid, before.content, after)
+    return {"wiki_uid": wiki_uid, "revision": WikiSnapshot(wiki_uid, before.title, after).revision}
+
+
+def delete_wiki(
+    repository: WikiRepository, project_uid: str, wiki_uid: str, expected_revision: str
+) -> dict[str, bool]:
+    """Delete one exact reviewed wiki without title-based guessing."""
+
+    before = repository.snapshot(project_uid, wiki_uid)
+    if before.revision != expected_revision:
+        raise ValueError("Wiki changed after review; read it again before deleting")
+    repository.delete(project_uid, wiki_uid, before.content)
+    return {"deleted": True}

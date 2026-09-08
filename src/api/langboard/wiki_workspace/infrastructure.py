@@ -43,6 +43,20 @@ class NativeWikiRepository(WikiRepository):
         if result is None:
             raise ValueError("Wiki not found")
 
+    def replace(self, project_uid: str, wiki_uid: str, before: str, after: str) -> None:
+        """Use the same native optimistic save for exact multi-hunk edits."""
+
+        self.append(project_uid, wiki_uid, before, after)
+
+    def delete(self, project_uid: str, wiki_uid: str, before: str) -> None:
+        """Reauthorize and reject stale reviewed content before native soft deletion."""
+
+        wiki = self._wiki(project_uid, wiki_uid)
+        if wiki.content.content != before:
+            raise ValueError("Wiki changed after review; read it again before deleting")
+        if not self.service.project_wiki.delete(self.user, project_uid, wiki):
+            raise ValueError("Wiki not found")
+
     def list_wikis(self, project_uid: str, query: str, after_uid: str | None, limit: int) -> dict[str, Any]:
         """Filter permissions in SQL before literal search, paging or snippets."""
         if not 1 <= limit <= 50 or len(query) > 1000:

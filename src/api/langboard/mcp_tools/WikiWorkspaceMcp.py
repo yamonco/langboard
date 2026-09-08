@@ -1,6 +1,6 @@
 """Bounded, user-authorized wiki MCP queries and append commands."""
 
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 from fastmcp.exceptions import ValidationError
 from langboard_shared.core.db import EditorContentModel
 from langboard_shared.core.exceptions.WikiContentConflict import WikiContentConflict
@@ -8,10 +8,19 @@ from langboard_shared.domain.models import ProjectRole, User
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.domain.services import DomainService
 from langboard_shared.security import RoleFinder
+from pydantic import BaseModel, ConfigDict, Field
 from ..mcp_integration import McpRoleFilter, McpTool
-from ..wiki_workspace.application import append_wiki, read_wiki
+from ..wiki_workspace.application import append_wiki, delete_wiki, patch_wiki, read_wiki
 from ..wiki_workspace.domain import WikiValidationError
 from ..wiki_workspace.infrastructure import NativeWikiRepository
+
+
+class WikiTextEdit(BaseModel):
+    """One exact fragment replacement in a reviewed wiki patch."""
+
+    model_config = ConfigDict(extra="forbid")
+    old_text: Annotated[str, Field(min_length=1)]
+    new_text: str
 
 
 @McpTool.add(
@@ -73,6 +82,47 @@ def append_wiki_content(
     try:
         return append_wiki(NativeWikiRepository(user, service), project_uid, wiki_uid, expected_revision, text)
     except (WikiContentConflict, WikiValidationError) as exc:
+        raise ValidationError(str(exc)) from exc
+
+
+@McpTool.add("user", description="Atomically patch exact wiki fragments with a reviewed content revision.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+def patch_wiki_content(
+    project_uid: str,
+    wiki_uid: str,
+    expected_revision: str,
+    edits: Annotated[list[WikiTextEdit], Field(min_length=1, max_length=20)],
+    user: User,
+    service: DomainService,
+) -> dict[str, str]:
+    """Reject stale, missing, ambiguous or no-op replacements before persistence."""
+
+    try:
+        return patch_wiki(
+            NativeWikiRepository(user, service),
+            project_uid,
+            wiki_uid,
+            expected_revision,
+            [(edit.old_text, edit.new_text) for edit in edits],
+        )
+    except (WikiContentConflict, WikiValidationError, ValueError) as exc:
+        raise ValidationError(str(exc)) from exc
+
+
+@McpTool.add("user", description="Delete one exact project wiki after revision review; never infer by title.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+def delete_project_wiki(
+    project_uid: str,
+    wiki_uid: str,
+    expected_revision: str,
+    user: User,
+    service: DomainService,
+) -> dict[str, bool]:
+    """Use native wiki deletion and its activity/event cleanup path."""
+
+    try:
+        return delete_wiki(NativeWikiRepository(user, service), project_uid, wiki_uid, expected_revision)
+    except (WikiValidationError, ValueError) as exc:
         raise ValidationError(str(exc)) from exc
 
 

@@ -86,3 +86,34 @@ def test_stale_append_is_rejected_before_storage() -> None:
         repository.append.side_effect = RuntimeError("post-save publisher failure")
         with pytest.raises(RuntimeError):
             WikiWorkspaceMcp.append_wiki_content("p", "w", repository.snapshot.return_value.revision, "add", None, None)
+
+
+def test_wiki_patch_and_delete_require_exact_identity_and_revision() -> None:
+    repository = Mock()
+    repository.snapshot.return_value = WikiSnapshot("w", "title", "one two")
+    with patch.object(WikiWorkspaceMcp, "NativeWikiRepository", return_value=repository):
+        patched = WikiWorkspaceMcp.patch_wiki_content(
+            "p",
+            "w",
+            repository.snapshot.return_value.revision,
+            [WikiWorkspaceMcp.WikiTextEdit(old_text="two", new_text="three")],
+            None,
+            None,
+        )
+        assert patched["revision"] == WikiSnapshot("w", "title", "one three").revision
+        repository.replace.assert_called_once_with("p", "w", "one two", "one three")
+
+        with pytest.raises(ValidationError, match="changed after review"):
+            WikiWorkspaceMcp.delete_project_wiki("p", "w", "stale", None, None)
+        repository.delete.assert_not_called()
+
+        deleted = WikiWorkspaceMcp.delete_project_wiki(
+            "p", "w", repository.snapshot.return_value.revision, None, None
+        )
+        assert deleted == {"deleted": True}
+        repository.delete.assert_called_once_with("p", "w", "one two")
+
+    patch_schema = McpTool.get_tool("patch_wiki_content")["input_schema"]
+    delete_schema = McpTool.get_tool("delete_project_wiki")["input_schema"]
+    assert set(patch_schema["properties"]) == {"project_uid", "wiki_uid", "expected_revision", "edits"}
+    assert set(delete_schema["properties"]) == {"project_uid", "wiki_uid", "expected_revision"}
