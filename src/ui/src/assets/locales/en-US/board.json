@@ -1,6 +1,6 @@
 {
   "Board": "Board",
-  "Relationship graph": "Relationship graph",
+  "Relationship graph": "Graph",
   "{cards} cards, {relationships} relationships": "{{cards}} cards, {{relationships}} relationships",
   "Wiki": "Wiki",
   "Activity": "Activity",
