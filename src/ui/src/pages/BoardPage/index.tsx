@@ -1,4 +1,4 @@
-import { memo, Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Navigate, useLocation } from "react-router";
 import { DashboardStyledLayout } from "@/components/Layout";
@@ -56,12 +56,16 @@ import useBoardGraphApprovalRequestedHandlers from "@/controllers/socket/board/g
 import useBoardGraphApprovalUpdatedHandlers from "@/controllers/socket/board/graphApprovals/useBoardGraphApprovalUpdatedHandlers";
 import { getBoardChatStore } from "@/core/stores/BoardChatStore";
 
+const BoardGraphPage = lazy(() => import("@/pages/BoardPage/BoardGraphPage"));
+
 const getCurrentPage = (pageRoute?: string): TBoardViewType => {
     switch (pageRoute) {
         case "card":
             return "card";
         case "wiki":
             return "wiki";
+        case "graph":
+            return "graph";
         case "settings":
             return "settings";
         default:
@@ -173,7 +177,7 @@ function BoardProxyDisplay({ pageRoute, isFetching, project }: IBoardProxyDispla
         setChatResizableSidebar,
         setBoardChat,
     } = useBoardController();
-    const isCardPage = !!pageRoute && !["wiki", "settings"].includes(pageRoute);
+    const isCardPage = !!pageRoute && !["graph", "wiki", "settings"].includes(pageRoute);
     const projectTitle = project.useField("title");
     useGetGraphApprovals(
         {
@@ -458,6 +462,15 @@ function BoardProxyDisplay({ pageRoute, isFetching, project }: IBoardProxyDispla
             hidden: !!selectCardViewType,
         },
         {
+            name: t("board.Relationship graph"),
+            onClick: () => {
+                setBoardViewType("graph");
+                navigate(ROUTES.BOARD.GRAPH(project.uid), { smooth: true });
+            },
+            active: boardViewType === "graph",
+            hidden: !!selectCardViewType,
+        },
+        {
             name: t("board.Activity"),
             onClick: openActivityDialog,
             active: isActivityDialogOpened,
@@ -516,6 +529,17 @@ function BoardProxyDisplay({ pageRoute, isFetching, project }: IBoardProxyDispla
             },
         },
         {
+            name: t("board.Relationship graph"),
+            icon: "git-fork",
+            active: boardViewType === "graph",
+            hidden: !!selectCardViewType,
+            onClick: () => {
+                setActiveSidePanel(undefined);
+                setBoardViewType("graph");
+                navigate(ROUTES.BOARD.GRAPH(project.uid), { smooth: true });
+            },
+        },
+        {
             name: t("settings.Bots"),
             icon: "bot",
             badge: pendingGraphApprovalBadge,
@@ -535,6 +559,10 @@ function BoardProxyDisplay({ pageRoute, isFetching, project }: IBoardProxyDispla
     let PageComponent;
     let SkeletonComponent;
     switch (boardViewType) {
+        case "graph":
+            PageComponent = BoardGraphPage;
+            SkeletonComponent = SkeletonBoard;
+            break;
         case "wiki":
             PageComponent = BoardWikiPage;
             SkeletonComponent = SkeletonBoardWikiPage;
