@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildBoardColumnCardHierarchy } from "./BoardColumnCardHierarchy.ts";
+import { buildBoardColumnCardHierarchy, canCreateCardRelationship } from "./BoardColumnCardHierarchy.ts";
 
 interface IRelationship {
     parent_card_uid: string;
@@ -69,4 +69,18 @@ test("places grandchildren inside the top-level parent group", () => {
             ],
         ]
     );
+});
+
+test("rejects duplicate, self, and cyclic relationship candidates", () => {
+    const relationships = [
+        { parent_card_uid: "a", child_card_uid: "b" },
+        { parent_card_uid: "b", child_card_uid: "c" },
+    ];
+    const cards = [card("a", 0, relationships), card("b", 1, relationships), card("c", 2, relationships), card("d", 3)];
+
+    assert.equal(canCreateCardRelationship(cards, "a", "a", "children"), false);
+    assert.equal(canCreateCardRelationship(cards, "a", "b", "children"), false);
+    assert.equal(canCreateCardRelationship(cards, "c", "a", "children"), false);
+    assert.equal(canCreateCardRelationship(cards, "a", "d", "children"), true);
+    assert.equal(canCreateCardRelationship(cards, "d", "c", "parents"), true);
 });
