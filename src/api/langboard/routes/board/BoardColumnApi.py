@@ -18,10 +18,10 @@ from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.domain.services import DomainService
 from langboard_shared.filter import RoleFilter
 from langboard_shared.security import Auth, RoleFinder
-from .forms import ChangeRootOrderForm, ColumnForm
+from .forms import ChangeRootOrderForm, ColumnDescriptionForm, ColumnForm, CreateColumnForm
 
 
-@AppRouter.schema(form=ColumnForm, permission=ApiPermission.Create)
+@AppRouter.schema(form=CreateColumnForm, permission=ApiPermission.Create)
 @AppRouter.api.post(
     "/board/{project_uid}/column",
     tags=["Board.Column"],
@@ -39,11 +39,11 @@ from .forms import ChangeRootOrderForm, ColumnForm
 @AuthFilter.add()
 def create_project_column(
     project_uid: str,
-    form: ColumnForm,
+    form: CreateColumnForm,
     user_or_bot: User | Bot = Auth.scope("all"),
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
-    column = service.project_column.create(user_or_bot, project_uid, form.name)
+    column = service.project_column.create(user_or_bot, project_uid, form.name, description=form.description)
     if not column:
         raise ApiException.NotFound_404(ApiErrorCode.NF2001)
 
@@ -88,6 +88,27 @@ def update_project_column_name(
         raise ApiException.NotFound_404(ApiErrorCode.NF2004)
 
     return JsonResponse(content={"name": form.name})
+
+
+@AppRouter.schema(form=ColumnDescriptionForm, permission=ApiPermission.Edit)
+@AppRouter.api.put(
+    "/board/{project_uid}/column/{column_uid}/description",
+    tags=["Board.Column"],
+    description="Change workflow guidance without renaming a column or moving cards.",
+    responses=OpenApiSchema().suc({"description": "string"}).auth().forbidden().err(404, ApiErrorCode.NF2004).get(),
+)
+@RoleFilter.add(ProjectRole, [ProjectRoleAction.Update], RoleFinder.project)
+@AuthFilter.add()
+def update_project_column_description(
+    project_uid: str,
+    column_uid: str,
+    form: ColumnDescriptionForm,
+    service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    """Require existing board update authorization for workflow guidance edits."""
+    if not service.project_column.change_description(project_uid, column_uid, form.description):
+        raise ApiException.NotFound_404(ApiErrorCode.NF2004)
+    return JsonResponse(content={"description": form.description})
 
 
 @AppRouter.api.put(

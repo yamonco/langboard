@@ -19,6 +19,7 @@ function ProjectTemplatesPage() {
     const [selected, setSelected] = useState<string>();
     const { mutateAsync: getTemplates } = useGetProjectTemplates({ interceptToast: true });
     const { mutateAsync: setDefault, isPending } = useSetDefaultProjectTemplate({ interceptToast: true });
+    const selectedTemplate = templates.find((template) => template.name === selected);
 
     useEffect(() => {
         setPageAliasRef.current(t("settings.Project templates"));
@@ -68,6 +69,18 @@ function ProjectTemplatesPage() {
                     {t("settings.Save default")}
                 </Button>
             </Flex>
+            <ol className="max-w-xl space-y-3">
+                {selectedTemplate?.columns.map((name, index) => (
+                    <li key={`${index}-${name}`}>
+                        <p className="font-medium">
+                            {index + 1}. {name}
+                        </p>
+                        <p className="whitespace-pre-wrap text-sm text-muted-foreground">
+                            {selectedTemplate.column_descriptions?.[index] || t("project.No column description")}
+                        </p>
+                    </li>
+                ))}
+            </ol>
         </Flex>
     );
 }
