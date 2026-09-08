@@ -11,6 +11,8 @@
   "Tap to move, hold to drag": "Tap to move, hold to drag",
   "Drop to archive": "Drop to archive",
   "Release to archive": "Release to archive",
+  "Relationship graph": "Graph",
+  "{cards} cards, {relationships} relationships": "{{cards}} cards, {{relationships}} relationships",
   "Wiki": "Wiki",
   "Activity": "Activity",
   "Settings": "Settings",
