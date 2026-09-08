@@ -14,7 +14,24 @@ x-kafka-env: &kafka-env
   KAFKA_HEAP_OPTS: ${KAFKA_HEAP_OPTS:--Xms256m -Xmx512m}
   MALLOC_ARENA_MAX: 2
 
+x-kafka-depends-on: &kafka-depends-on
+  kafka-volume-permissions:
+    condition: service_completed_successfully
+
 services:
+  kafka-volume-permissions:
+    image: apache/kafka:4.0.2
+    container_name: ${PROJECT_NAME}_kafka_volume_permissions
+    user: "0:0"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - chown -R 1000:1000 /var/lib/kafka/data0 /var/lib/kafka/data1 /var/lib/kafka/data2
+    volumes:
+      - kfdata0:/var/lib/kafka/data0
+      - kfdata1:/var/lib/kafka/data1
+      - kfdata2:/var/lib/kafka/data2
+    restart: "no"
+
   kafka0:
     image: apache/kafka:4.0.2
     container_name: ${PROJECT_NAME}_kafka0
@@ -24,6 +41,7 @@ services:
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://${PROJECT_NAME}_kafka0:9092
     volumes:
       - kfdata0:/var/lib/kafka/data
+    depends_on: *kafka-depends-on
     healthcheck: &kafka-healthcheck
       test:
         - CMD-SHELL
@@ -45,6 +63,7 @@ services:
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://${PROJECT_NAME}_kafka1:9092
     volumes:
       - kfdata1:/var/lib/kafka/data
+    depends_on: *kafka-depends-on
     healthcheck: *kafka-healthcheck
     networks:
       - net
@@ -59,6 +78,7 @@ services:
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://${PROJECT_NAME}_kafka2:9092
     volumes:
       - kfdata2:/var/lib/kafka/data
+    depends_on: *kafka-depends-on
     healthcheck: *kafka-healthcheck
     networks:
       - net
