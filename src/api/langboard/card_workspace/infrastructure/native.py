@@ -173,6 +173,7 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
                 {
                     "uid": str(column["uid"]),
                     "name": str(column["name"]),
+                    "description": str(column.get("description") or ""),
                     "order": int(column["order"]),
                 }
                 for column in self._bounded_source(

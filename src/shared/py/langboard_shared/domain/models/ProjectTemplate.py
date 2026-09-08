@@ -8,6 +8,8 @@ class ProjectTemplate(BaseDbModel, table=True):
 
     name: str = Field(nullable=False, unique=True, index=True, api_field=ApiField())
     columns: list[str] = Field(default_factory=list, nullable=False, sa_type=JSON, api_field=ApiField())
+    # Aligned with columns by position, preserving distinct descriptions for duplicate names.
+    column_descriptions: list[str] = Field(default_factory=list, nullable=False, sa_type=JSON, api_field=ApiField())
     internal_bots: list[dict[str, Any]] = Field(default_factory=list, nullable=False, sa_type=JSON)
     project_bot_scopes: list[dict[str, Any]] = Field(default_factory=list, nullable=False, sa_type=JSON)
     column_bot_scopes: list[dict[str, Any]] = Field(default_factory=list, nullable=False, sa_type=JSON)
