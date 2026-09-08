@@ -211,7 +211,15 @@ def test_project_member_projection_omits_email_and_is_bounded() -> None:
         project=SimpleNamespace(
             get_by_id_like=lambda _uid: object(),
             get_api_assigned_user_list=lambda _project: [
-                {"uid": str(index), "username": f"member-{index}", "email": "hidden@example.com"} for index in range(51)
+                {
+                    "uid": str(index),
+                    "username": f"member-{index}",
+                    "type": "user",
+                    "firstname": "Given",
+                    "lastname": "Family",
+                    "email": "hidden@example.com",
+                }
+                for index in range(51)
             ],
         )
     )
@@ -221,6 +229,33 @@ def test_project_member_projection_omits_email_and_is_bounded() -> None:
     assert len(result["items"]) == 50
     assert result["truncated"] is True
     assert "email" not in str(result)
+    assert result["items"][0] == {"uid": "0", "username": "member-0", "firstname": "Given", "lastname": "Family"}
+
+
+def test_project_member_projection_does_not_expose_invitation_email_as_name() -> None:
+    """Invitation and unknown identities cannot leak directory fields through names."""
+
+    service = SimpleNamespace(
+        project=SimpleNamespace(
+            get_by_id_like=lambda _uid: object(),
+            get_api_assigned_user_list=lambda _project: [
+                {
+                    "uid": identity_type,
+                    "username": "",
+                    "type": identity_type,
+                    "firstname": "hidden@example.com",
+                    "lastname": "Private",
+                    "email": "hidden@example.com",
+                }
+                for identity_type in ("group_email", "unknown")
+            ],
+        )
+    )
+
+    result = CardWorkspaceMcp.list_project_members("project", service)
+
+    assert result["items"] == [{"uid": "group_email", "username": ""}, {"uid": "unknown", "username": ""}]
+    assert "hidden@example.com" not in str(result)
 
 
 def test_empty_partial_edit_and_invalid_order_stop_before_service() -> None:
