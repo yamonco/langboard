@@ -1,7 +1,9 @@
 import base64
 import io
 from binascii import Error as Base64Error
+from fastmcp.exceptions import ValidationError
 from langboard_shared.core.db import EditorContentModel
+from langboard_shared.core.exceptions.CardDeleteForbidden import CardDeleteForbidden
 from langboard_shared.core.storage import Storage, StorageName
 from langboard_shared.core.types import SafeDateTime
 from langboard_shared.core.utils.Converter import convert_python_data
@@ -157,10 +159,13 @@ def archive_card(project_uid: str, card_uid: str, user_or_bot: User | Bot, servi
     return {"message": "Archived"}
 
 
-@McpTool.add(description="Delete a card. (Only available for archived cards)")
+@McpTool.add(description="Delete an archived card only when the signed-in actor is its original author.")
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardDelete], RoleFinder.project)
 def delete_card(project_uid: str, card_uid: str, user_or_bot: User | Bot, service: DomainService) -> dict:
-    result = service.card.delete(user_or_bot, project_uid, card_uid)
+    try:
+        result = service.card.delete(user_or_bot, project_uid, card_uid)
+    except CardDeleteForbidden as exc:
+        raise ValidationError(f"{exc.code}: {exc}") from exc
     if not result:
         raise ValueError("Failed to delete")
     return {"message": "Deleted"}

@@ -290,6 +290,69 @@ def test_native_archive_rejects_card_outside_project(monkeypatch: pytest.MonkeyP
     assert CardService.archive(object(), object(), "project-a", "card-from-b") is None
 
 
+def test_card_delete_is_limited_to_the_immutable_original_author(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Project delete permission cannot delete a card authored by another actor."""
+
+    module = importlib.import_module("langboard_shared.domain.services.factory.CardService")
+
+    class FakeUser:
+        def __init__(self, actor_id: int):
+            self.id = actor_id
+
+    class FakeBot:
+        def __init__(self, actor_id: int):
+            self.id = actor_id
+
+    monkeypatch.setattr(module, "User", FakeUser)
+    monkeypatch.setattr(module, "Bot", FakeBot)
+    user_card = SimpleNamespace(created_by_user_id=7, created_by_bot_id=None)
+    bot_card = SimpleNamespace(created_by_user_id=None, created_by_bot_id=9)
+    unknown_card = SimpleNamespace(created_by_user_id=None, created_by_bot_id=None)
+
+    assert CardService.can_delete(FakeUser(7), user_card) is True
+    assert CardService.can_delete(FakeUser(8), user_card) is False
+    assert CardService.can_delete(FakeBot(9), bot_card) is True
+    assert CardService.can_delete(FakeBot(10), bot_card) is False
+    assert CardService.can_delete(FakeUser(7), unknown_card) is False
+
+
+def test_card_delete_rejects_non_author_before_any_destructive_work(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Ownership mismatch fails closed before checkitems, relationships, schedules, or the card row change."""
+
+    from langboard_shared.core.exceptions.CardDeleteForbidden import CardDeleteForbidden
+
+    module = importlib.import_module("langboard_shared.domain.services.factory.CardService")
+
+    class FakeUser:
+        id = 8
+
+    project = SimpleNamespace(id=1)
+    card = SimpleNamespace(created_by_user_id=7, created_by_bot_id=None, archived_at=object())
+    repository = SimpleNamespace(
+        checkitem=SimpleNamespace(get_all_started_checkitem_by_card=lambda _card: pytest.fail())
+    )
+    service = CardService(lambda _service: pytest.fail(), lambda _name: pytest.fail(), repository)
+    monkeypatch.setattr(module, "User", FakeUser)
+    monkeypatch.setattr(module.InfraHelper, "get_records_with_foreign_by_params", lambda *_args: (project, card))
+
+    with pytest.raises(CardDeleteForbidden, match="original card author"):
+        service.delete(FakeUser(), project, card)
+
+
+def test_card_delete_mcp_returns_actionable_original_author_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Agents receive a stable cause instead of retrying or suggesting a missing project role."""
+
+    from fastmcp.exceptions import ValidationError
+    from langboard_shared.core.exceptions.CardDeleteForbidden import CardDeleteForbidden
+
+    def reject(*_args: Any) -> None:
+        raise CardDeleteForbidden("Only the original card author can delete this card")
+
+    service = SimpleNamespace(card=SimpleNamespace(delete=reject))
+    with pytest.raises(ValidationError, match="CARD_DELETE_ORIGINAL_AUTHOR_REQUIRED"):
+        CardMcp.delete_card("project", "card", object(), service)
+
+
 def test_native_move_rejects_column_from_another_project(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
