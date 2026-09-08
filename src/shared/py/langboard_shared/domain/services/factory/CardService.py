@@ -551,7 +551,7 @@ class CardService(BaseDomainService):
             return False
 
         if not self.can_delete(user_or_bot, card):
-            raise CardDeleteForbidden("Only the original card author can delete this card")
+            raise CardDeleteForbidden("Only the original card author or an administrator can delete this card")
 
         started_checkitems = self.repo.checkitem.get_all_started_checkitem_by_card(card)
 
@@ -591,8 +591,10 @@ class CardService(BaseDomainService):
 
     @staticmethod
     def can_delete(user_or_bot: TUserOrBot, card: Card) -> bool:
-        """Match the immutable creator identity; unknown legacy authors fail closed."""
+        """Allow administrators or the immutable creator; unknown legacy authors otherwise fail closed."""
 
         if isinstance(user_or_bot, User):
-            return card.created_by_user_id is not None and card.created_by_user_id == user_or_bot.id
+            return user_or_bot.is_admin or (
+                card.created_by_user_id is not None and card.created_by_user_id == user_or_bot.id
+            )
         return card.created_by_bot_id is not None and card.created_by_bot_id == user_or_bot.id

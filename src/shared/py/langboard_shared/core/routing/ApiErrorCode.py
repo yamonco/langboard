@@ -25,7 +25,7 @@ class ApiErrorCode(Enum):
     PE2003 = "No permission to access this checkitem."
     PE2004 = "No permission to access this comment."
     PE2005 = "No permission to access this wiki."
-    PE2006 = "Only the original card author can delete this card."
+    PE2006 = "Only the original card author or an administrator can delete this card."
 
     # Not Found Errors
     NF1001 = "Subemail not found or subemail's user and current user don't match."
