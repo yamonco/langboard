@@ -3,7 +3,11 @@
 from typing import Any
 from ...domain import (
     MAX_CHECKITEMS_PER_CHECKLIST,
+    MAX_GRAPH_EDGE_CHANGES,
+    MAX_GRAPH_NEW_CARDS,
     CardBundleSection,
+    CardGraphEdge,
+    CardGraphNewCard,
     ChecklistProjectionItem,
     require_projection_key,
     require_public_metadata_key,
@@ -53,6 +57,42 @@ def create_card_in_leftmost_column(
         _required_text(title, "Card title"),
         description,
         _unique_uids(assign_user_uids, "assign_user_uids") if assign_user_uids is not None else None,
+    )
+
+
+def apply_card_graph_patch(
+    port: CardWorkspaceCommandPort,
+    project_uid: str,
+    anchor_card_uid: str,
+    new_cards: list[CardGraphNewCard],
+    add_edges: list[CardGraphEdge],
+    remove_relationship_uids: list[str],
+) -> dict[str, Any]:
+    """Validate and atomically apply one bounded card relationship graph patch."""
+
+    if not new_cards and not add_edges and not remove_relationship_uids:
+        raise ValueError("Graph patch must contain at least one change")
+    if len(new_cards) > MAX_GRAPH_NEW_CARDS:
+        raise ValueError(f"Graph patch cannot create more than {MAX_GRAPH_NEW_CARDS} cards")
+    if len(add_edges) + len(remove_relationship_uids) > MAX_GRAPH_EDGE_CHANGES:
+        raise ValueError(f"Graph patch cannot change more than {MAX_GRAPH_EDGE_CHANGES} relationships")
+
+    client_refs = [card.client_ref for card in new_cards]
+    if len(client_refs) != len(set(client_refs)):
+        raise ValueError("New card client_ref values contain duplicates")
+    edge_keys = [(edge.parent_ref, edge.child_ref, edge.relationship_type_uid) for edge in add_edges]
+    if len(edge_keys) != len(set(edge_keys)):
+        raise ValueError("Graph patch contains duplicate relationship additions")
+    removals = [_required_text(uid, "Relationship UID") for uid in remove_relationship_uids]
+    if len(removals) != len(set(removals)):
+        raise ValueError("Graph patch contains duplicate relationship removals")
+
+    return port.apply_card_graph_patch(
+        _required_text(project_uid, "Project UID"),
+        _required_text(anchor_card_uid, "Anchor card UID"),
+        [CardGraphNewCard(card.client_ref, card.title.strip(), card.description) for card in new_cards],
+        add_edges,
+        removals,
     )
 
 

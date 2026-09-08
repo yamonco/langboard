@@ -1,12 +1,14 @@
 from typing import Any
 import pytest
 from langboard.card_workspace.application.commands import (
+    apply_card_graph_patch,
     create_card_in_leftmost_column,
     create_project_board,
     delete_public_card_metadata,
     set_card_people_and_labels,
     update_card_attachment,
 )
+from langboard.card_workspace.domain import CardGraphEdge, CardGraphNewCard
 
 
 class FakeCommandPort:
@@ -34,6 +36,22 @@ class FakeCommandPort:
     ) -> dict[str, Any]:
         self.calls.append(("create_card_in_leftmost_column", (project_uid, title, description, assign_user_uids)))
         return {"card": {"uid": "c1", "title": title}, "column": {"uid": "left"}}
+
+    def apply_card_graph_patch(
+        self,
+        project_uid: str,
+        anchor_card_uid: str,
+        new_cards: list[CardGraphNewCard],
+        add_edges: list[CardGraphEdge],
+        remove_relationship_uids: list[str],
+    ) -> dict[str, Any]:
+        self.calls.append(
+            (
+                "apply_card_graph_patch",
+                (project_uid, anchor_card_uid, new_cards, add_edges, remove_relationship_uids),
+            )
+        )
+        return {"created_cards": [], "created_relationships": [], "removed_relationship_uids": []}
 
     def replace_card_people_and_labels(
         self,
@@ -118,3 +136,40 @@ def test_attachment_mutation_response_is_bounded_and_strips_private_fields() -> 
     assert item["user"] == {"uid": "u1", "username": "safe"}
     assert "storage_key" not in item
     assert response["attachments"].limit == 25
+
+
+def test_graph_patch_supports_a_branched_tree_of_existing_and_new_cards() -> None:
+    """A graph patch preserves request-local references for one atomic native call."""
+
+    port = FakeCommandPort()
+    new_cards = [
+        CardGraphNewCard("new:research", "Research"),
+        CardGraphNewCard("new:api", "API"),
+        CardGraphNewCard("new:ui", "UI"),
+    ]
+    edges = [
+        CardGraphEdge("existing-root", "new:research", "blocks"),
+        CardGraphEdge("new:research", "new:api", "blocks"),
+        CardGraphEdge("new:research", "new:ui", "blocks"),
+    ]
+
+    apply_card_graph_patch(port, "project", "existing-root", new_cards, edges, ["old-edge"])
+
+    assert port.calls == [
+        (
+            "apply_card_graph_patch",
+            ("project", "existing-root", new_cards, edges, ["old-edge"]),
+        )
+    ]
+
+
+def test_graph_patch_rejects_more_than_seven_new_cards_before_mutation() -> None:
+    """The application bound is enforced before infrastructure can mutate."""
+
+    port = FakeCommandPort()
+    cards = [CardGraphNewCard(f"new:{index}", f"Card {index}") for index in range(8)]
+
+    with pytest.raises(ValueError, match="more than 7"):
+        apply_card_graph_patch(port, "project", "anchor", cards, [], [])
+
+    assert port.calls == []
