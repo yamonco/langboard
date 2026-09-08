@@ -1,5 +1,6 @@
 from fastapi import status
 from langboard_shared.core.db import EditorContentModel
+from langboard_shared.core.exceptions.CardDeleteForbidden import CardDeleteForbidden
 from langboard_shared.core.filter import AuthFilter
 from langboard_shared.core.routing import (
     ApiErrorCode,
@@ -72,6 +73,7 @@ from .forms import (
                             "member_uids": "string[]",
                             "relationships": [CardRelationship],
                             "current_auth_role_actions": [ALL_GRANTED, ProjectRoleAction],
+                            "can_delete": "boolean",
                         }
                     },
                 ),
@@ -132,6 +134,7 @@ def get_card_details(
         actions = service.project.get_user_role_actions_by_project(user_or_bot, project)
         api_card["current_auth_role_actions"] = actions
         can_set_scopes = ALL_GRANTED in actions or ProjectRoleAction.Update.value in actions
+    api_card["can_delete"] = service.card.can_delete(user_or_bot, card)
     if can_set_scopes:
         bot_scopes = service.card.get_api_bot_scope_list(project, card)
 
@@ -538,8 +541,8 @@ def archive_card(
 @AppRouter.api.delete(
     "/board/{project_uid}/card/{card_uid}",
     tags=["Board.Card"],
-    description="Delete a card. (Only available for archived cards)",
-    responses=OpenApiSchema().auth().forbidden().err(404, ApiErrorCode.NF2003).get(),
+    description="Delete an archived card only when the signed-in actor is its original author.",
+    responses=OpenApiSchema().auth().forbidden().err(403, ApiErrorCode.PE2006).err(404, ApiErrorCode.NF2003).get(),
 )
 @RoleFilter.add(ProjectRole, [ProjectRoleAction.CardDelete], RoleFinder.project)
 @AuthFilter.add()
@@ -549,7 +552,10 @@ def delete_card(
     user_or_bot: User | Bot = Auth.scope("all"),
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
-    result = service.card.delete(user_or_bot, project_uid, card_uid)
+    try:
+        result = service.card.delete(user_or_bot, project_uid, card_uid)
+    except CardDeleteForbidden as exc:
+        raise ApiException.Forbidden_403(ApiErrorCode.PE2006) from exc
     if not result:
         raise ApiException.NotFound_404(ApiErrorCode.NF2003)
 
