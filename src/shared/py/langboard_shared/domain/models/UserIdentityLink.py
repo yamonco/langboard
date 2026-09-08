@@ -22,11 +22,21 @@ class UserIdentityLink(BaseDbModel, table=True):
         nullable=False,
         sa_type=EnumLikeType(IdentityProvider),
         index=True,
-        unique_groups=("provider_external_id", "user_provider"),
+        unique_groups=("provider_issuer_external_id", "user_provider"),
         api_field=ApiField(),
     )
-    external_id: str = Field(nullable=False, index=True, unique_groups=("provider_external_id",), api_field=ApiField())
-    issuer: str | None = Field(default=None, nullable=True, api_field=ApiField())
+    external_id: str = Field(
+        nullable=False,
+        index=True,
+        unique_groups=("provider_issuer_external_id",),
+        api_field=ApiField(),
+    )
+    issuer: str = Field(
+        default="",
+        nullable=False,
+        unique_groups=("provider_issuer_external_id",),
+        api_field=ApiField(),
+    )
     email: str | None = Field(default=None, nullable=True, api_field=ApiField())
 
     def notification_data(self) -> dict[str, Any]:
