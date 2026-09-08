@@ -159,7 +159,7 @@ def archive_card(project_uid: str, card_uid: str, user_or_bot: User | Bot, servi
     return {"message": "Archived"}
 
 
-@McpTool.add(description="Delete an archived card only when the signed-in actor is its original author.")
+@McpTool.add(description="Delete an archived card when the signed-in actor is its original author or an administrator.")
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardDelete], RoleFinder.project)
 def delete_card(project_uid: str, card_uid: str, user_or_bot: User | Bot, service: DomainService) -> dict:
     try:

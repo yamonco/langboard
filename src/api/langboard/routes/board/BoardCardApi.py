@@ -541,7 +541,7 @@ def archive_card(
 @AppRouter.api.delete(
     "/board/{project_uid}/card/{card_uid}",
     tags=["Board.Card"],
-    description="Delete an archived card only when the signed-in actor is its original author.",
+    description="Delete an archived card when the signed-in actor is its original author or an administrator.",
     responses=OpenApiSchema().auth().forbidden().err(403, ApiErrorCode.PE2006).err(404, ApiErrorCode.NF2003).get(),
 )
 @RoleFilter.add(ProjectRole, [ProjectRoleAction.CardDelete], RoleFinder.project)
