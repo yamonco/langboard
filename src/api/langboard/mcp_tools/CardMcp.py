@@ -190,7 +190,7 @@ def change_card_order_or_move_column(
 
 
 @McpTool.add("user", description="Upload a card attachment. Accepts base64 encoded file data.")
-@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Update], RoleFinder.project)
 def upload_card_attachment(
     project_uid: str,
     card_uid: str,
