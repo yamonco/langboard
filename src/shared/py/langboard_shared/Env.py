@@ -338,6 +338,22 @@ class Env:
         return int(self.__get_from_cache("OIDC_CLOCK_SKEW_SEC", "60"))
 
     @property
+    def OIDC_BEARER_ENABLED(self) -> bool:
+        return self.__get_from_cache("OIDC_BEARER_ENABLED", "false").lower() == "true"
+
+    @property
+    def OIDC_RESOURCE_AUDIENCE(self) -> str:
+        return self.__get_from_cache("OIDC_RESOURCE_AUDIENCE", self.OIDC_CLIENT_ID)
+
+    @property
+    def OIDC_AUTO_LINK_BY_EMAIL(self) -> bool:
+        return self.__get_from_cache("OIDC_AUTO_LINK_BY_EMAIL", "true").lower() == "true"
+
+    @property
+    def OIDC_AUTO_PROVISION(self) -> bool:
+        return self.__get_from_cache("OIDC_AUTO_PROVISION", "true").lower() == "true"
+
+    @property
     def SCIM_ENABLED(self) -> bool:
         return self.__get_from_cache("SCIM_ENABLED", "false").lower() == "true"
 
