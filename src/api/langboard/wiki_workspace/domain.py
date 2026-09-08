@@ -37,6 +37,14 @@ class WikiRepository(ABC):
     def append(self, project_uid: str, wiki_uid: str, before: str, after: str) -> None:
         """Compare and save an authorized append without overwriting concurrent edits."""
 
+    @abstractmethod
+    def replace(self, project_uid: str, wiki_uid: str, before: str, after: str) -> None:
+        """Compare and save an authorized exact-text patch."""
+
+    @abstractmethod
+    def delete(self, project_uid: str, wiki_uid: str, before: str) -> None:
+        """Delete the authorized wiki only while its reviewed content is current."""
+
 
 def content_page(snapshot: WikiSnapshot, context: str, cursor: str | None, limit: int) -> dict[str, Any]:
     """Return exact text without mutating it or combining different revisions."""
@@ -80,3 +88,26 @@ def append_content(snapshot: WikiSnapshot, expected_revision: str, text: str) ->
     if not text.strip() or len(text) > 32000:
         raise WikiValidationError("Append text must contain 1 to 32000 characters")
     return snapshot.content + ("\n\n" if snapshot.content else "") + text
+
+
+def replace_content(
+    snapshot: WikiSnapshot, expected_revision: str, edits: list[tuple[str, str]]
+) -> str:
+    """Apply bounded exact replacements without guessing through stale or ambiguous text."""
+
+    if snapshot.revision != expected_revision:
+        raise WikiValidationError("Wiki changed after review; read it again before editing")
+    if not 1 <= len(edits) <= 20:
+        raise WikiValidationError("Wiki patch must contain 1 to 20 edits")
+    content = snapshot.content
+    for old_text, new_text in edits:
+        if not old_text:
+            raise WikiValidationError("Each old_text must be non-empty")
+        if content.count(old_text) != 1:
+            raise WikiValidationError("Each old_text must match exactly once")
+        content = content.replace(old_text, new_text, 1)
+    if content == snapshot.content:
+        raise WikiValidationError("Wiki patch must change content")
+    if len(content) > 32000:
+        raise WikiValidationError("Patched wiki content exceeds 32000 characters")
+    return content
