@@ -13,6 +13,7 @@ from ..card_workspace.application import (
 )
 from ..card_workspace.application import add_card_comment as add_comment
 from ..card_workspace.application import apply_card_graph_patch as apply_graph_patch
+from ..card_workspace.application import cardify_card_checkitem as cardify_checkitem
 from ..card_workspace.application import create_card_checkitem as create_checkitem
 from ..card_workspace.application import create_card_checklist as create_checklist
 from ..card_workspace.application import create_card_in_leftmost_column as create_leftmost
@@ -368,6 +369,32 @@ def create_card_checkitem(
     """Create a native checkitem."""
 
     return create_checkitem(_adapter(user_or_bot, service), project_uid, card_uid, checklist_uid, title)
+
+
+@McpTool.add(
+    description=(
+        "Create a card from one existing checkitem in an explicit active project column. "
+        "The checkitem remains linked to the resulting card."
+    )
+)
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+def cardify_card_checkitem(
+    project_uid: str,
+    card_uid: str,
+    checkitem_uid: str,
+    project_column_uid: str,
+    user_or_bot: User | Bot,
+    service: DomainService,
+) -> dict[str, Any]:
+    """Promote one native checkitem to a linked card."""
+
+    return cardify_checkitem(
+        _adapter(user_or_bot, service),
+        project_uid,
+        card_uid,
+        checkitem_uid,
+        project_column_uid,
+    )
 
 
 @McpTool.add(

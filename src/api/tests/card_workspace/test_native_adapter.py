@@ -91,6 +91,56 @@ def test_native_source_rejects_over_bound_people_before_projection() -> None:
         adapter.get_card_bundle_source("p1", "c1", frozenset({"people"}))
 
 
+def test_native_cardify_reads_back_created_card() -> None:
+    """Cardification returns the exact card linked by the source checkitem."""
+
+    calls: list[tuple[Any, ...]] = []
+    item = SimpleNamespace(cardified_id=None)
+    created = SimpleNamespace(board_api_response=lambda *_args: {"uid": "created-card", "title": "Promoted task"})
+
+    def cardify(*args: Any) -> bool:
+        calls.append(args)
+        item.cardified_id = 42
+        return True
+
+    project = SimpleNamespace(id=7)
+    source_card = SimpleNamespace(project_id=7)
+    service = SimpleNamespace(
+        checkitem=SimpleNamespace(cardify=cardify),
+        card=SimpleNamespace(get_by_id_like=lambda card_id: created if card_id == 42 else None),
+        project_column=SimpleNamespace(get_by_id_like=lambda _uid: SimpleNamespace(project_id=7, is_archive=False)),
+    )
+    actor = object()
+    adapter = NativeCardWorkspaceAdapter(actor, service)
+    adapter._ensure_project_card = lambda *_args: (project, source_card)  # type: ignore[method-assign]
+    adapter._ensure_checkitem = lambda *_args: item  # type: ignore[method-assign]
+
+    result = adapter.cardify_card_checkitem("project", "card", "item", "column")
+
+    assert result == {"uid": "created-card", "title": "Promoted task"}
+    assert calls == [(actor, "project", "card", item, "column")]
+
+
+def test_native_cardify_rejects_column_from_another_project() -> None:
+    """A caller cannot cardify into a column outside the source project."""
+
+    service = SimpleNamespace(
+        project_column=SimpleNamespace(get_by_id_like=lambda _uid: SimpleNamespace(project_id=99, is_archive=False)),
+        checkitem=SimpleNamespace(cardify=lambda *_args: pytest.fail("cardify must not run")),
+    )
+    adapter = NativeCardWorkspaceAdapter(object(), service)
+    adapter._ensure_project_card = lambda *_args: (  # type: ignore[method-assign]
+        SimpleNamespace(id=7),
+        SimpleNamespace(project_id=7),
+    )
+    adapter._ensure_checkitem = lambda *_args: SimpleNamespace(  # type: ignore[method-assign]
+        cardified_id=None
+    )
+
+    with pytest.raises(ValueError, match="not active in the source project"):
+        adapter.cardify_card_checkitem("project", "card", "item", "foreign-column")
+
+
 def test_native_project_creation_uses_template_service(monkeypatch: pytest.MonkeyPatch) -> None:
     """The native project API, not Hermes, owns template selection and board shape."""
 
