@@ -3,6 +3,7 @@ from ....ai import BotScheduleHelper, BotScopeHelper
 from ....core.db import EditorContentModel
 from ....core.domain import BaseDomainService
 from ....core.domain.BaseDomainService import TMutableValidatorMap
+from ....core.exceptions.CardDeleteForbidden import CardDeleteForbidden
 from ....core.exceptions.CardDescriptionConflict import CardDescriptionConflict
 from ....core.schema import TimeBasedPagination
 from ....core.types import SafeDateTime, SnowflakeID
@@ -13,6 +14,7 @@ from ....publishers import CardPublisher
 from ....tasks.activities import CardActivityTask
 from ....tasks.bots import CardBotTask
 from ...models import (
+    Bot,
     Card,
     CardAssignedProjectLabel,
     CardAssignedUser,
@@ -285,6 +287,8 @@ class CardService(BaseDomainService):
             return None
 
         card = Card(
+            created_by_user_id=user_or_bot.id if isinstance(user_or_bot, User) else None,
+            created_by_bot_id=user_or_bot.id if isinstance(user_or_bot, Bot) else None,
             project_id=project.id,
             project_column_id=column.id,
             title=title,
@@ -546,6 +550,9 @@ class CardService(BaseDomainService):
         if not card.archived_at:
             return False
 
+        if not self.can_delete(user_or_bot, card):
+            raise CardDeleteForbidden("Only the original card author or an administrator can delete this card")
+
         started_checkitems = self.repo.checkitem.get_all_started_checkitem_by_card(card)
 
         checkitem_service = self._get_service(CheckitemService)
@@ -581,3 +588,13 @@ class CardService(BaseDomainService):
         CardBotTask.card_deleted(user_or_bot, project, card)
 
         return True
+
+    @staticmethod
+    def can_delete(user_or_bot: TUserOrBot, card: Card) -> bool:
+        """Allow administrators or the immutable creator; unknown legacy authors otherwise fail closed."""
+
+        if isinstance(user_or_bot, User):
+            return user_or_bot.is_admin or (
+                card.created_by_user_id is not None and card.created_by_user_id == user_or_bot.id
+            )
+        return card.created_by_bot_id is not None and card.created_by_bot_id == user_or_bot.id
