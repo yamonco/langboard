@@ -7,6 +7,7 @@ import { Utils } from "@langboard/core/utils";
 import { IBoardColumnCardContextParams } from "@/pages/BoardPage/components/board/BoardConstants";
 import { memo } from "react";
 import { useTranslation } from "react-i18next";
+import { useBoard } from "@/core/providers/BoardProvider";
 
 export interface IBoardColumnCardRelationshipProps {
     attributes: Record<string, unknown>;
@@ -33,8 +34,12 @@ const BoardColumnCardRelationshipButton = memo(({ type, attributes }: IBoardColu
     const { setFilters } = params;
     const isParent = type === "parents";
     const { filterRelationships } = useBoardController();
+    const { cardsMap } = useBoard();
     const flatRelationships = card.useForeignFieldArray("relationships");
-    const relationships = filterRelationships(card.uid, flatRelationships, isParent);
+    const relationships = filterRelationships(card.uid, flatRelationships, isParent).filter((relationship) => {
+        const relatedCardUID = isParent ? relationship.parent_card_uid : relationship.child_card_uid;
+        return cardsMap[relatedCardUID]?.project_column_uid !== card.project_column_uid;
+    });
 
     if (!relationships.length) {
         return null;
