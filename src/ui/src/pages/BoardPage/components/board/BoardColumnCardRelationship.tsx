@@ -206,7 +206,10 @@ const BoardColumnCardRelationshipButton = memo(({ type, attributes, compact }: I
         }
     };
 
-    if (!visibleRelationshipCount && !canDragAndDrop) {
+    // A grouped descendant is a compact navigation chip, not another full
+    // relationship-editing surface. Keep meaningful cross-column counts, but
+    // do not surround every child chip with two empty creation handles.
+    if (!visibleRelationshipCount && (!canDragAndDrop || compact)) {
         return null;
     }
 
