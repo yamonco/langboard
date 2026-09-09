@@ -172,7 +172,10 @@ function BoardColumnCardCollapsible({ isDragging, compact = false }: IBoardColum
                         )}
                         {!compact && !isCollapsed && <BoardTaskMetadataBadges cardUID={card.uid} compact className="mb-1.5" />}
                         <Card.Title
-                            className={cn("break-all leading-tight", compact ? "max-w-full text-sm" : "max-w-[calc(100%_-_theme(spacing.8))]")}
+                            className={cn(
+                                "break-all leading-tight",
+                                compact ? "max-w-full text-sm font-medium text-muted-foreground" : "max-w-[calc(100%_-_theme(spacing.8))]"
+                            )}
                         >
                             {title}
                         </Card.Title>
