@@ -276,6 +276,8 @@ class BotService(BaseDomainService):
     def require_target_project(self, target: Project | ProjectColumn | Card, project: str | None) -> None:
         """Fail closed when an authorized project does not own a Bot target."""
 
+        if isinstance(target, Card) and target.is_linked_resource:
+            raise BotServiceError("target_read_only", "Linked resource cards cannot run Bots")
         if project is None:
             return
         resolved_project = InfraHelper.get_by_id_like(Project, project)

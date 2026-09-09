@@ -29,6 +29,62 @@ export interface IBoardColumnCardCollapsibleProps {
 }
 
 function BoardColumnCardCollapsible({ isDragging, compact = false }: IBoardColumnCardCollapsibleProps) {
+    const { model: card } = ModelRegistry.ProjectCard.useContext<IBoardColumnCardContextParams>();
+
+    if (card.source_type === "project_wiki") {
+        return <BoardColumnWikiCard isDragging={isDragging} />;
+    }
+
+    return <BoardColumnTaskCard isDragging={isDragging} compact={compact} />;
+}
+
+function BoardColumnWikiCard({ isDragging }: IBoardColumnCardCollapsibleProps) {
+    const { selectCardViewType } = useBoardController();
+    const { project, navigateWithFilters } = useBoard();
+    const [t] = useTranslation();
+    const { model: card } = ModelRegistry.ProjectCard.useContext<IBoardColumnCardContextParams>();
+    const resource = card.useField("linked_resource");
+    const openCard = useCallback(() => {
+        if (selectCardViewType || isDragging) {
+            return;
+        }
+
+        navigateWithFilters(ROUTES.BOARD.CARD(project.uid, card.uid));
+    }, [card.uid, isDragging, navigateWithFilters, project.uid, selectCardViewType]);
+
+    if (!resource) {
+        return null;
+    }
+
+    const isAvailable = resource.status === "available";
+    const resourceTitle = isAvailable ? resource.title : undefined;
+    const fallbackTitle = resource.status === "forbidden" ? t("wiki.Restricted wiki") : t("wiki.Source unavailable");
+
+    return (
+        <Card.Root
+            id={`board-card-${card.uid}`}
+            className={cn(
+                "group relative cursor-pointer overflow-hidden border-amber-400/35 bg-gradient-to-br from-amber-50/85 to-background",
+                "shadow-sm transition hover:border-amber-500/65 hover:shadow-md dark:from-amber-950/20 dark:to-card",
+                !!selectCardViewType && "cursor-not-allowed opacity-50"
+            )}
+            onClick={openCard}
+        >
+            <Card.Header className="space-y-2 px-5 py-4">
+                <Flex items="center" justify="between" gap="2">
+                    <Flex items="center" gap="2" className="min-w-0 text-amber-700 dark:text-amber-300">
+                        <IconComponent icon={isAvailable ? "book-text" : "lock"} size="4" />
+                        <span className="text-xs font-semibold uppercase tracking-[0.12em]">{t("wiki.Linked wiki")}</span>
+                    </Flex>
+                    <IconComponent icon="external-link" size="3.5" className="shrink-0 text-muted-foreground opacity-60" />
+                </Flex>
+                <Card.Title className="break-words text-[0.95rem] leading-snug">{resourceTitle || fallbackTitle}</Card.Title>
+            </Card.Header>
+        </Card.Root>
+    );
+}
+
+function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCollapsibleProps) {
     const { selectCardViewType, selectedRelationshipUIDs, currentCardUIDRef, isDisabledCard } = useBoardController();
     const { project, filters, cardsMap, globalRelationshipTypes, navigateWithFilters } = useBoard();
     const [t] = useTranslation();

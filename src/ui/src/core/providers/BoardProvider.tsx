@@ -27,6 +27,8 @@ import { ESocketTopic } from "@langboard/core/enums";
 import useSwitchSocketHandlers from "@/core/hooks/useSwitchSocketHandlers";
 import useBoardCardMetadataDeletedHandlers from "@/controllers/socket/metadata/useBoardCardMetadataDeletedHandlers";
 import useBoardCardMetadataUpdatedHandlers from "@/controllers/socket/metadata/useBoardCardMetadataUpdatedHandlers";
+import useCardLinkedResourceChangedHandlers from "@/controllers/socket/card/useCardLinkedResourceChangedHandlers";
+import { useQueryClient } from "@tanstack/react-query";
 
 const DEFAULT_ARCHIVE_CARD_VISIBLE_DAYS = 3;
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
@@ -94,6 +96,7 @@ const BoardContext = createContext<IBoardContext>(initialContext);
 export const BoardProvider = memo(({ project, currentUser, children }: IBoardProviderProps): React.ReactNode => {
     const navigate = usePageNavigateRef();
     const socket = useSocket();
+    const queryClient = useQueryClient();
     const { selectCardViewType } = useBoardController();
     const [t] = useTranslation();
     const members = project.useForeignFieldArray("all_members");
@@ -130,6 +133,22 @@ export const BoardProvider = memo(({ project, currentUser, children }: IBoardPro
                 }),
             ]),
         [cardUIDs, handleMetadataChanged]
+    );
+    const linkedCardUIDs = useMemo(() => cards.filter((card) => card.source_type === "project_wiki").map((card) => card.uid), [cards]);
+    const linkedResourceHandlers = useMemo(
+        () =>
+            linkedCardUIDs.map((cardUID) =>
+                useCardLinkedResourceChangedHandlers({
+                    projectUID: project.uid,
+                    cardUID,
+                    callback: () => queryClient.invalidateQueries({ queryKey: [`get-cards-${project.uid}`] }),
+                })
+            ),
+        [linkedCardUIDs, project, queryClient]
+    );
+    const boardSocketHandlers = useMemo(
+        () => [...boardCardMetadataHandlers, ...linkedResourceHandlers],
+        [boardCardMetadataHandlers, linkedResourceHandlers]
     );
     const cardMetadataRecords = MetadataModel.Model.useModels((model) => model.type === "card", [cards, metadataUpdated]);
     const forbiddenMessageIdRef = useRef<string | number | null>(null);
@@ -180,8 +199,8 @@ export const BoardProvider = memo(({ project, currentUser, children }: IBoardPro
 
     useSwitchSocketHandlers({
         socket,
-        handlers: boardCardMetadataHandlers,
-        dependencies: boardCardMetadataHandlers,
+        handlers: boardSocketHandlers,
+        dependencies: boardSocketHandlers,
     });
 
     const navigateWithFilters = (to?: To, options?: IPageNavigateOptions) => {

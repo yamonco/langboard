@@ -1,17 +1,26 @@
 from typing import Any, Literal, Sequence, cast, overload
+from sqlalchemy.exc import IntegrityError
 from ....ai import BotScheduleHelper, BotScopeHelper
 from ....core.db import EditorContentModel
 from ....core.domain import BaseDomainService
 from ....core.domain.BaseDomainService import TMutableValidatorMap
 from ....core.schema import TimeBasedPagination
 from ....core.types import SafeDateTime, SnowflakeID
-from ....core.types.ParamTypes import TCardParam, TColumnParam, TProjectLabelParam, TProjectParam, TUserOrBot
+from ....core.types.ParamTypes import (
+    TCardParam,
+    TColumnParam,
+    TProjectLabelParam,
+    TProjectParam,
+    TUserOrBot,
+    TWikiParam,
+)
 from ....core.utils.Converter import convert_python_data
 from ....helpers import InfraHelper
 from ....publishers import CardPublisher
 from ....tasks.activities import CardActivityTask
 from ....tasks.bots import CardBotTask
 from ...models import (
+    Bot,
     Card,
     CardAssignedProjectLabel,
     CardAssignedUser,
@@ -20,6 +29,7 @@ from ...models import (
     Checkitem,
     Project,
     ProjectColumn,
+    ProjectWiki,
     User,
 )
 from ...models.Checkitem import CheckitemStatus
@@ -29,10 +39,12 @@ from .GraphApprovalRequestService import GraphApprovalRequestService
 from .NotificationService import NotificationService
 from .ProjectLabelService import ProjectLabelService
 from .ProjectService import ProjectService
+from .ProjectWikiService import ProjectWikiService
 
 
 class CardService(BaseDomainService):
     CONTEXT_DESCRIPTION_MAX_LENGTH = 1200
+    LINKED_RESOURCE_PREVIEW_MAX_LENGTH = 240
 
     @staticmethod
     def name() -> str:
@@ -51,7 +63,11 @@ class CardService(BaseDomainService):
         return [card for card, _ in self.repo.card.get_all_by_project(project)]
 
     def get_details(
-        self, project: TProjectParam | None, card: TCardParam | None, limit: int | None = None
+        self,
+        project: TProjectParam | None,
+        card: TCardParam | None,
+        user_or_bot: TUserOrBot | None = None,
+        limit: int | None = None,
     ) -> dict[str, Any] | None:
         params = InfraHelper.get_records_with_foreign_by_params((Project, project), (Card, card))
         if not params:
@@ -64,6 +80,24 @@ class CardService(BaseDomainService):
 
         api_card = card.api_response()
         api_card["project_column_name"] = column.name
+        if card.is_linked_resource:
+            api_card.update(
+                {
+                    "count_comment": 0,
+                    "project_members": [],
+                    "labels": [],
+                    "member_uids": [],
+                    "relationships": [],
+                    "linked_resource": self._get_linked_resource_payloads(
+                        user_or_bot,
+                        project,
+                        [card],
+                        include_content=True,
+                    )[card.get_uid()],
+                }
+            )
+            return api_card
+
         api_card["count_comment"] = self.repo.card_comment.count_by_card(card)
 
         project_service = self._get_service(ProjectService)
@@ -78,7 +112,11 @@ class CardService(BaseDomainService):
         api_card["relationships"] = card_relationship_service.get_api_list_by_card(card, limit=limit)
         return api_card
 
-    def get_board_list(self, project: TProjectParam | None) -> list[dict[str, Any]]:
+    def get_board_list(
+        self,
+        project: TProjectParam | None,
+        user_or_bot: TUserOrBot | None = None,
+    ) -> list[dict[str, Any]]:
         project = InfraHelper.get_by_id_like(Project, project)
         if not project:
             return []
@@ -109,6 +147,12 @@ class CardService(BaseDomainService):
             labels[card_label.card_id].append(label.api_response())
 
         cards = []
+        resource_payloads = self._get_linked_resource_payloads(
+            user_or_bot,
+            project,
+            [card for card, _ in raw_cards if card.is_linked_resource],
+            include_content=False,
+        )
         for card, count_comment in raw_cards:
             api_card = card.board_api_response(
                 count_comment=count_comment,
@@ -116,9 +160,158 @@ class CardService(BaseDomainService):
                 relationships=relationships.get(card.id, []),
                 labels=labels.get(card.id, []),
             )
+            if card.is_linked_resource:
+                api_card["linked_resource"] = resource_payloads[card.get_uid()]
             cards.append(api_card)
 
         return cards
+
+    def _get_linked_resource_payloads(
+        self,
+        user_or_bot: TUserOrBot | None,
+        project: Project,
+        cards: Sequence[Card],
+        *,
+        include_content: bool,
+    ) -> dict[str, dict[str, Any]]:
+        payloads: dict[str, dict[str, Any]] = {
+            card.get_uid(): {
+                "type": card.source_type,
+                "uid": card.source_uid,
+                "status": "missing",
+            }
+            for card in cards
+            if card.source_type is not None and card.source_uid is not None
+        }
+        wiki_cards = [
+            card
+            for card in cards
+            if card.source_type == Card.LINKED_RESOURCE_PROJECT_WIKI and card.source_uid is not None
+        ]
+        wiki_uids = {cast(str, card.source_uid) for card in wiki_cards}
+        if include_content:
+            wikis = self.repo.project_wiki.get_by_project_and_uids(project, wiki_uids)
+            wiki_map: dict[str, Any] = {wiki.get_uid(): wiki for wiki in wikis}
+            private_wiki_ids = {int(wiki.id) for wiki in wikis if not wiki.is_public}
+        else:
+            headers = self.repo.project_wiki.get_headers_by_project_and_uids(project, wiki_uids)
+            wiki_map = {
+                wiki_id.to_short_code(): {"id": wiki_id, "title": title, "is_public": is_public}
+                for wiki_id, title, is_public in headers
+            }
+            private_wiki_ids = {int(wiki_id) for wiki_id, _, is_public in headers if not is_public}
+
+        assigned_wiki_ids: set[int] = set()
+        can_view_all = isinstance(user_or_bot, Bot) or (
+            isinstance(user_or_bot, User) and (user_or_bot.is_admin or project.owner_id == user_or_bot.id)
+        )
+        if isinstance(user_or_bot, User) and not can_view_all:
+            assigned_wiki_ids = self.repo.project_wiki_assigned_user.get_assigned_wiki_ids(
+                user_or_bot,
+                private_wiki_ids,
+            )
+
+        for card in wiki_cards:
+            source_uid = cast(str, card.source_uid)
+            wiki = wiki_map.get(source_uid)
+            payload: dict[str, Any] = {
+                "type": Card.LINKED_RESOURCE_PROJECT_WIKI,
+                "uid": source_uid,
+                "status": "missing",
+            }
+            if wiki is not None:
+                wiki_id = wiki.id if include_content else wiki["id"]
+                is_public = wiki.is_public if include_content else wiki["is_public"]
+                title = wiki.title if include_content else wiki["title"]
+                can_view = is_public or can_view_all or int(wiki_id) in assigned_wiki_ids
+                if can_view:
+                    payload.update(
+                        {
+                            "status": "available",
+                            "title": title,
+                        }
+                    )
+                    if include_content:
+                        content = wiki.content.content if wiki.content else ""
+                        payload["preview"] = content[: self.LINKED_RESOURCE_PREVIEW_MAX_LENGTH]
+                        payload["content"] = convert_python_data(wiki.content)
+                else:
+                    payload["status"] = "forbidden"
+            payloads[card.get_uid()] = payload
+
+        return payloads
+
+    def create_linked_wiki_card(
+        self,
+        user_or_bot: TUserOrBot,
+        project: TProjectParam | None,
+        wiki: TWikiParam | None,
+        column: TColumnParam | None = None,
+    ) -> tuple[Card, dict[str, Any], bool] | None:
+        params = InfraHelper.get_records_with_foreign_by_params((Project, project), (ProjectWiki, wiki))
+        if not params:
+            return None
+        project, wiki = params
+        if wiki.project_id != project.id:
+            return None
+        if column is None:
+            column = next(
+                (
+                    candidate
+                    for candidate, _ in self.repo.project_column.get_all_by_project(project)
+                    if not candidate.is_archive
+                ),
+                None,
+            )
+        else:
+            column = InfraHelper.get_by_id_like(ProjectColumn, column)
+        if column is None or column.project_id != project.id or column.is_archive:
+            return None
+        if isinstance(user_or_bot, User):
+            can_view = (
+                user_or_bot.is_admin
+                or project.owner_id == user_or_bot.id
+                or self._get_service(ProjectWikiService).is_assigned(user_or_bot, wiki)
+            )
+            if not can_view:
+                return None
+
+        source_uid = wiki.get_uid()
+        existing = self.repo.card.find_linked_resource(project, Card.LINKED_RESOURCE_PROJECT_WIKI, source_uid)
+        if existing is not None:
+            payload = existing.board_api_response(0, [], [], [])
+            payload["linked_resource"] = self._get_linked_resource_payloads(
+                user_or_bot, project, [existing], include_content=False
+            )[existing.get_uid()]
+            return existing, payload, False
+
+        card = Card(
+            project_id=project.id,
+            project_column_id=column.id,
+            title="",
+            description=EditorContentModel(),
+            order=self.repo.card.get_next_order(column, {"project_id": project.id}),
+            source_type=Card.LINKED_RESOURCE_PROJECT_WIKI,
+            source_uid=source_uid,
+        )
+        try:
+            self.repo.card.insert(card)
+        except IntegrityError:
+            existing = self.repo.card.find_linked_resource(project, Card.LINKED_RESOURCE_PROJECT_WIKI, source_uid)
+            if existing is None:
+                raise
+            payload = existing.board_api_response(0, [], [], [])
+            payload["linked_resource"] = self._get_linked_resource_payloads(
+                user_or_bot, project, [existing], include_content=False
+            )[existing.get_uid()]
+            return existing, payload, False
+
+        payload = card.board_api_response(0, [], [], [])
+        payload["linked_resource"] = self._get_linked_resource_payloads(
+            user_or_bot, project, [card], include_content=False
+        )[card.get_uid()]
+        CardPublisher.created(project, column, {"card": payload})
+        return card, payload, True
 
     def get_dashboard_list(
         self, user: User, pagination: TimeBasedPagination
@@ -135,16 +328,29 @@ class CardService(BaseDomainService):
             api_cards.append(api_card)
         return api_cards, list(api_projects.values())
 
-    def get_api_list_by_project(self, project: TProjectParam | None, limit: int | None = None) -> list[dict[str, Any]]:
+    def get_api_list_by_project(
+        self,
+        project: TProjectParam | None,
+        user_or_bot: TUserOrBot | None = None,
+        limit: int | None = None,
+    ) -> list[dict[str, Any]]:
         project = InfraHelper.get_by_id_like(Project, project)
         if not project:
             return []
 
         records = self.repo.card.get_all_by_project(project, limit=limit)
+        resource_payloads = self._get_linked_resource_payloads(
+            user_or_bot,
+            project,
+            [card for card, _ in records if card.is_linked_resource],
+            include_content=False,
+        )
         cards = []
         for card, column in records:
             api_card = card.api_response()
             api_card["project_column_name"] = column.name
+            if card.is_linked_resource:
+                api_card["linked_resource"] = resource_payloads[card.get_uid()]
             cards.append(api_card)
         return cards
 
@@ -326,6 +532,8 @@ class CardService(BaseDomainService):
         if not params:
             return None
         project, card = params
+        if card.is_linked_resource:
+            return None
 
         validators: TMutableValidatorMap = {
             "title": "not_empty",
@@ -385,6 +593,11 @@ class CardService(BaseDomainService):
             if not new_column or new_column.project_id != card.project_id:
                 return None
 
+            # A linked resource has no archived board-side state. Dropping it on
+            # the archive column unlinks the card while preserving its Wiki.
+            if card.is_linked_resource and new_column.is_archive:
+                return self._delete_card(user_or_bot, project, card)
+
             card.project_column_id = new_column.id
 
             if new_column.is_archive:
@@ -399,7 +612,7 @@ class CardService(BaseDomainService):
 
         CardPublisher.order_changed(project, card, old_column, cast(ProjectColumn, new_column))
 
-        if new_column:
+        if new_column and not card.is_linked_resource:
             CardBotTask.enqueue_card_moved_webhook(
                 user_or_bot, project, card, old_column, cast(ProjectColumn, new_column)
             )
@@ -419,6 +632,8 @@ class CardService(BaseDomainService):
         if not params:
             return None
         project, card = params
+        if card.is_linked_resource:
+            return None
 
         old_assigned_users = self.repo.card_assigned_user.get_all_by_card(card, only_ids=True)
         old_assigned_user_ids = [user_id for user_id, _ in old_assigned_users]
@@ -469,6 +684,8 @@ class CardService(BaseDomainService):
         if not params:
             return None
         project, card = params
+        if card.is_linked_resource:
+            return None
 
         old_labels = self.repo.project_label.get_all_by_card(card)
 
@@ -497,6 +714,8 @@ class CardService(BaseDomainService):
             return None
         project, card = params
 
+        if card.is_linked_resource:
+            return self._delete_card(user_or_bot, project, card)
         if card.archived_at:
             return True
 
@@ -512,8 +731,13 @@ class CardService(BaseDomainService):
             return False
         project, card = params
 
-        if not card.archived_at:
+        if not card.archived_at and not card.is_linked_resource:
             return False
+
+        return self._delete_card(user_or_bot, project, card)
+
+    def _delete_card(self, user_or_bot: TUserOrBot, project: Project, card: Card) -> bool:
+        """Delete only the board-side card and its dependent work records."""
 
         started_checkitems = self.repo.checkitem.get_all_started_checkitem_by_card(card)
 
@@ -542,11 +766,15 @@ class CardService(BaseDomainService):
             reason="card deleted",
         )
 
-        self.repo.card.delete(card)
+        # Linked cards are disposable references. Purging the board-side row
+        # allows the same source to be linked again while its Wiki stays intact.
+        is_linked_resource = card.is_linked_resource
+        self.repo.card.delete(card, purge=is_linked_resource)
         self.repo.card.reoder_after_delete(card.project_column_id, card.order)
 
         CardPublisher.deleted(project, card)
-        CardActivityTask.card_deleted(user_or_bot, project, card)
-        CardBotTask.card_deleted(user_or_bot, project, card)
+        if not is_linked_resource:
+            CardActivityTask.card_deleted(user_or_bot, project, card)
+            CardBotTask.card_deleted(user_or_bot, project, card)
 
         return True
