@@ -85,3 +85,52 @@ export const isRelationshipRenderedInHierarchy = (
     relatedCard: ProjectCard.TModel | undefined,
     isRelatedCardVisible: boolean
 ) => !!relatedCard && relatedCard.project_column_uid === card.project_column_uid && isRelatedCardVisible;
+
+export type TCardRelationshipIndex = Map<string, Set<string>>;
+
+export const buildCardRelationshipIndex = (cards: ProjectCard.TModel[]): TCardRelationshipIndex => {
+    const childrenByParentUID: TCardRelationshipIndex = new Map();
+    cards.forEach((card) => {
+        card.relationships.forEach((relationship) => {
+            const children = childrenByParentUID.get(relationship.parent_card_uid) ?? new Set<string>();
+            children.add(relationship.child_card_uid);
+            childrenByParentUID.set(relationship.parent_card_uid, children);
+        });
+    });
+    return childrenByParentUID;
+};
+
+export const canCreateCardRelationship = (
+    cards: ProjectCard.TModel[],
+    sourceCardUID: string,
+    targetCardUID: string,
+    type: "parents" | "children",
+    childrenByParentUID = buildCardRelationshipIndex(cards)
+): boolean => {
+    if (sourceCardUID === targetCardUID) {
+        return false;
+    }
+
+    const parentCardUID = type === "children" ? sourceCardUID : targetCardUID;
+    const childCardUID = type === "children" ? targetCardUID : sourceCardUID;
+    if (childrenByParentUID.get(parentCardUID)?.has(childCardUID)) {
+        return false;
+    }
+
+    const pending = [childCardUID];
+    const visited = new Set<string>();
+    while (pending.length) {
+        const currentUID = pending.pop()!;
+        if (currentUID === parentCardUID) {
+            return false;
+        }
+        if (visited.has(currentUID)) {
+            continue;
+        }
+
+        visited.add(currentUID);
+        pending.push(...(childrenByParentUID.get(currentUID) ?? []));
+    }
+
+    return true;
+};
