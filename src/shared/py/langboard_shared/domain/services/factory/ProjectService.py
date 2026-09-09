@@ -437,7 +437,7 @@ class ProjectService(BaseDomainService):
         for target_user in eligible_user_map.values():
             _, created = self.repo.project_assigned_user.ensure_assigned(project, target_user)
             if created:
-                self.repo.role.project.grant_default(user_id=target_user.id, project_id=project.id)
+                self.repo.role.project.grant_all(user_id=target_user.id, project_id=project.id)
                 newly_assigned_users.append(target_user)
 
         if not newly_assigned_users:
