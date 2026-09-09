@@ -31,6 +31,7 @@ from ..card_workspace.application import get_public_card_metadata_by_key as quer
 from ..card_workspace.application import list_project_cards as query_project_cards
 from ..card_workspace.application import patch_card_description as replace_description_text
 from ..card_workspace.application import reconcile_card_checklist_projection as reconcile_checklist
+from ..card_workspace.application import replace_card_description as replace_description
 from ..card_workspace.application import save_public_card_metadata as save_public_metadata
 from ..card_workspace.application import set_card_people_and_labels as replace_people_and_labels
 from ..card_workspace.application import set_card_relationships as replace_relationships
@@ -298,6 +299,26 @@ def patch_card_description(
         )
     except DescriptionPatchConflict as exc:
         raise ValidationError(f"{exc}. No changes saved; read the description and review a new patch.") from exc
+
+
+@McpTool.add(description="Replace a complete card description after reviewing its current revision.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+def replace_card_description(
+    project_uid: str,
+    card_uid: str,
+    description: str,
+    expected_revision: str,
+    user_or_bot: User | Bot,
+    service: DomainService,
+) -> dict[str, Any]:
+    """Safely initialize, clear, or replace the complete Markdown body."""
+
+    try:
+        return replace_description(
+            _adapter(user_or_bot, service), project_uid, card_uid, description, expected_revision
+        )
+    except DescriptionPatchConflict as exc:
+        raise ValidationError(f"{exc}. No changes saved; read the description and review the replacement.") from exc
 
 
 @McpTool.add(description="Add a rich-text comment to a card.")
