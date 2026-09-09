@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useReducer, useRef, useState } from "react";
 import invariant from "tiny-invariant";
 import BoardColumn, { SkeletonBoardColumn } from "@/pages/BoardPage/components/board/BoardColumn";
 import { bindAll } from "bind-event-listener";
@@ -23,6 +23,7 @@ import { useBoardController } from "@/core/providers/BoardController";
 import { cn } from "@/core/utils/ComponentUtils";
 import useBoardTouchCardDnd from "@/pages/BoardPage/components/board/useBoardTouchCardDnd";
 import BoardCardRelationshipOverlay from "@/pages/BoardPage/components/board/BoardCardRelationshipOverlay";
+import BoardMinimap from "@/pages/BoardPage/components/board/BoardMinimap";
 
 export function SkeletonBoard() {
     const [cardCounts, setCardCounts] = useState([1, 3, 2]);
@@ -85,21 +86,26 @@ export function SkeletonBoard() {
 
 export function Board() {
     const scrollableRef = useRef<HTMLDivElement | null>(null);
+    const scrollportId = useId();
 
     return (
-        <ScrollArea.Root
-            className={cn(
-                "h-[calc(100dvh_-_theme(spacing.28)_-_theme(spacing.2)_-_theme(spacing.16))]",
-                "min-h-0 md:h-[calc(100dvh_-_theme(spacing.28)_-_theme(spacing.2))]"
-            )}
-            viewportClassName="!overflow-x-auto"
-            viewportRef={scrollableRef}
-        >
-            <Flex direction="row" items="start" gap="4" p="4" h="full" className="min-h-0">
-                <BoardDisplay scrollableRef={scrollableRef} />
-            </Flex>
-            <ScrollArea.Bar orientation="horizontal" />
-        </ScrollArea.Root>
+        <>
+            <ScrollArea.Root
+                viewportId={scrollportId}
+                className={cn(
+                    "h-[calc(100dvh_-_theme(spacing.28)_-_theme(spacing.2)_-_theme(spacing.16))]",
+                    "min-h-0 md:h-[calc(100dvh_-_theme(spacing.28)_-_theme(spacing.2))]"
+                )}
+                viewportClassName="!overflow-x-auto"
+                viewportRef={scrollableRef}
+            >
+                <Flex direction="row" items="start" gap="4" p="4" h="full" className="min-h-0">
+                    <BoardDisplay scrollableRef={scrollableRef} />
+                </Flex>
+                <ScrollArea.Bar orientation="horizontal" />
+            </ScrollArea.Root>
+            <BoardMinimap scrollableRef={scrollableRef} scrollportId={scrollportId} />
+        </>
     );
 }
 
