@@ -144,13 +144,17 @@ const BoardCardRelationshipOverlay = memo(({ scrollableRef }: IBoardCardRelation
                     return;
                 }
 
+                const navigationTop = document.querySelector(".board-floating-navigation")?.getBoundingClientRect().top;
                 const viewport = intersectRelationshipRects(scrollable.getBoundingClientRect(), {
                     left: 0,
                     top: 0,
                     right: window.innerWidth,
-                    bottom: window.innerHeight,
+                    bottom: Math.min(window.innerHeight, navigationTop ?? window.innerHeight),
                 });
-                if (!viewport) return;
+                if (!viewport) {
+                    setLayout({ edges: [], previews: [] });
+                    return;
+                }
                 const clipForColumn = (columnUID: string) => {
                     const column = getColumnElement(columnUID);
                     const scrollport = column?.querySelector<HTMLElement>("[data-radix-scroll-area-viewport]");
@@ -286,7 +290,8 @@ const BoardCardRelationshipOverlay = memo(({ scrollableRef }: IBoardCardRelation
     const focusPreview = (preview: IPreviewTarget) => {
         keepOpen();
         const columnElement = document.querySelector<HTMLElement>(`[${BOARD_COLUMN_TOUCH_DND_ATTR}="${CSS.escape(preview.columnUID)}"]`);
-        columnElement?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+        const behavior = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
+        columnElement?.scrollIntoView({ behavior, block: "nearest", inline: "center" });
         document.dispatchEvent(
             new CustomEvent<IBoardCardFocusEventDetail>(BOARD_CARD_FOCUS_EVENT, {
                 detail: { cardUID: preview.cardUID, columnUID: preview.columnUID },

@@ -18,6 +18,12 @@ test("keeps partially visible cards attached to their visible bounds", () => {
     assert.equal(getRelationshipDirection(card, column), undefined);
 });
 
+test("excludes the floating navigation area from the usable board viewport", () => {
+    const viewport = intersectRelationshipRects(board, { left: 0, top: 0, right: 1000, bottom: 640 });
+    assert.deepEqual(viewport, { ...board, bottom: 640 });
+    assert.equal(intersectRelationshipRects({ left: 400, top: 640, right: 600, bottom: 700 }, viewport!), undefined);
+});
+
 test("reports all four offscreen directions, with horizontal navigation first", () => {
     assert.equal(getRelationshipDirection({ left: -100, right: 0, top: 40, bottom: 70 }, board), "left");
     assert.equal(getRelationshipDirection({ left: 1000, right: 1100, top: 720, bottom: 800 }, board), "right");
