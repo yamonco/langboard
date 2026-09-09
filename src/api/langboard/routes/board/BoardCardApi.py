@@ -385,6 +385,31 @@ def update_card_assigned_users(
     return JsonResponse()
 
 
+@AppRouter.schema(permission=ApiPermission.Edit)
+@AppRouter.api.put(
+    "/board/{project_uid}/card/{card_uid}/assigned-users/{assignee_uid}",
+    tags=["Board.Card"],
+    description="Add one active project member to a card without replacing its existing assignees.",
+    responses=OpenApiSchema().auth().forbidden().err(404, ApiErrorCode.NF2005).get(),
+)
+@RoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+@AuthFilter.add()
+def add_card_assignee(
+    project_uid: str,
+    card_uid: str,
+    assignee_uid: str,
+    user_or_bot: User | Bot = Auth.scope("all"),
+    service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    try:
+        result = service.card.assign_member(user_or_bot, project_uid, card_uid, assignee_uid)
+    except LookupError as exc:
+        raise ApiException.NotFound_404(ApiErrorCode.NF2003) from exc
+    except ValueError as exc:
+        raise ApiException.NotFound_404(ApiErrorCode.NF2005) from exc
+    return JsonResponse(content=result)
+
+
 @AppRouter.schema(form=ChangeChildOrderForm, permission=ApiPermission.Edit)
 @AppRouter.api.put(
     "/board/{project_uid}/card/{card_uid}/order",
