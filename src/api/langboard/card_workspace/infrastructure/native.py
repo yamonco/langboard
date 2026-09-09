@@ -332,6 +332,35 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
             raise RuntimeError("Validated card description patch failed")
         return patched
 
+    def replace_card_description(
+        self,
+        project_uid: str,
+        card_uid: str,
+        description: str,
+        expected_revision: str,
+    ) -> str:
+        if not isinstance(description, str):
+            raise ValueError("description must be a string")
+        project, card = self._ensure_project_card(project_uid, card_uid)
+        current = card.description.content if card.description is not None else ""
+        if projection_revision(current) != expected_revision.lower():
+            raise DescriptionPatchConflict("Card description changed after review: revision does not match")
+        if current == description:
+            raise ValueError("Card description replacement must change the content")
+        try:
+            result = self._service.card.update(
+                self._actor,
+                project,
+                card,
+                {"description": EditorContentModel(content=description)},
+                expected_description=current,
+            )
+        except CardDescriptionConflict as exc:
+            raise DescriptionPatchConflict(str(exc)) from exc
+        if not result:
+            raise RuntimeError("Validated card description replacement failed")
+        return description
+
     def add_card_comment(self, project_uid: str, card_uid: str, content: str) -> dict[str, Any]:
         comment = self._service.card_comment.create(
             self._actor, project_uid, card_uid, EditorContentModel(content=content)
