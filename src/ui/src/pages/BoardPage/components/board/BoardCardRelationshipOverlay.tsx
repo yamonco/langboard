@@ -17,6 +17,7 @@ import {
 } from "@/pages/BoardPage/components/board/BoardConstants";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { relationshipFocusAction } from "@/pages/BoardPage/components/board/BoardRelationshipFocus";
 
 interface IBoardCardRelationshipOverlayProps {
     scrollableRef: React.RefObject<HTMLDivElement | null>;
@@ -72,6 +73,26 @@ const BoardCardRelationshipOverlay = memo(({ scrollableRef }: IBoardCardRelation
     }, []);
     const [layout, setLayout] = useState<IOverlayLayout>({ edges: [], previews: [] });
     const columnsMap = useMemo(() => new Map(columns.map((column) => [column.uid, column])), [columns]);
+
+    useEffect(() => {
+        const source = hoveredElement?.querySelector<HTMLButtonElement>("[data-board-card-open]");
+        if (!source || !layout.previews.length) return;
+        const onKeyDown = (event: KeyboardEvent) => {
+            const buttons = Array.from(document.querySelectorAll<HTMLButtonElement>(`[${RELATIONSHIP_PREVIEW_ATTR}] button`));
+            const previewIndex = buttons.indexOf(document.activeElement as HTMLButtonElement);
+            const action = relationshipFocusAction(event.key, event.shiftKey, document.activeElement === source, previewIndex, buttons.length);
+            if (!action) return;
+            // Leaving the last preview resumes the browser's normal Tab from the title.
+            if (action !== "next") event.preventDefault();
+            if (action === "first") buttons[0]?.focus({ preventScroll: true });
+            else {
+                source.focus({ preventScroll: true });
+                if (action !== "source") setHoveredElement(null);
+            }
+        };
+        window.addEventListener("keydown", onKeyDown);
+        return () => window.removeEventListener("keydown", onKeyDown);
+    }, [hoveredElement, layout.previews.length]);
 
     useEffect(() => {
         const scrollable = scrollableRef.current;
@@ -287,14 +308,14 @@ const BoardCardRelationshipOverlay = memo(({ scrollableRef }: IBoardCardRelation
         };
     }, [cardsMap, columnsMap, hoveredCardUID, hoveredElement, scrollableRef, filters]);
 
-    const focusPreview = (preview: IPreviewTarget) => {
+    const focusPreview = (preview: IPreviewTarget, focus: boolean) => {
         keepOpen();
         const columnElement = document.querySelector<HTMLElement>(`[${BOARD_COLUMN_TOUCH_DND_ATTR}="${CSS.escape(preview.columnUID)}"]`);
         const behavior = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
         columnElement?.scrollIntoView({ behavior, block: "nearest", inline: "center" });
         document.dispatchEvent(
             new CustomEvent<IBoardCardFocusEventDetail>(BOARD_CARD_FOCUS_EVENT, {
-                detail: { cardUID: preview.cardUID, columnUID: preview.columnUID },
+                detail: { cardUID: preview.cardUID, columnUID: preview.columnUID, focus },
             })
         );
         setHoveredElement(null);
@@ -356,7 +377,7 @@ const BoardCardRelationshipOverlay = memo(({ scrollableRef }: IBoardCardRelation
                             variant="ghost"
                             className="h-auto w-full justify-start gap-2 whitespace-normal px-3 py-2 text-left"
                             aria-label={`${target.title} · ${target.columnName} · ${target.label}`}
-                            onClick={() => focusPreview(target)}
+                            onClick={(event) => focusPreview(target, event.detail === 0)}
                         >
                             <IconComponent icon={`arrow-${preview.side}`} size="4" className="shrink-0" />
                             <span className="min-w-0">

@@ -32,6 +32,7 @@ export const BOARD_COLUMN_TOUCH_DND_ATTR = "data-board-column-touch-dnd-uid" as 
 export interface IBoardCardFocusEventDetail {
     cardUID: string;
     columnUID: string;
+    focus?: boolean;
 }
 
 export interface IBoardCardLocationEventDetail extends IBoardCardFocusEventDetail {
