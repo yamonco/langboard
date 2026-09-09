@@ -105,3 +105,17 @@ def test_wiki_patch_and_delete_require_exact_identity_and_revision() -> None:
     delete_schema = McpTool.get_tool("delete_project_wiki")["input_schema"]
     assert set(patch_schema["properties"]) == {"project_uid", "wiki_uid", "expected_revision", "edits"}
     assert set(delete_schema["properties"]) == {"project_uid", "wiki_uid", "expected_revision"}
+
+
+def test_wiki_replacement_schema_and_boundary_allow_empty_content() -> None:
+    repository = Mock()
+    repository.snapshot.return_value = WikiSnapshot("w", "title", "existing")
+    with patch.object(WikiWorkspaceMcp, "NativeWikiRepository", return_value=repository):
+        result = WikiWorkspaceMcp.replace_wiki_content(
+            "p", "w", repository.snapshot.return_value.revision, "", None, None
+        )
+
+    assert result["revision"] == WikiSnapshot("w", "title", "").revision
+    repository.replace.assert_called_once_with("p", "w", "existing", "")
+    schema = McpTool.get_tool("replace_wiki_content")["input_schema"]
+    assert schema["required"] == ["project_uid", "wiki_uid", "expected_revision", "content"]

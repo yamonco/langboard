@@ -10,7 +10,7 @@ from langboard_shared.domain.services import DomainService
 from langboard_shared.security import RoleFinder
 from pydantic import BaseModel, ConfigDict, Field
 from ..mcp_integration import McpRoleFilter, McpTool
-from ..wiki_workspace.application import append_wiki, delete_wiki, patch_wiki, read_wiki
+from ..wiki_workspace.application import append_wiki, delete_wiki, patch_wiki, read_wiki, replace_wiki
 from ..wiki_workspace.domain import WikiValidationError
 from ..wiki_workspace.infrastructure import NativeWikiRepository
 
@@ -105,6 +105,24 @@ def patch_wiki_content(
             expected_revision,
             [(edit.old_text, edit.new_text) for edit in edits],
         )
+    except (WikiContentConflict, WikiValidationError, ValueError) as exc:
+        raise ValidationError(str(exc)) from exc
+
+
+@McpTool.add("user", description="Replace a complete wiki after reviewing its current content revision.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+def replace_wiki_content(
+    project_uid: str,
+    wiki_uid: str,
+    expected_revision: str,
+    content: str,
+    user: User,
+    service: DomainService,
+) -> dict[str, str]:
+    """Safely initialize, clear, or replace the complete Markdown document."""
+
+    try:
+        return replace_wiki(NativeWikiRepository(user, service), project_uid, wiki_uid, expected_revision, content)
     except (WikiContentConflict, WikiValidationError, ValueError) as exc:
         raise ValidationError(str(exc)) from exc
 
