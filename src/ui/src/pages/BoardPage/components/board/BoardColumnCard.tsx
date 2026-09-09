@@ -46,7 +46,7 @@ const outerStyles: { [Key in TRowState["type"]]?: string } = {
     "is-dragging-and-left-self": "opacity-40",
 };
 
-function BoardColumnCard({ card }: { card: ProjectCard.TModel }) {
+function BoardColumnCard({ card, hierarchyDepth = 0, grouped = false }: { card: ProjectCard.TModel; hierarchyDepth?: number; grouped?: boolean }) {
     const { canDragAndDrop } = useBoard();
     const outerRef = useRef<HTMLDivElement | null>(null);
     const innerRef = useRef<HTMLDivElement | null>(null);
@@ -84,8 +84,20 @@ function BoardColumnCard({ card }: { card: ProjectCard.TModel }) {
 
     return (
         <>
-            <BoardColumnCardDisplay outerRef={outerRef} innerRef={innerRef} state={state} card={card} />
-            {state.type === "preview" ? createPortal(<BoardColumnCardDisplay state={state} card={card} />, state.container) : null}
+            <BoardColumnCardDisplay
+                outerRef={outerRef}
+                innerRef={innerRef}
+                state={state}
+                card={card}
+                hierarchyDepth={hierarchyDepth}
+                grouped={grouped}
+            />
+            {state.type === "preview"
+                ? createPortal(
+                      <BoardColumnCardDisplay state={state} card={card} hierarchyDepth={hierarchyDepth} grouped={grouped} />,
+                      state.container
+                  )
+                : null}
         </>
     );
 }
@@ -95,16 +107,21 @@ function BoardColumnCardDisplay({
     state,
     outerRef,
     innerRef,
+    hierarchyDepth,
+    grouped,
 }: {
     card: ProjectCard.TModel;
     state: TRowState;
     outerRef?: React.Ref<HTMLDivElement | null>;
     innerRef?: React.Ref<HTMLDivElement | null>;
+    hierarchyDepth: number;
+    grouped: boolean;
 }) {
     const { selectCardViewType, currentCardUIDRef, getRelationshipSelectionActor, isSelectedCard, isDisabledCard } = useBoardController();
     const { filters, canDragAndDrop, navigateWithFilters } = useBoard();
     const isSelectedRelationshipCard = isSelectedCard(card.uid);
     const relationshipSelectionActor = isSelectedRelationshipCard ? getRelationshipSelectionActor(card.uid) : undefined;
+    const indentation = grouped ? Math.min(Math.max(hierarchyDepth - 1, 0), 3) * 8 : 0;
 
     const setFilters = (relationshipType: ProjectCardRelationship.TRelationship) => {
         if (!filters[relationshipType]) {
@@ -121,7 +138,7 @@ function BoardColumnCardDisplay({
     };
 
     const cardClassName = cn(
-        "relative min-w-[theme(spacing.72)_+_theme(spacing.1)]",
+        "relative min-w-0",
         canDragAndDrop
             ? "cursor-pointer touch-pan-y"
             : cn(
@@ -135,7 +152,12 @@ function BoardColumnCardDisplay({
 
     return (
         <ModelRegistry.ProjectCard.Provider model={card} params={{ setFilters }}>
-            <Flex gap="2" direction="col" className={outerStyles[state.type]}>
+            <Flex
+                gap="2"
+                direction="col"
+                className={outerStyles[state.type]}
+                style={{ marginLeft: indentation, width: `calc(100% - ${indentation}px)` }}
+            >
                 {state.type === "is-over" && state.closestEdge === "top" ? <BoardColumnCardShadow dragging={state.dragging} /> : null}
                 <Box
                     className={cardClassName}
@@ -156,8 +178,8 @@ function BoardColumnCardDisplay({
                             {relationshipSelectionActor.name}
                         </Box>
                     ) : null}
-                    <Box ref={innerRef} className="!w-[theme(spacing.72)_+_theme(spacing.1)]">
-                        <BoardColumnCardCollapsible isDragging={state.type !== "idle"} />
+                    <Box ref={innerRef} className="w-full">
+                        <BoardColumnCardCollapsible isDragging={state.type !== "idle"} compact={grouped} />
                     </Box>
                 </Box>
                 {state.type === "is-over" && state.closestEdge === "bottom" ? <BoardColumnCardShadow dragging={state.dragging} /> : null}
