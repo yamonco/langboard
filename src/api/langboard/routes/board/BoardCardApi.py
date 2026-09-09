@@ -74,6 +74,14 @@ from .forms import (
                             "relationships": [CardRelationship],
                             "current_auth_role_actions": [ALL_GRANTED, ProjectRoleAction],
                             "can_delete": "boolean",
+                            "linked_resource?": {
+                                "type": "string",
+                                "uid": "string",
+                                "status": "Enum[available, forbidden, missing]",
+                                "title?": "string",
+                                "preview?": "string",
+                                "content?": EditorContentModel,
+                            },
                         }
                     },
                 ),
@@ -124,10 +132,11 @@ def get_card_details(
     if not params:
         raise ApiException.NotFound_404(ApiErrorCode.NF2003)
     project, card = params
-    api_card = service.card.get_details(project, card)
+    api_card = service.card.get_details(project, card, user_or_bot)
     if api_card is None:
         raise ApiException.NotFound_404(ApiErrorCode.NF2003)
-    global_relationships = service.app_setting.get_api_global_relationship_list()
+    is_linked_resource = card.is_linked_resource
+    global_relationships = [] if is_linked_resource else service.app_setting.get_api_global_relationship_list()
     bot_scopes = []
     can_set_scopes = isinstance(user_or_bot, Bot)
     if isinstance(user_or_bot, User):
@@ -135,14 +144,14 @@ def get_card_details(
         api_card["current_auth_role_actions"] = actions
         can_set_scopes = ALL_GRANTED in actions or ProjectRoleAction.Update.value in actions
     api_card["can_delete"] = service.card.can_delete(user_or_bot, card)
-    if can_set_scopes:
+    if can_set_scopes and not is_linked_resource:
         bot_scopes = service.card.get_api_bot_scope_list(project, card)
 
     project_columns = service.project_column.get_api_list_by_project(project.id)
-    project_labels = service.project_label.get_api_list_by_project(project)
+    project_labels = [] if is_linked_resource else service.project_label.get_api_list_by_project(project)
 
-    checklists = service.checklist.get_api_list_by_card(card)
-    attachments = service.card_attachment.get_api_list_by_card(card)
+    checklists = [] if is_linked_resource else service.checklist.get_api_list_by_card(card)
+    attachments = [] if is_linked_resource else service.card_attachment.get_api_list_by_card(card)
 
     return JsonResponse(
         content={

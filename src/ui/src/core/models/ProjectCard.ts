@@ -33,6 +33,16 @@ export interface Interface extends IBaseModel {
     deadline_at?: Date;
     archived_at?: Date;
     can_delete?: bool;
+    source_type?: "project_wiki" | (string & {});
+    source_uid?: string;
+    linked_resource?: {
+        type: "project_wiki" | (string & {});
+        uid: string;
+        status: "available" | "forbidden" | "missing";
+        title?: string;
+        preview?: string;
+        content?: IEditorContent;
+    };
 }
 
 export interface IStore extends Interface {
@@ -66,39 +76,46 @@ class ProjectCard extends BaseModel<IStore> {
     constructor(model: Record<string, unknown>) {
         super(model);
 
-        this.subscribeSocketEvents(
-            [
-                useCardDetailsChangedHandlers,
-                useCardCommentAddedHandlers,
-                useCardCommentDeletedHandlers,
-                useCardCommentReactedHandlers,
-                useCardProjectUsersUpdatedHandlers,
-                useCardAssignedUsersUpdatedHandlers,
-                useCardLabelsUpdatedHandlers,
-                useCardChecklistCreatedHandlers,
-                useCardChecklistTitleChangedHandlers,
-                useCardChecklistCheckedChangedHandlers,
-                useCardChecklistDeletedHandlers,
-                useCardAttachmentUploadedHandlers,
-                useCardAttachmentDeletedHandlers,
-                useCardColumnChangedHandlers,
-                useCardDeletedHandlers,
-            ],
-            {
-                projectUID: this.project_uid,
-                uid: this.uid,
-                cardUID: this.uid,
-                card: this,
-            }
-        );
+        const cardSocketHandlers =
+            this.source_type === "project_wiki"
+                ? [useCardColumnChangedHandlers, useCardDeletedHandlers]
+                : [
+                      useCardDetailsChangedHandlers,
+                      useCardCommentAddedHandlers,
+                      useCardCommentDeletedHandlers,
+                      useCardCommentReactedHandlers,
+                      useCardProjectUsersUpdatedHandlers,
+                      useCardAssignedUsersUpdatedHandlers,
+                      useCardLabelsUpdatedHandlers,
+                      useCardChecklistCreatedHandlers,
+                      useCardChecklistTitleChangedHandlers,
+                      useCardChecklistCheckedChangedHandlers,
+                      useCardChecklistDeletedHandlers,
+                      useCardAttachmentUploadedHandlers,
+                      useCardAttachmentDeletedHandlers,
+                      useCardColumnChangedHandlers,
+                      useCardDeletedHandlers,
+                  ];
 
-        this.subscribeSocketEvents([useMetadataUpdatedHandlers, useMetadataDeletedHandlers], {
-            type: "card",
+        this.subscribeSocketEvents(cardSocketHandlers, {
+            projectUID: this.project_uid,
             uid: this.uid,
+            cardUID: this.uid,
+            card: this,
         });
+
+        if (this.source_type !== "project_wiki") {
+            this.subscribeSocketEvents([useMetadataUpdatedHandlers, useMetadataDeletedHandlers], {
+                type: "card",
+                uid: this.uid,
+            });
+        }
     }
 
     public static convertModel(model: IStore): IStore {
+        if (model.source_type === "project_wiki") {
+            model.title = model.linked_resource?.status === "available" ? (model.linked_resource.title ?? "") : "";
+        }
         if (Utils.Type.isString(model.deadline_at)) {
             model.deadline_at = new Date(model.deadline_at);
         }
@@ -124,6 +141,18 @@ class ProjectCard extends BaseModel<IStore> {
 
     public get title() {
         return this.getValue("title");
+    }
+
+    public get source_type() {
+        return this.getValue("source_type");
+    }
+
+    public get source_uid() {
+        return this.getValue("source_uid");
+    }
+
+    public get linked_resource() {
+        return this.getValue("linked_resource");
     }
     public set title(value) {
         this.update({ title: value });

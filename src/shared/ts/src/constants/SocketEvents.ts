@@ -63,6 +63,7 @@ const SERVER = {
             CREATED: "board:card:created:{uid}",
             ORDER_CHANGED: "board:card:order:changed:{uid}",
             DETAILS_CHANGED: "board:card:details:changed:{uid}",
+            LINKED_RESOURCE_CHANGED: "board:card:linked-resource:changed:{uid}",
             ASSIGNED_USERS_UPDATED: "board:card:assigned-users:updated:{uid}",
             RELATIONSHIPS_UPDATED: "board:card:relationships:updated:{uid}",
             LABELS_UPDATED: "board:card:labels:updated:{uid}",

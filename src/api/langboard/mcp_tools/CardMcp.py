@@ -17,24 +17,37 @@ from langboard_shared.security import RoleFinder
 from ..mcp_integration import McpRoleFilter, McpTool
 
 
+def _get_card_in_project(project_uid: str, card_uid: str) -> tuple[Project, Card] | None:
+    return InfraHelper.get_records_with_foreign_by_params((Project, project_uid), (Card, card_uid))
+
+
+def _require_task_card(project_uid: str, card_uid: str) -> tuple[Project, Card]:
+    params = _get_card_in_project(project_uid, card_uid)
+    if not params:
+        raise ValueError("Card not found")
+    if params[1].is_linked_resource:
+        raise ValueError("Linked Wiki cards are read-only references; move or remove the card, or edit the source Wiki")
+    return params
+
+
 @McpTool.add(description="Get all cards in a project.")
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
-def get_cards(project_uid: str, service: DomainService) -> dict:
+def get_cards(project_uid: str, user_or_bot: User | Bot, service: DomainService) -> dict:
     project = service.project.get_by_id_like(project_uid)
     if not project:
         raise ValueError("Project not found")
-    cards = service.card.get_api_list_by_project(project)
+    cards = service.card.get_api_list_by_project(project, user_or_bot)
     return {"cards": cards}
 
 
 @McpTool.add(description="Get card details.")
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
-def get_card(project_uid: str, card_uid: str, service: DomainService) -> dict:
-    params = InfraHelper.get_records_with_foreign_by_params((Project, project_uid), (Card, card_uid))
+def get_card(project_uid: str, card_uid: str, user_or_bot: User | Bot, service: DomainService) -> dict:
+    params = _get_card_in_project(project_uid, card_uid)
     if not params:
         raise ValueError("Card not found")
     project, card = params
-    api_card = service.card.get_details(project, card)
+    api_card = service.card.get_details(project, card, user_or_bot)
     if not api_card:
         raise ValueError("Card not found")
     return api_card
@@ -69,7 +82,7 @@ def get_card_bot_scopes(project_uid: str, card_uid: str, user_or_bot: User | Bot
     if not params:
         raise ValueError("Card not found")
     project, card = params
-    api_card = service.card.get_details(project, card)
+    api_card = service.card.get_details(project, card, user_or_bot)
     if not api_card:
         raise ValueError("Card not found")
     bot_scopes = []
@@ -77,7 +90,7 @@ def get_card_bot_scopes(project_uid: str, card_uid: str, user_or_bot: User | Bot
     if isinstance(user_or_bot, User):
         actions = service.project.get_user_role_actions_by_project(user_or_bot, project)
         can_set = ALL_GRANTED in actions or ProjectRoleAction.Update.value in actions
-    if can_set:
+    if can_set and not card.is_linked_resource:
         bot_scopes = service.card.get_api_bot_scope_list(project, card)
     return {"bot_scopes": bot_scopes}
 
@@ -132,6 +145,7 @@ def change_card_details(
         form_dict["description"] = EditorContentModel(content=description)
     if deadline_at is not None:
         form_dict["deadline_at"] = parsed_deadline
+    _require_task_card(project_uid, card_uid)
     result = service.card.update(user_or_bot, project_uid, card_uid, form_dict)
     if not result:
         raise ValueError("Failed to update")
@@ -150,13 +164,14 @@ def change_card_details(
 @McpTool.add(description="Archive a card.")
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
 def archive_card(project_uid: str, card_uid: str, user_or_bot: User | Bot, service: DomainService) -> dict:
-    p = service.project.get_by_id_like(project_uid)
-    if not p:
-        raise ValueError("Project not found")
-    result = service.card.archive(user_or_bot, p, card_uid)
+    params = _get_card_in_project(project_uid, card_uid)
+    if not params:
+        raise ValueError("Card not found")
+    project, card = params
+    result = service.card.archive(user_or_bot, project, card)
     if not result:
         raise ValueError("Failed to archive")
-    return {"message": "Archived"}
+    return {"message": "Removed from board" if card.is_linked_resource else "Archived"}
 
 
 @McpTool.add(description="Delete an archived card when the signed-in actor is its original author or an administrator.")
@@ -204,6 +219,7 @@ def upload_card_attachment(
     user: User,
     service: DomainService,
 ) -> dict:
+    _require_task_card(project_uid, card_uid)
     max_file_bytes = Env.MAX_FILE_SIZE_MB * 1024 * 1024
     max_base64_length = ((max_file_bytes + 2) // 3) * 4
     if len(file_data_base64) > max_base64_length:

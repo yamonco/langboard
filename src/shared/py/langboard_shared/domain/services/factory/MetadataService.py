@@ -1,6 +1,7 @@
 from typing import Any, Literal, Sequence, TypeVar, overload
 from ....core.db import BaseDbModel
 from ....core.domain import BaseDomainService
+from ...models import Card
 from ...models.bases import BaseMetadataModel
 
 
@@ -38,6 +39,9 @@ class MetadataService(BaseDomainService):
     ) -> list[dict[str, Any]] | dict[str, Any]:
         """Return metadata, optionally enforcing a repository row limit."""
 
+        if isinstance(foreign_model, Card) and foreign_model.is_linked_resource:
+            return {} if as_dict else []
+
         metadata_list = self.repo.metadata.get_list(model, foreign_model, limit=limit)
         if not as_dict:
             return [metadata.api_response() for metadata in metadata_list]
@@ -50,6 +54,11 @@ class MetadataService(BaseDomainService):
     def get_all_by_foreign_models_as_api(
         self, model: type[_TMetadata], foreign_key: str, foreign_models: Sequence[BaseDbModel]
     ) -> dict[str, dict[str, str]]:
+        foreign_models = [
+            foreign_model
+            for foreign_model in foreign_models
+            if not isinstance(foreign_model, Card) or not foreign_model.is_linked_resource
+        ]
         foreign_model_by_id = {int(foreign_model.id): foreign_model for foreign_model in foreign_models}
         foreign_ids = list(foreign_model_by_id.keys())
         metadata_list = self.repo.metadata.get_by_foreign_ids(model, foreign_key, foreign_ids)
@@ -67,14 +76,20 @@ class MetadataService(BaseDomainService):
         }
 
     def get_by_key_as_api(self, model: type[_TMetadata], foreign_model: BaseDbModel, key: str) -> dict[str, Any] | None:
+        if isinstance(foreign_model, Card) and foreign_model.is_linked_resource:
+            return None
         metadata = self.repo.metadata.get_by_key(model, foreign_model, key)
         return metadata.api_response() if metadata else None
 
     def save(
         self, model: type[_TMetadata], foreign_model: BaseDbModel, key: str, value: str, old_key: str | None = None
     ) -> _TMetadata | None:
+        if isinstance(foreign_model, Card) and foreign_model.is_linked_resource:
+            return None
         metadata = self.repo.metadata.save(model, foreign_model, key, value, old_key)
         return metadata
 
     def delete(self, model: type[_TMetadata], foreign_model: BaseDbModel, keys: str | list[str]) -> bool:
+        if isinstance(foreign_model, Card) and foreign_model.is_linked_resource:
+            return False
         return self.repo.metadata.delete_keys(model, foreign_model, keys)

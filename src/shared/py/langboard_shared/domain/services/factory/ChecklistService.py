@@ -82,6 +82,8 @@ class ChecklistService(BaseDomainService):
         if not params:
             return None
         project, card = params
+        if card.is_linked_resource:
+            return None
 
         checklist = Checklist(card_id=card.id, title=title, order=self.repo.checklist.get_next_order(card))
         self.repo.checklist.insert(checklist)
