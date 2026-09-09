@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildBoardColumnCardHierarchy } from "./BoardColumnCardHierarchy.ts";
+import { buildBoardColumnCardHierarchy, isRelationshipRenderedInHierarchy } from "./BoardColumnCardHierarchy.ts";
 
 interface IRelationship {
     parent_card_uid: string;
@@ -12,7 +12,7 @@ const card = (uid: string, order: number, relationships: IRelationship[] = []) =
 
 test("groups visible descendants directly after their parent", () => {
     const relationship = { parent_card_uid: "parent", child_card_uid: "child" };
-    const groups = buildBoardColumnCardHierarchy([card("child", 0, [relationship]), card("unrelated", 1), card("parent", 2, [relationship])]);
+    const groups = buildBoardColumnCardHierarchy([card("unrelated", 0), card("parent", 1, [relationship]), card("child", 2, [relationship])]);
 
     assert.deepEqual(
         groups.map(({ root, descendants }) => [root.uid, descendants.map(({ card: item, depth }) => [item.uid, depth])]),
@@ -21,6 +21,14 @@ test("groups visible descendants directly after their parent", () => {
             ["parent", [["child", 1]]],
         ]
     );
+});
+
+test("keeps a same-column relationship badge when filters hide the related card", () => {
+    const source = { ...card("parent", 0), project_column_uid: "column" };
+    const related = { ...card("child", 1), project_column_uid: "column" };
+
+    assert.equal(isRelationshipRenderedInHierarchy(source, related, true), true);
+    assert.equal(isRelationshipRenderedInHierarchy(source, related, false), false);
 });
 
 test("keeps cards independent when their related card is not visible", () => {
