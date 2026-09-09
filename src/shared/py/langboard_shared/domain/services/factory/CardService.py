@@ -439,6 +439,31 @@ class CardService(BaseDomainService):
             )
         return {"card_uid": card.get_uid(), "assigned_user_uid": user.get_uid(), "changed": changed}
 
+    def assign_member(
+        self, actor: TUserOrBot, project: TProjectParam, card: TCardParam, assignee_uid: str
+    ) -> dict[str, Any]:
+        """Add an existing active project member; never invite or replace other assignees."""
+        params = InfraHelper.get_records_with_foreign_by_params((Project, project), (Card, card))
+        if not params:
+            raise LookupError("Card not found in project")
+        project, card = params
+        assignee = InfraHelper.get_by_id_like(User, assignee_uid)
+        if assignee is None or assignee.deleted_at is not None or assignee.activated_at is None:
+            raise ValueError("Select an active member of this project")
+        member = self.repo.project_assigned_user.find_by_user_and_project(assignee, project)
+        if member is None:
+            raise ValueError("Select an active member of this project")
+        previous = self.repo.card_assigned_user.get_all_by_card(card, only_ids=True)
+        changed = self.repo.card_assigned_user.add_member(card, member)
+        users = [assigned for assigned, _ in self.repo.card_assigned_user.get_all_by_card(card)]
+        if changed:
+            CardPublisher.assigned_users_updated(project, card, users)
+            CardActivityTask.card_assigned_users_updated(
+                actor, project, card, [uid for uid, _ in previous], [item.id for item in users]
+            )
+            self._get_service(NotificationService).notify_assigned_to_card(actor, assignee, project, card)
+        return {"changed": changed, "member_uids": [assigned.get_uid() for assigned in users]}
+
     def update_assigned_users(
         self,
         user_or_bot: TUserOrBot,
