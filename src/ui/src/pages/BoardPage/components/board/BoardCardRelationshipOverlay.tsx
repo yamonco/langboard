@@ -1,6 +1,11 @@
 import Button from "@/components/base/Button";
 import { useBoard } from "@/core/providers/BoardProvider";
-import { BOARD_CARD_TOUCH_DND_ATTR, BOARD_COLUMN_TOUCH_DND_ATTR } from "@/pages/BoardPage/components/board/BoardConstants";
+import {
+    BOARD_CARD_FOCUS_EVENT,
+    BOARD_CARD_TOUCH_DND_ATTR,
+    BOARD_COLUMN_TOUCH_DND_ATTR,
+    IBoardCardFocusEventDetail,
+} from "@/pages/BoardPage/components/board/BoardConstants";
 import { memo, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 
@@ -166,23 +171,22 @@ const BoardCardRelationshipOverlay = memo(({ scrollableRef }: IBoardCardRelation
 
         updateLayout();
         window.addEventListener("resize", updateLayout);
-        document.addEventListener("scroll", updateLayout, true);
+        scrollable.addEventListener("scroll", updateLayout, true);
         return () => {
             cancelAnimationFrame(frame);
             window.removeEventListener("resize", updateLayout);
-            document.removeEventListener("scroll", updateLayout, true);
+            scrollable.removeEventListener("scroll", updateLayout, true);
         };
     }, [cardsMap, columnsMap, hoveredCardUID, scrollableRef]);
 
     const focusPreview = (preview: IEdgePreview) => {
         const columnElement = document.querySelector<HTMLElement>(`[${BOARD_COLUMN_TOUCH_DND_ATTR}="${CSS.escape(preview.columnUID)}"]`);
         columnElement?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
-        requestAnimationFrame(() => {
-            const cardElement = getCardElement(preview.cardUID);
-            cardElement?.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
-            cardElement?.setAttribute("data-relationship-drop-target", "true");
-            window.setTimeout(() => cardElement?.removeAttribute("data-relationship-drop-target"), 1200);
-        });
+        document.dispatchEvent(
+            new CustomEvent<IBoardCardFocusEventDetail>(BOARD_CARD_FOCUS_EVENT, {
+                detail: { cardUID: preview.cardUID, columnUID: preview.columnUID },
+            })
+        );
     };
 
     if (!hoveredCardUID || (!layout.edges.length && !layout.previews.length)) {
