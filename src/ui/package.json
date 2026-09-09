@@ -14,6 +14,7 @@
     "test:relationship-focus": "node --experimental-strip-types src/pages/BoardPage/components/board/BoardRelationshipFocus.test.ts",
     "test:board-gestures": "node --experimental-strip-types src/pages/BoardPage/components/board/BoardGestureData.test.ts",
     "test:board-minimap": "node --experimental-strip-types src/pages/BoardPage/components/board/BoardMinimapLayout.test.ts",
+    "test:relationship-hover": "node --experimental-strip-types --test src/pages/BoardPage/components/board/BoardRelationshipHoverIntent.test.ts",
     "preview": "vite preview",
     "format": "prettier --write \"{tests,src}/**/*.{js,jsx,ts,tsx,json,md}\" --ignore-path .prettierignore",
     "check-format": "prettier --check \"{tests,src}/**/*.{js,jsx,ts,tsx,json,md}\" --ignore-path .prettierignore"
