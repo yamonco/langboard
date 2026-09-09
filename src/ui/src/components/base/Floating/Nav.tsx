@@ -25,6 +25,7 @@ export interface IFloatingNavProps {
     itemClassName?: string;
     labelClassName?: string;
     iconSize?: React.ComponentProps<typeof IconComponent>["size"];
+    trailing?: React.ReactNode;
 }
 
 function Nav({
@@ -35,6 +36,7 @@ function Nav({
     itemClassName,
     labelClassName,
     iconSize = "4",
+    trailing,
 }: IFloatingNavProps): React.JSX.Element | null {
     const visibleItems = items.filter((item) => !item.hidden);
 
@@ -86,6 +88,7 @@ function Nav({
                         <span className={cn("truncate text-xs", labelClassName, item.labelClassName)}>{item.label}</span>
                     </Button>
                 ))}
+                {trailing}
             </Flex>
         </Flex>
     );

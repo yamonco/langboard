@@ -5,7 +5,7 @@ import { DashboardStyledLayout } from "@/components/Layout";
 import Box from "@/components/base/Box";
 import Button from "@/components/base/Button";
 import Flex from "@/components/base/Flex";
-import Floating from "@/components/base/Floating";
+import BoardFloatingNavigation from "@/pages/BoardPage/components/board/BoardFloatingNavigation";
 import IconComponent from "@/components/base/IconComponent";
 import ScrollArea from "@/components/base/ScrollArea";
 import Toast from "@/components/base/Toast";
@@ -637,9 +637,9 @@ function BoardProxyDisplay({ pageRoute, isFetching, project }: IBoardProxyDispla
                                 />
                             )}
                             {!isCardPage && !selectCardViewType && (
-                                <Floating.Nav
-                                    fixed
-                                    className="board-floating-navigation"
+                                <BoardFloatingNavigation
+                                    project={project}
+                                    currentUser={currentUser}
                                     items={floatingNavs.map((nav, index) => ({
                                         key: index,
                                         label: nav.name,

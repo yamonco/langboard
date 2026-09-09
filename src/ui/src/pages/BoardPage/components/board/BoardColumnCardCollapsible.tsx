@@ -22,6 +22,7 @@ import { useHasRunningBot } from "@/core/stores/BotStatusStore";
 import BoardGraphApprovalTargetBadge from "@/pages/BoardPage/components/board/BoardGraphApprovalTargetBadge";
 import { EGraphApprovalScopeTable } from "@/core/models/GraphApprovalRequestModel";
 import BoardTaskMetadataBadges from "@/pages/BoardPage/components/task/BoardTaskMetadataBadges";
+import BoardCardMove from "@/pages/BoardPage/components/board/BoardCardMove";
 
 export interface IBoardColumnCardCollapsibleProps {
     isDragging: bool;
@@ -149,8 +150,9 @@ function BoardColumnCardCollapsible({ isDragging, compact = false }: IBoardColum
             <Card.Root
                 id={`board-card-${card.uid}`}
                 className={cn(
-                    "relative hover:border-primary",
-                    compact && "border-border/60 bg-background/80 shadow-none transition-colors hover:bg-background",
+                    "relative rounded-xl border-border/80 bg-card shadow-sm transition-[border-color,box-shadow] dark:bg-muted/70",
+                    "hover:border-primary/60 hover:shadow-md",
+                    compact && "rounded-lg shadow-none hover:shadow-sm",
                     !!selectCardViewType && isDisabledCard(card.uid) ? "cursor-not-allowed" : "cursor-pointer"
                 )}
                 onClick={openCard}
@@ -162,7 +164,7 @@ function BoardColumnCardCollapsible({ isDragging, compact = false }: IBoardColum
                         updateCollapsed(card.uid, !opened);
                     }}
                 >
-                    <Card.Header className={cn("relative block space-y-0", compact ? "px-3 py-2" : "py-4")}>
+                    <Card.Header className={cn("relative block space-y-0", compact ? "min-h-11 px-3 py-3 md:min-h-0 md:py-2" : "px-3 py-3")}>
                         {!compact && !isCollapsed && !!labels.length && (
                             <Flex items="center" gap="1" mb="1.5" wrap>
                                 {labels.map((label) => (
@@ -173,8 +175,8 @@ function BoardColumnCardCollapsible({ isDragging, compact = false }: IBoardColum
                         {!compact && !isCollapsed && <BoardTaskMetadataBadges cardUID={card.uid} compact className="mb-1.5" />}
                         <Card.Title
                             className={cn(
-                                "break-all leading-tight",
-                                compact ? "max-w-full text-sm font-medium text-muted-foreground" : "max-w-[calc(100%_-_theme(spacing.8))]"
+                                "break-words text-sm font-medium leading-5",
+                                compact ? "pr-8 text-muted-foreground md:pr-0" : "pr-16 md:pr-8"
                             )}
                         >
                             <button
@@ -189,6 +191,7 @@ function BoardColumnCardCollapsible({ isDragging, compact = false }: IBoardColum
                                 {title}
                             </button>
                         </Card.Title>
+                        <BoardCardMove card={card} compact={compact} />
                         {!compact && (
                             <BoardGraphApprovalTargetBadge
                                 projectUID={project.uid}
@@ -200,7 +203,7 @@ function BoardColumnCardCollapsible({ isDragging, compact = false }: IBoardColum
                         {!compact && (
                             <Button
                                 variant="ghost"
-                                className={cn("absolute right-2.5 top-2.5 mt-0")}
+                                className={cn("absolute right-0 top-0 mt-0 size-11 md:right-1 md:top-1 md:size-8")}
                                 size="icon-sm"
                                 title={t(`common.${!isCollapsed ? "Collapse" : "Expand"}`)}
                                 titleSide="top"
@@ -218,7 +221,7 @@ function BoardColumnCardCollapsible({ isDragging, compact = false }: IBoardColum
                         )}
                     >
                         {!!presentableRelationships.length && (
-                            <Card.Content className="px-6 pb-4">
+                            <Card.Content className="px-3 pb-3">
                                 {presentableRelationships.map(([relatedCardTitle, relationshipName], index) => (
                                     <Flex
                                         key={`board-card-presentable-relationship-${card.uid}-${relationshipName}-${relatedCardTitle}-${index}`}
@@ -233,9 +236,9 @@ function BoardColumnCardCollapsible({ isDragging, compact = false }: IBoardColum
                                 ))}
                             </Card.Content>
                         )}
-                        <Card.Footer className="flex items-end justify-between gap-1.5 pb-4">
-                            <Flex items="center" gap="2">
-                                <IconComponent icon="message-square" size="4" className="text-secondary" strokeWidth="4" />
+                        <Card.Footer className="flex items-center justify-between gap-2 px-3 pb-3 text-xs text-muted-foreground">
+                            <Flex items="center" gap="1.5" className={!commentCount ? "invisible" : undefined}>
+                                <IconComponent icon="message-square" size="3.5" />
                                 <span>{commentCount}</span>
                             </Flex>
                             <UserAvatarList

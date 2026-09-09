@@ -76,6 +76,7 @@ export interface IBoardColumnProps {
 }
 
 function BoardColumn({ column, updateBoard }: IBoardColumnProps) {
+    const { canDragAndDrop } = useBoard();
     const scrollableRef = useRef<HTMLDivElement | null>(null);
     const outerFullHeightRef = useRef<HTMLDivElement | null>(null);
     const headerRef = useRef<HTMLDivElement | null>(null);
@@ -96,6 +97,7 @@ function BoardColumn({ column, updateBoard }: IBoardColumnProps) {
         invariant(inner);
 
         return columnRowDndHelpers.column({
+            canDrag: canDragAndDrop,
             column,
             symbolSet: BOARD_DND_SYMBOL_SET,
             draggable: header,
@@ -116,7 +118,7 @@ function BoardColumn({ column, updateBoard }: IBoardColumnProps) {
                 container.appendChild(preview);
             },
         });
-    }, [column, order]);
+    }, [canDragAndDrop, column, order]);
 
     return (
         <BoardAddCardProvider column={column} viewportRef={scrollableRef} toLastPage={() => {}}>
@@ -125,8 +127,8 @@ function BoardColumn({ column, updateBoard }: IBoardColumnProps) {
                 {...{ [BOARD_COLUMN_TOUCH_DND_ATTR]: column.uid }}
                 className={cn(
                     BOARD_COLUMN_MAX_HEIGHT_CLASS_NAMES,
-                    "relative my-1 grid w-72 flex-shrink-0 snap-center grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden shadow-md",
-                    "shadow-black/30 ring-primary dark:shadow-border/90 sm:w-80",
+                    "relative my-1 grid w-72 flex-shrink-0 snap-center grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-2xl",
+                    "border-border/60 bg-muted/40 shadow-sm ring-primary dark:bg-background/60 sm:w-80",
                     stateStyles[state.type]
                 )}
             >

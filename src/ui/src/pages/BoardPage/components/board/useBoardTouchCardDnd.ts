@@ -6,7 +6,11 @@ import { reorderWithEdge } from "@atlaskit/pragmatic-drag-and-drop-hitbox/util/r
 import { Edge } from "@atlaskit/pragmatic-drag-and-drop-hitbox/dist/types/types";
 import { ProjectCard, ProjectColumn } from "@/core/models";
 import { canReorderByClosestEdge } from "@/core/helpers/dnd/utils";
-import { BOARD_CARD_TOUCH_DND_ATTR, BOARD_COLUMN_TOUCH_DND_ATTR } from "@/pages/BoardPage/components/board/BoardConstants";
+import {
+    BOARD_CARD_TOUCH_DND_ATTR,
+    BOARD_CARD_TOUCH_HANDLE_ATTR,
+    BOARD_COLUMN_TOUCH_DND_ATTR,
+} from "@/pages/BoardPage/components/board/BoardConstants";
 
 interface IUseBoardTouchCardDndProps {
     enabled: bool;
@@ -354,11 +358,11 @@ function useBoardTouchCardDnd({ enabled, scrollableRef, columns, rowsMap, change
             }
 
             const target = event.target;
-            if (!(target instanceof HTMLElement)) {
+            if (!(target instanceof Element)) {
                 return;
             }
 
-            if (target.closest(interactiveSelector)) {
+            if (target.closest(interactiveSelector) && !target.closest(`[${BOARD_CARD_TOUCH_HANDLE_ATTR}]`)) {
                 return;
             }
 
