@@ -1,6 +1,7 @@
 import os
 from types import SimpleNamespace
 from typing import Any
+from unittest.mock import Mock
 import pytest
 
 
@@ -8,6 +9,7 @@ os.environ.setdefault("PROJECT_NAME", "langboard")
 
 from langboard.card_workspace.domain import (  # noqa: E402
     CardDescriptionPatch,
+    DescriptionPatchConflict,
     ExactTextReplacement,
     projection_revision,
 )
@@ -291,6 +293,49 @@ def test_native_description_patch_compares_before_updating() -> None:
     assert updates[0][1:3] == (project, card)
     assert updates[0][3]["description"].content == "before new after"
     assert updates[0][4] == {"expected_description": "before old after"}
+
+
+@pytest.mark.parametrize(("before", "after"), [("", "first body"), ("existing", "")])
+def test_native_description_replacement_supports_empty_bodies(before: str, after: str) -> None:
+    """A CAS-guarded whole-body write can initialize or clear a description."""
+
+    project = SimpleNamespace(id=1)
+    card = SimpleNamespace(project_id=1, description=SimpleNamespace(content=before))
+    updates: list[tuple[Any, ...]] = []
+    service = SimpleNamespace(
+        project=SimpleNamespace(get_by_id_like=lambda _uid: project),
+        card=SimpleNamespace(
+            get_by_id_like=lambda _uid: card,
+            update=lambda *args, **kwargs: (updates.append((*args, kwargs)), {"description": True})[1],
+        ),
+    )
+
+    result = NativeCardWorkspaceAdapter(object(), service).replace_card_description(
+        "project-one", "card-one", after, projection_revision(before)
+    )
+
+    assert result == after
+    assert updates[0][3]["description"].content == after
+    assert updates[0][4] == {"expected_description": before}
+
+
+def test_native_description_replacement_rejects_stale_revision_before_write() -> None:
+    """A whole-body replacement never overwrites content that changed after review."""
+
+    project = SimpleNamespace(id=1)
+    card = SimpleNamespace(project_id=1, description=SimpleNamespace(content="current"))
+    update = Mock()
+    service = SimpleNamespace(
+        project=SimpleNamespace(get_by_id_like=lambda _uid: project),
+        card=SimpleNamespace(get_by_id_like=lambda _uid: card, update=update),
+    )
+
+    with pytest.raises(DescriptionPatchConflict, match="revision does not match"):
+        NativeCardWorkspaceAdapter(object(), service).replace_card_description(
+            "project-one", "card-one", "replacement", projection_revision("stale")
+        )
+
+    update.assert_not_called()
 
 
 def test_native_description_missing_revision_stops_before_lookup() -> None:

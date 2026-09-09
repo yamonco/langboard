@@ -122,6 +122,23 @@ def patch_card_description(
     }
 
 
+def replace_card_description(
+    port: CardWorkspaceCommandPort,
+    project_uid: str,
+    card_uid: str,
+    description: str,
+    expected_revision: str,
+) -> dict[str, Any]:
+    """Replace the complete reviewed description without losing concurrent edits."""
+
+    content = port.replace_card_description(project_uid, card_uid, description, expected_revision)
+    return {
+        "changed": True,
+        "description_revision": projection_revision(content),
+        "description_chars": len(content),
+    }
+
+
 def add_card_comment(port: CardWorkspaceCommandPort, project_uid: str, card_uid: str, content: str) -> dict[str, Any]:
     """Create and return a sanitized card comment."""
 

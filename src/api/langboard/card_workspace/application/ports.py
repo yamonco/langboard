@@ -113,6 +113,15 @@ class CardWorkspaceCommandPort(Protocol):
     ) -> str:
         """Atomically apply one revision-bound description patch."""
 
+    def replace_card_description(
+        self,
+        project_uid: str,
+        card_uid: str,
+        description: str,
+        expected_revision: str,
+    ) -> str:
+        """Atomically replace one revision-bound description, including an empty body."""
+
     def add_card_comment(self, project_uid: str, card_uid: str, content: str) -> dict[str, Any]:
         """Create a comment."""
 

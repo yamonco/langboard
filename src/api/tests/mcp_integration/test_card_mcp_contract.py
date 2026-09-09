@@ -37,6 +37,14 @@ def test_description_patch_schema_supports_atomic_multi_hunk_edits() -> None:
     assert schema["$defs"]["ExactTextReplacement"]["required"] == ["old_text", "new_text"]
 
 
+def test_description_replacement_schema_requires_reviewed_revision_and_accepts_empty_content() -> None:
+    """The explicit whole-body contract cannot be mistaken for an unguarded partial edit."""
+
+    schema = McpTool.get_tool("replace_card_description")["input_schema"]
+
+    assert schema["required"] == ["project_uid", "card_uid", "description", "expected_revision"]
+
+
 def test_card_move_schema_makes_column_an_optional_destination() -> None:
     """Reordering in place requires no synthetic nullable column argument."""
 
