@@ -11,6 +11,7 @@
     "test:card-hierarchy": "node --experimental-strip-types src/pages/BoardPage/components/board/BoardColumnCardHierarchy.test.ts",
     "test:relationship-geometry": "node --experimental-strip-types src/pages/BoardPage/components/board/BoardRelationshipGeometry.test.ts",
     "test:relationship-focus": "node --experimental-strip-types src/pages/BoardPage/components/board/BoardRelationshipFocus.test.ts",
+    "test:relationship-hover": "node --experimental-strip-types --test src/pages/BoardPage/components/board/BoardRelationshipHoverIntent.test.ts",
     "preview": "vite preview",
     "format": "prettier --write \"{tests,src}/**/*.{js,jsx,ts,tsx,json,md}\" --ignore-path .prettierignore",
     "check-format": "prettier --check \"{tests,src}/**/*.{js,jsx,ts,tsx,json,md}\" --ignore-path .prettierignore"

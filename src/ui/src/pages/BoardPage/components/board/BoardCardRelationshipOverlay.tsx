@@ -15,9 +15,10 @@ import {
     IBoardCardFocusEventDetail,
     IBoardCardLocationEventDetail,
 } from "@/pages/BoardPage/components/board/BoardConstants";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { relationshipFocusAction } from "@/pages/BoardPage/components/board/BoardRelationshipFocus";
+import { createRelationshipHoverIntent } from "@/pages/BoardPage/components/board/BoardRelationshipHoverIntent";
 
 interface IBoardCardRelationshipOverlayProps {
     scrollableRef: React.RefObject<HTMLDivElement | null>;
@@ -64,13 +65,9 @@ const BoardCardRelationshipOverlay = memo(({ scrollableRef }: IBoardCardRelation
     const { cardsMap, columns, filters } = useBoard();
     const [hoveredElement, setHoveredElement] = useState<HTMLElement | null>(null);
     const hoveredCardUID = hoveredElement?.getAttribute(BOARD_CARD_TOUCH_DND_ATTR);
-    const hideTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-    const keepOpen = useCallback(() => clearTimeout(hideTimeout.current), []);
-    const scheduleClose = useCallback(() => {
-        clearTimeout(hideTimeout.current);
-        // Give the pointer time to cross the gap between a card and its preview.
-        hideTimeout.current = setTimeout(() => setHoveredElement(null), 350);
-    }, []);
+    const hoverIntent = useMemo(() => createRelationshipHoverIntent({ onOpen: setHoveredElement, onClose: () => setHoveredElement(null) }), []);
+    const keepOpen = hoverIntent.keepOpen;
+    const scheduleClose = hoverIntent.pointerLeave;
     const [layout, setLayout] = useState<IOverlayLayout>({ edges: [], previews: [] });
     const columnsMap = useMemo(() => new Map(columns.map((column) => [column.uid, column])), [columns]);
 
@@ -104,12 +101,17 @@ const BoardCardRelationshipOverlay = memo(({ scrollableRef }: IBoardCardRelation
             target instanceof Element
                 ? target.closest<HTMLElement>(`[${BOARD_CARD_TOUCH_DND_ATTR}]`)?.getAttribute(BOARD_CARD_TOUCH_DND_ATTR)
                 : undefined;
-        const onPointerOver = (event: Event) => {
+        const onPointerOver = (event: PointerEvent) => {
             const cardUID = getCardUID(event.target);
-            if (cardUID) {
-                keepOpen();
-                setHoveredElement((event.target as Element).closest<HTMLElement>(`[${BOARD_CARD_TOUCH_DND_ATTR}]`));
-            }
+            if (!cardUID || cardUID === getCardUID(event.relatedTarget) || !cardsMap[cardUID]?.relationships.length) return;
+            const cardElement = (event.target as Element).closest<HTMLElement>(`[${BOARD_CARD_TOUCH_DND_ATTR}]`);
+            if (cardElement) hoverIntent.pointerEnter(cardElement);
+        };
+        const onFocusIn = (event: FocusEvent) => {
+            const cardUID = getCardUID(event.target);
+            if (!cardUID || cardUID === getCardUID(event.relatedTarget) || !cardsMap[cardUID]?.relationships.length) return;
+            const cardElement = (event.target as Element).closest<HTMLElement>(`[${BOARD_CARD_TOUCH_DND_ATTR}]`);
+            if (cardElement) hoverIntent.openImmediately(cardElement);
         };
         const onPointerOut = (event: PointerEvent | FocusEvent) => {
             const sourceCardUID = getCardUID(event.target);
@@ -125,27 +127,24 @@ const BoardCardRelationshipOverlay = memo(({ scrollableRef }: IBoardCardRelation
 
         scrollable.addEventListener("pointerover", onPointerOver);
         scrollable.addEventListener("pointerout", onPointerOut);
-        scrollable.addEventListener("focusin", onPointerOver);
+        scrollable.addEventListener("focusin", onFocusIn);
         scrollable.addEventListener("focusout", onPointerOut);
-        const close = () => {
-            keepOpen();
-            setHoveredElement(null);
-        };
+        const close = hoverIntent.close;
         const onKeyDown = (event: KeyboardEvent) => {
             if (event.key === "Escape") close();
         };
         scrollable.addEventListener("dragstart", close);
         window.addEventListener("keydown", onKeyDown);
         return () => {
-            keepOpen();
+            hoverIntent.dispose();
             scrollable.removeEventListener("pointerover", onPointerOver);
             scrollable.removeEventListener("pointerout", onPointerOut);
-            scrollable.removeEventListener("focusin", onPointerOver);
+            scrollable.removeEventListener("focusin", onFocusIn);
             scrollable.removeEventListener("focusout", onPointerOut);
             scrollable.removeEventListener("dragstart", close);
             window.removeEventListener("keydown", onKeyDown);
         };
-    }, [scrollableRef, keepOpen, scheduleClose]);
+    }, [cardsMap, scrollableRef, hoverIntent, scheduleClose]);
 
     useEffect(() => {
         const scrollable = scrollableRef.current;
