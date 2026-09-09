@@ -26,11 +26,16 @@ export const BLOCK_BOARD_PANNING_ATTR = "data-block-board-panning" as const;
 export const BOARD_CARD_TOUCH_DND_ATTR = "data-board-card-touch-dnd-uid" as const;
 export const BOARD_CARD_RELATIONSHIP_DND_TYPE = "board-card-relationship-handle" as const;
 export const BOARD_CARD_FOCUS_EVENT = "board-card-focus" as const;
+export const BOARD_CARD_LOCATION_EVENT = "board-card-location" as const;
 export const BOARD_COLUMN_TOUCH_DND_ATTR = "data-board-column-touch-dnd-uid" as const;
 
 export interface IBoardCardFocusEventDetail {
     cardUID: string;
     columnUID: string;
+}
+
+export interface IBoardCardLocationEventDetail extends IBoardCardFocusEventDetail {
+    onLocated: (positions: number[], scrollOffset: number) => void;
 }
 
 export const BOARD_COLUMN_MAX_HEIGHT_CLASS_NAMES =
