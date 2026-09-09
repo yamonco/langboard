@@ -12,7 +12,7 @@ type TDotLink = LinkObject<TDot, { id: string }>;
 
 interface IBoardNetworkGraphProps {
     layout: ReturnType<typeof layoutBoardGraph>;
-    focusColumn?: string;
+    focusColumn?: { uid: string };
     onOpen: (cardUID: string) => void;
 }
 
@@ -68,7 +68,7 @@ function BoardNetworkGraph({ layout, focusColumn, onOpen }: IBoardNetworkGraphPr
         setHoveredUID(undefined);
     }, [graph]);
     useEffect(() => {
-        if (focusColumn) graphRef.current?.zoomToFit(reducedMotion ? 0 : 200, 64, (node) => node.columnUID === focusColumn);
+        if (focusColumn) graphRef.current?.zoomToFit(reducedMotion ? 0 : 200, 64, (node) => node.columnUID === focusColumn.uid);
     }, [focusColumn, reducedMotion]);
 
     const nodeColor = (node: TDotNode) => `hsl(${(colors.hue + node.columnIndex * 32) % 360} 62% ${resolvedTheme === "dark" ? 68 : 42}%)`;
@@ -85,7 +85,7 @@ function BoardNetworkGraph({ layout, focusColumn, onOpen }: IBoardNetworkGraphPr
                     backgroundColor={colors.background}
                     nodeLabel={() => ""}
                     linkLabel={() => ""}
-                    nodeColor={nodeColor}
+                    nodeColor={(node) => (activeUID && !neighbors.has(node.id) ? colors.muted : nodeColor(node))}
                     nodeVal={(node) => 1 + Math.min(node.degree, 8)}
                     nodeRelSize={4}
                     linkColor={(link) => (activeUID && activeLink(link) ? colors.primary : colors.muted)}
@@ -108,8 +108,9 @@ function BoardNetworkGraph({ layout, focusColumn, onOpen }: IBoardNetworkGraphPr
                     }}
                     nodeCanvasObjectMode={() => "after"}
                     nodeCanvasObject={(node, context, scale) => {
-                        const active = neighbors.has(node.id);
-                        if (!active && (scale < 1.2 || (activeUID && !active))) return;
+                        const active = node.id === activeUID;
+                        // Keep a selected neighborhood legible instead of stacking its long titles.
+                        if (!active && (activeUID || scale < 1.8 || node.degree < 2)) return;
                         const label = node.title.length > 24 ? `${node.title.slice(0, 23)}…` : node.title;
                         const fontSize = (active ? 12 : 10) / scale;
                         context.font = `${active ? 600 : 400} ${fontSize}px sans-serif`;
@@ -124,7 +125,7 @@ function BoardNetworkGraph({ layout, focusColumn, onOpen }: IBoardNetworkGraphPr
                     nodePointerAreaPaint={(node, color, context, scale) => {
                         context.fillStyle = color;
                         context.beginPath();
-                        context.arc(node.x ?? 0, node.y ?? 0, Math.max(4 * Math.sqrt(1 + Math.min(node.degree, 8)), 14 / scale), 0, 2 * Math.PI);
+                        context.arc(node.x ?? 0, node.y ?? 0, Math.max(4 * Math.sqrt(1 + Math.min(node.degree, 8)), 22 / scale), 0, 2 * Math.PI);
                         context.fill();
                     }}
                 />
