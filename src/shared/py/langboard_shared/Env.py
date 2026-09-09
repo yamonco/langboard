@@ -342,6 +342,10 @@ class Env:
         return self.__get_from_cache("OIDC_BEARER_ENABLED", "false").lower() == "true"
 
     @property
+    def OIDC_DELEGATED_BEARER_ENABLED(self) -> bool:
+        return self.__get_from_cache("OIDC_DELEGATED_BEARER_ENABLED", "false").lower() == "true"
+
+    @property
     def OIDC_RESOURCE_AUDIENCE(self) -> str:
         return self.__get_from_cache("OIDC_RESOURCE_AUDIENCE", self.OIDC_CLIENT_ID)
 

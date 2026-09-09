@@ -12,9 +12,10 @@ from starlette.datastructures import Headers
 
 os.environ.setdefault("PROJECT_NAME", "langboard")
 
-from langboard_shared.core.security import OidcClient  # noqa: E402
+from langboard_shared.core.security import AuthSecurity, OidcClient  # noqa: E402
 from langboard_shared.Env import Env  # noqa: E402
 from langboard_shared.helpers import MiddlewareHelper  # noqa: E402
+from langboard_shared.security import Auth  # noqa: E402
 
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -80,6 +81,68 @@ def test_oidc_bearer_is_disabled_by_default(monkeypatch: pytest.MonkeyPatch) -> 
     monkeypatch.setattr(OidcClient, "validate_access_token", lambda _token: pytest.fail("must not validate"))
 
     assert MiddlewareHelper._validate_oidc_user(Headers({"Authorization": "Bearer token"})) is None
+
+
+def test_delegated_assertion_uses_linked_user_and_keeps_gateway_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The proxy credential authenticates transport but never becomes the actor."""
+
+    Env.update_env("OIDC_DELEGATED_BEARER_ENABLED", "true")
+    gateway_user = SimpleNamespace(id="gateway")
+    delegated_user = SimpleNamespace(id="employee")
+    api_key = SimpleNamespace(id="gateway-key")
+    monkeypatch.setattr(Auth, "validate_user_by_api_key", lambda _headers: (gateway_user, api_key))
+    monkeypatch.setattr(
+        MiddlewareHelper, "_validate_oidc_token", lambda token: delegated_user if token == "signed.jwt" else None
+    )
+    scope: dict[str, Any] = {
+        "type": "http",
+        "headers": [
+            (AuthSecurity.API_KEY_HEADER.lower().encode(), b"gateway-secret"),
+            (AuthSecurity.MCP_USER_ASSERTION_HEADER.lower().encode(), b"signed.jwt"),
+        ],
+    }
+
+    assert MiddlewareHelper.validate_auth(scope) is delegated_user
+    assert scope["auth"] is delegated_user
+    assert scope["api_key"] is api_key
+
+
+@pytest.mark.parametrize("enabled,with_api_key", [(False, True), (True, False)])
+def test_delegated_assertion_fails_closed_without_both_gates(
+    monkeypatch: pytest.MonkeyPatch,
+    enabled: bool,
+    with_api_key: bool,
+) -> None:
+    """A rejected assertion cannot silently fall back to the gateway owner."""
+
+    Env.update_env("OIDC_DELEGATED_BEARER_ENABLED", str(enabled).lower())
+    monkeypatch.setattr(Auth, "validate_user_by_api_key", lambda _headers: pytest.fail("must not authenticate gateway"))
+    headers = [(AuthSecurity.MCP_USER_ASSERTION_HEADER.lower().encode(), b"signed.jwt")]
+    if with_api_key:
+        headers.append((AuthSecurity.API_KEY_HEADER.lower().encode(), b"gateway-secret"))
+    scope: dict[str, Any] = {"type": "http", "headers": headers}
+
+    assert MiddlewareHelper.validate_auth(scope) == 401
+    assert "auth" not in scope
+
+
+def test_unlinked_delegated_assertion_never_falls_back_to_gateway_user(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A valid proxy credential cannot authorize an unknown external subject."""
+
+    Env.update_env("OIDC_DELEGATED_BEARER_ENABLED", "true")
+    gateway_user = SimpleNamespace(id="gateway")
+    monkeypatch.setattr(Auth, "validate_user_by_api_key", lambda _headers: (gateway_user, SimpleNamespace()))
+    monkeypatch.setattr(MiddlewareHelper, "_validate_oidc_token", lambda _token: None)
+    scope: dict[str, Any] = {
+        "type": "http",
+        "headers": [
+            (AuthSecurity.API_KEY_HEADER.lower().encode(), b"gateway-secret"),
+            (AuthSecurity.MCP_USER_ASSERTION_HEADER.lower().encode(), b"unknown.jwt"),
+        ],
+    }
+
+    assert MiddlewareHelper.validate_auth(scope) == 401
+    assert "auth" not in scope
 
 
 def test_identity_migration_keys_subjects_by_provider_issuer_and_external_id() -> None:
