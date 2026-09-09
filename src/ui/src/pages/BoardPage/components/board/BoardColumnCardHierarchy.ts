@@ -16,12 +16,14 @@ export interface IBoardColumnCardHierarchyGroup {
  * multiple parents or a cycle.
  */
 export const buildBoardColumnCardHierarchy = (cards: ProjectCard.TModel[]): IBoardColumnCardHierarchyGroup[] => {
-    const sortedCards = [...cards].sort((left, right) => left.order - right.order);
-    const cardsByUID = new Map(sortedCards.map((card) => [card.uid, card]));
+    // useRowReordered already supplies board order. Keeping that order here
+    // makes the projection linear and avoids sorting every visible column.
+    const cardsByUID = new Map(cards.map((card) => [card.uid, card]));
+    const parentUIDsByChildUID = new Map<string, Set<string>>();
     const childUIDsByParentUID = new Map<string, Set<string>>();
     const childUIDs = new Set<string>();
 
-    sortedCards.forEach((card) => {
+    cards.forEach((card) => {
         card.relationships.forEach((relationship) => {
             const parent = cardsByUID.get(relationship.parent_card_uid);
             const child = cardsByUID.get(relationship.child_card_uid);
@@ -29,10 +31,18 @@ export const buildBoardColumnCardHierarchy = (cards: ProjectCard.TModel[]): IBoa
                 return;
             }
 
-            const children = childUIDsByParentUID.get(parent.uid) ?? new Set<string>();
-            children.add(child.uid);
-            childUIDsByParentUID.set(parent.uid, children);
+            const parents = parentUIDsByChildUID.get(child.uid) ?? new Set<string>();
+            parents.add(parent.uid);
+            parentUIDsByChildUID.set(child.uid, parents);
             childUIDs.add(child.uid);
+        });
+    });
+
+    cards.forEach((child) => {
+        parentUIDsByChildUID.get(child.uid)?.forEach((parentUID) => {
+            const children = childUIDsByParentUID.get(parentUID) ?? new Set<string>();
+            children.add(child.uid);
+            childUIDsByParentUID.set(parentUID, children);
         });
     });
 
@@ -51,14 +61,13 @@ export const buildBoardColumnCardHierarchy = (cards: ProjectCard.TModel[]): IBoa
 
         const children = [...(childUIDsByParentUID.get(card.uid) ?? [])]
             .map((uid) => cardsByUID.get(uid))
-            .filter((child): child is ProjectCard.TModel => !!child)
-            .sort((left, right) => left.order - right.order);
+            .filter((child): child is ProjectCard.TModel => !!child);
         children.forEach((child) => append(child, depth + 1));
         visitingUIDs.delete(card.uid);
     };
 
-    sortedCards.filter((card) => !childUIDs.has(card.uid)).forEach((card) => append(card, 0));
-    sortedCards.forEach((card) => append(card, 0));
+    cards.filter((card) => !childUIDs.has(card.uid)).forEach((card) => append(card, 0));
+    cards.forEach((card) => append(card, 0));
 
     return result.reduce<IBoardColumnCardHierarchyGroup[]>((groups, item) => {
         if (item.depth === 0 || !groups.length) {
@@ -70,3 +79,9 @@ export const buildBoardColumnCardHierarchy = (cards: ProjectCard.TModel[]): IBoa
         return groups;
     }, []);
 };
+
+export const isRelationshipRenderedInHierarchy = (
+    card: ProjectCard.TModel,
+    relatedCard: ProjectCard.TModel | undefined,
+    isRelatedCardVisible: boolean
+) => !!relatedCard && relatedCard.project_column_uid === card.project_column_uid && isRelatedCardVisible;
