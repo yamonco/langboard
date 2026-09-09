@@ -5,7 +5,13 @@ import Button from "@/components/base/Button";
 import IconComponent from "@/components/base/IconComponent";
 import { cn } from "@/core/utils/ComponentUtils";
 import { BOARD_COLUMN_TOUCH_DND_ATTR } from "@/pages/BoardPage/components/board/BoardConstants";
-import { MINIMAP_WIDTH, minimapColumnPath, minimapScrollAt, minimapViewport } from "@/pages/BoardPage/components/board/BoardMinimapLayout";
+import {
+    MINIMAP_WIDTH,
+    minimapColumnPath,
+    minimapDragDelta,
+    minimapScrollAt,
+    minimapViewport,
+} from "@/pages/BoardPage/components/board/BoardMinimapLayout";
 
 export default function BoardMinimap({ scrollableRef, scrollportId }: { scrollableRef: RefObject<HTMLDivElement | null>; scrollportId: string }) {
     const [t] = useTranslation();
@@ -135,7 +141,11 @@ export default function BoardMinimap({ scrollableRef, scrollportId }: { scrollab
                         if (drag.current)
                             scroll(
                                 drag.current.left +
-                                    ((event.clientX - drag.current.x) / event.currentTarget.getBoundingClientRect().width) * metrics.content
+                                    minimapDragDelta(
+                                        (event.clientX - drag.current.x) / event.currentTarget.getBoundingClientRect().width,
+                                        metrics.content,
+                                        metrics.viewport
+                                    )
                             );
                     }}
                     onPointerUp={() => {

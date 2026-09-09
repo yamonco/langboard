@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { MINIMAP_WIDTH, minimapColumnPath, minimapScrollAt, minimapViewport } from "./BoardMinimapLayout.ts";
+import { MINIMAP_WIDTH, minimapColumnPath, minimapDragDelta, minimapScrollAt, minimapViewport } from "./BoardMinimapLayout.ts";
 
 test("viewport marker stays inside the fixed widget at both scroll boundaries", () => {
     const start = minimapViewport(10000, 1000, -1);
@@ -30,4 +30,16 @@ test("click centers the real viewport and clamps out-of-range input", () => {
 test("empty or hidden viewports never produce invalid SVG coordinates", () => {
     assert.deepEqual(minimapViewport(0, 0, 0), { x: 0, width: MINIMAP_WIDTH, maximum: 0 });
     assert.equal(minimapColumnPath([], 0), "");
+});
+
+test("dragging the visible marker reaches both ends even on very wide boards", () => {
+    for (const content of [4000, 3200000]) {
+        const viewport = 390;
+        const marker = minimapViewport(content, viewport, 0);
+        const fraction = (MINIMAP_WIDTH - marker.width) / MINIMAP_WIDTH;
+        assert.ok(Math.abs(minimapDragDelta(fraction, content, viewport) - marker.maximum) < 0.000001);
+        assert.ok(Math.abs(minimapDragDelta(-fraction, content, viewport) + marker.maximum) < 0.000001);
+    }
+    assert.equal(minimapDragDelta(1, 0, 0), 0);
+    assert.equal(minimapDragDelta(1, 200, 1000), 0);
 });
