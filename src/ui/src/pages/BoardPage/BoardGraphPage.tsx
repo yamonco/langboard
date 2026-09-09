@@ -14,6 +14,7 @@ import { cn } from "@/core/utils/ComponentUtils";
 import { useAuth } from "@/core/providers/AuthProvider";
 import useUserSettingsStore, { getUserSettingsStore, useUserSettings } from "@/core/stores/UserSettingsStore";
 import { boardGraphViewForUser, TBoardGraphView } from "@/pages/BoardPage/BoardGraphPreference";
+import { useTheme } from "next-themes";
 
 const BoardNetworkGraph = lazy(() => import("@/pages/BoardPage/BoardNetworkGraph"));
 
@@ -60,6 +61,7 @@ const nodeTypes = { card: GraphCard, lane: GraphLane };
 
 const BoardGraphPage = ({ project }: IBoardRelatedPageProps): React.JSX.Element => {
     const [t] = useTranslation();
+    const { resolvedTheme } = useTheme();
     const navigate = usePageNavigateRef();
     const { currentUser } = useAuth();
     const savedViews = useUserSettings("graph_view_modes");
@@ -68,7 +70,7 @@ const BoardGraphPage = ({ project }: IBoardRelatedPageProps): React.JSX.Element 
     const setView = (next: TBoardGraphView) => {
         if (currentUser) updateSettingsByKey("graph_view_modes", { ...getUserSettingsStore().settings.graph_view_modes, [currentUser.uid]: next });
     };
-    const [focusColumn, setFocusColumn] = useState<string>();
+    const [focusColumn, setFocusColumn] = useState<{ uid: string }>();
     const { data, isError, refetch } = useGetCards({ project_uid: project.uid });
     const cards = ProjectCard.Model.useModels((card) => card.project_uid === project.uid, [project, data]);
     const columns = ProjectColumn.Model.useModels((column) => column.project_uid === project.uid, [project, data]);
@@ -205,7 +207,7 @@ const BoardGraphPage = ({ project }: IBoardRelatedPageProps): React.JSX.Element 
                             size="sm"
                             variant="ghost"
                             className="shrink-0 gap-2"
-                            onClick={() => (view === "columns" ? showColumn(x) : setFocusColumn(column.uid))}
+                            onClick={() => (view === "columns" ? showColumn(x) : setFocusColumn({ uid: column.uid }))}
                         >
                             {column.name}
                             <span className="text-xs text-muted-foreground">{laneCards.length}</span>
@@ -234,6 +236,7 @@ const BoardGraphPage = ({ project }: IBoardRelatedPageProps): React.JSX.Element 
                         nodes={nodes}
                         edges={edges}
                         nodeTypes={nodeTypes}
+                        colorMode={resolvedTheme === "dark" ? "dark" : "light"}
                         onInit={(instance) => {
                             flowRef.current = instance;
                         }}
