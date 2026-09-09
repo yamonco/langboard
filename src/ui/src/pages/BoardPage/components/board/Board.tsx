@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useId, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import invariant from "tiny-invariant";
 import BoardColumn, { SkeletonBoardColumn } from "@/pages/BoardPage/components/board/BoardColumn";
 import { bindAll } from "bind-event-listener";
@@ -86,7 +86,12 @@ export function SkeletonBoard() {
 
 export function Board() {
     const scrollableRef = useRef<HTMLDivElement | null>(null);
-    const scrollportId = useId();
+    const [scrollable, setScrollable] = useState<HTMLDivElement | null>(null);
+    const setScrollableRef = useCallback((node: HTMLDivElement | null) => {
+        scrollableRef.current = node;
+        setScrollable(node);
+    }, []);
+    const scrollportId = "board-scrollport";
 
     return (
         <>
@@ -97,14 +102,14 @@ export function Board() {
                     "min-h-0 md:h-[calc(100dvh_-_theme(spacing.28)_-_theme(spacing.2))]"
                 )}
                 viewportClassName="!overflow-x-auto"
-                viewportRef={scrollableRef}
+                viewportRef={setScrollableRef}
             >
                 <Flex direction="row" items="start" gap="4" p="4" h="full" className="min-h-0">
                     <BoardDisplay scrollableRef={scrollableRef} />
                 </Flex>
                 <ScrollArea.Bar orientation="horizontal" />
             </ScrollArea.Root>
-            <BoardMinimap scrollableRef={scrollableRef} scrollportId={scrollportId} />
+            <BoardMinimap scrollable={scrollable} scrollportId={scrollportId} />
         </>
     );
 }
