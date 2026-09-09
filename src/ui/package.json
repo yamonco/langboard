@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "vite --force",
     "build": "tsc && vite build",
+    "test:board-graph": "node --experimental-strip-types --test src/pages/BoardPage/BoardGraphLayout.test.ts src/pages/BoardPage/BoardGraphPreference.test.ts",
     "lint": "eslint . -c eslint.config.js --ignore-pattern node_modules/ --ignore-pattern dist/ --report-unused-disable-directives --max-warnings 0",
     "test:card-hierarchy": "node --experimental-strip-types src/pages/BoardPage/components/board/BoardColumnCardHierarchy.test.ts",
     "test:relationship-geometry": "node --experimental-strip-types src/pages/BoardPage/components/board/BoardRelationshipGeometry.test.ts",
@@ -16,12 +17,12 @@
     "check-format": "prettier --check \"{tests,src}/**/*.{js,jsx,ts,tsx,json,md}\" --ignore-path .prettierignore"
   },
   "dependencies": {
+    "react-force-graph-2d": "1.29.1",
     "@ai-sdk/react": "^3.0.113",
     "@ariakit/react": "^0.4.21",
     "@atlaskit/pragmatic-drag-and-drop": "^1.7.9",
     "@atlaskit/pragmatic-drag-and-drop-hitbox": "^1.1.0",
     "@atlaskit/pragmatic-drag-and-drop-react-drop-indicator": "^3.2.12",
-    "@dagrejs/dagre": "^3.1.1",
     "@emoji-mart/data": "^1.2.1",
     "@hocuspocus/provider": "^3.4.4",
     "@langboard/core": "file:../shared/ts",
