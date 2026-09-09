@@ -32,6 +32,7 @@ import {
 import { COLUMN_IDLE } from "@/core/helpers/dnd/createDndColumnEvents";
 import useRowReordered from "@/core/hooks/useRowReordered";
 import { useHasRunningBot } from "@/core/stores/BotStatusStore";
+import { buildBoardColumnCardHierarchy } from "@/pages/BoardPage/components/board/BoardColumnCardHierarchy";
 
 export function SkeletonBoardColumn({ cardCount }: { cardCount: number }) {
     return (
@@ -217,12 +218,14 @@ const BoardColumnCardList = memo(({ column, updateBoard, scrollableRef, onCardCo
         onCardCountChange(columnCards.length);
     }, [columnCards.length, onCardCountChange]);
 
+    const hierarchyGroups = useMemo(() => buildBoardColumnCardHierarchy(columnCards), [columnCards]);
+
     const virtualizer = useVirtualizer({
-        count: columnCards.length,
+        count: hierarchyGroups.length,
         getScrollElement: () => scrollableRef.current,
-        estimateSize: () => 126,
+        estimateSize: (index) => 134 + (hierarchyGroups[index]?.descendants.length ?? 0) * 42,
         overscan: 10,
-        getItemKey: (index) => columnCards[index]?.uid ?? index,
+        getItemKey: (index) => hierarchyGroups[index]?.root.uid ?? index,
     });
     const virtualItems = virtualizer.getVirtualItems();
     const totalSize = virtualizer.getTotalSize();
@@ -230,20 +233,31 @@ const BoardColumnCardList = memo(({ column, updateBoard, scrollableRef, onCardCo
     return (
         <Box className="relative w-full flex-shrink-0" style={{ height: `${totalSize}px` }}>
             {virtualItems.map((virtualRow) => {
-                const card = columnCards[virtualRow.index];
-                if (!card) {
+                const group = hierarchyGroups[virtualRow.index];
+                if (!group) {
                     return null;
                 }
 
                 return (
                     <Box
-                        key={card.uid}
+                        key={group.root.uid}
                         ref={virtualizer.measureElement}
                         data-index={virtualRow.index}
                         className="absolute left-0 top-0 w-full pb-2"
                         style={{ transform: `translateY(${virtualRow.start}px)` }}
                     >
-                        <BoardColumnCard card={card} />
+                        {group.descendants.length ? (
+                            <Box className="rounded-2xl border border-border/70 bg-secondary/30 p-1.5 shadow-sm">
+                                <BoardColumnCard card={group.root} />
+                                <Flex direction="col" gap="1" className="mt-1.5 border-t border-border/60 pt-1.5">
+                                    {group.descendants.map((item) => (
+                                        <BoardColumnCard key={item.card.uid} card={item.card} hierarchyDepth={item.depth} grouped />
+                                    ))}
+                                </Flex>
+                            </Box>
+                        ) : (
+                            <BoardColumnCard card={group.root} />
+                        )}
                     </Box>
                 );
             })}

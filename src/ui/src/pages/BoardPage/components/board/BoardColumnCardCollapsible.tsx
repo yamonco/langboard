@@ -25,9 +25,10 @@ import BoardTaskMetadataBadges from "@/pages/BoardPage/components/task/BoardTask
 
 export interface IBoardColumnCardCollapsibleProps {
     isDragging: bool;
+    compact?: bool;
 }
 
-function BoardColumnCardCollapsible({ isDragging }: IBoardColumnCardCollapsibleProps) {
+function BoardColumnCardCollapsible({ isDragging, compact = false }: IBoardColumnCardCollapsibleProps) {
     const { selectCardViewType, selectedRelationshipUIDs, currentCardUIDRef, isDisabledCard } = useBoardController();
     const { project, filters, cardsMap, globalRelationshipTypes, navigateWithFilters } = useBoard();
     const [t] = useTranslation();
@@ -149,44 +150,53 @@ function BoardColumnCardCollapsible({ isDragging }: IBoardColumnCardCollapsibleP
                 id={`board-card-${card.uid}`}
                 className={cn(
                     "relative hover:border-primary",
+                    compact && "border-border/60 bg-background/80 shadow-none transition-colors hover:bg-background",
                     !!selectCardViewType && isDisabledCard(card.uid) ? "cursor-not-allowed" : "cursor-pointer"
                 )}
                 onClick={openCard}
             >
                 {hasRunningBot && <ShineBorder className="z-50" />}
                 <Collapsible.Root
-                    open={!isCollapsed}
+                    open={!compact && !isCollapsed}
                     onOpenChange={(opened) => {
                         updateCollapsed(card.uid, !opened);
                     }}
                 >
-                    <Card.Header className="relative block space-y-0 py-4">
-                        {!isCollapsed && !!labels.length && (
+                    <Card.Header className={cn("relative block space-y-0", compact ? "px-3 py-2" : "py-4")}>
+                        {!compact && !isCollapsed && !!labels.length && (
                             <Flex items="center" gap="1" mb="1.5" wrap>
                                 {labels.map((label) => (
                                     <LabelModelBadge key={`board-card-label-${label.uid}`} model={label} />
                                 ))}
                             </Flex>
                         )}
-                        {!isCollapsed && <BoardTaskMetadataBadges cardUID={card.uid} compact className="mb-1.5" />}
-                        <Card.Title className="max-w-[calc(100%_-_theme(spacing.8))] break-all leading-tight">{title}</Card.Title>
-                        <BoardGraphApprovalTargetBadge
-                            projectUID={project.uid}
-                            scopeTable={EGraphApprovalScopeTable.Card}
-                            scopeUID={card.uid}
-                            className="absolute right-11 top-3"
-                        />
-                        <Button
-                            variant="ghost"
-                            className={cn("absolute right-2.5 top-2.5 mt-0")}
-                            size="icon-sm"
-                            title={t(`common.${!isCollapsed ? "Collapse" : "Expand"}`)}
-                            titleSide="top"
-                            onClick={handleOpenCollapsible}
-                            {...attributes}
+                        {!compact && !isCollapsed && <BoardTaskMetadataBadges cardUID={card.uid} compact className="mb-1.5" />}
+                        <Card.Title
+                            className={cn("break-all leading-tight", compact ? "max-w-full text-sm" : "max-w-[calc(100%_-_theme(spacing.8))]")}
                         >
-                            <IconComponent icon="chevron-down" size="4" className={cn("transition-all", !isCollapsed && "rotate-180")} />
-                        </Button>
+                            {title}
+                        </Card.Title>
+                        {!compact && (
+                            <BoardGraphApprovalTargetBadge
+                                projectUID={project.uid}
+                                scopeTable={EGraphApprovalScopeTable.Card}
+                                scopeUID={card.uid}
+                                className="absolute right-11 top-3"
+                            />
+                        )}
+                        {!compact && (
+                            <Button
+                                variant="ghost"
+                                className={cn("absolute right-2.5 top-2.5 mt-0")}
+                                size="icon-sm"
+                                title={t(`common.${!isCollapsed ? "Collapse" : "Expand"}`)}
+                                titleSide="top"
+                                onClick={handleOpenCollapsible}
+                                {...attributes}
+                            >
+                                <IconComponent icon="chevron-down" size="4" className={cn("transition-all", !isCollapsed && "rotate-180")} />
+                            </Button>
+                        )}
                     </Card.Header>
                     <Collapsible.Content
                         className={cn(
@@ -210,7 +220,6 @@ function BoardColumnCardCollapsible({ isDragging }: IBoardColumnCardCollapsibleP
                                 ))}
                             </Card.Content>
                         )}
-                        <BoardColumnCardRelationship attributes={attributes} />
                         <Card.Footer className="flex items-end justify-between gap-1.5 pb-4">
                             <Flex items="center" gap="2">
                                 <IconComponent icon="message-square" size="4" className="text-secondary" strokeWidth="4" />
@@ -230,6 +239,7 @@ function BoardColumnCardCollapsible({ isDragging }: IBoardColumnCardCollapsibleP
                         </Card.Footer>
                     </Collapsible.Content>
                 </Collapsible.Root>
+                <BoardColumnCardRelationship attributes={attributes} />
             </Card.Root>
             <SelectRelationshipDialog isOpened={isSelectRelationshipDialogOpened} setIsOpened={setIsSelectRelationshipDialogOpened} />
         </>
