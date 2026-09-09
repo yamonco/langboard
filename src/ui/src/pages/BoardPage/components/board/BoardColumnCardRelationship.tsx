@@ -226,7 +226,11 @@ const BoardColumnCardRelationshipButton = memo(({ type, attributes, compact }: I
                 ref={buttonRef}
                 size="icon-sm"
                 className={cn(
-                    "absolute top-1/2 z-30 -translate-y-1/2 transform rounded-full text-xs hover:bg-primary/70",
+                    "pointer-events-none absolute top-1/2 z-50 -translate-y-1/2 transform rounded-full text-xs",
+                    "opacity-0 transition-opacity hover:bg-primary/70",
+                    "group-hover/relationship-card:pointer-events-auto group-hover/relationship-card:opacity-100",
+                    "group-focus-within/relationship-card:pointer-events-auto group-focus-within/relationship-card:opacity-100",
+                    visibleRelationshipCount > 0 && "pointer-events-auto opacity-100",
                     compact && "size-5 p-0 text-[9px] opacity-60 transition-opacity hover:opacity-100 focus-visible:opacity-100",
                     isParent ? (compact ? "-left-2" : "-left-3") : compact ? "-right-2" : "-right-3"
                 )}
