@@ -15,6 +15,7 @@
     "test:board-gestures": "node --experimental-strip-types src/pages/BoardPage/components/board/BoardGestureData.test.ts",
     "test:board-touch-scroll": "node --experimental-strip-types src/pages/BoardPage/components/board/BoardTouchAutoScroll.test.ts",
     "test:board-touch-e2e": "playwright test -c playwright.board.config.ts",
+    "test:board-minimap": "node --experimental-strip-types src/pages/BoardPage/components/board/BoardMinimapLayout.test.ts",
     "preview": "vite preview",
     "format": "prettier --write \"{tests,src}/**/*.{js,jsx,ts,tsx,json,md}\" --ignore-path .prettierignore",
     "check-format": "prettier --check \"{tests,src}/**/*.{js,jsx,ts,tsx,json,md}\" --ignore-path .prettierignore"

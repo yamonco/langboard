@@ -23,6 +23,7 @@ import { useBoardController } from "@/core/providers/BoardController";
 import { cn } from "@/core/utils/ComponentUtils";
 import useBoardTouchCardDnd from "@/pages/BoardPage/components/board/useBoardTouchCardDnd";
 import BoardCardRelationshipOverlay from "@/pages/BoardPage/components/board/BoardCardRelationshipOverlay";
+import BoardMinimap from "@/pages/BoardPage/components/board/BoardMinimap";
 
 export function SkeletonBoard() {
     const [cardCounts, setCardCounts] = useState([1, 3, 2]);
@@ -90,21 +91,26 @@ export function Board() {
         scrollableRef.current = node;
         setScrollable(node);
     }, []);
+    const scrollportId = "board-scrollport";
 
     return (
-        <ScrollArea.Root
-            className={cn(
-                "h-[calc(100dvh_-_theme(spacing.28)_-_theme(spacing.2)_-_theme(spacing.16))]",
-                "min-h-0 md:h-[calc(100dvh_-_theme(spacing.28)_-_theme(spacing.2))]"
-            )}
-            viewportClassName="!overflow-x-auto"
-            viewportRef={setScrollableRef}
-        >
-            <Flex direction="row" items="start" gap="4" p="4" h="full" className="min-h-0">
-                <BoardDisplay scrollable={scrollable} scrollableRef={scrollableRef} />
-            </Flex>
-            <ScrollArea.Bar orientation="horizontal" />
-        </ScrollArea.Root>
+        <>
+            <ScrollArea.Root
+                viewportId={scrollportId}
+                className={cn(
+                    "h-[calc(100dvh_-_theme(spacing.28)_-_theme(spacing.2)_-_theme(spacing.16))]",
+                    "min-h-0 md:h-[calc(100dvh_-_theme(spacing.28)_-_theme(spacing.2))]"
+                )}
+                viewportClassName="!overflow-x-auto"
+                viewportRef={setScrollableRef}
+            >
+                <Flex direction="row" items="start" gap="4" p="4" h="full" className="min-h-0">
+                    <BoardDisplay scrollable={scrollable} scrollableRef={scrollableRef} />
+                </Flex>
+                <ScrollArea.Bar orientation="horizontal" />
+            </ScrollArea.Root>
+            <BoardMinimap scrollable={scrollable} scrollportId={scrollportId} />
+        </>
     );
 }
 

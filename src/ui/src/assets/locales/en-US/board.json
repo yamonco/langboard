@@ -1,5 +1,9 @@
 {
   "Board": "Board",
+  "Minimap": "Minimap",
+  "Scroll board horizontally": "Scroll board horizontally",
+  "Previous column": "Previous column",
+  "Next column": "Next column",
   "Drag onto a card to assign": "Drag onto a card to assign",
   "Member assigned": "Member assigned",
   "Move card": "Move card",
