@@ -121,7 +121,7 @@ function BoardColumnCardDisplay({
     const { filters, canDragAndDrop, navigateWithFilters } = useBoard();
     const isSelectedRelationshipCard = isSelectedCard(card.uid);
     const relationshipSelectionActor = isSelectedRelationshipCard ? getRelationshipSelectionActor(card.uid) : undefined;
-    const indentation = grouped ? Math.min(Math.max(hierarchyDepth - 1, 0), 3) * 8 : 0;
+    const indentation = grouped ? Math.min(Math.max(hierarchyDepth, 1), 3) * 8 : 0;
 
     const setFilters = (relationshipType: ProjectCardRelationship.TRelationship) => {
         if (!filters[relationshipType]) {
@@ -156,7 +156,7 @@ function BoardColumnCardDisplay({
             <Flex
                 gap="2"
                 direction="col"
-                className={outerStyles[state.type]}
+                className={cn(outerStyles[state.type], grouped && "border-l border-border/60 pl-2")}
                 style={{ marginLeft: indentation, width: `calc(100% - ${indentation}px)` }}
             >
                 {state.type === "is-over" && state.closestEdge === "top" ? <BoardColumnCardShadow dragging={state.dragging} /> : null}
