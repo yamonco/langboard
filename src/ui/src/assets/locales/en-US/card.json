@@ -89,6 +89,10 @@
   "Show all checklists ({checklists} hidden)": "Show all checklists ({{checklists}} hidden)",
   "Parent cards": "Parent cards",
   "Child cards": "Child cards",
+  "Connect parent card": "Connect parent card",
+  "Connect child card": "Connect child card",
+  "Connect cards": "Connect cards",
+  "Choose a relationship type for {source} and {target}.": "Choose a relationship type for {{source}} and {{target}}.",
   "Select cards": "Select cards",
   "errors": {
     "File name cannot be empty.": "File name cannot be empty.",
