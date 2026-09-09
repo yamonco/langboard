@@ -111,3 +111,15 @@ def replace_content(
     if len(content) > 32000:
         raise WikiValidationError("Patched wiki content exceeds 32000 characters")
     return content
+
+
+def replace_all_content(snapshot: WikiSnapshot, expected_revision: str, content: str) -> str:
+    """Replace a complete reviewed wiki, including initialization or clearing."""
+
+    if snapshot.revision != expected_revision:
+        raise WikiValidationError("Wiki changed after review; read it again before replacing")
+    if not isinstance(content, str) or len(content) > 32000:
+        raise WikiValidationError("Replacement wiki content must be a string of at most 32000 characters")
+    if content == snapshot.content:
+        raise WikiValidationError("Wiki replacement must change content")
+    return content

@@ -1,6 +1,6 @@
 """Revision-guarded wiki append commands."""
 
-from ...domain import WikiRepository, WikiSnapshot, append_content, replace_content
+from ...domain import WikiRepository, WikiSnapshot, append_content, replace_all_content, replace_content
 
 
 def append_wiki(
@@ -24,6 +24,21 @@ def patch_wiki(
 
     before = repository.snapshot(project_uid, wiki_uid)
     after = replace_content(before, expected_revision, edits)
+    repository.replace(project_uid, wiki_uid, before.content, after)
+    return {"wiki_uid": wiki_uid, "revision": WikiSnapshot(wiki_uid, before.title, after).revision}
+
+
+def replace_wiki(
+    repository: WikiRepository,
+    project_uid: str,
+    wiki_uid: str,
+    expected_revision: str,
+    content: str,
+) -> dict[str, str]:
+    """Persist one reviewed whole-document replacement as a single command."""
+
+    before = repository.snapshot(project_uid, wiki_uid)
+    after = replace_all_content(before, expected_revision, content)
     repository.replace(project_uid, wiki_uid, before.content, after)
     return {"wiki_uid": wiki_uid, "revision": WikiSnapshot(wiki_uid, before.title, after).revision}
 
