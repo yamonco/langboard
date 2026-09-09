@@ -264,7 +264,7 @@ const BoardColumnCardList = memo(({ column, updateBoard, scrollableRef, onCardCo
         let focusFrame = 0;
         let highlightTimeout = 0;
         const focusCard = (event: Event) => {
-            const { cardUID, columnUID } = (event as CustomEvent<IBoardCardFocusEventDetail>).detail;
+            const { cardUID, columnUID, focus } = (event as CustomEvent<IBoardCardFocusEventDetail>).detail;
             if (columnUID !== column.uid) {
                 return;
             }
@@ -295,6 +295,7 @@ const BoardColumnCardList = memo(({ column, updateBoard, scrollableRef, onCardCo
 
                 const behavior = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
                 cardElement.scrollIntoView({ behavior, block: "center", inline: "center" });
+                if (focus) cardElement.querySelector<HTMLButtonElement>("[data-board-card-open]")?.focus({ preventScroll: true });
                 cardElement.setAttribute("data-relationship-drop-target", "true");
                 highlightTimeout = window.setTimeout(() => cardElement.removeAttribute("data-relationship-drop-target"), 1200);
             };
