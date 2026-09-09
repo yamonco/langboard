@@ -83,6 +83,45 @@ test("places grandchildren inside the top-level parent group", () => {
         ]
     );
 });
+test("mirrors a shared child in every top-level parent group", () => {
+    const relationships = [
+        { parent_card_uid: "parent-a", child_card_uid: "shared" },
+        { parent_card_uid: "parent-b", child_card_uid: "shared" },
+    ];
+    const groups = buildBoardColumnCardHierarchy([
+        card("parent-a", 0, relationships),
+        card("parent-b", 1, relationships),
+        card("shared", 2, relationships),
+    ]);
+
+    assert.deepEqual(
+        groups.map(({ root, descendants }) => [root.uid, descendants.map(({ card: item }) => item.uid)]),
+        [
+            ["parent-a", ["shared"]],
+            ["parent-b", ["shared"]],
+        ]
+    );
+});
+
+test("renders a converging descendant once inside the same top-level group", () => {
+    const relationships = [
+        { parent_card_uid: "root", child_card_uid: "left" },
+        { parent_card_uid: "root", child_card_uid: "right" },
+        { parent_card_uid: "left", child_card_uid: "shared" },
+        { parent_card_uid: "right", child_card_uid: "shared" },
+    ];
+    const groups = buildBoardColumnCardHierarchy([
+        card("root", 0, relationships),
+        card("left", 1, relationships),
+        card("right", 2, relationships),
+        card("shared", 3, relationships),
+    ]);
+
+    assert.deepEqual(
+        groups.map(({ root, descendants }) => [root.uid, descendants.map(({ card: item }) => item.uid)]),
+        [["root", ["left", "shared", "right"]]]
+    );
+});
 
 test("rejects duplicate, self, and cyclic relationship candidates", () => {
     const relationships = [

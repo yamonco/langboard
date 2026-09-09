@@ -12,8 +12,9 @@ export interface IBoardColumnCardHierarchyGroup {
 
 /**
  * Projects same-column relationships as a tree without changing card order or
- * relationship data. A card is rendered once even when legacy data contains
- * multiple parents or a cycle.
+ * relationship data. Shared descendants are mirrored once in every top-level
+ * parent group that reaches them. A per-group path guard keeps legacy cycles
+ * finite without suppressing mirrors in independent groups.
  */
 export const buildBoardColumnCardHierarchy = (cards: ProjectCard.TModel[]): IBoardColumnCardHierarchyGroup[] => {
     // useRowReordered already supplies board order. Keeping that order here
@@ -46,38 +47,46 @@ export const buildBoardColumnCardHierarchy = (cards: ProjectCard.TModel[]): IBoa
         });
     });
 
-    const result: IBoardColumnCardHierarchyItem[] = [];
-    const renderedUIDs = new Set<string>();
-    const visitingUIDs = new Set<string>();
+    const groups: IBoardColumnCardHierarchyGroup[] = [];
+    const coveredUIDs = new Set<string>();
 
-    const append = (card: ProjectCard.TModel, depth: number) => {
-        if (renderedUIDs.has(card.uid) || visitingUIDs.has(card.uid)) {
-            return;
-        }
+    const appendGroup = (root: ProjectCard.TModel) => {
+        const descendants: IBoardColumnCardHierarchyItem[] = [];
+        const emittedUIDs = new Set([root.uid]);
+        const visitingUIDs = new Set([root.uid]);
+        coveredUIDs.add(root.uid);
 
-        visitingUIDs.add(card.uid);
-        renderedUIDs.add(card.uid);
-        result.push({ card, depth });
+        const appendChildren = (parent: ProjectCard.TModel, depth: number) => {
+            childUIDsByParentUID.get(parent.uid)?.forEach((childUID) => {
+                if (emittedUIDs.has(childUID) || visitingUIDs.has(childUID)) {
+                    return;
+                }
 
-        const children = [...(childUIDsByParentUID.get(card.uid) ?? [])]
-            .map((uid) => cardsByUID.get(uid))
-            .filter((child): child is ProjectCard.TModel => !!child);
-        children.forEach((child) => append(child, depth + 1));
-        visitingUIDs.delete(card.uid);
+                const child = cardsByUID.get(childUID);
+                if (!child) {
+                    return;
+                }
+
+                emittedUIDs.add(childUID);
+                visitingUIDs.add(childUID);
+                coveredUIDs.add(childUID);
+                descendants.push({ card: child, depth });
+                appendChildren(child, depth + 1);
+                visitingUIDs.delete(childUID);
+            });
+        };
+
+        appendChildren(root, 1);
+        groups.push({ root, descendants });
     };
 
-    cards.filter((card) => !childUIDs.has(card.uid)).forEach((card) => append(card, 0));
-    cards.forEach((card) => append(card, 0));
-
-    return result.reduce<IBoardColumnCardHierarchyGroup[]>((groups, item) => {
-        if (item.depth === 0 || !groups.length) {
-            groups.push({ root: item.card, descendants: [] });
-        } else {
-            groups.at(-1)!.descendants.push(item);
+    cards.filter((card) => !childUIDs.has(card.uid)).forEach(appendGroup);
+    cards.forEach((card) => {
+        if (!coveredUIDs.has(card.uid)) {
+            appendGroup(card);
         }
-
-        return groups;
-    }, []);
+    });
+    return groups;
 };
 
 export const isRelationshipRenderedInHierarchy = (
