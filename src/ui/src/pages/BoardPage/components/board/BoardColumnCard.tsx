@@ -18,6 +18,7 @@ import { SkeletonUserAvatarList } from "@/components/UserAvatarList";
 import { TRowState } from "@/core/helpers/dnd/types";
 import { ROW_IDLE } from "@/core/helpers/dnd/createDndRowEvents";
 import { columnRowDndHelpers } from "@/core/helpers/dnd";
+import useBoardMemberDrop from "@/pages/BoardPage/components/board/useBoardMemberDrop";
 
 export function SkeletonBoardColumnCard({ ref }: { ref?: React.Ref<HTMLDivElement> }): React.JSX.Element {
     return (
@@ -47,15 +48,16 @@ const outerStyles: { [Key in TRowState["type"]]?: string } = {
 };
 
 function BoardColumnCard({ card, hierarchyDepth = 0, grouped = false }: { card: ProjectCard.TModel; hierarchyDepth?: number; grouped?: boolean }) {
-    const { canDragAndDrop } = useBoard();
+    const { canDragCards } = useBoard();
     const outerRef = useRef<HTMLDivElement | null>(null);
     const innerRef = useRef<HTMLDivElement | null>(null);
     const [state, setState] = useState<TRowState>(ROW_IDLE);
     const order = card.useField("order");
     const columnUID = card.useField("project_column_uid");
+    useBoardMemberDrop(innerRef, card);
 
     useEffect(() => {
-        if (!canDragAndDrop) {
+        if (!canDragCards) {
             return;
         }
 
@@ -80,7 +82,7 @@ function BoardColumnCard({ card, hierarchyDepth = 0, grouped = false }: { card: 
                 });
             },
         });
-    }, [canDragAndDrop, card, order, columnUID]);
+    }, [canDragCards, card, order, columnUID]);
 
     return (
         <>
@@ -118,7 +120,7 @@ function BoardColumnCardDisplay({
     grouped: boolean;
 }) {
     const { selectCardViewType, currentCardUIDRef, getRelationshipSelectionActor, isSelectedCard, isDisabledCard } = useBoardController();
-    const { filters, canDragAndDrop, navigateWithFilters } = useBoard();
+    const { filters, canDragCards, navigateWithFilters } = useBoard();
     const isSelectedRelationshipCard = isSelectedCard(card.uid);
     const relationshipSelectionActor = isSelectedRelationshipCard ? getRelationshipSelectionActor(card.uid) : undefined;
     const indentation = grouped ? Math.min(Math.max(hierarchyDepth, 1), 3) * 8 : 0;
@@ -140,7 +142,7 @@ function BoardColumnCardDisplay({
     const cardClassName = cn(
         "group/relationship-card relative min-w-0",
         "data-[relationship-drop-target=true]:ring-2 data-[relationship-drop-target=true]:ring-primary",
-        canDragAndDrop
+        canDragCards
             ? "cursor-pointer touch-pan-y"
             : cn(
                   !selectCardViewType || !isDisabledCard(card.uid) ? "cursor-pointer" : "cursor-not-allowed",
@@ -179,7 +181,13 @@ function BoardColumnCardDisplay({
                             {relationshipSelectionActor.name}
                         </Box>
                     ) : null}
-                    <Box ref={innerRef} className="w-full">
+                    <Box
+                        ref={innerRef}
+                        className={cn(
+                            "w-full rounded-xl transition-shadow data-[member-drop-target=true]:ring-2 data-[member-drop-target=true]:ring-primary",
+                            "data-[member-drop-target=true]:ring-offset-2 data-[member-drop-target=true]:ring-offset-background"
+                        )}
+                    >
                         <BoardColumnCardCollapsible isDragging={state.type !== "idle"} compact={grouped} />
                     </Box>
                 </Box>
