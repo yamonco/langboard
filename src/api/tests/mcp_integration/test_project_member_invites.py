@@ -9,6 +9,7 @@ os.environ.setdefault("PROJECT_NAME", "langboard")
 from langboard.mcp_integration import McpTool
 from langboard.mcp_tools import ProjectMcp
 from langboard_shared.domain.models import IdentityProvider, User
+from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.domain.services.factory.IdentityLinkService import IdentityLinkService
 from langboard_shared.domain.services.factory.ProjectInvitationService import (
     InvitationRelatedResult,
@@ -194,7 +195,7 @@ def test_existing_member_addition_bypasses_invitation_and_preserves_members() ->
         get_all_by_project=Mock(side_effect=[[(existing, object())], assigned_rows]),
         ensure_assigned=Mock(return_value=(object(), True)),
     )
-    role_repository = SimpleNamespace(project=SimpleNamespace(grant_default=Mock()))
+    role_repository = SimpleNamespace(project=SimpleNamespace(grant_all=Mock()))
     relationship_repository = SimpleNamespace(ensure_project_relationships=Mock())
     invitation_service = SimpleNamespace(get_api_invited_user_list_by_project=Mock(return_value=[]))
     repository = SimpleNamespace(
@@ -217,7 +218,7 @@ def test_existing_member_addition_bypasses_invitation_and_preserves_members() ->
 
     assert result == {"requested_count": 1, "changed_count": 1, "status": "updated"}
     assigned_repository.ensure_assigned.assert_called_once_with(project, employee)
-    role_repository.project.grant_default.assert_called_once_with(user_id=20, project_id=10)
+    role_repository.project.grant_all.assert_called_once_with(user_id=20, project_id=10)
     invitation_service.get_api_invited_user_list_by_project.assert_called_once_with(project)
 
 
@@ -248,6 +249,43 @@ def test_federated_active_account_is_added_without_an_email_invitation() -> None
 
     assigned.assert_called_once_with(ANY, target)
     email_service.send_template.assert_not_called()
+
+
+def test_external_invitation_acceptance_grants_card_work_without_admin_access() -> None:
+    """Accepted guests can create and update cards but cannot manage or delete project data."""
+
+    project = SimpleNamespace(id=10)
+    guest = User.model_construct(id=20)
+    grant = Mock()
+    repository = SimpleNamespace(
+        project_assigned_user=SimpleNamespace(ensure_assigned=Mock(), get_all_by_project=Mock(return_value=[])),
+        project_invitation=SimpleNamespace(get_all_by_project_with_user=Mock(return_value=[])),
+        project_user_relationship=SimpleNamespace(ensure_project_relationships=Mock()),
+        role=SimpleNamespace(project=SimpleNamespace(grant=grant)),
+    )
+    project_service = SimpleNamespace(get_api_assigned_user_list=Mock(return_value=[]))
+    service = ProjectInvitationService(
+        lambda service_type: project_service if service_type is ProjectService else None,
+        lambda _name: None,
+        repository,
+    )
+
+    with (
+        patch("langboard_shared.domain.services.factory.ProjectInvitationService.ProjectPublisher.assigned_to_users"),
+        patch("langboard_shared.domain.services.factory.ProjectInvitationService.ProjectInvitationPublisher.accepted"),
+        patch("langboard_shared.domain.services.factory.ProjectInvitationService.ProjectActivityTask.project_invited_user_accepted"),
+    ):
+        service._ProjectInvitationService__assign_project_user(project, guest)
+
+    grant.assert_called_once_with(
+        actions=[
+            ProjectRoleAction.Read.value,
+            ProjectRoleAction.CardWrite.value,
+            ProjectRoleAction.CardUpdate.value,
+        ],
+        user_id=guest.id,
+        project_id=project.id,
+    )
 
 
 def test_invite_tool_schema_and_legacy_replacement_tool_are_distinct() -> None:
