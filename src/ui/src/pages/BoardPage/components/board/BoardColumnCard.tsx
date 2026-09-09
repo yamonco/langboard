@@ -138,7 +138,7 @@ function BoardColumnCardDisplay({
     };
 
     const cardClassName = cn(
-        "relative min-w-0",
+        "group/relationship-card relative min-w-0",
         "data-[relationship-drop-target=true]:ring-2 data-[relationship-drop-target=true]:ring-primary",
         canDragAndDrop
             ? "cursor-pointer touch-pan-y"
