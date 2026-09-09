@@ -1,12 +1,21 @@
 import Button from "@/components/base/Button";
+import IconComponent from "@/components/base/IconComponent";
 import { useBoard } from "@/core/providers/BoardProvider";
 import {
+    getRelationshipDirection,
+    intersectRelationshipRects,
+    relationshipCurve,
+    type TRelationshipDirection,
+} from "@/pages/BoardPage/components/board/BoardRelationshipGeometry";
+import {
     BOARD_CARD_FOCUS_EVENT,
+    BOARD_CARD_LOCATION_EVENT,
     BOARD_CARD_TOUCH_DND_ATTR,
     BOARD_COLUMN_TOUCH_DND_ATTR,
     IBoardCardFocusEventDetail,
+    IBoardCardLocationEventDetail,
 } from "@/pages/BoardPage/components/board/BoardConstants";
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 interface IBoardCardRelationshipOverlayProps {
@@ -21,13 +30,23 @@ interface IVisibleEdge {
     labelY: number;
 }
 
-interface IEdgePreview {
+interface IPreviewTarget {
     columnUID: string;
     cardUID: string;
     title: string;
     columnName: string;
-    count: number;
-    side: "left" | "right";
+    label: string;
+    sourceIsParent: boolean;
+    relationshipUID: string;
+}
+
+interface IEdgePreview {
+    side: TRelationshipDirection;
+    targets: IPreviewTarget[];
+    left: number;
+    top: number;
+    width: number;
+    height: number;
 }
 
 interface IOverlayLayout {
@@ -35,12 +54,22 @@ interface IOverlayLayout {
     previews: IEdgePreview[];
 }
 
-const getCardElement = (cardUID: string) => document.querySelector<HTMLElement>(`[${BOARD_CARD_TOUCH_DND_ATTR}="${CSS.escape(cardUID)}"]`);
+const getCardElements = (cardUID: string) =>
+    Array.from(document.querySelectorAll<HTMLElement>(`[${BOARD_CARD_TOUCH_DND_ATTR}="${CSS.escape(cardUID)}"]`));
+const getColumnElement = (columnUID: string) => document.querySelector<HTMLElement>(`[${BOARD_COLUMN_TOUCH_DND_ATTR}="${CSS.escape(columnUID)}"]`);
 const RELATIONSHIP_PREVIEW_ATTR = "data-board-relationship-preview";
 
 const BoardCardRelationshipOverlay = memo(({ scrollableRef }: IBoardCardRelationshipOverlayProps) => {
-    const { cardsMap, columns } = useBoard();
-    const [hoveredCardUID, setHoveredCardUID] = useState<string>();
+    const { cardsMap, columns, filters } = useBoard();
+    const [hoveredElement, setHoveredElement] = useState<HTMLElement | null>(null);
+    const hoveredCardUID = hoveredElement?.getAttribute(BOARD_CARD_TOUCH_DND_ATTR);
+    const hideTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+    const keepOpen = useCallback(() => clearTimeout(hideTimeout.current), []);
+    const scheduleClose = useCallback(() => {
+        clearTimeout(hideTimeout.current);
+        // Give the pointer time to cross the gap between a card and its preview.
+        hideTimeout.current = setTimeout(() => setHoveredElement(null), 350);
+    }, []);
     const [layout, setLayout] = useState<IOverlayLayout>({ edges: [], previews: [] });
     const columnsMap = useMemo(() => new Map(columns.map((column) => [column.uid, column])), [columns]);
 
@@ -54,13 +83,14 @@ const BoardCardRelationshipOverlay = memo(({ scrollableRef }: IBoardCardRelation
             target instanceof Element
                 ? target.closest<HTMLElement>(`[${BOARD_CARD_TOUCH_DND_ATTR}]`)?.getAttribute(BOARD_CARD_TOUCH_DND_ATTR)
                 : undefined;
-        const onPointerOver = (event: PointerEvent) => {
+        const onPointerOver = (event: Event) => {
             const cardUID = getCardUID(event.target);
             if (cardUID) {
-                setHoveredCardUID(cardUID);
+                keepOpen();
+                setHoveredElement((event.target as Element).closest<HTMLElement>(`[${BOARD_CARD_TOUCH_DND_ATTR}]`));
             }
         };
-        const onPointerOut = (event: PointerEvent) => {
+        const onPointerOut = (event: PointerEvent | FocusEvent) => {
             const sourceCardUID = getCardUID(event.target);
             const nextElement = event.relatedTarget instanceof Element ? event.relatedTarget : undefined;
             const nextCardUID = getCardUID(nextElement);
@@ -68,17 +98,33 @@ const BoardCardRelationshipOverlay = memo(({ scrollableRef }: IBoardCardRelation
                 return;
             }
             if (sourceCardUID && sourceCardUID !== nextCardUID) {
-                setHoveredCardUID(undefined);
+                scheduleClose();
             }
         };
 
         scrollable.addEventListener("pointerover", onPointerOver);
         scrollable.addEventListener("pointerout", onPointerOut);
+        scrollable.addEventListener("focusin", onPointerOver);
+        scrollable.addEventListener("focusout", onPointerOut);
+        const close = () => {
+            keepOpen();
+            setHoveredElement(null);
+        };
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (event.key === "Escape") close();
+        };
+        scrollable.addEventListener("dragstart", close);
+        window.addEventListener("keydown", onKeyDown);
         return () => {
+            keepOpen();
             scrollable.removeEventListener("pointerover", onPointerOver);
             scrollable.removeEventListener("pointerout", onPointerOut);
+            scrollable.removeEventListener("focusin", onPointerOver);
+            scrollable.removeEventListener("focusout", onPointerOut);
+            scrollable.removeEventListener("dragstart", close);
+            window.removeEventListener("keydown", onKeyDown);
         };
-    }, [scrollableRef]);
+    }, [scrollableRef, keepOpen, scheduleClose]);
 
     useEffect(() => {
         const scrollable = scrollableRef.current;
@@ -92,80 +138,138 @@ const BoardCardRelationshipOverlay = memo(({ scrollableRef }: IBoardCardRelation
         const updateLayout = () => {
             cancelAnimationFrame(frame);
             frame = requestAnimationFrame(() => {
-                const sourceElement = getCardElement(sourceCard.uid);
-                if (!sourceElement) {
+                const sourceElement = hoveredElement;
+                if (!sourceElement?.isConnected) {
                     setLayout({ edges: [], previews: [] });
                     return;
                 }
 
-                const viewport = scrollable.getBoundingClientRect();
-                const sourceRect = sourceElement.getBoundingClientRect();
-                const sourceColumn = columnsMap.get(sourceCard.project_column_uid);
+                const viewport = intersectRelationshipRects(scrollable.getBoundingClientRect(), {
+                    left: 0,
+                    top: 0,
+                    right: window.innerWidth,
+                    bottom: window.innerHeight,
+                });
+                if (!viewport) return;
+                const clipForColumn = (columnUID: string) => {
+                    const column = getColumnElement(columnUID);
+                    const scrollport = column?.querySelector<HTMLElement>("[data-radix-scroll-area-viewport]");
+                    return intersectRelationshipRects((scrollport ?? column)?.getBoundingClientRect() ?? viewport, viewport);
+                };
+                const sourceClip = clipForColumn(sourceCard.project_column_uid);
+                const sourceRect = sourceClip && intersectRelationshipRects(sourceElement.getBoundingClientRect(), sourceClip);
+                if (!sourceRect) {
+                    setLayout({ edges: [], previews: [] });
+                    return;
+                }
+                const sourceY = (sourceRect.top + sourceRect.bottom) / 2;
                 const edges: IVisibleEdge[] = [];
-                const previewGroups = new Map<string, IEdgePreview>();
+                const previewGroups = new Map<TRelationshipDirection, IPreviewTarget[]>();
                 const seenCardUIDs = new Set<string>();
 
                 sourceCard.relationships.forEach((relationship) => {
                     const sourceIsParent = relationship.parent_card_uid === sourceCard.uid;
                     const relatedCardUID = sourceIsParent ? relationship.child_card_uid : relationship.parent_card_uid;
                     const relatedCard = cardsMap[relatedCardUID];
-                    if (!relatedCard || relatedCard.project_column_uid === sourceCard.project_column_uid || seenCardUIDs.has(relatedCardUID)) {
+                    const relationshipType = relationship.relationship_type;
+                    if (!relatedCard || !relationshipType || seenCardUIDs.has(relatedCardUID)) {
                         return;
                     }
                     seenCardUIDs.add(relatedCardUID);
 
-                    const targetElement = getCardElement(relatedCardUID);
+                    const columnElement = getColumnElement(relatedCard.project_column_uid);
+                    const columnRect = columnElement?.getBoundingClientRect();
+                    const clip = clipForColumn(relatedCard.project_column_uid);
+                    const candidates = getCardElements(relatedCardUID);
+                    const targetElement =
+                        candidates.find((element) => clip && intersectRelationshipRects(element.getBoundingClientRect(), clip)) ?? candidates[0];
                     const targetRect = targetElement?.getBoundingClientRect();
-                    const isVisible =
-                        !!targetRect &&
-                        targetRect.right >= viewport.left &&
-                        targetRect.left <= viewport.right &&
-                        targetRect.bottom >= viewport.top &&
-                        targetRect.top <= viewport.bottom;
+                    const visibleTarget = targetRect && clip && intersectRelationshipRects(targetRect, clip);
                     const targetColumn = columnsMap.get(relatedCard.project_column_uid);
-                    const targetIsLeft = (targetColumn?.order ?? 0) < (sourceColumn?.order ?? 0);
+                    const label = sourceIsParent ? relationshipType.child_name : relationshipType.parent_name;
+                    let virtualDirection: "up" | "down" | undefined;
+                    if (!targetElement) {
+                        // The column owns filtering, hierarchy, and virtualization.
+                        document.dispatchEvent(
+                            new CustomEvent<IBoardCardLocationEventDetail>(BOARD_CARD_LOCATION_EVENT, {
+                                detail: {
+                                    cardUID: relatedCardUID,
+                                    columnUID: relatedCard.project_column_uid,
+                                    onLocated: (positions, scrollOffset) => {
+                                        if (positions.length) virtualDirection = positions.every((offset) => offset < scrollOffset) ? "up" : "down";
+                                    },
+                                },
+                            })
+                        );
+                        if (!virtualDirection) return;
+                    }
 
-                    if (isVisible && targetRect) {
-                        const relationshipType = relationship.relationship_type;
-                        if (!relationshipType) {
-                            return;
-                        }
-                        const startX = targetIsLeft ? sourceRect.left : sourceRect.right;
-                        const endX = targetIsLeft ? targetRect.right : targetRect.left;
-                        const startY = sourceRect.top + sourceRect.height / 2;
-                        const endY = targetRect.top + targetRect.height / 2;
-                        const curve = Math.max(56, Math.abs(endX - startX) * 0.42);
-                        const direction = targetIsLeft ? -1 : 1;
-                        const firstControlX = startX + curve * direction;
-                        const secondControlX = endX - curve * direction;
+                    if (visibleTarget) {
+                        if (relatedCard.project_column_uid === sourceCard.project_column_uid) return;
+                        const source = { x: sourceIsParent ? sourceRect.right : sourceRect.left, y: sourceY };
+                        const target = {
+                            x: sourceIsParent ? visibleTarget.left : visibleTarget.right,
+                            y: (visibleTarget.top + visibleTarget.bottom) / 2,
+                        };
                         edges.push({
                             uid: relationship.uid,
-                            label: sourceIsParent ? relationshipType.child_name : relationshipType.parent_name,
-                            path: `M ${startX} ${startY} C ${firstControlX} ${startY}, ${secondControlX} ${endY}, ${endX} ${endY}`,
-                            labelX: (startX + endX) / 2,
-                            labelY: (startY + endY) / 2 - 6,
+                            label,
+                            path: relationshipCurve(source, target, sourceIsParent),
+                            labelX: (source.x + target.x) / 2,
+                            labelY: (source.y + target.y) / 2 - 6,
                         });
                         return;
                     }
 
-                    const side = targetIsLeft ? "left" : "right";
-                    const key = `${side}:${relatedCard.project_column_uid}`;
-                    const existingPreview = previewGroups.get(key);
-                    if (existingPreview) {
-                        existingPreview.count += 1;
-                    } else {
-                        previewGroups.set(key, {
-                            columnUID: relatedCard.project_column_uid,
-                            cardUID: relatedCardUID,
-                            title: relatedCard.title,
-                            columnName: targetColumn?.name ?? "",
-                            count: 1,
-                            side,
-                        });
-                    }
+                    let side = columnRect && getRelationshipDirection(columnRect, viewport);
+                    if (!side && targetRect && clip) side = getRelationshipDirection(targetRect, clip);
+                    side ??= virtualDirection;
+                    if (!side) return;
+                    const targets = previewGroups.get(side) ?? [];
+                    targets.push({
+                        columnUID: relatedCard.project_column_uid,
+                        cardUID: relatedCardUID,
+                        title: relatedCard.title,
+                        columnName: targetColumn?.name ?? "",
+                        label,
+                        sourceIsParent,
+                        relationshipUID: relationship.uid,
+                    });
+                    previewGroups.set(side, targets);
                 });
 
-                setLayout({ edges, previews: [...previewGroups.values()] });
+                const previews = [...previewGroups].map(([side, targets]) => {
+                    const width = Math.min(224, (viewport.right - viewport.left) / 2 - 16);
+                    const height = Math.min(targets.length * 52, 176, (viewport.bottom - viewport.top) / 2 - 16);
+                    const left =
+                        side === "left"
+                            ? viewport.left + 12
+                            : side === "right"
+                              ? viewport.right - width - 12
+                              : (viewport.left + viewport.right - width) / 2;
+                    const top =
+                        side === "up"
+                            ? viewport.top + 12
+                            : side === "down"
+                              ? viewport.bottom - height - 12
+                              : Math.max(viewport.top + 12, Math.min(sourceY - height / 2, viewport.bottom - height - 12));
+                    targets.forEach((target) => {
+                        const source = { x: target.sourceIsParent ? sourceRect.right : sourceRect.left, y: sourceY };
+                        const endpoint = {
+                            x: side === "left" ? left + width : side === "right" ? left : left + width / 2,
+                            y: side === "up" ? top + height : side === "down" ? top : top + height / 2,
+                        };
+                        edges.push({
+                            uid: target.relationshipUID,
+                            label: "",
+                            path: relationshipCurve(source, endpoint, target.sourceIsParent),
+                            labelX: 0,
+                            labelY: 0,
+                        });
+                    });
+                    return { side, targets, left, top, width, height };
+                });
+                setLayout({ edges, previews });
             });
         };
 
@@ -177,9 +281,10 @@ const BoardCardRelationshipOverlay = memo(({ scrollableRef }: IBoardCardRelation
             window.removeEventListener("resize", updateLayout);
             scrollable.removeEventListener("scroll", updateLayout, true);
         };
-    }, [cardsMap, columnsMap, hoveredCardUID, scrollableRef]);
+    }, [cardsMap, columnsMap, hoveredCardUID, hoveredElement, scrollableRef, filters]);
 
-    const focusPreview = (preview: IEdgePreview) => {
+    const focusPreview = (preview: IPreviewTarget) => {
+        keepOpen();
         const columnElement = document.querySelector<HTMLElement>(`[${BOARD_COLUMN_TOUCH_DND_ATTR}="${CSS.escape(preview.columnUID)}"]`);
         columnElement?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
         document.dispatchEvent(
@@ -187,13 +292,12 @@ const BoardCardRelationshipOverlay = memo(({ scrollableRef }: IBoardCardRelation
                 detail: { cardUID: preview.cardUID, columnUID: preview.columnUID },
             })
         );
+        setHoveredElement(null);
     };
 
     if (!hoveredCardUID || (!layout.edges.length && !layout.previews.length)) {
         return null;
     }
-
-    const viewport = scrollableRef.current?.getBoundingClientRect();
 
     return createPortal(
         <>
@@ -227,29 +331,38 @@ const BoardCardRelationshipOverlay = memo(({ scrollableRef }: IBoardCardRelation
                     </g>
                 ))}
             </svg>
-            {layout.previews.map((preview, index) => (
-                <Button
-                    key={`${preview.side}:${preview.columnUID}`}
-                    type="button"
-                    {...{ [RELATIONSHIP_PREVIEW_ATTR]: true }}
-                    variant="secondary"
-                    className="fixed z-40 h-auto max-w-56 justify-start whitespace-normal border border-primary/30 px-3 py-2 text-left shadow-lg"
-                    style={{
-                        [preview.side]:
-                            preview.side === "left" ? (viewport?.left ?? 0) + 12 : window.innerWidth - (viewport?.right ?? window.innerWidth) + 12,
-                        top: (viewport?.top ?? 80) + 16 + index * 58,
+            {layout.previews.map((preview) => (
+                <div
+                    key={preview.side}
+                    {...{ [RELATIONSHIP_PREVIEW_ATTR]: preview.side }}
+                    className="fixed z-40 overflow-y-auto rounded-lg border border-primary/30 bg-secondary shadow-lg"
+                    style={{ left: preview.left, top: preview.top, width: preview.width, maxHeight: preview.height }}
+                    onPointerEnter={keepOpen}
+                    onPointerLeave={scheduleClose}
+                    onFocusCapture={keepOpen}
+                    onBlurCapture={(event) => {
+                        if (!event.currentTarget.contains(event.relatedTarget)) scheduleClose();
                     }}
-                    onClick={() => focusPreview(preview)}
-                    onPointerLeave={() => setHoveredCardUID(undefined)}
                 >
-                    <span className="min-w-0">
-                        <span className="block truncate text-xs font-semibold">{preview.title}</span>
-                        <span className="block truncate text-[10px] text-muted-foreground">
-                            {preview.columnName}
-                            {preview.count > 1 ? ` · +${preview.count - 1}` : ""}
-                        </span>
-                    </span>
-                </Button>
+                    {preview.targets.map((target) => (
+                        <Button
+                            key={target.cardUID}
+                            type="button"
+                            variant="ghost"
+                            className="h-auto w-full justify-start gap-2 whitespace-normal px-3 py-2 text-left"
+                            aria-label={`${target.title} · ${target.columnName} · ${target.label}`}
+                            onClick={() => focusPreview(target)}
+                        >
+                            <IconComponent icon={`arrow-${preview.side}`} size="4" className="shrink-0" />
+                            <span className="min-w-0">
+                                <span className="block truncate text-xs font-semibold">{target.title}</span>
+                                <span className="block truncate text-[10px] text-muted-foreground">
+                                    {target.columnName} · {target.label}
+                                </span>
+                            </span>
+                        </Button>
+                    ))}
+                </div>
             ))}
         </>,
         document.body

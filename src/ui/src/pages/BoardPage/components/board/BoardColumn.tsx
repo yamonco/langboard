@@ -25,12 +25,14 @@ import { TColumnState } from "@/core/helpers/dnd/types";
 import {
     BLOCK_BOARD_PANNING_ATTR,
     BOARD_CARD_FOCUS_EVENT,
+    BOARD_CARD_LOCATION_EVENT,
     BOARD_CARD_TOUCH_DND_ATTR,
     BOARD_COLUMN_MAX_HEIGHT_CLASS_NAMES,
     BOARD_COLUMN_TOUCH_DND_ATTR,
     BOARD_DND_SETTINGS,
     BOARD_DND_SYMBOL_SET,
     IBoardCardFocusEventDetail,
+    IBoardCardLocationEventDetail,
 } from "@/pages/BoardPage/components/board/BoardConstants";
 import { COLUMN_IDLE } from "@/core/helpers/dnd/createDndColumnEvents";
 import useRowReordered from "@/core/hooks/useRowReordered";
@@ -222,6 +224,17 @@ const BoardColumnCardList = memo(({ column, updateBoard, scrollableRef, onCardCo
     }, [columnCards.length, onCardCountChange]);
 
     const hierarchyGroups = useMemo(() => buildBoardColumnCardHierarchy(columnCards), [columnCards]);
+    const cardGroupIndices = useMemo(() => {
+        const indices = new Map<string, number[]>();
+        hierarchyGroups.forEach((group, index) => {
+            [group.root, ...group.descendants.map(({ card }) => card)].forEach((card) => {
+                const positions = indices.get(card.uid) ?? [];
+                positions.push(index);
+                indices.set(card.uid, positions);
+            });
+        });
+        return indices;
+    }, [hierarchyGroups]);
 
     const virtualizer = useVirtualizer({
         count: hierarchyGroups.length,
@@ -234,6 +247,20 @@ const BoardColumnCardList = memo(({ column, updateBoard, scrollableRef, onCardCo
     const totalSize = virtualizer.getTotalSize();
 
     useEffect(() => {
+        const locateCard = (event: Event) => {
+            const { cardUID, columnUID, onLocated } = (event as CustomEvent<IBoardCardLocationEventDetail>).detail;
+            if (columnUID !== column.uid) return;
+            const positions = (cardGroupIndices.get(cardUID) ?? []).flatMap((index) => {
+                const offset = virtualizer.getOffsetForIndex(index, "start");
+                return offset ? [offset[0]] : [];
+            });
+            onLocated(positions, scrollableRef.current?.scrollTop ?? 0);
+        };
+        document.addEventListener(BOARD_CARD_LOCATION_EVENT, locateCard);
+        return () => document.removeEventListener(BOARD_CARD_LOCATION_EVENT, locateCard);
+    }, [cardGroupIndices, column.uid, scrollableRef, virtualizer]);
+
+    useEffect(() => {
         let focusFrame = 0;
         let highlightTimeout = 0;
         const focusCard = (event: Event) => {
@@ -242,17 +269,22 @@ const BoardColumnCardList = memo(({ column, updateBoard, scrollableRef, onCardCo
                 return;
             }
 
-            const groupIndex = hierarchyGroups.findIndex(
-                (group) => group.root.uid === cardUID || group.descendants.some(({ card }) => card.uid === cardUID)
-            );
-            if (groupIndex < 0) {
+            const indices = cardGroupIndices.get(cardUID);
+            if (!indices?.length) {
                 return;
             }
+            const groupIndex = indices.reduce((nearest, index) => {
+                const offset = (candidate: number) =>
+                    Math.abs((virtualizer.getOffsetForIndex(candidate, "start")?.[0] ?? 0) - (scrollableRef.current?.scrollTop ?? 0));
+                return offset(index) < offset(nearest) ? index : nearest;
+            });
 
             virtualizer.scrollToIndex(groupIndex, { align: "center" });
             let attempts = 0;
             const highlightWhenMounted = () => {
-                const cardElement = document.querySelector<HTMLElement>(`[${BOARD_CARD_TOUCH_DND_ATTR}="${CSS.escape(cardUID)}"]`);
+                const cardElement = scrollableRef.current?.querySelector<HTMLElement>(
+                    `[data-index="${groupIndex}"] [${BOARD_CARD_TOUCH_DND_ATTR}="${CSS.escape(cardUID)}"]`
+                );
                 if (!cardElement && attempts++ < 30) {
                     focusFrame = requestAnimationFrame(highlightWhenMounted);
                     return;
@@ -274,7 +306,7 @@ const BoardColumnCardList = memo(({ column, updateBoard, scrollableRef, onCardCo
             window.clearTimeout(highlightTimeout);
             document.removeEventListener(BOARD_CARD_FOCUS_EVENT, focusCard);
         };
-    }, [column.uid, hierarchyGroups, virtualizer]);
+    }, [column.uid, cardGroupIndices, scrollableRef, virtualizer]);
 
     return (
         <Box className="relative w-full flex-shrink-0" style={{ height: `${totalSize}px` }}>
