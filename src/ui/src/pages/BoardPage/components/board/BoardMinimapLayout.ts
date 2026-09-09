@@ -10,6 +10,13 @@ export function minimapScrollAt(position: number, content: number, viewport: num
     return Math.max(0, Math.min(content - viewport, position * content - viewport / 2));
 }
 
+/** Match the marker's travel even when its minimum visible width exceeds the true viewport ratio. */
+export function minimapDragDelta(trackFraction: number, content: number, viewport: number): number {
+    const marker = minimapViewport(content, viewport, 0);
+    const travel = MINIMAP_WIDTH - marker.width;
+    return travel > 0 ? (trackFraction * MINIMAP_WIDTH * marker.maximum) / travel : 0;
+}
+
 /** One SVG path with at most 112 bands, even when a board has thousands of columns. */
 export function minimapColumnPath(columns: readonly { left: number; width: number }[], content: number): string {
     if (content <= 0) return "";
