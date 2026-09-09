@@ -247,6 +247,7 @@ const BoardCardDescription = memo((): React.JSX.Element => {
                         }}
                         placeholder={!isEditing ? t("card.No description") : undefined}
                         setValue={() => {}}
+                        authoritativeCollaborativeValue={description?.content ?? ""}
                         onCollaborativeValueReady={handleCollaborativeValueReady}
                         onCollaborativeValueResetReady={handleCollaborativeValueResetReady}
                         serializeOnChange={false}
