@@ -117,3 +117,17 @@ test("renders a converging descendant once inside the same top-level group", () 
         [["root", ["left", "shared", "right"]]]
     );
 });
+
+test("preserves a deep relationship chain without recursive stack overflow", () => {
+    const cards = Array.from({ length: 10_000 }, (_, index) =>
+        card(String(index), index, index ? [{ parent_card_uid: String(index - 1), child_card_uid: String(index) }] : [])
+    );
+    const groups = buildBoardColumnCardHierarchy(cards);
+    assert.equal(groups.length, 1);
+    assert.equal(groups[0].root.uid, "0");
+    assert.equal(groups[0].descendants.length, cards.length - 1);
+    groups[0].descendants.forEach(({ card: item, depth }, index) => {
+        assert.equal(item.uid, String(index + 1));
+        assert.equal(depth, index + 1);
+    });
+});
