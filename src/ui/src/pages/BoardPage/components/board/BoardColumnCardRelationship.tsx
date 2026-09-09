@@ -226,7 +226,7 @@ const BoardColumnCardRelationshipButton = memo(({ type, attributes, compact }: I
                 ref={buttonRef}
                 size="icon-sm"
                 className={cn(
-                    "absolute top-1/2 z-30 block -translate-y-1/2 transform rounded-full text-xs hover:bg-primary/70",
+                    "absolute top-1/2 z-30 -translate-y-1/2 transform rounded-full text-xs hover:bg-primary/70",
                     compact && "size-5 p-0 text-[9px] opacity-60 transition-opacity hover:opacity-100 focus-visible:opacity-100",
                     isParent ? (compact ? "-left-2" : "-left-3") : compact ? "-right-2" : "-right-3"
                 )}
