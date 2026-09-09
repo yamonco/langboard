@@ -293,7 +293,8 @@ const BoardColumnCardList = memo(({ column, updateBoard, scrollableRef, onCardCo
                     return;
                 }
 
-                cardElement.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
+                const behavior = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
+                cardElement.scrollIntoView({ behavior, block: "center", inline: "center" });
                 cardElement.setAttribute("data-relationship-drop-target", "true");
                 highlightTimeout = window.setTimeout(() => cardElement.removeAttribute("data-relationship-drop-target"), 1200);
             };

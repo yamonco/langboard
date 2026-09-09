@@ -639,6 +639,7 @@ function BoardProxyDisplay({ pageRoute, isFetching, project }: IBoardProxyDispla
                             {!isCardPage && !selectCardViewType && (
                                 <Floating.Nav
                                     fixed
+                                    className="board-floating-navigation"
                                     items={floatingNavs.map((nav, index) => ({
                                         key: index,
                                         label: nav.name,
