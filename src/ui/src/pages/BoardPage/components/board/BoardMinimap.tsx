@@ -1,4 +1,4 @@
-import { type RefObject, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { dropTargetForElements } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
 import Button from "@/components/base/Button";
@@ -13,7 +13,7 @@ import {
     minimapViewport,
 } from "@/pages/BoardPage/components/board/BoardMinimapLayout";
 
-export default function BoardMinimap({ scrollableRef, scrollportId }: { scrollableRef: RefObject<HTMLDivElement | null>; scrollportId: string }) {
+export default function BoardMinimap({ scrollable, scrollportId }: { scrollable: HTMLDivElement | null; scrollportId: string }) {
     const [t] = useTranslation();
     const [opened, setOpened] = useState(true);
     const [metrics, setMetrics] = useState({ content: 0, viewport: 0, step: 320, path: "" });
@@ -23,7 +23,6 @@ export default function BoardMinimap({ scrollableRef, scrollportId }: { scrollab
     const marker = minimapViewport(metrics.content, metrics.viewport, left);
 
     useEffect(() => {
-        const scrollable = scrollableRef.current;
         if (!scrollable) return;
         let frame = 0;
         const measure = () => {
@@ -57,7 +56,7 @@ export default function BoardMinimap({ scrollableRef, scrollportId }: { scrollab
             scrollable.removeEventListener("scroll", scrolled);
             cancelAnimationFrame(frame);
         };
-    }, [scrollableRef]);
+    }, [scrollable]);
 
     useEffect(() => {
         if (!root.current || !marker.maximum) return;
@@ -66,7 +65,7 @@ export default function BoardMinimap({ scrollableRef, scrollportId }: { scrollab
     }, [marker.maximum]);
 
     if (marker.maximum <= 1) return null;
-    const scroll = (value: number) => scrollableRef.current?.scrollTo({ left: Math.max(0, Math.min(marker.maximum, value)), behavior: "instant" });
+    const scroll = (value: number) => scrollable?.scrollTo({ left: Math.max(0, Math.min(marker.maximum, value)), behavior: "instant" });
 
     return (
         <div
@@ -126,7 +125,7 @@ export default function BoardMinimap({ scrollableRef, scrollportId }: { scrollab
                     aria-valuenow={Math.round(Math.max(0, Math.min(left, marker.maximum)))}
                     onPointerDown={(event) => {
                         if (event.button !== 0) return;
-                        const viewport = scrollableRef.current;
+                        const viewport = scrollable;
                         if (!viewport) return;
                         event.preventDefault();
                         event.currentTarget.focus();
