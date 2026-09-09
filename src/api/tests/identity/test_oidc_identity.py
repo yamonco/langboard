@@ -1,6 +1,7 @@
 """OIDC issuer-subject identity and resource-token tests."""
 
 from __future__ import annotations
+import importlib.util
 import os
 from datetime import UTC, datetime
 from pathlib import Path
@@ -8,6 +9,9 @@ from types import SimpleNamespace
 from typing import Any
 from uuid import uuid4
 import pytest
+import sqlalchemy as sa
+from alembic.migration import MigrationContext
+from alembic.operations import Operations
 from cryptography.hazmat.primitives.asymmetric import ec
 from jwt import encode as jwt_encode
 from jwt.algorithms import ECAlgorithm
@@ -174,6 +178,64 @@ def test_identity_migration_allows_multiple_oidc_issuers_per_user() -> None:
     assert 'down_revision: str | None = "6f4a9d18c2e1"' in source
     assert "uq_user_identity_link_user_provider_issuer" in source
     assert '["user_id", "provider", "issuer"]' in source
+
+
+def test_multi_issuer_migration_enforces_the_new_database_boundary() -> None:
+    spec = importlib.util.spec_from_file_location("multi_issuer_identity", MULTI_ISSUER_MIGRATION)
+    assert spec and spec.loader
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+    metadata = sa.MetaData()
+    identity_link = sa.Table(
+        "user_identity_link",
+        metadata,
+        sa.Column("id", sa.Integer(), primary_key=True),
+        sa.Column("user_id", sa.Integer(), nullable=False),
+        sa.Column("provider", sa.String(), nullable=False),
+        sa.Column("issuer", sa.String(), nullable=False),
+        sa.Column("external_id", sa.String(), nullable=False),
+        sa.UniqueConstraint("user_id", "provider", name="uq_user_identity_link_user_provider"),
+        sa.UniqueConstraint(
+            "provider",
+            "issuer",
+            "external_id",
+            name="uq_user_identity_link_provider_issuer_external_id",
+        ),
+    )
+    engine = sa.create_engine("sqlite://")
+    with engine.begin() as connection:
+        metadata.create_all(connection)
+        connection.execute(
+            identity_link.insert().values(
+                id=1,
+                user_id=41,
+                provider="oidc",
+                issuer="https://issuer-one.example",
+                external_id="subject-one",
+            )
+        )
+        migration.op = Operations(MigrationContext.configure(connection))
+        migration.upgrade()
+        reflected = sa.Table("user_identity_link", sa.MetaData(), autoload_with=connection)
+        connection.execute(
+            reflected.insert().values(
+                id=2,
+                user_id=41,
+                provider="oidc",
+                issuer="https://issuer-two.example",
+                external_id="subject-two",
+            )
+        )
+        with pytest.raises(sa.exc.IntegrityError):
+            connection.execute(
+                reflected.insert().values(
+                    id=3,
+                    user_id=41,
+                    provider="oidc",
+                    issuer="https://issuer-two.example",
+                    external_id="subject-three",
+                )
+            )
 
 
 def _configure_delegated_policy(monkeypatch: pytest.MonkeyPatch) -> tuple[Any, str]:
