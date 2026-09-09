@@ -242,7 +242,7 @@ function BoardColumnCardCollapsible({ isDragging, compact = false }: IBoardColum
                         </Card.Footer>
                     </Collapsible.Content>
                 </Collapsible.Root>
-                <BoardColumnCardRelationship attributes={attributes} />
+                <BoardColumnCardRelationship attributes={attributes} compact={compact} />
             </Card.Root>
             <SelectRelationshipDialog isOpened={isSelectRelationshipDialogOpened} setIsOpened={setIsSelectRelationshipDialogOpened} />
         </>
