@@ -13,7 +13,7 @@ export interface IBoardColumnCardHierarchyGroup {
 /**
  * Projects same-column relationships as a tree without changing card order or
  * relationship data. Shared descendants are mirrored once in every top-level
- * parent group that reaches them. A per-group path guard keeps legacy cycles
+ * parent group that reaches them. A per-group visited set keeps legacy cycles
  * finite without suppressing mirrors in independent groups.
  */
 export const buildBoardColumnCardHierarchy = (cards: ProjectCard.TModel[]): IBoardColumnCardHierarchyGroup[] => {
@@ -52,31 +52,22 @@ export const buildBoardColumnCardHierarchy = (cards: ProjectCard.TModel[]): IBoa
 
     const appendGroup = (root: ProjectCard.TModel) => {
         const descendants: IBoardColumnCardHierarchyItem[] = [];
-        const emittedUIDs = new Set([root.uid]);
-        const visitingUIDs = new Set([root.uid]);
-        coveredUIDs.add(root.uid);
+        const emittedUIDs = new Set<string>();
+        const pending = [{ card: root, depth: 0 }];
+        // Explicit DFS preserves sibling order without using the call stack for deep chains.
+        while (pending.length) {
+            const item = pending.pop()!;
+            if (emittedUIDs.has(item.card.uid)) continue;
+            emittedUIDs.add(item.card.uid);
+            coveredUIDs.add(item.card.uid);
+            if (item.depth) descendants.push(item);
 
-        const appendChildren = (parent: ProjectCard.TModel, depth: number) => {
-            childUIDsByParentUID.get(parent.uid)?.forEach((childUID) => {
-                if (emittedUIDs.has(childUID) || visitingUIDs.has(childUID)) {
-                    return;
-                }
-
-                const child = cardsByUID.get(childUID);
-                if (!child) {
-                    return;
-                }
-
-                emittedUIDs.add(childUID);
-                visitingUIDs.add(childUID);
-                coveredUIDs.add(childUID);
-                descendants.push({ card: child, depth });
-                appendChildren(child, depth + 1);
-                visitingUIDs.delete(childUID);
-            });
-        };
-
-        appendChildren(root, 1);
+            const children = [...(childUIDsByParentUID.get(item.card.uid) ?? [])];
+            for (let index = children.length - 1; index >= 0; index--) {
+                const child = cardsByUID.get(children[index]);
+                if (child) pending.push({ card: child, depth: item.depth + 1 });
+            }
+        }
         groups.push({ root, descendants });
     };
 
