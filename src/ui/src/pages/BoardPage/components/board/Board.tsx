@@ -22,6 +22,7 @@ import useColumnReordered from "@/core/hooks/useColumnReordered";
 import { useBoardController } from "@/core/providers/BoardController";
 import { cn } from "@/core/utils/ComponentUtils";
 import useBoardTouchCardDnd from "@/pages/BoardPage/components/board/useBoardTouchCardDnd";
+import BoardCardRelationshipOverlay from "@/pages/BoardPage/components/board/BoardCardRelationshipOverlay";
 
 export function SkeletonBoard() {
     const [cardCounts, setCardCounts] = useState([1, 3, 2]);
@@ -241,6 +242,7 @@ function BoardDisplay({ scrollableRef }: { scrollableRef: React.RefObject<HTMLDi
 
     return (
         <>
+            <BoardCardRelationshipOverlay scrollableRef={scrollableRef} />
             {columns.map((column) => (
                 <BoardColumn key={`board-columnr-${column.uid}`} column={column} updateBoard={forceUpdate} />
             ))}
