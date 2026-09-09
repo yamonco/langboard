@@ -70,6 +70,7 @@ interface IBasePlateEditorProps extends Omit<TUseCreateEditor, "plugins"> {
     editorComponentRef?: React.Ref<HTMLDivElement>;
     placeholder?: string;
     deserializedValue?: Value;
+    authoritativeCollaborativeValue?: string;
     onCollaborativeValueReady?: (updateValue: ((value: string) => void) | null) => void;
     onCollaborativeValueResetReady?: (resetValue: ((value: string) => void) | null) => void;
 }
@@ -109,6 +110,7 @@ function EditorWrapper({
     editorComponentRef,
     placeholder,
     deserializedValue,
+    authoritativeCollaborativeValue,
     onCollaborativeValueReady,
     onCollaborativeValueResetReady,
     ...props
@@ -139,6 +141,7 @@ function EditorWrapper({
     const isWaitingForCollaborativeReady = !readOnly && !!documentID && !isCollaborativeReady;
     const valueRef = useRef(value);
     const deserializedValueRef = useRef(deserializedValue);
+    const restoredCollaborativeValueRef = useRef<string | null>(null);
     valueRef.current = value;
     deserializedValueRef.current = deserializedValue;
     const richPatchSocketTarget = useMemo<IRichPatchSocketTarget | null>(() => {
@@ -260,6 +263,25 @@ function EditorWrapper({
         },
         [hasRemoteCollaborativeEditor, updateCollaborativeValue]
     );
+
+    useEffect(() => {
+        if (readOnly) {
+            restoredCollaborativeValueRef.current = null;
+            return;
+        }
+
+        if (!documentID || !isCollaborativeReady || authoritativeCollaborativeValue === undefined) {
+            return;
+        }
+
+        const restoreKey = `${documentID}\u0000${authoritativeCollaborativeValue}`;
+        if (restoredCollaborativeValueRef.current === restoreKey) {
+            return;
+        }
+
+        resetCollaborativeValue(authoritativeCollaborativeValue);
+        restoredCollaborativeValueRef.current = restoreKey;
+    }, [authoritativeCollaborativeValue, documentID, isCollaborativeReady, readOnly, resetCollaborativeValue]);
 
     useEffect(() => {
         if (readOnly || !documentID || !isCollaborativeReady) {
