@@ -45,7 +45,7 @@ class ScimProvisioningService(BaseDomainService):
 
     def build_scim_user(self, user: User) -> dict[str, Any]:
         identity_link = self._get_service(IdentityLinkService)
-        link = identity_link.get_by_user_provider(user, IdentityProvider.Scim)
+        link = identity_link.get_by_user_provider(user, IdentityProvider.Scim, (Env.SCIM_ISSUER or "").rstrip("/"))
         external_id = link.external_id if link else user.get_uid()
 
         return {

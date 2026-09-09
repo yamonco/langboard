@@ -46,6 +46,20 @@ class InMemoryCache(BaseCache):
             conn.execute("REPLACE INTO cache (key, value, expiry) VALUES (?, ?, ?)", (key, casted_value, expiry))
             conn.commit()
 
+    def set_if_absent(self, key: str, value: Any, ttl: int) -> bool:
+        if ttl <= 0:
+            raise ValueError("Atomic cache entries require a positive TTL")
+        self._expire()
+        with self._get_cache_db() as conn:
+            casted_value = self._cast_set(value)
+            expiry = int((SafeDateTime.now() + timedelta(seconds=ttl)).timestamp())
+            cursor = conn.execute(
+                "INSERT OR IGNORE INTO cache (key, value, expiry) VALUES (?, ?, ?)",
+                (key, casted_value, expiry),
+            )
+            conn.commit()
+            return cursor.rowcount == 1
+
     def delete(self, key: str) -> None:
         self._expire()
         with self._get_cache_db() as conn:

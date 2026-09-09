@@ -127,7 +127,7 @@ class MiddlewareHelper:
             return gateway_result if isinstance(gateway_result, int) else status.HTTP_401_UNAUTHORIZED
 
         _, api_key = gateway_result
-        user = MiddlewareHelper._validate_oidc_token(token)
+        user = MiddlewareHelper._validate_delegated_oidc_token(token)
         if not user:
             return status.HTTP_401_UNAUTHORIZED
         scope["auth"] = user
@@ -163,6 +163,33 @@ class MiddlewareHelper:
             issuer = str(claims.get("iss", "")).strip().rstrip("/")
             if not subject or not issuer:
                 return None
+            service = DomainService()
+            try:
+                user = service.identity_link.get_user_by_provider_external_id(
+                    IdentityProvider.Oidc,
+                    subject,
+                    issuer,
+                )
+                if not user or not user.activated_at or user.deleted_at:
+                    return None
+                return user
+            finally:
+                service.close()
+        except Exception:
+            return None
+
+    @staticmethod
+    def _validate_delegated_oidc_token(token: str) -> User | None:
+        """Resolve a one-time trusted-gateway assertion to an active linked user."""
+
+        from ..core.security import DelegatedOidcClient
+        from ..domain.models import IdentityProvider
+        from ..domain.services import DomainService
+
+        try:
+            claims = DelegatedOidcClient.validate(token)
+            subject = str(claims.get("sub", "")).strip()
+            issuer = str(claims.get("iss", "")).strip().rstrip("/")
             service = DomainService()
             try:
                 user = service.identity_link.get_user_by_provider_external_id(

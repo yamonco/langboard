@@ -15,14 +15,14 @@ class UserIdentityLink(BaseDbModel, table=True):
         foreign_key=User,
         nullable=False,
         index=True,
-        unique_groups=("user_provider",),
+        unique_groups=("user_provider_issuer",),
         api_field=ApiField(name="user_uid"),
     )
     provider: IdentityProvider = Field(
         nullable=False,
         sa_type=EnumLikeType(IdentityProvider),
         index=True,
-        unique_groups=("provider_issuer_external_id", "user_provider"),
+        unique_groups=("provider_issuer_external_id", "user_provider_issuer"),
         api_field=ApiField(),
     )
     external_id: str = Field(
@@ -34,7 +34,7 @@ class UserIdentityLink(BaseDbModel, table=True):
     issuer: str = Field(
         default="",
         nullable=False,
-        unique_groups=("provider_issuer_external_id",),
+        unique_groups=("provider_issuer_external_id", "user_provider_issuer"),
         api_field=ApiField(),
     )
     email: str | None = Field(default=None, nullable=True, api_field=ApiField())
