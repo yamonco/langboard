@@ -2,7 +2,7 @@
 
 from dataclasses import replace
 import pytest
-from .application import WikiRepository, append_wiki, delete_wiki, patch_wiki, read_wiki
+from .application import WikiRepository, append_wiki, delete_wiki, patch_wiki, read_wiki, replace_wiki
 from .domain import WikiSnapshot, WikiValidationError, append_content, content_page, replace_content
 
 
@@ -106,3 +106,26 @@ def test_exact_patch_and_delete_each_use_one_reviewed_wiki_uow() -> None:
     with pytest.raises(ValueError, match="changed after review"):
         delete_wiki(repository, "p", "w", before.revision)
     assert repository.deletes == 1
+
+
+@pytest.mark.parametrize(("before", "after"), [("", "first body"), ("existing", "")])
+def test_whole_wiki_replacement_supports_initialization_and_clearing(before: str, after: str) -> None:
+    repository = MemoryWiki()
+    repository.value = replace(repository.value, content=before)
+
+    result = replace_wiki(repository, "p", "w", repository.value.revision, after)
+
+    assert repository.value.content == after
+    assert result["revision"] == repository.value.revision
+    assert repository.saves == 1
+
+
+def test_whole_wiki_replacement_rejects_stale_or_unchanged_content() -> None:
+    repository = MemoryWiki()
+
+    with pytest.raises(WikiValidationError, match="changed after review"):
+        replace_wiki(repository, "p", "w", "stale", "replacement")
+    with pytest.raises(WikiValidationError, match="must change"):
+        replace_wiki(repository, "p", "w", repository.value.revision, repository.value.content)
+
+    assert repository.saves == 0
