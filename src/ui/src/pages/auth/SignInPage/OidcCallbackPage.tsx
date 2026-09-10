@@ -22,7 +22,6 @@ function OidcCallbackPage(): React.JSX.Element {
     const handledRequestKeyRef = useRef<string | null>(null);
 
     useEffect(() => {
-        let isDisposed = false;
         const searchParams = new URLSearchParams(location.search);
         const code = searchParams.get("code");
         const state = searchParams.get("state");
@@ -50,9 +49,6 @@ function OidcCallbackPage(): React.JSX.Element {
                 if (!data.access_token) {
                     throw new Error();
                 }
-                if (isDisposed) {
-                    return;
-                }
 
                 const fallbackRedirectUrl = searchParams.get(QUERY_NAMES.REDIRECT) ?? ROUTES.AFTER_SIGN_IN;
                 const redirectUrl = data.redirect ?? fallbackRedirectUrl;
@@ -74,9 +70,6 @@ function OidcCallbackPage(): React.JSX.Element {
             .catch(() => {
                 handledRequestKeyRef.current = null;
                 getAuthStore().removeOidcCallbackRequestStatus(requestKey);
-                if (isDisposed) {
-                    return;
-                }
 
                 searchParams.delete("code");
                 searchParams.delete("state");
@@ -84,9 +77,6 @@ function OidcCallbackPage(): React.JSX.Element {
                 navigate(`${ROUTES.SIGN_IN.EMAIL}?${searchParams.toString()}`, { replace: true, smooth: true });
             });
 
-        return () => {
-            isDisposed = true;
-        };
         // OIDC callback handling should only rerun when the callback query string changes.
     }, [location]);
 
