@@ -6,6 +6,7 @@ export interface IProjectActivityPriority {
     starred: boolean;
     created_at: Date;
     last_activity_at: Date | null;
+    related_to_current_user?: boolean;
 }
 
 export function compareProjectActivityPriority(a: IProjectActivityPriority, b: IProjectActivityPriority): number {

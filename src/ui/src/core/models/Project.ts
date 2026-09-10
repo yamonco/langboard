@@ -70,6 +70,7 @@ export interface IStore extends Interface {
     ai_description?: string;
     last_viewed_at: Date;
     last_activity_at: Date | null;
+    related_to_current_user: bool;
 
     member_roles: Record<string, ProjectRole.TActions[]>; // This will be used in board setting.
 }
@@ -258,6 +259,13 @@ class Project extends BaseModel<IStore> {
     }
     public set last_activity_at(value: Date | null) {
         this.update({ last_activity_at: value });
+    }
+
+    public get related_to_current_user(): bool {
+        return this.getValue("related_to_current_user");
+    }
+    public set related_to_current_user(value: bool) {
+        this.update({ related_to_current_user: value });
     }
 
     public get member_roles() {

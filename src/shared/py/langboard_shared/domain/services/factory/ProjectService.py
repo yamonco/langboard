@@ -167,11 +167,11 @@ class ProjectService(BaseDomainService):
     def __convert_project_list(
         self,
         user: User,
-        raw_projects: list[tuple[Project, ProjectAssignedUser, SafeDateTime | None]],
+        raw_projects: list[tuple[Project, ProjectAssignedUser, SafeDateTime | None, bool]],
     ) -> tuple[list[dict[str, Any]], list[SnowflakeID]]:
         projects = []
         roles_dict = {}
-        raw_project_ids = [project.id for project, _, _ in raw_projects]
+        raw_project_ids = [project.id for project, _, _, _ in raw_projects]
 
         if not user.is_admin and raw_project_ids:
             roles = self.repo.role.project.get_list(user_id=user.id, project_id=raw_project_ids)  # type: ignore
@@ -181,7 +181,7 @@ class ProjectService(BaseDomainService):
                 roles_dict[role.project_id] = role.actions
 
         project_ids = []
-        for project, assigned_user, last_activity_at in raw_projects:
+        for project, assigned_user, last_activity_at, related_to_current_user in raw_projects:
             if not user.is_admin and project.id not in roles_dict:
                 continue
 
@@ -190,6 +190,7 @@ class ProjectService(BaseDomainService):
             api_project["starred"] = assigned_user.starred
             api_project["last_viewed_at"] = assigned_user.last_viewed_at
             api_project["last_activity_at"] = last_activity_at
+            api_project["related_to_current_user"] = related_to_current_user
             api_project["current_auth_role_actions"] = roles_dict[project.id] if not user.is_admin else [ALL_GRANTED]
             projects.append(api_project)
 
