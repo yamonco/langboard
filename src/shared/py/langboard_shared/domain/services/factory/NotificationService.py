@@ -41,9 +41,16 @@ class NotificationService(BaseDomainService):
         return "notification"
 
     def get_api_list(
-        self, user: User, time_range: Literal["3d", "7d", "1m", "all"] = "3d", page: int = 1, limit: int = 20
+        self,
+        user: User,
+        time_range: Literal["3d", "7d", "1m", "all"] = "3d",
+        page: int = 1,
+        limit: int = 20,
+        unread_only: bool = False,
     ) -> tuple[list[dict[str, Any]], bool, int]:
-        raw_notifications = self.repo.user_notification.get_list(user, time_range, page, limit)
+        """Return one notification page, optionally limited to unread rows."""
+
+        raw_notifications = self.repo.user_notification.get_list(user, time_range, page, limit, unread_only)
         has_more = len(raw_notifications) > limit
         raw_notifications = raw_notifications[:limit]
         unread_count = self.repo.user_notification.count_unread(user)
@@ -84,7 +91,7 @@ class NotificationService(BaseDomainService):
                 }
             )
 
-        if notification_ids_should_delete:
+        if notification_ids_should_delete and not unread_only:
             self.repo.user_notification.delete_all_by_ids(notification_ids_should_delete)
 
         return notifications, has_more, unread_count
