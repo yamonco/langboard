@@ -190,6 +190,14 @@ const ProjectTabs = memo(
                                 }}
                             />
                             <ProjectCompactList
+                                title={t("dashboard.Related to me")}
+                                projects={discoverySections.related}
+                                updateStarredProjects={() => {
+                                    updateHeaderStarredProjects();
+                                    updateStarredProjects();
+                                }}
+                            />
+                            <ProjectCompactList
                                 title={t("dashboard.Recent work")}
                                 projects={discoverySections.recent}
                                 updateStarredProjects={() => {

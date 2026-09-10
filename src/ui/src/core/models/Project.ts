@@ -69,6 +69,7 @@ export interface IStore extends Interface {
     ai_description?: string;
     last_viewed_at: Date;
     last_activity_at: Date | null;
+    related_to_current_user: bool;
 
     member_roles: Record<string, ProjectRole.TActions[]>; // This will be used in board setting.
 }

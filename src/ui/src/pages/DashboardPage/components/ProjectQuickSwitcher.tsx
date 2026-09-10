@@ -112,6 +112,12 @@ const ProjectQuickSwitcher = memo((): React.JSX.Element => {
                     onSelect={selectProject}
                 />
                 <ProjectQuickSwitcherGroup
+                    heading={t("dashboard.Related to me")}
+                    projects={sections.related}
+                    currentProjectUID={currentProjectUID}
+                    onSelect={selectProject}
+                />
+                <ProjectQuickSwitcherGroup
                     heading={t("dashboard.Recent work")}
                     projects={sections.recent}
                     currentProjectUID={currentProjectUID}
