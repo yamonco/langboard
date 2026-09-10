@@ -38,7 +38,7 @@ def test_domain_model_does_not_own_the_linked_source_check_constraint() -> None:
     column_names = {column.name for column in Card.__table__.columns}
 
     assert {"source_type", "source_uid"}.issubset(column_names)
-    assert "ck_card_`linked_source_complete`" not in constraints
+    assert "ck_card_linked_source_complete" not in constraints
     assert "uq_card_linked_resource" in constraints
 
 
@@ -79,6 +79,51 @@ def test_dashboard_projects_linked_titles_and_states_in_project_batches() -> Non
     assert cards[1]["linked_resource"]["title"] == "Reference title"
     assert projects == [{"uid": "project-1"}]
     project_payloads.assert_called_once_with(ANY, project, [linked], include_content=False)
+
+
+def test_paginated_project_cards_include_permission_safe_linked_titles(monkeypatch: pytest.MonkeyPatch) -> None:
+    module = importlib.import_module("langboard_shared.domain.services.factory.CardService")
+    project = SimpleNamespace(id=1)
+    column = SimpleNamespace(name="Reference")
+    linked = SimpleNamespace(
+        is_linked_resource=True,
+        api_response=lambda: {"uid": "card-linked", "title": ""},
+        get_uid=lambda: "card-linked",
+        updated_at=SimpleNamespace(isoformat=lambda: "2026-09-11T00:00:00+00:00"),
+    )
+    actor = FakeUser(2)
+    payloads = Mock(
+        return_value={
+            "card-linked": {
+                "type": "project_wiki",
+                "uid": "wiki-1",
+                "status": "available",
+                "title": "Reference title",
+            }
+        }
+    )
+    monkeypatch.setattr(module.InfraHelper, "get_by_id_like", lambda *_args: project)
+    service = SimpleNamespace(
+        repo=SimpleNamespace(
+            card=SimpleNamespace(
+                get_page_by_project=Mock(return_value=[(linked, column)]),
+                count_by_project=Mock(return_value=1),
+            )
+        ),
+        _get_linked_resource_payloads=payloads,
+    )
+
+    cards, total_count, next_fields = CardService.get_api_page_by_project(
+        service,
+        project,
+        10,
+        user_or_bot=actor,
+    )
+
+    assert total_count == 1
+    assert next_fields is None
+    assert cards[0]["linked_resource"]["title"] == "Reference title"
+    payloads.assert_called_once_with(actor, project, [linked], include_content=False)
 
 
 def test_batch_preview_never_exposes_forbidden_wiki_fields(monkeypatch: pytest.MonkeyPatch) -> None:
