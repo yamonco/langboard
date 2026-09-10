@@ -13,6 +13,7 @@ import ProjectList, { SkeletonProjectList } from "@/pages/DashboardPage/componen
 import { PROJECT_TABS, TProjectTab, TProjectTabRoute } from "@/pages/DashboardPage/constants";
 import { Project } from "@/core/models";
 import { usePageNavigateRef } from "@/core/hooks/usePageNavigate";
+import { compareProjectActivityPriority } from "@/pages/DashboardPage/components/ProjectActivityPriority";
 
 export function SkeletonProjecTabs() {
     return (
@@ -81,18 +82,7 @@ const ProjectTabs = memo(
                 }
             });
 
-            if (currentTab !== "recent") {
-                return filteredProjects;
-            }
-
-            return [...filteredProjects].sort((a, b) => {
-                const lastViewedDiff = b.last_viewed_at.getTime() - a.last_viewed_at.getTime();
-                if (lastViewedDiff !== 0) {
-                    return lastViewedDiff;
-                }
-
-                return b.updated_at.getTime() - a.updated_at.getTime();
-            });
+            return [...filteredProjects].sort(compareProjectActivityPriority);
         }, [currentTab, debouncedSearchQuery, projects, updatedStarredProjects]);
 
         const navigateToTab = (tab: IProjectTabsProps["currentTab"]) => {
