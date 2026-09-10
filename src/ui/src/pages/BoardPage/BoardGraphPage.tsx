@@ -5,16 +5,18 @@ import Button from "@/components/base/Button";
 import useGetCards from "@/controllers/api/board/useGetCards";
 import { GlobalRelationshipType, ProjectCard, ProjectColumn } from "@/core/models";
 import { usePageNavigateRef } from "@/core/hooks/usePageNavigate";
+import setupApiErrorHandler from "@/core/helpers/setupApiErrorHandler";
 import { ROUTES } from "@/core/routing/constants";
 import { IBoardRelatedPageProps } from "@/pages/BoardPage/types";
 import { GRAPH_CARD_HEIGHT, GRAPH_CARD_WIDTH, GRAPH_DEFAULT_VIEWPORT, GRAPH_LANE_WIDTH, layoutBoardGraph } from "@/pages/BoardPage/BoardGraphLayout";
-import { lazy, Suspense, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/core/utils/ComponentUtils";
 import { useAuth } from "@/core/providers/AuthProvider";
 import useUserSettingsStore, { getUserSettingsStore, useUserSettings } from "@/core/stores/UserSettingsStore";
 import { boardGraphViewForUser, TBoardGraphView } from "@/pages/BoardPage/BoardGraphPreference";
 import { useTheme } from "next-themes";
+import { EHttpStatus } from "@langboard/core/enums";
 
 const BoardNetworkGraph = lazy(() => import("@/pages/BoardPage/BoardNetworkGraph"));
 
@@ -71,7 +73,7 @@ const BoardGraphPage = ({ project }: IBoardRelatedPageProps): React.JSX.Element 
         if (currentUser) updateSettingsByKey("graph_view_modes", { ...getUserSettingsStore().settings.graph_view_modes, [currentUser.uid]: next });
     };
     const [focusColumn, setFocusColumn] = useState<{ uid: string }>();
-    const { data, isError, refetch } = useGetCards({ project_uid: project.uid });
+    const { data, error, isError, refetch } = useGetCards({ project_uid: project.uid });
     const cards = ProjectCard.Model.useModels((card) => card.project_uid === project.uid, [project, data]);
     const columns = ProjectColumn.Model.useModels((column) => column.project_uid === project.uid, [project, data]);
     const relationshipTypes = GlobalRelationshipType.Model.useModels(() => true, []);
@@ -80,6 +82,19 @@ const BoardGraphPage = ({ project }: IBoardRelatedPageProps): React.JSX.Element 
     const [activeCard, setActiveCard] = useState<string>();
     const flowRef = useRef<ReactFlowInstance | null>(null);
     const layout = useMemo(() => layoutBoardGraph(cards, columns, { includeArchive, showUnlinked }), [cards, columns, includeArchive, showUnlinked]);
+
+    useEffect(() => {
+        if (!error) return;
+        const { handle } = setupApiErrorHandler({
+            [EHttpStatus.HTTP_403_FORBIDDEN]: {
+                after: () => navigate(ROUTES.ERROR(EHttpStatus.HTTP_403_FORBIDDEN), { replace: true }),
+            },
+            [EHttpStatus.HTTP_404_NOT_FOUND]: {
+                after: () => navigate(ROUTES.ERROR(EHttpStatus.HTTP_404_NOT_FOUND), { replace: true }),
+            },
+        });
+        handle(error);
+    }, [error]);
 
     const nodes = useMemo<Node[]>(
         () => [
@@ -119,7 +134,7 @@ const BoardGraphPage = ({ project }: IBoardRelatedPageProps): React.JSX.Element 
                 }))
             ),
         ],
-        [layout, navigate, project.uid]
+        [layout, navigate, project]
     );
     const edges = useMemo<Edge[]>(() => {
         const names = new Map(relationshipTypes.map((type) => [type.uid, type.child_name]));
@@ -250,7 +265,6 @@ const BoardGraphPage = ({ project }: IBoardRelatedPageProps): React.JSX.Element 
                         onlyRenderVisibleElements
                         onNodeMouseEnter={(_event, node) => setActiveCard(node.type === "card" ? node.id : undefined)}
                         onNodeMouseLeave={() => setActiveCard(undefined)}
-                        proOptions={{ hideAttribution: true }}
                     >
                         <Background gap={24} size={1} color="hsl(var(--border))" />
                         <Controls showInteractive={false} showFitView={false} />
