@@ -262,6 +262,13 @@ class Project extends BaseModel<IStore> {
         this.update({ last_activity_at: value as unknown as Date | null });
     }
 
+    public get related_to_current_user(): bool {
+        return this.getValue("related_to_current_user");
+    }
+    public set related_to_current_user(value: bool) {
+        this.update({ related_to_current_user: value });
+    }
+
     public get member_roles() {
         return this.getValue("member_roles");
     }
