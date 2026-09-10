@@ -50,16 +50,37 @@ def upgrade() -> None:
             "source_record_id",
             name="uq_external_import_record_source_record",
         ),
+        if_not_exists=True,
     )
-    op.create_index(op.f("ix_external_import_record_project_id"), "external_import_record", ["project_id"])
-    op.create_index(op.f("ix_external_import_record_source_namespace"), "external_import_record", ["source_namespace"])
-    op.create_index(op.f("ix_external_import_record_record_type"), "external_import_record", ["record_type"])
-    op.create_index(op.f("ix_external_import_record_batch_id"), "external_import_record", ["batch_id"])
+    op.create_index(
+        op.f("ix_external_import_record_project_id"),
+        "external_import_record",
+        ["project_id"],
+        if_not_exists=True,
+    )
+    op.create_index(
+        op.f("ix_external_import_record_source_namespace"),
+        "external_import_record",
+        ["source_namespace"],
+        if_not_exists=True,
+    )
+    op.create_index(
+        op.f("ix_external_import_record_record_type"),
+        "external_import_record",
+        ["record_type"],
+        if_not_exists=True,
+    )
+    op.create_index(
+        op.f("ix_external_import_record_batch_id"),
+        "external_import_record",
+        ["batch_id"],
+        if_not_exists=True,
+    )
 
 
 def downgrade() -> None:
-    op.drop_index(op.f("ix_external_import_record_batch_id"), table_name="external_import_record")
-    op.drop_index(op.f("ix_external_import_record_record_type"), table_name="external_import_record")
-    op.drop_index(op.f("ix_external_import_record_source_namespace"), table_name="external_import_record")
-    op.drop_index(op.f("ix_external_import_record_project_id"), table_name="external_import_record")
-    op.drop_table("external_import_record")
+    op.drop_index(op.f("ix_external_import_record_batch_id"), table_name="external_import_record", if_exists=True)
+    op.drop_index(op.f("ix_external_import_record_record_type"), table_name="external_import_record", if_exists=True)
+    op.drop_index(op.f("ix_external_import_record_source_namespace"), table_name="external_import_record", if_exists=True)
+    op.drop_index(op.f("ix_external_import_record_project_id"), table_name="external_import_record", if_exists=True)
+    op.drop_table("external_import_record", if_exists=True)
