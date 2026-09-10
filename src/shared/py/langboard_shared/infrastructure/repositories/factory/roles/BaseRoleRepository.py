@@ -36,7 +36,7 @@ class BaseRoleRepository(Generic[_TRoleModel], BaseRepository[_TRoleModel]):
 
         If the given parameters are not in the model's fields or are `None`, they will be ignored.
 
-        If no parameters are given, all roles will be returned.
+        If no parameters are given, one role is returned without a guaranteed order.
         """
         consistent = bool(kwargs.pop("consistent", False))
         model_cls = self._get_model_cls()
