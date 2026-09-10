@@ -15,6 +15,7 @@ from langboard_shared.domain.models import Project, User  # noqa: E402
 from langboard_shared.domain.services.factory.ScimProvisioningService import (  # noqa: E402
     ScimProvisioningService,
 )
+from langboard_shared.Env import Env  # noqa: E402
 from langboard_shared.helpers import InfraHelper  # noqa: E402
 from langboard_shared.security import Auth  # noqa: E402
 
@@ -248,6 +249,28 @@ def test_bound_group_rejects_a_user_without_current_scim_identity(
 
     with pytest.raises(ScimProvisioningException.InvalidRequest):
         service._validate_project_role_members("project-role:project-a:viewer", [local_user.id])
+
+
+def test_bound_group_fails_closed_without_a_configured_scim_issuer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = SimpleNamespace(id=10, owner_id=1, get_uid=lambda: "project-a")
+    scim_user = SimpleNamespace(id=4)
+    identity = IdentityService({scim_user.id})
+    service = make_service(SimpleNamespace(), identity)
+
+    def resolve(model: Any, identifier: Any, **_kwargs: Any) -> Any | None:
+        if model is Project and identifier == "project-a":
+            return project
+        if model is User and identifier == scim_user.id:
+            return scim_user
+        return None
+
+    monkeypatch.setattr(InfraHelper, "get_by_id_like", resolve)
+    monkeypatch.setattr(type(Env), "SCIM_ISSUER", property(lambda _self: ""))
+
+    with pytest.raises(ScimProvisioningException.InvalidRequest):
+        service._validate_project_role_members("project-role:project-a:viewer", [scim_user.id])
 
 
 def test_deactivation_removes_group_memberships_before_reconciling_access(
