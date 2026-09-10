@@ -10,6 +10,7 @@
     "lint": "eslint . -c eslint.config.js --ignore-pattern node_modules/ --ignore-pattern dist/ --report-unused-disable-directives --max-warnings 0",
     "test:card-hierarchy": "node --experimental-strip-types src/pages/BoardPage/components/board/BoardColumnCardHierarchy.test.ts",
     "preview": "vite preview",
+    "test:project-priority": "node --experimental-strip-types --test src/pages/DashboardPage/components/ProjectActivityPriority.test.ts",
     "format": "prettier --write \"{tests,src}/**/*.{js,jsx,ts,tsx,json,md}\" --ignore-path .prettierignore",
     "check-format": "prettier --check \"{tests,src}/**/*.{js,jsx,ts,tsx,json,md}\" --ignore-path .prettierignore"
   },

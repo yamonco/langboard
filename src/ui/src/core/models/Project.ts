@@ -31,6 +31,7 @@ import useDashboardCheckitemDeletedHandlers from "@/controllers/socket/dashboard
 import useDashboardCheckitemStatusChangedHandlers from "@/controllers/socket/dashboard/checkitem/useDashboardCheckitemStatusChangedHandlers";
 import useDashboardCheckitemTitleChangedHandlers from "@/controllers/socket/dashboard/checkitem/useDashboardCheckitemTitleChangedHandlers";
 import useDashboardProjectAssignedUsersUpdatedHandlers from "@/controllers/socket/dashboard/project/useDashboardProjectAssignedUsersUpdatedHandlers";
+import useDashboardProjectActivityRecordedHandlers from "@/controllers/socket/dashboard/project/useDashboardProjectActivityRecordedHandlers";
 import useDashboardProjectColumnCreatedHandlers from "@/controllers/socket/dashboard/project/useDashboardProjectColumnCreatedHandlers";
 import useDashboardProjectColumnDeletedHandlers from "@/controllers/socket/dashboard/project/useDashboardProjectColumnDeletedHandlers";
 import useDashboardProjectColumnNameChangedHandlers from "@/controllers/socket/dashboard/project/useDashboardProjectColumnNameChangedHandlers";
@@ -40,6 +41,7 @@ import { IBaseModel, BaseModel } from "@/core/models/Base";
 import { registerModel } from "@/core/models/ModelRegistry";
 import { Utils } from "@langboard/core/utils";
 import { ProjectRole } from "@/core/models/roles";
+import { parseProjectActivityTimestamp } from "@/core/models/projectActivityTimestamp";
 
 export const TYPES = ["SI", "SW", "Other"];
 
@@ -67,6 +69,7 @@ export interface IStore extends Interface {
     description: string;
     ai_description?: string;
     last_viewed_at: Date;
+    last_activity_at: Date | null;
 
     member_roles: Record<string, ProjectRole.TActions[]>; // This will be used in board setting.
 }
@@ -110,6 +113,7 @@ class Project extends BaseModel<IStore> {
                 useBoardBotLogCreatedHandlers,
                 useBoardBotLogStackAddedHandlers,
                 useDashboardProjectAssignedUsersUpdatedHandlers,
+                useDashboardProjectActivityRecordedHandlers,
                 useDashboardProjectColumnCreatedHandlers,
                 useDashboardProjectColumnNameChangedHandlers,
                 useDashboardProjectColumnOrderChangedHandlers,
@@ -138,6 +142,7 @@ class Project extends BaseModel<IStore> {
         if (Utils.Type.isString(model.last_viewed_at)) {
             model.last_viewed_at = new Date(model.last_viewed_at);
         }
+        model.last_activity_at = parseProjectActivityTimestamp(model.last_activity_at);
 
         if (!Utils.Type.isNullOrUndefined(model.internal_bot_settings)) {
             const newSettings = {} as IStore["internal_bot_settings"];
@@ -246,6 +251,13 @@ class Project extends BaseModel<IStore> {
     }
     public set last_viewed_at(value: string | Date) {
         this.update({ last_viewed_at: value as unknown as Date });
+    }
+
+    public get last_activity_at(): Date | null {
+        return this.getValue("last_activity_at");
+    }
+    public set last_activity_at(value: Date | null) {
+        this.update({ last_activity_at: value });
     }
 
     public get member_roles() {

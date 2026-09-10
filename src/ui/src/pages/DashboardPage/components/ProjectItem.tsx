@@ -97,7 +97,7 @@ const ProjectItem = memo(({ project, updateStarredProjects, ...props }: IProject
                 <Card.Content></Card.Content>
                 <Card.Footer className="flex items-center gap-1.5">
                     {columns.map((column) => (
-                        <ProjectItemColumn key={Utils.String.Token.shortUUID()} column={column} />
+                        <ProjectItemColumn key={column.uid} column={column} />
                     ))}
                 </Card.Footer>
             </ModelRegistry.Project.Provider>
