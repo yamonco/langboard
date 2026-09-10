@@ -11,6 +11,7 @@ from ....core.utils.String import concat
 from ....Env import UI_QUERY_NAMES, Env
 from ....helpers import InfraHelper
 from ....tasks.bots import BotDefaultTask
+from ....tasks.notifications.NotificationWorkEventTask import publish_pending_work_events
 from ...models import (
     Bot,
     Card,
@@ -26,6 +27,8 @@ from ...models import (
 )
 from ...models.BaseNotificationScheduleModel import BaseNotificationScheduleModel
 from ...models.UserNotification import NotificationType
+from ...models.UserNotificationUnsubscription import NotificationChannel
+from .UserNotificationSettingService import UserNotificationSettingService
 
 
 _TModel = TypeVar(
@@ -416,7 +419,6 @@ class NotificationService(BaseDomainService):
             email_formats["sender"] = notifier.get_fullname()
 
         notification = UserNotification(
-            id=SnowflakeID(),  # generate new ID
             notifier_type="user" if isinstance(notifier, User) else "bot",
             notifier_id=notifier.id,
             receiver_id=target_user.id,
@@ -425,15 +427,29 @@ class NotificationService(BaseDomainService):
             record_list=record_list,
         )
 
-        model = NotificationPublishModel(
+        subscription_model = NotificationPublishModel(
             notification=notification,
-            api_notification=self.convert_to_api_response(notification, references, notifier),
+            api_notification={},
             target_user=target_user,
             scope_models=scope_model_tuples,
             email_template_name=email_template_name,
             email_formats=email_formats,
         )
+        web_notification_visible = not self._get_service(UserNotificationSettingService).has_unsubscription(
+            subscription_model, NotificationChannel.Web
+        )
+        notification.web_visible = web_notification_visible
+        self.repo.user_notification.insert(notification)
+
+        model = subscription_model.model_copy(
+            update={
+                "api_notification": self.convert_to_api_response(notification, references, notifier),
+                "source_notification_persisted": True,
+                "web_notification_visible": web_notification_visible,
+            }
+        )
         NotificationPublisher.put_dispather(model)
+        publish_pending_work_events()
         return True
 
     def __create_redirect_url(self, project: Project, card_or_wiki: ProjectWiki | Card | None = None):
