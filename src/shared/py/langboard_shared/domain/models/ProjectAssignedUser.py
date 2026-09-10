@@ -10,7 +10,7 @@ class ProjectAssignedUser(BaseDbModel, table=True):
     user_id: SnowflakeID = SnowflakeIDField(foreign_key=User, nullable=False, index=True)
     starred: bool = Field(default=False, nullable=False)
     last_viewed_at: SafeDateTime = DateTimeField(default=SafeDateTime.now, nullable=False, onupdate=True)
-    view_count: int = Field(default=0, nullable=False)
+    view_count: int = Field(default=0, nullable=False, sa_column_kwargs={"server_default": "0"})
 
     def notification_data(self) -> dict[str, Any]:
         return {}

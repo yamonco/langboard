@@ -99,3 +99,12 @@ def test_view_count_migration_repairs_and_replays() -> None:
         migration.downgrade()
         columns = {column["name"] for column in sa.inspect(connection).get_columns("project_assigned_user")}
         assert "view_count" not in columns
+
+
+def test_view_count_model_matches_the_database_default() -> None:
+    """Core inserts that omit the counter retain the migration's zero default."""
+
+    from langboard_shared.domain.models import ProjectAssignedUser
+
+    assert ProjectAssignedUser.__table__.c.view_count.server_default is not None
+    assert str(ProjectAssignedUser.__table__.c.view_count.server_default.arg) == "0"
