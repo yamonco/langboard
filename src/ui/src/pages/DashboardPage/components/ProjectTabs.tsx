@@ -14,6 +14,16 @@ import { PROJECT_TABS, TProjectTab, TProjectTabRoute } from "@/pages/DashboardPa
 import { Project } from "@/core/models";
 import { usePageNavigateRef } from "@/core/hooks/usePageNavigate";
 import { compareProjectActivityPriority } from "@/pages/DashboardPage/components/ProjectActivityPriority";
+import Button from "@/components/base/Button";
+import Flex from "@/components/base/Flex";
+import IconComponent from "@/components/base/IconComponent";
+import ProjectCompactList from "@/pages/DashboardPage/components/ProjectCompactList";
+import {
+    buildProjectDiscoverySections,
+    parseProjectListView,
+    projectListViewStorageKey,
+    type TProjectListView,
+} from "@/pages/DashboardPage/components/ProjectDiscovery";
 
 export function SkeletonProjecTabs() {
     return (
@@ -36,6 +46,7 @@ export function SkeletonProjecTabs() {
 
 interface IProjectTabsProps {
     currentTab: TProjectTab;
+    userUID: string;
     projectsData?: IGetProjectsResponse;
     isProjectsFetching: bool;
     isProjectsLoading: bool;
@@ -46,6 +57,7 @@ interface IProjectTabsProps {
 const ProjectTabs = memo(
     ({
         currentTab,
+        userUID,
         projectsData,
         isProjectsFetching,
         isProjectsLoading,
@@ -55,6 +67,8 @@ const ProjectTabs = memo(
         const navigate = usePageNavigateRef();
         const [updatedStarredProjects, updateStarredProjects] = useReducer((x) => x + 1, 0);
         const [searchQuery, setSearchQuery] = useState("");
+        const storageKey = projectListViewStorageKey(userUID);
+        const [projectListView, setProjectListView] = useState<TProjectListView>(() => parseProjectListView(localStorage.getItem(storageKey)));
         const debouncedSearchQuery = useDebounce(searchQuery.trim(), 300);
         const [t] = useTranslation();
 
@@ -84,6 +98,12 @@ const ProjectTabs = memo(
 
             return [...filteredProjects].sort(compareProjectActivityPriority);
         }, [currentTab, debouncedSearchQuery, projects, updatedStarredProjects]);
+        const discoverySections = useMemo(() => buildProjectDiscoverySections(currentProjects), [currentProjects]);
+
+        const changeProjectListView = (view: TProjectListView) => {
+            setProjectListView(view);
+            localStorage.setItem(storageKey, view);
+        };
 
         const navigateToTab = (tab: IProjectTabsProps["currentTab"]) => {
             if (tab === currentTab) {
@@ -114,12 +134,36 @@ const ProjectTabs = memo(
                         clearable
                     />
                 </Box>
+                <Flex role="group" justify="end" gap="1" px="2" mt="2" aria-label={t("dashboard.Project view") as string}>
+                    <Button
+                        type="button"
+                        size="icon-sm"
+                        variant={projectListView === "compact" ? "secondary" : "ghost"}
+                        title={t("dashboard.Compact view")}
+                        aria-label={t("dashboard.Compact view")}
+                        aria-pressed={projectListView === "compact"}
+                        onClick={() => changeProjectListView("compact")}
+                    >
+                        <IconComponent icon="list" size="4" />
+                    </Button>
+                    <Button
+                        type="button"
+                        size="icon-sm"
+                        variant={projectListView === "cards" ? "secondary" : "ghost"}
+                        title={t("dashboard.Card view")}
+                        aria-label={t("dashboard.Card view")}
+                        aria-pressed={projectListView === "cards"}
+                        onClick={() => changeProjectListView("cards")}
+                    >
+                        <IconComponent icon="layout-grid" size="4" />
+                    </Button>
+                </Flex>
                 <Tabs.Content value={currentTab}>
                     {(isProjectsLoading || isProjectsFetching) && currentProjects.length === 0 ? (
                         <SkeletonProjectList />
                     ) : currentProjects.length === 0 ? (
                         <h2 className="py-3 text-center text-lg text-accent-foreground">{t("dashboard.No projects found")}</h2>
-                    ) : (
+                    ) : projectListView === "cards" ? (
                         <ProjectList
                             projects={currentProjects}
                             updateStarredProjects={() => {
@@ -127,6 +171,50 @@ const ProjectTabs = memo(
                                 updateStarredProjects();
                             }}
                             scrollAreaUpdater={scrollAreaUpdater}
+                        />
+                    ) : debouncedSearchQuery ? (
+                        <ProjectCompactList
+                            title={t("dashboard.Search results")}
+                            projects={discoverySections.all}
+                            updateStarredProjects={() => {
+                                updateHeaderStarredProjects();
+                                updateStarredProjects();
+                            }}
+                        />
+                    ) : currentTab === "all" ? (
+                        <>
+                            <ProjectCompactList
+                                title={t("dashboard.Favorites")}
+                                projects={discoverySections.favorites}
+                                updateStarredProjects={() => {
+                                    updateHeaderStarredProjects();
+                                    updateStarredProjects();
+                                }}
+                            />
+                            <ProjectCompactList
+                                title={t("dashboard.Recent work")}
+                                projects={discoverySections.recent}
+                                updateStarredProjects={() => {
+                                    updateHeaderStarredProjects();
+                                    updateStarredProjects();
+                                }}
+                            />
+                            <ProjectCompactList
+                                title={t("dashboard.All projects")}
+                                projects={discoverySections.all}
+                                updateStarredProjects={() => {
+                                    updateHeaderStarredProjects();
+                                    updateStarredProjects();
+                                }}
+                            />
+                        </>
+                    ) : (
+                        <ProjectCompactList
+                            projects={discoverySections.all}
+                            updateStarredProjects={() => {
+                                updateHeaderStarredProjects();
+                                updateStarredProjects();
+                            }}
                         />
                     )}
                 </Tabs.Content>
