@@ -18,7 +18,7 @@ from langboard_shared.helpers import MiddlewareHelper  # noqa: E402
 
 
 ROOT = Path(__file__).resolve().parents[4]
-MIGRATION = ROOT / "src/api/langboard/migrations/versions/20260903235000-6f4a9d18c2e1.py"
+MIGRATION = ROOT / "src/api/langboard/migrations/versions/20260910223340-7b7818743022.py"
 
 
 def test_access_token_requires_the_configured_resource_audience(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -87,6 +87,6 @@ def test_identity_migration_keys_subjects_by_provider_issuer_and_external_id() -
 
     source = MIGRATION.read_text(encoding="utf-8")
 
-    assert 'down_revision: str | None = "91f7b2c4d8e6"' in source
+    assert 'down_revision: str | None = "da39f306364b"' in source
     assert "uq_user_identity_link_provider_issuer_external_id" in source
-    assert '["provider", "issuer", "external_id"]' in source
+    assert '["provider", "external_id", "issuer"]' in source
