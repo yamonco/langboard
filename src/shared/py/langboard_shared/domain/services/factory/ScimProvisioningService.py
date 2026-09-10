@@ -537,54 +537,18 @@ class ScimProvisioningService(BaseDomainService):
 
     def _reconcile_project_entitlements(self, project: Project) -> None:
         desired = self._desired_project_roles(project)
-        assigned_rows = self.repo.project_assigned_user.get_all_by_project(project, consistent=True)
-        managed_current = {
-            user.id: user
-            for user, _ in assigned_rows
-            if user.id != project.owner_id and self._is_current_scim_user(user)
+        desired_with_actions = {
+            user_id: (user, self._project_role_actions(role_key)) for user_id, (user, role_key) in desired.items()
         }
-
-        for user_id, (user, role_key) in desired.items():
-            if user_id == project.owner_id:
-                continue
-            self.repo.project_assigned_user.ensure_assigned(project, user)
-            actions = self._project_role_actions(role_key)
-            if actions == ["*"]:
-                self.repo.role.project.grant_all(user_id=user_id, project_id=project.id)
-            else:
-                self.repo.role.project.grant(actions=actions, user_id=user_id, project_id=project.id)
-
-        stale_users = [user for user_id, user in managed_current.items() if user_id not in desired]
-        if stale_users:
-            self.repo.project_assigned_user.delete_all_by_project_and_users(project, stale_users)
-
-        final_rows = self.repo.project_assigned_user.get_all_by_project(project, consistent=True)
-        final_user_ids = {user.id for user, _ in final_rows}
-        self.repo.project_user_relationship.ensure_project_relationships(project, list(final_user_ids))
-        self._verify_project_entitlements(project, desired, final_user_ids, set(managed_current))
-
-    def _verify_project_entitlements(
-        self,
-        project: Project,
-        desired: dict[SnowflakeID, tuple[User, str]],
-        final_user_ids: set[SnowflakeID],
-        previously_managed: set[SnowflakeID],
-    ) -> None:
-        for user_id, (_, role_key) in desired.items():
-            if user_id == project.owner_id:
-                continue
-            role = self.repo.role.project.get_one(user_id=user_id, project_id=project.id, consistent=True)
-            if user_id not in final_user_ids or not role:
-                raise ScimProvisioningException.Unavailable()
-            expected = self._project_role_actions(role_key)
-            if expected == ["*"]:
-                if not role.is_all_granted():
-                    raise ScimProvisioningException.Unavailable()
-            elif set(role.actions) != set(expected):
-                raise ScimProvisioningException.Unavailable()
-
-        stale_user_ids = previously_managed - set(desired) - {project.owner_id}
-        if stale_user_ids & final_user_ids:
+        try:
+            self.repo.project_assigned_user.reconcile_scim_project_roles(
+                project,
+                Env.SCIM_ISSUER or "",
+                desired_with_actions,
+            )
+        except ValueError as error:
+            if str(error) in {"Project not found", "SCIM issuer is required"}:
+                raise ScimProvisioningException.InvalidRequest() from error
             raise ScimProvisioningException.Unavailable()
 
     def _extract_email(self, payload: dict[str, Any]) -> str:

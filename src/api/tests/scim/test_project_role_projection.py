@@ -45,9 +45,17 @@ class RoleRepository:
 
 
 class AssignedRepository:
-    def __init__(self, users: list[Any], role_repository: RoleRepository) -> None:
+    def __init__(
+        self,
+        users: list[Any],
+        role_repository: RoleRepository,
+        managed_user_ids: set[int] | None = None,
+        relationship_calls: list[set[int]] | None = None,
+    ) -> None:
         self.users = {user.id: user for user in users}
         self.role_repository = role_repository
+        self.managed_user_ids = managed_user_ids or set()
+        self.relationship_calls = relationship_calls
 
     def get_all_by_project(self, _project: Any, *, consistent: bool = False) -> list[tuple[Any, Any]]:
         return [(user, SimpleNamespace(user_id=user.id)) for user in self.users.values()]
@@ -61,6 +69,25 @@ class AssignedRepository:
         for user in users:
             self.users.pop(user.id, None)
             self.role_repository.roles.pop((project.id, user.id), None)
+
+    def reconcile_scim_project_roles(
+        self,
+        project: Any,
+        _issuer: str,
+        desired: dict[int, tuple[Any, list[str]]],
+    ) -> None:
+        for user_id, (user, actions) in desired.items():
+            if user_id == project.owner_id:
+                continue
+            self.users[user_id] = user
+            self.role_repository.grant(actions=actions, user_id=user_id, project_id=project.id)
+        stale_user_ids = self.managed_user_ids - set(desired) - {project.owner_id}
+        for user_id in stale_user_ids:
+            self.users.pop(user_id, None)
+            self.role_repository.roles.pop((project.id, user_id), None)
+        self.managed_user_ids = set(desired)
+        if self.relationship_calls is not None:
+            self.relationship_calls.append(set(self.users))
 
 
 class IdentityService:
@@ -87,7 +114,9 @@ class IdentityService:
         return SimpleNamespace(**kwargs)
 
 
-def make_service(repository: Any, identity: IdentityService, user_service: Any | None = None) -> ScimProvisioningService:
+def make_service(
+    repository: Any, identity: IdentityService, user_service: Any | None = None
+) -> ScimProvisioningService:
     services = {
         "identity_link": identity,
         "user": user_service or SimpleNamespace(),
@@ -106,9 +135,7 @@ def test_external_id_does_not_auto_link_an_existing_email() -> None:
     service = make_service(SimpleNamespace(), identity, user_service)
 
     with pytest.raises(ScimProvisioningException.Conflict):
-        service.create_or_upsert_user(
-            {"externalId": "employee-7", "userName": "person@example.com"}
-        )
+        service.create_or_upsert_user({"externalId": "employee-7", "userName": "person@example.com"})
 
     assert identity.upserts == []
 
@@ -196,17 +223,16 @@ def test_project_role_groups_reconcile_membership_role_and_revocation() -> None:
         102: [(SimpleNamespace(user_id=employee.id), employee)],
     }
     role_repository = RoleRepository()
-    assigned_repository = AssignedRepository(
-        [owner, employee, stale_employee, external], role_repository
-    )
     relationship_calls: list[set[int]] = []
+    assigned_repository = AssignedRepository(
+        [owner, employee, stale_employee, external],
+        role_repository,
+        {employee.id, stale_employee.id},
+        relationship_calls,
+    )
     repository = SimpleNamespace(
-        scim_group=SimpleNamespace(
-            get_by_external_id=lambda external_id, **_kwargs: groups.get(external_id)
-        ),
-        scim_group_member=SimpleNamespace(
-            get_users_by_group=lambda group, **_kwargs: members.get(group.id, [])
-        ),
+        scim_group=SimpleNamespace(get_by_external_id=lambda external_id, **_kwargs: groups.get(external_id)),
+        scim_group_member=SimpleNamespace(get_users_by_group=lambda group, **_kwargs: members.get(group.id, [])),
         project_assigned_user=assigned_repository,
         project_user_relationship=SimpleNamespace(
             ensure_project_relationships=lambda _project, user_ids: relationship_calls.append(set(user_ids))
@@ -282,9 +308,7 @@ def test_deactivation_removes_group_memberships_before_reconciling_access(
     project = SimpleNamespace(id=10)
     calls: list[tuple[str, Any]] = []
     identity = IdentityService({user.id})
-    user_service = SimpleNamespace(
-        update=lambda target, form, **_kwargs: calls.append(("deactivate", (target, form)))
-    )
+    user_service = SimpleNamespace(update=lambda target, form, **_kwargs: calls.append(("deactivate", (target, form))))
     repository = SimpleNamespace(
         scim_group_member=SimpleNamespace(
             delete_all_by_user=lambda target: calls.append(("delete_memberships", target))
