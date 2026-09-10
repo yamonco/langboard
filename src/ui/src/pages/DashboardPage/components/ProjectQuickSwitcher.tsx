@@ -16,15 +16,17 @@ import {
     isProjectQuickSwitcherShortcut,
     PROJECT_QUICK_SWITCHER_EVENT,
 } from "@/pages/DashboardPage/components/ProjectDiscovery";
+import { projectActivityAt, type TProjectActivityKind } from "@/pages/DashboardPage/components/ProjectActivityPriority";
 
 interface IProjectQuickSwitcherGroupProps {
+    activityKind?: TProjectActivityKind;
     currentProjectUID?: string;
     heading: string;
     onSelect: (projectUID: string) => void;
     projects: Project.TModel[];
 }
 
-const ProjectQuickSwitcherGroup = ({ currentProjectUID, heading, onSelect, projects }: IProjectQuickSwitcherGroupProps) => {
+const ProjectQuickSwitcherGroup = ({ activityKind = "project", currentProjectUID, heading, onSelect, projects }: IProjectQuickSwitcherGroupProps) => {
     if (!projects.length) return null;
 
     return (
@@ -33,6 +35,7 @@ const ProjectQuickSwitcherGroup = ({ currentProjectUID, heading, onSelect, proje
                 <ProjectQuickSwitcherItem
                     key={project.uid}
                     project={project}
+                    activityKind={activityKind}
                     active={project.uid === currentProjectUID}
                     onSelect={() => onSelect(project.uid)}
                 />
@@ -41,14 +44,22 @@ const ProjectQuickSwitcherGroup = ({ currentProjectUID, heading, onSelect, proje
     );
 };
 
-const ProjectQuickSwitcherItem = ({ project, active, onSelect }: { project: Project.TModel; active: bool; onSelect: () => void }) => {
+const ProjectQuickSwitcherItem = ({
+    project,
+    activityKind,
+    active,
+    onSelect,
+}: {
+    project: Project.TModel;
+    activityKind: TProjectActivityKind;
+    active: bool;
+    onSelect: () => void;
+}) => {
     const [t, i18n] = useTranslation();
     const title = project.useField("title");
     const projectType = project.useField("project_type");
     const starred = project.useField("starred");
-    const lastActivityAt = project.useField("last_activity_at");
-    const createdAt = project.useField("created_at");
-    const activityAt = lastActivityAt ?? createdAt;
+    const activityAt = projectActivityAt(project, activityKind);
 
     return (
         <Command.Item value={`${title} ${projectType}`} onSelect={onSelect} className="gap-3 rounded-lg py-2.5">
@@ -113,6 +124,7 @@ const ProjectQuickSwitcher = memo((): React.JSX.Element => {
                 />
                 <ProjectQuickSwitcherGroup
                     heading={t("dashboard.Related to me")}
+                    activityKind="related"
                     projects={sections.related}
                     currentProjectUID={currentProjectUID}
                     onSelect={selectProject}

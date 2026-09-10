@@ -1,4 +1,4 @@
-import { compareProjectActivityPriority, compareProjectRelatedActivity, type IActivityPriorityProject } from "./ProjectActivityPriority.ts";
+import { compareProjectActivityPriority, compareProjectRelatedActivity, type IProjectActivityPriority } from "./ProjectActivityPriority.ts";
 
 export const PROJECT_RECENT_WORK_LIMIT = 6;
 export const PROJECT_RELATED_TO_ME_LIMIT = 6;
@@ -6,14 +6,14 @@ export const PROJECT_QUICK_SWITCHER_EVENT = "langboard:open-project-quick-switch
 
 export type TProjectListView = "compact" | "cards";
 
-export interface IProjectDiscoverySections<TProject extends IActivityPriorityProject> {
+export interface IProjectDiscoverySections<TProject extends IProjectActivityPriority> {
     all: TProject[];
     favorites: TProject[];
     related: TProject[];
     recent: TProject[];
 }
 
-export const buildProjectDiscoverySections = <TProject extends IActivityPriorityProject>(
+export const buildProjectDiscoverySections = <TProject extends IProjectActivityPriority>(
     projects: readonly TProject[],
     recentLimit = PROJECT_RECENT_WORK_LIMIT
 ): IProjectDiscoverySections<TProject> => {
@@ -29,7 +29,7 @@ export const buildProjectDiscoverySections = <TProject extends IActivityPriority
     };
 };
 
-export const buildProjectQuickSwitcherSections = <TProject extends IActivityPriorityProject>(projects: readonly TProject[]) => {
+export const buildProjectQuickSwitcherSections = <TProject extends IProjectActivityPriority>(projects: readonly TProject[]) => {
     const { all, favorites, related, recent } = buildProjectDiscoverySections(projects);
     const promotedUIDs = new Set([...favorites, ...related, ...recent].map((project) => project.uid));
     return {
