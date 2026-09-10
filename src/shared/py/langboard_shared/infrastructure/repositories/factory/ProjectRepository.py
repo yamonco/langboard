@@ -1,10 +1,12 @@
 from typing import cast
+from sqlalchemy import func
 from sqlalchemy.orm import aliased
 from sqlalchemy.orm.attributes import InstrumentedAttribute
 from ....core.db import DbSession, SqlBuilder
 from ....core.domain import BaseRepository
+from ....core.types import SafeDateTime
 from ....core.types.ParamTypes import TProjectParam, TUserParam
-from ....domain.models import Project, ProjectAssignedUser
+from ....domain.models import Project, ProjectActivity, ProjectAssignedUser
 from ....helpers import InfraHelper
 
 
@@ -20,16 +22,22 @@ class ProjectRepository(BaseRepository[Project]):
     def get_by_id_like(self, project: TProjectParam | None) -> Project | None:
         return InfraHelper.get_by_id_like(Project, project)
 
-    def get_all_by_user(self, user: TUserParam) -> list[tuple[Project, ProjectAssignedUser]]:
+    def get_all_by_user(self, user: TUserParam) -> list[tuple[Project, ProjectAssignedUser, SafeDateTime | None]]:
         user_id = InfraHelper.convert_id(user)
+        last_activity_at = self._last_activity_at()
         query = (
             SqlBuilder.select.tables(Project, ProjectAssignedUser)
+            .add_columns(last_activity_at)
             .join(
                 ProjectAssignedUser,
                 Project.column("id") == ProjectAssignedUser.column("project_id"),
             )
             .where(ProjectAssignedUser.column("user_id") == user_id)
-            .order_by(Project.column("updated_at").desc(), Project.column("id").desc())
+            .order_by(
+                ProjectAssignedUser.column("starred").desc(),
+                func.coalesce(last_activity_at, Project.column("created_at")).desc(),
+                Project.column("id").desc(),
+            )
         )
 
         projects = []
@@ -38,12 +46,14 @@ class ProjectRepository(BaseRepository[Project]):
             projects = result.all()
         return projects
 
-    def get_all_starred(self, user: TUserParam) -> list[tuple[Project, ProjectAssignedUser]]:
+    def get_all_starred(self, user: TUserParam) -> list[tuple[Project, ProjectAssignedUser, SafeDateTime | None]]:
         user_id = InfraHelper.convert_id(user)
+        last_activity_at = self._last_activity_at()
         projects = []
         with DbSession.use(readonly=True) as db:
             result = db.exec(
                 SqlBuilder.select.tables(Project, ProjectAssignedUser)
+                .add_columns(last_activity_at)
                 .join(
                     ProjectAssignedUser,
                     ProjectAssignedUser.column("project_id") == Project.column("id"),
@@ -51,13 +61,22 @@ class ProjectRepository(BaseRepository[Project]):
                 .where(ProjectAssignedUser.column("user_id") == user_id)
                 .where(ProjectAssignedUser.column("starred") == True)  # noqa
                 .order_by(
-                    ProjectAssignedUser.column("last_viewed_at").desc(),
-                    Project.column("updated_at").desc(),
+                    func.coalesce(last_activity_at, Project.column("created_at")).desc(),
                     Project.column("id").desc(),
                 )
             )
             projects = result.all()
         return projects
+
+    @staticmethod
+    def _last_activity_at():
+        return (
+            SqlBuilder.select.column(func.max(ProjectActivity.column("created_at")))
+            .where(ProjectActivity.column("project_id") == Project.column("id"))
+            .correlate(Project)
+            .scalar_subquery()
+            .label("last_activity_at")
+        )
 
     def are_users_related(
         self, user: TUserParam, target_user: TUserParam, project: TProjectParam | None = None
