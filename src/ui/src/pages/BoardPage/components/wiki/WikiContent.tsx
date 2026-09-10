@@ -302,34 +302,35 @@ const WikiContent = memo(({ wiki }: IWikiContentProps) => {
                 {canStartEditing && (
                     <>
                         {!isWikiEditing ? (
-                            <Button variant="default" onClick={enterEditMode}>
+                            <Button type="button" variant="default" onClick={enterEditMode}>
                                 {t("common.Edit")}
                             </Button>
                         ) : (
                             <>
-                                <Button variant="secondary" onClick={handleCancelEditing}>
+                                <Button type="button" variant="secondary" onClick={handleCancelEditing}>
                                     {t("common.Cancel")}
                                 </Button>
-                                <Button variant="default" disabled={isSaving} onClick={handleSaveEditing}>
+                                <Button type="button" variant="default" disabled={isSaving} onClick={handleSaveEditing}>
                                     {t("common.Save")}
                                 </Button>
                             </>
                         )}
                     </>
                 )}
-                <Button variant="secondary" onClick={() => navigate(ROUTES.BOARD.WIKI_ACTIVITY(project.uid, wiki.uid))}>
+                <Button type="button" variant="secondary" onClick={() => navigate(ROUTES.BOARD.WIKI_ACTIVITY(project.uid, wiki.uid))}>
                     {t("board.Activity")}
                 </Button>
-                <Button variant="secondary" onClick={() => navigate(ROUTES.BOARD.WIKI_METADATA(project.uid, wiki.uid))}>
+                <Button type="button" variant="secondary" onClick={() => navigate(ROUTES.BOARD.WIKI_METADATA(project.uid, wiki.uid))}>
                     {t("metadata.Metadata")}
                 </Button>
                 {linkedCardUID ? (
-                    <Button variant="secondary" onClick={() => navigate(ROUTES.BOARD.CARD(project.uid, linkedCardUID))}>
+                    <Button type="button" variant="secondary" onClick={() => navigate(ROUTES.BOARD.CARD(project.uid, linkedCardUID))}>
                         {t("wiki.View on board")}
                     </Button>
                 ) : (
                     canCreateLinkedCard && (
                         <Button
+                            type="button"
                             variant="secondary"
                             disabled={isCreatingLinkedCard}
                             onClick={async () => {
