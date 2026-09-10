@@ -72,7 +72,7 @@ const getCurrentPage = (pageRoute?: string): TBoardViewType => {
         case "settings":
             return "settings";
         default:
-            return "board";
+            return pageRoute ? "card" : "board";
     }
 };
 
@@ -561,7 +561,12 @@ function BoardProxyDisplay({ pageRoute, isFetching, project }: IBoardProxyDispla
 
     let PageComponent;
     let SkeletonComponent;
-    switch (boardViewType) {
+    // Route-backed pages must win during the render that observes a location
+    // change. Waiting for the boardViewType effect leaves the previous Wiki
+    // tree mounted for one render, where its auto-selection can overwrite a
+    // card deep link and navigate back to the Wiki.
+    const renderedViewType = pageRoute ? getCurrentPage(pageRoute) : boardViewType;
+    switch (renderedViewType) {
         case "graph":
             PageComponent = BoardGraphPage;
             SkeletonComponent = SkeletonBoard;
