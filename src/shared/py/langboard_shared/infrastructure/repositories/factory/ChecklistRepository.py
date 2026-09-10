@@ -1,5 +1,6 @@
 from ....core.db import DbSession, SqlBuilder
 from ....core.domain import BaseOrderRepository
+from ....core.types import SafeDateTime
 from ....core.types.ParamTypes import TCardParam, TProjectParam
 from ....domain.models import Card, Checklist
 from ....helpers import InfraHelper
@@ -32,16 +33,24 @@ class ChecklistRepository(BaseOrderRepository[Checklist, Card]):
         with DbSession.use(readonly=True) as db:
             return list(db.exec(query).all())
 
-    def get_all_by_project(self, project: TProjectParam) -> list[Checklist]:
+    def get_all_by_project(
+        self, project: TProjectParam, archive_visible_since: SafeDateTime | None = None
+    ) -> list[Checklist]:
         project_id = InfraHelper.convert_id(project)
 
         checklists = []
         with DbSession.use(readonly=True) as db:
-            result = db.exec(
+            query = (
                 SqlBuilder.select.table(Checklist)
                 .join(Card, Checklist.column("card_id") == Card.column("id"))
                 .where(Card.column("project_id") == project_id)
             )
+            if archive_visible_since is not None:
+                query = query.where(
+                    (Card.column("archived_at") == None)  # noqa: E711
+                    | (Card.column("archived_at") >= archive_visible_since)
+                )
+            result = db.exec(query)
             checklists = result.all()
 
         return checklists

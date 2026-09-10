@@ -80,7 +80,7 @@ class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
             ).all()
         return {card.source_uid: card for card in cards if card.source_uid is not None}
 
-    def get_board_list(self, project: TProjectParam) -> list[tuple[Card, int]]:
+    def get_board_list(self, project: TProjectParam, archive_visible_since: SafeDateTime) -> list[tuple[Card, int]]:
         project_id = InfraHelper.convert_id(project)
         comment_counts = (
             SqlBuilder.select.columns(
@@ -102,11 +102,62 @@ class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
                 )
                 .outerjoin(comment_counts, Card.column("id") == comment_counts.c.card_id)
                 .where(Card.column("project_id") == project_id)
+                .where(
+                    (Card.column("archived_at") == None)  # noqa: E711
+                    | (Card.column("archived_at") >= archive_visible_since)
+                )
                 .order_by(Card.column("order").asc())
             )
             cards = result.all()
 
         return cards
+
+    def get_archived_page_by_project(
+        self,
+        project: TProjectParam,
+        limit: int,
+        before_archived_at: SafeDateTime | None = None,
+        before_card: TCardParam | None = None,
+        input_value: str | None = None,
+    ) -> list[tuple[Card, ProjectColumn]]:
+        """Return a bounded archived-card keyset page without entering the hot board query."""
+
+        project_id = InfraHelper.convert_id(project)
+        query = (
+            SqlBuilder.select.tables(Card, ProjectColumn)
+            .join(ProjectColumn, Card.column("project_column_id") == ProjectColumn.column("id"))
+            .where(Card.column("project_id") == project_id)
+            .where(Card.column("archived_at") != None)  # noqa: E711
+        )
+        if input_value:
+            escaped_input = input_value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            query = query.where(Card.column("title").ilike(f"%{escaped_input}%", escape="\\"))
+        if before_archived_at is not None:
+            if before_card is None:
+                raise ValueError("before_card is required with before_archived_at")
+            before_card_id = InfraHelper.convert_id(before_card)
+            query = query.where(
+                (Card.column("archived_at") < before_archived_at)
+                | ((Card.column("archived_at") == before_archived_at) & (Card.column("id") < before_card_id))
+            )
+        query = query.order_by(Card.column("archived_at").desc(), Card.column("id").desc()).limit(limit + 1)
+        with DbSession.use(readonly=True) as db:
+            return list(db.exec(query).all())
+
+    def count_archived_by_project(self, project: TProjectParam, input_value: str | None = None) -> int:
+        """Count archived project cards, optionally applying the archive title search."""
+
+        project_id = InfraHelper.convert_id(project)
+        query = (
+            SqlBuilder.select.count(Card, Card.column("id"))
+            .where(Card.column("project_id") == project_id)
+            .where(Card.column("archived_at") != None)  # noqa: E711
+        )
+        if input_value:
+            escaped_input = input_value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            query = query.where(Card.column("title").ilike(f"%{escaped_input}%", escape="\\"))
+        with DbSession.use(readonly=True) as db:
+            return db.exec(query).first() or 0
 
     def get_dashboard_list_scroller(self, user: TUserParam, pagination: TimeBasedPagination):
         user_id = InfraHelper.convert_id(user)

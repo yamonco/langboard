@@ -1,8 +1,9 @@
 from typing import Sequence
 from ....core.db import DbSession, SqlBuilder
 from ....core.domain import BaseOrderRepository
+from ....core.types import SafeDateTime
 from ....core.types.ParamTypes import TBaseParam, TCardParam, TProjectLabelParam, TProjectParam
-from ....domain.models import CardAssignedProjectLabel, Project, ProjectLabel
+from ....domain.models import Card, CardAssignedProjectLabel, Project, ProjectLabel
 from ....helpers import InfraHelper
 
 
@@ -73,20 +74,27 @@ class ProjectLabelRepository(BaseOrderRepository[ProjectLabel, Project]):
         return labels
 
     def get_all_card_labels_by_project(
-        self, project: TProjectParam
+        self, project: TProjectParam, archive_visible_since: SafeDateTime | None = None
     ) -> list[tuple[ProjectLabel, CardAssignedProjectLabel]]:
         project_id = InfraHelper.convert_id(project)
 
         labels = []
         with DbSession.use(readonly=True) as db:
-            result = db.exec(
+            query = (
                 SqlBuilder.select.tables(ProjectLabel, CardAssignedProjectLabel)
                 .join(
                     CardAssignedProjectLabel,
                     ProjectLabel.column("id") == CardAssignedProjectLabel.column("project_label_id"),
                 )
+                .join(Card, CardAssignedProjectLabel.column("card_id") == Card.column("id"))
                 .where(ProjectLabel.column("project_id") == project_id)
             )
+            if archive_visible_since is not None:
+                query = query.where(
+                    (Card.column("archived_at") == None)  # noqa: E711
+                    | (Card.column("archived_at") >= archive_visible_since)
+                )
+            result = db.exec(query)
             labels = result.all()
         return labels
 

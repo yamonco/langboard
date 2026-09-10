@@ -1,5 +1,6 @@
 import pytest
 from langboard.card_workspace.domain import (
+    ArchivedCardCursor,
     CardDescriptionPatch,
     CommentCursor,
     CommentPage,
@@ -48,6 +49,17 @@ def test_description_patch_applies_multiple_edits_atomically_against_revision() 
 
     with pytest.raises(ValueError, match="revision"):
         patch.apply(f"{content}\nconcurrent change")
+def test_archived_card_cursor_round_trips_without_exposing_shape() -> None:
+    cursor = ArchivedCardCursor(archived_at="2026-09-10T12:30:00+00:00", card_uid="card-one")
+    encoded = cursor.encode()
+
+    assert "archived_at" not in encoded
+    assert ArchivedCardCursor.decode(encoded) == cursor
+
+
+def test_archived_card_cursor_rejects_invalid_payload() -> None:
+    with pytest.raises(ValueError, match="Invalid archive cursor"):
+        ArchivedCardCursor.decode("not-a-valid-cursor")
 
 
 def test_comment_cursor_round_trips_without_exposing_shape() -> None:
