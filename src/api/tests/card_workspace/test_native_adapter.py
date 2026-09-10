@@ -159,7 +159,7 @@ def test_native_project_identity_limits_the_column_query() -> None:
 
 
 def test_native_project_creation_uses_template_service(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The native project API, not Hermes, owns template selection and board shape."""
+    """The native project API owns template selection and board shape."""
 
     class Actor:
         pass

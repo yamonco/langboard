@@ -424,7 +424,7 @@ def test_create_webhook_returns_vault_secret_and_cleans_up_on_insert_failure(
 
     setting, secret = app_setting_module.AppSettingService.create_webhook_setting(
         service,
-        "Hermes",
+        "Webhook consumer",
         " https://example.invalid/hook ",
     )
 
@@ -440,7 +440,7 @@ def test_create_webhook_returns_vault_secret_and_cleans_up_on_insert_failure(
     with pytest.raises(RuntimeError, match="db"):
         app_setting_module.AppSettingService.create_webhook_setting(
             service,
-            "Hermes",
+            "Webhook consumer",
             "https://example.invalid/hook",
         )
     assert deleted == [created[1]]
