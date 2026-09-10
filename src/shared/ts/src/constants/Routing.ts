@@ -124,6 +124,7 @@ const API = {
             GET_CONTEXT: "/board/{uid}/card/{card_uid}/context",
             CHANGE_DETAILS: "/board/{uid}/card/{card_uid}/details",
             UPDATE_ASSIGNED_USERS: "/board/{uid}/card/{card_uid}/assigned-users",
+            ADD_ASSIGNED_USER: "/board/{uid}/card/{card_uid}/assigned-users/{assignee_uid}",
             UPDATE_LABELS: "/board/{uid}/card/{card_uid}/labels",
             UPDATE_RELATIONSHIPS: "/board/{uid}/card/{card_uid}/relationships",
             PATCH_RELATIONSHIPS: "/board/{uid}/card/{card_uid}/relationships/patch",

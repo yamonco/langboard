@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import invariant from "tiny-invariant";
 import { BOARD_CARD_TOUCH_DND_ATTR, BOARD_DND_SYMBOL_SET } from "@/pages/BoardPage/components/board/BoardConstants";
@@ -51,10 +51,15 @@ function BoardColumnCard({ card, hierarchyDepth = 0, grouped = false }: { card: 
     const { canDragCards } = useBoard();
     const outerRef = useRef<HTMLDivElement | null>(null);
     const innerRef = useRef<HTMLDivElement | null>(null);
+    const [innerElement, setInnerElement] = useState<HTMLDivElement | null>(null);
+    const setInnerRef = useCallback((element: HTMLDivElement | null) => {
+        innerRef.current = element;
+        setInnerElement(element);
+    }, []);
     const [state, setState] = useState<TRowState>(ROW_IDLE);
     const order = card.useField("order");
     const columnUID = card.useField("project_column_uid");
-    useBoardMemberDrop(innerRef, card);
+    useBoardMemberDrop(innerElement, card);
 
     useEffect(() => {
         if (!canDragCards) {
@@ -88,7 +93,7 @@ function BoardColumnCard({ card, hierarchyDepth = 0, grouped = false }: { card: 
         <>
             <BoardColumnCardDisplay
                 outerRef={outerRef}
-                innerRef={innerRef}
+                innerRef={setInnerRef}
                 state={state}
                 card={card}
                 hierarchyDepth={hierarchyDepth}

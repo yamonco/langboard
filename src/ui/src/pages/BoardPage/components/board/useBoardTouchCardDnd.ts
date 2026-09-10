@@ -1,6 +1,6 @@
 "use client";
 
-import { RefObject, useEffect } from "react";
+import { useEffect } from "react";
 import { reorder } from "@atlaskit/pragmatic-drag-and-drop/reorder";
 import { reorderWithEdge } from "@atlaskit/pragmatic-drag-and-drop-hitbox/util/reorder-with-edge";
 import { Edge } from "@atlaskit/pragmatic-drag-and-drop-hitbox/dist/types/types";
@@ -11,10 +11,12 @@ import {
     BOARD_CARD_TOUCH_HANDLE_ATTR,
     BOARD_COLUMN_TOUCH_DND_ATTR,
 } from "@/pages/BoardPage/components/board/BoardConstants";
+import { startBoardTouchAutoScroll } from "@/pages/BoardPage/components/board/BoardTouchAutoScroll";
+import { nextCardOrder } from "@/pages/BoardPage/components/board/BoardGestureData";
 
 interface IUseBoardTouchCardDndProps {
     enabled: bool;
-    scrollableRef: RefObject<HTMLDivElement | null>;
+    scrollable: HTMLDivElement | null;
     columns: ProjectColumn.TModel[];
     rowsMap: Record<string, ProjectCard.TModel>;
     changeRowOrder: (context: { rowUID: string; order: number; parentUID?: string; undo: () => void }) => void;
@@ -40,18 +42,12 @@ const TOUCH_MOVE_CANCEL_PX = 8;
 
 const interactiveSelector = "button,a,input,textarea,select,[contenteditable='true'],[role='button']";
 
-function useBoardTouchCardDnd({ enabled, scrollableRef, columns, rowsMap, changeRowOrder }: IUseBoardTouchCardDndProps) {
+function useBoardTouchCardDnd({ enabled, scrollable, columns, rowsMap, changeRowOrder }: IUseBoardTouchCardDndProps) {
     useEffect(() => {
-        if (!enabled) {
-            return;
-        }
-
-        const scrollable = scrollableRef.current;
-        if (!scrollable) {
-            return;
-        }
+        if (!enabled || !scrollable) return;
 
         let active: TActiveTouchDrag | null = null;
+        let stopAutoScroll: (() => void) | null = null;
 
         const getRowsByColumnUID = (columnUID: string): ProjectCard.TModel[] => {
             return Object.values(rowsMap)
@@ -142,8 +138,6 @@ function useBoardTouchCardDnd({ enabled, scrollableRef, columns, rowsMap, change
             targetIndex: number | "last";
         }) => {
             const updatedCards: Record<string, [number, string | null]> = {};
-            let lastIndex = 0;
-
             Object.values(rowsMap).forEach((row) => {
                 if (row.project_column_uid === sourceColumn.uid && row.order > draggingRow.order) {
                     updatedCards[row.uid] = [row.order, null];
@@ -155,10 +149,7 @@ function useBoardTouchCardDnd({ enabled, scrollableRef, columns, rowsMap, change
                     return;
                 }
 
-                if (targetIndex === "last") {
-                    lastIndex = Math.max(lastIndex, row.order);
-                    return;
-                }
+                if (targetIndex === "last") return;
 
                 if (row.order >= targetIndex) {
                     updatedCards[row.uid] = [row.order, null];
@@ -167,7 +158,13 @@ function useBoardTouchCardDnd({ enabled, scrollableRef, columns, rowsMap, change
             });
 
             updatedCards[draggingRow.uid] = [draggingRow.order, draggingRow.project_column_uid];
-            draggingRow.order = targetIndex === "last" ? lastIndex + 1 : targetIndex;
+            draggingRow.order =
+                targetIndex === "last"
+                    ? nextCardOrder(
+                          Object.values(rowsMap).filter((row) => row.uid !== draggingRow.uid),
+                          destinationColumn.uid
+                      )
+                    : targetIndex;
             draggingRow.project_column_uid = destinationColumn.uid;
 
             const undo = () => {
@@ -188,6 +185,8 @@ function useBoardTouchCardDnd({ enabled, scrollableRef, columns, rowsMap, change
         };
 
         const cleanupActive = () => {
+            stopAutoScroll?.();
+            stopAutoScroll = null;
             if (!active) {
                 return;
             }
@@ -230,6 +229,7 @@ function useBoardTouchCardDnd({ enabled, scrollableRef, columns, rowsMap, change
             preview.style.transition = "none";
 
             document.body.appendChild(preview);
+            stopAutoScroll = startBoardTouchAutoScroll(scrollable, () => active?.currentX ?? 0);
         };
 
         const movePreview = () => {
@@ -450,7 +450,7 @@ function useBoardTouchCardDnd({ enabled, scrollableRef, columns, rowsMap, change
             scrollable.removeEventListener("touchcancel", handleTouchCancel);
             cleanupActive();
         };
-    }, [changeRowOrder, columns, enabled, rowsMap]);
+    }, [changeRowOrder, columns, enabled, rowsMap, scrollable]);
 }
 
 export default useBoardTouchCardDnd;

@@ -165,7 +165,7 @@ function BoardDisplay({ scrollable, scrollableRef }: { scrollable: HTMLDivElemen
 
     useBoardTouchCardDnd({
         enabled: canDragCards,
-        scrollableRef,
+        scrollable,
         columns,
         rowsMap: cardsMap,
         changeRowOrder,
