@@ -69,6 +69,29 @@ class Storage:
 
         return self._storages[LocalStorage.storage_type].upload(file, filename, storage_name)
 
+    def upload_named(
+        self,
+        file: BinaryIO,
+        storage_name: StorageName,
+        stored_filename: str,
+        original_filename: str,
+    ) -> FileModel | None:
+        """Upload using a deterministic key for restartable workflows."""
+
+        if not stored_filename or not original_filename:
+            return None
+        for storage_type, storage in self._storages.items():
+            if storage_type == LocalStorage.storage_type:
+                continue
+            if storage.is_connectable():
+                return storage.upload_named(file, original_filename, storage_name, stored_filename)
+        return self._storages[LocalStorage.storage_type].upload_named(
+            file,
+            original_filename,
+            storage_name,
+            stored_filename,
+        )
+
     def delete(self, file_model: FileModel) -> bool:
         if file_model.storage_type not in self._storages:
             return False
