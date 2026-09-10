@@ -4,8 +4,10 @@ import importlib.util
 from pathlib import Path
 from types import ModuleType
 import sqlalchemy as sa
+from alembic.config import Config
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
+from alembic.script import ScriptDirectory
 
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -43,3 +45,10 @@ def test_archive_page_index_upgrade_and_downgrade() -> None:
         assert "ix_card_project_archive_page" not in {
             index["name"] for index in sa.inspect(connection).get_indexes("card")
         }
+
+
+def test_archive_page_index_is_the_only_migration_head() -> None:
+    config = Config(str(ROOT / "alembic.ini"))
+    config.set_main_option("script_location", str(ROOT / "src/api/langboard/migrations"))
+
+    assert ScriptDirectory.from_config(config).get_heads() == ["4e8b1c7d2a90"]

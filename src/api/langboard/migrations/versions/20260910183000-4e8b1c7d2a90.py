@@ -1,7 +1,7 @@
 """index archived card pagination
 
 Revision ID: 4e8b1c7d2a90
-Revises: 91f7b2c4d8e6
+Revises: b82e65d4f013
 Create Date: 2026-09-10 18:30:00.000000
 
 """
@@ -11,7 +11,7 @@ from alembic import op
 
 
 revision: str = "4e8b1c7d2a90"
-down_revision: Union[str, None] = "91f7b2c4d8e6"
+down_revision: Union[str, None] = "b82e65d4f013"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
