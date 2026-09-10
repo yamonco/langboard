@@ -43,6 +43,24 @@ _DETERMINISTIC_EVENT_SCHEMAS: dict[str, dict[str, Any]] = {
         "project_column_uid": "string",
         "card_uid?": "string",
     },
+    "work_event": {
+        "event_type": "string",
+        "actor": {"kind": "string", "uid": "string"},
+        "recipient": {"kind": "string", "uid": "string"},
+        "scope": {
+            "project_uid": "string",
+            "project_column_uid?": "string",
+            "card_uid?": "string",
+            "wiki_uid?": "string",
+            "checklist_uid?": "string",
+            "checkitem_uid?": "string",
+            "project_invitation_uid?": "string",
+        },
+        "notification_uid": "string",
+        "payload_hash": "string",
+        "correlation_id": "string",
+        "priority": "string",
+    },
 }
 
 
@@ -70,7 +88,7 @@ def webhook_openapi() -> JsonResponse:
     user_schema = _make_object_property("user", user_schema)
 
     for schema_name in schemas:
-        schema = _minimal_event_schema(schemas[schema_name])
+        schema = _minimal_event_schema(schemas[schema_name], event=schema_name)
         schemas[schema_name] = {
             "title": schema_name.replace("_", " ").capitalize(),
             "type": "object",
@@ -159,7 +177,7 @@ def _make_property(properties: dict[str, Any]):
     return schema, required
 
 
-def _minimal_event_schema(schema: dict[str, Any]) -> dict[str, Any]:
+def _minimal_event_schema(schema: dict[str, Any], *, event: str | None = None) -> dict[str, Any]:
     """Expose only routing identifiers and non-PII actor identity."""
 
     result = {
@@ -167,6 +185,20 @@ def _minimal_event_schema(schema: dict[str, Any]) -> dict[str, Any]:
         for key, value in schema.items()
         if key.removesuffix("?") in _SAFE_EVENT_SCHEMA_IDENTIFIERS
         or key.removesuffix("?") in _SAFE_EVENT_SCHEMA_FIELDS
+        or (
+            event == "work_event"
+            and key
+            in {
+                "event_type",
+                "actor",
+                "recipient",
+                "scope",
+                "notification_uid",
+                "payload_hash",
+                "correlation_id",
+                "priority",
+            }
+        )
     }
     if "executor" in schema:
         result["executor"] = {"uid": "string", "type": "string", "display_name": "string"}

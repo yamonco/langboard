@@ -23,3 +23,12 @@ class NotificationPublisher:
     def put_dispather(model: NotificationPublishModel):
         dispatacher_model = DispatcherModel(event="notification_publish", data=model.model_dump())
         DispatcherQueue.put(dispatacher_model)
+
+        # Reuse the signed webhook transport for external action-required events.
+        # Import locally so the core publisher does not create a module cycle at startup.
+        from ...tasks.webhooks import WebhookTask
+        from ...tasks.webhooks.utils import build_notification_work_event
+
+        work_event = build_notification_work_event(model.notification)
+        if work_event is not None:
+            WebhookTask.webhook_task(work_event)
