@@ -1,3 +1,4 @@
+from datetime import timedelta
 from fastapi import Query
 from langboard_shared.core.filter import AuthFilter
 from langboard_shared.core.routing import (
@@ -12,6 +13,7 @@ from langboard_shared.core.routing import (
     create_editor_collaboration_document_id,
 )
 from langboard_shared.core.schema import OpenApiSchema
+from langboard_shared.core.types import SafeDateTime
 from langboard_shared.domain.models import (
     Bot,
     Card,
@@ -33,6 +35,7 @@ from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.domain.services import DomainService
 from langboard_shared.filter import RoleFilter
 from langboard_shared.security import Auth, RoleFinder
+from ...card_workspace.domain import ArchivedCardCursor
 from .forms import InviteProjectMemberForm, ProjectInvitationForm
 
 
@@ -221,6 +224,60 @@ def get_project_card_context(
 
 @AppRouter.schema(permission=ApiPermission.Read)
 @AppRouter.api.get(
+    "/board/{project_uid}/cards/archive",
+    tags=["Board"],
+    description="Search and page archived cards without loading them into the active board.",
+    responses=(
+        OpenApiSchema()
+        .suc(
+            {
+                "cards": [(Card, {"schema": {"project_column_name": "string"}})],
+                "total_count": "integer",
+                "next_cursor": ["string", None],
+                "limit": "integer",
+            }
+        )
+        .auth()
+        .forbidden()
+        .err(400, ApiErrorCode.VA0000)
+        .err(404, ApiErrorCode.NF2001)
+        .get()
+    ),
+)
+@RoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+@AuthFilter.add()
+def get_archived_project_cards(
+    project_uid: str,
+    limit: int = Query(default=25, ge=1, le=100),
+    cursor: str | None = Query(default=None, max_length=2048),
+    input_value: str | None = Query(default=None, min_length=1, max_length=1000),
+    service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    project = service.project.get_by_id_like(project_uid)
+    if project is None:
+        raise ApiException.NotFound_404(ApiErrorCode.NF2001)
+    try:
+        decoded = ArchivedCardCursor.decode(cursor) if cursor else None
+        result = service.card.get_api_archived_page_by_project(
+            project,
+            limit,
+            SafeDateTime.fromisoformat(decoded.archived_at) if decoded else None,
+            decoded.card_uid if decoded else None,
+            input_value,
+        )
+    except ValueError as exc:
+        raise ApiException.BadRequest_400(ApiErrorCode.VA0000) from exc
+    if result is None:
+        raise ApiException.NotFound_404(ApiErrorCode.NF2001)
+    cards, total_count, next_fields = result
+    next_cursor = ArchivedCardCursor(*next_fields).encode() if next_fields else None
+    return JsonResponse(
+        content={"cards": cards, "total_count": total_count, "next_cursor": next_cursor, "limit": limit}
+    )
+
+
+@AppRouter.schema(permission=ApiPermission.Read)
+@AppRouter.api.get(
     "/board/{project_uid}/cards",
     tags=["Board"],
     description="Get project cards.",
@@ -263,8 +320,12 @@ def get_project_cards(project_uid: str, service: DomainService = DomainService.s
         raise ApiException.NotFound_404(ApiErrorCode.NF2001)
     global_relationships = service.app_setting.get_api_global_relationship_list()
     columns = service.project_column.get_api_list_by_project(project)
-    cards = service.card.get_board_list(project)
-    checklists = service.checklist.get_api_list_only_by_project(project)
+    archive_visible_since = SafeDateTime.now() - timedelta(days=project.archive_visible_days)
+    cards = service.card.get_board_list(project, archive_visible_since)
+    checklists = service.checklist.get_api_list_only_by_project(
+        project,
+        archive_visible_since=archive_visible_since,
+    )
     column_bot_scopes = service.project_column.get_api_bot_scopes_by_project(project)
     column_bot_schedules = service.project_column.get_api_bot_schedule_list_by_project(project)
 
