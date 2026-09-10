@@ -3,7 +3,7 @@ from ...core.broker import Broker
 from ...core.db import DbSession, EditorContentModel, SqlBuilder
 from ...domain.models import Bot, Card, CardComment, Project, ProjectActivity, User
 from ...domain.models.ProjectActivity import ProjectActivityType
-from .UserActivityTask import record_project_activity
+from . import UserActivityTask
 from .utils import ActivityHistoryHelper, ActivityTaskHelper
 
 
@@ -16,7 +16,7 @@ async def card_comment_added(user_or_bot: User | Bot, project: Project, card: Ca
         activity_history,
         **_get_activity_params(ProjectActivityType.CardCommentAdded, project, card),
     )
-    record_project_activity(user_or_bot, activity)
+    UserActivityTask.record_project_activity(user_or_bot, activity)
 
 
 @Broker.wrap_async_task_decorator
@@ -34,7 +34,7 @@ async def card_comment_updated(
     activity = helper.record(
         user_or_bot, activity_history, **_get_activity_params(ProjectActivityType.CardCommentUpdated, project, card)
     )
-    record_project_activity(user_or_bot, activity)
+    UserActivityTask.record_project_activity(user_or_bot, activity)
 
 
 @Broker.wrap_async_task_decorator
@@ -46,7 +46,7 @@ async def card_comment_deleted(user_or_bot: User | Bot, project: Project, card: 
         activity_history,
         **_get_activity_params(ProjectActivityType.CardCommentDeleted, project, card),
     )
-    record_project_activity(user_or_bot, activity)
+    UserActivityTask.record_project_activity(user_or_bot, activity)
 
 
 @Broker.wrap_async_task_decorator
@@ -63,7 +63,7 @@ async def card_comment_reacted(
         activity_history,
         **_get_activity_params(ProjectActivityType.CardCommentReacted, project, card),
     )
-    record_project_activity(user_or_bot, activity)
+    UserActivityTask.record_project_activity(user_or_bot, activity)
 
 
 @Broker.wrap_async_task_decorator
@@ -80,7 +80,7 @@ async def card_comment_unreacted(
         activity_history,
         **_get_activity_params(ProjectActivityType.CardCommentUnreacted, project, card),
     )
-    record_project_activity(user_or_bot, activity)
+    UserActivityTask.record_project_activity(user_or_bot, activity)
 
 
 def _get_default_history(helper: ActivityTaskHelper, project: Project, card: Card, comment: CardComment):

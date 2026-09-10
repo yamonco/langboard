@@ -24,6 +24,7 @@ class InvitationRelatedResult:
         self.users_by_email: dict[str, User] = {}
         self.user_ids_should_delete: set[SnowflakeID] = set()
         self.assigned_ids_should_delete: set[SnowflakeID] = set()
+        self.applied_count = 0
 
 
 class ProjectInvitationService(BaseDomainService):
@@ -32,10 +33,12 @@ class ProjectInvitationService(BaseDomainService):
         """DO NOT EDIT THIS METHOD"""
         return "project_invitation"
 
-    def get_api_invited_user_list_by_project(self, project: TProjectParam | None) -> list[dict[str, Any]]:
+    def get_api_invited_user_list_by_project(
+        self, project: TProjectParam | None, limit: int | None = None
+    ) -> list[dict[str, Any]]:
         if not project:
             return []
-        raw_users = self.repo.project_invitation.get_all_by_project_with_user(project)
+        raw_users = self.repo.project_invitation.get_all_by_project_with_user(project, limit=limit)
 
         users = []
         for invitation, invited_user in raw_users:
@@ -144,10 +147,17 @@ class ProjectInvitationService(BaseDomainService):
             target_user = invitation_result.users_by_email.get(email)
             if user.is_admin and target_user:
                 self.__assign_project_user(project, target_user)
+                invitation_result.applied_count += 1
                 continue
 
-            invitation = ProjectInvitation(project_id=project.id, email=email, token=generate_random_string(32))
-            self.repo.project_invitation.insert(invitation)
+            invitation = self.repo.project_invitation.create_if_missing(
+                project,
+                email,
+                generate_random_string(32),
+            )
+            if invitation is None:
+                continue
+            invitation_result.applied_count += 1
 
             if target_user:
                 preferred_lang = target_user.preferred_lang

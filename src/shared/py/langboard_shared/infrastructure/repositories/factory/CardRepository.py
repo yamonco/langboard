@@ -91,22 +91,23 @@ class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
             records = result.all()
         return records
 
-    def get_all_by_project(self, project: TProjectParam):
+    def get_all_by_project(self, project: TProjectParam, limit: int | None = None) -> list[tuple[Card, ProjectColumn]]:
         project_id = InfraHelper.convert_id(project)
 
-        records = []
-        with DbSession.use(readonly=True) as db:
-            result = db.exec(
-                SqlBuilder.select.tables(Card, ProjectColumn)
-                .join(
-                    ProjectColumn,
-                    Card.column("project_column_id") == ProjectColumn.column("id"),
-                )
-                .where(Card.column("project_id") == project_id)
-                .order_by(Card.column("order").asc())
+        query = (
+            SqlBuilder.select.tables(Card, ProjectColumn)
+            .join(
+                ProjectColumn,
+                Card.column("project_column_id") == ProjectColumn.column("id"),
             )
-            records = result.all()
-        return records
+            .where(Card.column("project_id") == project_id)
+            .order_by(Card.column("order").asc(), Card.column("id").asc())
+        )
+        if limit is not None:
+            query = query.limit(limit)
+
+        with DbSession.use(readonly=True) as db:
+            return list(db.exec(query).all())
 
     def search_context_by_project(
         self, project: TProjectParam, input_value: str, limit: int = 20

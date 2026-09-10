@@ -1,12 +1,15 @@
 """Canonical project-scoped API for Bot event Hooks."""
 
+from typing import NoReturn
 from langboard_shared.core.filter import AuthFilter
 from langboard_shared.core.routing import ApiErrorCode, ApiException, ApiPermission, AppRouter, JsonResponse
 from langboard_shared.core.schema import OpenApiSchema
-from langboard_shared.domain.models import Bot, ProjectRole, User
+from langboard_shared.domain.models import Bot, Project, ProjectRole, User
+from langboard_shared.domain.models.bases import ALL_GRANTED
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.domain.services import DomainService
 from langboard_shared.domain.services.factory.BotService import BotServiceError
+from langboard_shared.Env import Env
 from langboard_shared.filter import RoleFilter
 from langboard_shared.security import Auth, RoleFinder
 from .forms import UpdateBotHookForm, UpsertBotHookForm
@@ -42,7 +45,6 @@ BOT_HOOK_RECEIPT_SCHEMA = {"receipt": {"operation": "string", **BOT_HOOK_SCHEMA}
         .get()
     ),
 )
-@RoleFilter.add(ProjectRole, [ProjectRoleAction.Update], RoleFinder.project)
 @AuthFilter.add()
 def upsert_bot_hook(
     bot_uid: str,
@@ -52,7 +54,11 @@ def upsert_bot_hook(
 ) -> JsonResponse:
     """Compatibility route; project-scoped clients should use the canonical route."""
 
-    _ensure_bot_author(actor, bot_uid, service=service)
+    project = service.bot.get_hook_target_project(form.target_table, form.target_uid)
+    if not project:
+        raise ApiException.NotFound_404(ApiErrorCode.NF2020)
+    _ensure_project_update_access(actor, project, service=service)
+    _ensure_bot_author(actor, bot_uid, project_uid=project.get_uid(), service=service)
     try:
         hook = service.bot.upsert_hook(
             bot_uid,
@@ -60,9 +66,10 @@ def upsert_bot_hook(
             form.target_uid,
             form.events,
             active=form.active,
+            project=project.get_uid(),
         )
     except ValueError as error:
-        raise ApiException.BadRequest_400(ApiErrorCode.VA3003) from error
+        _raise_hook_api_error(error)
     if not hook:
         raise ApiException.NotFound_404(ApiErrorCode.NF2020)
     return JsonResponse(content={"hook": hook})
@@ -224,7 +231,19 @@ def _ensure_bot_author(
             raise ApiException.Forbidden_403(ApiErrorCode.PE1001)
 
 
-def _raise_hook_api_error(error: ValueError) -> None:
+def _ensure_project_update_access(actor: User | Bot, project: Project, *, service: DomainService) -> None:
+    """Apply the project role check after resolving a compatibility-route target."""
+
+    if not isinstance(actor, User):
+        return
+    if actor.is_admin or actor.email in Env.FULL_ADMIN_ACCESS_EMAILS:
+        return
+    actions = service.project.get_user_role_actions_by_project(actor, project)
+    if ALL_GRANTED not in actions and ProjectRoleAction.Update.value not in actions:
+        raise ApiException.Forbidden_403(ApiErrorCode.PE1001)
+
+
+def _raise_hook_api_error(error: ValueError) -> NoReturn:
     """Translate the shared Hook boundary without leaking cross-project existence."""
 
     if isinstance(error, BotServiceError) and error.code == "project_mismatch":

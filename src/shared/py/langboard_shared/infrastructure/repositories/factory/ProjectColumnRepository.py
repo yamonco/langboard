@@ -23,7 +23,11 @@ class ProjectColumnRepository(BaseOrderRepository[ProjectColumn, Project]):
     def get_by_id_like(self, column: TColumnParam | None) -> ProjectColumn | None:
         return InfraHelper.get_by_id_like(ProjectColumn, column)
 
-    def get_all_by_project(self, projects: TProjectParam | list[TProjectParam]) -> list[tuple[ProjectColumn, int]]:
+    def get_all_by_project(
+        self,
+        projects: TProjectParam | list[TProjectParam],
+        limit: int | None = None,
+    ) -> list[tuple[ProjectColumn, int]]:
         if not isinstance(projects, list):
             projects = [projects]
         project_ids = [InfraHelper.convert_id(project) for project in projects]
@@ -34,9 +38,14 @@ class ProjectColumnRepository(BaseOrderRepository[ProjectColumn, Project]):
 
         query = (
             query.where(ProjectColumn.column("project_id").in_(project_ids))
-            .order_by(ProjectColumn.column("order").asc())
+            .order_by(
+                ProjectColumn.column("order").asc(),
+                ProjectColumn.column("id").asc(),
+            )
             .group_by(ProjectColumn.column("id"), ProjectColumn.column("order"))
         )
+        if limit is not None:
+            query = query.limit(limit)
 
         raw_columns = []
         with DbSession.use(readonly=True) as db:

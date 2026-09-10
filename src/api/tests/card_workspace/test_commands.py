@@ -1,10 +1,13 @@
 from typing import Any
 import pytest
 from langboard.card_workspace.application.commands import (
+    add_card_comment,
     create_card_in_leftmost_column,
     create_project_board,
     delete_public_card_metadata,
+    save_public_card_metadata,
     set_card_people_and_labels,
+    set_card_relationships,
     update_card_attachment,
 )
 
@@ -93,6 +96,32 @@ def test_create_commands_normalize_before_calling_port() -> None:
         (
             lambda port: delete_public_card_metadata(port, "p", "c", ["api_token"]),
             "reserved or secret-like",
+        ),
+        (
+            lambda port: set_card_people_and_labels(port, "p", "c", [f"u{index}" for index in range(26)], None),
+            "exceeds 25 items",
+        ),
+        (
+            lambda port: set_card_relationships(
+                port,
+                "p",
+                "c",
+                True,
+                [(f"c{index}", "r1") for index in range(26)],
+            ),
+            "exceeds 25 items",
+        ),
+        (
+            lambda port: delete_public_card_metadata(port, "p", "c", [f"key_{index}" for index in range(26)]),
+            "exceeds 25 items",
+        ),
+        (
+            lambda port: add_card_comment(port, "p", "c", "x" * 8_001),
+            "exceeds 8000 characters",
+        ),
+        (
+            lambda port: save_public_card_metadata(port, "p", "c", "summary", "x" * 4_001),
+            "exceeds 4000 characters",
         ),
     ],
 )

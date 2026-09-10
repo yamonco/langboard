@@ -36,6 +36,18 @@ def test_admin_only_short_circuits_when_filter_allows_it(monkeypatch: pytest.Mon
     assert len(contract.RoleSecurity.calls) == 1
 
 
+def test_full_access_user_bypasses_role_filters(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Match the full-access exception used by the HTTP role middleware."""
+
+    contract = _load_role_checker(monkeypatch)
+    contract.McpRoleFilter.metadata = (contract.ProjectRole, ["read"], contract.finder, False)
+    contract.RoleSecurity.decision = False
+    user = contract.User(1, email="root@example.com")
+
+    assert contract.checker.check_permission(contract.handler, user, {"project_uid": "project-a"}) is True
+    assert contract.RoleSecurity.calls == []
+
+
 def test_bot_requires_scope_for_exact_project(monkeypatch: pytest.MonkeyPatch) -> None:
     """A project-scoped MCP tool only accepts bots assigned to that project."""
 
@@ -62,9 +74,10 @@ def test_bot_missing_string_project_uid_fails_closed(monkeypatch: pytest.MonkeyP
 
 def _load_role_checker(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
     class User:
-        def __init__(self, user_id: int, is_admin: bool = False) -> None:
+        def __init__(self, user_id: int, is_admin: bool = False, email: str = "member@example.com") -> None:
             self.id = user_id
             self.is_admin = is_admin
+            self.email = email
 
     class Bot:
         def __init__(self, bot_id: int) -> None:
@@ -134,6 +147,11 @@ def _load_role_checker(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
     )
     _set_package(monkeypatch, "langboard_shared.domain.services")
     _set_module(monkeypatch, "langboard_shared.domain.services.DomainService", DomainService=DomainService)
+    _set_module(
+        monkeypatch,
+        "langboard_shared.Env",
+        Env=SimpleNamespace(FULL_ADMIN_ACCESS_EMAILS={"root@example.com"}),
+    )
     _set_module(monkeypatch, "langboard_shared.security", RoleSecurity=RoleSecurity)
     _set_package(monkeypatch, "langboard")
     _set_package(monkeypatch, "langboard.mcp_tools")

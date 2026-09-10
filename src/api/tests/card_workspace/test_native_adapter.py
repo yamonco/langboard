@@ -91,6 +91,73 @@ def test_native_source_rejects_over_bound_people_before_projection() -> None:
         adapter.get_card_bundle_source("p1", "c1", frozenset({"people"}))
 
 
+def test_native_checkitem_continuation_reads_only_the_requested_checklist() -> None:
+    project = SimpleNamespace(id=1)
+    card = SimpleNamespace(
+        id=2,
+        project_id=1,
+        project_column_id=3,
+        api_response=lambda: {"uid": "c1"},
+    )
+    column = SimpleNamespace(id=3, project_id=1, name="Backlog")
+    checklist = SimpleNamespace(
+        id=4,
+        card_id=2,
+        api_response=lambda: {"uid": "cl1", "title": "Checklist"},
+    )
+    calls: list[tuple[Any, Any, int]] = []
+    service = SimpleNamespace(
+        project=SimpleNamespace(get_by_id_like=lambda _uid: project),
+        project_column=SimpleNamespace(get_by_id_like=lambda _uid: column),
+        card=SimpleNamespace(get_by_id_like=lambda _uid: card),
+        checklist=SimpleNamespace(
+            get_by_id_like=lambda _uid: checklist,
+            get_api_list_by_card=lambda *_args, **_kwargs: pytest.fail("bulk checklist query used"),
+        ),
+        checkitem=SimpleNamespace(
+            get_api_list_by_checklist=lambda target_card, target_checklist, limit: (
+                calls.append((target_card, target_checklist, limit)),
+                [{"uid": "ci1", "title": "Item"}],
+            )[1]
+        ),
+    )
+
+    source = NativeCardWorkspaceAdapter(object(), service).get_card_bundle_source(
+        "p1",
+        "c1",
+        frozenset({"checkitems:cl1"}),
+    )
+
+    assert source is not None
+    assert source.checklists[0]["checkitems"] == [{"uid": "ci1", "title": "Item"}]
+    assert calls == [(card, checklist, MAX_NATIVE_SECTION_SOURCE + 1)]
+
+
+def test_native_project_identity_limits_the_column_query() -> None:
+    project = SimpleNamespace(
+        id=1,
+        title="Delivery",
+        project_type="Other",
+        get_uid=lambda: "p1",
+    )
+    calls: list[int] = []
+    service = SimpleNamespace(
+        project=SimpleNamespace(get_by_id_like=lambda _uid: project),
+        project_column=SimpleNamespace(
+            get_api_list_by_project=lambda _project, limit: (
+                calls.append(limit),
+                [{"uid": "backlog", "name": "Backlog", "order": 0, "is_archive": False}],
+            )[1]
+        ),
+    )
+
+    result = NativeCardWorkspaceAdapter(object(), service).get_project_identity("p1")
+
+    assert result is not None
+    assert result["columns"]["items"] == [{"uid": "backlog", "name": "Backlog", "order": 0}]
+    assert calls == [MAX_NATIVE_SECTION_SOURCE + 1]
+
+
 def test_native_project_creation_uses_template_service(monkeypatch: pytest.MonkeyPatch) -> None:
     """The native project API, not Hermes, owns template selection and board shape."""
 
@@ -165,7 +232,7 @@ def test_native_card_creation_selects_server_side_leftmost_active_column() -> No
     service = SimpleNamespace(
         project=SimpleNamespace(get_by_id_like=lambda _uid: project),
         project_column=SimpleNamespace(
-            get_api_list_by_project=lambda _project: [
+            get_api_list_by_project=lambda _project, limit: [
                 {"uid": "done", "name": "Done", "order": 20, "is_archive": False},
                 {"uid": "archive", "name": "Archive", "order": -1, "is_archive": True},
                 {"uid": "backlog", "name": "Backlog", "order": 10, "is_archive": False},
@@ -186,3 +253,54 @@ def test_native_card_creation_selects_server_side_leftmost_active_column() -> No
         "card": card,
         "column": {"uid": "backlog", "name": "Backlog"},
     }
+
+
+def test_native_metadata_save_returns_written_record_without_bulk_reload() -> None:
+    project = SimpleNamespace(id=1)
+    card = SimpleNamespace(id=2, project_id=1)
+    saved = SimpleNamespace(key="summary", value="Ready")
+    service = SimpleNamespace(
+        project=SimpleNamespace(get_by_id_like=lambda _uid: project),
+        card=SimpleNamespace(get_by_id_like=lambda _uid: card),
+        metadata=SimpleNamespace(
+            save=lambda *_args: saved,
+            get_all_as_api=lambda *_args, **_kwargs: pytest.fail("bulk metadata query used"),
+        ),
+    )
+
+    result = NativeCardWorkspaceAdapter(object(), service).save_public_card_metadata(
+        "project-one",
+        "card-one",
+        "summary",
+        "Ready",
+        None,
+    )
+
+    assert result == {"summary": "Ready"}
+
+
+def test_native_relationship_replacement_bounds_existing_relationships() -> None:
+    project = SimpleNamespace(id=1)
+    card = SimpleNamespace(id=2, project_id=1)
+    limits: list[int] = []
+    service = SimpleNamespace(
+        project=SimpleNamespace(get_by_id_like=lambda _uid: project),
+        card=SimpleNamespace(get_by_id_like=lambda _uid: card),
+        app_setting=SimpleNamespace(get_api_global_relationship_list=lambda: []),
+        card_relationship=SimpleNamespace(
+            get_api_list_by_card=lambda _card, limit: (
+                limits.append(limit),
+                [{} for _ in range(MAX_NATIVE_SECTION_SOURCE + 1)],
+            )[1]
+        ),
+    )
+
+    with pytest.raises(ValueError, match="safe 100-item MCP source bound"):
+        NativeCardWorkspaceAdapter(object(), service).replace_card_relationships(
+            "project-one",
+            "card-one",
+            True,
+            [],
+        )
+
+    assert limits == [MAX_NATIVE_SECTION_SOURCE + 1]

@@ -29,7 +29,9 @@ from langboard_shared.domain.models import (
 from langboard_shared.domain.models.bases import ALL_GRANTED
 from langboard_shared.domain.models.InternalBot import InternalBotType
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
+from langboard_shared.domain.models.SettingRole import SettingRoleAction
 from langboard_shared.domain.services import DomainService
+from langboard_shared.Env import Env
 from langboard_shared.filter import RoleFilter
 from langboard_shared.security import Auth, RoleFinder
 from .forms import (
@@ -133,9 +135,16 @@ def update_project_email_notification_policy(
 def copy_project_as_template(
     project_uid: str,
     form: CopyProjectTemplateForm,
+    user: User = Auth.scope("user"),
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
     """Snapshot reusable board structure while excluding cards, members, and schedules."""
+
+    setting_role = service.user.get_setting_role(user)
+    if user.email not in Env.FULL_ADMIN_ACCESS_EMAILS and not (
+        setting_role and setting_role.is_granted(SettingRoleAction.ProjectTemplateCreate)
+    ):
+        raise ApiException.Forbidden_403(ApiErrorCode.AU1001)
 
     project = service.project.get_by_id_like(project_uid)
     if not project:

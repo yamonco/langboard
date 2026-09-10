@@ -7,7 +7,7 @@ class ProjectTemplateRepository(BaseRepository[ProjectTemplate]):
     """Persist and resolve project templates."""
 
     @staticmethod
-    def model_cls():
+    def model_cls() -> type[ProjectTemplate]:
         return ProjectTemplate
 
     @staticmethod
@@ -29,11 +29,13 @@ class ProjectTemplateRepository(BaseRepository[ProjectTemplate]):
             return db.exec(
                 SqlBuilder.select.table(ProjectTemplate)
                 .where(ProjectTemplate.column("is_default") == True)  # noqa: E712
+                .order_by(ProjectTemplate.column("id").asc())
                 .limit(1)
             ).first()
 
     def replace_default(self, template: ProjectTemplate) -> None:
         with DbSession.use(readonly=False) as db:
+            db.exec(SqlBuilder.select.table(ProjectTemplate).with_for_update()).all()
             db.exec(SqlBuilder.update.table(ProjectTemplate).values({ProjectTemplate.column("is_default"): False}))
             db.exec(
                 SqlBuilder.update.table(ProjectTemplate)

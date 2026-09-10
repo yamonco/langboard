@@ -2,10 +2,9 @@ from datetime import datetime
 from enum import Enum
 from typing import Any
 from sqlalchemy import JSON, TEXT
-from ...core.db import ApiField, BaseDbModel, CSVType, Field, SnowflakeIDField
+from ...core.db import ApiField, BaseDbModel, CSVType, EnumLikeType, Field, SnowflakeIDField
 from ...core.types import SnowflakeID
 from .Project import Project
-from .User import User
 
 
 class ProjectEmailNotificationCategory(Enum):
@@ -15,6 +14,11 @@ class ProjectEmailNotificationCategory(Enum):
     Attachments = "attachments"
     Checklists = "checklists"
     Wiki = "wiki"
+
+
+class ProjectEmailNotificationDeliveryStatus(Enum):
+    Succeeded = "succeeded"
+    Failed = "failed"
 
 
 class ProjectEmailNotificationPolicy(BaseDbModel, table=True):
@@ -44,7 +48,12 @@ class ProjectEmailNotificationPolicy(BaseDbModel, table=True):
         sa_type=JSON,
         api_field=ApiField(),
     )
-    last_delivery_status: str | None = Field(default=None, max_length=20, nullable=True, api_field=ApiField())
+    last_delivery_status: ProjectEmailNotificationDeliveryStatus | None = Field(
+        default=None,
+        nullable=True,
+        sa_type=EnumLikeType(ProjectEmailNotificationDeliveryStatus)(length=20),
+        api_field=ApiField(),
+    )
     last_delivery_at: datetime | None = Field(default=None, nullable=True, api_field=ApiField())
     last_delivery_recipient_email: str | None = Field(
         default=None,
@@ -67,24 +76,3 @@ class ProjectEmailNotificationPolicy(BaseDbModel, table=True):
             "external_recipient_emails",
             "last_delivery_status",
         ]
-
-
-class ProjectEmailNotificationRecipient(BaseDbModel, table=True):
-    policy_id: SnowflakeID = SnowflakeIDField(
-        foreign_key=ProjectEmailNotificationPolicy,
-        nullable=False,
-        index=True,
-        unique_groups=("policy_user",),
-    )
-    user_id: SnowflakeID = SnowflakeIDField(
-        foreign_key=User,
-        nullable=False,
-        index=True,
-        unique_groups=("policy_user",),
-    )
-
-    def notification_data(self) -> dict[str, Any]:
-        return {}
-
-    def _get_repr_keys(self) -> list[str | tuple[str, str]]:
-        return ["policy_id", "user_id"]

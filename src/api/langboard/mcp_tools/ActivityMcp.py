@@ -1,12 +1,15 @@
 from langboard_shared.core.schema import TimeBasedPagination
+from langboard_shared.core.types import SafeDateTime
 from langboard_shared.domain.models import ProjectRole, User
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.domain.services.DomainService import DomainService
 from langboard_shared.security import RoleFinder
+from pydantic import Field
 from ..mcp_integration import McpRoleFilter, McpTool
 
 
 class ActivityPagination(TimeBasedPagination):
+    limit: int = Field(default=50, ge=1, le=100)
     assignee_uid: str | None = None
     only_count: bool = False
 
@@ -30,7 +33,11 @@ def get_project_activities(
     page: int = 1,
     refer_time: str | None = None,
 ) -> dict:
-    pagination = ActivityPagination(page=page, limit=limit, refer_time=refer_time)
+    pagination = (
+        ActivityPagination(page=page, limit=limit, refer_time=SafeDateTime.fromisoformat(refer_time))
+        if refer_time
+        else ActivityPagination(page=page, limit=limit)
+    )
     result = service.activity.get_api_list_by_project(project_uid, pagination)
     if not result:
         return {

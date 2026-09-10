@@ -1,4 +1,5 @@
 import os
+from contextlib import contextmanager
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 import pytest
@@ -8,12 +9,20 @@ os.environ.setdefault("PROJECT_NAME", "langboard")
 
 from langboard.mcp_integration import McpTool
 from langboard.mcp_tools import ProjectMcp
-from langboard_shared.domain.models import User
+from langboard.routes.board.BoardApi import search_project_member_candidates
+from langboard_shared.core.db import DbSession
+from langboard_shared.core.types import SnowflakeID
+from langboard_shared.domain.models import Project, ProjectAssignedUser, ProjectRole, User
+from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.domain.services.factory.ProjectInvitationService import (
     InvitationRelatedResult,
     ProjectInvitationService,
 )
 from langboard_shared.domain.services.factory.ProjectService import ProjectService
+from langboard_shared.filter import RoleFilter
+from langboard_shared.infrastructure.repositories.factory.ProjectAssignedUserRepository import (
+    ProjectAssignedUserRepository,
+)
 
 
 def test_additive_invitation_data_preserves_existing_members_and_invites() -> None:
@@ -113,9 +122,92 @@ def test_additive_retry_is_a_complete_noop() -> None:
     assigned_users.assert_not_called()
 
 
+def test_additive_invitation_reports_a_concurrent_duplicate_as_unchanged() -> None:
+    """A repository race loser reports no change after the atomic insert is skipped."""
+
+    project = object()
+    invitation_data = InvitationRelatedResult()
+    invitation_data.emails_should_invite.add("pending@example.com")
+
+    def lose_insert_race(_user: User, _project: object, result: InvitationRelatedResult) -> bool:
+        result.applied_count = 0
+        return True
+
+    invitation_service = SimpleNamespace(
+        get_additive_invitation_related_data=Mock(return_value=invitation_data),
+        invite_emails=Mock(side_effect=lose_insert_race),
+        get_api_invited_user_list_by_project=Mock(return_value=[]),
+    )
+    assigned_users = Mock(return_value=[])
+    repository = SimpleNamespace(project_assigned_user=SimpleNamespace(get_all_by_project=assigned_users))
+    service = ProjectService(lambda _: None, lambda _: None, repository)
+
+    with (
+        patch(
+            "langboard_shared.domain.services.factory.ProjectService.InfraHelper.get_by_id_like",
+            return_value=project,
+        ),
+        patch.object(service, "_get_service_by_name", return_value=invitation_service),
+    ):
+        result = service.invite_assigned_users(User.model_construct(), project, ["pending@example.com"])
+
+    assert result == {"requested_count": 1, "changed_count": 0, "status": "unchanged"}
+
+
 def test_invite_tool_schema_and_legacy_replacement_tool_are_distinct() -> None:
     """Consumers can select additive invitations without changing the legacy contract."""
 
     invite_schema = McpTool.get_tool("invite_project_members")["input_schema"]
     assert invite_schema["required"] == ["project_uid", "emails"]
     assert McpTool.get_tool("update_project_members") is not None
+
+
+def test_member_candidate_search_requires_project_update() -> None:
+    role_model, actions, _, _ = RoleFilter.get_filtered(search_project_member_candidates)
+
+    assert role_model is ProjectRole
+    assert actions == [ProjectRoleAction.Update.value]
+
+
+def test_member_assignment_locks_project_before_checking_for_duplicates(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Concurrent invitation acceptance is serialized on the owning project row."""
+
+    project = Project.model_construct(id=SnowflakeID(1))
+    user = User.model_construct(id=SnowflakeID(2))
+    existing = ProjectAssignedUser.model_construct(
+        id=SnowflakeID(3),
+        project_id=project.id,
+        user_id=user.id,
+    )
+    statements: list[object] = []
+    inserts: list[ProjectAssignedUser] = []
+
+    class Result:
+        def __init__(self, value: object | None) -> None:
+            self.value = value
+
+        def first(self) -> object | None:
+            return self.value
+
+    class Database:
+        def exec(self, statement: object) -> Result:
+            statements.append(statement)
+            return Result(project if len(statements) == 1 else existing)
+
+        def insert(self, assigned_user: ProjectAssignedUser) -> None:
+            inserts.append(assigned_user)
+
+    @contextmanager
+    def use_database(*, readonly: bool):
+        assert readonly is False
+        yield Database()
+
+    monkeypatch.setattr(DbSession, "use", use_database)
+    repository = ProjectAssignedUserRepository(lambda *_: None, lambda *_: None)
+
+    assigned_user, created = repository.ensure_assigned(project, user)
+
+    assert assigned_user is existing
+    assert created is False
+    assert getattr(statements[0], "_for_update_arg", None) is not None
+    assert inserts == []

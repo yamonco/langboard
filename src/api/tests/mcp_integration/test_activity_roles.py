@@ -105,7 +105,9 @@ def test_project_scoped_activity_tools_require_project_read(monkeypatch: pytest.
 
     module.get_project_activities("project", service, limit=7, refer_time="2026-08-06T12:00:00+09:00")
 
-    assert pagination_values == [{"page": 1, "limit": 7, "refer_time": "2026-08-06T12:00:00+09:00"}]
+    assert pagination_values[0]["page"] == 1
+    assert pagination_values[0]["limit"] == 7
+    assert pagination_values[0]["refer_time"].isoformat() == "2026-08-06T12:00:00+09:00"
 
 
 def _set_package(monkeypatch: pytest.MonkeyPatch, name: str) -> ModuleType:

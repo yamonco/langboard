@@ -20,7 +20,7 @@ class ProjectRepository(BaseRepository[Project]):
     def get_by_id_like(self, project: TProjectParam | None) -> Project | None:
         return InfraHelper.get_by_id_like(Project, project)
 
-    def get_all_by_user(self, user: TUserParam) -> list[tuple[Project, ProjectAssignedUser]]:
+    def get_all_by_user(self, user: TUserParam, limit: int | None = None) -> list[tuple[Project, ProjectAssignedUser]]:
         user_id = InfraHelper.convert_id(user)
         query = (
             SqlBuilder.select.tables(Project, ProjectAssignedUser)
@@ -31,6 +31,8 @@ class ProjectRepository(BaseRepository[Project]):
             .where(ProjectAssignedUser.column("user_id") == user_id)
             .order_by(Project.column("updated_at").desc(), Project.column("id").desc())
         )
+        if limit is not None:
+            query = query.limit(limit)
 
         projects = []
         with DbSession.use(readonly=True) as db:
@@ -38,24 +40,28 @@ class ProjectRepository(BaseRepository[Project]):
             projects = result.all()
         return projects
 
-    def get_all_starred(self, user: TUserParam) -> list[tuple[Project, ProjectAssignedUser]]:
+    def get_all_starred(self, user: TUserParam, limit: int | None = None) -> list[tuple[Project, ProjectAssignedUser]]:
         user_id = InfraHelper.convert_id(user)
+        query = (
+            SqlBuilder.select.tables(Project, ProjectAssignedUser)
+            .join(
+                ProjectAssignedUser,
+                ProjectAssignedUser.column("project_id") == Project.column("id"),
+            )
+            .where(ProjectAssignedUser.column("user_id") == user_id)
+            .where(ProjectAssignedUser.column("starred") == True)  # noqa
+            .order_by(
+                ProjectAssignedUser.column("last_viewed_at").desc(),
+                Project.column("updated_at").desc(),
+                Project.column("id").desc(),
+            )
+        )
+        if limit is not None:
+            query = query.limit(limit)
+
         projects = []
         with DbSession.use(readonly=True) as db:
-            result = db.exec(
-                SqlBuilder.select.tables(Project, ProjectAssignedUser)
-                .join(
-                    ProjectAssignedUser,
-                    ProjectAssignedUser.column("project_id") == Project.column("id"),
-                )
-                .where(ProjectAssignedUser.column("user_id") == user_id)
-                .where(ProjectAssignedUser.column("starred") == True)  # noqa
-                .order_by(
-                    ProjectAssignedUser.column("last_viewed_at").desc(),
-                    Project.column("updated_at").desc(),
-                    Project.column("id").desc(),
-                )
-            )
+            result = db.exec(query)
             projects = result.all()
         return projects
 

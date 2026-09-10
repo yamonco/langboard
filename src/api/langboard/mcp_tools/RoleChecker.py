@@ -2,6 +2,7 @@ from collections.abc import Callable
 from typing import Any
 from langboard_shared.domain.models import Bot, ProjectRole, User
 from langboard_shared.domain.services.DomainService import DomainService
+from langboard_shared.Env import Env
 from langboard_shared.security import RoleSecurity
 from ..mcp_integration.RoleFilter import McpRoleFilter
 
@@ -30,6 +31,8 @@ class McpRoleChecker:
                 return True
             return self._has_project_scope(user_or_bot, arguments)
 
+        if user_or_bot.email in Env.FULL_ADMIN_ACCESS_EMAILS:
+            return True
         if allowed_all_admin and user_or_bot.is_admin:
             return True
 

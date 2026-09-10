@@ -446,7 +446,7 @@ function useBoardTouchCardDnd({ enabled, scrollableRef, columns, rowsMap, change
             scrollable.removeEventListener("touchcancel", handleTouchCancel);
             cleanupActive();
         };
-    }, [changeRowOrder, columns, enabled, rowsMap, scrollableRef]);
+    }, [changeRowOrder, columns, enabled, rowsMap]);
 }
 
 export default useBoardTouchCardDnd;

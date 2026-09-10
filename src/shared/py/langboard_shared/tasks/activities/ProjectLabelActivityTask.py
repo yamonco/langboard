@@ -2,7 +2,7 @@ from typing import Any
 from ...core.broker import Broker
 from ...domain.models import Bot, Project, ProjectActivity, ProjectLabel, User
 from ...domain.models.ProjectActivity import ProjectActivityType
-from .UserActivityTask import record_project_activity
+from . import UserActivityTask
 from .utils import ActivityHistoryHelper, ActivityTaskHelper
 
 
@@ -13,7 +13,7 @@ async def project_label_created(user_or_bot: User | Bot, project: Project, label
     activity = helper.record(
         user_or_bot, activity_history, **_get_activity_params(ProjectActivityType.ProjectLabelCreated, project)
     )
-    record_project_activity(user_or_bot, activity)
+    UserActivityTask.record_project_activity(user_or_bot, activity)
 
 
 @Broker.wrap_async_task_decorator
@@ -28,7 +28,7 @@ async def project_label_updated(
     activity = helper.record(
         user_or_bot, activity_history, **_get_activity_params(ProjectActivityType.ProjectLabelUpdated, project)
     )
-    record_project_activity(user_or_bot, activity)
+    UserActivityTask.record_project_activity(user_or_bot, activity)
 
 
 @Broker.wrap_async_task_decorator
@@ -38,7 +38,7 @@ async def project_label_deleted(user_or_bot: User | Bot, project: Project, label
     activity = helper.record(
         user_or_bot, activity_history, **_get_activity_params(ProjectActivityType.ProjectLabelDeleted, project)
     )
-    record_project_activity(user_or_bot, activity)
+    UserActivityTask.record_project_activity(user_or_bot, activity)
 
 
 def _get_default_history(helper: ActivityTaskHelper, project: Project, label: ProjectLabel):

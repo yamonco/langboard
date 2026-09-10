@@ -2,6 +2,7 @@ from ...core.broker import Broker
 from ...domain.models import Bot, Project, ProjectActivity, ProjectWikiActivity, User, UserActivity
 from ...domain.models.bases import BaseActivityModel
 from ...domain.models.UserActivity import UserActivityType
+from ..notifications.ProjectEmailNotificationQueue import enqueue_project_activity_email
 from .utils import ActivityHistoryHelper, ActivityTaskHelper
 
 
@@ -26,17 +27,13 @@ async def declined_project_invitation(user: User, project: Project):
 def record_project_activity(user_or_bot: User | Bot, activity: ProjectActivity):
     helper = ActivityTaskHelper(UserActivity)
     helper.record(user_or_bot, {}, **_refer_activity(activity))
-    from ..notifications.ProjectEmailNotificationTask import fanout_project_activity_email
-
-    fanout_project_activity_email(activity.__tablename__, activity.id)
+    enqueue_project_activity_email(activity.__tablename__, activity.id)
 
 
 def record_wiki_activity(user_or_bot: User | Bot, activity: ProjectWikiActivity):
     helper = ActivityTaskHelper(UserActivity)
     helper.record(user_or_bot, {}, **_refer_activity(activity))
-    from ..notifications.ProjectEmailNotificationTask import fanout_project_activity_email
-
-    fanout_project_activity_email(activity.__tablename__, activity.id)
+    enqueue_project_activity_email(activity.__tablename__, activity.id)
 
 
 def _refer_activity(activity: BaseActivityModel):

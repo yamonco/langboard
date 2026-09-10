@@ -1,7 +1,7 @@
 from ...core.broker import Broker
 from ...domain.models import Bot, Card, CardAttachment, Project, ProjectActivity, User
 from ...domain.models.ProjectActivity import ProjectActivityType
-from .UserActivityTask import record_project_activity
+from . import UserActivityTask
 from .utils import ActivityHistoryHelper, ActivityTaskHelper
 
 
@@ -14,7 +14,7 @@ async def card_attachment_uploaded(user_or_bot: User | Bot, project: Project, ca
         activity_history,
         **_get_activity_params(ProjectActivityType.CardAttachmentUploaded, project, card),
     )
-    record_project_activity(user_or_bot, activity)
+    UserActivityTask.record_project_activity(user_or_bot, activity)
 
 
 @Broker.wrap_async_task_decorator
@@ -31,7 +31,7 @@ async def card_attachment_name_changed(
         activity_history,
         **_get_activity_params(ProjectActivityType.CardAttachmentNameChanged, project, card),
     )
-    record_project_activity(user_or_bot, activity)
+    UserActivityTask.record_project_activity(user_or_bot, activity)
 
 
 @Broker.wrap_async_task_decorator
@@ -43,7 +43,7 @@ async def card_attachment_deleted(user_or_bot: User | Bot, project: Project, car
         activity_history,
         **_get_activity_params(ProjectActivityType.ProjectLabelDeleted, project, card),
     )
-    record_project_activity(user_or_bot, activity)
+    UserActivityTask.record_project_activity(user_or_bot, activity)
 
 
 def _get_default_history(helper: ActivityTaskHelper, project: Project, card: Card, attachment: CardAttachment):

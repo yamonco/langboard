@@ -181,7 +181,7 @@ function SettingsProxyDisplay({ currentUser, isOllamaAvailable }: { currentUser:
             icon: "layout-template",
             name: t("settings.Project templates"),
             onClick: () => navigate(ROUTES.SETTINGS.PROJECT_TEMPLATES, { smooth: true }),
-            hidden: !currentUser.is_admin,
+            hidden: !hasSettingRoleAction(SettingRole.EAction.ProjectTemplateUpdate),
         },
         [ROUTES.SETTINGS.API_KEYS]: {
             icon: "key-round",
@@ -313,7 +313,7 @@ function SettingsProxyDisplay({ currentUser, isOllamaAvailable }: { currentUser:
         const foundAvailableRoute = Object.entries(sidebarNavs).find(([_, nav]) => !nav.hidden)?.[0];
         switch (pathname) {
             case ROUTES.SETTINGS.PROJECT_TEMPLATES:
-                if (!currentUser.is_admin) {
+                if (!hasSettingRoleAction(SettingRole.EAction.ProjectTemplateUpdate)) {
                     navigate(foundAvailableRoute ?? ROUTES.DASHBOARD.PROJECTS.ALL, { replace: true });
                 }
                 break;

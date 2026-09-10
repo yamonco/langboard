@@ -3,7 +3,19 @@ import { TMutationOptions, TQueryOptions, useQueryMutation } from "@/core/helper
 import { Routing } from "@langboard/core/constants";
 import { Utils } from "@langboard/core/utils";
 
-export type TProjectEmailNotificationCategory = "board" | "cards" | "comments" | "attachments" | "checklists" | "wiki";
+export enum EProjectEmailNotificationCategory {
+    Board = "board",
+    Cards = "cards",
+    Comments = "comments",
+    Attachments = "attachments",
+    Checklists = "checklists",
+    Wiki = "wiki",
+}
+
+export enum EProjectEmailNotificationDeliveryStatus {
+    Succeeded = "succeeded",
+    Failed = "failed",
+}
 
 export interface IProjectEmailNotificationRecipient {
     uid: string;
@@ -15,14 +27,14 @@ export interface IProjectEmailNotificationRecipient {
 export interface IProjectEmailNotificationPolicy {
     is_enabled: boolean;
     notify_all_members: boolean;
-    categories: TProjectEmailNotificationCategory[];
+    categories: EProjectEmailNotificationCategory[];
     recipient_user_uids: string[];
     external_recipient_emails: string[];
     card_move_target_columns: string[];
     available_recipients: IProjectEmailNotificationRecipient[];
     available_columns: string[];
     smtp_available: boolean;
-    last_delivery_status: "succeeded" | "failed" | null;
+    last_delivery_status: EProjectEmailNotificationDeliveryStatus | null;
     last_delivery_at: string | null;
     last_delivery_recipient_email: string | null;
     last_delivery_error: string | null;
@@ -31,7 +43,7 @@ export interface IProjectEmailNotificationPolicy {
 export interface IUpdateProjectEmailNotificationPolicyForm {
     is_enabled: boolean;
     notify_all_members: boolean;
-    categories: TProjectEmailNotificationCategory[];
+    categories: EProjectEmailNotificationCategory[];
     recipient_user_uids: string[];
     external_recipient_emails: string[];
     card_move_target_columns: string[];
@@ -45,7 +57,13 @@ export const useGetProjectEmailNotificationPolicy = (projectUID: string, options
         policyKey(projectUID),
         async () => {
             const url = Utils.String.format(Routing.API.BOARD.SETTINGS.EMAIL_NOTIFICATIONS, { uid: projectUID });
-            return (await api.get(url)).data.policy as IProjectEmailNotificationPolicy;
+            return (
+                await api.get<{ policy: IProjectEmailNotificationPolicy }>(url, {
+                    env: {
+                        interceptToast: options?.interceptToast,
+                    } as never,
+                })
+            ).data.policy;
         },
         { ...options, retry: 0 }
     );
@@ -60,7 +78,13 @@ export const useUpdateProjectEmailNotificationPolicy = (
         policyKey(projectUID),
         async (form) => {
             const url = Utils.String.format(Routing.API.BOARD.SETTINGS.EMAIL_NOTIFICATIONS, { uid: projectUID });
-            return (await api.put(url, form)).data.policy as IProjectEmailNotificationPolicy;
+            return (
+                await api.put<{ policy: IProjectEmailNotificationPolicy }>(url, form, {
+                    env: {
+                        interceptToast: options?.interceptToast,
+                    } as never,
+                })
+            ).data.policy;
         },
         { ...options, retry: 0 }
     );

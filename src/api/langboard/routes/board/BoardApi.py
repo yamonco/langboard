@@ -130,7 +130,7 @@ def get_project_assigned_users(project_uid: str, service: DomainService = Domain
     description="Search project member invite candidates.",
     responses=OpenApiSchema().suc({"users": [User]}).auth().forbidden().err(404, ApiErrorCode.NF2001).get(),
 )
-@RoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+@RoleFilter.add(ProjectRole, [ProjectRoleAction.Update], RoleFinder.project)
 @AuthFilter.add("user")
 def search_project_member_candidates(
     project_uid: str, query: str = "", user: User = Auth.scope("user"), service: DomainService = DomainService.scope()
@@ -266,7 +266,7 @@ def get_project_cards(project_uid: str, service: DomainService = DomainService.s
     cards = service.card.get_board_list(project)
     checklists = service.checklist.get_api_list_only_by_project(project)
     column_bot_scopes = service.project_column.get_api_bot_scopes_by_project(project)
-    column_bot_schedules = service.project_column.get_api_bot_schedule_list_by_project(project, columns)
+    column_bot_schedules = service.project_column.get_api_bot_schedule_list_by_project(project)
 
     column_names_by_uid = {col["uid"]: col["name"] for col in columns}
     for card in cards:

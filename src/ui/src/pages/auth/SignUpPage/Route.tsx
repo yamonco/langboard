@@ -1,11 +1,17 @@
 import { lazy } from "react";
-import { Navigate, Outlet, RouteObject } from "react-router";
+import { Navigate, Outlet, RouteObject, useLocation } from "react-router";
 import { ProtectedAuthRoute } from "@/core/routing/ProtectedAuthRoute";
 import { ROUTES } from "@/core/routing/constants";
 
 const SignUpPage = lazy(() => import("./index"));
 const CompletePage = lazy(() => import("./CompletePage"));
 const ActivatePage = lazy(() => import("./ActivatePage"));
+
+function SignUpIndexRedirect(): React.JSX.Element {
+    const { search } = useLocation();
+
+    return <Navigate to={`${ROUTES.SIGN_UP.REQUIRED}${search}`} replace />;
+}
 
 const routes: RouteObject[] = [
     {
@@ -19,7 +25,7 @@ const routes: RouteObject[] = [
         children: [
             {
                 index: true,
-                element: <Navigate to={`${ROUTES.SIGN_UP.REQUIRED}?${new URLSearchParams(location.search).toString()}`} replace />,
+                element: <SignUpIndexRedirect />,
             },
             {
                 path: ROUTES.SIGN_UP.REQUIRED,

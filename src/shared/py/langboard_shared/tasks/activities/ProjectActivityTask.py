@@ -2,7 +2,7 @@ from typing import Any
 from ...core.broker import Broker
 from ...domain.models import Bot, Project, ProjectActivity, User
 from ...domain.models.ProjectActivity import ProjectActivityType
-from .UserActivityTask import record_project_activity
+from . import UserActivityTask
 from .utils import ActivityHistoryHelper, ActivityTaskHelper
 
 
@@ -13,7 +13,7 @@ async def project_created(user: User, project: Project):
     activity = helper.record(
         user, activity_history, **_get_activity_params(ProjectActivityType.ProjectCreated, project)
     )
-    record_project_activity(user, activity)
+    UserActivityTask.record_project_activity(user, activity)
 
 
 @Broker.wrap_async_task_decorator
@@ -26,7 +26,7 @@ async def project_updated(user_or_bot: User | Bot, old_dict: dict[str, Any], pro
     activity = helper.record(
         user_or_bot, activity_history, **_get_activity_params(ProjectActivityType.ProjectUpdated, project)
     )
-    record_project_activity(user_or_bot, activity)
+    UserActivityTask.record_project_activity(user_or_bot, activity)
 
 
 @Broker.wrap_async_task_decorator
@@ -46,30 +46,30 @@ async def project_assigned_users_updated(
     activity = helper.record(
         user, activity_history, **_get_activity_params(ProjectActivityType.ProjectAssignedUsersUpdated, project)
     )
-    record_project_activity(user, activity)
+    UserActivityTask.record_project_activity(user, activity)
 
 
 @Broker.wrap_async_task_decorator
 async def project_email_notification_policy_updated(
     user: User,
     project: Project,
-    added_external_emails: list[str],
-    removed_external_emails: list[str],
+    added_external_recipient_count: int,
+    removed_external_recipient_count: int,
 ):
-    """Record exact edge recipient changes in the native project activity lineage."""
+    """Record external recipient changes without exposing email addresses."""
 
     helper = ActivityTaskHelper(ProjectActivity)
     activity_history = {
         **helper.create_project_default_history(project),
-        "added_external_emails": added_external_emails,
-        "removed_external_emails": removed_external_emails,
+        "added_external_recipient_count": added_external_recipient_count,
+        "removed_external_recipient_count": removed_external_recipient_count,
     }
     activity = helper.record(
         user,
         activity_history,
         **_get_activity_params(ProjectActivityType.ProjectEmailNotificationPolicyUpdated, project),
     )
-    record_project_activity(user, activity)
+    UserActivityTask.record_project_activity(user, activity)
 
 
 @Broker.wrap_async_task_decorator
@@ -81,7 +81,7 @@ async def project_invited_user_accepted(user: User, project: Project):
         activity_history,
         **_get_activity_params(ProjectActivityType.ProjectInvitedUserAccepted, project),
     )
-    record_project_activity(user, activity)
+    UserActivityTask.record_project_activity(user, activity)
 
 
 @Broker.wrap_async_task_decorator
@@ -91,7 +91,7 @@ async def project_deleted(user: User, project: Project):
     activity = helper.record(
         user, activity_history, **_get_activity_params(ProjectActivityType.ProjectDeleted, project)
     )
-    record_project_activity(user, activity)
+    UserActivityTask.record_project_activity(user, activity)
 
 
 def _get_activity_params(activity_type: ProjectActivityType, project: Project):

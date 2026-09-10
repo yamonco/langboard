@@ -77,8 +77,8 @@ class ProjectActivity(BaseActivityModel, table=True):
         nullable=False, sa_type=EnumLikeType(ProjectActivityType), api_field=ApiField()
     )
 
-    def api_response(self) -> dict[str, Any]:
-        response = super().api_response()
+    def api_response(self, **kwargs) -> dict[str, Any]:
+        response = super().api_response(**kwargs)
         response["filterable_map"] = {
             Project.__tablename__: self.project_id.to_short_code(),
         }

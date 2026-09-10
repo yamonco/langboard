@@ -1,6 +1,10 @@
 from langboard_shared.core.filter import AuthFilter
 from langboard_shared.core.routing import ApiErrorCode, ApiException, AppRouter, JsonResponse
+from langboard_shared.domain.models import SettingRole
+from langboard_shared.domain.models.SettingRole import SettingRoleAction
 from langboard_shared.domain.services import DomainService
+from langboard_shared.filter import RoleFilter
+from langboard_shared.security import RoleFinder
 from .Form import SetDefaultProjectTemplateForm
 
 
@@ -13,6 +17,12 @@ def get_project_templates(service: DomainService = DomainService.scope()) -> Jso
 
 
 @AppRouter.api.put("/settings/project-templates/default", tags=["AppSettings.ProjectTemplate"])
+@RoleFilter.add(
+    SettingRole,
+    [SettingRoleAction.ProjectTemplateUpdate],
+    RoleFinder.setting,
+    allowed_all_admin=False,
+)
 @AuthFilter.add("admin")
 def set_default_project_template(
     form: SetDefaultProjectTemplateForm,

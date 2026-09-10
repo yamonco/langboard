@@ -56,7 +56,10 @@ export const resolveSocketTopicId = (topic: ESocketTopic, topicId?: string) => {
         case ESocketTopic.Global:
             return GLOBAL_TOPIC_ID;
         default:
-            return topicId!;
+            if (topicId === undefined) {
+                throw new Error(`Socket topic ${topic} requires a topic ID`);
+            }
+            return topicId;
     }
 };
 

@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
 import { Plate } from "platejs/react";
@@ -8,7 +7,8 @@ import { IEditorContent } from "@/core/models/Base";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type Value } from "platejs";
 import { FocusScope } from "@radix-ui/react-focus-scope";
-import { EditorDataProvider, TEditorDataProviderProps, useEditorData } from "@/core/providers/EditorDataProvider";
+import { useComposedRefs } from "@radix-ui/react-compose-refs";
+import { EditorDataProvider, TEditorDataProviderValueProps, useEditorData } from "@/core/providers/EditorDataProvider";
 import { TEditor } from "@/components/Editor/editor-kit";
 import { useMounted } from "@/core/hooks/useMounted";
 import { YjsPlugin } from "@platejs/yjs/react";
@@ -57,7 +57,7 @@ const isYjsSelectionMismatchError = (error: unknown) => {
     return error instanceof Error && error.message.includes(YJS_SELECTION_MISMATCH_ERROR);
 };
 
-interface IBasePlateEditorProps extends Omit<TUseCreateEditor, "plugins"> {
+interface IBasePlateEditorProps extends Omit<TUseCreateEditor, "plugins" | "readOnly"> {
     setValue?: (value: IEditorContent) => void;
     onEditorChange?: (editor: TEditor) => void;
     onEditorReady?: (editor: TEditor) => void;
@@ -86,39 +86,39 @@ interface IPlateEditorProps extends IBasePlateEditorProps {
 
 export type TPlateEditorProps = IPlateViewerProps | IPlateEditorProps;
 
-export function PlateEditor(props: TPlateEditorProps & Omit<TEditorDataProviderProps, "children">) {
+export function PlateEditor(props: TPlateEditorProps & TEditorDataProviderValueProps) {
     return (
-        <EditorDataProvider {...(props as any)}>
+        <EditorDataProvider {...props}>
             <EditorWrapper {...props} />
         </EditorDataProvider>
     );
 }
 
-function EditorWrapper({
-    value,
-    readOnly,
-    variant = "ai",
-    serializeOnChange = true,
-    focusOnReady = false,
-    className,
-    containerClassName,
-    setValue,
-    onEditorChange,
-    onEditorReady,
-    editorRef,
-    editorComponentRef,
-    placeholder,
-    deserializedValue,
-    onCollaborativeValueReady,
-    onCollaborativeValueResetReady,
-    ...props
-}: TPlateEditorProps) {
-    if (!editorRef) {
-        editorRef = useRef<TEditor>(null);
-    }
+function EditorWrapper(editorProps: TPlateEditorProps) {
+    const {
+        value,
+        readOnly,
+        variant = "ai",
+        serializeOnChange = true,
+        focusOnReady = false,
+        className,
+        containerClassName,
+        setValue,
+        onEditorChange,
+        onEditorReady,
+        editorRef,
+        editorComponentRef,
+        placeholder,
+        deserializedValue,
+        onCollaborativeValueReady,
+        onCollaborativeValueResetReady,
+    } = editorProps;
 
     const [t] = useTranslation();
+    const internalEditorRef = useRef<TEditor>(null);
+    const resolvedEditorRef = editorRef ?? internalEditorRef;
     const internalEditorComponentRef = useRef<HTMLDivElement>(null);
+    const composedEditorComponentRef = useComposedRefs(internalEditorComponentRef, editorComponentRef);
     const [isCollaborativeReady, setIsCollaborativeReady] = useState(false);
     const [showSyncUnavailable, setShowSyncUnavailable] = useState(false);
     const [collaborativeRetryKey, setCollaborativeRetryKey] = useState(0);
@@ -126,12 +126,9 @@ function EditorWrapper({
         setIsCollaborativeReady(isSynced);
     }, []);
     const editor = useCreateEditor({
-        value,
-        readOnly,
-        deserializedValue,
+        ...editorProps,
         onCollaborativeSyncChange: handleCollaborativeSyncChange,
-        ...props,
-    } as TUseCreateEditor);
+    });
     const mounted = useMounted();
     const socket = useSocket();
     const { documentID, editorType, form } = useEditorData();
@@ -149,14 +146,14 @@ function EditorWrapper({
         if (editorType === EEditorType.CardDescription && form?.card_uid) {
             return {
                 topic: ESocketTopic.BoardCard,
-                topicId: form.card_uid as string,
+                topicId: form.card_uid,
             };
         }
 
         if (editorType === EEditorType.WikiContent && form?.wiki_uid) {
             return {
                 topic: ESocketTopic.BoardWikiPrivate,
-                topicId: form.wiki_uid as string,
+                topicId: form.wiki_uid,
             };
         }
 
@@ -227,7 +224,7 @@ function EditorWrapper({
         [onEditorChange, readOnly, serializeOnChange, setValue]
     );
 
-    editorRef.current = editor;
+    resolvedEditorRef.current = editor;
 
     const updateCollaborativeValue = useCallback(
         (nextContent: string) => {
@@ -316,7 +313,7 @@ function EditorWrapper({
                 topicId: richPatchSocketTarget.topicId,
                 event: EDITOR_SYNC_RICH_PATCH_REQUEST_EVENT,
                 eventKey: documentID,
-                callback: callback as unknown as (data: unknown) => void,
+                callback,
             });
         };
     }, [documentID, mounted, readOnly, richPatchSocketTarget, socket, updateCollaborativeValue]);
@@ -450,30 +447,18 @@ function EditorWrapper({
         focusEditor();
     }, [documentID, focusEditor, focusOnReady, mounted, readOnly]);
 
-    const setEditorComponentRefs = useCallback(
-        (node: HTMLDivElement | null) => {
-            internalEditorComponentRef.current = node;
-
-            if (!editorComponentRef) {
-                return;
-            }
-
-            if (Utils.Type.isFunction(editorComponentRef)) {
-                editorComponentRef(node);
-                return;
-            }
-
-            editorComponentRef.current = node;
-        },
-        [editorComponentRef]
-    );
-
     return (
         <FocusScope trapped={false} loop={false} className="w-full outline-none">
             <Plate editor={editor} readOnly={readOnly} onValueChange={handleValueChange}>
                 <div className="relative">
                     <EditorContainer className={containerClassName}>
-                        <Editor variant={variant} className={className} placeholder={placeholder} readOnly={readOnly} ref={setEditorComponentRefs} />
+                        <Editor
+                            variant={variant}
+                            className={className}
+                            placeholder={placeholder}
+                            readOnly={readOnly}
+                            ref={composedEditorComponentRef}
+                        />
                     </EditorContainer>
                     {isWaitingForCollaborativeReady && (
                         <SyncBlocker

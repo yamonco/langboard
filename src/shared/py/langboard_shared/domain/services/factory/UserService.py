@@ -32,8 +32,7 @@ class UserService(BaseDomainService):
         return "user"
 
     def get_by_id_like(self, user: TUserParam | None) -> User | None:
-        project = InfraHelper.get_by_id_like(User, user)
-        return project
+        return InfraHelper.get_by_id_like(User, user)
 
     def create_cache_name(self, cache_type: str, email: str) -> str:
         return f"{cache_type}:{email}"

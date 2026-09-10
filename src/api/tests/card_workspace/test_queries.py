@@ -9,6 +9,7 @@ from langboard.card_workspace.application.queries import (
     get_card_bundle,
     get_project_identity,
     get_public_card_metadata,
+    get_public_card_metadata_by_key,
     list_project_cards,
 )
 from langboard.card_workspace.domain import CardBundleInclude, CommentPage, SectionPage
@@ -132,6 +133,15 @@ class FakeQueryPort:
 
     def get_public_card_metadata(self, project_uid: str, card_uid: str) -> dict[str, str] | None:
         return self.source.metadata
+
+    def get_public_card_metadata_by_key(
+        self,
+        project_uid: str,
+        card_uid: str,
+        key: str,
+    ) -> dict[str, str] | None:
+        value = self.source.metadata.get(key)
+        return {"key": key, "value": value} if value is not None else None
 
 
 def test_initial_card_bundle_is_bounded_and_privacy_preserving() -> None:
@@ -307,3 +317,20 @@ def test_public_metadata_exposes_opaque_continuation() -> None:
     second = get_public_card_metadata(port, "p1", "c1", limit=1, cursor=first.next_cursor)
 
     assert second.items[0]["key"] != first.items[0]["key"]
+
+
+def test_public_metadata_key_uses_the_single_record_port() -> None:
+    """A key lookup does not materialize the card's metadata collection."""
+
+    class KeyOnlyQueryPort(FakeQueryPort):
+        def get_public_card_metadata(self, project_uid: str, card_uid: str) -> dict[str, str] | None:
+            raise AssertionError("single-key lookup loaded the metadata collection")
+
+    result = get_public_card_metadata_by_key(KeyOnlyQueryPort(), "p1", "c1", "public.topic")
+
+    assert result == {
+        "key": "public.topic",
+        "value": "delivery",
+        "total_chars": 8,
+        "truncated": False,
+    }

@@ -65,6 +65,10 @@ class ApiKeyService(BaseDomainService):
         is_active: bool = True,
         expires_in_days: str | None = None,
     ) -> tuple[ApiKeySetting, str] | None:
+        valid_ip_whitelist = self.filter_valid_ip_whitelist(ip_whitelist or [])
+        if not valid_ip_whitelist:
+            return None
+
         provider_type = KeyVault.name()
         if provider_type == "openbao":
             provider = ApiKeyProvider.OpenBao
@@ -91,7 +95,7 @@ class ApiKeyService(BaseDomainService):
             name=name,
             provider=provider,
             value=key_id,
-            ip_whitelist=ip_whitelist or [],
+            ip_whitelist=valid_ip_whitelist,
             activated_at=SafeDateTime.now() if is_active else None,
             expires_in_days=expires_in_days_int,
             expires_at=expires_at,
@@ -196,6 +200,8 @@ class ApiKeyService(BaseDomainService):
             return False
 
         valid_ip_whitelist = self.filter_valid_ip_whitelist(ip_whitelist)
+        if not valid_ip_whitelist:
+            return False
 
         api_key.ip_whitelist = valid_ip_whitelist
         self.repo.api_key.update(api_key)

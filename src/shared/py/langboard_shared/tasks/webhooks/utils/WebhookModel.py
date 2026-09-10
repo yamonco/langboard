@@ -16,6 +16,8 @@ def validate_webhook_events(events: list[str] | None) -> list[str] | None:
         return None
     if not events:
         raise ValueError("Webhook events must contain at least one event name")
+    if len(events) > len(WEBHOOK_EVENT_NAMES):
+        raise ValueError("Webhook events exceed the supported event count")
     if len(events) != len(set(events)):
         raise ValueError("Webhook events must be unique")
 

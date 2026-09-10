@@ -20,14 +20,17 @@ class ProjectLabelRepository(BaseOrderRepository[ProjectLabel, Project]):
         return "project_label"
 
     def get_all_by_project(
-        self, project: TProjectParam, where_in: Sequence[TProjectLabelParam] | None = None
+        self,
+        project: TProjectParam,
+        where_in: Sequence[TProjectLabelParam] | None = None,
+        limit: int | None = None,
     ) -> list[ProjectLabel]:
         project_id = InfraHelper.convert_id(project)
         labels = []
         query = (
             SqlBuilder.select.table(ProjectLabel)
             .where(ProjectLabel.column("project_id") == project_id)
-            .order_by(ProjectLabel.column("order").asc())
+            .order_by(ProjectLabel.column("order").asc(), ProjectLabel.column("id").asc())
         )
 
         if where_in is not None:
@@ -35,6 +38,8 @@ class ProjectLabelRepository(BaseOrderRepository[ProjectLabel, Project]):
                 where_in = [where_in]
             label_ids = [InfraHelper.convert_id(label) for label in where_in]
             query = query.where(ProjectLabel.column("id").in_(label_ids))
+        if limit is not None:
+            query = query.limit(limit)
 
         with DbSession.use(readonly=True) as db:
             result = db.exec(query)

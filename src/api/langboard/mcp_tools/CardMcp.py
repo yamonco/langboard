@@ -6,33 +6,42 @@ from langboard_shared.core.storage import Storage, StorageName
 from langboard_shared.core.types import SafeDateTime
 from langboard_shared.core.utils.Converter import convert_python_data
 from langboard_shared.domain.models import Bot, Card, Project, ProjectRole, User
-from langboard_shared.domain.models.bases import ALL_GRANTED
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.domain.services.DomainService import DomainService
 from langboard_shared.Env import Env
 from langboard_shared.helpers import InfraHelper
 from langboard_shared.security import RoleFinder
+from ..Constants import MCP_DEFAULT_LIST_LIMIT, TMcpListLimit
 from ..mcp_integration import McpRoleFilter, McpTool
 
 
 @McpTool.add(description="Get all cards in a project.")
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
-def get_cards(project_uid: str, service: DomainService) -> dict:
+def get_cards(
+    project_uid: str,
+    service: DomainService,
+    limit: TMcpListLimit = MCP_DEFAULT_LIST_LIMIT,
+) -> dict:
     project = service.project.get_by_id_like(project_uid)
     if not project:
         raise ValueError("Project not found")
-    cards = service.card.get_api_list_by_project(project)
+    cards = service.card.get_api_list_by_project(project, limit=limit)
     return {"cards": cards}
 
 
-@McpTool.add(description="Get card details.")
+@McpTool.add(description="Get card details with bounded related records.")
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
-def get_card(project_uid: str, card_uid: str, service: DomainService) -> dict:
+def get_card(
+    project_uid: str,
+    card_uid: str,
+    service: DomainService,
+    limit: TMcpListLimit = MCP_DEFAULT_LIST_LIMIT,
+) -> dict:
     params = InfraHelper.get_records_with_foreign_by_params((Project, project_uid), (Card, card_uid))
     if not params:
         raise ValueError("Card not found")
     project, card = params
-    api_card = service.card.get_details(project, card)
+    api_card = service.card.get_details(project, card, limit=limit)
     if not api_card:
         raise ValueError("Card not found")
     return api_card
@@ -40,44 +49,35 @@ def get_card(project_uid: str, card_uid: str, service: DomainService) -> dict:
 
 @McpTool.add(description="Get card checklists.")
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
-def get_card_checklists(project_uid: str, card_uid: str, service: DomainService) -> dict:
+def get_card_checklists(
+    project_uid: str,
+    card_uid: str,
+    service: DomainService,
+    limit: TMcpListLimit = MCP_DEFAULT_LIST_LIMIT,
+    checkitems_limit: TMcpListLimit = MCP_DEFAULT_LIST_LIMIT,
+) -> dict:
     params = InfraHelper.get_records_with_foreign_by_params((Project, project_uid), (Card, card_uid))
     if not params:
         raise ValueError("Card not found")
     _, card = params
-    checklists = service.checklist.get_api_list_by_card(card)
+    checklists = service.checklist.get_api_list_by_card(card, limit=limit, checkitems_limit=checkitems_limit)
     return {"checklists": checklists}
 
 
 @McpTool.add(description="Get card attachments.")
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
-def get_card_attachments(project_uid: str, card_uid: str, service: DomainService) -> dict:
+def get_card_attachments(
+    project_uid: str,
+    card_uid: str,
+    service: DomainService,
+    limit: TMcpListLimit = MCP_DEFAULT_LIST_LIMIT,
+) -> dict:
     params = InfraHelper.get_records_with_foreign_by_params((Project, project_uid), (Card, card_uid))
     if not params:
         raise ValueError("Card not found")
     _, card = params
-    attachments = service.card_attachment.get_api_list_by_card(card)
+    attachments = service.card_attachment.get_api_list_by_card(card, limit=limit)
     return {"attachments": attachments}
-
-
-@McpTool.add(description="Get bot scopes for a card.")
-@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
-def get_card_bot_scopes(project_uid: str, card_uid: str, user_or_bot: User | Bot, service: DomainService) -> dict:
-    params = InfraHelper.get_records_with_foreign_by_params((Project, project_uid), (Card, card_uid))
-    if not params:
-        raise ValueError("Card not found")
-    project, card = params
-    api_card = service.card.get_details(project, card)
-    if not api_card:
-        raise ValueError("Card not found")
-    bot_scopes = []
-    can_set = isinstance(user_or_bot, Bot)
-    if isinstance(user_or_bot, User):
-        actions = service.project.get_user_role_actions_by_project(user_or_bot, project)
-        can_set = ALL_GRANTED in actions or ProjectRoleAction.Update.value in actions
-    if can_set:
-        bot_scopes = service.card.get_api_bot_scope_list(project, card)
-    return {"bot_scopes": bot_scopes}
 
 
 @McpTool.add(description="Create a card.")

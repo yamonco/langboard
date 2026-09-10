@@ -45,6 +45,9 @@ from ..card_workspace.infrastructure import NativeCardWorkspaceAdapter
 from ..mcp_integration import McpRoleFilter, McpTool
 
 
+MAX_PROJECT_MEMBER_ITEMS = 50
+
+
 def _as_card_bundle_include(value: str | CardBundleInclude) -> CardBundleInclude:
     """Parse one JSON enum value without weakening the domain type."""
 
@@ -162,9 +165,10 @@ def list_project_members(project_uid: str, service: DomainService) -> dict[str, 
     project = service.project.get_by_id_like(project_uid)
     if not project:
         raise ValueError("Project not found")
-    members = service.project.get_api_assigned_user_list(project)
-    items = [{key: member[key] for key in ("uid", "username") if key in member} for member in members[:50]]
-    return {"items": items, "total_count": len(members), "truncated": len(members) > 50}
+    members = service.project.get_api_assigned_user_list(project, limit=MAX_PROJECT_MEMBER_ITEMS)
+    total_count = service.project.count_assigned_users(project)
+    items = [{key: member[key] for key in ("uid", "username") if key in member} for member in members]
+    return {"items": items, "total_count": total_count, "truncated": total_count > len(items)}
 
 
 @McpTool.add(description="List a bounded newest-updated-first page of cards in a project.")

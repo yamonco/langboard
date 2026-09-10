@@ -179,7 +179,7 @@ function BoardDisplay({ scrollableRef }: { scrollableRef: React.RefObject<HTMLDi
             changeColumnOrder,
             changeRowOrder,
         });
-    }, [cardsMap, changeColumnOrder, changeRowOrder, chatResizableSidebar, columns, scrollableRef]);
+    }, [cardsMap, changeColumnOrder, changeRowOrder, chatResizableSidebar, columns]);
 
     // Panning the board
     useEffect(() => {

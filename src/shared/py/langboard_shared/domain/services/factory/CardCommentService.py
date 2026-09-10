@@ -68,7 +68,8 @@ class CardCommentService(BaseDomainService):
         comments = [
             api_comment
             for comment, user, bot in page
-            if (api_comment := self.convert_to_api_response((comment, user, bot), reactions.get(comment.id))) is not None
+            if (api_comment := self.convert_to_api_response((comment, user, bot), reactions.get(comment.id)))
+            is not None
         ]
         next_fields = None
         if has_more and page:

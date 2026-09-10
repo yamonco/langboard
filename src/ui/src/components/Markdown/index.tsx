@@ -431,7 +431,8 @@ const Markdown = memo(({ message, ...mdProps }: IMarkdownProps): React.JSX.Eleme
             ) : (
                 <code
                     className={cn(
-                        "whitespace-pre-wrap rounded-md bg-foreground/10 px-[0.3em] py-[0.2em] font-mono text-sm text-inherit [overflow-wrap:anywhere]",
+                        "whitespace-pre-wrap rounded-md bg-foreground/10 px-[0.3em] py-[0.2em] font-mono text-sm",
+                        "text-inherit [overflow-wrap:anywhere]",
                         className
                     )}
                     {...props}

@@ -50,7 +50,9 @@ class CardService(BaseDomainService):
 
         return [card for card, _ in self.repo.card.get_all_by_project(project)]
 
-    def get_details(self, project: TProjectParam | None, card: TCardParam | None) -> dict[str, Any] | None:
+    def get_details(
+        self, project: TProjectParam | None, card: TCardParam | None, limit: int | None = None
+    ) -> dict[str, Any] | None:
         params = InfraHelper.get_records_with_foreign_by_params((Project, project), (Card, card))
         if not params:
             return None
@@ -65,15 +67,15 @@ class CardService(BaseDomainService):
         api_card["count_comment"] = self.repo.card_comment.count_by_card(card)
 
         project_service = self._get_service(ProjectService)
-        api_card["project_members"] = project_service.get_api_assigned_user_list(card.project_id)
+        api_card["project_members"] = project_service.get_api_assigned_user_list(card.project_id, limit=limit)
 
         project_label_service = self._get_service(ProjectLabelService)
-        api_card["labels"] = project_label_service.get_api_list_by_card(card)
+        api_card["labels"] = project_label_service.get_api_list_by_card(card, limit=limit)
 
-        api_card["member_uids"] = self.get_api_assigned_user_list(card, only_uids=True)
+        api_card["member_uids"] = self.get_api_assigned_user_list(card, only_uids=True, limit=limit)
 
         card_relationship_service = self._get_service(CardRelationshipService)
-        api_card["relationships"] = card_relationship_service.get_api_list_by_card(card)
+        api_card["relationships"] = card_relationship_service.get_api_list_by_card(card, limit=limit)
         return api_card
 
     def get_board_list(self, project: TProjectParam | None) -> list[dict[str, Any]]:
@@ -133,12 +135,12 @@ class CardService(BaseDomainService):
             api_cards.append(api_card)
         return api_cards, list(api_projects.values())
 
-    def get_api_list_by_project(self, project: TProjectParam | None) -> list[dict[str, Any]]:
+    def get_api_list_by_project(self, project: TProjectParam | None, limit: int | None = None) -> list[dict[str, Any]]:
         project = InfraHelper.get_by_id_like(Project, project)
         if not project:
             return []
 
-        records = self.repo.card.get_all_by_project(project)
+        records = self.repo.card.get_all_by_project(project, limit=limit)
         cards = []
         for card, column in records:
             api_card = card.api_response()

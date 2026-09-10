@@ -8,15 +8,17 @@ from kombu.exceptions import OperationalError
 from ...core.broker import Broker
 from ...core.db import DbSession, SqlBuilder
 from ...core.security import KeyVault
-from ...core.types import SafeDateTime
+from ...core.types import SafeDateTime, SnowflakeID
 from ...core.utils.Converter import convert_python_data
 from ...domain.models import WebhookSetting
 from ...helpers import InfraHelper
+from ...infrastructure.repositories import Repository
 from ...publishers import AppSettingPublisher
 from .utils import WebhookModel, ensure_public_webhook_url
 
 
 WEBHOOK_TIMEOUT = Timeout(5.0, connect=2.0)
+WEBHOOK_FANOUT_BATCH_SIZE = 100
 _SAFE_EVENT_FIELDS = frozenset(
     {
         "card_title",
@@ -82,19 +84,25 @@ async def webhook_delivery_task(model: WebhookModel, webhook_uid: str) -> None:
 async def run_webhook(model: WebhookModel) -> None:
     """Schedule one delivery task for each endpoint that accepts the event."""
 
-    settings = _get_webhook_settings()
-    for setting in settings:
-        if not _accepts_event(setting, model.event):
-            continue
-        try:
-            webhook_delivery_task(model, setting.get_uid())
-        except OperationalError as error:
-            Broker.logger.error(
-                "Webhook delivery scheduling failed: endpoint=%s error=%s",
-                setting.get_uid(),
-                type(error).__name__,
-            )
-            raise
+    after_id: SnowflakeID | None = None
+    while True:
+        settings = _get_webhook_settings() if after_id is None else _get_webhook_settings(after_id)
+        for setting in settings:
+            if not _accepts_event(setting, model.event):
+                continue
+            try:
+                webhook_delivery_task(model, setting.get_uid())
+            except OperationalError as error:
+                Broker.logger.error(
+                    "Webhook delivery scheduling failed: endpoint=%s error=%s",
+                    setting.get_uid(),
+                    type(error).__name__,
+                )
+                raise
+
+        if len(settings) < WEBHOOK_FANOUT_BATCH_SIZE:
+            return
+        after_id = settings[-1].id
 
 
 async def deliver_webhook(model: WebhookModel, webhook_uid: str) -> None:
@@ -106,10 +114,18 @@ async def deliver_webhook(model: WebhookModel, webhook_uid: str) -> None:
 
     try:
         secret = KeyVault.get_key(setting.secret_id) if setting.secret_id else None
+        if setting.secret_id and not secret:
+            raise ValueError("Webhook signing secret is unavailable")
         body, headers = signed_request(model, secret)
-        url = await ensure_public_webhook_url(setting.url)
+        target = await ensure_public_webhook_url(setting.url)
+        headers["Host"] = target.host_header
         async with AsyncClient(timeout=WEBHOOK_TIMEOUT, follow_redirects=False) as client:
-            response = await client.post(url, content=body, headers=headers)
+            response = await client.post(
+                target.url,
+                content=body,
+                headers=headers,
+                extensions={"sni_hostname": target.sni_hostname},
+            )
             response.raise_for_status()
     except Exception as error:
         Broker.logger.error(
@@ -119,15 +135,15 @@ async def deliver_webhook(model: WebhookModel, webhook_uid: str) -> None:
         )
         raise WebhookDeliveryError(f"Webhook delivery failed: endpoint={webhook_uid}") from error
 
-    setting.last_used_at = SafeDateTime.now()
-    setting.total_used_count += 1
-    with DbSession.use(readonly=False) as db:
-        db.update(setting)
+    with Repository.use() as repository:
+        updated_setting = repository.webhook_setting.record_delivery_success(webhook_uid, SafeDateTime.now())
+    if updated_setting is None:
+        return
     AppSettingPublisher.webhook_setting_updated(
         webhook_uid,
         {
-            "last_used_at": setting.last_used_at,
-            "total_used_count": setting.total_used_count,
+            "last_used_at": updated_setting.last_used_at,
+            "total_used_count": updated_setting.total_used_count,
         },
     )
 
@@ -194,6 +210,9 @@ def minimal_event_data(data: dict[str, Any]) -> dict[str, Any]:
 def _executor_display_name(executor: dict[str, Any], executor_type: str) -> str:
     """Freeze the safe actor label used by downstream notifications."""
 
+    display_name = executor.get("display_name")
+    if isinstance(display_name, str) and display_name.strip():
+        return display_name.strip()
     if executor_type == "user":
         full_name = " ".join(
             part.strip()
@@ -203,24 +222,20 @@ def _executor_display_name(executor: dict[str, Any], executor_type: str) -> str:
         if full_name:
             return full_name
         username = executor.get("username")
-        return username.strip() if isinstance(username, str) and username.strip() else "알 수 없음"
+        return username.strip() if isinstance(username, str) and username.strip() else "Unknown"
     if executor_type == "bot":
         name = executor.get("name")
         return name.strip() if isinstance(name, str) and name.strip() else "Langboard"
-    return "알 수 없음"
+    return "Unknown"
 
 
-def _get_webhook_settings() -> list[WebhookSetting]:
-    urls = None
+def _get_webhook_settings(after_id: SnowflakeID | None = None) -> list[WebhookSetting]:
+    query = SqlBuilder.select.table(WebhookSetting).order_by(WebhookSetting.column("id").asc())
+    if after_id is not None:
+        query = query.where(WebhookSetting.column("id") > after_id)
+
     with DbSession.use(readonly=True) as db:
-        result = db.exec(SqlBuilder.select.table(WebhookSetting))
-        urls = result.all()
-    if not urls:
-        return []
-    if not isinstance(urls, list):
-        return []
-
-    return urls
+        return db.exec(query.limit(WEBHOOK_FANOUT_BATCH_SIZE)).all()
 
 
 def _get_webhook_setting(webhook_uid: str) -> WebhookSetting | None:

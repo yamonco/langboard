@@ -1,7 +1,9 @@
 from os.path import dirname
 from pathlib import Path
 from sys import executable
+from typing import Annotated
 from langboard_shared.Env import Env
+from pydantic import Field
 
 
 # Directory
@@ -14,3 +16,7 @@ HOST = Env.get_from_env("API_HOST", "localhost")
 APP_CONFIG_FILE = Env.DATA_DIR / "api_config.json"
 
 EMAIL_REGEX = r"^.+@.+\..+$"
+
+MCP_DEFAULT_LIST_LIMIT = 50
+MCP_MAX_LIST_LIMIT = 100
+TMcpListLimit = Annotated[int, Field(ge=1, le=MCP_MAX_LIST_LIMIT)]

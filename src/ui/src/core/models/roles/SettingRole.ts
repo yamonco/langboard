@@ -30,6 +30,8 @@ export enum EAction {
     ApiComfortToolUpdate = "api_comfort_tool_update",
     ApiComfortToolDelete = "api_comfort_tool_delete",
     OllamaRead = "ollama_read",
+    ProjectTemplateCreate = "project_template_create",
+    ProjectTemplateUpdate = "project_template_update",
 }
 
 export type TActions = EAction | keyof typeof EAction | TRoleAllGranted;
@@ -53,4 +55,5 @@ export const CATEGORIZED_MAP = {
     ],
     ApiComfortTool: [EAction.ApiComfortToolRead, EAction.ApiComfortToolCreate, EAction.ApiComfortToolUpdate, EAction.ApiComfortToolDelete],
     Ollama: [EAction.OllamaRead],
+    ProjectTemplate: [EAction.ProjectTemplateCreate, EAction.ProjectTemplateUpdate],
 };

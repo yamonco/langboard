@@ -67,12 +67,14 @@ class ChecklistService(BaseDomainService):
         checklists = self.repo.checklist.get_all_by_card(card)
         return [checklist.api_response() for checklist in checklists]
 
-    def get_api_list_only_by_project(self, project: TProjectParam | None) -> list[dict[str, Any]]:
+    def get_api_list_only_by_project(
+        self, project: TProjectParam | None, limit: int | None = None
+    ) -> list[dict[str, Any]]:
         project = InfraHelper.get_by_id_like(Project, project)
         if not project:
             return []
 
-        checklists = self.repo.checklist.get_all_by_project(project)
+        checklists = self.repo.checklist.get_all_by_project(project, limit=limit)
         return [checklist.api_response() for checklist in checklists]
 
     def create(

@@ -8,7 +8,11 @@ from pydantic import Field
 class CreateBotScopeForm(BaseFormModel):
     target_table: str = Field(..., title=f"Target table name ({', '.join(AVAILABLE_BOT_TARGET_TABLES.keys())})")
     target_uid: str = Field(..., title="Target UID")
-    conditions: list[BotTriggerCondition] = Field(default=[], title="List of conditions for the bot trigger")
+    conditions: list[BotTriggerCondition] = Field(
+        default_factory=list,
+        max_length=len(BotTriggerCondition),
+        title="List of conditions for the bot trigger",
+    )
 
 
 @form_model
@@ -17,7 +21,12 @@ class UpsertBotHookForm(BaseFormModel):
 
     target_table: str = Field(..., title=f"Target type ({', '.join(AVAILABLE_BOT_TARGET_TABLES.keys())})")
     target_uid: str = Field(..., title="Target UID")
-    events: list[BotTriggerCondition] = Field(..., min_length=1, title="Events subscribed by the bot")
+    events: list[BotTriggerCondition] = Field(
+        ...,
+        min_length=1,
+        max_length=len(BotTriggerCondition),
+        title="Events subscribed by the bot",
+    )
     active: bool = True
 
 
@@ -28,6 +37,7 @@ class UpdateBotHookForm(BaseFormModel):
     events: list[BotTriggerCondition] | None = Field(
         default=None,
         min_length=1,
+        max_length=len(BotTriggerCondition),
         title="Replacement events subscribed by the bot",
     )
     active: bool | None = None

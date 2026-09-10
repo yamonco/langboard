@@ -47,7 +47,7 @@ def test_api_runtime_excludes_document_processing_extra() -> None:
 
     required, optional = pyproject.split("[project.optional-dependencies]", maxsplit=1)
     assert '"docling>=2.105.0"' not in required
-    assert 'document-processing = [' in optional
+    assert "document-processing = [" in optional
     assert '"docling>=2.105.0"' in optional
     assert "FROM base AS with-document-processing" in dockerfile
     assert "uv sync --locked --no-dev --extra document-processing" in dockerfile
@@ -85,7 +85,7 @@ def test_ui_build_refreshes_the_mounted_shared_package_first() -> None:
 def test_environment_renderer_is_release_worktree_safe() -> None:
     """Resolve the repository root from the script, not its checkout basename."""
 
-    renderer = (ROOT / "scripts" / "utils" / "update-docker-envs.sh").read_text()
+    renderer = (ROOT / "scripts" / "utils" / "update-docker-envs.sh").read_text(encoding="utf-8")
 
     assert renderer.startswith("#!/bin/bash\nset -e\n")
     assert 'ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"' in renderer

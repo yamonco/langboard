@@ -4,9 +4,10 @@ from sqlalchemy import tuple_
 from ..core.db import BaseDbModel, DbSession, SqlBuilder
 from ..core.schema import TimeBasedPagination
 from ..core.types import SafeDateTime, SnowflakeID
+from ..core.types.ParamTypes import TProjectParam
 from ..core.utils.CronTabUtils import CronTabUtils
 from ..core.utils.decorators import staticclass
-from ..domain.models import Bot, BotSchedule
+from ..domain.models import Bot, BotSchedule, ProjectColumn, ProjectColumnBotSchedule
 from ..domain.models.bases import BaseBotScheduleModel
 from ..domain.models.BotSchedule import BotScheduleRunningType, BotScheduleStatus
 from ..helpers import InfraHelper
@@ -106,6 +107,42 @@ class BotScheduleHelper:
             api_schedules.append(api_schedule)
 
         return api_schedules
+
+    @staticmethod
+    def get_all_by_project_columns(
+        project: TProjectParam,
+        pagination: TimeBasedPagination | None = None,
+    ) -> list[dict[str, Any]]:
+        """Return column schedules for a project without materializing its columns."""
+
+        project_id = InfraHelper.convert_id(project)
+        query = (
+            SqlBuilder.select.tables(ProjectColumnBotSchedule, BotSchedule)
+            .join(
+                BotSchedule,
+                BotSchedule.column("id") == ProjectColumnBotSchedule.column("bot_schedule_id"),
+            )
+            .join(
+                ProjectColumn,
+                ProjectColumn.column("id") == ProjectColumnBotSchedule.column("project_column_id"),
+            )
+            .where(ProjectColumn.column("project_id") == project_id)
+        )
+        if pagination:
+            query = query.where(BotSchedule.column("created_at") <= pagination.refer_time)
+            query = query.order_by(BotSchedule.column("created_at").desc(), BotSchedule.column("id").desc())
+            query = query.limit(pagination.limit).offset((pagination.page - 1) * pagination.limit)
+
+        with DbSession.use(readonly=True) as db:
+            schedules = db.exec(query).all()
+
+        return [
+            {
+                **schedule.api_response(),
+                **schedule_model.api_response(),
+            }
+            for schedule_model, schedule in schedules
+        ]
 
     @staticmethod
     def get_default_status_with_dates(

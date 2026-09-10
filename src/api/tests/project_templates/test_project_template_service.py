@@ -2,6 +2,7 @@ import os
 from types import SimpleNamespace
 from typing import Any
 import pytest
+from sqlalchemy.exc import IntegrityError
 
 
 os.environ.setdefault("PROJECT_NAME", "langboard")
@@ -63,8 +64,50 @@ def test_builtin_si_is_the_initial_default_without_duplicate_archive() -> None:
     assert "Archive" not in template.columns
     assert template.is_default is True
     assert template.email_notification_policy == SI_EMAIL_NOTIFICATION_POLICY
+    template.columns.append("Custom")
+    template.email_notification_policy["categories"].append("comments")
+    assert "Custom" not in SI_COLUMNS
+    assert SI_EMAIL_NOTIFICATION_POLICY["categories"] == ["cards"]
     assert _service(repository).ensure_builtin() is template
     assert len(templates.items) == 1
+
+
+def test_builtin_si_does_not_replace_an_existing_default() -> None:
+    """Adding the built-in template preserves an explicitly selected default."""
+
+    templates = TemplateRepository()
+    existing_default = ProjectTemplate(name="Support", columns=["Queue"], is_default=True)
+    templates.items.append(existing_default)
+
+    template = _service(SimpleNamespace(project_template=templates)).ensure_builtin()
+
+    assert template.name == "SI"
+    assert template.is_default is False
+    assert existing_default.is_default is True
+
+
+def test_concurrent_template_copy_reports_a_domain_conflict() -> None:
+    """The database uniqueness guard is exposed as the same validation failure as a pre-check."""
+
+    def reject_duplicate(_template: ProjectTemplate) -> None:
+        raise IntegrityError("insert", {}, Exception("duplicate"))
+
+    repository = SimpleNamespace(
+        project_template=SimpleNamespace(
+            get_by_name=lambda _name: None,
+            insert=reject_duplicate,
+        ),
+        project_column=SimpleNamespace(
+            get_all_by_project=lambda _project: [],
+            get_bot_scopes_by_project=lambda _project: [],
+        ),
+        project_assigned_internal_bot=SimpleNamespace(get_all_by_project=lambda _project: []),
+        project_bot_scope=SimpleNamespace(get_all_by_project=lambda _project: []),
+        project_email_notification=SimpleNamespace(get_with_recipients=lambda _project: (None, [])),
+    )
+
+    with pytest.raises(ValueError, match="name already exists"):
+        _service(repository).copy_from_project(SimpleNamespace(id=7), "Support")
 
 
 def test_builtin_si_name_cannot_be_claimed_by_a_project_copy() -> None:

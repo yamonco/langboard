@@ -1,7 +1,8 @@
 from typing import Any
 from ....ai import BotScheduleHelper, BotScopeHelper
 from ....core.domain import BaseDomainService
-from ....core.types import SafeDateTime, SnowflakeID
+from ....core.schema import TimeBasedPagination
+from ....core.types import SafeDateTime
 from ....core.types.ParamTypes import TColumnParam, TProjectParam, TUserOrBot
 from ....helpers import InfraHelper
 from ....publishers import ProjectColumnPublisher
@@ -21,8 +22,12 @@ class ProjectColumnService(BaseDomainService):
         column = InfraHelper.get_by_id_like(ProjectColumn, column)
         return column
 
-    def get_api_list_by_project(self, projects: TProjectParam | list[TProjectParam]) -> list[dict[str, Any]]:
-        raw_columns = self.repo.project_column.get_all_by_project(projects)
+    def get_api_list_by_project(
+        self,
+        projects: TProjectParam | list[TProjectParam],
+        limit: int | None = None,
+    ) -> list[dict[str, Any]]:
+        raw_columns = self.repo.project_column.get_all_by_project(projects, limit=limit)
 
         columns = []
         for raw_column, count in raw_columns:
@@ -30,7 +35,9 @@ class ProjectColumnService(BaseDomainService):
 
         return columns
 
-    def get_api_bot_scopes_by_project(self, project: TProjectParam | None) -> list[dict[str, Any]]:
+    def get_api_bot_scopes_by_project(
+        self, project: TProjectParam | None, limit: int | None = None
+    ) -> list[dict[str, Any]]:
         project = InfraHelper.get_by_id_like(Project, project)
         if not project:
             return []
@@ -41,35 +48,37 @@ class ProjectColumnService(BaseDomainService):
                 ProjectColumn,
                 ProjectColumn.column("id") == ProjectColumnBotScope.column("project_column_id"),
             ).where(ProjectColumn.column("project_id") == project.id),
+            limit=limit,
+        )
+        return [scope.api_response() for scope in scopes]
+
+    def get_api_bot_scopes_by_column(
+        self,
+        column: TColumnParam | None,
+        limit: int | None = None,
+    ) -> list[dict[str, Any]]:
+        column = InfraHelper.get_by_id_like(ProjectColumn, column)
+        if not column:
+            return []
+
+        scopes = BotScopeHelper.get_list(
+            ProjectColumnBotScope,
+            limit=limit,
+            project_column_id=column.id,
         )
         return [scope.api_response() for scope in scopes]
 
     def get_api_bot_schedule_list_by_project(
-        self, project: TProjectParam | None, columns: list[dict] | list[ProjectColumn] | None
+        self,
+        project: TProjectParam | None,
+        limit: int | None = None,
     ) -> list[dict[str, Any]]:
         project = InfraHelper.get_by_id_like(Project, project)
         if not project:
             return []
 
-        scope_column_ids: list[int] = []
-        if isinstance(columns, list):
-            scope_column_ids = [
-                SnowflakeID.from_short_code(column["uid"]) if isinstance(column, dict) else column.id
-                for column in columns
-            ]
-        else:
-            scope_column_ids = [column.id for column in InfraHelper.get_all_by(ProjectColumn, "project_id", project.id)]
-
-        if not scope_column_ids:
-            return []
-
-        schedules = BotScheduleHelper.get_all_by_scope(
-            ProjectColumnBotSchedule,
-            None,
-            (ProjectColumn, scope_column_ids),
-            as_api=True,
-        )
-        return schedules
+        pagination = TimeBasedPagination(page=1, limit=limit) if limit is not None else None
+        return BotScheduleHelper.get_all_by_project_columns(project, pagination=pagination)
 
     def create(self, user_or_bot: TUserOrBot, project: TProjectParam | None, name: str) -> ProjectColumn | None:
         project = InfraHelper.get_by_id_like(Project, project)

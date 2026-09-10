@@ -15,7 +15,11 @@ export const useGetProjectTemplates = (options?: TMutationOptions<unknown, IProj
     return mutate(
         ["get-project-templates"],
         async () => {
-            const response = await api.get<{ templates: IProjectTemplate[] }>(Routing.API.SETTINGS.PROJECT_TEMPLATES.GET_LIST);
+            const response = await api.get<{ templates: IProjectTemplate[] }>(Routing.API.SETTINGS.PROJECT_TEMPLATES.GET_LIST, {
+                env: {
+                    interceptToast: options?.interceptToast,
+                } as never,
+            });
             return response.data.templates;
         },
         { ...options, retry: 0 }
@@ -27,9 +31,15 @@ export const useSetDefaultProjectTemplate = (options?: TMutationOptions<{ templa
     return mutate(
         ["set-default-project-template"],
         async ({ template_name }: { template_name: string }) => {
-            const response = await api.put<{ template: IProjectTemplate }>(Routing.API.SETTINGS.PROJECT_TEMPLATES.SET_DEFAULT, {
-                template_name,
-            });
+            const response = await api.put<{ template: IProjectTemplate }>(
+                Routing.API.SETTINGS.PROJECT_TEMPLATES.SET_DEFAULT,
+                { template_name },
+                {
+                    env: {
+                        interceptToast: options?.interceptToast,
+                    } as never,
+                }
+            );
             return response.data.template;
         },
         { ...options, retry: 0 }

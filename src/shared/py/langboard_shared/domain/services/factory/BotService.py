@@ -1,5 +1,6 @@
 import re
-from typing import Any, Mapping, Sequence
+from enum import Enum
+from typing import Any, Literal, Mapping, Sequence, TypedDict
 from ....ai import BotScheduleHelper, BotScopeHelper
 from ....core.domain import BaseDomainService
 from ....core.domain.BaseDomainService import TMutableValidatorMap
@@ -21,12 +22,36 @@ from ...models.GraphApprovalRequest import GraphApprovalOriginType
 from .GraphApprovalRequestService import GraphApprovalRequestService
 
 
-ACTION_SUGGESTION_RISK_BY_PERMISSION = {
+type ActionSuggestionSource = Literal["comfort_tool", "api", "mcp_tool", "mcp_tool_group"]
+type ActionSuggestionRisk = Literal["low", "medium", "high"]
+
+
+class ActionSuggestionCandidate(TypedDict):
+    source: ActionSuggestionSource
+    name: str
+    label: str
+    description: str
+    api_names: list[str]
+    risk: ActionSuggestionRisk
+    confidence: int
+    already_selected: bool
+    reason: str
+
+
+class BotDraft(TypedDict):
+    bot_name: str
+    bot_uname: str
+    value_patch: dict[str, object]
+    suggestions: list[ActionSuggestionCandidate]
+
+
+ACTION_SUGGESTION_RISK_BY_PERMISSION: dict[str, ActionSuggestionRisk] = {
     "read": "low",
     "create": "medium",
     "edit": "medium",
     "delete": "high",
 }
+MAX_ACTION_SUGGESTION_CANDIDATES = 500
 
 
 class BotServiceError(ValueError):
@@ -151,16 +176,25 @@ class BotService(BaseDomainService):
                 return None
             scope = updated
 
-        project = self._hook_project(target)
-        if project:
+        target_project = self._hook_project(target)
+        if target_project:
             if created:
-                ProjectBotPublisher.scope_created(project, scope)
+                ProjectBotPublisher.scope_created(target_project, scope)
             elif previous_events != tuple(events):
-                ProjectBotPublisher.scope_conditions_updated(project, scope)
+                ProjectBotPublisher.scope_conditions_updated(target_project, scope)
             if not created and active_changed:
-                ProjectBotPublisher.scope_freeze_updated(project, scope)
+                ProjectBotPublisher.scope_freeze_updated(target_project, scope)
 
         return self._hook_response(resolved_bot, scope, target_table, target.get_uid())
+
+    def get_hook_target_project(self, target_table: str, target_uid: str) -> Project | None:
+        """Resolve the project boundary for a hook target."""
+
+        target_result = BotHelper.get_target_model_by_param("scope", target_table, target_uid)
+        if not target_result:
+            return None
+        _, target = target_result
+        return self._hook_project(target)
 
     def get_hook(
         self,
@@ -224,19 +258,19 @@ class BotService(BaseDomainService):
         scope_model_class = type(scope)
         BotScopeHelper.delete(scope_model_class, scope)
 
-        project = self._hook_project(target)
-        if project:
+        target_project = self._hook_project(target)
+        if target_project:
             approval_service = self._get_service(GraphApprovalRequestService)
             for origin_type in (GraphApprovalOriginType.Trigger, GraphApprovalOriginType.ManualScopeRun):
                 approval_service.cancel_pending_by_scope(
-                    project,
+                    target_project,
                     target_table,
                     target.get_uid(),
                     origin_type=origin_type,
                     bot=resolved_bot,
                     reason="bot hook deleted",
                 )
-            ProjectBotPublisher.scope_deleted(project, scope)
+            ProjectBotPublisher.scope_deleted(target_project, scope)
         return hook
 
     def require_target_project(self, target: Project | ProjectColumn | Card, project: str | None) -> None:
@@ -266,6 +300,8 @@ class BotService(BaseDomainService):
             return None
 
         target_id = scope.__dict__.get(scope.get_scope_column_name())
+        if not isinstance(target_id, (int, str)) or isinstance(target_id, bool):
+            return None
         target_result = BotHelper.get_target_model_by_param("scope", target_table, target_id)
         if not target_result:
             return None
@@ -292,6 +328,8 @@ class BotService(BaseDomainService):
             return None
 
         target_id = schedule_model.__dict__.get(schedule_model_class.get_scope_column_name())
+        if not isinstance(target_id, (int, str)) or isinstance(target_id, bool):
+            return None
         target_result = BotHelper.get_target_model_by_param("schedule", target_table, target_id)
         if not target_result:
             return None
@@ -349,9 +387,9 @@ class BotService(BaseDomainService):
         if not scheduled:
             raise BotServiceError("schedule_failed", "Bot Schedule could not be created")
 
-        project = self._hook_project(target)
-        if project:
-            ProjectBotPublisher.scheduled(project, scheduled)
+        target_project = self._hook_project(target)
+        if target_project:
+            ProjectBotPublisher.scheduled(target_project, scheduled)
         schedule, schedule_model = scheduled
         return self._schedule_receipt(
             "created",
@@ -409,9 +447,9 @@ class BotService(BaseDomainService):
             raise BotServiceError("schedule_failed", "Bot Schedule could not be updated")
         schedule, updated_schedule_model, changes = updated
 
-        project = self._hook_project(target)
-        if project:
-            ProjectBotPublisher.rescheduled(project, updated_schedule_model, changes)
+        target_project = self._hook_project(target)
+        if target_project:
+            ProjectBotPublisher.rescheduled(target_project, updated_schedule_model, changes)
         resolved_bot = InfraHelper.get_by_id_like(Bot, bot)
         if not resolved_bot:
             raise BotServiceError("bot_not_found", "Bot not found")
@@ -459,17 +497,17 @@ class BotService(BaseDomainService):
             raise BotServiceError("schedule_failed", "Bot Schedule could not be deleted")
         _, deleted_schedule_model = deleted
 
-        project = self._hook_project(target)
-        if project:
+        target_project = self._hook_project(target)
+        if target_project:
             self._get_service(GraphApprovalRequestService).cancel_pending_by_scope(
-                project,
+                target_project,
                 target_table,
                 target.get_uid(),
                 origin_type=GraphApprovalOriginType.Schedule,
                 bot=resolved_bot,
                 reason="bot schedule deleted",
             )
-            ProjectBotPublisher.unscheduled(project, deleted_schedule_model)
+            ProjectBotPublisher.unscheduled(target_project, deleted_schedule_model)
         return receipt
 
     @staticmethod
@@ -605,6 +643,8 @@ class BotService(BaseDomainService):
 
         model: dict[str, Any] = {}
         unpublishable_model: dict[str, Any] = {}
+        if form.get("delete_avatar") and "avatar" in old_record:
+            model["deleted_avatar"] = True
         for key in form:
             if key in unpublishable_keys:
                 if key in old_record:
@@ -669,42 +709,38 @@ class BotService(BaseDomainService):
 
         return True
 
-    def suggest_action_candidates(
+    def get_action_candidates(
         self,
-        prompt: str,
         api_schemas: Mapping[str, Mapping[str, Any]],
-        comfort_tools: Sequence[dict[str, Any]],
-        mcp_tools: Sequence[dict[str, Any]] | None = None,
-        mcp_tool_groups: Sequence[dict[str, Any]] | None = None,
+        comfort_tools: Sequence[Mapping[str, object]],
+        mcp_tools: Sequence[Mapping[str, object]] | None = None,
+        mcp_tool_groups: Sequence[Mapping[str, object]] | None = None,
         selected_api_names: Sequence[str] | None = None,
         selected_comfort_tool_names: Sequence[str] | None = None,
-        limit: int = 8,
-    ) -> list[dict[str, Any]]:
-        prompt_text = prompt.strip()
-        if not prompt_text:
-            return []
-
+    ) -> list[ActionSuggestionCandidate]:
         selected_api_set = set(selected_api_names or [])
         selected_comfort_tool_set = set(selected_comfort_tool_names or [])
-        prompt_tokens = self._tokenize_action_suggestion_text(prompt_text)
-        candidates: list[dict[str, Any]] = []
+        candidates: list[ActionSuggestionCandidate] = []
 
         for comfort_tool in comfort_tools:
-            name = str(comfort_tool.get("name") or "")
-            api_names = [str(api_name) for api_name in comfort_tool.get("api_names", [])]
+            raw_name = comfort_tool.get("name")
+            raw_api_names = comfort_tool.get("api_names")
+            if not isinstance(raw_name, str) or not isinstance(raw_api_names, list):
+                continue
+            name = raw_name.strip()
+            api_names = [api_name for api_name in raw_api_names if isinstance(api_name, str)]
             if not name or not api_names:
                 continue
 
-            label = str(comfort_tool.get("label") or name)
-            description = str(comfort_tool.get("description") or "")
+            raw_label = comfort_tool.get("label")
+            raw_description = comfort_tool.get("description")
+            label = raw_label if isinstance(raw_label, str) and raw_label else name
+            description = raw_description if isinstance(raw_description, str) else ""
             permissions = [
                 self._normalize_api_permission(api_schemas.get(api_name, {}).get("permission"))
                 for api_name in api_names
             ]
             risk = self._get_highest_action_risk(permissions)
-            score = self._score_action_suggestion(prompt_text, prompt_tokens, [name, label, description, *api_names])
-            if score <= 0:
-                continue
 
             candidates.append(
                 {
@@ -714,21 +750,19 @@ class BotService(BaseDomainService):
                     "description": description,
                     "api_names": api_names,
                     "risk": risk,
-                    "confidence": min(100, score),
+                    "confidence": 0,
                     "already_selected": name in selected_comfort_tool_set,
-                    "reason": self._create_action_suggestion_reason(label, risk),
+                    "reason": "",
                 }
             )
 
         for mcp_tool in mcp_tools or []:
-            name = str(mcp_tool.get("name") or "")
-            description = str(mcp_tool.get("description") or "")
-            if not name:
+            raw_name = mcp_tool.get("name")
+            if not isinstance(raw_name, str) or not raw_name.strip():
                 continue
-
-            score = self._score_action_suggestion(prompt_text, prompt_tokens, [name, description])
-            if score <= 0:
-                continue
+            name = raw_name.strip()
+            raw_description = mcp_tool.get("description")
+            description = raw_description if isinstance(raw_description, str) else ""
 
             candidates.append(
                 {
@@ -738,22 +772,23 @@ class BotService(BaseDomainService):
                     "description": description,
                     "api_names": [],
                     "risk": "medium",
-                    "confidence": min(100, score),
+                    "confidence": 0,
                     "already_selected": False,
-                    "reason": f"{name} is an MCP tool candidate. Add it through an MCP tool group before the bot can use it.",
+                    "reason": "",
                 }
             )
 
         for mcp_tool_group in mcp_tool_groups or []:
-            name = str(mcp_tool_group.get("name") or "")
-            description = str(mcp_tool_group.get("description") or "")
-            tool_names = [str(tool_name) for tool_name in mcp_tool_group.get("tools", [])]
+            raw_name = mcp_tool_group.get("name")
+            raw_tool_names = mcp_tool_group.get("tools")
+            if not isinstance(raw_name, str) or not isinstance(raw_tool_names, list):
+                continue
+            name = raw_name.strip()
+            tool_names = [tool_name for tool_name in raw_tool_names if isinstance(tool_name, str)]
             if not name or not tool_names:
                 continue
-
-            score = self._score_action_suggestion(prompt_text, prompt_tokens, [name, description, *tool_names])
-            if score <= 0:
-                continue
+            raw_description = mcp_tool_group.get("description")
+            description = raw_description if isinstance(raw_description, str) else ""
 
             candidates.append(
                 {
@@ -763,9 +798,9 @@ class BotService(BaseDomainService):
                     "description": description,
                     "api_names": [],
                     "risk": "medium",
-                    "confidence": min(100, score),
+                    "confidence": 0,
                     "already_selected": False,
-                    "reason": f"{name} is an active MCP tool group candidate. Review its tools before enabling bot use.",
+                    "reason": "",
                 }
             )
 
@@ -773,9 +808,6 @@ class BotService(BaseDomainService):
             description = str(api_schema.get("description") or "")
             permission = self._normalize_api_permission(api_schema.get("permission"))
             risk = ACTION_SUGGESTION_RISK_BY_PERMISSION.get(permission, "medium")
-            score = self._score_action_suggestion(prompt_text, prompt_tokens, [api_name, description])
-            if score <= 0:
-                continue
 
             candidates.append(
                 {
@@ -785,42 +817,19 @@ class BotService(BaseDomainService):
                     "description": description,
                     "api_names": [api_name],
                     "risk": risk,
-                    "confidence": min(100, score),
+                    "confidence": 0,
                     "already_selected": api_name in selected_api_set,
-                    "reason": self._create_action_suggestion_reason(api_name, risk),
+                    "reason": "",
                 }
             )
 
-        candidates.sort(
-            key=lambda candidate: (
-                -int(candidate["confidence"]),
-                0 if candidate["source"] == "comfort_tool" else 1,
-                str(candidate["name"]),
-            )
-        )
-        return candidates[: max(limit, 0)]
+        return candidates[:MAX_ACTION_SUGGESTION_CANDIDATES]
 
     def create_bot_draft(
         self,
         instruction: str,
-        api_schemas: Mapping[str, Mapping[str, Any]],
-        comfort_tools: Sequence[dict[str, Any]],
-        mcp_tools: Sequence[dict[str, Any]] | None = None,
-        mcp_tool_groups: Sequence[dict[str, Any]] | None = None,
-        selected_api_names: Sequence[str] | None = None,
-        selected_comfort_tool_names: Sequence[str] | None = None,
-    ) -> dict[str, Any]:
+    ) -> BotDraft:
         prompt = instruction.strip()
-        suggestions = self.suggest_action_candidates(
-            prompt,
-            api_schemas,
-            comfort_tools,
-            mcp_tools=mcp_tools,
-            mcp_tool_groups=mcp_tool_groups,
-            selected_api_names=selected_api_names,
-            selected_comfort_tool_names=selected_comfort_tool_names,
-            limit=6,
-        )
         bot_name = self._create_draft_bot_name(prompt)
         return {
             "bot_name": bot_name,
@@ -828,43 +837,20 @@ class BotService(BaseDomainService):
             "value_patch": {
                 "system_prompt": prompt,
             },
-            "suggestions": suggestions,
+            "suggestions": [],
         }
 
-    def _score_action_suggestion(
-        self,
-        prompt_text: str,
-        prompt_tokens: set[str],
-        candidate_texts: Sequence[str],
-    ) -> int:
-        candidate_text = " ".join(candidate_texts).lower()
-        candidate_tokens = self._tokenize_action_suggestion_text(candidate_text)
-        token_score = len(prompt_tokens.intersection(candidate_tokens)) * 16
-        direct_score = sum(20 for text in candidate_texts if text and text.lower() in prompt_text.lower())
-        return token_score + direct_score
-
-    def _tokenize_action_suggestion_text(self, value: str) -> set[str]:
-        tokens = re.findall(r"[a-zA-Z0-9_]+", value.lower())
-        return {token for token in tokens if len(token) > 1}
-
-    def _normalize_api_permission(self, permission: Any) -> str:
-        if hasattr(permission, "value"):
+    def _normalize_api_permission(self, permission: object) -> str:
+        if isinstance(permission, Enum):
             permission = permission.value
         return str(permission or "read").lower()
 
-    def _get_highest_action_risk(self, permissions: Sequence[str]) -> str:
+    def _get_highest_action_risk(self, permissions: Sequence[str]) -> ActionSuggestionRisk:
         if "delete" in permissions:
             return "high"
         if any(permission in {"create", "edit"} for permission in permissions):
             return "medium"
         return "low"
-
-    def _create_action_suggestion_reason(self, label: str, risk: str) -> str:
-        if risk == "high":
-            return f"{label} may change or remove data. Review before applying."
-        if risk == "medium":
-            return f"{label} can perform changes requested by the prompt."
-        return f"{label} can gather context requested by the prompt."
 
     def _create_draft_bot_name(self, instruction: str) -> str:
         first_line = next((line.strip() for line in instruction.splitlines() if line.strip()), "")
@@ -888,34 +874,83 @@ class BotService(BaseDomainService):
 
     def merge_generated_bot_draft(
         self,
-        fallback_draft: dict[str, Any],
-        generated_draft: dict[str, Any] | None,
-        _api_schemas: Mapping[str, Mapping[str, Any]],
-        _comfort_tools: Sequence[dict[str, Any]],
-    ) -> dict[str, Any]:
+        fallback_draft: BotDraft,
+        generated_draft: Mapping[str, object] | None,
+        action_candidates: Sequence[ActionSuggestionCandidate],
+    ) -> BotDraft:
         if not isinstance(generated_draft, dict):
             return fallback_draft
 
-        draft = {
-            **fallback_draft,
+        draft: BotDraft = {
+            "bot_name": fallback_draft["bot_name"],
+            "bot_uname": fallback_draft["bot_uname"],
             "value_patch": dict(fallback_draft.get("value_patch") or {}),
             "suggestions": list(fallback_draft.get("suggestions") or []),
         }
-        generated_name = str(generated_draft.get("bot_name") or "").strip()
-        if generated_name:
+        generated_name = generated_draft.get("bot_name")
+        if isinstance(generated_name, str) and generated_name.strip():
+            generated_name = generated_name.strip()
             draft["bot_name"] = generated_name[:48].rstrip(" .,:;")
             draft["bot_uname"] = self._create_draft_bot_uname(str(draft["bot_name"]))
 
         generated_value = generated_draft.get("value_patch")
-        if not isinstance(generated_value, dict):
-            return draft
+        if isinstance(generated_value, dict):
+            patch = draft["value_patch"]
+            system_prompt = str(generated_value.get("system_prompt") or "").strip()
+            if system_prompt:
+                patch["system_prompt"] = system_prompt
 
-        patch = draft["value_patch"]
-        system_prompt = str(generated_value.get("system_prompt") or "").strip()
-        if system_prompt:
-            patch["system_prompt"] = system_prompt
+        draft["suggestions"] = self.select_generated_action_candidates(
+            action_candidates,
+            generated_draft.get("suggestions"),
+            limit=8,
+        )
 
         return draft
+
+    @staticmethod
+    def select_generated_action_candidates(
+        action_candidates: Sequence[ActionSuggestionCandidate],
+        generated_suggestions: object,
+        limit: int,
+    ) -> list[ActionSuggestionCandidate]:
+        """Accept only model selections that reference the authorized candidate catalog."""
+
+        candidates_by_ref = {
+            f"{candidate.get('source')}:{candidate.get('name')}": candidate
+            for candidate in action_candidates
+            if candidate.get("source") and candidate.get("name")
+        }
+        if not isinstance(generated_suggestions, list):
+            return []
+
+        suggestions: list[ActionSuggestionCandidate] = []
+        seen_refs: set[str] = set()
+        for generated in generated_suggestions:
+            if not isinstance(generated, dict):
+                continue
+            reference = generated.get("ref")
+            if not isinstance(reference, str) or reference in seen_refs:
+                continue
+            candidate = candidates_by_ref.get(reference)
+            if candidate is None:
+                continue
+            reason = generated.get("reason")
+            confidence = generated.get("confidence")
+            if not isinstance(reason, str) or not reason.strip():
+                continue
+            if isinstance(confidence, bool) or not isinstance(confidence, (int, float)):
+                continue
+
+            suggestion = candidate.copy()
+            suggestion["reason"] = reason.strip()[:500]
+            suggestion["confidence"] = max(0, min(100, int(confidence)))
+            suggestions.append(suggestion)
+            seen_refs.add(reference)
+            if len(suggestions) >= limit:
+                break
+
+        return suggestions
 
     def generate_api_key(self) -> str:
         api_key = f"sk-{generate_random_string(53)}"

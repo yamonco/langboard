@@ -39,10 +39,7 @@ class CardCommentRepository(BaseRepository[CardComment]):
             comment_id = InfraHelper.convert_id(before_comment)
             query = query.where(
                 (CardComment.column("created_at") < before_created_at)
-                | (
-                    (CardComment.column("created_at") == before_created_at)
-                    & (CardComment.column("id") < comment_id)
-                )
+                | ((CardComment.column("created_at") == before_created_at) & (CardComment.column("id") < comment_id))
             )
         with DbSession.use(readonly=True) as db:
             return db.exec(query.limit(limit + 1)).all()

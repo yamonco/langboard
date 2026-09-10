@@ -3,6 +3,7 @@ import hmac
 import importlib
 import json
 import os
+from contextlib import nullcontext
 from types import SimpleNamespace
 import pytest
 from pydantic import ValidationError
@@ -11,21 +12,23 @@ from pydantic import ValidationError
 os.environ.setdefault("PROJECT_NAME", "langboard")
 
 from langboard_shared.core.broker import Broker  # noqa: E402
+from langboard_shared.domain.models.bases import BotTriggerCondition  # noqa: E402
 from langboard_shared.tasks.bots import CardBotTask  # noqa: E402
 from langboard_shared.tasks.bots.utils.BotTaskDataHelper import BotTaskDataHelper  # noqa: E402
+from langboard_shared.tasks.bots.utils.BotTaskHelper import BotTaskHelper  # noqa: E402
 from langboard_shared.tasks.webhooks import WebhookTask  # noqa: E402
 from langboard_shared.tasks.webhooks.utils import (  # noqa: E402
     WEBHOOK_EVENT_NAMES,
+    ResolvedWebhookTarget,
     WebhookModel,
+    validate_webhook_events,
     validate_webhook_url,
 )
 
 
 app_setting_module = importlib.import_module("langboard_shared.domain.services.factory.AppSettingService")
 webhook_schema_module = importlib.import_module("langboard.routes.schemas.WebhookSchemaApi")
-webhook_url_policy_module = importlib.import_module(
-    "langboard_shared.tasks.webhooks.utils.WebhookUrlPolicy"
-)
+webhook_url_policy_module = importlib.import_module("langboard_shared.tasks.webhooks.utils.WebhookUrlPolicy")
 settings_form_module = importlib.import_module("langboard.routes.settings.Form")
 
 
@@ -38,20 +41,20 @@ def test_signed_request_has_stable_versioned_envelope() -> None:
         event="card_moved",
         data={
             "project_uid": "project-1",
-            "project_title": "산모피아",
+            "project_title": "Sample Project",
             "card_uid": "card-1",
-            "card_title": "업무 요청사항(2026.08.06)",
+            "card_title": "Work Request (2026.08.06)",
             "project_column_uid": "column-2",
-            "project_column_name": "진행중",
+            "project_column_name": "In Progress",
             "project_column_is_archive": False,
             "old_project_column_uid": "column-1",
-            "old_project_column_name": "진행예정",
+            "old_project_column_name": "Planned",
             "old_project_column_is_archive": False,
             "related_cards": [{"card_uid": "other", "title": "private title"}],
             "executor": {
                 "uid": "user-1",
                 "type": "user",
-                "firstname": "이대중",
+                "firstname": "Sample User",
                 "lastname": "",
                 "email": "private@example.com",
             },
@@ -68,16 +71,16 @@ def test_signed_request_has_stable_versioned_envelope() -> None:
         "event": "card_moved",
         "data": {
             "project_uid": "project-1",
-            "project_title": "산모피아",
+            "project_title": "Sample Project",
             "card_uid": "card-1",
-            "card_title": "업무 요청사항(2026.08.06)",
+            "card_title": "Work Request (2026.08.06)",
             "project_column_uid": "column-2",
-            "project_column_name": "진행중",
+            "project_column_name": "In Progress",
             "project_column_is_archive": False,
             "old_project_column_uid": "column-1",
-            "old_project_column_name": "진행예정",
+            "old_project_column_name": "Planned",
             "old_project_column_is_archive": False,
-            "executor": {"uid": "user-1", "type": "user", "display_name": "이대중"},
+            "executor": {"uid": "user-1", "type": "user", "display_name": "Sample User"},
         },
     }
     assert headers["X-Langboard-Webhook-Id"] == "event-1"
@@ -174,6 +177,14 @@ def test_webhook_url_policy_rejects_ssrf_destinations(url: str) -> None:
         settings_form_module.CreateWebhookForm(name="Unsafe", url=url)
 
 
+def test_webhook_inputs_are_bounded_before_network_or_set_work() -> None:
+    with pytest.raises(ValueError, match="too long"):
+        validate_webhook_url(f"https://example.invalid/{'a' * 2048}")
+
+    with pytest.raises(ValueError, match="supported event count"):
+        validate_webhook_events([f"event-{index}" for index in range(len(WEBHOOK_EVENT_NAMES) + 1)])
+
+
 @pytest.mark.asyncio
 async def test_webhook_delivery_rechecks_dns_before_connect(monkeypatch: pytest.MonkeyPatch) -> None:
     """A hostname that resolves inside the network is blocked at delivery time."""
@@ -186,6 +197,45 @@ async def test_webhook_delivery_rechecks_dns_before_connect(monkeypatch: pytest.
 
     with pytest.raises(ValueError, match="private network"):
         await webhook_url_policy_module.ensure_public_webhook_url("https://example.com/hook")
+
+
+@pytest.mark.asyncio
+async def test_webhook_delivery_pins_the_checked_address(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Delivery connects to the checked IP while retaining the original HTTP and TLS host."""
+
+    monkeypatch.setattr(
+        webhook_url_policy_module,
+        "getaddrinfo",
+        lambda *args: [(2, 1, 6, "", ("93.184.216.34", 443))],
+    )
+
+    target = await webhook_url_policy_module.ensure_public_webhook_url(
+        "https://example.com:443/hooks/card?source=board"
+    )
+
+    assert target == ResolvedWebhookTarget(
+        url="https://93.184.216.34:443/hooks/card?source=board",
+        host_header="example.com:443",
+        sni_hostname="example.com",
+    )
+
+
+@pytest.mark.asyncio
+async def test_webhook_delivery_formats_ipv6_authority(monkeypatch: pytest.MonkeyPatch) -> None:
+    address = "2606:4700:4700::1111"
+    monkeypatch.setattr(
+        webhook_url_policy_module,
+        "getaddrinfo",
+        lambda *args: [(10, 1, 6, "", (address, 443, 0, 0))],
+    )
+
+    target = await webhook_url_policy_module.ensure_public_webhook_url(f"https://[{address}]:443/hook")
+
+    assert target == ResolvedWebhookTarget(
+        url=f"https://[{address}]:443/hook",
+        host_header=f"[{address}]:443",
+        sni_hostname=address,
+    )
 
 
 def test_webhook_schema_documents_envelope_and_signature(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -237,20 +287,23 @@ def test_minimal_event_data_freezes_safe_bot_and_unknown_actor_labels() -> None:
     """Presentation snapshots exclude credentials while retaining one actor label."""
 
     assert WebhookTask.minimal_event_data(
-        {"executor": {"uid": "bot-1", "type": "bot", "name": "자동화", "api_key": "secret"}}
-    ) == {"executor": {"uid": "bot-1", "type": "bot", "display_name": "자동화"}}
+        {"executor": {"uid": "bot-1", "type": "bot", "name": "Automation", "api_key": "secret"}}
+    ) == {"executor": {"uid": "bot-1", "type": "bot", "display_name": "Automation"}}
     assert WebhookTask.minimal_event_data(
         {"executor": {"uid": "external-1", "type": "external", "email": "private@example.com"}}
-    ) == {"executor": {"uid": "external-1", "type": "external", "display_name": "알 수 없음"}}
+    ) == {"executor": {"uid": "external-1", "type": "external", "display_name": "Unknown"}}
+
+    sanitized = {"executor": {"uid": "user-1", "type": "user", "display_name": "Sample User"}}
+    assert WebhookTask.minimal_event_data(sanitized) == sanitized
 
 
 def test_native_card_snapshot_is_frozen_at_event_creation(monkeypatch: pytest.MonkeyPatch) -> None:
     """Native helper data carries the names needed after later provider changes."""
 
     actor = SimpleNamespace(api_response=lambda: {"uid": "user-1", "type": "user"})
-    project = SimpleNamespace(get_uid=lambda: "project-1", title="산모피아", id=1)
-    column = SimpleNamespace(get_uid=lambda: "column-1", name="진행중", is_archive=False)
-    card = SimpleNamespace(get_uid=lambda: "card-1", title="업무 요청", project_column_id=1)
+    project = SimpleNamespace(get_uid=lambda: "project-1", title="Sample Project", id=1)
+    column = SimpleNamespace(get_uid=lambda: "column-1", name="In Progress", is_archive=False)
+    card = SimpleNamespace(get_uid=lambda: "card-1", title="Work Request", project_column_id=1)
     monkeypatch.setattr(
         BotTaskDataHelper,
         "create_card_relationship_context",
@@ -259,20 +312,20 @@ def test_native_card_snapshot_is_frozen_at_event_creation(monkeypatch: pytest.Mo
 
     data = BotTaskDataHelper.create_card(actor, project, card, column)
 
-    assert data["project_title"] == "산모피아"
-    assert data["project_column_name"] == "진행중"
+    assert data["project_title"] == "Sample Project"
+    assert data["project_column_name"] == "In Progress"
     assert data["project_column_is_archive"] is False
-    assert data["card_title"] == "업무 요청"
+    assert data["card_title"] == "Work Request"
 
 
 def test_card_move_webhook_is_queued_before_scoped_bot_execution(monkeypatch: pytest.MonkeyPatch) -> None:
     """A user move queues its immutable webhook without depending on bot lookup."""
 
     actor = SimpleNamespace(api_response=lambda: {"uid": "user-1", "type": "user"})
-    project = SimpleNamespace(get_uid=lambda: "project-1", title="산모피아", id=1)
-    old_column = SimpleNamespace(get_uid=lambda: "column-1", name="진행예정", is_archive=False)
-    current_column = SimpleNamespace(get_uid=lambda: "column-2", name="진행중", is_archive=False)
-    card = SimpleNamespace(get_uid=lambda: "card-1", title="업무 요청", project_column_id=2)
+    project = SimpleNamespace(get_uid=lambda: "project-1", title="Sample Project", id=1)
+    old_column = SimpleNamespace(get_uid=lambda: "column-1", name="Planned", is_archive=False)
+    current_column = SimpleNamespace(get_uid=lambda: "column-2", name="In Progress", is_archive=False)
+    card = SimpleNamespace(get_uid=lambda: "card-1", title="Work Request", project_column_id=2)
     queued: list[WebhookModel] = []
     monkeypatch.setattr(
         BotTaskDataHelper,
@@ -285,8 +338,36 @@ def test_card_move_webhook_is_queued_before_scoped_bot_execution(monkeypatch: py
 
     assert len(queued) == 1
     assert queued[0].event == "card_moved"
-    assert queued[0].data["project_column_name"] == "진행중"
-    assert queued[0].data["old_project_column_name"] == "진행예정"
+    assert queued[0].data["project_column_name"] == "In Progress"
+    assert queued[0].data["old_project_column_name"] == "Planned"
+    assert "related_cards" not in queued[0].data
+
+
+@pytest.mark.asyncio
+async def test_bot_task_queues_only_public_webhook_data(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Bot execution keeps its context while the broker receives the public webhook projection."""
+
+    queued: list[WebhookModel] = []
+    data = {
+        "project_uid": "project-1",
+        "related_cards": {"parents": [{"title": "Private relationship"}]},
+        "executor": {
+            "uid": "user-1",
+            "type": "user",
+            "firstname": "Sample",
+            "lastname": "User",
+            "email": "private@example.com",
+        },
+    }
+    monkeypatch.setattr(WebhookTask, "webhook_task", queued.append)
+
+    await BotTaskHelper.run([], BotTriggerCondition.CardCreated, data)
+
+    assert data["related_cards"] == {"parents": [{"title": "Private relationship"}]}
+    assert queued[0].data == {
+        "project_uid": "project-1",
+        "executor": {"uid": "user-1", "type": "user", "display_name": "Sample User"},
+    }
 
 
 def test_native_card_move_schema_documents_old_column_snapshot() -> None:
@@ -317,7 +398,7 @@ def test_webhook_schema_matches_emitted_registry_without_import_order(
 
     bot_cron = schemas["bot_cron_scheduled"]["properties"]["data"]
     assert set(bot_cron["properties"]) == {"project_uid", "project_column_uid", "card_uid"}
-    assert bot_cron["required"] == ["project_uid", "project_column_uid"]
+    assert bot_cron["required"] == ["project_uid"]
 
 
 def test_create_webhook_returns_vault_secret_and_cleans_up_on_insert_failure(
@@ -433,6 +514,31 @@ async def test_fanout_filters_then_schedules_independent_endpoint_deliveries(
 
 
 @pytest.mark.asyncio
+async def test_fanout_reads_webhook_settings_in_bounded_pages(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Large endpoint sets are traversed without retaining every database row at once."""
+
+    def setting(identifier: int) -> SimpleNamespace:
+        return SimpleNamespace(id=identifier, events=None, get_uid=lambda: f"webhook-{identifier}")
+
+    first_page = [setting(identifier) for identifier in range(1, WebhookTask.WEBHOOK_FANOUT_BATCH_SIZE + 1)]
+    second_page = [setting(WebhookTask.WEBHOOK_FANOUT_BATCH_SIZE + 1)]
+    cursors: list[object] = []
+    scheduled: list[str] = []
+
+    def get_page(after_id: object = None) -> list[SimpleNamespace]:
+        cursors.append(after_id)
+        return first_page if after_id is None else second_page
+
+    monkeypatch.setattr(WebhookTask, "_get_webhook_settings", get_page)
+    monkeypatch.setattr(WebhookTask, "webhook_delivery_task", lambda model, uid: scheduled.append(uid))
+
+    await WebhookTask.run_webhook(WebhookModel(event="card_created", data={}))
+
+    assert cursors == [None, WebhookTask.WEBHOOK_FANOUT_BATCH_SIZE]
+    assert len(scheduled) == WebhookTask.WEBHOOK_FANOUT_BATCH_SIZE + 1
+
+
+@pytest.mark.asyncio
 async def test_fanout_retries_only_broker_publish_failures(monkeypatch: pytest.MonkeyPatch) -> None:
     """A partial child publish raises the broker error for bounded parent retry."""
 
@@ -494,8 +600,8 @@ async def test_endpoint_delivery_failure_is_bounded_and_retryable(monkeypatch: p
     )
     observed_timeout: list[object] = []
 
-    async def allow_public_url(url: str) -> str:
-        return url
+    async def allow_public_url(url: str) -> ResolvedWebhookTarget:
+        return ResolvedWebhookTarget(url=url, host_header="example.invalid", sni_hostname="example.invalid")
 
     class FakeClient:
         def __init__(self, *, timeout: object, follow_redirects: bool) -> None:
@@ -528,3 +634,85 @@ async def test_endpoint_delivery_failure_is_bounded_and_retryable(monkeypatch: p
         "retry_kwargs": {"max_retries": 3},
     }
     assert WebhookTask.WebhookDeliveryError not in WebhookTask.WEBHOOK_FANOUT_RETRY_OPTIONS["autoretry_for"]
+
+
+@pytest.mark.asyncio
+async def test_successful_delivery_records_usage_through_repository(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Successful concurrent deliveries delegate their counters to one atomic repository update."""
+
+    setting = SimpleNamespace(secret_id=None, url="https://example.invalid/hook", events=None)
+    delivered_at = WebhookTask.SafeDateTime.now()
+    updated_setting = SimpleNamespace(last_used_at=delivered_at, total_used_count=7)
+    recorded: list[tuple[str, object]] = []
+    published: list[tuple[str, dict[str, object]]] = []
+
+    async def allow_public_url(url: str) -> ResolvedWebhookTarget:
+        return ResolvedWebhookTarget(url=url, host_header="example.invalid", sni_hostname="example.invalid")
+
+    class FakeResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+    class FakeClient:
+        def __init__(self, *, timeout: object, follow_redirects: bool) -> None:
+            assert timeout is WebhookTask.WEBHOOK_TIMEOUT
+            assert follow_redirects is False
+
+        async def __aenter__(self) -> "FakeClient":
+            return self
+
+        async def __aexit__(self, *args: object) -> None:
+            return None
+
+        async def post(self, *args: object, **kwargs: object) -> FakeResponse:
+            assert kwargs["headers"]["Host"] == "example.invalid"
+            assert kwargs["extensions"] == {"sni_hostname": "example.invalid"}
+            return FakeResponse()
+
+    repository = SimpleNamespace(
+        webhook_setting=SimpleNamespace(
+            record_delivery_success=lambda uid, timestamp: recorded.append((uid, timestamp)) or updated_setting
+        )
+    )
+    monkeypatch.setattr(WebhookTask, "_get_webhook_setting", lambda uid: setting)
+    monkeypatch.setattr(WebhookTask, "ensure_public_webhook_url", allow_public_url)
+    monkeypatch.setattr(WebhookTask, "AsyncClient", FakeClient)
+    monkeypatch.setattr(WebhookTask.SafeDateTime, "now", lambda: delivered_at)
+    monkeypatch.setattr(WebhookTask.Repository, "use", lambda: nullcontext(repository))
+    monkeypatch.setattr(
+        WebhookTask.AppSettingPublisher,
+        "webhook_setting_updated",
+        lambda uid, data: published.append((uid, data)),
+    )
+
+    await WebhookTask.deliver_webhook(WebhookModel(event="card_created", data={}), "webhook-1")
+
+    assert recorded == [("webhook-1", delivered_at)]
+    assert published == [
+        (
+            "webhook-1",
+            {"last_used_at": delivered_at, "total_used_count": 7},
+        )
+    ]
+
+
+@pytest.mark.asyncio
+async def test_missing_webhook_secret_never_sends_unsigned_request(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A key-vault failure is retried instead of silently downgrading the signature."""
+
+    setting = SimpleNamespace(
+        secret_id="missing-secret",
+        url="https://example.invalid/hook",
+        events=None,
+    )
+
+    class UnexpectedClient:
+        def __init__(self, **kwargs: object) -> None:
+            raise AssertionError("unsigned delivery opened an HTTP client")
+
+    monkeypatch.setattr(WebhookTask, "_get_webhook_setting", lambda uid: setting)
+    monkeypatch.setattr(WebhookTask.KeyVault, "get_key", lambda key: None)
+    monkeypatch.setattr(WebhookTask, "AsyncClient", UnexpectedClient)
+
+    with pytest.raises(WebhookTask.WebhookDeliveryError, match="endpoint=webhook-1"):
+        await WebhookTask.deliver_webhook(WebhookModel(event="card_created", data={}), "webhook-1")

@@ -1,7 +1,7 @@
 from ...core.broker import Broker
 from ...domain.models import Bot, Card, Checklist, Project, ProjectActivity, User
 from ...domain.models.ProjectActivity import ProjectActivityType
-from .UserActivityTask import record_project_activity
+from . import UserActivityTask
 from .utils import ActivityHistoryHelper, ActivityTaskHelper
 
 
@@ -14,7 +14,7 @@ async def card_checklist_created(user_or_bot: User | Bot, project: Project, card
         activity_history,
         **_get_activity_params(ProjectActivityType.CardChecklistCreated, project, card),
     )
-    record_project_activity(user_or_bot, activity)
+    UserActivityTask.record_project_activity(user_or_bot, activity)
 
 
 @Broker.wrap_async_task_decorator
@@ -31,7 +31,7 @@ async def card_checklist_title_changed(
         activity_history,
         **_get_activity_params(ProjectActivityType.CardChecklistTitleChanged, project, card),
     )
-    record_project_activity(user_or_bot, activity)
+    UserActivityTask.record_project_activity(user_or_bot, activity)
 
 
 @Broker.wrap_async_task_decorator
@@ -43,7 +43,7 @@ async def card_checklist_checked(user_or_bot: User | Bot, project: Project, card
         activity_history,
         **_get_activity_params(ProjectActivityType.CardChecklistChecked, project, card),
     )
-    record_project_activity(user_or_bot, activity)
+    UserActivityTask.record_project_activity(user_or_bot, activity)
 
 
 @Broker.wrap_async_task_decorator
@@ -55,7 +55,7 @@ async def card_checklist_unchecked(user_or_bot: User | Bot, project: Project, ca
         activity_history,
         **_get_activity_params(ProjectActivityType.CardChecklistUnchecked, project, card),
     )
-    record_project_activity(user_or_bot, activity)
+    UserActivityTask.record_project_activity(user_or_bot, activity)
 
 
 @Broker.wrap_async_task_decorator
@@ -67,7 +67,7 @@ async def card_checklist_deleted(user_or_bot: User | Bot, project: Project, card
         activity_history,
         **_get_activity_params(ProjectActivityType.CardChecklistDeleted, project, card),
     )
-    record_project_activity(user_or_bot, activity)
+    UserActivityTask.record_project_activity(user_or_bot, activity)
 
 
 def _get_default_history(helper: ActivityTaskHelper, project: Project, card: Card, checklist: Checklist):

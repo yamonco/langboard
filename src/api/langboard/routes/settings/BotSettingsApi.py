@@ -21,6 +21,7 @@ from langboard_shared.domain.models.BaseBotModel import BotPlatform, BotPlatform
 from langboard_shared.domain.models.McpRole import McpRoleAction
 from langboard_shared.domain.models.SettingRole import SettingRoleAction
 from langboard_shared.domain.services import DomainService
+from langboard_shared.domain.services.factory.BotService import ActionSuggestionCandidate
 from langboard_shared.Env import Env
 from langboard_shared.filter import RoleFilter
 from langboard_shared.security import Auth, RoleFinder
@@ -95,27 +96,35 @@ def _get_comfort_tool_action_sources(user: User, service: DomainService) -> list
     return service.app_setting.get_api_comfort_tool_response_list()
 
 
-def _request_graph_bot_draft(form: BotDraftForm, fallback_draft: dict[str, Any]) -> dict[str, Any] | None:
-    if not _has_graph_draft_model_settings(form.value):
+def _request_graph_bot_draft(
+    instruction: str,
+    value: dict[str, Any],
+    action_candidates: list[ActionSuggestionCandidate],
+) -> dict[str, object] | None:
+    if not _has_graph_draft_model_settings(value):
         return None
 
     try:
         response = httpx.post(
             f"{Env.DEFAULT_GRAPH_URL.rstrip('/')}/api/v1/graph/bot/draft",
             json={
-                "instruction": form.instruction,
-                "current_value": form.value,
-                "suggestions": fallback_draft.get("suggestions", []),
+                "instruction": instruction,
+                "current_value": value,
+                "action_candidates": action_candidates,
             },
             timeout=Env.AI_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
-        data = response.json()
+        data: object = response.json()
     except (httpx.HTTPError, ValueError):
         return None
 
+    if not isinstance(data, dict):
+        return None
     draft = data.get("draft")
-    return draft if isinstance(draft, dict) else None
+    if not isinstance(draft, dict):
+        return None
+    return {key: value for key, value in draft.items() if isinstance(key, str)}
 
 
 def _has_graph_draft_model_settings(value: dict[str, Any]) -> bool:
@@ -192,15 +201,19 @@ def suggest_bot_actions(
         ],
     )
     mcp_tools, mcp_tool_groups = _get_mcp_action_sources(user, service, form.include_mcp)
-    suggestions = service.bot.suggest_action_candidates(
-        form.prompt,
+    action_candidates = service.bot.get_action_candidates(
         AppRouter.api_routes,
         _get_comfort_tool_action_sources(user, service),
         mcp_tools=mcp_tools,
         mcp_tool_groups=mcp_tool_groups,
         selected_api_names=form.selected_api_names,
         selected_comfort_tool_names=form.selected_comfort_tool_names,
-        limit=form.limit,
+    )
+    generated_draft = _request_graph_bot_draft(form.prompt, form.value, action_candidates)
+    suggestions = service.bot.select_generated_action_candidates(
+        action_candidates,
+        generated_draft.get("suggestions") if generated_draft else None,
+        form.limit,
     )
 
     return JsonResponse(content={"suggestions": suggestions})
@@ -242,8 +255,7 @@ def draft_bot_from_instruction(
     )
     mcp_tools, mcp_tool_groups = _get_mcp_action_sources(user, service, form.include_mcp)
     comfort_tools = _get_comfort_tool_action_sources(user, service)
-    draft = service.bot.create_bot_draft(
-        form.instruction,
+    action_candidates = service.bot.get_action_candidates(
         AppRouter.api_routes,
         comfort_tools,
         mcp_tools=mcp_tools,
@@ -251,8 +263,9 @@ def draft_bot_from_instruction(
         selected_api_names=form.selected_api_names,
         selected_comfort_tool_names=form.selected_comfort_tool_names,
     )
-    graph_draft = _request_graph_bot_draft(form, draft)
-    draft = service.bot.merge_generated_bot_draft(draft, graph_draft, AppRouter.api_routes, comfort_tools)
+    draft = service.bot.create_bot_draft(form.instruction)
+    graph_draft = _request_graph_bot_draft(form.instruction, form.value, action_candidates)
+    draft = service.bot.merge_generated_bot_draft(draft, graph_draft, action_candidates)
 
     return JsonResponse(content={"draft": draft})
 

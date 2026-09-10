@@ -4,6 +4,7 @@ from pydantic import Field as PydanticField
 from pydantic_core import PydanticUndefined as Undefined
 from pydantic_core import PydanticUndefinedType as UndefinedType
 from sqlalchemy import Column
+from sqlalchemy.types import TypeEngine
 from typing_extensions import Literal
 from .ApiField import ApiField
 
@@ -53,7 +54,7 @@ def Field(
     unique_groups: Union[Sequence[str], UndefinedType] = Undefined,
     nullable: Union[bool, UndefinedType] = Undefined,
     index: Union[bool, UndefinedType] = Undefined,
-    sa_type: Union[Type[Any], UndefinedType] = Undefined,
+    sa_type: Union[Type[Any], TypeEngine[Any], UndefinedType] = Undefined,
     sa_column_args: Union[Sequence[Any], UndefinedType] = Undefined,
     sa_column_kwargs: Union[Mapping[str, Any], UndefinedType] = Undefined,
     schema_extra: Optional[Dict[str, Any]] = None,
@@ -97,7 +98,7 @@ def Field(
     unique_groups: Union[Sequence[str], UndefinedType] = Undefined,
     nullable: Union[bool, UndefinedType] = Undefined,
     index: Union[bool, UndefinedType] = Undefined,
-    sa_type: Union[Type[Any], UndefinedType] = Undefined,
+    sa_type: Union[Type[Any], TypeEngine[Any], UndefinedType] = Undefined,
     sa_column_args: Union[Sequence[Any], UndefinedType] = Undefined,
     sa_column_kwargs: Union[Mapping[str, Any], UndefinedType] = Undefined,
     schema_extra: Optional[Dict[str, Any]] = None,
@@ -181,7 +182,7 @@ def Field(
     unique_groups: Union[Sequence[str], UndefinedType] = Undefined,
     nullable: Union[bool, UndefinedType] = Undefined,
     index: Union[bool, UndefinedType] = Undefined,
-    sa_type: Union[Type[Any], UndefinedType] = Undefined,
+    sa_type: Union[Type[Any], TypeEngine[Any], UndefinedType] = Undefined,
     sa_column: Union[Column, UndefinedType] = Undefined,  # type: ignore
     sa_column_args: Union[Sequence[Any], UndefinedType] = Undefined,
     sa_column_kwargs: Union[Mapping[str, Any], UndefinedType] = Undefined,

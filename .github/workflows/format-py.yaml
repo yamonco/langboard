@@ -4,7 +4,7 @@ on: workflow_dispatch
 
 jobs:
   run-core-formatter:
-    name: Lint (src/shared/py via uv)
+    name: Format (src/shared/py via uv)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -15,7 +15,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.12"
       - name: Install uv
         run: pipx install uv
       - name: Cache uv and venv
@@ -33,26 +33,23 @@ jobs:
           else
             uv sync
           fi
-      - name: Lint (core)
-        run: |
-          uv run ruff check . --fix
-          uv run ruff format .
+      - name: Check formatting (core)
+        run: uv run ruff format --check .
   run-root-formatter:
-    name: Lint (root via uv)
+    name: Format (root via uv)
     runs-on: ubuntu-latest
     strategy:
       matrix:
         python-version:
           - "3.13"
           - "3.12"
-          - "3.11"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: ${{ matrix.python-version }}
       - name: Install uv
         run: pipx install uv
       - name: Cache uv and venv
@@ -70,12 +67,10 @@ jobs:
           else
             uv sync
           fi
-      - name: Lint (root)
-        run: |
-          uv run ruff check . --fix
-          uv run ruff format .
+      - name: Check formatting (root)
+        run: uv run ruff format --check . --exclude "src/api/langboard/migrations/**"
   run-graph-formatter:
-    name: Lint (src/graph via uv)
+    name: Format (src/graph via uv)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -86,7 +81,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.12"
       - name: Install uv
         run: pipx install uv
       - name: Cache uv and venv
@@ -104,7 +99,5 @@ jobs:
           else
             uv sync
           fi
-      - name: Lint (graph)
-        run: |
-          uv run ruff check . --fix
-          uv run ruff format .
+      - name: Check formatting (graph)
+        run: uv run ruff format --check .

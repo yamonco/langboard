@@ -1,4 +1,6 @@
-from typing import Any
+from copy import deepcopy
+from typing import Any, TypeVar
+from sqlalchemy.exc import IntegrityError
 from ....core.domain import BaseDomainService
 from ....helpers import InfraHelper
 from ...models import (
@@ -25,6 +27,7 @@ SI_EMAIL_NOTIFICATION_POLICY = {
     "categories": [ProjectEmailNotificationCategory.Cards.value],
     "card_move_target_columns": ["Review"],
 }
+_TScope = TypeVar("_TScope", ProjectBotScope, ProjectColumnBotScope)
 
 
 class ProjectTemplateService(BaseDomainService):
@@ -43,18 +46,25 @@ class ProjectTemplateService(BaseDomainService):
                 self.repo.project_template.replace_default(template)
                 template.is_default = True
             if not template.email_notification_policy:
-                template.email_notification_policy = SI_EMAIL_NOTIFICATION_POLICY
+                template.email_notification_policy = deepcopy(SI_EMAIL_NOTIFICATION_POLICY)
                 self.repo.project_template.update(template)
             return template
+        current_default = self.repo.project_template.get_default()
         template = ProjectTemplate(
             name="SI",
-            columns=SI_COLUMNS,
-            email_notification_policy=SI_EMAIL_NOTIFICATION_POLICY,
+            columns=list(SI_COLUMNS),
+            email_notification_policy=deepcopy(SI_EMAIL_NOTIFICATION_POLICY),
             is_builtin=True,
-            is_default=True,
+            is_default=current_default is None,
         )
-        self.repo.project_template.insert(template)
-        if self.repo.project_template.get_default() is None:
+        try:
+            self.repo.project_template.insert(template)
+        except IntegrityError as error:
+            existing = self.repo.project_template.get_by_name("SI")
+            if existing and existing.is_builtin:
+                return existing
+            raise ValueError("SI is reserved for the built-in project template") from error
+        if current_default is None:
             self.repo.project_template.replace_default(template)
         return template
 
@@ -110,7 +120,10 @@ class ProjectTemplateService(BaseDomainService):
             column_bot_scopes=column_scopes,
             email_notification_policy=self._email_notification_policy_snapshot(project),
         )
-        self.repo.project_template.insert(template)
+        try:
+            self.repo.project_template.insert(template)
+        except IntegrityError as error:
+            raise ValueError("Project template name already exists") from error
         return template
 
     def create_project(
@@ -254,18 +267,20 @@ class ProjectTemplateService(BaseDomainService):
             if scope:
                 self.repo.project_column_bot_scope.insert(scope)
 
-    def _build_scope(self, model: type, snapshot: dict[str, Any], **scope: Any) -> Any | None:
+    def _build_scope(
+        self,
+        model: type[_TScope],
+        snapshot: dict[str, Any],
+        **scope: Any,
+    ) -> _TScope | None:
         bot = self._find_bot(str(snapshot.get("bot_uname") or ""))
         if not bot:
             return None
         branch_name = snapshot.get("default_scope_branch")
-        branch = next(
-            (
-                item
-                for item in InfraHelper.get_all_by(BotDefaultScopeBranch, "bot_id", bot.id)
-                if item.name == branch_name
-            ),
-            None,
+        branch = (
+            self.repo.bot_default_scope_branch.get_by_bot_and_name(bot, str(branch_name))
+            if branch_name is not None
+            else None
         )
         available = model.get_available_conditions()
         conditions = []

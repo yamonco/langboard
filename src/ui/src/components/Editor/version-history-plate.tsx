@@ -9,7 +9,7 @@ import { diffPlugins } from "@/components/Editor/plugins/diff-plugins";
 import { EditorKit } from "@/components/Editor/editor-kit";
 import { MarkdownPlugin } from "@platejs/markdown";
 import { cloneDeep } from "lodash";
-import { EditorDataProvider, TEditorDataProviderProps } from "@/core/providers/EditorDataProvider";
+import { EditorDataProvider, TViewEditorDataProviderProps } from "@/core/providers/EditorDataProvider";
 import Box from "@/components/base/Box";
 import Collapsible from "@/components/base/Collapsible";
 import { cn } from "@/core/utils/ComponentUtils";
@@ -53,7 +53,7 @@ function Diff({ current, previous }: DiffProps) {
     return <VersionHistory readOnly editor={editor} />;
 }
 
-interface IBaseVersionHistoryPlateProps extends Pick<TEditorDataProviderProps, "form" | "mentionables" | "currentUser"> {
+interface IBaseVersionHistoryPlateProps extends Pick<TViewEditorDataProviderProps, "form" | "mentionables" | "currentUser"> {
     oldValue?: IEditorContent;
     newValue?: IEditorContent;
 }

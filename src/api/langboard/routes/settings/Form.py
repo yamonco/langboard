@@ -84,18 +84,19 @@ class UpdateBotForm(BaseFormModel):
 
 
 class BotActionSuggestionForm(BaseModel):
-    prompt: str = ""
-    selected_api_names: list[str] = Field(default_factory=list)
-    selected_comfort_tool_names: list[str] = Field(default_factory=list)
+    prompt: str = Field(min_length=1, max_length=30_000)
+    value: dict[str, Any] = Field(default_factory=dict)
+    selected_api_names: list[str] = Field(default_factory=list, max_length=100)
+    selected_comfort_tool_names: list[str] = Field(default_factory=list, max_length=100)
     include_mcp: bool = True
-    limit: int = 8
+    limit: int = Field(default=8, ge=1, le=20)
 
 
 class BotDraftForm(BaseModel):
-    instruction: str
+    instruction: str = Field(min_length=1, max_length=30_000)
     value: dict[str, Any] = Field(default_factory=dict)
-    selected_api_names: list[str] = Field(default_factory=list)
-    selected_comfort_tool_names: list[str] = Field(default_factory=list)
+    selected_api_names: list[str] = Field(default_factory=list, max_length=100)
+    selected_comfort_tool_names: list[str] = Field(default_factory=list, max_length=100)
     include_mcp: bool = True
 
 

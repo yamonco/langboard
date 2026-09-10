@@ -1,8 +1,7 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { TSharedBotValueInputProps } from "@/components/bots/BotValueInput/types";
 import { showableDefaultInputs } from "@/components/bots/BotValueInput/utils";
 import { API_URL, IS_OLLAMA_RUNNING } from "@/constants";
-import { Agent, EBotPlatform, EBotPlatformRunningType, TAgentFormInput, TAgentModelName } from "@langboard/core/ai";
+import { AGENT_MODELS, Agent, EBotPlatform, EBotPlatformRunningType, TAgentFormInput, TAgentModelName } from "@langboard/core/ai";
 import { Utils } from "@langboard/core/utils";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -14,7 +13,7 @@ export interface IBotValueDefaultInputContext {
     platformRunningType: EBotPlatformRunningType;
     section?: TSharedBotValueInputProps["section"];
     uid?: TSharedBotValueInputProps["uid"];
-    valuesRef: React.RefObject<Record<string, any>>;
+    valuesRef: React.RefObject<Record<string, unknown>>;
     selectedProvider: TAgentModelName;
     setSelectedProvider: React.Dispatch<React.SetStateAction<TAgentModelName>>;
     selectedApis: string[];
@@ -29,7 +28,7 @@ export interface IBotValueDefaultInputContext {
     setErrors: React.Dispatch<React.SetStateAction<Record<string, string>>>;
     apiList: Record<string, string>;
     setApiList: React.Dispatch<React.SetStateAction<Record<string, string>>>;
-    setValue: (name: string) => (value: any) => void;
+    setValue: (name: string) => (value: unknown) => void;
     setInputRef: (name: string) => (element: HTMLElement | null) => void;
     required?: bool;
     isValidating: bool;
@@ -41,34 +40,33 @@ interface IBotValueDefaultInputProviderProps extends TSharedBotValueInputProps {
     children: React.ReactNode;
 }
 
-const initialContext = {
-    currentUser: {} as TSharedBotValueInputProps["currentUser"],
-    platform: EBotPlatform.Default,
-    platformRunningType: EBotPlatformRunningType.Default,
-    valuesRef: { current: {} },
-    selectedProvider: "OpenAI" as TAgentModelName,
-    setSelectedProvider: () => {},
-    selectedApis: [] as string[],
-    setSelectedApis: () => {},
-    selectedComfortTools: [] as string[],
-    setSelectedComfortTools: () => {},
-    comfortToolDescriptions: {} as Record<string, string>,
-    setComfortToolDescriptions: () => {},
-    inputs: [] as TAgentFormInput[],
-    setInputs: () => {},
-    errors: {} as Record<string, string>,
-    setErrors: () => {},
-    apiList: {} as Record<string, string>,
-    setApiList: () => {},
-    setValue: () => () => {},
-    setInputRef: () => () => {},
-    required: false,
-    isValidating: false,
-    showableInputs: [],
-    resetTick: 0,
+const isAgentModelName = (value: unknown): value is TAgentModelName => {
+    return Utils.Type.isString(value) && AGENT_MODELS.some((modelName) => modelName === value);
 };
 
-const BotValueDefaultInputContext = createContext<IBotValueDefaultInputContext>(initialContext);
+const isStringArray = (value: unknown): value is string[] => {
+    return Utils.Type.isArray(value) && value.every((item) => Utils.Type.isString(item));
+};
+
+const isStringRecord = (value: unknown): value is Record<string, string> => {
+    return Utils.Type.isObject<Record<string, unknown>>(value) && Object.values(value).every((item) => Utils.Type.isString(item));
+};
+
+const parseBotValues = (value: string): Record<string, unknown> => {
+    if (!Utils.String.isJsonString(value)) {
+        return {};
+    }
+
+    const parsed: unknown = JSON.parse(value);
+    return Utils.Type.isObject<Record<string, unknown>>(parsed) ? parsed : {};
+};
+
+const getSelectedProvider = (values: Record<string, unknown>): TAgentModelName => {
+    const provider = values["agent_llm"];
+    return isAgentModelName(provider) ? provider : "OpenAI";
+};
+
+const BotValueDefaultInputContext = createContext<IBotValueDefaultInputContext | null>(null);
 
 export const BotValueDefaultInputProvider = ({
     collaborationType,
@@ -86,12 +84,14 @@ export const BotValueDefaultInputProvider = ({
     children,
 }: IBotValueDefaultInputProviderProps): React.ReactNode => {
     const [t] = useTranslation();
-    const valuesRef = useRef<Record<string, any>>(Utils.String.isJsonString(value) ? JSON.parse(value) : {});
-    const [selectedProvider, setSelectedProvider] = useState<TAgentModelName>((valuesRef.current["agent_llm"] as TAgentModelName) ?? "OpenAI");
-    const [selectedApis, setSelectedApis] = useState<string[]>((valuesRef.current["api_names"] as string[]) ?? []);
-    const [selectedComfortTools, setSelectedComfortTools] = useState<string[]>((valuesRef.current["comfort_tool_names"] as string[]) ?? []);
+    const valuesRef = useRef<Record<string, unknown>>(parseBotValues(value));
+    const [selectedProvider, setSelectedProvider] = useState<TAgentModelName>(getSelectedProvider(valuesRef.current));
+    const [selectedApis, setSelectedApis] = useState<string[]>(isStringArray(valuesRef.current["api_names"]) ? valuesRef.current["api_names"] : []);
+    const [selectedComfortTools, setSelectedComfortTools] = useState<string[]>(
+        isStringArray(valuesRef.current["comfort_tool_names"]) ? valuesRef.current["comfort_tool_names"] : []
+    );
     const [comfortToolDescriptions, setComfortToolDescriptions] = useState<Record<string, string>>(
-        (valuesRef.current["comfort_tool_descriptions"] as Record<string, string>) ?? {}
+        isStringRecord(valuesRef.current["comfort_tool_descriptions"]) ? valuesRef.current["comfort_tool_descriptions"] : {}
     );
     const [inputs, setInputs] = useState<TAgentFormInput[]>([]);
     const inputsRef = useRef<Record<string, HTMLElement | null>>({});
@@ -104,7 +104,7 @@ export const BotValueDefaultInputProvider = ({
         inputsRef.current[name] = element;
     };
     const setValue = useCallback(
-        (name: string) => (value: any) => {
+        (name: string) => (value: unknown) => {
             valuesRef.current[name] = value;
             syncValue();
         },
@@ -134,13 +134,13 @@ export const BotValueDefaultInputProvider = ({
             return;
         }
 
-        const nextValues = Utils.String.isJsonString(value) ? JSON.parse(value) : {};
+        const nextValues = parseBotValues(value);
         valuesRef.current = nextValues;
         newValueRef.current = value;
-        setSelectedProvider((nextValues["agent_llm"] as TAgentModelName) ?? "OpenAI");
-        setSelectedApis((nextValues["api_names"] as string[]) ?? []);
-        setSelectedComfortTools((nextValues["comfort_tool_names"] as string[]) ?? []);
-        setComfortToolDescriptions((nextValues["comfort_tool_descriptions"] as Record<string, string>) ?? {});
+        setSelectedProvider(getSelectedProvider(nextValues));
+        setSelectedApis(isStringArray(nextValues["api_names"]) ? nextValues["api_names"] : []);
+        setSelectedComfortTools(isStringArray(nextValues["comfort_tool_names"]) ? nextValues["comfort_tool_names"] : []);
+        setComfortToolDescriptions(isStringRecord(nextValues["comfort_tool_descriptions"]) ? nextValues["comfort_tool_descriptions"] : {});
         setErrors({});
         setResetTick((tick) => tick + 1);
     }, [disabled, value]);
@@ -197,23 +197,20 @@ export const BotValueDefaultInputProvider = ({
             };
             syncValue();
 
-            if (Utils.Type.isString(safePatch["agent_llm"])) {
-                setSelectedProvider(safePatch["agent_llm"] as TAgentModelName);
+            if (isAgentModelName(safePatch["agent_llm"])) {
+                setSelectedProvider(safePatch["agent_llm"]);
             }
 
-            if (Utils.Type.isArray(safePatch["api_names"]) && safePatch["api_names"].every((apiName) => Utils.Type.isString(apiName))) {
-                setSelectedApis(safePatch["api_names"] as string[]);
+            if (isStringArray(safePatch["api_names"])) {
+                setSelectedApis(safePatch["api_names"]);
             }
 
-            if (
-                Utils.Type.isArray(safePatch["comfort_tool_names"]) &&
-                safePatch["comfort_tool_names"].every((comfortToolName) => Utils.Type.isString(comfortToolName))
-            ) {
-                setSelectedComfortTools(safePatch["comfort_tool_names"] as string[]);
+            if (isStringArray(safePatch["comfort_tool_names"])) {
+                setSelectedComfortTools(safePatch["comfort_tool_names"]);
             }
 
-            if (Utils.Type.isObject(safePatch["comfort_tool_descriptions"])) {
-                setComfortToolDescriptions(safePatch["comfort_tool_descriptions"] as Record<string, string>);
+            if (isStringRecord(safePatch["comfort_tool_descriptions"])) {
+                setComfortToolDescriptions(safePatch["comfort_tool_descriptions"]);
             }
 
             setResetTick((tick) => tick + 1);
