@@ -69,6 +69,7 @@ export interface IStore extends Interface {
     description: string;
     ai_description?: string;
     last_viewed_at: Date;
+    view_count: number;
     last_activity_at: Date | null;
     related_to_current_user: bool;
     related_activity_at: Date | null;

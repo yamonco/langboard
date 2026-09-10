@@ -191,6 +191,7 @@ class ProjectService(BaseDomainService):
             api_project = project.api_response()
             api_project["starred"] = assigned_user.starred
             api_project["last_viewed_at"] = assigned_user.last_viewed_at
+            api_project["view_count"] = assigned_user.view_count
             api_project["last_activity_at"] = last_activity_at
             api_project["related_to_current_user"] = related_to_current_user
             api_project["related_activity_at"] = related_activity_at

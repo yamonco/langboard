@@ -1,7 +1,18 @@
 import importlib
 from contextlib import contextmanager
+from pathlib import Path
+import sqlalchemy as sa
+from alembic.migration import MigrationContext
+from alembic.operations import Operations
+from langboard_shared.infrastructure.repositories.factory.ProjectAssignedUserRepository import (  # noqa: E402
+    ProjectAssignedUserRepository,
+)
 from langboard_shared.infrastructure.repositories.factory.ProjectRepository import ProjectRepository  # noqa: E402
 from sqlalchemy.dialects import postgresql
+
+
+ROOT = Path(__file__).resolve().parents[4]
+VIEW_COUNT_MIGRATION = ROOT / "src/api/langboard/migrations/versions/20260911072500-57c4d82e1a63.py"
 
 
 class _Result:
@@ -49,3 +60,42 @@ def test_project_list_orders_by_star_and_recorded_activity(monkeypatch) -> None:
     order_by = sql.split("ORDER BY", maxsplit=1)[1]
     assert "project_assigned_user.starred DESC" in order_by
     assert "project.updated_at" not in order_by
+
+
+def test_view_tracking_updates_recency_and_frequency_together(monkeypatch) -> None:
+    db = _Db()
+
+    @contextmanager
+    def use(*, readonly: bool):
+        assert readonly is False
+        yield db
+
+    repository_module = importlib.import_module(ProjectAssignedUserRepository.__module__)
+    monkeypatch.setattr(repository_module.DbSession, "use", use)
+
+    ProjectAssignedUserRepository(lambda _: None, lambda _: None).set_last_view(7, 11)
+    sql = str(db.statement.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
+    assert "last_viewed_at=" in sql
+    assert "view_count=(project_assigned_user.view_count + 1)" in sql
+
+
+def test_view_count_migration_repairs_and_replays() -> None:
+    spec = importlib.util.spec_from_file_location("project_view_count_migration", VIEW_COUNT_MIGRATION)
+    assert spec and spec.loader
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+
+    engine = sa.create_engine("sqlite://")
+    with engine.begin() as connection:
+        connection.execute(sa.text("CREATE TABLE project_assigned_user (id BIGINT PRIMARY KEY)"))
+        migration.op = Operations(MigrationContext.configure(connection))
+
+        migration.upgrade()
+        migration.upgrade()
+        columns = {column["name"] for column in sa.inspect(connection).get_columns("project_assigned_user")}
+        assert "view_count" in columns
+
+        migration.downgrade()
+        migration.downgrade()
+        columns = {column["name"] for column in sa.inspect(connection).get_columns("project_assigned_user")}
+        assert "view_count" not in columns
