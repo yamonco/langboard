@@ -48,6 +48,8 @@ class CardRelationshipService(BaseDomainService):
         if not params:
             return None
         project, card = params
+        if card.is_linked_resource:
+            return None
 
         old_relationships = self.repo.card_relationship.get_all_by_card_and_relation(
             card, relation="parent" if is_parent else "child"

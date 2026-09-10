@@ -94,7 +94,11 @@ class CardRelationshipRepository(BaseRepository[CardRelationship]):
 
     def get_all_related_card_ids(self, project: TProjectParam, cards: Sequence[TCardParam] | None = None):
         project_id = InfraHelper.convert_id(project)
-        query = SqlBuilder.select.column(Card.column("id")).where(Card.column("project_id") == project_id)
+        query = (
+            SqlBuilder.select.column(Card.column("id"))
+            .where(Card.column("project_id") == project_id)
+            .where(Card.column("source_type").is_(None))
+        )
 
         if cards is not None:
             if not isinstance(cards, Sequence) or isinstance(cards, str):

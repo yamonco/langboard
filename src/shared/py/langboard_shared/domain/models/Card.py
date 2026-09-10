@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, ClassVar
 from sqlalchemy import TEXT
 from ...core.db import ApiField, DateTimeField, EditorContentModel, Field, ModelColumnType, SnowflakeIDField
 from ...core.types import SafeDateTime, SnowflakeID
@@ -8,8 +8,14 @@ from .ProjectColumn import ProjectColumn
 
 
 class Card(BaseNotificationScheduleModel, table=True):
+    LINKED_RESOURCE_PROJECT_WIKI: ClassVar[str] = "project_wiki"
+
     project_id: SnowflakeID = SnowflakeIDField(
-        foreign_key=Project, nullable=False, index=True, api_field=ApiField(name="project_uid")
+        foreign_key=Project,
+        nullable=False,
+        index=True,
+        unique_groups=["linked_resource"],
+        api_field=ApiField(name="project_uid"),
     )
     project_column_id: SnowflakeID = SnowflakeIDField(
         foreign_key=ProjectColumn, nullable=False, index=True, api_field=ApiField(name="project_column_uid")
@@ -22,6 +28,22 @@ class Card(BaseNotificationScheduleModel, table=True):
     deadline_at: SafeDateTime | None = DateTimeField(default=None, nullable=True, api_field=ApiField())
     order: int = Field(default=0, nullable=False, api_field=ApiField())
     archived_at: SafeDateTime | None = DateTimeField(default=None, nullable=True, api_field=ApiField())
+    source_type: str | None = Field(
+        default=None,
+        nullable=True,
+        unique_groups=["linked_resource"],
+        api_field=ApiField(),
+    )
+    source_uid: str | None = Field(
+        default=None,
+        nullable=True,
+        unique_groups=["linked_resource"],
+        api_field=ApiField(),
+    )
+
+    @property
+    def is_linked_resource(self) -> bool:
+        return self.source_type is not None and self.source_uid is not None
 
     def board_api_response(
         self,
@@ -62,6 +84,8 @@ class Card(BaseNotificationScheduleModel, table=True):
         operator: str | None,
         now: SafeDateTime,
     ) -> dict[str, Any] | None:
+        if self.is_linked_resource:
+            return None
         if field != "deadline_at" or operator not in [self.OPERATOR_WITHIN_NEXT_DAYS, self.OPERATOR_OVERDUE]:
             return super().get_notification_schedule_rule_message_vars(field, operator, now)
         if not self.deadline_at:

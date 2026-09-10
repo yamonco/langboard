@@ -18,7 +18,7 @@ from langboard_shared.core.routing.Exception import MissingException
 from langboard_shared.core.schema import OpenApiSchema
 from langboard_shared.core.storage import Storage, StorageName
 from langboard_shared.core.utils.Converter import convert_python_data
-from langboard_shared.domain.models import Bot, Project, ProjectRole, ProjectWiki, ProjectWikiAttachment, User
+from langboard_shared.domain.models import Bot, Card, Project, ProjectRole, ProjectWiki, ProjectWikiAttachment, User
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.domain.services import DomainService
 from langboard_shared.filter import RoleFilter
@@ -48,6 +48,7 @@ from .forms import (
                         {
                             "schema": {
                                 "assigned_members": [User],
+                                "linked_card_uid?": "string",
                             }
                         },
                     )
@@ -90,6 +91,7 @@ def get_project_wikis(
                     {
                         "schema": {
                             "assigned_members": [User],
+                            "linked_card_uid?": "string",
                         }
                     },
                 )
@@ -118,6 +120,7 @@ def get_project_wiki_details(
     if not api_wiki:
         raise ApiException.NotFound_404(ApiErrorCode.NF2008)
 
+    api_wiki["linked_card_uid"] = service.project_wiki.get_linked_card_uid(project, project_wiki)
     return JsonResponse(content={"wiki": api_wiki})
 
 
@@ -161,6 +164,43 @@ def create_project_wiki(
     _, api_wiki = result
 
     return JsonResponse(content={"wiki": api_wiki}, status_code=status.HTTP_201_CREATED)
+
+
+@AppRouter.schema(permission=ApiPermission.Create)
+@AppRouter.api.post(
+    "/board/{project_uid}/wiki/{wiki_uid}/linked-card",
+    tags=["Board.Wiki"],
+    description="Create or return the board card linked to a project Wiki.",
+    responses=(
+        OpenApiSchema()
+        .suc({"card": (Card, {"schema": {"linked_resource": "object"}}), "created": "boolean"}, 201)
+        .suc({"card": (Card, {"schema": {"linked_resource": "object"}}), "created": "boolean"}, 200)
+        .auth()
+        .forbidden()
+        .err(404, ApiErrorCode.NF2008)
+        .get()
+    ),
+)
+@RoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+@AuthFilter.add()
+def create_wiki_linked_card(
+    project_uid: str,
+    wiki_uid: str,
+    user_or_bot: User | Bot = Auth.scope("all"),
+    service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    result = service.card.create_linked_wiki_card(
+        user_or_bot,
+        project_uid,
+        wiki_uid,
+    )
+    if result is None:
+        raise ApiException.NotFound_404(ApiErrorCode.NF2008)
+    _, api_card, created = result
+    return JsonResponse(
+        content={"card": api_card, "created": created},
+        status_code=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+    )
 
 
 @collaborative_edit(

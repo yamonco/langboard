@@ -118,6 +118,8 @@ class CardCommentService(BaseDomainService):
         if not params:
             return None
         project, card = params
+        if card.is_linked_resource:
+            return None
 
         if isinstance(content, dict):
             content = EditorContentModel(**content)
