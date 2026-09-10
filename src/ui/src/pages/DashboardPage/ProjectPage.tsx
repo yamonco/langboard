@@ -88,6 +88,7 @@ const ProjectPage = memo(({ currentTab, updateStarredProjects, scrollAreaUpdater
     return (
         <ProjectTabs
             currentTab={currentTab}
+            userUID={currentUser.uid}
             projectsData={data}
             isProjectsFetching={isFetching}
             isProjectsLoading={isLoading}
