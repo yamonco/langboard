@@ -8,5 +8,11 @@ class ScimProvisioningException:
     class Conflict(Default):
         pass
 
+    class IdentityLinkRequired(Conflict):
+        pass
+
+    class ExternalIdentityConflict(Conflict):
+        pass
+
     class Unavailable(Default):
         pass

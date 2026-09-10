@@ -13,6 +13,8 @@ class ApiErrorCode(Enum):
     EX1002 = "The email is already primary."
     EX1003 = "The email is already in use."
     EX1004 = "The account is already activated."
+    EX1005 = "An existing account with this email must be linked explicitly before SCIM provisioning."
+    EX1006 = "The external identity is already linked and cannot be reassigned."
     EX3001 = "Bot uname already exists."
     EX3002 = "Default internal bot cannot be deleted."
     EX3003 = "MCP tool name already exists."
