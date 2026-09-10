@@ -399,6 +399,7 @@ class CardService(BaseDomainService):
         limit: int,
         before_updated_at: SafeDateTime | None = None,
         before_card: TCardParam | None = None,
+        user_or_bot: TUserOrBot | None = None,
     ) -> tuple[list[dict[str, Any]], int, tuple[str, str] | None] | None:
         """Return a bounded newest-updated-first card page and opaque cursor fields."""
 
@@ -408,10 +409,18 @@ class CardService(BaseDomainService):
         records = self.repo.card.get_page_by_project(project, limit, before_updated_at, before_card)
         has_more = len(records) > limit
         page = records[:limit]
+        resource_payloads = self._get_linked_resource_payloads(
+            user_or_bot,
+            project,
+            [card for card, _ in page if card.is_linked_resource],
+            include_content=False,
+        )
         cards: list[dict[str, Any]] = []
         for card, column in page:
             api_card = card.api_response()
             api_card["project_column_name"] = column.name
+            if card.is_linked_resource:
+                api_card["linked_resource"] = resource_payloads[card.get_uid()]
             cards.append(api_card)
         next_fields = None
         if has_more and page:
