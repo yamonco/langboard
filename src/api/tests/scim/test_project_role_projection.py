@@ -40,7 +40,7 @@ class RoleRepository:
     def grant_all(self, *, user_id: int, project_id: int) -> Role:
         return self.grant(actions=["*"], user_id=user_id, project_id=project_id)
 
-    def get_one(self, *, user_id: int, project_id: int) -> Role | None:
+    def get_one(self, *, user_id: int, project_id: int, consistent: bool = False) -> Role | None:
         return self.roles.get((project_id, user_id))
 
 
@@ -49,7 +49,7 @@ class AssignedRepository:
         self.users = {user.id: user for user in users}
         self.role_repository = role_repository
 
-    def get_all_by_project(self, _project: Any) -> list[tuple[Any, Any]]:
+    def get_all_by_project(self, _project: Any, *, consistent: bool = False) -> list[tuple[Any, Any]]:
         return [(user, SimpleNamespace(user_id=user.id)) for user in self.users.values()]
 
     def ensure_assigned(self, _project: Any, user: Any) -> tuple[Any, bool]:
@@ -201,9 +201,11 @@ def test_project_role_groups_reconcile_membership_role_and_revocation() -> None:
     )
     relationship_calls: list[set[int]] = []
     repository = SimpleNamespace(
-        scim_group=SimpleNamespace(get_by_external_id=lambda external_id: groups.get(external_id)),
+        scim_group=SimpleNamespace(
+            get_by_external_id=lambda external_id, **_kwargs: groups.get(external_id)
+        ),
         scim_group_member=SimpleNamespace(
-            get_users_by_group=lambda group: members.get(group.id, [])
+            get_users_by_group=lambda group, **_kwargs: members.get(group.id, [])
         ),
         project_assigned_user=assigned_repository,
         project_user_relationship=SimpleNamespace(

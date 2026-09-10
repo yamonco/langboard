@@ -17,7 +17,11 @@ class ProjectAssignedUserRepository(BaseRepository[ProjectAssignedUser]):
         return "project_assigned_user"
 
     def get_all_by_project(
-        self, project: TProjectParam, where_users_in: Sequence[TUserParam] | None = None
+        self,
+        project: TProjectParam,
+        where_users_in: Sequence[TUserParam] | None = None,
+        *,
+        consistent: bool = False,
     ) -> list[tuple[User, ProjectAssignedUser]]:
         project_id = InfraHelper.convert_id(project)
         query = (
@@ -36,7 +40,7 @@ class ProjectAssignedUserRepository(BaseRepository[ProjectAssignedUser]):
             query = query.where(User.column("id").in_(user_ids))
 
         users = []
-        with DbSession.use(readonly=True) as db:
+        with DbSession.use(readonly=not consistent) as db:
             result = db.exec(query)
             users = result.all()
         return users
