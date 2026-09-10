@@ -22,8 +22,9 @@ def upgrade() -> None:
         "card",
         ["project_id", "archived_at", "id"],
         unique=False,
+        if_not_exists=True,
     )
 
 
 def downgrade() -> None:
-    op.drop_index("ix_card_project_archive_page", table_name="card")
+    op.drop_index("ix_card_project_archive_page", table_name="card", if_exists=True)
