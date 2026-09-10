@@ -2,14 +2,21 @@ import Box from "@/components/base/Box";
 import Flex from "@/components/base/Flex";
 import { Project } from "@/core/models";
 import ProjectCompactItem from "@/pages/DashboardPage/components/ProjectCompactItem";
+import type { TProjectActivityKind } from "@/pages/DashboardPage/components/ProjectActivityPriority";
 
 interface IProjectCompactListProps {
+    activityKind?: TProjectActivityKind;
     projects: Project.TModel[];
     title?: string;
     updateStarredProjects: React.DispatchWithoutAction;
 }
 
-const ProjectCompactList = ({ projects, title, updateStarredProjects }: IProjectCompactListProps): React.JSX.Element | null => {
+const ProjectCompactList = ({
+    activityKind = "project",
+    projects,
+    title,
+    updateStarredProjects,
+}: IProjectCompactListProps): React.JSX.Element | null => {
     if (!projects.length) return null;
 
     return (
@@ -22,7 +29,12 @@ const ProjectCompactList = ({ projects, title, updateStarredProjects }: IProject
             ) : null}
             <Box className="grid gap-1 rounded-2xl border bg-card/60 p-1.5 md:grid-cols-2 xl:grid-cols-3">
                 {projects.map((project) => (
-                    <ProjectCompactItem key={project.uid} project={project} updateStarredProjects={updateStarredProjects} />
+                    <ProjectCompactItem
+                        key={project.uid}
+                        activityKind={activityKind}
+                        project={project}
+                        updateStarredProjects={updateStarredProjects}
+                    />
                 ))}
             </Box>
         </Box>

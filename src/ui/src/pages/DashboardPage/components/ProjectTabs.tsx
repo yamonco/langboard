@@ -193,6 +193,7 @@ const ProjectTabs = memo(
                             />
                             <ProjectCompactList
                                 title={t("dashboard.Related to me")}
+                                activityKind="related"
                                 projects={discoverySections.related}
                                 updateStarredProjects={() => {
                                     updateHeaderStarredProjects();
