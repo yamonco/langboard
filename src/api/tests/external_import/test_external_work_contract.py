@@ -1,6 +1,7 @@
 from copy import deepcopy
 from hashlib import sha256
 import pytest
+from langboard.commands.ImportExternalWorkCommand import ImportExternalWorkCommand, ImportExternalWorkCommandOptions
 from langboard.external_import import ExternalWorkBundle
 from langboard.external_import.importer import ExternalImportError, ExternalWorkImporter
 from pydantic import ValidationError
@@ -134,3 +135,22 @@ def test_attachment_bundle_requires_explicit_root() -> None:
 
     with pytest.raises(ExternalImportError, match="attachments_root is required"):
         ExternalWorkImporter()._verify_attachments(bundle.attachments)
+
+
+def test_import_command_namespace_can_be_constructed_before_argparse_populates_it() -> None:
+    options = ImportExternalWorkCommandOptions()
+
+    assert options.project_uid == ""
+    assert options.actor_uid == ""
+
+
+@pytest.mark.parametrize(
+    ("options", "message"),
+    [
+        (ImportExternalWorkCommandOptions(actor_uid="actor"), "--project-uid is required"),
+        (ImportExternalWorkCommandOptions(project_uid="project"), "--actor-uid is required"),
+    ],
+)
+def test_import_command_rejects_missing_scope_before_reading_bundle(options, message: str) -> None:
+    with pytest.raises(ValueError, match=message):
+        ImportExternalWorkCommand().execute("missing.json", options)
