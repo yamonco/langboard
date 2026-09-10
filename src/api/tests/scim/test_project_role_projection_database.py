@@ -16,6 +16,8 @@ from langboard_shared.infrastructure.repositories.factory.ProjectAssignedUserRep
 
 
 DATABASE_URL = os.getenv("LANGBOARD_TEST_DATABASE_URL")
+if DATABASE_URL and DATABASE_URL.startswith("postgresql://"):
+    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+psycopg://", 1)
 pytestmark = pytest.mark.skipif(not DATABASE_URL, reason="requires LANGBOARD_TEST_DATABASE_URL")
 
 
@@ -42,7 +44,8 @@ def _create_tables(engine) -> None:
                     project_id BIGINT NOT NULL,
                     user_id BIGINT NOT NULL,
                     starred BOOLEAN NOT NULL,
-                    last_viewed_at TIMESTAMP NOT NULL
+                    last_viewed_at TIMESTAMP NOT NULL,
+                    view_count INTEGER NOT NULL DEFAULT 0
                 )
                 """
             )
