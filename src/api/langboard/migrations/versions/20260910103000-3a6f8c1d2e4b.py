@@ -23,7 +23,7 @@ def upgrade() -> None:
         batch_op.add_column(sa.Column("source_type", sa.String(), nullable=True))
         batch_op.add_column(sa.Column("source_uid", sa.String(), nullable=True))
         batch_op.create_check_constraint(
-            op.f("ck_card_`linked_source_complete`"),
+            op.f("ck_card_linked_source_complete"),
             "(source_type IS NULL) = (source_uid IS NULL)",
         )
         batch_op.create_unique_constraint(
@@ -37,6 +37,6 @@ def downgrade() -> None:
 
     with op.batch_alter_table("card", schema=None) as batch_op:
         batch_op.drop_constraint("uq_card_linked_resource", type_="unique")
-        batch_op.drop_constraint(op.f("ck_card_`linked_source_complete`"), type_="check")
+        batch_op.drop_constraint(op.f("ck_card_linked_source_complete"), type_="check")
         batch_op.drop_column("source_uid")
         batch_op.drop_column("source_type")

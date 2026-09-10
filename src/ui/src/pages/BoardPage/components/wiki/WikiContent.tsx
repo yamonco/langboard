@@ -84,7 +84,7 @@ const WikiContent = memo(({ wiki }: IWikiContentProps) => {
     const { hasRoleAction } = useRoleActionFilter(roleActions);
     const { mutateAsync: createLinkedCard, isPending: isCreatingLinkedCard } = useCreateWikiLinkedCard({ interceptToast: true });
     const canStartEditing = canEditWiki(wiki.uid);
-    const canCreateLinkedCard = hasRoleAction(ProjectRole.EAction.CardUpdate);
+    const canCreateLinkedCard = canStartEditing && hasRoleAction(ProjectRole.EAction.CardUpdate);
     const editorRef = useRef<TEditor>(null);
     const [isEditing, setIsEditing] = useState(false);
     const [isSaving, setIsSaving] = useState(false);

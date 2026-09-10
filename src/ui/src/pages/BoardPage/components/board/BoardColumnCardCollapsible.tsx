@@ -50,7 +50,7 @@ function BoardColumnWikiCard({ isDragging }: IBoardColumnCardCollapsibleProps) {
         }
 
         navigateWithFilters(ROUTES.BOARD.CARD(project.uid, card.uid));
-    }, [card.uid, isDragging, navigateWithFilters, project.uid, selectCardViewType]);
+    }, [card, isDragging, navigateWithFilters, project, selectCardViewType]);
 
     if (!resource) {
         return null;

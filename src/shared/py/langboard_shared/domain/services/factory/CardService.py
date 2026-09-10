@@ -318,11 +318,30 @@ class CardService(BaseDomainService):
     ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         records = self.repo.card.get_dashboard_list_scroller(user, pagination)
 
+        linked_cards_by_project: dict[int, list[Card]] = {}
+        projects_by_id: dict[int, Project] = {}
+        for card, project, _ in records:
+            projects_by_id[project.id] = project
+            if card.is_linked_resource:
+                linked_cards_by_project.setdefault(project.id, []).append(card)
+        linked_payloads = {
+            card_uid: payload
+            for project_id, cards in linked_cards_by_project.items()
+            for card_uid, payload in self._get_linked_resource_payloads(
+                user,
+                projects_by_id[project_id],
+                cards,
+                include_content=False,
+            ).items()
+        }
+
         api_cards = []
         api_projects: dict[int, dict[str, Any]] = {}
         for card, project, column in records:
             api_card = card.api_response()
             api_card["project_column_name"] = column.name
+            if card.is_linked_resource:
+                api_card["linked_resource"] = linked_payloads[card.get_uid()]
             if project.id not in api_projects:
                 api_projects[project.id] = project.api_response()
             api_cards.append(api_card)

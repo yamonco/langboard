@@ -33,13 +33,52 @@ def linked_card(uid: str, source_uid: str) -> SimpleNamespace:
     )
 
 
-def test_card_schema_enforces_atomic_and_unique_source_identity() -> None:
+def test_domain_model_does_not_own_the_linked_source_check_constraint() -> None:
     constraints = {constraint.name for constraint in Card.__table__.constraints}
     column_names = {column.name for column in Card.__table__.columns}
 
     assert {"source_type", "source_uid"}.issubset(column_names)
-    assert "ck_card_`linked_source_complete`" in constraints
+    assert "ck_card_`linked_source_complete`" not in constraints
     assert "uq_card_linked_resource" in constraints
+
+
+def test_dashboard_projects_linked_titles_and_states_in_project_batches() -> None:
+    project = SimpleNamespace(id=1, owner_id=2, api_response=lambda: {"uid": "project-1"})
+    column = SimpleNamespace(name="Reference")
+    ordinary = SimpleNamespace(
+        is_linked_resource=False,
+        api_response=lambda: {"uid": "card-ordinary", "title": "Task"},
+    )
+    linked = SimpleNamespace(
+        is_linked_resource=True,
+        api_response=lambda: {"uid": "card-linked", "title": ""},
+        get_uid=lambda: "card-linked",
+    )
+    project_payloads = Mock(
+        return_value={
+            "card-linked": {
+                "type": "project_wiki",
+                "uid": "wiki-1",
+                "status": "available",
+                "title": "Reference title",
+            }
+        }
+    )
+    service = SimpleNamespace(
+        repo=SimpleNamespace(
+            card=SimpleNamespace(
+                get_dashboard_list_scroller=Mock(return_value=[(ordinary, project, column), (linked, project, column)])
+            )
+        ),
+        _get_linked_resource_payloads=project_payloads,
+    )
+
+    cards, projects = CardService.get_dashboard_list(service, FakeUser(2), object())
+
+    assert cards[0] == {"uid": "card-ordinary", "title": "Task", "project_column_name": "Reference"}
+    assert cards[1]["linked_resource"]["title"] == "Reference title"
+    assert projects == [{"uid": "project-1"}]
+    project_payloads.assert_called_once_with(ANY, project, [linked], include_content=False)
 
 
 def test_batch_preview_never_exposes_forbidden_wiki_fields(monkeypatch: pytest.MonkeyPatch) -> None:

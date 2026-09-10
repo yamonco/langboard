@@ -1,5 +1,5 @@
 from typing import Any, ClassVar
-from sqlalchemy import TEXT, CheckConstraint
+from sqlalchemy import TEXT
 from ...core.db import ApiField, DateTimeField, EditorContentModel, Field, ModelColumnType, SnowflakeIDField
 from ...core.types import SafeDateTime, SnowflakeID
 from .BaseNotificationScheduleModel import BaseNotificationScheduleModel
@@ -9,12 +9,6 @@ from .ProjectColumn import ProjectColumn
 
 class Card(BaseNotificationScheduleModel, table=True):
     LINKED_RESOURCE_PROJECT_WIKI: ClassVar[str] = "project_wiki"
-    __table_args__ = (
-        CheckConstraint(
-            "(source_type IS NULL) = (source_uid IS NULL)",
-            name="linked_source_complete",
-        ),
-    )
 
     project_id: SnowflakeID = SnowflakeIDField(
         foreign_key=Project,
