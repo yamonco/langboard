@@ -258,7 +258,7 @@ const BoardColumnCardList = memo(({ column, updateBoard, scrollableRef, onCardCo
         };
         document.addEventListener(BOARD_CARD_LOCATION_EVENT, locateCard);
         return () => document.removeEventListener(BOARD_CARD_LOCATION_EVENT, locateCard);
-    }, [cardGroupIndices, column.uid, scrollableRef, virtualizer]);
+    }, [cardGroupIndices, column, virtualizer]);
 
     useEffect(() => {
         let focusFrame = 0;
@@ -308,7 +308,7 @@ const BoardColumnCardList = memo(({ column, updateBoard, scrollableRef, onCardCo
             window.clearTimeout(highlightTimeout);
             document.removeEventListener(BOARD_CARD_FOCUS_EVENT, focusCard);
         };
-    }, [column.uid, cardGroupIndices, scrollableRef, virtualizer]);
+    }, [cardGroupIndices, column, virtualizer]);
 
     return (
         <Box className="relative w-full flex-shrink-0" style={{ height: `${totalSize}px` }}>
