@@ -415,14 +415,26 @@ class ProjectService(BaseDomainService):
     ) -> dict[str, int | str] | None:
         """Immediately add existing accounts without creating invitations or removing members."""
 
+        if not isinstance(user_or_bot, User):
+            raise ValueError("Only users can add existing project members")
         project = InfraHelper.get_by_id_like(Project, project)
         if not project:
             return None
 
         unique_users = {user.id: user for user in users if user.id is not None}
+        user_service = self._get_service_by_name("user")
+        eligible_users = self.repo.user.get_direct_project_member_candidates(
+            user_or_bot,
+            list(unique_users.values()),
+            can_search_all_users=user_service.can_search_all_users(user_or_bot),
+        )
+        eligible_user_map = {user.id: user for user in eligible_users}
+        if eligible_user_map.keys() != unique_users.keys():
+            raise ValueError("One or more selected people are not eligible for direct addition")
+
         old_assigned_users = self.repo.project_assigned_user.get_all_by_project(project)
         newly_assigned_users: list[User] = []
-        for target_user in unique_users.values():
+        for target_user in eligible_user_map.values():
             _, created = self.repo.project_assigned_user.ensure_assigned(project, target_user)
             if created:
                 self.repo.role.project.grant_default(user_id=target_user.id, project_id=project.id)
@@ -439,7 +451,9 @@ class ProjectService(BaseDomainService):
             project,
             {
                 "assigned_members": [assigned_user.api_response() for assigned_user, _ in new_assigned_users],
-                "invited_members": self._get_service_by_name("project_invitation").get_api_invited_user_list_by_project(project),
+                "invited_members": self._get_service_by_name("project_invitation").get_api_invited_user_list_by_project(
+                    project
+                ),
             },
         )
         ProjectPublisher.assigned_to_users(project, newly_assigned_users)

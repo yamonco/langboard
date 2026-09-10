@@ -12,9 +12,8 @@ from langboard.mcp_tools import ProjectMcp
 from langboard.routes.board.BoardApi import search_project_member_candidates
 from langboard_shared.core.db import DbSession
 from langboard_shared.core.types import SnowflakeID
-from langboard_shared.domain.models import IdentityProvider, Project, ProjectAssignedUser, ProjectRole, User
+from langboard_shared.domain.models import Project, ProjectAssignedUser, ProjectRole, User
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
-from langboard_shared.domain.services.factory.IdentityLinkService import IdentityLinkService
 from langboard_shared.domain.services.factory.ProjectInvitationService import (
     InvitationRelatedResult,
     ProjectInvitationService,
@@ -237,11 +236,14 @@ def test_existing_member_addition_bypasses_invitation_and_preserves_members() ->
     )
     role_repository = SimpleNamespace(project=SimpleNamespace(grant_default=Mock()))
     relationship_repository = SimpleNamespace(ensure_project_relationships=Mock())
+    user_repository = SimpleNamespace(get_direct_project_member_candidates=Mock(return_value=[employee]))
+    user_service = SimpleNamespace(can_search_all_users=Mock(return_value=False))
     invitation_service = SimpleNamespace(get_api_invited_user_list_by_project=Mock(return_value=[]))
     repository = SimpleNamespace(
         project_assigned_user=assigned_repository,
         role=role_repository,
         project_user_relationship=relationship_repository,
+        user=user_repository,
     )
     service = ProjectService(lambda _: None, lambda _: None, repository)
 
@@ -250,46 +252,104 @@ def test_existing_member_addition_bypasses_invitation_and_preserves_members() ->
             "langboard_shared.domain.services.factory.ProjectService.InfraHelper.get_by_id_like",
             return_value=project,
         ),
-        patch.object(service, "_get_service_by_name", return_value=invitation_service),
+        patch.object(
+            service,
+            "_get_service_by_name",
+            side_effect=lambda name: user_service if name == "user" else invitation_service,
+        ),
         patch("langboard_shared.domain.services.factory.ProjectService.ProjectPublisher.assigned_users_updated"),
         patch("langboard_shared.domain.services.factory.ProjectService.ProjectPublisher.assigned_to_users"),
-        patch("langboard_shared.domain.services.factory.ProjectService.ProjectActivityTask.project_assigned_users_updated"),
+        patch(
+            "langboard_shared.domain.services.factory.ProjectService.ProjectActivityTask.project_assigned_users_updated"
+        ),
     ):
         result = service.add_existing_assigned_users(actor, project, [employee])
 
     assert result == {"requested_count": 1, "changed_count": 1, "status": "updated"}
     assigned_repository.ensure_assigned.assert_called_once_with(project, employee)
+    user_repository.get_direct_project_member_candidates.assert_called_once_with(
+        actor,
+        [employee],
+        can_search_all_users=False,
+    )
     role_repository.project.grant_default.assert_called_once_with(user_id=20, project_id=10)
     invitation_service.get_api_invited_user_list_by_project.assert_called_once_with(project)
 
 
-def test_federated_active_account_is_added_without_an_email_invitation() -> None:
-    """Federated accounts become members immediately while classic accounts retain the invite flow."""
+def test_active_email_match_outside_candidate_scope_stays_on_invitation_track() -> None:
+    """An existing non-admin target still receives an invitation instead of direct access."""
 
-    target = User.model_construct(id=1, activated_at=object())
+    actor = User.model_construct(is_admin=False, preferred_lang="en-US", firstname="Actor", lastname="User")
+    target = User.model_construct(id=1, activated_at=object(), preferred_lang="en-US", firstname="Target")
+    project = SimpleNamespace(title="Project")
+    created_invitation = object()
     invitation = InvitationRelatedResult()
     invitation.emails_should_invite.add("employee@example.com")
     invitation.users_by_email["employee@example.com"] = target
     assigned = Mock()
     email_service = SimpleNamespace(send_template=Mock())
-    identity_link = SimpleNamespace(
-        get_by_user_provider=lambda _user, provider: object() if provider is IdentityProvider.Oidc else None
+    notification_service = SimpleNamespace(notify_project_invited=Mock())
+    repository = SimpleNamespace(
+        project_invitation=SimpleNamespace(create_if_missing=Mock(return_value=created_invitation))
     )
     service = ProjectInvitationService(
-        lambda service_type: identity_link if service_type is IdentityLinkService else email_service,
+        lambda service_type: email_service if service_type.__name__ == "EmailService" else notification_service,
         lambda _name: None,
-        SimpleNamespace(),
+        repository,
     )
     setattr(service, "_ProjectInvitationService__assign_project_user", assigned)
 
-    with patch(
-        "langboard_shared.domain.services.factory.ProjectInvitationService.InfraHelper.get_by_id_like",
-        return_value=SimpleNamespace(),
+    with (
+        patch(
+            "langboard_shared.domain.services.factory.ProjectInvitationService.InfraHelper.get_by_id_like",
+            return_value=project,
+        ),
+        patch.object(
+            service, "_ProjectInvitationService__create_invitation_token_url", return_value="https://example.test"
+        ),
     ):
-        service.invite_emails(User.model_construct(), "project", invitation)
+        service.invite_emails(actor, "project", invitation)
 
-    assigned.assert_called_once_with(ANY, target)
-    email_service.send_template.assert_not_called()
+    assigned.assert_not_called()
+    repository.project_invitation.create_if_missing.assert_called_once_with(
+        project,
+        "employee@example.com",
+        ANY,
+    )
+    notification_service.notify_project_invited.assert_called_once_with(actor, target, project, created_invitation)
+    email_service.send_template.assert_called_once()
+
+
+def test_existing_member_addition_rejects_arbitrary_uid_outside_candidate_scope() -> None:
+    """Resolving a real user object is insufficient without relationship-scoped eligibility."""
+
+    project = SimpleNamespace(id=10)
+    actor = User.model_construct(id=11)
+    unrelated = User.model_construct(id=20, activated_at=object())
+    assigned_repository = SimpleNamespace(
+        get_all_by_project=Mock(),
+        ensure_assigned=Mock(),
+    )
+    user_repository = SimpleNamespace(get_direct_project_member_candidates=Mock(return_value=[]))
+    service = ProjectService(
+        lambda _type: None,
+        lambda _name: None,
+        SimpleNamespace(project_assigned_user=assigned_repository, user=user_repository),
+    )
+    user_service = SimpleNamespace(can_search_all_users=Mock(return_value=False))
+
+    with (
+        patch(
+            "langboard_shared.domain.services.factory.ProjectService.InfraHelper.get_by_id_like",
+            return_value=project,
+        ),
+        patch.object(service, "_get_service_by_name", return_value=user_service),
+        pytest.raises(ValueError, match="not eligible"),
+    ):
+        service.add_existing_assigned_users(actor, project, [unrelated])
+
+    assigned_repository.get_all_by_project.assert_not_called()
+    assigned_repository.ensure_assigned.assert_not_called()
 
 
 def test_invite_tool_schema_and_legacy_replacement_tool_are_distinct() -> None:
