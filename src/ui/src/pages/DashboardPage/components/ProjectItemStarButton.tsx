@@ -5,14 +5,16 @@ import setupApiErrorHandler from "@/core/helpers/setupApiErrorHandler";
 import { ModelRegistry } from "@/core/models/ModelRegistry";
 import { memo } from "react";
 import { useTranslation } from "react-i18next";
+import { cn } from "@/core/utils/ComponentUtils";
 
 export interface IProjectCardStarButtonProps {
     isUpdating: bool;
     setIsUpdating: React.Dispatch<React.SetStateAction<bool>>;
     updateStarredProjects: React.DispatchWithoutAction;
+    compact?: bool;
 }
 
-const ProjectCardStarButton = memo(({ isUpdating, setIsUpdating, updateStarredProjects }: IProjectCardStarButtonProps) => {
+const ProjectCardStarButton = memo(({ isUpdating, setIsUpdating, updateStarredProjects, compact = false }: IProjectCardStarButtonProps) => {
     const [t] = useTranslation();
     const { model: project } = ModelRegistry.Project.useContext();
     const { mutate } = useToggleStarProject();
@@ -50,8 +52,8 @@ const ProjectCardStarButton = memo(({ isUpdating, setIsUpdating, updateStarredPr
     return (
         <Button
             variant={starred ? "default" : "outline"}
-            className="absolute right-2.5 top-1 mt-0"
-            size="icon"
+            className={cn(!compact && "absolute right-2.5 top-1 mt-0", compact && "shrink-0 rounded-lg shadow-none")}
+            size={compact ? "icon-sm" : "icon"}
             title={t(`dashboard.${starred ? "Unstar this project" : "Star this project"}`)}
             titleSide="bottom"
             onClick={toggleStar}

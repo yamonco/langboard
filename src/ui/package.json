@@ -17,6 +17,7 @@
     "test:relationship-hover": "node --experimental-strip-types --test src/pages/BoardPage/components/board/BoardRelationshipHoverIntent.test.ts",
     "preview": "vite preview",
     "test:project-priority": "node --experimental-strip-types --test src/pages/DashboardPage/components/ProjectActivityPriority.test.ts",
+    "test:project-discovery": "node --experimental-strip-types --test src/pages/DashboardPage/components/ProjectDiscovery.test.ts",
     "format": "prettier --write \"{tests,src}/**/*.{js,jsx,ts,tsx,json,md}\" --ignore-path .prettierignore",
     "check-format": "prettier --check \"{tests,src}/**/*.{js,jsx,ts,tsx,json,md}\" --ignore-path .prettierignore"
   },

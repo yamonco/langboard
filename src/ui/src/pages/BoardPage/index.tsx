@@ -7,6 +7,7 @@ import Button from "@/components/base/Button";
 import Flex from "@/components/base/Flex";
 import BoardFloatingNavigation from "@/pages/BoardPage/components/board/BoardFloatingNavigation";
 import IconComponent from "@/components/base/IconComponent";
+import Input from "@/components/base/Input";
 import ScrollArea from "@/components/base/ScrollArea";
 import Toast from "@/components/base/Toast";
 import { ROUTES } from "@/core/routing/constants";
@@ -55,6 +56,8 @@ import useBoardGraphApprovalDeletedHandlers from "@/controllers/socket/board/gra
 import useBoardGraphApprovalRequestedHandlers from "@/controllers/socket/board/graphApprovals/useBoardGraphApprovalRequestedHandlers";
 import useBoardGraphApprovalUpdatedHandlers from "@/controllers/socket/board/graphApprovals/useBoardGraphApprovalUpdatedHandlers";
 import { getBoardChatStore } from "@/core/stores/BoardChatStore";
+import { compareProjectActivityPriority } from "@/pages/DashboardPage/components/ProjectActivityPriority";
+import { Utils } from "@langboard/core/utils";
 
 const BoardGraphPage = lazy(() => import("@/pages/BoardPage/BoardGraphPage"));
 
@@ -770,32 +773,51 @@ function BoardSwitchProjectSidebar({
     currentProject: Project.TModel;
     onSelectProject: (projectUID: string) => void;
 }): React.JSX.Element {
+    const [t] = useTranslation();
     const { data, isFetching, isLoading } = useGetProjects();
+    const [searchQuery, setSearchQuery] = useState("");
     const projects = useMemo(() => {
         const projectMap = new Map<string, Project.TModel>();
         [currentProject, ...(data?.projects ?? [])].forEach((project) => {
             projectMap.set(project.uid, project);
         });
-        return [...projectMap.values()];
-    }, [currentProject, data]);
+        const query = searchQuery.trim().toLowerCase();
+        return [...projectMap.values()]
+            .filter((project) => !query || project.title.toLowerCase().includes(query))
+            .sort(compareProjectActivityPriority);
+    }, [currentProject, data, searchQuery]);
 
     return (
-        <ScrollArea.Root className="h-full min-h-0">
-            <Flex direction="col" gap="1" p="2">
-                {(isLoading || isFetching) && projects.length === 0 ? (
-                    <Box className="px-2 py-3 text-sm text-muted-foreground">Loading...</Box>
-                ) : (
-                    projects.map((project) => (
-                        <BoardSwitchProjectSidebarItem
-                            key={project.uid}
-                            project={project}
-                            active={project.uid === currentProjectUID}
-                            onClick={() => onSelectProject(project.uid)}
-                        />
-                    ))
-                )}
-            </Flex>
-        </ScrollArea.Root>
+        <Flex direction="col" h="full" className="min-h-0">
+            <Box className="shrink-0 border-b p-2">
+                <Input
+                    value={searchQuery}
+                    onChange={(event) => setSearchQuery(event.currentTarget.value)}
+                    placeholder={t("dashboard.Search projects...")}
+                    aria-label={t("dashboard.Search projects")}
+                    leftIcon={<IconComponent icon="search" />}
+                    clearable
+                />
+            </Box>
+            <ScrollArea.Root className="h-full min-h-0">
+                <Flex direction="col" gap="1" p="2">
+                    {(isLoading || isFetching) && projects.length === 0 ? (
+                        <Box className="px-2 py-3 text-sm text-muted-foreground">{t("common.Loading...")}</Box>
+                    ) : projects.length === 0 ? (
+                        <Box className="px-2 py-3 text-sm text-muted-foreground">{t("dashboard.No projects found")}</Box>
+                    ) : (
+                        projects.map((project) => (
+                            <BoardSwitchProjectSidebarItem
+                                key={project.uid}
+                                project={project}
+                                active={project.uid === currentProjectUID}
+                                onClick={() => onSelectProject(project.uid)}
+                            />
+                        ))
+                    )}
+                </Flex>
+            </ScrollArea.Root>
+        </Flex>
     );
 }
 
@@ -808,8 +830,12 @@ function BoardSwitchProjectSidebarItem({
     active: bool;
     onClick: () => void;
 }): React.JSX.Element {
+    const [t, i18n] = useTranslation();
     const title = project.useField("title");
     const projectType = project.useField("project_type");
+    const starred = project.useField("starred");
+    const lastActivityAt = project.useField("last_activity_at");
+    const createdAt = project.useField("created_at");
 
     return (
         <Button
@@ -818,10 +844,13 @@ function BoardSwitchProjectSidebarItem({
             className="h-auto justify-start gap-2 rounded-lg px-3 py-2 text-left"
             onClick={onClick}
         >
-            <IconComponent icon="folder-kanban" size="4" />
+            <IconComponent icon={starred ? "star" : "folder-kanban"} size="4" />
             <Box className="min-w-0">
                 <Box className="truncate text-sm font-medium">{title}</Box>
-                <Box className="truncate text-xs text-muted-foreground">{projectType}</Box>
+                <Box className="truncate text-xs text-muted-foreground">
+                    {t(projectType === "Other" ? "common.Other" : `project.types.${projectType}`)} ·{" "}
+                    {Utils.String.formatDateDistance(i18n, t, lastActivityAt ?? createdAt)}
+                </Box>
             </Box>
         </Button>
     );
