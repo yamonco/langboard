@@ -250,7 +250,11 @@ class Project extends BaseModel<IStore> {
         return this.getValue("last_viewed_at");
     }
     public set last_viewed_at(value: string | Date) {
-        this.update({ last_viewed_at: value as unknown as Date });
+        const parsed = parseProjectActivityTimestamp(value);
+        if (!parsed) {
+            throw new TypeError("last_viewed_at must be a valid date");
+        }
+        this.update({ last_viewed_at: parsed });
     }
 
     public get last_activity_at(): Date | null {
