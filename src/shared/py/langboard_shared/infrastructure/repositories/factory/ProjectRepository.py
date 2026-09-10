@@ -1,12 +1,12 @@
 from typing import cast
-from sqlalchemy import func
+from sqlalchemy import exists, func
 from sqlalchemy.orm import aliased
 from sqlalchemy.orm.attributes import InstrumentedAttribute
 from ....core.db import DbSession, SqlBuilder
 from ....core.domain import BaseRepository
-from ....core.types import SafeDateTime
+from ....core.types import SafeDateTime, SnowflakeID
 from ....core.types.ParamTypes import TProjectParam, TUserParam
-from ....domain.models import Project, ProjectActivity, ProjectAssignedUser
+from ....domain.models import Card, CardAssignedUser, Project, ProjectActivity, ProjectAssignedUser
 from ....helpers import InfraHelper
 
 
@@ -24,12 +24,13 @@ class ProjectRepository(BaseRepository[Project]):
 
     def get_all_by_user(
         self, user: TUserParam, limit: int | None = None
-    ) -> list[tuple[Project, ProjectAssignedUser, SafeDateTime | None]]:
+    ) -> list[tuple[Project, ProjectAssignedUser, SafeDateTime | None, bool]]:
         user_id = InfraHelper.convert_id(user)
         last_activity_at = self._last_activity_at()
+        related_to_current_user = self._related_to_user(user_id)
         query = (
             SqlBuilder.select.tables(Project, ProjectAssignedUser)
-            .add_columns(last_activity_at)
+            .add_columns(last_activity_at, related_to_current_user)
             .join(
                 ProjectAssignedUser,
                 Project.column("id") == ProjectAssignedUser.column("project_id"),
@@ -52,12 +53,13 @@ class ProjectRepository(BaseRepository[Project]):
 
     def get_all_starred(
         self, user: TUserParam, limit: int | None = None
-    ) -> list[tuple[Project, ProjectAssignedUser, SafeDateTime | None]]:
+    ) -> list[tuple[Project, ProjectAssignedUser, SafeDateTime | None, bool]]:
         user_id = InfraHelper.convert_id(user)
         last_activity_at = self._last_activity_at()
+        related_to_current_user = self._related_to_user(user_id)
         query = (
             SqlBuilder.select.tables(Project, ProjectAssignedUser)
-            .add_columns(last_activity_at)
+            .add_columns(last_activity_at, related_to_current_user)
             .join(
                 ProjectAssignedUser,
                 ProjectAssignedUser.column("project_id") == Project.column("id"),
@@ -86,6 +88,18 @@ class ProjectRepository(BaseRepository[Project]):
             .correlate(Project)
             .scalar_subquery()
             .label("last_activity_at")
+        )
+
+    @staticmethod
+    def _related_to_user(user_id: SnowflakeID):
+        return (
+            exists()
+            .where(Card.column("project_id") == Project.column("id"))
+            .where(Card.column("archived_at").is_(None))
+            .where(CardAssignedUser.column("card_id") == Card.column("id"))
+            .where(CardAssignedUser.column("user_id") == user_id)
+            .correlate(Project)
+            .label("related_to_current_user")
         )
 
     def are_users_related(

@@ -37,6 +37,10 @@ def test_project_list_orders_by_star_and_recorded_activity(monkeypatch) -> None:
         )
     )
     assert "max(project_activity.created_at)" in sql
+    assert "EXISTS (SELECT *" in sql
+    assert "card_assigned_user.user_id = 7" in sql
+    assert "card_assigned_user.card_id = card.id" in sql
+    assert "card.archived_at IS NULL" in sql
     order_by = sql.split("ORDER BY", maxsplit=1)[1]
     assert "project_assigned_user.starred DESC" in order_by
     assert "project.updated_at" not in order_by
