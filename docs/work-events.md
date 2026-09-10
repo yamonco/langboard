@@ -14,7 +14,7 @@ Each event contains:
 - the occurrence time and action-required notification type;
 - opaque Langboard actor and recipient principals;
 - project/card/wiki/checklist scope identifiers when present;
-- the source Web notification identifier;
+- the durable source notification identifier;
 - a SHA-256 hash of the complete internal notification payload;
 - a correlation identifier that is stable for the event.
 
@@ -22,6 +22,8 @@ The payload deliberately excludes email addresses, names, message excerpts, card
 
 ## Idempotency and ownership
 
-Langboard owns event creation and bounded delivery to the configured endpoint. The consumer owns durable downstream delivery and must deduplicate by `event_id`; a successful retry must not create another user notification. Langboard continues to own its Web notification state independently.
+Langboard persists the source notification before an event can be scheduled. A bounded backlog retries undispatched sources with the same `event_id` and marks a source only after endpoint deliveries have been scheduled. The consumer owns durable downstream delivery and must deduplicate by `event_id`.
+
+Web subscription preferences affect only in-app visibility. An unsubscribed source remains durable for the integration event but is excluded from notification lists, unread counts, and realtime Web delivery. Email and other notification channels retain their own subscription policies.
 
 Low-value reaction events are excluded. Assignment, mention, checklist notification, project invitation, and scheduled-rule/deadline notifications are eligible by default.

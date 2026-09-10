@@ -15,6 +15,8 @@ class NotificationPublishModel(BaseModel):
     # email
     email_template_name: TEmailTemplateName | None
     email_formats: dict[str, str] | None
+    source_notification_persisted: bool = False
+    web_notification_visible: bool = True
 
 
 @staticclass
@@ -23,12 +25,3 @@ class NotificationPublisher:
     def put_dispather(model: NotificationPublishModel):
         dispatacher_model = DispatcherModel(event="notification_publish", data=model.model_dump())
         DispatcherQueue.put(dispatacher_model)
-
-        # Reuse the signed webhook transport for external action-required events.
-        # Import locally so the core publisher does not create a module cycle at startup.
-        from ...tasks.webhooks import WebhookTask
-        from ...tasks.webhooks.utils import build_notification_work_event
-
-        work_event = build_notification_work_event(model.notification)
-        if work_event is not None:
-            WebhookTask.webhook_task(work_event)

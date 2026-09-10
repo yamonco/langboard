@@ -29,7 +29,11 @@ class UserNotificationRepository(BaseRepository[UserNotification]):
         limit: int = 20,
     ):
         user_id = InfraHelper.convert_id(user)
-        query = SqlBuilder.select.table(UserNotification).where((UserNotification.column("receiver_id") == user_id))
+        query = (
+            SqlBuilder.select.table(UserNotification)
+            .where(UserNotification.column("receiver_id") == user_id)
+            .where(UserNotification.column("web_visible") == True)  # noqa: E712
+        )
 
         if time_range.endswith("d"):
             days = int(time_range[:-1])
@@ -69,12 +73,44 @@ class UserNotificationRepository(BaseRepository[UserNotification]):
             notification = result.first()
         return notification
 
+    def get_pending_work_events(self, limit: int = 100) -> list[UserNotification]:
+        """Read a bounded durable work-event backlog from the primary database."""
+
+        eligible_types = [
+            NotificationType.AssignedToCard,
+            NotificationType.MentionedInCard,
+            NotificationType.MentionedInComment,
+            NotificationType.MentionedInWiki,
+            NotificationType.NotifiedFromChecklist,
+            NotificationType.ProjectInvited,
+            NotificationType.ScheduledRule,
+        ]
+        with DbSession.use(readonly=False) as db:
+            return db.exec(
+                SqlBuilder.select.table(UserNotification)
+                .where(UserNotification.column("notification_type").in_(eligible_types))
+                .where(UserNotification.column("work_event_dispatched_at") == None)  # noqa: E711
+                .order_by(UserNotification.column("created_at").asc(), UserNotification.column("id").asc())
+                .limit(max(1, min(limit, 100)))
+            ).all()
+
+    def mark_work_event_dispatched(self, notification: UserNotification) -> None:
+        with DbSession.use(readonly=False) as db:
+            db.exec(
+                SqlBuilder.update.table(UserNotification)
+                .values(work_event_dispatched_at=SafeDateTime.now())
+                .where(UserNotification.column("id") == notification.id)
+                .where(UserNotification.column("work_event_dispatched_at") == None)  # noqa: E711
+            )
+
     def count_unread(self, user: TUserParam) -> int:
         user_id = InfraHelper.convert_id(user)
         with DbSession.use(readonly=True) as db:
             result = db.exec(
                 SqlBuilder.select.count(UserNotification, UserNotification.column("id")).where(
-                    (UserNotification.column("receiver_id") == user_id) & (UserNotification.column("read_at") == None)  # noqa
+                    (UserNotification.column("receiver_id") == user_id)
+                    & (UserNotification.column("web_visible") == True)  # noqa: E712
+                    & (UserNotification.column("read_at") == None)  # noqa: E711
                 )
             )
             return result.first() or 0
@@ -86,7 +122,9 @@ class UserNotificationRepository(BaseRepository[UserNotification]):
                 SqlBuilder.update.table(UserNotification)
                 .values({UserNotification.column("read_at"): SafeDateTime.now()})
                 .where(
-                    (UserNotification.column("receiver_id") == user_id) & (UserNotification.column("read_at") == None)  # noqa
+                    (UserNotification.column("receiver_id") == user_id)
+                    & (UserNotification.column("web_visible") == True)  # noqa: E712
+                    & (UserNotification.column("read_at") == None)  # noqa: E711
                 )
             )
 
