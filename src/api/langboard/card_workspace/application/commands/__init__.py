@@ -3,11 +3,11 @@
 from typing import Any
 from ...domain import (
     MAX_CHECKITEMS_PER_CHECKLIST,
+    MAX_GRAPH_EDGE_CHANGES,
+    MAX_GRAPH_NEW_CARDS,
     MAX_METADATA_VALUE_CHARS,
     MAX_SECTION_LIMIT,
     MAX_TEXT_CHARS,
-    MAX_GRAPH_EDGE_CHANGES,
-    MAX_GRAPH_NEW_CARDS,
     CardBundleSection,
     CardGraphEdge,
     CardGraphNewCard,

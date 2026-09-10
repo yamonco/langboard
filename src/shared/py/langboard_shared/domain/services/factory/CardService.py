@@ -151,11 +151,16 @@ class CardService(BaseDomainService):
             labels[card_label.card_id].append(label.api_response())
 
         cards = []
-        resource_payloads = self._get_linked_resource_payloads(
-            user_or_bot,
-            project,
-            [card for card, _ in raw_cards if card.is_linked_resource],
-            include_content=False,
+        linked_cards = [card for card, _ in raw_cards if card.is_linked_resource]
+        resource_payloads = (
+            self._get_linked_resource_payloads(
+                user_or_bot,
+                project,
+                linked_cards,
+                include_content=False,
+            )
+            if linked_cards
+            else {}
         )
         for card, count_comment in raw_cards:
             api_card = card.board_api_response(

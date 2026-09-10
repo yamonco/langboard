@@ -48,6 +48,8 @@ card_service_module = import_module("langboard_shared.domain.services.factory.Ca
 
 
 class FakeCard:
+    is_linked_resource = False
+
     def __init__(self, card_id: int, uid: str, archived_at: SafeDateTime | None = None) -> None:
         self.id = card_id
         self._uid = uid
@@ -127,7 +129,7 @@ def test_board_route_passes_one_request_cutoff_to_cards_and_checklists(monkeypat
             get_api_bot_schedule_list_by_project=lambda _project: [],
         ),
         card=SimpleNamespace(
-            get_board_list=lambda _project, cutoff: (calls.__setitem__("cards", cutoff), [])[1],
+            get_board_list=lambda _project, _actor, cutoff: (calls.__setitem__("cards", cutoff), [])[1],
         ),
         checklist=SimpleNamespace(
             get_api_list_only_by_project=lambda _project, *, archive_visible_since: (
