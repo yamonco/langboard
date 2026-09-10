@@ -25,7 +25,7 @@ const recencySignal = (value: Date | null | undefined, now: number): number => {
 
 export function projectPriorityScore(project: IProjectActivityPriority, now = Date.now()): number {
     const activityAt = project.last_activity_at ?? project.created_at;
-    const frequencySignal = 1 - Math.exp(-Math.max(0, project.view_count) / 20);
+    const frequencySignal = 1 - Math.exp(-Math.max(0, project.view_count ?? 0) / 20);
     return (
         recencySignal(project.last_viewed_at, now) * 0.4 +
         recencySignal(activityAt, now) * 0.35 +
