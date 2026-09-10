@@ -15,6 +15,7 @@ interface ITestProject {
     created_at: Date;
     last_activity_at: Date | null;
     related_to_current_user: boolean;
+    related_activity_at: Date | null;
 }
 
 const project = (uid: string, overrides: Partial<ITestProject> = {}): ITestProject => ({
@@ -24,6 +25,7 @@ const project = (uid: string, overrides: Partial<ITestProject> = {}): ITestProje
     created_at: new Date("2026-09-01T00:00:00Z"),
     last_activity_at: null,
     related_to_current_user: false,
+    related_activity_at: null,
     ...overrides,
 });
 
@@ -67,8 +69,16 @@ test("recent work is bounded and never duplicates favorites", () => {
 
 test("related projects are bounded and removed from the fallback recent section", () => {
     const sections = buildProjectDiscoverySections([
-        project("related-newer", { related_to_current_user: true, last_activity_at: new Date("2026-09-04T00:00:00Z") }),
-        project("related-older", { related_to_current_user: true, last_activity_at: new Date("2026-09-03T00:00:00Z") }),
+        project("related-newer", {
+            related_to_current_user: true,
+            related_activity_at: new Date("2026-09-04T00:00:00Z"),
+            last_activity_at: new Date("2026-09-03T00:00:00Z"),
+        }),
+        project("related-older", {
+            related_to_current_user: true,
+            related_activity_at: new Date("2026-09-03T00:00:00Z"),
+            last_activity_at: new Date("2026-09-05T00:00:00Z"),
+        }),
         project("unrelated", { last_activity_at: new Date("2026-09-02T00:00:00Z") }),
     ]);
 

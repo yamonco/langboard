@@ -1,4 +1,4 @@
-import { compareProjectActivityPriority, type IActivityPriorityProject } from "./ProjectActivityPriority.ts";
+import { compareProjectActivityPriority, compareProjectRelatedActivity, type IActivityPriorityProject } from "./ProjectActivityPriority.ts";
 
 export const PROJECT_RECENT_WORK_LIMIT = 6;
 export const PROJECT_RELATED_TO_ME_LIMIT = 6;
@@ -21,7 +21,10 @@ export const buildProjectDiscoverySections = <TProject extends IActivityPriority
     return {
         all,
         favorites: all.filter((project) => project.starred),
-        related: all.filter((project) => !project.starred && project.related_to_current_user).slice(0, PROJECT_RELATED_TO_ME_LIMIT),
+        related: all
+            .filter((project) => !project.starred && project.related_to_current_user)
+            .sort(compareProjectRelatedActivity)
+            .slice(0, PROJECT_RELATED_TO_ME_LIMIT),
         recent: all.filter((project) => !project.starred && !project.related_to_current_user).slice(0, recentLimit),
     };
 };

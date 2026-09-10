@@ -22,17 +22,21 @@ class ProjectRepository(BaseRepository[Project]):
     def get_by_id_like(self, project: TProjectParam | None) -> Project | None:
         return InfraHelper.get_by_id_like(Project, project)
 
-    def get_all_by_user(self, user: TUserParam) -> list[tuple[Project, ProjectAssignedUser, SafeDateTime | None, bool]]:
+    def get_all_by_user(
+        self, user: TUserParam
+    ) -> list[tuple[Project, ProjectAssignedUser, SafeDateTime | None, bool, SafeDateTime | None]]:
         user_id = InfraHelper.convert_id(user)
         last_activity_at = self._last_activity_at()
         related_to_current_user = self._related_to_user(user_id)
+        related_activity = self._related_activity_by_project(user_id)
         query = (
             SqlBuilder.select.tables(Project, ProjectAssignedUser)
-            .add_columns(last_activity_at, related_to_current_user)
+            .add_columns(last_activity_at, related_to_current_user, related_activity.c.related_activity_at)
             .join(
                 ProjectAssignedUser,
                 Project.column("id") == ProjectAssignedUser.column("project_id"),
             )
+            .outerjoin(related_activity, related_activity.c.project_id == Project.column("id"))
             .where(ProjectAssignedUser.column("user_id") == user_id)
             .order_by(
                 ProjectAssignedUser.column("starred").desc(),
@@ -47,19 +51,23 @@ class ProjectRepository(BaseRepository[Project]):
             projects = result.all()
         return projects
 
-    def get_all_starred(self, user: TUserParam) -> list[tuple[Project, ProjectAssignedUser, SafeDateTime | None, bool]]:
+    def get_all_starred(
+        self, user: TUserParam
+    ) -> list[tuple[Project, ProjectAssignedUser, SafeDateTime | None, bool, SafeDateTime | None]]:
         user_id = InfraHelper.convert_id(user)
         last_activity_at = self._last_activity_at()
         related_to_current_user = self._related_to_user(user_id)
+        related_activity = self._related_activity_by_project(user_id)
         projects = []
         with DbSession.use(readonly=True) as db:
             result = db.exec(
                 SqlBuilder.select.tables(Project, ProjectAssignedUser)
-                .add_columns(last_activity_at, related_to_current_user)
+                .add_columns(last_activity_at, related_to_current_user, related_activity.c.related_activity_at)
                 .join(
                     ProjectAssignedUser,
                     ProjectAssignedUser.column("project_id") == Project.column("id"),
                 )
+                .outerjoin(related_activity, related_activity.c.project_id == Project.column("id"))
                 .where(ProjectAssignedUser.column("user_id") == user_id)
                 .where(ProjectAssignedUser.column("starred") == True)  # noqa
                 .order_by(
@@ -90,6 +98,21 @@ class ProjectRepository(BaseRepository[Project]):
             .where(CardAssignedUser.column("user_id") == user_id)
             .correlate(Project)
             .label("related_to_current_user")
+        )
+
+    @staticmethod
+    def _related_activity_by_project(user_id: SnowflakeID):
+        return (
+            SqlBuilder.select.columns(
+                Card.column("project_id").label("project_id"),
+                func.max(ProjectActivity.column("created_at")).label("related_activity_at"),
+            )
+            .join(CardAssignedUser, CardAssignedUser.column("card_id") == Card.column("id"))
+            .join(ProjectActivity, ProjectActivity.column("card_id") == Card.column("id"))
+            .where(Card.column("archived_at").is_(None))
+            .where(CardAssignedUser.column("user_id") == user_id)
+            .group_by(Card.column("project_id"))
+            .subquery()
         )
 
     def are_users_related(

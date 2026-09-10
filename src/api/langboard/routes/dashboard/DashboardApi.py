@@ -24,6 +24,7 @@ from .DashboardForm import DashboardPagination, DashboardProjectCreateForm
                                 "last_viewed_at": "string",
                                 "last_activity_at": "string?",
                                 "related_to_current_user": "bool",
+                                "related_activity_at": "string?",
                             }
                         },
                     )
@@ -60,6 +61,7 @@ def get_starred_projects(
                                 "last_viewed_at": "string",
                                 "last_activity_at": "string?",
                                 "related_to_current_user": "bool",
+                                "related_activity_at": "string?",
                             }
                         },
                     ),
