@@ -481,7 +481,7 @@ class ScimProvisioningService(BaseDomainService):
         if not link:
             return False
         expected_issuer = (Env.SCIM_ISSUER or "").rstrip("/")
-        return not expected_issuer or (link.issuer or "").rstrip("/") == expected_issuer
+        return bool(expected_issuer) and (link.issuer or "").rstrip("/") == expected_issuer
 
     def _validate_project_role_members(self, external_id: str, user_ids: list[SnowflakeID]) -> None:
         if not self._resolve_project_role_external_id(external_id):
