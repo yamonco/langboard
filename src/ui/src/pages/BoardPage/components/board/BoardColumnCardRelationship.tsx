@@ -7,6 +7,8 @@ import { Utils } from "@langboard/core/utils";
 import { IBoardColumnCardContextParams } from "@/pages/BoardPage/components/board/BoardConstants";
 import { memo } from "react";
 import { useTranslation } from "react-i18next";
+import { useBoard } from "@/core/providers/BoardProvider";
+import { isRelationshipRenderedInHierarchy } from "@/pages/BoardPage/components/board/BoardColumnCardHierarchy";
 
 export interface IBoardColumnCardRelationshipProps {
     attributes: Record<string, unknown>;
@@ -33,8 +35,20 @@ const BoardColumnCardRelationshipButton = memo(({ type, attributes }: IBoardColu
     const { setFilters } = params;
     const isParent = type === "parents";
     const { filterRelationships } = useBoardController();
+    const { cardsMap, filterCard, filterCardLabels, filterCardMember, filterCardRelationships, shouldShowArchivedCard } = useBoard();
     const flatRelationships = card.useForeignFieldArray("relationships");
-    const relationships = filterRelationships(card.uid, flatRelationships, isParent);
+    const relationships = filterRelationships(card.uid, flatRelationships, isParent).filter((relationship) => {
+        const relatedCardUID = isParent ? relationship.parent_card_uid : relationship.child_card_uid;
+        const relatedCard = cardsMap[relatedCardUID];
+        const isRelatedCardVisible =
+            !!relatedCard &&
+            shouldShowArchivedCard(relatedCard) &&
+            filterCard(relatedCard) &&
+            filterCardMember(relatedCard) &&
+            filterCardLabels(relatedCard) &&
+            filterCardRelationships(relatedCard);
+        return !isRelationshipRenderedInHierarchy(card, relatedCard, isRelatedCardVisible);
+    });
 
     if (!relationships.length) {
         return null;
