@@ -10,9 +10,10 @@ os.environ.setdefault("PROJECT_NAME", "langboard")
 from langboard.mcp_integration import McpTool
 from langboard.mcp_tools import ProjectMcp
 from langboard.routes.board.BoardApi import search_project_member_candidates
+from langboard.routes.board.forms.Project import InviteProjectMemberForm
 from langboard_shared.core.db import DbSession
 from langboard_shared.core.types import SnowflakeID
-from langboard_shared.domain.models import Project, ProjectAssignedUser, ProjectRole, User
+from langboard_shared.domain.models import IdentityProvider, Project, ProjectAssignedUser, ProjectRole, User
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.domain.services.factory.ProjectInvitationService import (
     InvitationRelatedResult,
@@ -257,6 +258,11 @@ def test_existing_member_addition_bypasses_invitation_and_preserves_members() ->
             "_get_service_by_name",
             side_effect=lambda name: user_service if name == "user" else invitation_service,
         ),
+        patch.object(
+            service,
+            "_ProjectService__organization_identities",
+            return_value=[(IdentityProvider.Oidc, "https://issuer.example")],
+        ),
         patch("langboard_shared.domain.services.factory.ProjectService.ProjectPublisher.assigned_users_updated"),
         patch("langboard_shared.domain.services.factory.ProjectService.ProjectPublisher.assigned_to_users"),
         patch(
@@ -271,6 +277,7 @@ def test_existing_member_addition_bypasses_invitation_and_preserves_members() ->
         actor,
         [employee],
         can_search_all_users=False,
+        organization_identities=[(IdentityProvider.Oidc, "https://issuer.example")],
     )
     role_repository.project.grant_all.assert_called_once_with(user_id=20, project_id=10)
     invitation_service.get_api_invited_user_list_by_project.assert_called_once_with(project)
@@ -320,6 +327,114 @@ def test_active_email_match_outside_candidate_scope_stays_on_invitation_track() 
     email_service.send_template.assert_called_once()
 
 
+def test_federated_member_uid_uses_direct_addition_without_email() -> None:
+    """The explicit organization-member track never creates or sends an invitation."""
+
+    actor = User.model_construct(is_admin=False, preferred_lang="en-US", firstname="Actor", lastname="User")
+    target = User.model_construct(id=SnowflakeID(1), activated_at=object(), preferred_lang="en-US", firstname="Target")
+    project = SimpleNamespace(title="Project")
+    invitation = InvitationRelatedResult()
+    invitation.emails_should_invite.add("employee@example.com")
+    invitation.users_by_email["employee@example.com"] = target
+    assigned = Mock()
+    email_service = SimpleNamespace(send_template=Mock())
+    notification_service = SimpleNamespace(notify_project_invited=Mock())
+    repository = SimpleNamespace(project_invitation=SimpleNamespace(create_if_missing=Mock()))
+    service = ProjectInvitationService(
+        lambda service_type: email_service if service_type.__name__ == "EmailService" else notification_service,
+        lambda _name: None,
+        repository,
+    )
+    setattr(service, "_ProjectInvitationService__assign_project_user", assigned)
+
+    with patch(
+        "langboard_shared.domain.services.factory.ProjectInvitationService.InfraHelper.get_by_id_like",
+        return_value=project,
+    ):
+        service.invite_emails(actor, "project", invitation, direct_user_ids={target.id})
+
+    assigned.assert_called_once_with(project, target)
+    repository.project_invitation.create_if_missing.assert_not_called()
+    notification_service.notify_project_invited.assert_not_called()
+    email_service.send_template.assert_not_called()
+
+
+def test_member_update_form_keeps_direct_and_external_tracks_distinct() -> None:
+    form = InviteProjectMemberForm(member_uids=["member-a"], emails=["guest@example.com"])
+
+    assert form.member_uids == ["member-a"]
+    assert form.emails == ["guest@example.com"]
+
+
+def test_member_update_routes_federated_people_to_direct_addition() -> None:
+    project = SimpleNamespace(id=10)
+    actor = User.model_construct(id=SnowflakeID(11))
+    employee = User.model_construct(id=SnowflakeID(20), email="employee@example.com")
+    assigned_rows = [(employee, object())]
+    assigned_repository = SimpleNamespace(
+        get_all_by_project=Mock(side_effect=[[], assigned_rows]),
+        delete_all_by_project_and_users=Mock(),
+    )
+    relationship_repository = SimpleNamespace(ensure_project_relationships=Mock())
+    user_repository = SimpleNamespace(get_direct_project_member_candidates=Mock(return_value=[employee]))
+    invitation_data = InvitationRelatedResult()
+    invitation_service = SimpleNamespace(
+        get_invitation_related_data=Mock(return_value=invitation_data),
+        invite_emails=Mock(return_value=True),
+        get_api_invited_user_list_by_project=Mock(return_value=[]),
+    )
+    user_service = SimpleNamespace(can_search_all_users=Mock(return_value=False))
+    service = ProjectService(
+        lambda _type: None,
+        lambda _name: None,
+        SimpleNamespace(
+            project_assigned_user=assigned_repository,
+            project_user_relationship=relationship_repository,
+            user=user_repository,
+        ),
+    )
+
+    with (
+        patch(
+            "langboard_shared.domain.services.factory.ProjectService.InfraHelper.get_by_id_like",
+            return_value=project,
+        ),
+        patch.object(
+            service,
+            "_get_service_by_name",
+            side_effect=lambda name: user_service if name == "user" else invitation_service,
+        ),
+        patch.object(
+            service,
+            "_ProjectService__organization_identities",
+            return_value=[(IdentityProvider.Oidc, "https://issuer.example")],
+        ),
+        patch("langboard_shared.domain.services.factory.ProjectService.ProjectPublisher.assigned_users_updated"),
+        patch("langboard_shared.domain.services.factory.ProjectService.ProjectPublisher.assigned_to_users"),
+        patch(
+            "langboard_shared.domain.services.factory.ProjectService.ProjectActivityTask.project_assigned_users_updated"
+        ),
+    ):
+        result = service.update_assigned_users(
+            actor,
+            project,
+            ["guest@example.com"],
+            direct_members=[employee],
+        )
+
+    assert result is True
+    invitation_service.get_invitation_related_data.assert_called_once_with(
+        project,
+        ["guest@example.com", "employee@example.com"],
+    )
+    invitation_service.invite_emails.assert_called_once_with(
+        actor,
+        project,
+        invitation_data,
+        direct_user_ids={employee.id},
+    )
+
+
 def test_existing_member_addition_rejects_arbitrary_uid_outside_candidate_scope() -> None:
     """Resolving a real user object is insufficient without relationship-scoped eligibility."""
 
@@ -344,6 +459,11 @@ def test_existing_member_addition_rejects_arbitrary_uid_outside_candidate_scope(
             return_value=project,
         ),
         patch.object(service, "_get_service_by_name", return_value=user_service),
+        patch.object(
+            service,
+            "_ProjectService__organization_identities",
+            return_value=[(IdentityProvider.Oidc, "https://issuer.example")],
+        ),
         pytest.raises(ValueError, match="not eligible"),
     ):
         service.add_existing_assigned_users(actor, project, [unrelated])

@@ -10,7 +10,8 @@ from pydantic import BaseModel, EmailStr, Field
 
 @form_model
 class InviteProjectMemberForm(BaseFormModel):
-    emails: list[str]
+    emails: list[str] = Field(default_factory=list, max_length=50)
+    member_uids: list[str] = Field(default_factory=list, max_length=50)
 
 
 @form_model

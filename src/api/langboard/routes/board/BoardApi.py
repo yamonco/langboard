@@ -373,7 +373,15 @@ def update_project_member(
     user: User = Auth.scope("user"),
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
-    result = service.project.update_assigned_users(user, project_uid, form.emails)
+    direct_members = [service.user.get_by_id_like(uid) for uid in dict.fromkeys(form.member_uids)]
+    if any(member is None or member.deleted_at is not None for member in direct_members):
+        raise ApiException.BadRequest_400(ApiErrorCode.VA0000)
+    result = service.project.update_assigned_users(
+        user,
+        project_uid,
+        form.emails,
+        direct_members=[member for member in direct_members if member is not None],
+    )
     if result is None:
         raise ApiException.NotFound_404(ApiErrorCode.NF2001)
 
