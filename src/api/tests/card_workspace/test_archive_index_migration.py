@@ -38,9 +38,11 @@ def test_archive_page_index_upgrade_and_downgrade() -> None:
         migration.op = Operations(MigrationContext.configure(connection))
 
         migration.upgrade()
+        migration.upgrade()
         indexes = {index["name"]: index for index in sa.inspect(connection).get_indexes("card")}
         assert indexes["ix_card_project_archive_page"]["column_names"] == ["project_id", "archived_at", "id"]
 
+        migration.downgrade()
         migration.downgrade()
         assert "ix_card_project_archive_page" not in {
             index["name"] for index in sa.inspect(connection).get_indexes("card")
