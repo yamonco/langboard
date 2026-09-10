@@ -5,6 +5,7 @@ import { ISocketContext, useSocket } from "@/core/providers/SocketProvider";
 import { TUserLikeModel } from "@/core/models/ModelRegistry";
 import { ProjectRole } from "@/core/models/roles";
 import { Utils } from "@langboard/core/utils";
+import type { ICardCommentAnchor } from "@/core/models/types/card-comment-anchor.type";
 
 // Must stay aligned with Tailwind `md` breakpoint in `tailwind.config.js` (768px).
 const DESKTOP_COMMENT_BREAKPOINT = 768;
@@ -18,6 +19,7 @@ export interface IBoardCardContext {
     canEditCard: bool;
     socket: ISocketContext;
     replyRef: React.RefObject<(target: TUserLikeModel) => void>;
+    anchoredCommentRef: React.RefObject<(anchor: ICardCommentAnchor) => void>;
     cardEditMode: "view" | "edit";
     isCardEditing: bool;
     setCardEditMode: React.Dispatch<React.SetStateAction<"view" | "edit">>;
@@ -46,6 +48,7 @@ const initialContext = {
     canEditCard: false,
     socket: {} as ISocketContext,
     replyRef: { current: () => {} },
+    anchoredCommentRef: { current: () => {} },
     cardEditMode: "view" as const,
     isCardEditing: false,
     setCardEditMode: () => "view",
@@ -82,6 +85,7 @@ const BoardCardPanelContext = createContext<IBoardCardPanelContext>(initialPanel
 export const BoardCardProvider = ({ projectUID, card, currentUser, viewportRef, children }: IBoardCardProviderProps): React.ReactNode => {
     const socket = useSocket();
     const replyRef = useRef<(target: TUserLikeModel) => void>(() => {});
+    const anchoredCommentRef = useRef<(anchor: ICardCommentAnchor) => void>(() => {});
     const commentCount = card.useField("count_comment");
     const [isCommentPanelOpen, setIsCommentPanelOpen] = useState(() => commentCount > 0);
     const [isActionPanelOpen, setIsActionPanelOpen] = useState(false);
@@ -145,6 +149,7 @@ export const BoardCardProvider = ({ projectUID, card, currentUser, viewportRef, 
             canEditCard,
             socket,
             replyRef,
+            anchoredCommentRef,
             cardEditMode,
             isCardEditing: cardEditMode === "edit",
             setCardEditMode,
