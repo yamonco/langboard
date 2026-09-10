@@ -56,7 +56,7 @@ const BoardResult = memo(({ project }: { project: Project.TModel }) => {
     const [t] = useTranslation();
 
     return (
-        <>
+        <Flex direction="col" h="full" minH="0">
             {selectCardViewType && (
                 <Flex justify="center" items="center" position="fixed" top="-2" left="0" h="20" w="full" z="50" gap="3" px="1">
                     <Box position="absolute" top="0" left="0" size="full" className="bg-secondary/70 bg-cover blur-md backdrop-blur-sm" />
@@ -82,7 +82,7 @@ const BoardResult = memo(({ project }: { project: Project.TModel }) => {
                 </Flex>
             )}
 
-            <Flex justify="between" px="4" pt="4" wrap>
+            <Flex justify="between" px="4" pt="4" wrap className="shrink-0">
                 <BoardMemberList isSelectCardView={!!selectCardViewType} />
                 <Flex items="center" gap="1">
                     <BoardFilter />
@@ -90,7 +90,7 @@ const BoardResult = memo(({ project }: { project: Project.TModel }) => {
             </Flex>
 
             <Board key={`board-${project.uid}`} />
-        </>
+        </Flex>
     );
 });
 BoardResult.displayName = "Board.Result";
