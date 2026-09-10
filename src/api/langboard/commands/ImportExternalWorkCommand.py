@@ -7,8 +7,11 @@ from pydantic import Field
 
 
 class ImportExternalWorkCommandOptions(BaseCommandOptions):
-    project_uid: str = Field(description="Target project UID")
-    actor_uid: str = Field(description="Administrator, owner, or full-access actor UID")
+    # Commander creates an empty Pydantic namespace before argparse populates it.
+    # Keep CLI-required validation at the command boundary instead of making
+    # namespace construction fail before the supplied arguments are parsed.
+    project_uid: str = Field(default="", description="Target project UID")
+    actor_uid: str = Field(default="", description="Administrator, owner, or full-access actor UID")
     attachments_root: str = Field(default="", description="Root directory for attachment files")
     dry_run: bool = Field(default=False, description="Validate without writing")
 
@@ -43,6 +46,10 @@ class ImportExternalWorkCommand(BaseCommand):
         return str
 
     def execute(self, bundle_file: str, options: ImportExternalWorkCommandOptions) -> None:
+        if not options.project_uid.strip():
+            raise ValueError("--project-uid is required")
+        if not options.actor_uid.strip():
+            raise ValueError("--actor-uid is required")
         path = Path(bundle_file).resolve()
         bundle = ExternalWorkBundle.model_validate(loads(path.read_text()))
         attachments_root = Path(options.attachments_root) if options.attachments_root else None
