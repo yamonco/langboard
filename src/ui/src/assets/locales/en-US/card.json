@@ -83,6 +83,8 @@
   "No comments": "No comments",
   "Added {date}": "Added {{date}}",
   "Add a comment as {firstname} {lastname}": "Add a comment as {{firstname}} {{lastname}}",
+  "Comment on selection": "Comment",
+  "Open anchored comment": "Open anchored comment",
   "Show fewer attachments": "Show fewer attachments",
   "Show all attachments ({attachments} hidden)": "Show all attachments ({{attachments}} hidden)",
   "Show fewer checklists": "Show fewer checklists",

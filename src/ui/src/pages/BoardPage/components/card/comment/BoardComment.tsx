@@ -18,6 +18,7 @@ import { IBoardCommentContextParams } from "@/pages/BoardPage/components/card/co
 import { EEditorType } from "@langboard/core/constants";
 import { memo, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
+import { resolveCardCommentAnchorElement } from "@/pages/BoardPage/components/card/comment/commentAnchor";
 
 export function SkeletonBoardComment({ ref }: { ref?: React.Ref<HTMLDivElement> }): React.JSX.Element {
     return (
@@ -49,6 +50,7 @@ const BoardComment = memo(({ comment, deletedComment }: IBoardCommentProps): Rea
     const mentionables = useMemo(() => [...projectMembers, ...bots], [projectMembers, bots]);
     const cards = ProjectCard.Model.useModels((model) => model.uid !== card.uid && model.project_uid === projectUID, [projectUID, card]);
     const content = comment.useField("content");
+    const anchor = comment.useField("anchor");
     const commentUser = comment.useForeignFieldOne("user");
     const commentBot = comment.useForeignFieldOne("bot");
     const commentAuthor = commentUser || commentBot;
@@ -63,12 +65,34 @@ const BoardComment = memo(({ comment, deletedComment }: IBoardCommentProps): Rea
             model={comment}
             params={{ author: commentAuthor, deletedComment, valueRef, editorName, isCurrentEditor, editorRef }}
         >
-            <Box display="grid" gap="2" className="grid-cols-[theme(spacing.8),minmax(0,1fr)]">
+            <Box data-card-comment-uid={comment.uid} display="grid" gap="2" className="grid-cols-[theme(spacing.8),minmax(0,1fr)]">
                 <Box>
                     <BoardCommentUserAvatar projectUID={projectUID} cardUID={card.uid} />
                 </Box>
                 <Flex direction="col" gap="2" className="max-w-full">
                     <BoardCommentHeader />
+                    {anchor && (
+                        <button
+                            type="button"
+                            className={cn(
+                                "max-w-full truncate rounded-md border-l-2 border-brand bg-brand/10 px-2 py-1 text-left text-xs",
+                                "text-muted-foreground hover:bg-brand/15"
+                            )}
+                            title={anchor.exact}
+                            onClick={() => {
+                                const description = document.querySelector<HTMLElement>("[data-card-description]");
+                                if (!description) {
+                                    return;
+                                }
+                                resolveCardCommentAnchorElement(description, anchor)?.scrollIntoView({
+                                    behavior: "smooth",
+                                    block: "center",
+                                });
+                            }}
+                        >
+                            “{anchor.exact}”
+                        </button>
+                    )}
                     <Flex
                         px="3"
                         py="1.5"

@@ -1,14 +1,16 @@
 import Box from "@/components/base/Box";
+import Button from "@/components/base/Button";
 import Flex from "@/components/base/Flex";
+import IconComponent from "@/components/base/IconComponent";
 import Skeleton from "@/components/base/Skeleton";
 import type { TEditor } from "@/components/Editor/editor-kit";
 import { PlateEditor } from "@/components/Editor/plate-editor";
 import { sanitizeEditorContent } from "@/components/Editor/utils";
-import { BotModel, ProjectCard } from "@/core/models";
+import { BotModel, ProjectCard, ProjectCardComment } from "@/core/models";
 import type { IEditorContent } from "@/core/models/Base";
 import type { TUserLikeModel } from "@/core/models/ModelRegistry";
 import { ProjectRole } from "@/core/models/roles";
-import { useBoardCard } from "@/core/providers/BoardCardProvider";
+import { useBoardCard, useBoardCardPanel } from "@/core/providers/BoardCardProvider";
 import { cn } from "@/core/utils/ComponentUtils";
 import { useBoardCardSectionSaveActions } from "@/pages/BoardPage/components/card/BoardCardSectionSaveProvider";
 import { EEditorType } from "@langboard/core/constants";
@@ -21,8 +23,25 @@ import remarkGfm from "remark-gfm";
 import { toMarkdown } from "mdast-util-to-markdown";
 import { gfmToMarkdown } from "mdast-util-gfm";
 import { Utils } from "@langboard/core/utils";
+import {
+    captureCardCommentAnchor,
+    resolveCardCommentAnchorElement,
+    type ICardCommentAnchor,
+} from "@/pages/BoardPage/components/card/comment/commentAnchor";
 
 const FULL_COPY_TEXT_SAMPLE_LENGTH = 80;
+
+interface IAnchorComposerPosition {
+    anchor: ICardCommentAnchor;
+    left: number;
+    top: number;
+}
+
+interface IAnchorMarkerPosition {
+    commentUID: string;
+    quote: string;
+    top: number;
+}
 
 function normalizeCopyText(value: string): string {
     return value
@@ -75,7 +94,8 @@ export function SkeletonBoardCardDescription() {
 }
 
 const BoardCardDescription = memo((): React.JSX.Element => {
-    const { projectUID, card, currentUser, hasRoleAction, isCardEditing } = useBoardCard();
+    const { projectUID, card, currentUser, hasRoleAction, isCardEditing, anchoredCommentRef } = useBoardCard();
+    const { setIsCommentPanelOpen } = useBoardCardPanel();
     const [t] = useTranslation();
     const editorRef = useRef<TEditor>(null);
     const descriptionRef = useRef<HTMLDivElement>(null);
@@ -85,8 +105,11 @@ const BoardCardDescription = memo((): React.JSX.Element => {
     const bots = BotModel.Model.useModels(() => true);
     const mentionables = useMemo(() => [...projectMembers, ...bots], [projectMembers, bots]);
     const cards = ProjectCard.Model.useModels((model) => model.uid !== card.uid && model.project_uid === projectUID, [projectUID, card]);
+    const comments = ProjectCardComment.Model.useModels((model) => model.card_uid === card.uid, [card.uid]);
     const description = card.useField("description");
     const [isEditing, setIsEditing] = useState(false);
+    const [anchorComposer, setAnchorComposer] = useState<IAnchorComposerPosition | null>(null);
+    const [anchorMarkers, setAnchorMarkers] = useState<IAnchorMarkerPosition[]>([]);
     const pointerDownPositionRef = useRef<{ x: number; y: number } | null>(null);
     const { registerSectionCancelHandler, registerSectionSaveHandler } = useBoardCardSectionSaveActions();
     const canEdit = hasRoleAction(ProjectRole.EAction.CardUpdate);
@@ -191,8 +214,34 @@ const BoardCardDescription = memo((): React.JSX.Element => {
         [canStartEditing, isEditing]
     );
 
+    const captureSelection = useCallback(() => {
+        if (isEditing) {
+            setAnchorComposer(null);
+            return;
+        }
+        const root = descriptionRef.current;
+        const selection = window.getSelection();
+        const anchor = root ? captureCardCommentAnchor(root, selection) : null;
+        if (!root || !anchor || !selection?.rangeCount) {
+            setAnchorComposer(null);
+            return;
+        }
+        const rangeRect = selection.getRangeAt(0).getBoundingClientRect();
+        const rootRect = root.getBoundingClientRect();
+        setAnchorComposer({
+            anchor,
+            left: Math.max(8, Math.min(rangeRect.left - rootRect.left, rootRect.width - 112)),
+            top: Math.max(0, rangeRect.bottom - rootRect.top + 6),
+        });
+    }, [isEditing]);
+
     const handlePointerUp = useCallback(
         (e: PointerEvent<HTMLDivElement>) => {
+            captureSelection();
+            if ((e.target as HTMLElement).closest("button")) {
+                pointerDownPositionRef.current = null;
+                return;
+            }
             const pointerDownPosition = pointerDownPositionRef.current;
             pointerDownPositionRef.current = null;
             if (!canStartEditing || isEditing || !pointerDownPosition) {
@@ -208,7 +257,54 @@ const BoardCardDescription = memo((): React.JSX.Element => {
                 setIsEditing(true);
             });
         },
-        [canStartEditing, isEditing]
+        [canStartEditing, captureSelection, isEditing]
+    );
+
+    useEffect(() => {
+        const root = descriptionRef.current;
+        if (!root || isEditing) {
+            setAnchorMarkers([]);
+            return;
+        }
+
+        const updateMarkers = () => {
+            const rootRect = root.getBoundingClientRect();
+            const seen = new Map<number, number>();
+            const next = comments.flatMap((comment) => {
+                const anchor = comment.anchor;
+                if (!anchor) {
+                    return [];
+                }
+                const block = resolveCardCommentAnchorElement(root, anchor);
+                if (!block) {
+                    return [];
+                }
+                const blockTop = block.getBoundingClientRect().top - rootRect.top;
+                const roundedTop = Math.round(blockTop);
+                const stackIndex = seen.get(roundedTop) ?? 0;
+                seen.set(roundedTop, stackIndex + 1);
+                return [{ commentUID: comment.uid, quote: anchor.exact, top: blockTop + stackIndex * 24 }];
+            });
+            setAnchorMarkers(next);
+        };
+
+        updateMarkers();
+        const observer = new ResizeObserver(updateMarkers);
+        observer.observe(root);
+        return () => observer.disconnect();
+    }, [comments, description?.content, isEditing, shouldCollapse, visibleChunkCount]);
+
+    const openAnchoredComment = useCallback(
+        (commentUID: string) => {
+            setIsCommentPanelOpen(true);
+            window.setTimeout(() => {
+                document.querySelector<HTMLElement>(`[data-card-comment-uid="${CSS.escape(commentUID)}"]`)?.scrollIntoView({
+                    behavior: "smooth",
+                    block: "center",
+                });
+            }, 100);
+        },
+        [setIsCommentPanelOpen]
     );
 
     useEffect(() => registerSectionSaveHandler("description", handleSave), [handleSave, registerSectionSaveHandler]);
@@ -218,10 +314,46 @@ const BoardCardDescription = memo((): React.JSX.Element => {
         <Box
             ref={descriptionRef}
             data-card-description
-            className={cn(canStartEditing && !isEditing && "cursor-text rounded-md transition-colors hover:bg-accent/20")}
+            className={cn("relative", canStartEditing && !isEditing && "cursor-text rounded-md transition-colors hover:bg-accent/20")}
             onPointerDown={handlePointerDown}
             onPointerUp={handlePointerUp}
         >
+            {anchorComposer && (
+                <Button
+                    size="sm"
+                    className="absolute z-30 h-8 gap-1 rounded-full shadow-lg"
+                    style={{ left: anchorComposer.left, top: anchorComposer.top }}
+                    onPointerDown={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                    }}
+                    onClick={() => {
+                        anchoredCommentRef.current(anchorComposer.anchor);
+                        setAnchorComposer(null);
+                        window.getSelection()?.removeAllRanges();
+                    }}
+                >
+                    <IconComponent icon="message-square" size="4" />
+                    {t("card.Comment on selection")}
+                </Button>
+            )}
+            {anchorMarkers.map((marker) => (
+                <button
+                    key={marker.commentUID}
+                    type="button"
+                    className={cn(
+                        "absolute right-1 z-20 flex size-5 items-center justify-center rounded-full border border-brand/40",
+                        "bg-brand/15 text-brand shadow-sm transition-transform hover:scale-110"
+                    )}
+                    style={{ top: marker.top }}
+                    title={marker.quote}
+                    aria-label={t("card.Open anchored comment")}
+                    onPointerDown={(event) => event.stopPropagation()}
+                    onClick={() => openAnchoredComment(marker.commentUID)}
+                >
+                    <IconComponent icon="message-square" size="3" />
+                </button>
+            ))}
             {shouldCollapse ? (
                 <CollapsibleDescriptionContent
                     description={description}

@@ -17,6 +17,7 @@
     "test:board-touch-scroll": "node --experimental-strip-types src/pages/BoardPage/components/board/BoardTouchAutoScroll.test.ts",
     "test:board-touch-e2e": "playwright test -c playwright.board.config.ts",
     "test:board-minimap": "node --experimental-strip-types src/pages/BoardPage/components/board/BoardMinimapLayout.test.ts",
+    "test:comment-anchor": "node --experimental-strip-types src/pages/BoardPage/components/card/comment/commentAnchor.test.ts",
     "preview": "vite preview",
     "test:project-priority": "node --experimental-strip-types --test src/pages/DashboardPage/components/ProjectActivityPriority.test.ts",
     "test:project-discovery": "node --experimental-strip-types --test src/pages/DashboardPage/components/ProjectDiscovery.test.ts",

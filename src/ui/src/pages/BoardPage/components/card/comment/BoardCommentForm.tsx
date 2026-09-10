@@ -23,6 +23,7 @@ import { getCardCommentDraftStore } from "@/core/stores/CardCommentDraftStore";
 import { TEditor } from "@/components/Editor/editor-kit";
 import { EEditorType } from "@langboard/core/constants";
 import { getMentionOnSelectItem } from "@platejs/mention";
+import type { ICardCommentAnchor } from "@/core/models/types/card-comment-anchor.type";
 
 export function SkeletonBoardCommentForm() {
     return (
@@ -47,7 +48,7 @@ export interface IBoardCommentFormProps {
 const insertMention = getMentionOnSelectItem();
 
 const BoardCommentForm = memo(({ variant = "mobile" }: IBoardCommentFormProps): React.JSX.Element | null => {
-    const { projectUID, card, currentUser, replyRef } = useBoardCard();
+    const { projectUID, card, currentUser, replyRef, anchoredCommentRef } = useBoardCard();
     const { isCommentPanelOpen, setIsCommentPanelOpen, commentLayoutMode } = useBoardCardPanel();
     const [t] = useTranslation();
     const isPanelLayout = commentLayoutMode === "panel";
@@ -66,6 +67,7 @@ const BoardCommentForm = memo(({ variant = "mobile" }: IBoardCommentFormProps): 
     const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
     const [isPanelEditorOpen, setIsPanelEditorOpen] = useState(false);
     const [pendingReplyMention, setPendingReplyMention] = useState<{ uid: string; username: string } | null>(null);
+    const [pendingAnchor, setPendingAnchor] = useState<ICardCommentAnchor | null>(null);
     const [isValidating, setIsValidating] = useState(false);
     const { mutate: addCommentMutate } = useAddCardComment();
     const isClickedRef = useRef(false);
@@ -95,6 +97,7 @@ const BoardCommentForm = memo(({ variant = "mobile" }: IBoardCommentFormProps): 
     const clearEditor = useCallback(() => {
         setValue({ content: "" });
         setPendingReplyMention(null);
+        setPendingAnchor(null);
         clearDraftFromStorage();
     }, [clearDraftFromStorage, setValue]);
 
@@ -208,6 +211,35 @@ const BoardCommentForm = memo(({ variant = "mobile" }: IBoardCommentFormProps): 
     }, [isCurrentEditor, isReplyOwner, isValidating, openEditor, setIsCommentPanelOpen, variant]);
 
     useEffect(() => {
+        if (!isReplyOwner) {
+            return;
+        }
+
+        const handleAnchoredComment = (anchor: ICardCommentAnchor) => {
+            if (isValidating) {
+                return;
+            }
+            setPendingAnchor(anchor);
+            setIsCommentPanelOpen(true);
+            if (variant === "panel") {
+                setIsPanelEditorOpen(true);
+            } else {
+                setIsMobileDrawerOpen(true);
+            }
+            if (!isCurrentEditor) {
+                openEditor();
+            }
+        };
+
+        anchoredCommentRef.current = handleAnchoredComment;
+        return () => {
+            if (anchoredCommentRef.current === handleAnchoredComment) {
+                anchoredCommentRef.current = () => {};
+            }
+        };
+    }, [anchoredCommentRef, isCurrentEditor, isReplyOwner, isValidating, openEditor, setIsCommentPanelOpen, variant]);
+
+    useEffect(() => {
         if (!isCurrentEditor) {
             saveDraftToStorage(valueRef.current.content);
         }
@@ -257,10 +289,12 @@ const BoardCommentForm = memo(({ variant = "mobile" }: IBoardCommentFormProps): 
                 project_uid: projectUID,
                 card_uid: card.uid,
                 content,
+                anchor: pendingAnchor,
             },
             {
                 onSuccess: () => {
                     setValue({ content: "" });
+                    setPendingAnchor(null);
                     clearDraftFromStorage();
                     getEditorStore().setCurrentEditor(null);
 
@@ -337,6 +371,11 @@ const BoardCommentForm = memo(({ variant = "mobile" }: IBoardCommentFormProps): 
                         </Flex>
                     ) : (
                         <Box rounded="lg" border className="overflow-hidden bg-background" data-card-comment-form>
+                            {pendingAnchor && (
+                                <Box px="4" py="2" className="border-b bg-brand/10 text-xs text-muted-foreground">
+                                    “{pendingAnchor.exact}”
+                                </Box>
+                            )}
                             <PlateEditor
                                 value={valueRef.current}
                                 currentUser={currentUser}
@@ -428,6 +467,11 @@ const BoardCommentForm = memo(({ variant = "mobile" }: IBoardCommentFormProps): 
                             <Box display="inline-block" h="2" rounded="full" className="w-[100px] bg-muted" />
                         </Drawer.Handle>
                         <Box position="relative" w="full" className="border-b">
+                            {pendingAnchor && (
+                                <Box px="6" py="2" className="border-b bg-brand/10 text-xs text-muted-foreground">
+                                    “{pendingAnchor.exact}”
+                                </Box>
+                            )}
                             <PlateEditor
                                 value={valueRef.current}
                                 currentUser={currentUser}
