@@ -17,7 +17,8 @@ export const buildProjectDiscoverySections = <TProject extends IProjectActivityP
     projects: readonly TProject[],
     recentLimit = PROJECT_RECENT_WORK_LIMIT
 ): IProjectDiscoverySections<TProject> => {
-    const all = [...projects].sort(compareProjectActivityPriority);
+    const now = Date.now();
+    const all = [...projects].sort((a, b) => compareProjectActivityPriority(a, b, now));
     return {
         all,
         favorites: all.filter((project) => project.starred),

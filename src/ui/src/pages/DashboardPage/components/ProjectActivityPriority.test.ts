@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { compareProjectActivityPriority, newerProjectActivity, projectActivityAt, type IProjectActivityPriority } from "./ProjectActivityPriority.ts";
+import {
+    compareProjectActivityPriority,
+    newerProjectActivity,
+    projectActivityAt,
+    projectPriorityScore,
+    type IProjectActivityPriority,
+} from "./ProjectActivityPriority.ts";
 import { parseProjectActivityTimestamp } from "../../../core/models/projectActivityTimestamp.ts";
 
 const project = (overrides: Partial<IProjectActivityPriority>): IProjectActivityPriority => ({
@@ -8,6 +14,8 @@ const project = (overrides: Partial<IProjectActivityPriority>): IProjectActivity
     title: "Alpha",
     starred: false,
     created_at: new Date("2026-01-01T00:00:00Z"),
+    last_viewed_at: new Date("2026-01-01T00:00:00Z"),
+    view_count: 0,
     last_activity_at: null,
     ...overrides,
 });
@@ -80,4 +88,20 @@ test("related sections display the same activity clock used for their ordering",
 
     assert.equal(projectActivityAt(candidate, "project"), globalActivity);
     assert.equal(projectActivityAt(candidate, "related"), relatedActivity);
+});
+
+test("smart priority combines viewing, actual work, related work, and frequency", () => {
+    const now = new Date("2026-09-11T00:00:00Z").getTime();
+    const baseline = project({
+        last_viewed_at: new Date("2026-08-01T00:00:00Z"),
+        last_activity_at: new Date("2026-08-01T00:00:00Z"),
+    });
+    const engaged = project({
+        last_viewed_at: new Date("2026-09-10T00:00:00Z"),
+        last_activity_at: new Date("2026-09-09T00:00:00Z"),
+        related_activity_at: new Date("2026-09-08T00:00:00Z"),
+        view_count: 20,
+    });
+
+    assert.ok(projectPriorityScore(engaged, now) > projectPriorityScore(baseline, now));
 });

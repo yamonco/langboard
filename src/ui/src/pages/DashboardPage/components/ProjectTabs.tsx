@@ -96,7 +96,8 @@ const ProjectTabs = memo(
                 }
             });
 
-            return [...filteredProjects].sort(compareProjectActivityPriority);
+            const now = Date.now();
+            return [...filteredProjects].sort((a, b) => compareProjectActivityPriority(a, b, now));
         }, [currentTab, debouncedSearchQuery, projects, updatedStarredProjects]);
         const discoverySections = useMemo(() => buildProjectDiscoverySections(currentProjects), [currentProjects]);
 
