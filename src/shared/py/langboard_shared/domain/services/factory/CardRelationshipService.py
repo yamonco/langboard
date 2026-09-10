@@ -148,17 +148,7 @@ class CardRelationshipService(BaseDomainService):
                 raise ValueError(f"Unknown project card: {card_uid}")
             existing_cards[card_uid] = card
 
-        graph_snapshot = self.repo.card_relationship.get_graph_snapshot(project)
-        relationship_by_uid = {
-            SnowflakeID(relationship_id).to_short_code(): (relationship_id, parent_id, child_id)
-            for relationship_id, parent_id, child_id in graph_snapshot
-        }
         remove_relationships: list[tuple[int, int, int]] = []
-        for relationship_uid in remove_relationship_uids:
-            relationship = relationship_by_uid.get(relationship_uid)
-            if not relationship:
-                raise ValueError(f"Unknown project relationship: {relationship_uid}")
-            remove_relationships.append(relationship)
 
         relationship_type_ids = {
             SnowflakeID.from_short_code(relationship_type_uid) for _, _, relationship_type_uid in add_edges
@@ -167,27 +157,38 @@ class CardRelationshipService(BaseDomainService):
         if len(relationship_types) != len(relationship_type_ids):
             raise ValueError("Unknown relationship type")
 
-        removed_ids = {relationship_id for relationship_id, _, _ in remove_relationships}
-        current_edges = {
-            (parent_id, child_id)
-            for relationship_id, parent_id, child_id in graph_snapshot
-            if relationship_id not in removed_ids
-        }
         ref_ids = {uid: card.id for uid, card in existing_cards.items()}
-        symbolic_edges: set[tuple[str | int, str | int]] = set(current_edges)
-        for parent_ref, child_ref, _ in add_edges:
-            parent: str | int = parent_ref if parent_ref in new_refs else ref_ids[parent_ref]
-            child: str | int = child_ref if child_ref in new_refs else ref_ids[child_ref]
-            if (parent, child) in symbolic_edges:
-                raise ValueError("Relationship already exists")
-            symbolic_edges.add((parent, child))
 
-        if self._has_cycle(symbolic_edges):
-            raise ValueError("Graph patch would create a relationship cycle")
+        def prepare_mutation(graph_snapshot: list[tuple[int, int, int]]) -> list[tuple[int, int, int]]:
+            relationship_by_uid = {
+                SnowflakeID(relationship_id).to_short_code(): (relationship_id, parent_id, child_id)
+                for relationship_id, parent_id, child_id in graph_snapshot
+            }
+            selected_removals: list[tuple[int, int, int]] = []
+            for relationship_uid in remove_relationship_uids:
+                relationship = relationship_by_uid.get(relationship_uid)
+                if not relationship:
+                    raise ValueError(f"Unknown project relationship: {relationship_uid}")
+                selected_removals.append(relationship)
 
-        anchor_id = anchor_card.id
-        if new_refs and not self._all_connected(symbolic_edges, anchor_id, new_refs):
-            raise ValueError("Every new card must connect to the anchor card")
+            removed_ids = {relationship_id for relationship_id, _, _ in selected_removals}
+            symbolic_edges: set[tuple[str | int, str | int]] = {
+                (parent_id, child_id)
+                for relationship_id, parent_id, child_id in graph_snapshot
+                if relationship_id not in removed_ids
+            }
+            for parent_ref, child_ref, _ in add_edges:
+                parent: str | int = parent_ref if parent_ref in new_refs else ref_ids[parent_ref]
+                child: str | int = child_ref if child_ref in new_refs else ref_ids[child_ref]
+                if (parent, child) in symbolic_edges:
+                    raise ValueError("Relationship already exists")
+                symbolic_edges.add((parent, child))
+
+            if self._has_cycle(symbolic_edges):
+                raise ValueError("Graph patch would create a relationship cycle")
+            if new_refs and not self._all_connected(symbolic_edges, anchor_card.id, new_refs):
+                raise ValueError("Every new card must connect to the anchor card")
+            return selected_removals
 
         next_order = self.repo.card.get_next_order(column, {"project_id": project.id})
         cards_to_create = {
@@ -204,11 +205,12 @@ class CardRelationshipService(BaseDomainService):
             (parent_ref, child_ref, SnowflakeID.from_short_code(relationship_type_uid))
             for parent_ref, child_ref, relationship_type_uid in add_edges
         ]
-        created_relationships = self.repo.card_relationship.apply_graph_patch(
+        created_relationships, remove_relationships = self.repo.card_relationship.apply_graph_patch(
+            project,
             cards_to_create,
             {uid: card.id for uid, card in existing_cards.items()},
             converted_edges,
-            list(removed_ids),
+            prepare_mutation,
         )
 
         created_cards = []
@@ -219,9 +221,9 @@ class CardRelationshipService(BaseDomainService):
             CardActivityTask.card_created(user_or_bot, project, card)
             CardBotTask.card_created(user_or_bot, project, card)
 
-        affected_ids = {
-            parent_id for _, parent_id, _ in remove_relationships
-        } | {child_id for _, _, child_id in remove_relationships}
+        affected_ids = {parent_id for _, parent_id, _ in remove_relationships} | {
+            child_id for _, _, child_id in remove_relationships
+        }
         affected_ids |= {relationship.card_id_parent for relationship in created_relationships}
         affected_ids |= {relationship.card_id_child for relationship in created_relationships}
         known_card_ids = {card.id for card in existing_cards.values()}
