@@ -1,6 +1,7 @@
 """OIDC issuer-subject identity and resource-token tests."""
 
 from __future__ import annotations
+import importlib.util
 import os
 from pathlib import Path
 from types import SimpleNamespace
@@ -90,3 +91,47 @@ def test_identity_migration_keys_subjects_by_provider_issuer_and_external_id() -
     assert 'down_revision: str | None = "da39f306364b"' in source
     assert "uq_user_identity_link_provider_issuer_external_id" in source
     assert '["provider", "external_id", "issuer"]' in source
+
+
+def test_identity_migration_accepts_an_already_projected_constraint(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A deployment repaired ahead of Alembic bookkeeping remains upgradeable."""
+
+    spec = importlib.util.spec_from_file_location("issuer_identity_migration", MIGRATION)
+    assert spec and spec.loader
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+
+    calls: list[str] = []
+    monkeypatch.setattr(migration.op, "get_bind", lambda: object())
+    monkeypatch.setattr(migration.op, "f", lambda name: name)
+    monkeypatch.setattr(
+        migration.sa,
+        "inspect",
+        lambda _bind: SimpleNamespace(
+            get_unique_constraints=lambda _table: [
+                {"name": "uq_user_identity_link_provider_issuer_external_id"}
+            ]
+        ),
+    )
+    monkeypatch.setattr(migration.op, "execute", lambda _statement: calls.append("execute"))
+    monkeypatch.setattr(
+        migration.op,
+        "alter_column",
+        lambda *_args, **_kwargs: calls.append("alter"),
+    )
+    monkeypatch.setattr(
+        migration.op,
+        "drop_constraint",
+        lambda *_args, **_kwargs: calls.append("drop"),
+    )
+    monkeypatch.setattr(
+        migration.op,
+        "create_unique_constraint",
+        lambda *_args, **_kwargs: calls.append("create"),
+    )
+
+    migration.upgrade()
+
+    assert calls == ["execute", "alter"]
