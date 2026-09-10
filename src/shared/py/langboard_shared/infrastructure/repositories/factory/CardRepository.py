@@ -1,3 +1,4 @@
+from typing import Sequence
 from sqlalchemy import func, literal, or_
 from ....core.db import DbSession, SqlBuilder
 from ....core.domain import BaseOrderRepository
@@ -23,6 +24,35 @@ class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
 
     def get_by_id_like(self, card: TCardParam | None) -> Card | None:
         return InfraHelper.get_by_id_like(Card, card)
+
+    def find_linked_resource(self, project: TProjectParam, source_type: str, source_uid: str) -> Card | None:
+        project_id = InfraHelper.convert_id(project)
+        with DbSession.use(readonly=True) as db:
+            return db.exec(
+                SqlBuilder.select.table(Card)
+                .where(Card.column("project_id") == project_id)
+                .where(Card.column("source_type") == source_type)
+                .where(Card.column("source_uid") == source_uid)
+                .limit(1)
+            ).first()
+
+    def get_linked_resource_map(
+        self,
+        project: TProjectParam,
+        source_type: str,
+        source_uids: Sequence[str],
+    ) -> dict[str, Card]:
+        if not source_uids:
+            return {}
+        project_id = InfraHelper.convert_id(project)
+        with DbSession.use(readonly=True) as db:
+            cards = db.exec(
+                SqlBuilder.select.table(Card)
+                .where(Card.column("project_id") == project_id)
+                .where(Card.column("source_type") == source_type)
+                .where(Card.column("source_uid").in_(set(source_uids)))
+            ).all()
+        return {card.source_uid: card for card in cards if card.source_uid is not None}
 
     def get_board_list(self, project: TProjectParam) -> list[tuple[Card, int]]:
         project_id = InfraHelper.convert_id(project)
@@ -119,6 +149,7 @@ class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
             SqlBuilder.select.tables(Card, ProjectColumn)
             .join(ProjectColumn, Card.column("project_column_id") == ProjectColumn.column("id"))
             .where(Card.column("project_id") == project_id)
+            .where(Card.column("source_type") == None)  # noqa: E711
             .where(
                 or_(
                     literal(input_value).ilike("%" + title + "%"),

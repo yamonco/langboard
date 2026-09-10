@@ -6,10 +6,10 @@ from ....core.storage import FileModel
 from ....core.types.ParamTypes import TProjectParam, TUserOrBot, TWikiParam
 from ....core.utils.Converter import convert_python_data
 from ....helpers import InfraHelper
-from ....publishers import ProjectWikiPublisher
+from ....publishers import CardPublisher, ProjectWikiPublisher
 from ....tasks.activities import ProjectWikiActivityTask
 from ....tasks.bots import ProjectWikiBotTask
-from ...models import Bot, Project, ProjectWiki, ProjectWikiAssignedUser, ProjectWikiAttachment, User
+from ...models import Bot, Card, Project, ProjectWiki, ProjectWikiAssignedUser, ProjectWikiAttachment, User
 from .GraphApprovalRequestService import GraphApprovalRequestService
 from .NotificationService import NotificationService
 
@@ -31,8 +31,25 @@ class ProjectWikiService(BaseDomainService):
 
         raw_wikis = self.repo.project_wiki.get_all_by_project(project)
         wikis = [self.convert_to_api_response(user_or_bot, project, raw_wiki) for raw_wiki in raw_wikis]
+        linked_cards = self.repo.card.get_linked_resource_map(
+            project,
+            Card.LINKED_RESOURCE_PROJECT_WIKI,
+            [wiki.get_uid() for wiki in raw_wikis],
+        )
+        for raw_wiki, api_wiki in zip(raw_wikis, wikis, strict=True):
+            linked_card = linked_cards.get(raw_wiki.get_uid())
+            api_wiki["linked_card_uid"] = linked_card.get_uid() if linked_card else None
 
         return wikis
+
+    def get_linked_card_uid(self, project: Project, wiki: ProjectWiki) -> str | None:
+        card = self.repo.card.find_linked_resource(project, Card.LINKED_RESOURCE_PROJECT_WIKI, wiki.get_uid())
+        return card.get_uid() if card else None
+
+    def _publish_linked_card_changed(self, project: Project, wiki: ProjectWiki) -> None:
+        card = self.repo.card.find_linked_resource(project, Card.LINKED_RESOURCE_PROJECT_WIKI, wiki.get_uid())
+        if card:
+            CardPublisher.linked_resource_changed(project, card)
 
     def convert_to_api_response(self, user_or_bot: TUserOrBot, project: Project, wiki: ProjectWiki) -> dict[str, Any]:
         api_wiki = wiki.api_response()
@@ -134,6 +151,7 @@ class ProjectWikiService(BaseDomainService):
             model[key] = convert_python_data(getattr(wiki, key))
 
         ProjectWikiPublisher.updated(project, wiki, model)
+        self._publish_linked_card_changed(project, wiki)
 
         notification_service = self._get_service(NotificationService)
         if "content" in model:
@@ -176,6 +194,7 @@ class ProjectWikiService(BaseDomainService):
         self.repo.project_wiki.update(wiki)
 
         ProjectWikiPublisher.publicity_changed(user_or_bot, project, wiki)
+        self._publish_linked_card_changed(project, wiki)
         ProjectWikiActivityTask.project_wiki_publicity_changed(user_or_bot, project, was_public, wiki)
         ProjectWikiBotTask.project_wiki_publicity_changed(user_or_bot, project, wiki)
 
@@ -209,6 +228,7 @@ class ProjectWikiService(BaseDomainService):
                 target_users.append(target_user)
 
         ProjectWikiPublisher.assignees_updated(project, wiki, target_users)
+        self._publish_linked_card_changed(project, wiki)
         ProjectWikiActivityTask.project_wiki_assignees_updated(
             user,
             project,
@@ -267,6 +287,7 @@ class ProjectWikiService(BaseDomainService):
         self.repo.project_wiki.delete(wiki)
 
         ProjectWikiPublisher.deleted(project, wiki)
+        self._publish_linked_card_changed(project, wiki)
         ProjectWikiActivityTask.project_wiki_deleted(user_or_bot, project, wiki)
         ProjectWikiBotTask.project_wiki_deleted(user_or_bot, project, wiki)
 

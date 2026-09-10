@@ -9,6 +9,7 @@ import { cn } from "@/core/utils/ComponentUtils";
 import { Utils } from "@langboard/core/utils";
 import { add as addDate, differenceInSeconds, intervalToDuration } from "date-fns";
 import { useMemo } from "react";
+import { useTranslation } from "react-i18next";
 
 export interface ICardRowProps extends React.HTMLAttributes<HTMLTableRowElement> {
     card: ProjectCard.TModel;
@@ -17,9 +18,19 @@ export interface ICardRowProps extends React.HTMLAttributes<HTMLTableRowElement>
 function CardRow({ card, ...props }: ICardRowProps): React.JSX.Element | null {
     const navigate = usePageNavigateRef();
     const title = card.useField("title");
+    const linkedResource = card.useField("linked_resource");
     const columnName = card.useField("project_column_name");
     const archivedAt = card.useField("archived_at");
     const createdAt = card.useField("created_at");
+    const [t] = useTranslation();
+    const displayTitle =
+        card.source_type === "project_wiki"
+            ? linkedResource?.status === "available"
+                ? linkedResource.title
+                : linkedResource?.status === "forbidden"
+                  ? t("wiki.Restricted wiki")
+                  : t("wiki.Source unavailable")
+            : title;
 
     return (
         <Table.FlexRow
@@ -37,7 +48,7 @@ function CardRow({ card, ...props }: ICardRowProps): React.JSX.Element | null {
             <ModelRegistry.ProjectCard.Provider model={card}>
                 <Table.FlexCell className="w-1/3 text-center">
                     <Button variant="link" className="size-auto p-0" onClick={() => navigate(ROUTES.BOARD.CARD(card.project_uid, card.uid))}>
-                        {title}
+                        {displayTitle}
                     </Button>
                 </Table.FlexCell>
                 <Table.FlexCell className="w-1/3 text-center">
