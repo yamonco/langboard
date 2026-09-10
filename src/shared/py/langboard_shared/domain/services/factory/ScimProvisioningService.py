@@ -160,7 +160,11 @@ class ScimProvisioningService(BaseDomainService):
         user_service = self._get_service(UserService)
 
         if external_id:
-            user = identity_link.get_user_by_provider_external_id(IdentityProvider.Scim, external_id)
+            user = identity_link.get_user_by_provider_external_id(
+                IdentityProvider.Scim,
+                external_id,
+                (Env.SCIM_ISSUER or "").rstrip("/"),
+            )
             if user:
                 self.apply_user_mutations(user, payload)
                 return user
@@ -220,7 +224,11 @@ class ScimProvisioningService(BaseDomainService):
         if external_id:
             identity_link = self._get_service(IdentityLinkService)
             current_link = identity_link.get_by_user_provider(user, IdentityProvider.Scim)
-            linked_user = identity_link.get_user_by_provider_external_id(IdentityProvider.Scim, external_id)
+            linked_user = identity_link.get_user_by_provider_external_id(
+                IdentityProvider.Scim,
+                external_id,
+                (Env.SCIM_ISSUER or "").rstrip("/"),
+            )
             if (current_link and current_link.external_id != external_id) or (
                 linked_user and linked_user.id != user.id
             ):

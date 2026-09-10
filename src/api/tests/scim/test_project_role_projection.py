@@ -73,7 +73,12 @@ class IdentityService:
             return None
         return SimpleNamespace(external_id=f"employee-{user.id}", issuer="https://directory.example/scim")
 
-    def get_user_by_provider_external_id(self, _provider: Any, external_id: str) -> Any | None:
+    def get_user_by_provider_external_id(
+        self,
+        _provider: Any,
+        external_id: str,
+        _issuer: str | None = None,
+    ) -> Any | None:
         return self.external_users.get(external_id)
 
     def upsert_user_link(self, **kwargs: Any) -> Any:
