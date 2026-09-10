@@ -1,9 +1,17 @@
 from collections.abc import Sequence
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, func, or_, select
 from ....core.db import DbSession, SqlBuilder
 from ....core.domain import BaseRepository
 from ....core.types.ParamTypes import TUserParam
-from ....domain.models import ProjectAssignedUser, ProjectUserRelationship, User, UserEmail, UserProfile
+from ....domain.models import (
+    IdentityProvider,
+    ProjectAssignedUser,
+    ProjectUserRelationship,
+    User,
+    UserEmail,
+    UserIdentityLink,
+    UserProfile,
+)
 from ....helpers import InfraHelper
 
 
@@ -68,7 +76,12 @@ class UserRepository(BaseRepository[User]):
         return record
 
     def search_project_member_candidates(
-        self, user: TUserParam, query: str, can_search_all_users: bool, limit: int = 20
+        self,
+        user: TUserParam,
+        query: str,
+        can_search_all_users: bool,
+        organization_identities: Sequence[tuple[IdentityProvider, str]],
+        limit: int = 20,
     ) -> list[User]:
         user_id = InfraHelper.convert_id(user)
         query = query.strip().lower()
@@ -88,6 +101,7 @@ class UserRepository(BaseRepository[User]):
             .where(User.column("id") != user_id)
             .where(User.column("deleted_at") == None)  # noqa: E711
             .where(User.column("activated_at") != None)  # noqa: E711
+            .where(self._has_organization_identity(organization_identities))
             .where(search_clause)
             .order_by(User.column("firstname").asc(), User.column("lastname").asc(), User.column("id").asc())
             .limit(limit)
@@ -120,6 +134,7 @@ class UserRepository(BaseRepository[User]):
         user: TUserParam,
         candidate_users: Sequence[TUserParam],
         can_search_all_users: bool,
+        organization_identities: Sequence[tuple[IdentityProvider, str]],
     ) -> list[User]:
         """Resolve only active users inside the caller's candidate relationship scope."""
 
@@ -134,6 +149,7 @@ class UserRepository(BaseRepository[User]):
             .where(User.column("id") != user_id)
             .where(User.column("deleted_at") == None)  # noqa: E711
             .where(User.column("activated_at") != None)  # noqa: E711
+            .where(self._has_organization_identity(organization_identities))
             .order_by(User.column("id").asc())
         )
 
@@ -157,3 +173,19 @@ class UserRepository(BaseRepository[User]):
 
         with DbSession.use(readonly=True) as db:
             return db.exec(sql).all()
+
+    @staticmethod
+    def _has_organization_identity(organization_identities: Sequence[tuple[IdentityProvider, str]]):
+        clauses = [
+            and_(
+                UserIdentityLink.column("provider") == provider,
+                UserIdentityLink.column("issuer") == issuer,
+            )
+            for provider, issuer in organization_identities
+        ]
+        return (
+            select(UserIdentityLink.column("id"))
+            .where(UserIdentityLink.column("user_id") == User.column("id"))
+            .where(or_(*clauses))
+            .exists()
+        )

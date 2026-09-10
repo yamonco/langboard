@@ -6,11 +6,13 @@ from ....core.schema import TimeBasedPagination
 from ....core.types import SafeDateTime, SnowflakeID
 from ....core.types.ParamTypes import TInternalBotParam, TProjectParam, TUserOrBot, TUserParam
 from ....core.utils.Converter import convert_python_data
+from ....Env import Env
 from ....helpers import InfraHelper
 from ....publishers import ProjectPublisher
 from ....tasks.activities import ProjectActivityTask
 from ....tasks.bots import ProjectBotTask
 from ...models import (
+    IdentityProvider,
     InternalBot,
     Project,
     ProjectAssignedInternalBot,
@@ -76,12 +78,26 @@ class ProjectService(BaseDomainService):
             return None
 
         user_service = self._get_service_by_name("user")
+        organization_identities = self.__organization_identities()
+        if not organization_identities:
+            return []
         users = self.repo.user.search_project_member_candidates(
             user,
             query,
             can_search_all_users=user_service.can_search_all_users(user),
+            organization_identities=organization_identities,
         )
         return [user.api_response() for user in users]
+
+    @staticmethod
+    def __organization_identities() -> list[tuple[IdentityProvider, str]]:
+        """Configured federated issuers define who is safe to add without consent."""
+
+        pairs = (
+            (IdentityProvider.Oidc, Env.OIDC_ISSUER),
+            (IdentityProvider.Scim, Env.SCIM_ISSUER),
+        )
+        return [(provider, issuer.strip().rstrip("/")) for provider, issuer in pairs if issuer.strip()]
 
     def get_user_role_actions_by_project(self, user: User, project: Project) -> list[str]:
         if user.is_admin:
@@ -327,10 +343,19 @@ class ProjectService(BaseDomainService):
 
         return model
 
-    def update_assigned_users(self, user: User, project: TProjectParam | None, emails: list[str]) -> bool:
+    def update_assigned_users(
+        self,
+        user: User,
+        project: TProjectParam | None,
+        emails: list[str],
+        direct_members: list[User] | None = None,
+    ) -> bool:
         project = InfraHelper.get_by_id_like(Project, project)
         if not project:
             return False
+
+        eligible_direct_members = self.__eligible_direct_members(user, direct_members) if direct_members else []
+        desired_emails = list(dict.fromkeys([*emails, *(member.email for member in eligible_direct_members)]))
 
         old_assigned_users = self.repo.project_assigned_user.get_all_by_project(project)
         self.repo.project_user_relationship.ensure_project_relationships(
@@ -338,13 +363,18 @@ class ProjectService(BaseDomainService):
         )
 
         invitation_service: "ProjectInvitationService" = self._get_service_by_name("project_invitation")
-        invitation_related_data = invitation_service.get_invitation_related_data(project, emails)
+        invitation_related_data = invitation_service.get_invitation_related_data(project, desired_emails)
 
         self.repo.project_assigned_user.delete_all_by_project_and_users(
             project, list(invitation_related_data.user_ids_should_delete)
         )
 
-        result = invitation_service.invite_emails(user, project, invitation_related_data)
+        result = invitation_service.invite_emails(
+            user,
+            project,
+            invitation_related_data,
+            direct_user_ids={member.id for member in eligible_direct_members},
+        )
 
         new_assigned_users = self.repo.project_assigned_user.get_all_by_project(project)
         self.repo.project_user_relationship.ensure_project_relationships(
@@ -430,15 +460,9 @@ class ProjectService(BaseDomainService):
             return None
 
         unique_users = {user.id: user for user in users if user.id is not None}
-        user_service = self._get_service_by_name("user")
-        eligible_users = self.repo.user.get_direct_project_member_candidates(
-            user_or_bot,
-            list(unique_users.values()),
-            can_search_all_users=user_service.can_search_all_users(user_or_bot),
-        )
-        eligible_user_map = {user.id: user for user in eligible_users}
-        if eligible_user_map.keys() != unique_users.keys():
-            raise ValueError("One or more selected people are not eligible for direct addition")
+        eligible_user_map = {
+            user.id: user for user in self.__eligible_direct_members(user_or_bot, list(unique_users.values()))
+        }
 
         old_assigned_users = self.repo.project_assigned_user.get_all_by_project(project)
         newly_assigned_users: list[User] = []
@@ -472,6 +496,22 @@ class ProjectService(BaseDomainService):
             [assigned_user.id for assigned_user, _ in new_assigned_users],
         )
         return {"requested_count": len(unique_users), "changed_count": len(newly_assigned_users), "status": "updated"}
+
+    def __eligible_direct_members(self, actor: User, users: list[User]) -> list[User]:
+        user_service = self._get_service_by_name("user")
+        organization_identities = self.__organization_identities()
+        if not organization_identities:
+            raise ValueError("Federated organization identity is not configured")
+        unique_users = {user.id: user for user in users if user.id is not None}
+        eligible = self.repo.user.get_direct_project_member_candidates(
+            actor,
+            list(unique_users.values()),
+            can_search_all_users=user_service.can_search_all_users(actor),
+            organization_identities=organization_identities,
+        )
+        if {user.id for user in eligible} != unique_users.keys():
+            raise ValueError("One or more selected people are not eligible for direct addition")
+        return eligible
 
     def unassign_assignee(self, user: User, project: TProjectParam | None, target: TUserParam | None) -> bool:
         project = InfraHelper.get_by_id_like(Project, project)

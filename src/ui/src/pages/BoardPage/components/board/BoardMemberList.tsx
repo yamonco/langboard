@@ -11,7 +11,7 @@ import { useBoard } from "@/core/providers/BoardProvider";
 import { cn } from "@/core/utils/ComponentUtils";
 import { Routing } from "@langboard/core/constants";
 import { Utils } from "@langboard/core/utils";
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import BoardMemberDrag from "@/pages/BoardPage/components/board/BoardMemberDrag";
 
@@ -32,6 +32,7 @@ const BoardMemberList = memo(({ isSelectCardView }: IBoardMemberListProps) => {
     const [candidateSearchInput, setCandidateSearchInput] = useState("");
     const [candidateSearchQuery, setCandidateSearchQuery] = useState("");
     const [memberCandidates, setMemberCandidates] = useState<User.TModel[]>([]);
+    const directCandidateUIDsRef = useRef(new Set<string>());
     const visibleMembers = useMemo(() => allMemebers.filter((model) => !model.isDeletedUser()), [allMemebers]);
     const allSelectables = useMemo(() => {
         const userMap = new Map<string, User.TModel>();
@@ -153,7 +154,9 @@ const BoardMemberList = memo(({ isSelectCardView }: IBoardMemberListProps) => {
         })
             .then((res) => {
                 if (!cancelled) {
-                    setMemberCandidates(User.Model.fromArray(res.data.users ?? [], true));
+                    const candidates = User.Model.fromArray(res.data.users ?? [], true);
+                    candidates.forEach((candidate) => directCandidateUIDsRef.current.add(candidate.uid));
+                    setMemberCandidates(candidates);
                 }
             })
             .catch(() => {
@@ -169,15 +172,18 @@ const BoardMemberList = memo(({ isSelectCardView }: IBoardMemberListProps) => {
 
     const save = (items: (string | User.TModel)[]) => {
         const mergedItems = hiddenCurrentUserAssignee ? [...items, hiddenCurrentUserAssignee] : items;
+        const directCandidateUIDs = directCandidateUIDsRef.current;
         const promise = updateProjectAssignedUsersMutateAsync({
             uid: project.uid,
             emails: mergedItems.flatMap((item) => {
                 if (Utils.Type.isString(item)) {
                     return [item];
                 }
-
-                return "email" in item && Utils.Type.isString(item.email) ? [item.email] : [];
+                return !directCandidateUIDs.has(item.uid) && "email" in item && Utils.Type.isString(item.email) ? [item.email] : [];
             }),
+            member_uids: mergedItems.flatMap((item) =>
+                !Utils.Type.isString(item) && directCandidateUIDs.has(item.uid) ? [item.uid] : []
+            ),
         });
 
         Toast.Add.promise(promise, {
