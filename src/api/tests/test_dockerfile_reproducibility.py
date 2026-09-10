@@ -92,3 +92,12 @@ def test_environment_renderer_is_release_worktree_safe() -> None:
     assert 'cd "$ROOT_DIR"' in renderer
     assert 'CURRENT_DIR=$(basename "$PWD")' not in renderer
     assert '== "langboard"' not in renderer
+
+
+def test_server_environment_exports_oidc_resource_server_settings() -> None:
+    """Container recreation must preserve delegated bearer authentication."""
+
+    template = (ROOT / "docker" / "envs" / "server.env.template").read_text()
+
+    assert "OIDC_BEARER_ENABLED=${OIDC_BEARER_ENABLED}" in template
+    assert "OIDC_RESOURCE_AUDIENCE=${OIDC_RESOURCE_AUDIENCE}" in template
