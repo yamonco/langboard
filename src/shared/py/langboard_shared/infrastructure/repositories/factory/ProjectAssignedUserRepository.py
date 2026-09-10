@@ -22,6 +22,8 @@ class ProjectAssignedUserRepository(BaseRepository[ProjectAssignedUser]):
         project: TProjectParam,
         where_users_in: Sequence[TUserParam] | None = None,
         limit: int | None = None,
+        *,
+        consistent: bool = False,
     ) -> list[tuple[User, ProjectAssignedUser]]:
         project_id = InfraHelper.convert_id(project)
         query = (
@@ -43,7 +45,7 @@ class ProjectAssignedUserRepository(BaseRepository[ProjectAssignedUser]):
             query = query.limit(limit)
 
         users = []
-        with DbSession.use(readonly=True) as db:
+        with DbSession.use(readonly=not consistent) as db:
             result = db.exec(query)
             users = result.all()
         return users

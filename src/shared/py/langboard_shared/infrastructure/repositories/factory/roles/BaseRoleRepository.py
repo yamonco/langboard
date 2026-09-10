@@ -38,6 +38,7 @@ class BaseRoleRepository(Generic[_TRoleModel], BaseRepository[_TRoleModel]):
 
         If no parameters are given, all roles will be returned.
         """
+        consistent = bool(kwargs.pop("consistent", False))
         model_cls = self._get_model_cls()
         query = SqlBuilder.select.table(model_cls)
 
@@ -46,7 +47,7 @@ class BaseRoleRepository(Generic[_TRoleModel], BaseRepository[_TRoleModel]):
                 query = query.where(getattr(model_cls, arg) == value)
 
         record = None
-        with DbSession.use(readonly=True) as db:
+        with DbSession.use(readonly=not consistent) as db:
             result = db.exec(query.limit(1))
             record = result.first()
         return record

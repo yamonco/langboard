@@ -15,10 +15,12 @@ class ScimGroupMemberRepository(BaseRepository[ScimGroupMember]):
     def name() -> str:
         return "scim_group_member"
 
-    def get_users_by_group(self, group: TScimGroupParam) -> list[tuple[ScimGroupMember, User]]:
+    def get_users_by_group(
+        self, group: TScimGroupParam, *, consistent: bool = False
+    ) -> list[tuple[ScimGroupMember, User]]:
         group_id = InfraHelper.convert_id(group)
 
-        with DbSession.use(readonly=True) as db:
+        with DbSession.use(readonly=not consistent) as db:
             return db.exec(
                 SqlBuilder.select.tables(ScimGroupMember, User)
                 .join(User, User.column("id") == ScimGroupMember.column("user_id"))
@@ -38,10 +40,12 @@ class ScimGroupMemberRepository(BaseRepository[ScimGroupMember]):
                 .order_by(ScimGroupMember.column("group_id").asc(), User.column("email").asc(), User.column("id").asc())
             ).all()
 
-    def get_groups_by_user(self, user: TUserParam) -> list[tuple[ScimGroupMember, ScimGroup]]:
+    def get_groups_by_user(
+        self, user: TUserParam, *, consistent: bool = False
+    ) -> list[tuple[ScimGroupMember, ScimGroup]]:
         user_id = InfraHelper.convert_id(user)
 
-        with DbSession.use(readonly=True) as db:
+        with DbSession.use(readonly=not consistent) as db:
             return db.exec(
                 SqlBuilder.select.tables(ScimGroupMember, ScimGroup)
                 .join(ScimGroup, ScimGroup.column("id") == ScimGroupMember.column("group_id"))
