@@ -10,6 +10,7 @@ from ....helpers import InfraHelper
 from ....publishers import ProjectInvitationPublisher, ProjectPublisher
 from ....tasks.activities import ProjectActivityTask, UserActivityTask
 from ...models import Project, ProjectAssignedUser, ProjectInvitation, User, UserEmail
+from ...models.ProjectRole import ProjectRoleAction
 from .EmailService import EmailService
 from .NotificationService import NotificationService
 from .ProjectService import ProjectService
@@ -280,12 +281,21 @@ class ProjectInvitationService(BaseDomainService):
 
             self.repo.project_invitation.delete(invitation)
 
-        self.repo.project_assigned_user.ensure_assigned(project, user)
+        _, created = self.repo.project_assigned_user.ensure_assigned(project, user)
         project_users = self.repo.project_assigned_user.get_all_by_project(project)
         self.repo.project_user_relationship.ensure_project_relationships(
             project, [assigned_user.id for assigned_user, _ in project_users]
         )
-        self.repo.role.project.grant_default(user_id=user.id, project_id=project.id)
+        if created:
+            self.repo.role.project.grant(
+                actions=[
+                    ProjectRoleAction.Read.value,
+                    ProjectRoleAction.CardWrite.value,
+                    ProjectRoleAction.CardUpdate.value,
+                ],
+                user_id=user.id,
+                project_id=project.id,
+            )
         ProjectPublisher.assigned_to_users(project, [user])
 
         project_service = self._get_service(ProjectService)

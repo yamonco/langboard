@@ -234,7 +234,7 @@ def test_existing_member_addition_bypasses_invitation_and_preserves_members() ->
         get_all_by_project=Mock(side_effect=[[(existing, object())], assigned_rows]),
         ensure_assigned=Mock(return_value=(object(), True)),
     )
-    role_repository = SimpleNamespace(project=SimpleNamespace(grant_default=Mock()))
+    role_repository = SimpleNamespace(project=SimpleNamespace(grant_all=Mock()))
     relationship_repository = SimpleNamespace(ensure_project_relationships=Mock())
     user_repository = SimpleNamespace(get_direct_project_member_candidates=Mock(return_value=[employee]))
     user_service = SimpleNamespace(can_search_all_users=Mock(return_value=False))
@@ -272,7 +272,7 @@ def test_existing_member_addition_bypasses_invitation_and_preserves_members() ->
         [employee],
         can_search_all_users=False,
     )
-    role_repository.project.grant_default.assert_called_once_with(user_id=20, project_id=10)
+    role_repository.project.grant_all.assert_called_once_with(user_id=20, project_id=10)
     invitation_service.get_api_invited_user_list_by_project.assert_called_once_with(project)
 
 
@@ -350,6 +350,82 @@ def test_existing_member_addition_rejects_arbitrary_uid_outside_candidate_scope(
 
     assigned_repository.get_all_by_project.assert_not_called()
     assigned_repository.ensure_assigned.assert_not_called()
+
+
+def test_external_invitation_acceptance_grants_card_work_without_admin_access() -> None:
+    """Accepted guests can create and update cards but cannot manage or delete project data."""
+
+    project = SimpleNamespace(id=10)
+    guest = User.model_construct(id=20)
+    grant = Mock()
+    repository = SimpleNamespace(
+        project_assigned_user=SimpleNamespace(
+            ensure_assigned=Mock(return_value=(object(), True)),
+            get_all_by_project=Mock(return_value=[]),
+        ),
+        project_invitation=SimpleNamespace(get_all_by_project_with_user=Mock(return_value=[])),
+        project_user_relationship=SimpleNamespace(ensure_project_relationships=Mock()),
+        role=SimpleNamespace(project=SimpleNamespace(grant=grant)),
+    )
+    project_service = SimpleNamespace(get_api_assigned_user_list=Mock(return_value=[]))
+    service = ProjectInvitationService(
+        lambda service_type: project_service if service_type is ProjectService else None,
+        lambda _name: None,
+        repository,
+    )
+
+    with (
+        patch("langboard_shared.domain.services.factory.ProjectInvitationService.ProjectPublisher.assigned_to_users"),
+        patch("langboard_shared.domain.services.factory.ProjectInvitationService.ProjectInvitationPublisher.accepted"),
+        patch(
+            "langboard_shared.domain.services.factory.ProjectInvitationService.ProjectActivityTask.project_invited_user_accepted"
+        ),
+    ):
+        service._ProjectInvitationService__assign_project_user(project, guest)
+
+    grant.assert_called_once_with(
+        actions=[
+            ProjectRoleAction.Read.value,
+            ProjectRoleAction.CardWrite.value,
+            ProjectRoleAction.CardUpdate.value,
+        ],
+        user_id=guest.id,
+        project_id=project.id,
+    )
+
+
+def test_invitation_acceptance_preserves_an_existing_members_role() -> None:
+    """A stale invitation cannot downgrade a member who already has stronger access."""
+
+    project = SimpleNamespace(id=10)
+    member = User.model_construct(id=20)
+    grant = Mock()
+    repository = SimpleNamespace(
+        project_assigned_user=SimpleNamespace(
+            ensure_assigned=Mock(return_value=(object(), False)),
+            get_all_by_project=Mock(return_value=[]),
+        ),
+        project_invitation=SimpleNamespace(get_all_by_project_with_user=Mock(return_value=[])),
+        project_user_relationship=SimpleNamespace(ensure_project_relationships=Mock()),
+        role=SimpleNamespace(project=SimpleNamespace(grant=grant)),
+    )
+    project_service = SimpleNamespace(get_api_assigned_user_list=Mock(return_value=[]))
+    service = ProjectInvitationService(
+        lambda service_type: project_service if service_type is ProjectService else None,
+        lambda _name: None,
+        repository,
+    )
+
+    with (
+        patch("langboard_shared.domain.services.factory.ProjectInvitationService.ProjectPublisher.assigned_to_users"),
+        patch("langboard_shared.domain.services.factory.ProjectInvitationService.ProjectInvitationPublisher.accepted"),
+        patch(
+            "langboard_shared.domain.services.factory.ProjectInvitationService.ProjectActivityTask.project_invited_user_accepted"
+        ),
+    ):
+        service._ProjectInvitationService__assign_project_user(project, member)
+
+    grant.assert_not_called()
 
 
 def test_invite_tool_schema_and_legacy_replacement_tool_are_distinct() -> None:
