@@ -56,22 +56,15 @@ export function SkeletonBoard() {
     }, []);
 
     return (
-        <>
-            <Flex justify="between" px="4" pt="4" wrap>
+        <Flex direction="col" h="full" minH="0">
+            <Flex justify="between" px="4" pt="4" wrap className="shrink-0">
                 <SkeletonUserAvatarList count={6} size={{ initial: "sm", xs: "default" }} spacing="none" />
                 <Flex items="center" gap="1">
                     <SkeletonBoardFilter />
                 </Flex>
             </Flex>
 
-            <Box
-                position="relative"
-                h="full"
-                className={cn(
-                    "max-h-[calc(100dvh_-_theme(spacing.28)_-_theme(spacing.2)_-_theme(spacing.16))]",
-                    "overflow-hidden md:max-h-[calc(100dvh_-_theme(spacing.28)_-_theme(spacing.2))]"
-                )}
-            >
+            <Box position="relative" h="full" className="min-h-0 flex-1 overflow-hidden">
                 <Box size="full" className="rounded-[inherit]">
                     <Flex direction="row" items="start" gap="10" p="4">
                         {cardCounts.map((count) => (
@@ -80,7 +73,7 @@ export function SkeletonBoard() {
                     </Flex>
                 </Box>
             </Box>
-        </>
+        </Flex>
     );
 }
 
@@ -97,11 +90,8 @@ export function Board() {
         <>
             <ScrollArea.Root
                 viewportId={scrollportId}
-                className={cn(
-                    "h-[calc(100dvh_-_theme(spacing.28)_-_theme(spacing.2)_-_theme(spacing.16))]",
-                    "min-h-0 md:h-[calc(100dvh_-_theme(spacing.28)_-_theme(spacing.2))]"
-                )}
-                viewportClassName="!overflow-x-auto"
+                className="min-h-0 flex-1"
+                viewportClassName="!overflow-x-auto !overflow-y-hidden"
                 viewportRef={setScrollableRef}
             >
                 <Flex direction="row" items="start" gap="4" p="4" h="full" className="min-h-0">
