@@ -85,6 +85,7 @@ const HeaderUserNotification = memo(({ currentUser }: IHeaderUserNotificationPro
         setHasMore(false);
         setUnreadCount(0);
     }, []);
+    const closeNotifications = useCallback(() => setIsOpened(false), []);
     const updateTimeRange = (value: IUserSettings["notifications_time_range"]) => {
         getUserSettingsStore().updateSettingsByKey("notifications_time_range", value);
     };
@@ -198,6 +199,7 @@ const HeaderUserNotification = memo(({ currentUser }: IHeaderUserNotificationPro
                     hasMore={hasMore}
                     isOnlyUnread={isOnlyUnread}
                     loadMore={loadMoreNotifications}
+                    onNavigate={closeNotifications}
                     setUnreadCount={setUnreadCount}
                     timeRange={timeRange || "3d"}
                     updater={[updated, forceUpdate]}
@@ -211,12 +213,21 @@ interface IHeaderUserNotificationListProps {
     hasMore: bool;
     isOnlyUnread: bool;
     loadMore: (page: number) => Promise<bool>;
+    onNavigate: () => void;
     setUnreadCount: React.Dispatch<React.SetStateAction<number>>;
     timeRange: IUserSettings["notifications_time_range"];
     updater: [number, React.DispatchWithoutAction];
 }
 
-function HeaderUserNotificationList({ hasMore, isOnlyUnread, loadMore, setUnreadCount, timeRange, updater }: IHeaderUserNotificationListProps) {
+function HeaderUserNotificationList({
+    hasMore,
+    isOnlyUnread,
+    loadMore,
+    onNavigate,
+    setUnreadCount,
+    timeRange,
+    updater,
+}: IHeaderUserNotificationListProps) {
     const [t] = useTranslation();
     const [updated] = updater;
     const flatNotifications = UserNotification.Model.useModels(() => true, [updated]);
@@ -259,6 +270,7 @@ function HeaderUserNotificationList({ hasMore, isOnlyUnread, loadMore, setUnread
                     <HeaderUserNotificationItem
                         key={notification.uid}
                         notification={notification}
+                        onNavigate={onNavigate}
                         setUnreadCount={setUnreadCount}
                         updater={updater}
                     />
@@ -270,11 +282,12 @@ function HeaderUserNotificationList({ hasMore, isOnlyUnread, loadMore, setUnread
 
 interface IHeaderUserNotificationItemProps {
     notification: UserNotification.TModel;
+    onNavigate: () => void;
     setUnreadCount: React.Dispatch<React.SetStateAction<number>>;
     updater: [number, React.DispatchWithoutAction];
 }
 
-const HeaderUserNotificationItem = memo(({ notification, setUnreadCount, updater }: IHeaderUserNotificationItemProps) => {
+const HeaderUserNotificationItem = memo(({ notification, onNavigate, setUnreadCount, updater }: IHeaderUserNotificationItemProps) => {
     const [_, forceUpdate] = updater;
     const [t, i18n] = useTranslation();
     const navigate = usePageNavigateRef();
@@ -322,6 +335,7 @@ const HeaderUserNotificationItem = memo(({ notification, setUnreadCount, updater
     const movePage = () => {
         const route = getRoute(notification);
         readNotification(false);
+        onNavigate();
         navigate(route);
     };
     const messageVars = getNotificationMessageVars(notification);
