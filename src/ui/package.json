@@ -7,12 +7,14 @@
   "scripts": {
     "dev": "vite --force",
     "build": "tsc && vite build",
+    "test:board-graph": "node --experimental-strip-types --test src/pages/BoardPage/BoardGraphLayout.test.ts src/pages/BoardPage/BoardGraphPreference.test.ts",
     "lint": "eslint . -c eslint.config.js --ignore-pattern node_modules/ --ignore-pattern dist/ --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
     "format": "prettier --write \"{tests,src}/**/*.{js,jsx,ts,tsx,json,md}\" --ignore-path .prettierignore",
     "check-format": "prettier --check \"{tests,src}/**/*.{js,jsx,ts,tsx,json,md}\" --ignore-path .prettierignore"
   },
   "dependencies": {
+    "react-force-graph-2d": "1.29.1",
     "@ai-sdk/react": "^3.0.113",
     "@ariakit/react": "^0.4.21",
     "@atlaskit/pragmatic-drag-and-drop": "^1.7.9",
@@ -83,6 +85,7 @@
     "@udecode/cmdk": "^1.0.2",
     "@udecode/cn": "^52.0.11",
     "@uiw/react-json-view": "^2.0.0-alpha.41",
+    "@xyflow/react": "^12.11.5",
     "add": "^2.0.6",
     "ai": "^6.0.111",
     "axios": "^1.13.6",

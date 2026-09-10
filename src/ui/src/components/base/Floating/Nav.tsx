@@ -73,7 +73,13 @@ function Nav({
                         onClick={item.onClick}
                     >
                         {item.badge && (
-                            <span className="absolute -right-1 -top-1 inline-flex min-w-5 items-center justify-center rounded-full bg-destructive px-1.5 py-0.5 text-[10px] font-bold leading-none text-destructive-foreground shadow">
+                            <span
+                                className={cn(
+                                    "absolute -right-1 -top-1 inline-flex min-w-5 items-center justify-center rounded-full",
+                                    "bg-destructive px-1.5 py-0.5 text-[10px] font-bold leading-none",
+                                    "text-destructive-foreground shadow"
+                                )}
+                            >
                                 {item.badge}
                             </span>
                         )}
