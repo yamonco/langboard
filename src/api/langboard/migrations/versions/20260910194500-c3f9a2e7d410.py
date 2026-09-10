@@ -1,7 +1,7 @@
 """index card-related activity recency lookups
 
 Revision ID: c3f9a2e7d410
-Revises: a71d54c3e902
+Revises: 4e8b1c7d2a90
 Create Date: 2026-09-10 19:45:00
 """
 
@@ -10,7 +10,7 @@ from alembic import op
 
 
 revision: str = "c3f9a2e7d410"
-down_revision: Union[str, None] = "a71d54c3e902"
+down_revision: Union[str, None] = "4e8b1c7d2a90"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
