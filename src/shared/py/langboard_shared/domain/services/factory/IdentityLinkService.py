@@ -30,11 +30,16 @@ class IdentityLinkService(BaseDomainService):
             return None
         return self.repo.user_identity_link.get_by_provider_external_id(provider_enum, external_id, issuer)
 
-    def get_by_user_provider(self, user: TUserParam, provider: IdentityProvider | str) -> UserIdentityLink | None:
+    def get_by_user_provider(
+        self,
+        user: TUserParam,
+        provider: IdentityProvider | str,
+        issuer: str | None = None,
+    ) -> UserIdentityLink | None:
         provider_enum = self._to_provider_enum(provider)
         if provider_enum is None:
             return None
-        return self.repo.user_identity_link.get_by_user_provider(user, provider_enum)
+        return self.repo.user_identity_link.get_by_user_provider(user, provider_enum, issuer)
 
     def get_user_by_provider_external_id(
         self,
@@ -60,14 +65,12 @@ class IdentityLinkService(BaseDomainService):
         if provider_enum is None:
             raise ValueError("Unsupported identity provider")
 
-        current_link = self.get_by_user_provider(user_id, provider_enum)
         normalized_issuer = issuer.strip().rstrip("/") if issuer else ""
+        current_link = self.get_by_user_provider(user_id, provider_enum, normalized_issuer)
         external_link = self.get_by_provider_external_id(provider_enum, external_id, normalized_issuer)
 
-        if external_link and current_link and external_link.id != current_link.id:
-            # Keep a single record per user/provider pair.
-            self.repo.user_identity_link.delete(current_link, purge=True)
-            current_link = None
+        if external_link and external_link.user_id != user_id:
+            raise ValueError("External identity is already linked to another user")
 
         target = external_link or current_link
         if not target:

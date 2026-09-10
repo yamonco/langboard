@@ -342,6 +342,35 @@ class Env:
         return self.__get_from_cache("OIDC_BEARER_ENABLED", "false").lower() == "true"
 
     @property
+    def OIDC_DELEGATED_BEARER_ENABLED(self) -> bool:
+        return self.__get_from_cache("OIDC_DELEGATED_BEARER_ENABLED", "false").lower() == "true"
+
+    @property
+    def OIDC_DELEGATED_ISSUER(self) -> str:
+        return self.__get_from_cache("OIDC_DELEGATED_ISSUER", "")
+
+    @property
+    def OIDC_DELEGATED_JWKS_URL(self) -> str:
+        return self.__get_from_cache("OIDC_DELEGATED_JWKS_URL", "")
+
+    @property
+    def OIDC_DELEGATED_AUDIENCE(self) -> str:
+        return self.__get_from_cache("OIDC_DELEGATED_AUDIENCE", "")
+
+    @property
+    def OIDC_DELEGATED_ACTOR_SUBJECTS(self) -> set[str]:
+        raw = self.__get_from_cache("OIDC_DELEGATED_ACTOR_SUBJECTS", "")
+        return {value.strip() for value in raw.split(",") if value.strip()}
+
+    @property
+    def OIDC_DELEGATED_MAX_TTL_SEC(self) -> int:
+        return int(self.__get_from_cache("OIDC_DELEGATED_MAX_TTL_SEC", "120"))
+
+    @property
+    def OIDC_DELEGATED_CLOCK_SKEW_SEC(self) -> int:
+        return int(self.__get_from_cache("OIDC_DELEGATED_CLOCK_SKEW_SEC", "30"))
+
+    @property
     def OIDC_RESOURCE_AUDIENCE(self) -> str:
         return self.__get_from_cache("OIDC_RESOURCE_AUDIENCE", self.OIDC_CLIENT_ID)
 

@@ -63,6 +63,13 @@ class MiddlewareHelper:
     @staticmethod
     def validate_auth(scope: Scope) -> User | Bot | int:
         headers = Headers(scope=scope)
+        delegated_assertion = headers.get(
+            AuthSecurity.MCP_USER_ASSERTION_HEADER,
+            headers.get(AuthSecurity.MCP_USER_ASSERTION_HEADER.lower()),
+        )
+        if delegated_assertion is not None:
+            return MiddlewareHelper._validate_delegated_oidc_user(scope, headers, delegated_assertion)
+
         if headers.get(AuthSecurity.API_TOKEN_HEADER, headers.get(AuthSecurity.API_TOKEN_HEADER.lower())):
             validation_result = Auth.validate_user_by_api_token(headers)
             if isinstance(validation_result, User):
@@ -96,12 +103,41 @@ class MiddlewareHelper:
         return validation_result
 
     @staticmethod
+    def _validate_delegated_oidc_user(scope: Scope, headers: Headers, assertion: str) -> User | int:
+        """Authenticate a proxy and resolve its signed end-user assertion.
+
+        The API key authenticates the MCP gateway only. Authorization always
+        runs as the explicitly linked OIDC subject carried by the assertion.
+        Any malformed, disabled, or unlinked assertion fails closed instead of
+        falling back to the API-key owner.
+        """
+
+        from ..Env import Env
+
+        if not Env.OIDC_DELEGATED_BEARER_ENABLED:
+            return status.HTTP_401_UNAUTHORIZED
+        token = assertion.strip()
+        if not token or any(character.isspace() for character in token):
+            return status.HTTP_401_UNAUTHORIZED
+        if not headers.get(AuthSecurity.API_KEY_HEADER, headers.get(AuthSecurity.API_KEY_HEADER.lower())):
+            return status.HTTP_401_UNAUTHORIZED
+
+        gateway_result = Auth.validate_user_by_api_key(headers)
+        if not isinstance(gateway_result, tuple):
+            return gateway_result if isinstance(gateway_result, int) else status.HTTP_401_UNAUTHORIZED
+
+        _, api_key = gateway_result
+        user = MiddlewareHelper._validate_delegated_oidc_token(token)
+        if not user:
+            return status.HTTP_401_UNAUTHORIZED
+        scope["auth"] = user
+        scope["api_key"] = api_key
+        return user
+
+    @staticmethod
     def _validate_oidc_user(headers: Headers) -> User | None:
         """Resolve a resource-scoped OIDC token through an explicit identity link."""
 
-        from ..core.security import OidcClient
-        from ..domain.models import IdentityProvider
-        from ..domain.services import DomainService
         from ..Env import Env
 
         if not Env.OIDC_BEARER_ENABLED:
@@ -111,12 +147,49 @@ class MiddlewareHelper:
         token = token.strip()
         if not separator or scheme.lower() != "bearer" or not token:
             return None
+        return MiddlewareHelper._validate_oidc_token(token)
+
+    @staticmethod
+    def _validate_oidc_token(token: str) -> User | None:
+        """Resolve one validated resource token to an active linked user."""
+
+        from ..core.security import OidcClient
+        from ..domain.models import IdentityProvider
+        from ..domain.services import DomainService
+
         try:
             claims = OidcClient.validate_access_token(token)
             subject = str(claims.get("sub", "")).strip()
             issuer = str(claims.get("iss", "")).strip().rstrip("/")
             if not subject or not issuer:
                 return None
+            service = DomainService()
+            try:
+                user = service.identity_link.get_user_by_provider_external_id(
+                    IdentityProvider.Oidc,
+                    subject,
+                    issuer,
+                )
+                if not user or not user.activated_at or user.deleted_at:
+                    return None
+                return user
+            finally:
+                service.close()
+        except Exception:
+            return None
+
+    @staticmethod
+    def _validate_delegated_oidc_token(token: str) -> User | None:
+        """Resolve a one-time trusted-gateway assertion to an active linked user."""
+
+        from ..core.security import DelegatedOidcClient
+        from ..domain.models import IdentityProvider
+        from ..domain.services import DomainService
+
+        try:
+            claims = DelegatedOidcClient.validate(token)
+            subject = str(claims.get("sub", "")).strip()
+            issuer = str(claims.get("iss", "")).strip().rstrip("/")
             service = DomainService()
             try:
                 user = service.identity_link.get_user_by_provider_external_id(
