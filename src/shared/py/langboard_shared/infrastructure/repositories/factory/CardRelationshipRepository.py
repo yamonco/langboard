@@ -1,4 +1,6 @@
-from typing import Literal, Sequence
+from collections.abc import Callable
+from typing import Literal, Mapping, Sequence
+from sqlalchemy import select
 from ....core.db import DbSession, SqlBuilder
 from ....core.domain import BaseRepository
 from ....core.types.ParamTypes import TCardParam, TGlobalCardRelationshipTypeParam, TProjectParam
@@ -139,3 +141,79 @@ class CardRelationshipRepository(BaseRepository[CardRelationship]):
                     | (CardRelationship.column("card_id_child") == card_id)
                 )
             )
+
+    def apply_graph_patch(
+        self,
+        project: TProjectParam,
+        new_cards: Mapping[str, Card],
+        existing_card_ids: Mapping[str, int],
+        add_edges: Sequence[tuple[str, str, int]],
+        prepare_mutation: Callable[[list[tuple[int, int, int]]], Sequence[tuple[int, int, int]]],
+    ) -> tuple[list[CardRelationship], list[tuple[int, int, int]]]:
+        """Lock, re-read, validate, and mutate one project graph in one transaction."""
+
+        project_id = InfraHelper.convert_id(project)
+        created_relationships: list[CardRelationship] = []
+        with DbSession.use(readonly=False) as db:
+            locked_project_id = db.exec(
+                SqlBuilder.select.column(Project.column("id"))
+                .where(Project.column("id") == project_id)
+                .with_for_update()
+            ).first()
+            if locked_project_id is None:
+                raise ValueError("Project no longer exists")
+
+            parent_card = Card.__table__.alias("graph_parent_card")
+            child_card = Card.__table__.alias("graph_child_card")
+            relationship = CardRelationship.__table__
+            graph_snapshot = db.exec(
+                select(
+                    relationship.c.id,
+                    relationship.c.card_id_parent,
+                    relationship.c.card_id_child,
+                )
+                .select_from(
+                    relationship.join(parent_card, relationship.c.card_id_parent == parent_card.c.id).join(
+                        child_card, relationship.c.card_id_child == child_card.c.id
+                    )
+                )
+                .where(parent_card.c.project_id == project_id)
+                .where(child_card.c.project_id == project_id)
+                .order_by(relationship.c.id.asc())
+            ).all()
+            remove_relationships = list(prepare_mutation(graph_snapshot))
+            remove_relationship_ids = [relationship_id for relationship_id, _, _ in remove_relationships]
+
+            requested_existing_ids = set(existing_card_ids.values())
+            if requested_existing_ids:
+                current_existing_ids = set(
+                    db.exec(
+                        SqlBuilder.select.column(Card.column("id"))
+                        .where(Card.column("id").in_(requested_existing_ids))
+                        .where(Card.column("project_id") == project_id)
+                    ).all()
+                )
+                if current_existing_ids != requested_existing_ids:
+                    raise ValueError("One or more project cards changed before the graph patch was applied")
+
+            if remove_relationship_ids:
+                db.exec(
+                    SqlBuilder.delete.table(CardRelationship).where(
+                        CardRelationship.column("id").in_(remove_relationship_ids)
+                    )
+                )
+            if new_cards:
+                db.insert_all(new_cards.values())
+
+            card_ids = {**existing_card_ids, **{ref: card.id for ref, card in new_cards.items()}}
+            created_relationships = [
+                CardRelationship(
+                    relationship_type_id=relationship_type_id,
+                    card_id_parent=card_ids[parent_ref],
+                    card_id_child=card_ids[child_ref],
+                )
+                for parent_ref, child_ref, relationship_type_id in add_edges
+            ]
+            if created_relationships:
+                db.insert_all(created_relationships)
+        return created_relationships, remove_relationships

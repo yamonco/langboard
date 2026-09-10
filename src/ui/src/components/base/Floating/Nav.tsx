@@ -25,6 +25,7 @@ export interface IFloatingNavProps {
     itemClassName?: string;
     labelClassName?: string;
     iconSize?: React.ComponentProps<typeof IconComponent>["size"];
+    trailing?: React.ReactNode;
 }
 
 function Nav({
@@ -35,6 +36,7 @@ function Nav({
     itemClassName,
     labelClassName,
     iconSize = "4",
+    trailing,
 }: IFloatingNavProps): React.JSX.Element | null {
     const visibleItems = items.filter((item) => !item.hidden);
 
@@ -47,7 +49,7 @@ function Nav({
             justify="center"
             className={cn(
                 "pointer-events-none z-50 w-full shrink-0",
-                fixed && "fixed bottom-2 left-2 right-2 md:left-1/2 md:right-auto md:w-auto md:-translate-x-1/2",
+                fixed && "fixed bottom-2 left-2 right-2 w-auto md:left-1/2 md:right-auto md:-translate-x-1/2",
                 className
             )}
         >
@@ -75,9 +77,8 @@ function Nav({
                         {item.badge && (
                             <span
                                 className={cn(
-                                    "absolute -right-1 -top-1 inline-flex min-w-5 items-center justify-center rounded-full",
-                                    "bg-destructive px-1.5 py-0.5 text-[10px] font-bold leading-none",
-                                    "text-destructive-foreground shadow"
+                                    "absolute -right-1 -top-1 inline-flex min-w-5 items-center justify-center rounded-full bg-destructive",
+                                    "px-1.5 py-0.5 text-[10px] font-bold leading-none text-destructive-foreground shadow"
                                 )}
                             >
                                 {item.badge}
@@ -87,6 +88,7 @@ function Nav({
                         <span className={cn("truncate text-xs", labelClassName, item.labelClassName)}>{item.label}</span>
                     </Button>
                 ))}
+                {trailing}
             </Flex>
         </Flex>
     );

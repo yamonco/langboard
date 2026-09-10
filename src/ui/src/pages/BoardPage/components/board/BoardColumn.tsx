@@ -24,10 +24,15 @@ import { columnRowDndHelpers } from "@/core/helpers/dnd";
 import { TColumnState } from "@/core/helpers/dnd/types";
 import {
     BLOCK_BOARD_PANNING_ATTR,
+    BOARD_CARD_FOCUS_EVENT,
+    BOARD_CARD_LOCATION_EVENT,
+    BOARD_CARD_TOUCH_DND_ATTR,
     BOARD_COLUMN_MAX_HEIGHT_CLASS_NAMES,
     BOARD_COLUMN_TOUCH_DND_ATTR,
     BOARD_DND_SETTINGS,
     BOARD_DND_SYMBOL_SET,
+    IBoardCardFocusEventDetail,
+    IBoardCardLocationEventDetail,
 } from "@/pages/BoardPage/components/board/BoardConstants";
 import { COLUMN_IDLE } from "@/core/helpers/dnd/createDndColumnEvents";
 import useRowReordered from "@/core/hooks/useRowReordered";
@@ -71,6 +76,7 @@ export interface IBoardColumnProps {
 }
 
 function BoardColumn({ column, updateBoard }: IBoardColumnProps) {
+    const { canDragAndDrop } = useBoard();
     const scrollableRef = useRef<HTMLDivElement | null>(null);
     const outerFullHeightRef = useRef<HTMLDivElement | null>(null);
     const headerRef = useRef<HTMLDivElement | null>(null);
@@ -91,6 +97,7 @@ function BoardColumn({ column, updateBoard }: IBoardColumnProps) {
         invariant(inner);
 
         return columnRowDndHelpers.column({
+            canDrag: canDragAndDrop,
             column,
             symbolSet: BOARD_DND_SYMBOL_SET,
             draggable: header,
@@ -111,7 +118,7 @@ function BoardColumn({ column, updateBoard }: IBoardColumnProps) {
                 container.appendChild(preview);
             },
         });
-    }, [column, order]);
+    }, [canDragAndDrop, column, order]);
 
     return (
         <BoardAddCardProvider column={column} viewportRef={scrollableRef} toLastPage={() => {}}>
@@ -120,8 +127,8 @@ function BoardColumn({ column, updateBoard }: IBoardColumnProps) {
                 {...{ [BOARD_COLUMN_TOUCH_DND_ATTR]: column.uid }}
                 className={cn(
                     BOARD_COLUMN_MAX_HEIGHT_CLASS_NAMES,
-                    "relative my-1 grid w-72 flex-shrink-0 snap-center grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden shadow-md",
-                    "shadow-black/30 ring-primary dark:shadow-border/90 sm:w-80",
+                    "relative my-1 grid w-72 flex-shrink-0 snap-center grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-2xl",
+                    "border-border/60 bg-muted/40 shadow-sm ring-primary dark:bg-background/60 sm:w-80",
                     stateStyles[state.type]
                 )}
             >
@@ -219,6 +226,17 @@ const BoardColumnCardList = memo(({ column, updateBoard, scrollableRef, onCardCo
     }, [columnCards.length, onCardCountChange]);
 
     const hierarchyGroups = useMemo(() => buildBoardColumnCardHierarchy(columnCards), [columnCards]);
+    const cardGroupIndices = useMemo(() => {
+        const indices = new Map<string, number[]>();
+        hierarchyGroups.forEach((group, index) => {
+            [group.root, ...group.descendants.map(({ card }) => card)].forEach((card) => {
+                const positions = indices.get(card.uid) ?? [];
+                positions.push(index);
+                indices.set(card.uid, positions);
+            });
+        });
+        return indices;
+    }, [hierarchyGroups]);
 
     const virtualizer = useVirtualizer({
         count: hierarchyGroups.length,
@@ -229,6 +247,70 @@ const BoardColumnCardList = memo(({ column, updateBoard, scrollableRef, onCardCo
     });
     const virtualItems = virtualizer.getVirtualItems();
     const totalSize = virtualizer.getTotalSize();
+
+    useEffect(() => {
+        const locateCard = (event: Event) => {
+            const { cardUID, columnUID, onLocated } = (event as CustomEvent<IBoardCardLocationEventDetail>).detail;
+            if (columnUID !== column.uid) return;
+            const positions = (cardGroupIndices.get(cardUID) ?? []).flatMap((index) => {
+                const offset = virtualizer.getOffsetForIndex(index, "start");
+                return offset ? [offset[0]] : [];
+            });
+            onLocated(positions, scrollableRef.current?.scrollTop ?? 0);
+        };
+        document.addEventListener(BOARD_CARD_LOCATION_EVENT, locateCard);
+        return () => document.removeEventListener(BOARD_CARD_LOCATION_EVENT, locateCard);
+    }, [cardGroupIndices, column, virtualizer]);
+
+    useEffect(() => {
+        let focusFrame = 0;
+        let highlightTimeout = 0;
+        const focusCard = (event: Event) => {
+            const { cardUID, columnUID, focus } = (event as CustomEvent<IBoardCardFocusEventDetail>).detail;
+            if (columnUID !== column.uid) {
+                return;
+            }
+
+            const indices = cardGroupIndices.get(cardUID);
+            if (!indices?.length) {
+                return;
+            }
+            const groupIndex = indices.reduce((nearest, index) => {
+                const offset = (candidate: number) =>
+                    Math.abs((virtualizer.getOffsetForIndex(candidate, "start")?.[0] ?? 0) - (scrollableRef.current?.scrollTop ?? 0));
+                return offset(index) < offset(nearest) ? index : nearest;
+            });
+
+            virtualizer.scrollToIndex(groupIndex, { align: "center" });
+            let attempts = 0;
+            const highlightWhenMounted = () => {
+                const cardElement = scrollableRef.current?.querySelector<HTMLElement>(
+                    `[data-index="${groupIndex}"] [${BOARD_CARD_TOUCH_DND_ATTR}="${CSS.escape(cardUID)}"]`
+                );
+                if (!cardElement && attempts++ < 30) {
+                    focusFrame = requestAnimationFrame(highlightWhenMounted);
+                    return;
+                }
+                if (!cardElement) {
+                    return;
+                }
+
+                const behavior = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
+                cardElement.scrollIntoView({ behavior, block: "center", inline: "center" });
+                if (focus) cardElement.querySelector<HTMLButtonElement>("[data-board-card-open]")?.focus({ preventScroll: true });
+                cardElement.setAttribute("data-relationship-drop-target", "true");
+                highlightTimeout = window.setTimeout(() => cardElement.removeAttribute("data-relationship-drop-target"), 1200);
+            };
+            focusFrame = requestAnimationFrame(highlightWhenMounted);
+        };
+
+        document.addEventListener(BOARD_CARD_FOCUS_EVENT, focusCard);
+        return () => {
+            cancelAnimationFrame(focusFrame);
+            window.clearTimeout(highlightTimeout);
+            document.removeEventListener(BOARD_CARD_FOCUS_EVENT, focusCard);
+        };
+    }, [cardGroupIndices, column, virtualizer]);
 
     return (
         <Box className="relative w-full flex-shrink-0" style={{ height: `${totalSize}px` }}>
