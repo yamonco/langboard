@@ -13,6 +13,7 @@ import { Routing } from "@langboard/core/constants";
 import { Utils } from "@langboard/core/utils";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import BoardMemberDrag from "@/pages/BoardPage/components/board/BoardMemberDrag";
 
 export interface IBoardMemberListProps {
     isSelectCardView: bool;
@@ -20,7 +21,7 @@ export interface IBoardMemberListProps {
 
 const BoardMemberList = memo(({ isSelectCardView }: IBoardMemberListProps) => {
     const [t] = useTranslation();
-    const { project, currentUser, hasRoleAction } = useBoard();
+    const { project, currentUser, hasRoleAction, canDragCards } = useBoard();
     const canEdit = hasRoleAction(ProjectRole.EAction.Update);
     const ownerUID = project.useField("owner_uid");
     const allMemebers = project.useForeignFieldArray("all_members");
@@ -50,7 +51,7 @@ const BoardMemberList = memo(({ isSelectCardView }: IBoardMemberListProps) => {
         return [...userMap.values()];
     }, [currentUserUID, memberCandidates, ownerUID, visibleMembers]);
     const showableAssignees = useMemo(
-        () => [...visibleMembers.filter((model) => model.isValidUser() && !invitedMemberUIDs.includes(model.uid))].slice(0, 6),
+        () => visibleMembers.filter((model) => model.isValidUser() && !invitedMemberUIDs.includes(model.uid)),
         [invitedMemberUIDs, visibleMembers]
     );
     const selectedAssignees = useMemo(() => visibleMembers.filter((model) => model.uid !== ownerUID), [ownerUID, visibleMembers]);
@@ -220,6 +221,13 @@ const BoardMemberList = memo(({ isSelectCardView }: IBoardMemberListProps) => {
                 size: { initial: "sm", xs: "default" },
                 spacing: "3",
                 listAlign: "start",
+                renderAvatar: canDragCards
+                    ? (member, avatar) => (
+                          <BoardMemberDrag projectUID={project.uid} memberUID={member.uid}>
+                              {avatar}
+                          </BoardMemberDrag>
+                      )
+                    : undefined,
             }}
             tagContentProps={{
                 scope: {
