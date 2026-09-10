@@ -20,7 +20,6 @@ import { columnRowDndHelpers } from "@/core/helpers/dnd";
 import setupApiErrorHandler from "@/core/helpers/setupApiErrorHandler";
 import useColumnReordered from "@/core/hooks/useColumnReordered";
 import { useBoardController } from "@/core/providers/BoardController";
-import { cn } from "@/core/utils/ComponentUtils";
 import useBoardTouchCardDnd from "@/pages/BoardPage/components/board/useBoardTouchCardDnd";
 
 export function SkeletonBoard() {
@@ -62,7 +61,7 @@ export function SkeletonBoard() {
                 </Flex>
             </Flex>
 
-            <Box position="relative" h="full" className="min-h-0 flex-1 overflow-hidden">
+            <Box position="relative" className="min-h-0 flex-1 overflow-hidden">
                 <Box size="full" className="rounded-[inherit]">
                     <Flex direction="row" items="start" gap="10" p="4">
                         {cardCounts.map((count) => (
