@@ -493,7 +493,7 @@ class ScimProvisioningService(BaseDomainService):
 
     def _bound_projects_for_user(self, user: User) -> list[Project]:
         projects: dict[SnowflakeID, Project] = {}
-        for _, group in self.repo.scim_group_member.get_groups_by_user(user):
+        for _, group in self.repo.scim_group_member.get_groups_by_user(user, consistent=True):
             binding = self._resolve_project_role_external_id(group.external_id or "")
             if binding:
                 projects[binding[0].id] = binding[0]
@@ -511,10 +511,12 @@ class ScimProvisioningService(BaseDomainService):
     def _desired_project_roles(self, project: Project) -> dict[SnowflakeID, tuple[User, str]]:
         desired: dict[SnowflakeID, tuple[User, str]] = {}
         for role_key in self.PROJECT_ROLE_KEYS:
-            group = self.repo.scim_group.get_by_external_id(self._project_role_external_id(project, role_key))
+            group = self.repo.scim_group.get_by_external_id(
+                self._project_role_external_id(project, role_key), consistent=True
+            )
             if not group:
                 continue
-            for _, user in self.repo.scim_group_member.get_users_by_group(group):
+            for _, user in self.repo.scim_group_member.get_users_by_group(group, consistent=True):
                 if not self._is_current_scim_user(user):
                     raise ScimProvisioningException.InvalidRequest()
                 # Iteration order is lowest to highest privilege, so the highest
@@ -535,7 +537,7 @@ class ScimProvisioningService(BaseDomainService):
 
     def _reconcile_project_entitlements(self, project: Project) -> None:
         desired = self._desired_project_roles(project)
-        assigned_rows = self.repo.project_assigned_user.get_all_by_project(project)
+        assigned_rows = self.repo.project_assigned_user.get_all_by_project(project, consistent=True)
         managed_current = {
             user.id: user
             for user, _ in assigned_rows
@@ -556,7 +558,7 @@ class ScimProvisioningService(BaseDomainService):
         if stale_users:
             self.repo.project_assigned_user.delete_all_by_project_and_users(project, stale_users)
 
-        final_rows = self.repo.project_assigned_user.get_all_by_project(project)
+        final_rows = self.repo.project_assigned_user.get_all_by_project(project, consistent=True)
         final_user_ids = {user.id for user, _ in final_rows}
         self.repo.project_user_relationship.ensure_project_relationships(project, list(final_user_ids))
         self._verify_project_entitlements(project, desired, final_user_ids, set(managed_current))
@@ -571,7 +573,7 @@ class ScimProvisioningService(BaseDomainService):
         for user_id, (_, role_key) in desired.items():
             if user_id == project.owner_id:
                 continue
-            role = self.repo.role.project.get_one(user_id=user_id, project_id=project.id)
+            role = self.repo.role.project.get_one(user_id=user_id, project_id=project.id, consistent=True)
             if user_id not in final_user_ids or not role:
                 raise ScimProvisioningException.Unavailable()
             expected = self._project_role_actions(role_key)
