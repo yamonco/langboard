@@ -126,6 +126,7 @@ const API = {
             UPDATE_ASSIGNED_USERS: "/board/{uid}/card/{card_uid}/assigned-users",
             UPDATE_LABELS: "/board/{uid}/card/{card_uid}/labels",
             UPDATE_RELATIONSHIPS: "/board/{uid}/card/{card_uid}/relationships",
+            PATCH_RELATIONSHIPS: "/board/{uid}/card/{card_uid}/relationships/patch",
             ARCHIVE: "/board/{uid}/card/{card_uid}/archive",
             DELETE: "/board/{uid}/card/{card_uid}",
             ATTACHMENT: {

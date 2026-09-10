@@ -39,14 +39,15 @@ from langboard_shared.domain.services import DomainService
 from langboard_shared.filter import RoleFilter
 from langboard_shared.helpers import InfraHelper
 from langboard_shared.security import Auth, RoleFinder
-from ...card_workspace.application import get_card_bundle
-from ...card_workspace.domain import CardBundleInclude, CommentPage, SectionPage
+from ...card_workspace.application import apply_card_graph_patch, get_card_bundle
+from ...card_workspace.domain import CardBundleInclude, CardGraphEdge, CardGraphNewCard, CommentPage, SectionPage
 from ...card_workspace.infrastructure import NativeCardWorkspaceAdapter
 from .forms import (
     AssignUsersForm,
     ChangeCardDetailsForm,
     ChangeChildOrderForm,
     CreateCardForm,
+    PatchCardGraphForm,
     UpdateCardLabelsForm,
     UpdateCardRelationshipsForm,
 )
@@ -468,6 +469,41 @@ def update_card_relationships(
         raise ApiException.NotFound_404(ApiErrorCode.NF2003)
 
     return JsonResponse(content={"relationships": result})
+
+
+@collaborative_edit(
+    collaborative_block(
+        create_editor_collaboration_document_id(EEditorCollaborationType.Card, "{card_uid}", "relationships-parents")
+    ),
+    collaborative_block(
+        create_editor_collaboration_document_id(EEditorCollaborationType.Card, "{card_uid}", "relationships-children")
+    ),
+)
+@AppRouter.schema(form=PatchCardGraphForm, permission=ApiPermission.Edit)
+@AppRouter.api.post(
+    "/board/{project_uid}/card/{card_uid}/relationships/patch",
+    tags=["Board.Card"],
+    description="Atomically add or remove card relationships against the current project graph.",
+    responses=OpenApiSchema().auth().forbidden().err(404, ApiErrorCode.NF2003).get(),
+)
+@RoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+@AuthFilter.add()
+def patch_card_relationships(
+    project_uid: str,
+    card_uid: str,
+    form: PatchCardGraphForm,
+    user_or_bot: User | Bot = Auth.scope("all"),
+    service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    result = apply_card_graph_patch(
+        NativeCardWorkspaceAdapter(user_or_bot, service),
+        project_uid,
+        card_uid,
+        [CardGraphNewCard(item.client_ref, item.title, item.description) for item in form.new_cards],
+        [CardGraphEdge(item.parent_ref, item.child_ref, item.relationship_type_uid) for item in form.add_edges],
+        form.remove_relationship_uids,
+    )
+    return JsonResponse(content=result)
 
 
 @collaborative_edit(
