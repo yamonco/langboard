@@ -343,7 +343,7 @@ class Env:
 
     @property
     def OIDC_RESOURCE_AUDIENCE(self) -> str:
-        return self.__get_from_cache("OIDC_RESOURCE_AUDIENCE", self.OIDC_CLIENT_ID)
+        return self.__get_from_cache("OIDC_RESOURCE_AUDIENCE", "")
 
     @property
     def OIDC_AUTO_LINK_BY_EMAIL(self) -> bool:

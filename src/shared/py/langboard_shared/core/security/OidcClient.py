@@ -87,15 +87,15 @@ class OidcClient:
 
         algorithm = str(unverified_header.get("alg", "RS256"))
         if algorithm.lower() == "none":
-            raise RuntimeError("OIDC ID token algorithm 'none' is not allowed")
+            raise RuntimeError("OIDC token algorithm 'none' is not allowed")
         if algorithm.startswith("HS"):
             signing_key: Any = Env.OIDC_CLIENT_SECRET
             if not signing_key:
-                raise RuntimeError("OIDC client secret is required for HMAC-signed ID tokens")
+                raise RuntimeError("OIDC client secret is required for HMAC-signed tokens")
         else:
             jwk = OidcClient._find_jwk(unverified_header)
             if not jwk:
-                raise RuntimeError("OIDC JWK for ID token is not found")
+                raise RuntimeError("OIDC JWK for token is not found")
             signing_key = RSAAlgorithm.from_jwk(json_dumps(jwk))
 
         issuer = str(discovery.get("issuer", Env.OIDC_ISSUER)).strip()

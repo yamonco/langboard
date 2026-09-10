@@ -22,6 +22,16 @@ ROOT = Path(__file__).resolve().parents[4]
 MIGRATION = ROOT / "src/api/langboard/migrations/versions/20260910223340-7b7818743022.py"
 
 
+def test_resource_audience_never_defaults_to_the_login_client(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Bearer auth stays fail-closed until a dedicated API audience is configured."""
+
+    monkeypatch.delenv("OIDC_RESOURCE_AUDIENCE", raising=False)
+    Env.update_env("OIDC_CLIENT_ID", "login-client")
+    Env._Env__envs.pop("OIDC_RESOURCE_AUDIENCE", None)  # noqa: SLF001
+
+    assert Env.OIDC_RESOURCE_AUDIENCE == ""
+
+
 def test_access_token_requires_the_configured_resource_audience(monkeypatch: pytest.MonkeyPatch) -> None:
     """A token for the login client cannot be replayed against Langboard APIs."""
 
