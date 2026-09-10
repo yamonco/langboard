@@ -3,6 +3,7 @@ from typing import Literal, Mapping, Sequence
 from sqlalchemy import select
 from ....core.db import DbSession, SqlBuilder
 from ....core.domain import BaseRepository
+from ....core.types import SafeDateTime
 from ....core.types.ParamTypes import TCardParam, TGlobalCardRelationshipTypeParam, TProjectParam
 from ....domain.models import Card, CardRelationship, GlobalCardRelationshipType, Project
 from ....helpers import InfraHelper
@@ -44,12 +45,25 @@ class CardRelationshipRepository(BaseRepository[CardRelationship]):
             relationships = result.all()
         return relationships
 
-    def get_all_by_project(self, project: TProjectParam) -> list[tuple[CardRelationship, GlobalCardRelationshipType]]:
+    def get_all_by_project(
+        self, project: TProjectParam, archive_visible_since: SafeDateTime | None = None
+    ) -> list[tuple[CardRelationship, GlobalCardRelationshipType]]:
         project_id = InfraHelper.convert_id(project)
+
+        visible_card_ids = None
+        if archive_visible_since is not None:
+            visible_card_ids = (
+                SqlBuilder.select.column(Card.id)
+                .where(Card.column("project_id") == project_id)
+                .where(
+                    (Card.column("archived_at") == None)  # noqa: E711
+                    | (Card.column("archived_at") >= archive_visible_since)
+                )
+            )
 
         relationships = []
         with DbSession.use(readonly=True) as db:
-            result = db.exec(
+            query = (
                 SqlBuilder.select.tables(CardRelationship, GlobalCardRelationshipType)
                 .join(
                     GlobalCardRelationshipType,
@@ -62,6 +76,12 @@ class CardRelationshipRepository(BaseRepository[CardRelationship]):
                 .join(Project, (Card.column("project_id") == Project.column("id")))
                 .where(Project.column("id") == project_id)
             )
+            if visible_card_ids is not None:
+                query = query.where(
+                    CardRelationship.column("card_id_parent").in_(visible_card_ids)
+                    & CardRelationship.column("card_id_child").in_(visible_card_ids)
+                )
+            result = db.exec(query)
             relationships = result.all()
         return relationships
 

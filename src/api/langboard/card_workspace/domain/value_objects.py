@@ -277,6 +277,37 @@ class ProjectCardCursor:
             raise ValueError("Invalid cards_cursor") from exc
 
 
+@dataclass(frozen=True)
+class ArchivedCardCursor:
+    """Opaque keyset cursor for the archive-only card list."""
+
+    archived_at: str
+    card_uid: str
+
+    def __post_init__(self) -> None:
+        datetime.fromisoformat(self.archived_at)
+        if not self.card_uid:
+            raise ValueError("Archived card cursor UID is required")
+
+    def encode(self) -> str:
+        payload = dumps(
+            {"v": 1, "archived_at": self.archived_at, "card_uid": self.card_uid},
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode()
+        return urlsafe_b64encode(payload).decode().rstrip("=")
+
+    @classmethod
+    def decode(cls, value: str) -> "ArchivedCardCursor":
+        try:
+            payload = _decode_cursor_payload(value)
+            if payload.get("v") != 1:
+                raise ValueError("Unsupported cursor version")
+            return cls(archived_at=payload["archived_at"], card_uid=payload["card_uid"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError("Invalid archive cursor") from exc
+
+
 def projection_revision(value: Any) -> str:
     """Return a stable content hash used to detect stale offset cursors."""
 
