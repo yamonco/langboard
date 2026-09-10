@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { compareProjectActivityPriority, newerProjectActivity, type IProjectActivityPriority } from "./ProjectActivityPriority.ts";
+import { compareProjectActivityPriority, newerProjectActivity, projectActivityAt, type IProjectActivityPriority } from "./ProjectActivityPriority.ts";
 import { parseProjectActivityTimestamp } from "../../../core/models/projectActivityTimestamp.ts";
 
 const project = (overrides: Partial<IProjectActivityPriority>): IProjectActivityPriority => ({
@@ -71,4 +71,13 @@ test("activity timestamp parsing preserves dates and accepts nullable API values
     assert.equal(parseProjectActivityTimestamp(undefined), null);
     assert.equal(parseProjectActivityTimestamp("not-a-date"), null);
     assert.equal(parseProjectActivityTimestamp("2026-09-11T02:00:00Z")?.toISOString(), "2026-09-11T02:00:00.000Z");
+});
+
+test("related sections display the same activity clock used for their ordering", () => {
+    const globalActivity = new Date("2026-09-10T02:00:00Z");
+    const relatedActivity = new Date("2026-09-09T02:00:00Z");
+    const candidate = project({ last_activity_at: globalActivity, related_activity_at: relatedActivity });
+
+    assert.equal(projectActivityAt(candidate, "project"), globalActivity);
+    assert.equal(projectActivityAt(candidate, "related"), relatedActivity);
 });
