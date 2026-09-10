@@ -53,4 +53,4 @@ def test_archive_page_index_reaches_the_canary_merge_head() -> None:
     config = Config(str(ROOT / "alembic.ini"))
     config.set_main_option("script_location", str(ROOT / "src/api/langboard/migrations"))
 
-    assert ScriptDirectory.from_config(config).get_heads() == ["f19c8b0d4e21"]
+    assert ScriptDirectory.from_config(config).get_heads() == ["3529fe5238b9"]
