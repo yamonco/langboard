@@ -21,7 +21,7 @@ import { relationshipFocusAction } from "@/pages/BoardPage/components/board/Boar
 import { createRelationshipHoverIntent } from "@/pages/BoardPage/components/board/BoardRelationshipHoverIntent";
 
 interface IBoardCardRelationshipOverlayProps {
-    scrollableRef: React.RefObject<HTMLDivElement | null>;
+    scrollable: HTMLDivElement | null;
 }
 
 interface IVisibleEdge {
@@ -61,7 +61,7 @@ const getCardElements = (cardUID: string) =>
 const getColumnElement = (columnUID: string) => document.querySelector<HTMLElement>(`[${BOARD_COLUMN_TOUCH_DND_ATTR}="${CSS.escape(columnUID)}"]`);
 const RELATIONSHIP_PREVIEW_ATTR = "data-board-relationship-preview";
 
-const BoardCardRelationshipOverlay = memo(({ scrollableRef }: IBoardCardRelationshipOverlayProps) => {
+const BoardCardRelationshipOverlay = memo(({ scrollable }: IBoardCardRelationshipOverlayProps) => {
     const { cardsMap, columns, filters } = useBoard();
     const [hoveredElement, setHoveredElement] = useState<HTMLElement | null>(null);
     const hoveredCardUID = hoveredElement?.getAttribute(BOARD_CARD_TOUCH_DND_ATTR);
@@ -92,7 +92,6 @@ const BoardCardRelationshipOverlay = memo(({ scrollableRef }: IBoardCardRelation
     }, [hoveredElement, layout.previews.length]);
 
     useEffect(() => {
-        const scrollable = scrollableRef.current;
         if (!scrollable) {
             return;
         }
@@ -144,10 +143,9 @@ const BoardCardRelationshipOverlay = memo(({ scrollableRef }: IBoardCardRelation
             scrollable.removeEventListener("dragstart", close);
             window.removeEventListener("keydown", onKeyDown);
         };
-    }, [cardsMap, scrollableRef, hoverIntent, scheduleClose]);
+    }, [cardsMap, hoverIntent, scheduleClose, scrollable]);
 
     useEffect(() => {
-        const scrollable = scrollableRef.current;
         const sourceCard = hoveredCardUID ? cardsMap[hoveredCardUID] : undefined;
         if (!scrollable || !sourceCard) {
             setLayout({ edges: [], previews: [] });
@@ -305,7 +303,7 @@ const BoardCardRelationshipOverlay = memo(({ scrollableRef }: IBoardCardRelation
             window.removeEventListener("resize", updateLayout);
             scrollable.removeEventListener("scroll", updateLayout, true);
         };
-    }, [cardsMap, columnsMap, hoveredCardUID, hoveredElement, scrollableRef, filters]);
+    }, [cardsMap, columnsMap, filters, hoveredCardUID, hoveredElement, scrollable]);
 
     const focusPreview = (preview: IPreviewTarget, focus: boolean) => {
         keepOpen();

@@ -105,7 +105,7 @@ export function Board() {
                 viewportRef={setScrollableRef}
             >
                 <Flex direction="row" items="start" gap="4" p="4" h="full" className="min-h-0">
-                    <BoardDisplay scrollableRef={scrollableRef} />
+                    <BoardDisplay scrollable={scrollable} scrollableRef={scrollableRef} />
                 </Flex>
                 <ScrollArea.Bar orientation="horizontal" />
             </ScrollArea.Root>
@@ -114,7 +114,7 @@ export function Board() {
     );
 }
 
-function BoardDisplay({ scrollableRef }: { scrollableRef: React.RefObject<HTMLDivElement | null> }) {
+function BoardDisplay({ scrollable, scrollableRef }: { scrollable: HTMLDivElement | null; scrollableRef: React.RefObject<HTMLDivElement | null> }) {
     const { chatResizableSidebar } = useBoardController();
     const { project, columns: flatColumns, cardsMap, socket, canDragAndDrop, canDragCards } = useBoard();
     const updater = useReducer((x) => x + 1, 0);
@@ -253,7 +253,7 @@ function BoardDisplay({ scrollableRef }: { scrollableRef: React.RefObject<HTMLDi
 
     return (
         <>
-            <BoardCardRelationshipOverlay scrollableRef={scrollableRef} />
+            <BoardCardRelationshipOverlay scrollable={scrollable} />
             {columns.map((column) => (
                 <BoardColumn key={`board-columnr-${column.uid}`} column={column} updateBoard={forceUpdate} />
             ))}
