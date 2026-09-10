@@ -417,6 +417,61 @@ class ProjectService(BaseDomainService):
             "status": "updated" if changed_count else "unchanged",
         }
 
+    def add_existing_assigned_users(
+        self, user_or_bot: TUserOrBot, project: TProjectParam | None, users: list[User]
+    ) -> dict[str, int | str] | None:
+        """Immediately add existing accounts without creating invitations or removing members."""
+
+        if not isinstance(user_or_bot, User):
+            raise ValueError("Only users can add existing project members")
+        project = InfraHelper.get_by_id_like(Project, project)
+        if not project:
+            return None
+
+        unique_users = {user.id: user for user in users if user.id is not None}
+        user_service = self._get_service_by_name("user")
+        eligible_users = self.repo.user.get_direct_project_member_candidates(
+            user_or_bot,
+            list(unique_users.values()),
+            can_search_all_users=user_service.can_search_all_users(user_or_bot),
+        )
+        eligible_user_map = {user.id: user for user in eligible_users}
+        if eligible_user_map.keys() != unique_users.keys():
+            raise ValueError("One or more selected people are not eligible for direct addition")
+
+        old_assigned_users = self.repo.project_assigned_user.get_all_by_project(project)
+        newly_assigned_users: list[User] = []
+        for target_user in eligible_user_map.values():
+            _, created = self.repo.project_assigned_user.ensure_assigned(project, target_user)
+            if created:
+                self.repo.role.project.grant_all(user_id=target_user.id, project_id=project.id)
+                newly_assigned_users.append(target_user)
+
+        if not newly_assigned_users:
+            return {"requested_count": len(unique_users), "changed_count": 0, "status": "unchanged"}
+
+        new_assigned_users = self.repo.project_assigned_user.get_all_by_project(project)
+        self.repo.project_user_relationship.ensure_project_relationships(
+            project, [assigned_user.id for assigned_user, _ in new_assigned_users]
+        )
+        ProjectPublisher.assigned_users_updated(
+            project,
+            {
+                "assigned_members": [assigned_user.api_response() for assigned_user, _ in new_assigned_users],
+                "invited_members": self._get_service_by_name("project_invitation").get_api_invited_user_list_by_project(
+                    project
+                ),
+            },
+        )
+        ProjectPublisher.assigned_to_users(project, newly_assigned_users)
+        ProjectActivityTask.project_assigned_users_updated(
+            user_or_bot,
+            project,
+            [assigned_user.id for assigned_user, _ in old_assigned_users],
+            [assigned_user.id for assigned_user, _ in new_assigned_users],
+        )
+        return {"requested_count": len(unique_users), "changed_count": len(newly_assigned_users), "status": "updated"}
+
     def unassign_assignee(self, user: User, project: TProjectParam | None, target: TUserParam | None) -> bool:
         project = InfraHelper.get_by_id_like(Project, project)
         target_user = InfraHelper.get_by_id_like(User, target)
