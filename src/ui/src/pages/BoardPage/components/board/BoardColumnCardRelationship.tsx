@@ -3,7 +3,7 @@ import Dialog from "@/components/base/Dialog";
 import Flex from "@/components/base/Flex";
 import IconComponent from "@/components/base/IconComponent";
 import Toast from "@/components/base/Toast";
-import useUpdateCardRelationships from "@/controllers/api/card/useUpdateCardRelationships";
+import usePatchCardRelationships from "@/controllers/api/card/usePatchCardRelationships";
 import setupApiErrorHandler from "@/core/helpers/setupApiErrorHandler";
 import { ProjectCardRelationship } from "@/core/models";
 import { ModelRegistry } from "@/core/models/ModelRegistry";
@@ -95,7 +95,7 @@ const BoardColumnCardRelationshipButton = memo(({ type, attributes, compact }: I
     const [targetCardUID, setTargetCardUID] = useState<string>();
     const [selectedRelationshipUID, setSelectedRelationshipUID] = useState<string>();
     const [isSaving, setIsSaving] = useState(false);
-    const { mutateAsync: updateCardRelationships } = useUpdateCardRelationships({ interceptToast: true });
+    const { mutateAsync: patchCardRelationships } = usePatchCardRelationships({ interceptToast: true });
 
     useEffect(() => {
         const button = buttonRef.current;
@@ -173,16 +173,13 @@ const BoardColumnCardRelationshipButton = memo(({ type, attributes, compact }: I
             return;
         }
 
-        const existingRelationships = relationships.map(
-            (relationship) =>
-                [isParent ? relationship.parent_card_uid : relationship.child_card_uid, relationship.relationship_type_uid] satisfies [string, string]
-        );
         setIsSaving(true);
-        const promise = updateCardRelationships({
+        const parentRef = isParent ? targetCardUID : card.uid;
+        const childRef = isParent ? card.uid : targetCardUID;
+        const promise = patchCardRelationships({
             project_uid: project.uid,
             card_uid: card.uid,
-            is_parent: isParent,
-            relationships: [...existingRelationships, [targetCardUID, selectedRelationshipUID]],
+            add_edges: [{ parent_ref: parentRef, child_ref: childRef, relationship_type_uid: selectedRelationshipUID }],
         });
 
         Toast.Add.promise(promise, {
