@@ -1,6 +1,5 @@
 import importlib
 from contextlib import contextmanager
-from langboard_shared.infrastructure.repositories.factory.ProjectRepository import ProjectRepository  # noqa: E402
 from sqlalchemy.dialects import postgresql
 
 
@@ -18,6 +17,9 @@ class _Db:
 
 
 def test_project_list_orders_by_star_and_recorded_activity(monkeypatch) -> None:
+    monkeypatch.setenv("PROJECT_NAME", "langboard")
+    from langboard_shared.infrastructure.repositories.factory.ProjectRepository import ProjectRepository
+
     db = _Db()
 
     @contextmanager
