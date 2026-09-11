@@ -13,6 +13,7 @@ import { ProjectRole } from "@/core/models/roles";
 import { useBoardCard, useBoardCardPanel } from "@/core/providers/BoardCardProvider";
 import { cn } from "@/core/utils/ComponentUtils";
 import { useBoardCardSectionSaveActions } from "@/pages/BoardPage/components/card/BoardCardSectionSaveProvider";
+import useGetCardComments from "@/controllers/api/card/comment/useGetCardComments";
 import { EEditorType } from "@langboard/core/constants";
 import { AIChatPlugin, AIPlugin } from "@platejs/ai/react";
 import { memo, startTransition, type MouseEvent, type PointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -130,7 +131,9 @@ const BoardCardDescription = memo((): React.JSX.Element => {
     const bots = BotModel.Model.useModels(() => true);
     const mentionables = useMemo(() => [...projectMembers, ...bots], [projectMembers, bots]);
     const cards = ProjectCard.Model.useModels((model) => model.uid !== card.uid && model.project_uid === projectUID, [projectUID, card]);
-    const comments = ProjectCardComment.Model.useModels((model) => model.card_uid === card.uid, [card.uid]);
+    const modelComments = ProjectCardComment.Model.useModels((model) => model.card_uid === card.uid, [card.uid]);
+    const { data: commentsData } = useGetCardComments({ project_uid: projectUID, card_uid: card.uid });
+    const comments = commentsData?.comments ?? modelComments;
     const description = card.useField("description");
     const [isEditing, setIsEditing] = useState(false);
     const [anchorComposer, setAnchorComposer] = useState<IAnchorComposerPosition | null>(null);
