@@ -4,10 +4,6 @@ from pathlib import Path
 import sqlalchemy as sa
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
-from langboard_shared.infrastructure.repositories.factory.ProjectAssignedUserRepository import (  # noqa: E402
-    ProjectAssignedUserRepository,
-)
-from langboard_shared.infrastructure.repositories.factory.ProjectRepository import ProjectRepository  # noqa: E402
 from sqlalchemy.dialects import postgresql
 
 
@@ -29,6 +25,9 @@ class _Db:
 
 
 def test_project_list_orders_by_star_and_recorded_activity(monkeypatch) -> None:
+    monkeypatch.setenv("PROJECT_NAME", "langboard")
+    from langboard_shared.infrastructure.repositories.factory.ProjectRepository import ProjectRepository
+
     db = _Db()
 
     @contextmanager
@@ -63,6 +62,11 @@ def test_project_list_orders_by_star_and_recorded_activity(monkeypatch) -> None:
 
 
 def test_view_tracking_updates_recency_and_frequency_together(monkeypatch) -> None:
+    monkeypatch.setenv("PROJECT_NAME", "langboard")
+    from langboard_shared.infrastructure.repositories.factory.ProjectAssignedUserRepository import (
+        ProjectAssignedUserRepository,
+    )
+
     db = _Db()
 
     @contextmanager
@@ -101,9 +105,10 @@ def test_view_count_migration_repairs_and_replays() -> None:
         assert "view_count" not in columns
 
 
-def test_view_count_model_matches_the_database_default() -> None:
+def test_view_count_model_matches_the_database_default(monkeypatch) -> None:
     """Core inserts that omit the counter retain the migration's zero default."""
 
+    monkeypatch.setenv("PROJECT_NAME", "langboard")
     from langboard_shared.domain.models import ProjectAssignedUser
 
     assert ProjectAssignedUser.__table__.c.view_count.server_default is not None
