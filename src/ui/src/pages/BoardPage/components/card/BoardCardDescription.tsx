@@ -13,6 +13,7 @@ import { ProjectRole } from "@/core/models/roles";
 import { useBoardCard, useBoardCardPanel } from "@/core/providers/BoardCardProvider";
 import { cn } from "@/core/utils/ComponentUtils";
 import { useBoardCardSectionSaveActions } from "@/pages/BoardPage/components/card/BoardCardSectionSaveProvider";
+import useGetCardComments from "@/controllers/api/card/comment/useGetCardComments";
 import { EEditorType } from "@langboard/core/constants";
 import { AIChatPlugin, AIPlugin } from "@platejs/ai/react";
 import { memo, startTransition, type MouseEvent, type PointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -43,6 +44,29 @@ interface IAnchorMarkerPosition {
     quote: string;
     commentPreview: string;
     top: number;
+}
+
+interface IAnchorCommentSnapshot {
+    anchor: ICardCommentAnchor | null;
+    content: string;
+}
+
+interface IAnchorCommentSubscriptionProps {
+    comment: ProjectCardComment.TModel;
+    onChange: (commentUID: string, snapshot: IAnchorCommentSnapshot | null) => void;
+}
+
+function AnchorCommentSubscription({ comment, onChange }: IAnchorCommentSubscriptionProps) {
+    const anchor = comment.useField("anchor") ?? null;
+    const content = comment.useField("content")?.content ?? "";
+
+    useEffect(() => {
+        onChange(comment.uid, { anchor, content });
+    }, [anchor, comment.uid, content, onChange]);
+
+    useEffect(() => () => onChange(comment.uid, null), [comment.uid, onChange]);
+
+    return null;
 }
 
 function normalizeCopyText(value: string): string {
@@ -107,15 +131,35 @@ const BoardCardDescription = memo((): React.JSX.Element => {
     const bots = BotModel.Model.useModels(() => true);
     const mentionables = useMemo(() => [...projectMembers, ...bots], [projectMembers, bots]);
     const cards = ProjectCard.Model.useModels((model) => model.uid !== card.uid && model.project_uid === projectUID, [projectUID, card]);
-    const comments = ProjectCardComment.Model.useModels((model) => model.card_uid === card.uid, [card.uid]);
+    const modelComments = ProjectCardComment.Model.useModels((model) => model.card_uid === card.uid, [card.uid]);
+    const { data: commentsData } = useGetCardComments({ project_uid: projectUID, card_uid: card.uid });
+    const comments = commentsData?.comments ?? modelComments;
     const description = card.useField("description");
     const [isEditing, setIsEditing] = useState(false);
     const [anchorComposer, setAnchorComposer] = useState<IAnchorComposerPosition | null>(null);
     const [anchorMarkers, setAnchorMarkers] = useState<IAnchorMarkerPosition[]>([]);
+    const [anchorCommentSnapshots, setAnchorCommentSnapshots] = useState<Record<string, IAnchorCommentSnapshot>>({});
     const pointerDownPositionRef = useRef<{ x: number; y: number } | null>(null);
     const { registerSectionCancelHandler, registerSectionSaveHandler } = useBoardCardSectionSaveActions();
     const canEdit = hasRoleAction(ProjectRole.EAction.CardUpdate);
     const canStartEditing = canEdit && isCardEditing;
+    const updateAnchorCommentSnapshot = useCallback((commentUID: string, snapshot: IAnchorCommentSnapshot | null) => {
+        setAnchorCommentSnapshots((current) => {
+            if (!snapshot) {
+                if (!(commentUID in current)) {
+                    return current;
+                }
+                const next = { ...current };
+                delete next[commentUID];
+                return next;
+            }
+            const previous = current[commentUID];
+            if (previous?.anchor === snapshot.anchor && previous.content === snapshot.content) {
+                return current;
+            }
+            return { ...current, [commentUID]: snapshot };
+        });
+    }, []);
     const stopEditing = useCallback(() => {
         if (!editorRef.current) {
             return;
@@ -273,7 +317,8 @@ const BoardCardDescription = memo((): React.JSX.Element => {
             const rootRect = root.getBoundingClientRect();
             const seen = new Map<number, number>();
             const next = comments.flatMap((comment) => {
-                const anchor = comment.anchor;
+                const snapshot = anchorCommentSnapshots[comment.uid];
+                const anchor = snapshot?.anchor;
                 if (!anchor) {
                     return [];
                 }
@@ -289,7 +334,7 @@ const BoardCardDescription = memo((): React.JSX.Element => {
                     {
                         commentUID: comment.uid,
                         quote: anchor.exact,
-                        commentPreview: normalizeAnchorPreview(comment.content?.content ?? ""),
+                        commentPreview: normalizeAnchorPreview(snapshot.content),
                         top: blockTop + stackIndex * 24,
                     },
                 ];
@@ -301,7 +346,7 @@ const BoardCardDescription = memo((): React.JSX.Element => {
         const observer = new ResizeObserver(updateMarkers);
         observer.observe(root);
         return () => observer.disconnect();
-    }, [comments, description?.content, isEditing, shouldCollapse, visibleChunkCount]);
+    }, [anchorCommentSnapshots, comments, description?.content, isEditing, shouldCollapse, visibleChunkCount]);
 
     const openAnchoredComment = useCallback(
         (commentUID: string) => {
@@ -327,6 +372,9 @@ const BoardCardDescription = memo((): React.JSX.Element => {
             onPointerDown={handlePointerDown}
             onPointerUp={handlePointerUp}
         >
+            {comments.map((comment) => (
+                <AnchorCommentSubscription key={comment.uid} comment={comment} onChange={updateAnchorCommentSnapshot} />
+            ))}
             {anchorComposer && (
                 <Button
                     size="sm"
