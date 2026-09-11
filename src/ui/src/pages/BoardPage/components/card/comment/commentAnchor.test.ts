@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { type ICardCommentAnchor, resolveCardCommentAnchorIndex } from "./commentAnchor.ts";
+import { normalizeAnchorPreview, type ICardCommentAnchor, resolveCardCommentAnchorIndex } from "./commentAnchor.ts";
 
 const anchor: ICardCommentAnchor = {
     type: "TextQuoteSelector",
@@ -24,4 +24,11 @@ test("reattaches by the exact quote after the block is edited", () => {
 
 test("uses a close block match before the stale path hint", () => {
     assert.equal(resolveCardCommentAnchorIndex(anchor, ["Unrelated", "Use a durable identity for threaded comments"]), 1);
+});
+
+test("creates a compact plain-text memo preview", () => {
+    assert.equal(
+        normalizeAnchorPreview("**Decision:** use [stable identity](https://example.test)\n> Keep email as metadata"),
+        "Decision: use stable identity Keep email as metadata"
+    );
 });
