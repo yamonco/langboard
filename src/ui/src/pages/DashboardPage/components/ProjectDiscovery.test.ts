@@ -15,6 +15,8 @@ interface ITestProject {
     starred: boolean;
     created_at: Date;
     last_activity_at: Date | null;
+    related_to_current_user: boolean;
+    related_activity_at: Date | null;
 }
 
 const project = (uid: string, overrides: Partial<ITestProject> = {}): ITestProject => ({
@@ -23,6 +25,8 @@ const project = (uid: string, overrides: Partial<ITestProject> = {}): ITestProje
     starred: false,
     created_at: new Date("2026-09-01T00:00:00Z"),
     last_activity_at: null,
+    related_to_current_user: false,
+    related_activity_at: null,
     ...overrides,
 });
 
@@ -64,15 +68,41 @@ test("recent work is bounded and never duplicates favorites", () => {
     );
 });
 
+test("related projects are bounded and removed from the fallback recent section", () => {
+    const sections = buildProjectDiscoverySections([
+        project("related-newer", {
+            related_to_current_user: true,
+            related_activity_at: new Date("2026-09-04T00:00:00Z"),
+            last_activity_at: new Date("2026-09-03T00:00:00Z"),
+        }),
+        project("related-older", {
+            related_to_current_user: true,
+            related_activity_at: new Date("2026-09-03T00:00:00Z"),
+            last_activity_at: new Date("2026-09-05T00:00:00Z"),
+        }),
+        project("unrelated", { last_activity_at: new Date("2026-09-02T00:00:00Z") }),
+    ]);
+
+    assert.deepEqual(
+        sections.related.map(({ uid }) => uid),
+        ["related-newer", "related-older"]
+    );
+    assert.deepEqual(
+        sections.recent.map(({ uid }) => uid),
+        ["unrelated"]
+    );
+});
+
 test("quick switcher promotes projects without rendering duplicate choices", () => {
     const sections = buildProjectQuickSwitcherSections([
         project("favorite", { starred: true }),
+        project("related", { related_to_current_user: true, last_activity_at: new Date("2026-09-04T00:00:00Z") }),
         project("recent", { last_activity_at: new Date("2026-09-03T00:00:00Z") }),
         project("other", { last_activity_at: new Date("2026-09-02T00:00:00Z") }),
     ]);
-    const renderedUIDs = [...sections.favorites, ...sections.recent, ...sections.other].map(({ uid }) => uid);
+    const renderedUIDs = [...sections.favorites, ...sections.related, ...sections.recent, ...sections.other].map(({ uid }) => uid);
 
-    assert.deepEqual(renderedUIDs, ["favorite", "recent", "other"]);
+    assert.deepEqual(renderedUIDs, ["favorite", "related", "recent", "other"]);
     assert.equal(new Set(renderedUIDs).size, renderedUIDs.length);
 });
 

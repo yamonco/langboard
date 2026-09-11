@@ -10,21 +10,21 @@ import { usePageNavigateRef } from "@/core/hooks/usePageNavigate";
 import { ROUTES } from "@/core/routing/constants";
 import { Utils } from "@langboard/core/utils";
 import ProjectItemStarButton from "@/pages/DashboardPage/components/ProjectItemStarButton";
+import { projectActivityAt, type TProjectActivityKind } from "@/pages/DashboardPage/components/ProjectActivityPriority";
 
 interface IProjectCompactItemProps {
+    activityKind?: TProjectActivityKind;
     project: Project.TModel;
     updateStarredProjects: React.DispatchWithoutAction;
 }
 
-const ProjectCompactItem = memo(({ project, updateStarredProjects }: IProjectCompactItemProps): React.JSX.Element => {
+const ProjectCompactItem = memo(({ activityKind = "project", project, updateStarredProjects }: IProjectCompactItemProps): React.JSX.Element => {
     const [t, i18n] = useTranslation();
     const navigate = usePageNavigateRef();
     const [isUpdating, setIsUpdating] = useState(false);
     const title = project.useField("title");
     const projectType = project.useField("project_type");
-    const lastActivityAt = project.useField("last_activity_at");
-    const createdAt = project.useField("created_at");
-    const activityAt = lastActivityAt ?? createdAt;
+    const activityAt = projectActivityAt(project, activityKind);
 
     return (
         <ModelRegistry.Project.Provider model={project}>

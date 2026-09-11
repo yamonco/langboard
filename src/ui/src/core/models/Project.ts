@@ -69,7 +69,10 @@ export interface IStore extends Interface {
     description: string;
     ai_description?: string;
     last_viewed_at: Date;
+    view_count: number;
     last_activity_at: Date | null;
+    related_to_current_user: bool;
+    related_activity_at: Date | null;
 
     member_roles: Record<string, ProjectRole.TActions[]>; // This will be used in board setting.
 }
@@ -143,6 +146,7 @@ class Project extends BaseModel<IStore> {
             model.last_viewed_at = new Date(model.last_viewed_at);
         }
         model.last_activity_at = parseProjectActivityTimestamp(model.last_activity_at);
+        model.related_activity_at = parseProjectActivityTimestamp(model.related_activity_at);
 
         if (!Utils.Type.isNullOrUndefined(model.internal_bot_settings)) {
             const newSettings = {} as IStore["internal_bot_settings"];
@@ -262,6 +266,20 @@ class Project extends BaseModel<IStore> {
     }
     public set last_activity_at(value: Date | null) {
         this.update({ last_activity_at: value });
+    }
+
+    public get related_to_current_user(): bool {
+        return this.getValue("related_to_current_user");
+    }
+    public set related_to_current_user(value: bool) {
+        this.update({ related_to_current_user: value });
+    }
+
+    public get related_activity_at(): Date | null {
+        return this.getValue("related_activity_at");
+    }
+    public set related_activity_at(value: Date | null) {
+        this.update({ related_activity_at: value });
     }
 
     public get member_roles() {

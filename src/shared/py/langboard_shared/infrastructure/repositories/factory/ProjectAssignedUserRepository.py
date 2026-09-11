@@ -158,7 +158,10 @@ class ProjectAssignedUserRepository(BaseRepository[ProjectAssignedUser]):
         with DbSession.use(readonly=False) as db:
             db.exec(
                 SqlBuilder.update.table(ProjectAssignedUser)
-                .values(last_viewed_at=SafeDateTime.now())
+                .values(
+                    last_viewed_at=SafeDateTime.now(),
+                    view_count=ProjectAssignedUser.column("view_count") + 1,
+                )
                 .where(
                     (ProjectAssignedUser.column("project_id") == project_id)
                     & (ProjectAssignedUser.column("user_id") == user_id)

@@ -18,7 +18,16 @@ from .DashboardForm import DashboardPagination, DashboardProjectCreateForm
                 "projects": [
                     (
                         Project,
-                        {"schema": {"starred": "bool", "last_viewed_at": "string", "last_activity_at": "string?"}},
+                        {
+                            "schema": {
+                                "starred": "bool",
+                                "last_viewed_at": "string",
+                                "view_count": "integer",
+                                "last_activity_at": "string?",
+                                "related_to_current_user": "bool",
+                                "related_activity_at": "string?",
+                            }
+                        },
                     )
                 ]
             }
@@ -51,7 +60,10 @@ def get_starred_projects(
                             "schema": {
                                 "starred": "bool",
                                 "last_viewed_at": "string",
+                                "view_count": "integer",
                                 "last_activity_at": "string?",
+                                "related_to_current_user": "bool",
+                                "related_activity_at": "string?",
                             }
                         },
                     ),

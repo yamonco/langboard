@@ -96,7 +96,8 @@ const ProjectTabs = memo(
                 }
             });
 
-            return [...filteredProjects].sort(compareProjectActivityPriority);
+            const now = Date.now();
+            return [...filteredProjects].sort((a, b) => compareProjectActivityPriority(a, b, now));
         }, [currentTab, debouncedSearchQuery, projects, updatedStarredProjects]);
         const discoverySections = useMemo(() => buildProjectDiscoverySections(currentProjects), [currentProjects]);
 
@@ -186,6 +187,15 @@ const ProjectTabs = memo(
                             <ProjectCompactList
                                 title={t("dashboard.Favorites")}
                                 projects={discoverySections.favorites}
+                                updateStarredProjects={() => {
+                                    updateHeaderStarredProjects();
+                                    updateStarredProjects();
+                                }}
+                            />
+                            <ProjectCompactList
+                                title={t("dashboard.Related to me")}
+                                activityKind="related"
+                                projects={discoverySections.related}
                                 updateStarredProjects={() => {
                                     updateHeaderStarredProjects();
                                     updateStarredProjects();
