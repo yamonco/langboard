@@ -101,6 +101,8 @@ def test_identity_migration_keys_subjects_by_provider_issuer_and_external_id() -
     assert 'down_revision: str | None = "da39f306364b"' in source
     assert "uq_user_identity_link_provider_issuer_external_id" in source
     assert '["provider", "external_id", "issuer"]' in source
+    assert "GROUP BY provider, external_id HAVING COUNT(*) > 1" in source
+    assert "duplicate (provider, external_id) rows exist across issuers" in source
 
 
 def test_identity_migration_accepts_an_already_projected_constraint(
@@ -120,9 +122,7 @@ def test_identity_migration_accepts_an_already_projected_constraint(
         migration.sa,
         "inspect",
         lambda _bind: SimpleNamespace(
-            get_unique_constraints=lambda _table: [
-                {"name": "uq_user_identity_link_provider_issuer_external_id"}
-            ]
+            get_unique_constraints=lambda _table: [{"name": "uq_user_identity_link_provider_issuer_external_id"}]
         ),
     )
     monkeypatch.setattr(migration.op, "execute", lambda _statement: calls.append("execute"))
@@ -145,3 +145,43 @@ def test_identity_migration_accepts_an_already_projected_constraint(
     migration.upgrade()
 
     assert calls == ["execute", "alter"]
+
+
+def test_manual_identity_link_allows_only_secure_or_local_development_issuers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Production links require TLS while local development may use loopback HTTP."""
+
+    from langboard.routes.settings.UserSettingsApi import _is_allowed_oidc_issuer
+
+    Env.update_env("ENVIRONMENT", "production")
+    assert _is_allowed_oidc_issuer("https://issuer.example/realm")
+    assert not _is_allowed_oidc_issuer("http://issuer.example/realm")
+    assert not _is_allowed_oidc_issuer("http://localhost:8080/realm")
+
+    Env.update_env("ENVIRONMENT", "development")
+    assert _is_allowed_oidc_issuer("http://localhost:8080/realm")
+    assert _is_allowed_oidc_issuer("http://127.0.0.1:8080/realm")
+    assert _is_allowed_oidc_issuer("http://[::1]:8080/realm")
+    assert not _is_allowed_oidc_issuer("http://issuer.example/realm")
+
+
+def test_identity_migration_downgrade_fails_before_schema_changes_when_legacy_key_collides(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A downgrade explains incompatible cross-issuer subjects without partial DDL."""
+
+    spec = importlib.util.spec_from_file_location("identity_migration", MIGRATION)
+    assert spec and spec.loader
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+    result = SimpleNamespace(first=lambda: (1,))
+    monkeypatch.setattr(migration.op, "get_bind", lambda: SimpleNamespace(execute=lambda _statement: result))
+    monkeypatch.setattr(
+        migration.op,
+        "drop_constraint",
+        lambda *_args, **_kwargs: pytest.fail("schema changed before compatibility check"),
+    )
+
+    with pytest.raises(RuntimeError, match="duplicate .* rows exist across issuers"):
+        migration.downgrade()

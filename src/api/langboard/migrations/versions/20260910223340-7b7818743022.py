@@ -48,6 +48,16 @@ def upgrade() -> None:
 def downgrade() -> None:
     """Restore the legacy provider-subject key when values remain compatible."""
 
+    duplicate = (
+        op.get_bind()
+        .execute(sa.text("SELECT 1 FROM user_identity_link GROUP BY provider, external_id HAVING COUNT(*) > 1 LIMIT 1"))
+        .first()
+    )
+    if duplicate:
+        raise RuntimeError(
+            "Cannot downgrade user_identity_link: duplicate (provider, external_id) rows exist across issuers"
+        )
+
     constraints = _unique_constraint_names()
     issuer_constraint = "uq_user_identity_link_provider_issuer_external_id"
     legacy_constraint = op.f("uq_user_identity_link_provider_external_id")
