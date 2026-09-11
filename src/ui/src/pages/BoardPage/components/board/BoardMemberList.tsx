@@ -181,9 +181,7 @@ const BoardMemberList = memo(({ isSelectCardView }: IBoardMemberListProps) => {
                 }
                 return !directCandidateUIDs.has(item.uid) && "email" in item && Utils.Type.isString(item.email) ? [item.email] : [];
             }),
-            member_uids: mergedItems.flatMap((item) =>
-                !Utils.Type.isString(item) && directCandidateUIDs.has(item.uid) ? [item.uid] : []
-            ),
+            member_uids: mergedItems.flatMap((item) => (!Utils.Type.isString(item) && directCandidateUIDs.has(item.uid) ? [item.uid] : [])),
         });
 
         Toast.Add.promise(promise, {
