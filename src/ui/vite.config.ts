@@ -72,6 +72,10 @@ export default defineConfig(({ mode }) => {
             "process.env.MAX_FILE_SIZE_MB": JSON.stringify(process.env.MAX_FILE_SIZE_MB || 50),
         },
         build: {
+            // Keep content-hashed assets from the previous deployment so an
+            // already-open client can still lazy-load its remaining chunks.
+            // index.html is replaced on every build and is served no-cache.
+            emptyOutDir: false,
             watch: watchOptions,
             chunkSizeWarningLimit: 2000,
         },
