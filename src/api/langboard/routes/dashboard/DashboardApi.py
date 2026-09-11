@@ -13,7 +13,16 @@ from .DashboardForm import DashboardPagination, DashboardProjectCreateForm
     tags=["Dashboard"],
     responses=(
         OpenApiSchema()
-        .suc({"projects": [(Project, {"schema": {"starred": "bool", "last_viewed_at": "string"}})]})
+        .suc(
+            {
+                "projects": [
+                    (
+                        Project,
+                        {"schema": {"starred": "bool", "last_viewed_at": "string", "last_activity_at": "string?"}},
+                    )
+                ]
+            }
+        )
         .auth()
         .forbidden()
         .get()
@@ -42,6 +51,7 @@ def get_starred_projects(
                             "schema": {
                                 "starred": "bool",
                                 "last_viewed_at": "string",
+                                "last_activity_at": "string?",
                             }
                         },
                     ),
