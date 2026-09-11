@@ -4,6 +4,7 @@ export type { ICardCommentAnchor } from "@/core/models/types/card-comment-anchor
 
 const CONTEXT_LENGTH = 256;
 const MAX_QUOTE_LENGTH = 4096;
+const MAX_PREVIEW_LENGTH = 240;
 const SLATE_ELEMENT_SELECTOR = "[data-slate-node=element]";
 
 export const normalizeAnchorText = (value: string): string =>
@@ -11,6 +12,14 @@ export const normalizeAnchorText = (value: string): string =>
         .replace(/\uFEFF/g, "")
         .replace(/\s+/g, " ")
         .trim();
+
+export const normalizeAnchorPreview = (value: string): string =>
+    normalizeAnchorText(
+        value
+            .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
+            .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+            .replace(/[`*_>#~-]/g, " ")
+    ).slice(0, MAX_PREVIEW_LENGTH);
 
 const getTextBeforeRange = (root: HTMLElement, range: Range): string => {
     const before = range.cloneRange();

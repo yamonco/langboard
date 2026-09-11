@@ -25,6 +25,7 @@ import { gfmToMarkdown } from "mdast-util-gfm";
 import { Utils } from "@langboard/core/utils";
 import {
     captureCardCommentAnchor,
+    normalizeAnchorPreview,
     resolveCardCommentAnchorElement,
     type ICardCommentAnchor,
 } from "@/pages/BoardPage/components/card/comment/commentAnchor";
@@ -40,6 +41,7 @@ interface IAnchorComposerPosition {
 interface IAnchorMarkerPosition {
     commentUID: string;
     quote: string;
+    commentPreview: string;
     top: number;
 }
 
@@ -283,7 +285,14 @@ const BoardCardDescription = memo((): React.JSX.Element => {
                 const roundedTop = Math.round(blockTop);
                 const stackIndex = seen.get(roundedTop) ?? 0;
                 seen.set(roundedTop, stackIndex + 1);
-                return [{ commentUID: comment.uid, quote: anchor.exact, top: blockTop + stackIndex * 24 }];
+                return [
+                    {
+                        commentUID: comment.uid,
+                        quote: anchor.exact,
+                        commentPreview: normalizeAnchorPreview(comment.content?.content ?? ""),
+                        top: blockTop + stackIndex * 24,
+                    },
+                ];
             });
             setAnchorMarkers(next);
         };
@@ -342,7 +351,7 @@ const BoardCardDescription = memo((): React.JSX.Element => {
                     key={marker.commentUID}
                     type="button"
                     className={cn(
-                        "absolute right-1 z-20 flex size-5 items-center justify-center rounded-full border border-brand/40",
+                        "group absolute right-1 z-20 flex size-5 items-center justify-center rounded-full border border-brand/40",
                         "bg-brand/15 text-brand shadow-sm transition-transform hover:scale-110"
                     )}
                     style={{ top: marker.top }}
@@ -352,6 +361,17 @@ const BoardCardDescription = memo((): React.JSX.Element => {
                     onClick={() => openAnchoredComment(marker.commentUID)}
                 >
                     <IconComponent icon="message-square" size="3" />
+                    <span
+                        className={cn(
+                            "pointer-events-none absolute right-6 top-1/2 hidden w-64 -translate-y-1/2 rounded-lg border",
+                            "bg-popover p-2 text-left text-popover-foreground shadow-xl group-hover:block group-focus-visible:block"
+                        )}
+                    >
+                        <span className="block truncate text-[11px] font-medium text-brand">“{marker.quote}”</span>
+                        <span className="mt-1 line-clamp-3 block text-xs leading-5 text-muted-foreground">
+                            {marker.commentPreview || t("card.Open anchored comment")}
+                        </span>
+                    </span>
                 </button>
             ))}
             {shouldCollapse ? (
