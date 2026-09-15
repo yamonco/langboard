@@ -252,7 +252,7 @@ class CardService(BaseDomainService):
         if not params:
             return None
         project, wiki = params
-        if wiki.project_id != project.id:
+        if wiki.project_id != project.id or not wiki.is_public:
             return None
         if column is None:
             column = next(
