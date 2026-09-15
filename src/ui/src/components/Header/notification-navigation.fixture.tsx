@@ -1,5 +1,8 @@
-import * as Popover from "@radix-ui/react-popover";
-import * as Dialog from "@radix-ui/react-dialog";
+import Popover from "@/components/base/Popover";
+import Dialog from "@/components/base/Dialog";
+import "@/assets/styles/main.css";
+import { CARD_WINDOW_HEIGHT_CLASS, CARD_WINDOW_OVERLAY_CLASS } from "@/pages/BoardPage/cardWindowLayout";
+import { cn } from "@/core/utils/ComponentUtils";
 import { createRoot } from "react-dom/client";
 import { useCallback, useState } from "react";
 import { isNotificationInteraction, useNotificationNavigation } from "./useNotificationNavigation";
@@ -11,19 +14,20 @@ function Fixture() {
     const { closeThenNavigate, onCloseAutoFocus } = useNotificationNavigation(close, setRoute);
     return (
         <>
-            <Popover.Root modal open={open} onOpenChange={setOpen}>
-                <Popover.Trigger data-notification-surface="trigger">Notifications</Popover.Trigger>
-                <Popover.Portal>
+            <header className="sticky top-0 z-10 flex h-16 items-center gap-4 border-b bg-background px-4">
+                <Popover.Root modal open={open} onOpenChange={setOpen}>
+                    <Popover.Trigger data-notification-surface="trigger">Notifications</Popover.Trigger>
                     <Popover.Content data-notification-surface="content" onCloseAutoFocus={onCloseAutoFocus}>
                         {["card", "wiki", "project"].map((target) => (
                             <button key={target} onClick={() => closeThenNavigate(target)}>
                                 Open {target}
                             </button>
                         ))}
-                        <Popover.Close>Cancel</Popover.Close>
+                        <button onClick={close}>Cancel</button>
                     </Popover.Content>
-                </Popover.Portal>
-            </Popover.Root>
+                </Popover.Root>
+                <button>Other navigation</button>
+            </header>
             <Dialog.Root
                 modal={false}
                 open={route !== null}
@@ -31,18 +35,30 @@ function Fixture() {
                     if (!next) setRoute(null);
                 }}
             >
-                <Dialog.Portal>
-                    <Dialog.Content
-                        aria-describedby={undefined}
-                        onInteractOutside={(event) => {
-                            if (isNotificationInteraction(event.detail.originalEvent.target)) event.preventDefault();
-                        }}
-                    >
-                        <Dialog.Title>Destination {route}</Dialog.Title>
-                        <button>Destination action</button>
-                        <Dialog.Close>Close destination</Dialog.Close>
-                    </Dialog.Content>
-                </Dialog.Portal>
+                <Dialog.Content
+                    nonModalOverlay
+                    withCloseButton={false}
+                    className={cn(
+                        "h-[calc(100dvh-theme(spacing.6))] sm:h-[calc(100dvh-theme(spacing.8))]",
+                        "w-[calc(100vw-theme(spacing.4))] max-w-none p-6",
+                        CARD_WINDOW_HEIGHT_CLASS
+                    )}
+                    overlayClassName={CARD_WINDOW_OVERLAY_CLASS}
+                    contentWrapperClassName="pointer-events-none !items-start pb-2 pt-4 sm:pt-6 [&_[data-dialog-content=true]]:pointer-events-auto"
+                    viewportClassName="!py-0"
+                    onOverlayInteract={(event) => {
+                        if (isNotificationInteraction(event.target)) event.preventDefault();
+                        else setRoute(null);
+                    }}
+                    aria-describedby={undefined}
+                    onInteractOutside={(event) => {
+                        if (isNotificationInteraction(event.detail.originalEvent.target)) event.preventDefault();
+                    }}
+                >
+                    <Dialog.Title>Destination {route}</Dialog.Title>
+                    <button>Destination action</button>
+                    <Dialog.Close>Close destination</Dialog.Close>
+                </Dialog.Content>
             </Dialog.Root>
         </>
     );
