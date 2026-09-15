@@ -20,6 +20,7 @@
     "test:board-touch-e2e": "playwright test -c playwright.board.config.ts",
     "test:board-minimap": "node --experimental-strip-types src/pages/BoardPage/components/board/BoardMinimapLayout.test.ts",
     "test:comment-anchor": "node --experimental-strip-types src/pages/BoardPage/components/card/comment/commentAnchor.test.ts",
+    "test:comment-anchor-capture": "playwright test -c playwright.comment-anchor.config.ts",
     "preview": "vite preview",
     "test:project-priority": "node --experimental-strip-types --test src/pages/DashboardPage/components/ProjectActivityPriority.test.ts",
     "test:project-discovery": "node --experimental-strip-types --test src/pages/DashboardPage/components/ProjectDiscovery.test.ts",
