@@ -143,6 +143,11 @@ const BoardCardDescription = memo((): React.JSX.Element => {
     const { registerSectionCancelHandler, registerSectionSaveHandler } = useBoardCardSectionSaveActions();
     const canEdit = hasRoleAction(ProjectRole.EAction.CardUpdate);
     const canStartEditing = canEdit && isCardEditing;
+    useEffect(() => {
+        if (canStartEditing) {
+            setIsEditing(true);
+        }
+    }, [canStartEditing]);
     const updateAnchorCommentSnapshot = useCallback((commentUID: string, snapshot: IAnchorCommentSnapshot | null) => {
         setAnchorCommentSnapshots((current) => {
             if (!snapshot) {
