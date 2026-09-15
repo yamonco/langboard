@@ -251,6 +251,7 @@ def test_linked_card_deletion_purges_reference_row(monkeypatch: pytest.MonkeyPat
     service = SimpleNamespace(
         repo=repo,
         _get_service=lambda service_type: graph_approval,
+        can_delete=Mock(return_value=True),
     )
     monkeypatch.setattr(module.BotScopeHelper, "delete_by_scope", Mock())
     monkeypatch.setattr(module.BotScheduleHelper, "unschedule_by_scope", Mock())
@@ -296,7 +297,7 @@ def test_regular_column_move_keeps_linked_card_movable(monkeypatch: pytest.Monke
 def test_existing_wiki_link_is_idempotent(monkeypatch: pytest.MonkeyPatch) -> None:
     module = importlib.import_module("langboard_shared.domain.services.factory.CardService")
     project = SimpleNamespace(id=1)
-    wiki = SimpleNamespace(project_id=1, get_uid=lambda: "wiki-1")
+    wiki = SimpleNamespace(project_id=1, is_public=True, get_uid=lambda: "wiki-1")
     column = SimpleNamespace(id=10, project_id=1, is_archive=False)
     existing = SimpleNamespace(
         board_api_response=lambda *args: {"uid": "card-1"},
