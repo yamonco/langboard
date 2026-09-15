@@ -204,7 +204,7 @@ def apply_card_graph_patch(
 
 @McpTool.add(
     description=(
-        "Read compact card core and workflow fields. Request description, people, classification, checklists, "
+        "Read compact card core, public creator identity, and workflow fields. Request description, people, classification, checklists, "
         "comments, attachments, public metadata, or automation explicitly. Use returned opaque cursors for "
         "rich description and every collection."
     )
