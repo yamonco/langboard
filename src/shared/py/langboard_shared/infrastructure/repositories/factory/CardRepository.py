@@ -1,11 +1,24 @@
-from sqlalchemy import func, literal, or_
+from sqlalchemy import cast, func, or_, select
+from sqlalchemy.dialects.postgresql import JSONB
 from ....core.db import DbSession, SqlBuilder
+from ....core.db.DbEngine import DbEngine
 from ....core.domain import BaseOrderRepository
 from ....core.schema import TimeBasedPagination
 from ....core.types import SafeDateTime
 from ....core.types.ParamTypes import TCardParam, TColumnParam, TProjectParam, TUserParam
-from ....domain.models import Card, CardAssignedUser, CardComment, Project, ProjectColumn, ProjectRole
+from ....domain.models import Card, CardAssignedUser, CardAttachment, CardComment, Project, ProjectColumn, ProjectRole
 from ....helpers import InfraHelper
+
+
+def _editor_search_text(column, dialect: str):
+    """Decode the existing JSON string representation before literal text matching."""
+    if dialect == "postgresql":
+        return cast(column, JSONB).op("#>>")("{}")
+    if dialect == "sqlite":
+        return func.json_extract(column, "$")
+    if dialect in {"mysql", "mariadb"}:
+        return func.json_unquote(column)
+    raise ValueError("Unsupported database dialect for editor content search")
 
 
 class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
@@ -115,14 +128,32 @@ class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
         project_id = InfraHelper.convert_id(project)
         escaped_input = input_value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
         title = Card.column("title")
+        pattern = f"%{escaped_input}%"
+        dialect = DbEngine.get_readonly_engine().dialect.name
+        comments = (
+            select(CardComment.column("id"))
+            .where(CardComment.column("card_id") == Card.column("id"))
+            .where(CardComment.column("deleted_at") == None)  # noqa: E711
+            .where(_editor_search_text(CardComment.column("content"), dialect).ilike(pattern, escape="\\"))
+            .exists()
+        )
+        attachments = (
+            select(CardAttachment.column("id"))
+            .where(CardAttachment.column("card_id") == Card.column("id"))
+            .where(CardAttachment.column("deleted_at") == None)  # noqa: E711
+            .where(CardAttachment.column("filename").ilike(pattern, escape="\\"))
+            .exists()
+        )
         query = (
             SqlBuilder.select.tables(Card, ProjectColumn)
             .join(ProjectColumn, Card.column("project_column_id") == ProjectColumn.column("id"))
             .where(Card.column("project_id") == project_id)
             .where(
                 or_(
-                    literal(input_value).ilike("%" + title + "%"),
-                    title.ilike(f"%{escaped_input}%", escape="\\"),
+                    title.ilike(pattern, escape="\\"),
+                    _editor_search_text(Card.column("description"), dialect).ilike(pattern, escape="\\"),
+                    comments,
+                    attachments,
                 )
             )
             .order_by(Card.column("updated_at").desc(), Card.column("id").desc())
