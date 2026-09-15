@@ -3,7 +3,7 @@ import type { SlateElementProps } from "platejs/static";
 import { NodeApi } from "platejs";
 import { SlateElement } from "platejs/static";
 import { cn } from "@/core/utils/ComponentUtils";
-import CachedImage from "@/components/CachedImage";
+import ImageThumbnail from "@/components/ImagePreviewDialog/ImageThumbnail";
 
 export function ImageElementStatic(props: SlateElementProps<TImageElement & TCaptionProps & TResizableProps>) {
     const { align = "center", caption, url, width } = props.element;
@@ -13,10 +13,10 @@ export function ImageElementStatic(props: SlateElementProps<TImageElement & TCap
         <SlateElement {...props} className="py-2.5">
             <figure className="group relative m-0 inline-block max-w-full" style={{ width }}>
                 <div className="relative min-w-[92px] max-w-full" style={{ textAlign: align }}>
-                    <CachedImage
+                    <ImageThumbnail
                         className={cn(
                             "h-auto max-w-full cursor-default object-cover px-0",
-                            hasExplicitWidth ? "w-full" : "w-auto max-w-2xl",
+                            hasExplicitWidth ? "w-full" : "w-auto max-w-[min(100%,42rem)]",
                             "rounded-sm"
                         )}
                         alt=""

@@ -3,7 +3,7 @@
 import type { TImageElement } from "platejs";
 import type { PlateElementProps } from "platejs/react";
 import { useDraggable } from "@platejs/dnd";
-import { Image, ImagePlugin, useMediaState } from "@platejs/media/react";
+import { Image, ImagePlugin, openImagePreview, useMediaState } from "@platejs/media/react";
 import { ResizableProvider, useResizableValue } from "@platejs/resizable";
 import { PlateElement, useEditorRef, withHOC } from "platejs/react";
 import { cn } from "@/core/utils/ComponentUtils";
@@ -67,14 +67,29 @@ export const ImageElement = withHOC(ResizableProvider, function ImageElement(pro
                             className={cn(
                                 "block h-auto max-w-full cursor-pointer object-cover px-0",
                                 hasExplicitWidth ? "w-full" : "w-auto",
-                                !hasExplicitWidth && "max-w-2xl",
+                                !hasExplicitWidth && "max-w-[min(100%,42rem)]",
                                 !hasExplicitWidth && align === "center" && "mx-auto",
                                 !hasExplicitWidth && align === "right" && "ml-auto",
                                 "rounded-sm",
+                                readOnly && "max-h-[min(60vh,24rem)] w-auto object-contain",
                                 focused && selected && "ring-2 ring-ring ring-offset-2",
                                 isDragging && "opacity-50"
                             )}
                             alt=""
+                            role={readOnly ? "button" : undefined}
+                            tabIndex={readOnly ? 0 : undefined}
+                            aria-label={readOnly ? t("editor.Image") : undefined}
+                            onClick={readOnly ? () => openImagePreview(editor, props.element) : undefined}
+                            onKeyDown={
+                                readOnly
+                                    ? (event) => {
+                                          if (event.key === "Enter" || event.key === " ") {
+                                              event.preventDefault();
+                                              openImagePreview(editor, props.element);
+                                          }
+                                      }
+                                    : undefined
+                            }
                             onLoad={setInitialImageWidth}
                         />
                         <ResizeHandle
