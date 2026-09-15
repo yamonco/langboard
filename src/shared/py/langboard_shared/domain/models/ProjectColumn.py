@@ -11,6 +11,7 @@ class ProjectColumn(SoftDeleteModel, table=True):
     )
     name: str = Field(nullable=False, api_field=ApiField())
     order: int = Field(default=0, nullable=False, api_field=ApiField())
+    dock_order: int | None = Field(default=None, nullable=True, api_field=ApiField())
     is_archive: bool = Field(default=False, nullable=False, api_field=ApiField())
 
     def notification_data(self) -> dict[str, Any]:

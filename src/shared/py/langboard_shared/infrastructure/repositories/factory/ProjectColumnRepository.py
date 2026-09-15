@@ -1,4 +1,4 @@
-from sqlalchemy import func
+from sqlalchemy import case, func
 from ....ai import BotScheduleHelper, BotScopeHelper
 from ....core.db import DbSession, SqlBuilder
 from ....core.domain import BaseOrderRepository
@@ -22,6 +22,38 @@ class ProjectColumnRepository(BaseOrderRepository[ProjectColumn, Project]):
 
     def get_by_id_like(self, column: TColumnParam | None) -> ProjectColumn | None:
         return InfraHelper.get_by_id_like(ProjectColumn, column)
+
+    def replace_dock_columns(self, project: TProjectParam, column_uids: list[str]) -> bool:
+        """Replace shared shortcuts without changing board column positions."""
+        if len(column_uids) != len(set(column_uids)):
+            return False
+        project_id = InfraHelper.convert_id(project)
+        with DbSession.use(readonly=False) as db:
+            # Serialize whole-list replacements, including an initially empty dock.
+            locked = db.exec(
+                SqlBuilder.select.column(Project.column("id"))
+                .where(Project.column("id") == project_id)
+                .with_for_update()
+            ).first()
+            if locked is None:
+                return False
+            columns = db.exec(
+                SqlBuilder.select.table(ProjectColumn).where(ProjectColumn.column("project_id") == project_id)
+            ).all()
+            eligible = {column.get_uid(): column.id for column in columns if not column.is_archive}
+            if any(uid not in eligible for uid in column_uids):
+                return False
+            positions = {eligible[uid]: index for index, uid in enumerate(column_uids)}
+            value = case(positions, value=ProjectColumn.column("id"), else_=None) if positions else None
+            db.exec(
+                SqlBuilder.update.table(ProjectColumn)
+                .values(dock_order=value)
+                .where(
+                    (ProjectColumn.column("project_id") == project_id)
+                    & (ProjectColumn.column("deleted_at").is_(None))
+                )
+            )
+        return True
 
     def get_all_by_project(
         self,
