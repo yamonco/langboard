@@ -1,7 +1,7 @@
-from typing import Any
-from fastapi import Depends
+from typing import Any, Literal
+from fastapi import Depends, Query
 from langboard_shared.core.filter import AuthFilter
-from langboard_shared.core.routing import ApiPermission, AppRouter, JsonResponse
+from langboard_shared.core.routing import ApiErrorCode, ApiException, ApiPermission, AppRouter, JsonResponse
 from langboard_shared.core.schema import InfiniteRefreshableList, OpenApiSchema
 from langboard_shared.domain.models import Bot, ProjectRole, ProjectWikiActivity, User, UserActivity
 from langboard_shared.domain.models.bases import BaseActivityModel
@@ -23,6 +23,30 @@ USER_ACTIVITY_SCHEMA = InfiniteRefreshableList.api_schema(
         },
     )
 )
+
+
+@AppRouter.api.get("/activity/user/{user_uid}/shared", tags=["Activity"], response_model=None)
+@AuthFilter.add("user")
+def get_shared_user_activities(
+    user_uid: str,
+    pagination: ActivityPagination = Depends(),
+    activity_uid: str | None = None,
+    scope: Literal["project", "wiki"] | None = None,
+    offset: int = Query(default=0, ge=0),
+    max_chars: int = Query(default=4000, ge=1, le=8000),
+    project_uid: str | None = None,
+    since: str | None = None,
+    until: str | None = None,
+    user: User = Auth.scope("user"),
+    service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    try:
+        result = service.activity.get_shared_user_activities(
+            user, user_uid, pagination, activity_uid, scope, offset, max_chars, project_uid, since, until
+        )
+    except ValueError as exc:
+        raise ApiException.BadRequest_400(ApiErrorCode.VA0000) from exc
+    return JsonResponse(content=result)
 
 
 def _create_project_activity_schema(
