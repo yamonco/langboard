@@ -18,21 +18,20 @@ import {
     parseProjectListView,
     projectListViewStorageKey,
     searchProjects,
+    PROJECT_QUICK_SWITCHER_EVENT,
     type TProjectListView,
 } from "@/pages/DashboardPage/components/ProjectDiscovery";
 
 export function SkeletonProjecTabs() {
     return (
         <>
-            <Box display="grid" gap="1" h="10" p="1" className="grid-cols-4">
-                <Skeleton h="8" />
-                <Skeleton h="8" />
-                <Skeleton h="8" />
-                <Skeleton h="8" />
-            </Box>
             <Box px="2" mt="3">
                 <Skeleton h="9" />
             </Box>
+            <Flex justify="end" gap="1" px="2" mt="2">
+                <Skeleton className="size-8" />
+                <Skeleton className="size-8" />
+            </Flex>
             <Box mt="2">
                 <SkeletonProjectList />
             </Box>
@@ -89,8 +88,9 @@ const ProjectTabs = memo(
 
         return (
             <>
-                <Box px="2" mt="3">
+                <Flex items="center" gap="2" px="2" mt="3">
                     <Input
+                        wrapperProps={{ className: "min-w-0 flex-1" }}
                         value={searchQuery}
                         onChange={(event) => setSearchQuery(event.currentTarget.value)}
                         placeholder={t("dashboard.Search projects...")}
@@ -98,7 +98,18 @@ const ProjectTabs = memo(
                         leftIcon={<Search />}
                         clearable
                     />
-                </Box>
+                    <Button
+                        type="button"
+                        size="icon"
+                        variant="outline"
+                        className="shrink-0 md:hidden"
+                        title={t("dashboard.Quick switcher")}
+                        aria-label={t("dashboard.Quick switcher")}
+                        onClick={() => window.dispatchEvent(new Event(PROJECT_QUICK_SWITCHER_EVENT))}
+                    >
+                        <IconComponent icon="search" size="4" />
+                    </Button>
+                </Flex>
                 <Flex role="group" justify="end" gap="1" px="2" mt="2" aria-label={t("dashboard.Project view") as string}>
                     <Button
                         type="button"

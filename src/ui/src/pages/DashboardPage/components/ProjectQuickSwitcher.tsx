@@ -6,6 +6,7 @@ import Command from "@/components/base/Command";
 import Flex from "@/components/base/Flex";
 import IconComponent from "@/components/base/IconComponent";
 import BaseDialog from "@/components/base/Dialog";
+import { projectTypeLabel } from "@/pages/DashboardPage/components/ProjectTypeCopy";
 import useGetProjects from "@/controllers/api/dashboard/useGetProjects";
 import { Project } from "@/core/models";
 import { usePageNavigateRef } from "@/core/hooks/usePageNavigate";
@@ -70,8 +71,7 @@ const ProjectQuickSwitcherItem = ({
             <Box className="min-w-0 flex-1">
                 <Box className="truncate font-medium">{title}</Box>
                 <Box className="truncate text-xs text-muted-foreground">
-                    {t(projectType === "Other" ? "common.Other" : `project.types.${projectType}`)} ·{" "}
-                    {Utils.String.formatDateDistance(i18n, t, activityAt)}
+                    {projectTypeLabel(t, projectType)} · {Utils.String.formatDateDistance(i18n, t, activityAt)}
                 </Box>
             </Box>
             {active ? <IconComponent icon="check" size="4" className="shrink-0 text-primary" /> : null}

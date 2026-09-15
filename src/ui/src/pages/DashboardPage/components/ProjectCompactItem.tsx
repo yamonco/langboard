@@ -11,6 +11,7 @@ import { ROUTES } from "@/core/routing/constants";
 import { Utils } from "@langboard/core/utils";
 import ProjectItemStarButton from "@/pages/DashboardPage/components/ProjectItemStarButton";
 import ContextMenu from "@/components/base/ContextMenu";
+import { projectTypeLabel } from "@/pages/DashboardPage/components/ProjectTypeCopy";
 import { projectActivityAt, type TProjectActivityKind } from "@/pages/DashboardPage/components/ProjectActivityPriority";
 
 interface IProjectCompactItemProps {
@@ -43,7 +44,7 @@ const ProjectCompactItem = memo(({ activityKind = "project", project, updateStar
                             <Box className="min-w-0 flex-1">
                                 <Box className="truncate text-sm font-semibold">{title}</Box>
                                 <Flex items="center" gap="1.5" className="mt-0.5 min-w-0 text-xs text-muted-foreground">
-                                    <span className="truncate">{t(projectType === "Other" ? "common.Other" : `project.types.${projectType}`)}</span>
+                                    <span className="truncate">{projectTypeLabel(t, projectType)}</span>
                                     <span aria-hidden="true">·</span>
                                     <span className="shrink-0">{Utils.String.formatDateDistance(i18n, t, activityAt)}</span>
                                 </Flex>
