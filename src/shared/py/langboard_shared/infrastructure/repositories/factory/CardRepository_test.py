@@ -81,7 +81,8 @@ def test_search_matches_comment_only_unicode_and_deduplicates_without_cross_proj
         assert repository.search_context_by_project(project, "삭제자료") == []
         assert len(repository.search_context_by_project(project, "only", limit=1)) == 1
         expression = _editor_search_text(CardComment.column("content"), "postgresql")
-        assert "#>>" in str(expression.compile(dialect=postgresql.dialect()))
+        compiled = str(expression.compile(dialect=postgresql.dialect()))
+        assert "#>>" in compiled and "TEXT[]" in compiled
         with pytest.raises(ValueError, match="Unsupported"):
             _editor_search_text(CardComment.column("content"), "unknown")
     finally:
