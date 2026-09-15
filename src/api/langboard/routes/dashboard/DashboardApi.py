@@ -106,7 +106,22 @@ def toggle_star_project(
         OpenApiSchema()
         .suc(
             {
-                "cards": [(Card, {"schema": {"project_column_name": "string"}})],
+                "cards": [
+                    (
+                        Card,
+                        {
+                            "schema": {
+                                "project_column_name": "string",
+                                "linked_resource?": {
+                                    "type": "string",
+                                    "uid": "string",
+                                    "status": "string",
+                                    "title?": "string",
+                                },
+                            }
+                        },
+                    )
+                ],
                 "projects": [Project],
             }
         )

@@ -47,6 +47,32 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
         column = self._service.project_column.get_by_id_like(card.project_column_id)
         if column is None or column.project_id != project.id:
             return None
+
+        if getattr(card, "is_linked_resource", False):
+            details = self._service.card.get_details(
+                project,
+                card,
+                self._actor,
+                limit=_SOURCE_QUERY_LIMIT,
+            )
+            if details is None:
+                return None
+            resource = details.get("linked_resource", {})
+            if resource.get("status") == "available":
+                details["title"] = resource.get("title", "")
+                details["description"] = resource.get("content")
+            else:
+                details["title"] = "Restricted reference" if resource.get("status") == "forbidden" else "Source unavailable"
+                details["description"] = None
+            return CardBundleSource(
+                details=details,
+                checklists=[],
+                attachments=[],
+                metadata={},
+                bot_scopes=[],
+                bot_schedules=[],
+            )
+
         details = card.api_response()
         details["project_column_name"] = column.name
 
@@ -209,7 +235,13 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
         before_card_uid: str | None,
     ) -> ProjectCardPageSource:
         before = SafeDateTime.fromisoformat(before_updated_at) if before_updated_at else None
-        result = self._service.card.get_api_page_by_project(project_uid, limit, before, before_card_uid)
+        result = self._service.card.get_api_page_by_project(
+            project_uid,
+            limit,
+            before,
+            before_card_uid,
+            user_or_bot=self._actor,
+        )
         if result is None:
             raise ValueError("Project not found")
         items, total_count, next_fields = result

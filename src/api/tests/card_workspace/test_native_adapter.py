@@ -1,6 +1,7 @@
 import os
 from types import SimpleNamespace
 from typing import Any
+from unittest.mock import Mock
 import pytest
 
 
@@ -89,6 +90,47 @@ def test_native_source_rejects_over_bound_people_before_projection() -> None:
 
     with pytest.raises(ValueError, match="safe 100-item MCP source bound"):
         adapter.get_card_bundle_source("p1", "c1", frozenset({"people"}))
+
+
+def test_native_source_projects_linked_wiki_content_without_task_sections() -> None:
+    project = SimpleNamespace(id=1)
+    card = SimpleNamespace(project_id=1, project_column_id=2, is_linked_resource=True)
+    column = SimpleNamespace(id=2, project_id=1, name="Reference")
+    actor = object()
+    get_details = Mock(
+        return_value={
+            "uid": "c1",
+            "title": "",
+            "project_column_uid": "column-1",
+            "project_column_name": "Reference",
+            "linked_resource": {
+                "status": "available",
+                "title": "Runbook",
+                "content": {"content": "Canonical Wiki body"},
+            },
+        }
+    )
+    service = SimpleNamespace(
+        project=SimpleNamespace(get_by_id_like=lambda _uid: project),
+        project_column=SimpleNamespace(get_by_id_like=lambda _uid: column),
+        card=SimpleNamespace(get_by_id_like=lambda _uid: card, get_details=get_details),
+    )
+
+    source = NativeCardWorkspaceAdapter(actor, service).get_card_bundle_source(
+        "p1",
+        "c1",
+        frozenset({"description", "people", "checklists", "attachments", "metadata", "automation.bot_scopes"}),
+    )
+
+    assert source is not None
+    assert source.details["title"] == "Runbook"
+    assert source.details["description"] == {"content": "Canonical Wiki body"}
+    assert source.checklists == []
+    assert source.attachments == []
+    assert source.metadata == {}
+    assert source.bot_scopes == []
+    assert source.bot_schedules == []
+    get_details.assert_called_once_with(project, card, actor, limit=MAX_NATIVE_SECTION_SOURCE + 1)
 
 
 def test_native_checkitem_continuation_reads_only_the_requested_checklist() -> None:

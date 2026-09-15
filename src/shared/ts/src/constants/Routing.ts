@@ -168,6 +168,7 @@ const API = {
             GET_ALL: "/board/{uid}/wikis",
             GET_DETAILS: "/board/{uid}/wiki/{wiki_uid}",
             CREATE: "/board/{uid}/wiki",
+            CREATE_LINKED_CARD: "/board/{uid}/wiki/{wiki_uid}/linked-card",
             UPLOAD: "/board/{uid}/wiki/{wiki_uid}/attachment",
             CHANGE_DETAILS: "/board/{uid}/wiki/{wiki_uid}/details",
             CHANGE_ORDER: "/board/{uid}/wiki/{wiki_uid}/order",

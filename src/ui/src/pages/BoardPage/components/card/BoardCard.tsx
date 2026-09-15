@@ -25,7 +25,7 @@ import BoardCardAttachmentList, { SkeletonBoardCardAttachmentList } from "@/page
 import BoardCardTitle, { SkeletonBoardCardTitle } from "@/pages/BoardPage/components/card/BoardCardTitle";
 import BoardCommentForm from "@/pages/BoardPage/components/card/comment/BoardCommentForm";
 import BoardCommentList, { SkeletonBoardCommentList } from "@/pages/BoardPage/components/card/comment/BoardCommentList";
-import { forwardRef, memo, useCallback, useEffect, useRef, useState } from "react";
+import { forwardRef, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import BoardCardMemberList from "@/pages/BoardPage/components/card/BoardCardMemberList";
 import { SkeletonUserAvatarList } from "@/components/UserAvatarList";
@@ -42,6 +42,10 @@ import { cn } from "@/core/utils/ComponentUtils";
 import { useBoardChat } from "@/core/providers/BoardChatProvider";
 import { useIsMobile } from "@/core/hooks/useIsMobile";
 import BoardTaskMetadataSection from "@/pages/BoardPage/components/task/BoardTaskMetadataSection";
+import BoardLinkedWikiCard from "@/pages/BoardPage/components/card/BoardLinkedWikiCard";
+import useCardLinkedResourceChangedHandlers from "@/controllers/socket/card/useCardLinkedResourceChangedHandlers";
+import useSwitchSocketHandlers from "@/core/hooks/useSwitchSocketHandlers";
+import { useQueryClient } from "@tanstack/react-query";
 
 export interface IBoardCardProps {
     projectUID: string;
@@ -69,6 +73,7 @@ const BoardCard = memo(
         const { data: cardData, isFetching, error } = useGetCardDetails({ project_uid: projectUID, card_uid: cardUID });
         const [t] = useTranslation();
         const socket = useSocket();
+        const queryClient = useQueryClient();
         const navigate = usePageNavigateRef();
         const { on: onCardDeletedHandlers } = useCardDeletedHandlers({
             projectUID,
@@ -77,6 +82,22 @@ const BoardCard = memo(
                 Toast.Add.error(t("project.errors.Card deleted."));
                 navigate(ROUTES.BOARD.MAIN(projectUID), { replace: true });
             },
+        });
+        const linkedResourceChangedHandler = useMemo(
+            () =>
+                useCardLinkedResourceChangedHandlers({
+                    projectUID,
+                    cardUID,
+                    detail: true,
+                    callback: () => queryClient.invalidateQueries({ queryKey: [`get-card-details-${projectUID}-${cardUID}`] }),
+                }),
+            [cardUID, projectUID, queryClient]
+        );
+
+        useSwitchSocketHandlers({
+            socket,
+            handlers: cardData?.card?.source_type === "project_wiki" ? [linkedResourceChangedHandler] : [],
+            dependencies: [cardData?.card?.source_type, linkedResourceChangedHandler],
         });
 
         useEffect(() => {
@@ -97,7 +118,7 @@ const BoardCard = memo(
         }, [error]);
 
         useEffect(() => {
-            setPageAliasRef.current(cardData?.card?.title || "");
+            setPageAliasRef.current(cardData?.card?.linked_resource?.title || cardData?.card?.title || "");
             if (!cardData || isFetching) {
                 return;
             }
@@ -208,7 +229,17 @@ interface IBoardCardResultProps {
     onEditModeStateChange?: (isEditing: bool, cancelEdit: (() => void) | null) => void;
 }
 
-function BoardCardResult({ isExpanded, setIsExpanded, onClose, onEditModeStateChange }: IBoardCardResultProps): React.JSX.Element {
+function BoardCardResult(props: IBoardCardResultProps): React.JSX.Element {
+    const { card } = useBoardCard();
+
+    if (card.source_type === "project_wiki" && card.linked_resource) {
+        return <BoardLinkedWikiCard {...props} />;
+    }
+
+    return <BoardTaskCardResult {...props} />;
+}
+
+function BoardTaskCardResult({ isExpanded, setIsExpanded, onClose, onEditModeStateChange }: IBoardCardResultProps): React.JSX.Element {
     const { card, isCardEditing, leaveCardEditMode } = useBoardCard();
     const { isActionPanelOpen } = useBoardCardPanel();
     const { boardChat } = useBoardController();
