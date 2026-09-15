@@ -6,6 +6,7 @@ import Command from "@/components/base/Command";
 import Flex from "@/components/base/Flex";
 import IconComponent from "@/components/base/IconComponent";
 import BaseDialog from "@/components/base/Dialog";
+import { projectTypeLabel } from "@/pages/DashboardPage/components/ProjectTypeCopy";
 import useGetProjects from "@/controllers/api/dashboard/useGetProjects";
 import { Project } from "@/core/models";
 import { usePageNavigateRef } from "@/core/hooks/usePageNavigate";
@@ -52,15 +53,14 @@ const ProjectQuickSwitcherItem = ({ project, active, onSelect }: { project: Proj
     const activityAt = lastActivityAt ?? createdAt;
 
     return (
-        <Command.Item value={`${title} ${projectType}`} onSelect={onSelect} className="gap-3 rounded-lg py-2.5">
+        <Command.Item value={project.uid} keywords={[title, projectType]} onSelect={onSelect} className="gap-3 rounded-lg py-2.5">
             <Flex items="center" justify="center" className="size-8 shrink-0 rounded-lg bg-secondary">
                 <IconComponent icon={starred ? "star" : "folder-kanban"} size="4" />
             </Flex>
             <Box className="min-w-0 flex-1">
                 <Box className="truncate font-medium">{title}</Box>
                 <Box className="truncate text-xs text-muted-foreground">
-                    {t(projectType === "Other" ? "common.Other" : `project.types.${projectType}`)} ·{" "}
-                    {Utils.String.formatDateDistance(i18n, t, activityAt)}
+                    {projectTypeLabel(t, projectType)} · {Utils.String.formatDateDistance(i18n, t, activityAt)}
                 </Box>
             </Box>
             {active ? <IconComponent icon="check" size="4" className="shrink-0 text-primary" /> : null}

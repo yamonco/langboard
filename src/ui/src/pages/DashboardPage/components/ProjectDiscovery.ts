@@ -1,4 +1,5 @@
 import { compareProjectActivityPriority, type IProjectActivityPriority as IActivityPriorityProject } from "./ProjectActivityPriority.ts";
+import { defaultFilter } from "cmdk";
 
 export const PROJECT_RECENT_WORK_LIMIT = 6;
 export const PROJECT_QUICK_SWITCHER_EVENT = "langboard:open-project-quick-switcher";
@@ -19,7 +20,7 @@ export const buildProjectDiscoverySections = <TProject extends IActivityPriority
     return {
         all,
         favorites: all.filter((project) => project.starred),
-        recent: all.filter((project) => !project.starred).slice(0, recentLimit),
+        recent: all.filter((project) => !project.starred && project.last_activity_at).slice(0, recentLimit),
     };
 };
 
@@ -41,3 +42,12 @@ export const isProjectQuickSwitcherShortcut = (event: Pick<KeyboardEvent, "altKe
     event.key.toLowerCase() === "k" && (event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey;
 
 export const projectQuickSwitcherShortcutLabel = (platform: string): string => (/mac|iphone|ipad/i.test(platform) ? "⌘K" : "Ctrl K");
+
+export const searchProjects = <TProject extends IActivityPriorityProject>(projects: readonly TProject[], query: string): TProject[] => {
+    const search = query.trim();
+    return projects
+        .map((project) => ({ project, score: search ? defaultFilter(project.title, search) : 1 }))
+        .filter(({ score }) => score > 0)
+        .sort((a, b) => b.score - a.score || compareProjectActivityPriority(a.project, b.project))
+        .map(({ project }) => project);
+};
