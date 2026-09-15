@@ -1586,7 +1586,7 @@
     y-protocols "^1.0.7"
     yjs "^13.6.29"
 
-"@playwright/test@^1.63.0":
+"@playwright/test@1.63.0", "@playwright/test@^1.63.0":
   version "1.63.0"
   resolved "https://registry.yarnpkg.com/@playwright/test/-/test-1.63.0.tgz#808020c46e8b6b91f9d628cd0ebcbb32bdfd8b6c"
   integrity sha512-oxMK4vllB9RK5NQ2l1pq1IfOf2AvnEuj/vYGDj0H2nMtmtZpKtCwt/l00GEO6xjGfpBNAvjovvYdCm50dRQkpQ==
