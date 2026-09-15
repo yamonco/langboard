@@ -16,7 +16,7 @@ export function ImageElementStatic(props: SlateElementProps<TImageElement & TCap
                     <CachedImage
                         className={cn(
                             "h-auto max-w-full cursor-default object-cover px-0",
-                            hasExplicitWidth ? "w-full" : "w-auto max-w-2xl",
+                            hasExplicitWidth ? "w-full" : "w-auto max-w-[min(100%,42rem)]",
                             "rounded-sm"
                         )}
                         alt=""

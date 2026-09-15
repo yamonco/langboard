@@ -67,7 +67,7 @@ export const ImageElement = withHOC(ResizableProvider, function ImageElement(pro
                             className={cn(
                                 "block h-auto max-w-full cursor-pointer object-cover px-0",
                                 hasExplicitWidth ? "w-full" : "w-auto",
-                                !hasExplicitWidth && "max-w-2xl",
+                                !hasExplicitWidth && "max-w-[min(100%,42rem)]",
                                 !hasExplicitWidth && align === "center" && "mx-auto",
                                 !hasExplicitWidth && align === "right" && "ml-auto",
                                 "rounded-sm",
