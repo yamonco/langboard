@@ -1,4 +1,5 @@
 import Dialog from "@/components/base/Dialog";
+import { isNotificationInteraction } from "@/components/Header/useNotificationNavigation";
 import { usePageNavigateRef } from "@/core/hooks/usePageNavigate";
 import { useAuth } from "@/core/providers/AuthProvider";
 import { ROUTES } from "@/core/routing/constants";
@@ -156,6 +157,10 @@ const BoardCardPageComponent = ({
                             disablePortal={embedded}
                             viewportRef={viewportRef}
                             onInteractOutside={(event) => {
+                                if (isNotificationInteraction(event.detail.originalEvent.target)) {
+                                    event.preventDefault();
+                                    return;
+                                }
                                 if (isCardEditingRef.current) {
                                     event.preventDefault();
                                     handleCloseRequest();
