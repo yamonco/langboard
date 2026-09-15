@@ -127,6 +127,7 @@ const HeaderUserNotification = memo(({ currentUser }: IHeaderUserNotificationPro
                 <Button
                     variant="ghost"
                     className="relative p-2"
+                    data-notification-surface="trigger"
                     title={t(unreadCount > 0 ? "notification.{count} notifications received" : "notification.Notifications", {
                         count: unreadCount,
                     })}
@@ -148,6 +149,7 @@ const HeaderUserNotification = memo(({ currentUser }: IHeaderUserNotificationPro
                 </Button>
             </Popover.Trigger>
             <Popover.Content
+                data-notification-surface="content"
                 onCloseAutoFocus={onCloseAutoFocus}
                 className="min-w-[min(theme(screens.xs),100vw)] max-w-[min(theme(screens.xs),100vw)] p-0"
             >

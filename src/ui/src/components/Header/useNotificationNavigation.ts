@@ -1,5 +1,8 @@
 import { useCallback, useRef } from "react";
 
+export const isNotificationInteraction = (target: EventTarget | null): boolean =>
+    target instanceof Element && !!target.closest("[data-notification-surface]");
+
 export function useNotificationNavigation(close: () => void, navigate: (route: string) => void) {
     const pendingRoute = useRef<string | null>(null);
     const closeThenNavigate = useCallback(
