@@ -21,8 +21,8 @@ import { useTranslation } from "react-i18next";
 import { unified } from "unified";
 import remarkParse from "remark-parse";
 import remarkGfm from "remark-gfm";
-import { toMarkdown } from "mdast-util-to-markdown";
-import { gfmToMarkdown } from "mdast-util-gfm";
+import type { Node as MarkdownNode } from "unist";
+import { descriptionChunkSource } from "@/pages/BoardPage/components/card/descriptionChunkSource";
 import { Utils } from "@langboard/core/utils";
 import {
     captureCardCommentAnchor,
@@ -478,7 +478,7 @@ const MAX_HEAVY_LIST_ITEMS = 6;
 const MAX_HEAVY_PARAGRAPH_LENGTH = 1200;
 const SHOW_ALL_BATCH_SIZE = 2;
 
-interface IMarkdownNode {
+interface IMarkdownNode extends Pick<MarkdownNode, "position"> {
     type?: string;
     children?: IMarkdownNode[];
     value?: string;
@@ -559,9 +559,7 @@ const CollapsibleDescriptionContent = memo((props: ICollapsibleDescriptionConten
             }
 
             chunks.push({
-                content: toMarkdown({ type: "root", children: chunkChildren } as never, {
-                    extensions: [gfmToMarkdown()],
-                }),
+                content: descriptionChunkSource(content, chunkChildren),
             });
         };
 
