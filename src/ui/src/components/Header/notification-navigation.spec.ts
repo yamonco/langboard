@@ -21,5 +21,9 @@ for (const width of [390, 1440]) {
         await page.getByRole("button", { name: "Cancel", exact: true }).click();
         await expect(page.getByRole("button", { name: "Notifications", exact: true })).toBeFocused();
         await expect(page.getByRole("dialog")).toHaveCount(0);
+        await page.getByRole("button", { name: "Notifications", exact: true }).click();
+        await page.getByRole("button", { name: "Open card", exact: true }).click();
+        await page.getByRole("button", { name: "Other navigation", exact: true }).click();
+        await expect(page.getByRole("dialog")).toHaveCount(0);
     });
 }
