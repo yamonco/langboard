@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "vite --force",
     "test:markdown-numbers": "node --experimental-strip-types --test src/components/Editor/plugins/markdown/list-number.test.ts",
+    "test:markdown-number-ui": "playwright test -c playwright.list-number.config.ts",
     "build": "tsc && vite build",
     "lint": "eslint . -c eslint.config.js --ignore-pattern node_modules/ --ignore-pattern dist/ --report-unused-disable-directives --max-warnings 0",
     "test:card-hierarchy": "node --experimental-strip-types src/pages/BoardPage/components/board/BoardColumnCardHierarchy.test.ts",
@@ -153,6 +154,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.32.0",
+    "@playwright/test": "1.63.0",
     "@tailwindcss/forms": "^0.5.11",
     "@tailwindcss/typography": "^0.5.19",
     "@types/lodash": "^4.17.24",
