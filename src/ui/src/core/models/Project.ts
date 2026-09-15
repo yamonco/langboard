@@ -261,6 +261,13 @@ class Project extends BaseModel<IStore> {
         this.update({ last_viewed_at: parsed });
     }
 
+    public get view_count(): number {
+        return this.getValue("view_count");
+    }
+    public set view_count(value: number) {
+        this.update({ view_count: value });
+    }
+
     public get last_activity_at(): Date | null {
         return this.getValue("last_activity_at");
     }

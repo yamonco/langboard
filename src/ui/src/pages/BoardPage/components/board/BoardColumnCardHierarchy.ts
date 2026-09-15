@@ -81,8 +81,8 @@ export const buildBoardColumnCardHierarchy = (cards: ProjectCard.TModel[]): IBoa
 };
 
 export const isRelationshipRenderedInHierarchy = (
-    card: ProjectCard.TModel,
-    relatedCard: ProjectCard.TModel | undefined,
+    card: Pick<ProjectCard.TModel, "project_column_uid">,
+    relatedCard: Pick<ProjectCard.TModel, "project_column_uid"> | undefined,
     isRelatedCardVisible: boolean
 ) => !!relatedCard && relatedCard.project_column_uid === card.project_column_uid && isRelatedCardVisible;
 

@@ -4,7 +4,7 @@
 import { TabbablePlugin } from "@platejs/tabbable/react";
 import { KEYS } from "platejs";
 
-export const TabbableKit = TabbablePlugin.configure(({ editor }) => ({
+export const TabbableKit: typeof TabbablePlugin = TabbablePlugin.configure(({ editor }) => ({
     node: {
         isElement: true,
     },

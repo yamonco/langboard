@@ -138,7 +138,7 @@ export default function BoardLinkedWikiCard({ isExpanded, setIsExpanded, onClose
                                         <Button variant="secondary" size="sm" disabled={isRemoving} onClick={() => setConfirmOpen(false)}>
                                             {t("common.Cancel")}
                                         </Button>
-                                        <SubmitButton variant="destructive" size="sm" isValidating={isRemoving} onClick={handleRemove}>
+                                        <SubmitButton type="button" variant="destructive" size="sm" isValidating={isRemoving} onClick={handleRemove}>
                                             {t("wiki.Remove from board")}
                                         </SubmitButton>
                                     </Flex>

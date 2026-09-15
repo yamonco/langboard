@@ -14,6 +14,8 @@ interface ITestProject {
     title: string;
     starred: boolean;
     created_at: Date;
+    last_viewed_at: Date;
+    view_count: number;
     last_activity_at: Date | null;
     related_to_current_user: boolean;
     related_activity_at: Date | null;
@@ -24,6 +26,8 @@ const project = (uid: string, overrides: Partial<ITestProject> = {}): ITestProje
     title: uid,
     starred: false,
     created_at: new Date("2026-09-01T00:00:00Z"),
+    last_viewed_at: new Date("2026-09-01T00:00:00Z"),
+    view_count: 0,
     last_activity_at: null,
     related_to_current_user: false,
     related_activity_at: null,
