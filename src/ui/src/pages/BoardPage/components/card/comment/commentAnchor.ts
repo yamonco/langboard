@@ -81,51 +81,43 @@ export const captureCardCommentAnchor = (root: HTMLElement, selection: Selection
     };
 };
 
-const bigrams = (value: string): Set<string> => {
-    const normalized = normalizeAnchorText(value).toLocaleLowerCase();
-    if (normalized.length < 2) {
-        return new Set(normalized ? [normalized] : []);
-    }
-    return new Set(Array.from({ length: normalized.length - 1 }, (_, index) => normalized.slice(index, index + 2)));
-};
-
-const similarity = (left: string, right: string): number => {
-    const leftBigrams = bigrams(left);
-    const rightBigrams = bigrams(right);
-    if (!leftBigrams.size || !rightBigrams.size) {
-        return 0;
-    }
-    const overlap = [...leftBigrams].filter((value) => rightBigrams.has(value)).length;
-    return (2 * overlap) / (leftBigrams.size + rightBigrams.size);
-};
-
 export const resolveCardCommentAnchorIndex = (anchor: ICardCommentAnchor, blockTexts: string[]): number | null => {
-    const normalizedBlocks = blockTexts.map(normalizeAnchorText);
-    const exactBlockIndex = normalizedBlocks.findIndex((text) => text === normalizeAnchorText(anchor.start_block));
-    if (exactBlockIndex >= 0) {
-        return exactBlockIndex;
+    const exact = normalizeAnchorText(anchor.exact);
+    if (!exact) return null;
+    const blocks = blockTexts.map(normalizeAnchorText);
+    const offsets: number[] = [];
+    let length = 0;
+    for (const block of blocks) {
+        offsets.push(length);
+        length += block.length + 1;
     }
-
-    const quoteIndex = normalizedBlocks.findIndex((text) => text.includes(normalizeAnchorText(anchor.exact)));
-    if (quoteIndex >= 0) {
-        return quoteIndex;
-    }
-
-    let bestIndex = -1;
-    let bestScore = 0;
-    normalizedBlocks.forEach((text, index) => {
-        const score = similarity(text, anchor.start_block);
-        if (score > bestScore) {
-            bestIndex = index;
-            bestScore = score;
+    const text = blocks.join(" ");
+    const prefix = normalizeAnchorText(anchor.prefix);
+    const suffix = normalizeAnchorText(anchor.suffix);
+    let blockIndex = 0;
+    let bestScore = -1;
+    const bestBlocks = new Set<number>();
+    for (let position = text.indexOf(exact); position >= 0; position = text.indexOf(exact, position + 1)) {
+        while (blockIndex + 1 < offsets.length && offsets[blockIndex + 1] <= position) blockIndex++;
+        const before = text.slice(Math.max(0, position - CONTEXT_LENGTH - 1), position).trim();
+        const after = text.slice(position + exact.length, position + exact.length + CONTEXT_LENGTH + 1).trim();
+        let score = 0;
+        for (let i = 1; i <= Math.min(before.length, prefix.length); i++) {
+            if (before.at(-i) !== prefix.at(-i)) break;
+            score++;
         }
-    });
-    if (bestScore >= 0.55) {
-        return bestIndex;
+        for (let i = 0; i < Math.min(after.length, suffix.length); i++) {
+            if (after[i] !== suffix[i]) break;
+            score++;
+        }
+        if (score > bestScore) {
+            bestScore = score;
+            bestBlocks.clear();
+        }
+        if (score === bestScore) bestBlocks.add(blockIndex);
     }
-
-    const hintedIndex = anchor.start_path[0];
-    return Number.isInteger(hintedIndex) && hintedIndex >= 0 && hintedIndex < blockTexts.length ? hintedIndex : null;
+    // A stale position or fuzzy resemblance cannot establish the quoted block's identity.
+    return bestBlocks.size === 1 ? [...bestBlocks][0] : null;
 };
 
 export const resolveCardCommentAnchorElement = (root: HTMLElement, anchor: ICardCommentAnchor): HTMLElement | null => {
