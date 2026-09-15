@@ -2,6 +2,7 @@ import { createRoot } from "react-dom/client";
 import { createPlateEditor, Plate } from "platejs/react";
 import { ImagePlugin } from "@platejs/media/react";
 import { ImageElement } from "./media-image-node";
+import { MediaPreviewDialog } from "./media-preview-dialog";
 import { Editor } from "./editor";
 import "@/assets/styles/main.css";
 
@@ -19,7 +20,7 @@ function Fixture() {
                 { width: 900, height: 1800 },
             ].map(({ width, height }) => {
                 const editor = createPlateEditor({
-                    plugins: [ImagePlugin.withComponent(ImageElement)],
+                    plugins: [ImagePlugin.configure({ render: { node: ImageElement, afterEditable: MediaPreviewDialog } })],
                     value: [{ type: "img", url: imageUrl(width, height), children: [{ text: "" }] }],
                 });
                 return (
