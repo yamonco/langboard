@@ -11,7 +11,7 @@ for (const width of [390, 1440]) {
             const height = await image.evaluate((node) => node.getBoundingClientRect().height);
             expect(height).toBeLessThanOrEqual(384);
             await thumbnail.getByRole("button").click();
-            const preview = page.getByRole("dialog");
+            const preview = page.getByRole("dialog", { name: /^(editor\.)?Image$/ });
             await expect(preview.locator("img")).toBeVisible();
             const bounds = await preview
                 .locator("img")
@@ -47,9 +47,14 @@ for (const width of [390, 1440]) {
             expect(size.width / size.height).toBeCloseTo(size.naturalRatio, 2);
             expect(size.height).toBeLessThanOrEqual(384);
             await image.click();
-            const preview = page.locator("div.fixed:not(.hidden)");
+            const preview = page.locator("div.fixed.left-0.top-0:not(.hidden)");
             await expect(preview).toHaveCount(1);
             await expect(preview.locator("img")).toBeVisible();
+            await page.keyboard.press("Escape");
+            await expect(page.getByRole("dialog", { name: "Image card", exact: true })).toBeVisible();
+            await expect(preview).toHaveCount(0);
+            await image.click();
+            await expect(preview).toHaveCount(1);
             await preview.click({ position: { x: 3, y: 3 } });
             await expect(preview).toHaveCount(0);
             await image.focus();
