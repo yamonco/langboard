@@ -25,6 +25,12 @@ export const getRelationshipDirection = (target: IRelationshipRect, viewport: IR
     return undefined;
 };
 
+export const getVisibleRelationshipTarget = (
+    card: IRelationshipRect,
+    viewport: IRelationshipRect,
+    title: IRelationshipRect = card
+): IRelationshipRect | undefined => (intersectRelationshipRects(title, viewport) ? intersectRelationshipRects(card, viewport) : undefined);
+
 /** Keep the arrow parent-to-child even when the hovered card is the child. */
 export const relationshipCurve = (source: { x: number; y: number }, target: { x: number; y: number }, sourceIsParent: boolean) => {
     const [parent, child] = sourceIsParent ? [source, target] : [target, source];

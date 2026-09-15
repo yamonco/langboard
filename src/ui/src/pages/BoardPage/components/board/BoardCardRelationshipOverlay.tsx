@@ -3,6 +3,7 @@ import IconComponent from "@/components/base/IconComponent";
 import { useBoard } from "@/core/providers/BoardProvider";
 import {
     getRelationshipDirection,
+    getVisibleRelationshipTarget,
     intersectRelationshipRects,
     relationshipCurve,
     type TRelationshipDirection,
@@ -206,7 +207,8 @@ const BoardCardRelationshipOverlay = memo(({ scrollable }: IBoardCardRelationshi
                     const targetElement =
                         candidates.find((element) => clip && intersectRelationshipRects(element.getBoundingClientRect(), clip)) ?? candidates[0];
                     const targetRect = targetElement?.getBoundingClientRect();
-                    const visibleTarget = targetRect && clip && intersectRelationshipRects(targetRect, clip);
+                    const targetTitleRect = targetElement?.querySelector("[data-board-card-open]")?.getBoundingClientRect();
+                    const visibleTarget = targetRect && clip && getVisibleRelationshipTarget(targetRect, clip, targetTitleRect);
                     const targetColumn = columnsMap.get(relatedCard.project_column_uid);
                     const label = sourceIsParent ? relationshipType.child_name : relationshipType.parent_name;
                     let virtualDirection: "up" | "down" | undefined;
@@ -244,7 +246,7 @@ const BoardCardRelationshipOverlay = memo(({ scrollable }: IBoardCardRelationshi
                     }
 
                     let side = columnRect && getRelationshipDirection(columnRect, viewport);
-                    if (!side && targetRect && clip) side = getRelationshipDirection(targetRect, clip);
+                    if (!side && targetRect && clip) side = getRelationshipDirection(targetTitleRect ?? targetRect, clip);
                     side ??= virtualDirection;
                     if (!side) return;
                     const targets = previewGroups.get(side) ?? [];
