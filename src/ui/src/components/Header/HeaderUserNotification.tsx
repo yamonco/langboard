@@ -35,6 +35,7 @@ import { cn } from "@/core/utils/ComponentUtils";
 import { Utils } from "@langboard/core/utils";
 import { memo, useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { Trans, useTranslation } from "react-i18next";
+import { useNotificationNavigation } from "./useNotificationNavigation";
 
 interface IHeaderUserNotificationProps {
     currentUser: AuthUser.TModel;
@@ -86,6 +87,8 @@ const HeaderUserNotification = memo(({ currentUser }: IHeaderUserNotificationPro
         setUnreadCount(0);
     }, []);
     const closeNotifications = useCallback(() => setIsOpened(false), []);
+    const navigate = usePageNavigateRef();
+    const { closeThenNavigate, onCloseAutoFocus } = useNotificationNavigation(closeNotifications, navigate);
     const updateTimeRange = (value: IUserSettings["notifications_time_range"]) => {
         getUserSettingsStore().updateSettingsByKey("notifications_time_range", value);
     };
@@ -144,7 +147,10 @@ const HeaderUserNotification = memo(({ currentUser }: IHeaderUserNotificationPro
                     )}
                 </Button>
             </Popover.Trigger>
-            <Popover.Content className="min-w-[min(theme(screens.xs),100vw)] max-w-[min(theme(screens.xs),100vw)] p-0">
+            <Popover.Content
+                onCloseAutoFocus={onCloseAutoFocus}
+                className="min-w-[min(theme(screens.xs),100vw)] max-w-[min(theme(screens.xs),100vw)] p-0"
+            >
                 <Flex items="center" justify="between" py="2.5" px="3" className="border-b">
                     <Flex items="center" gap="1.5" textSize="base" weight="semibold">
                         {t("notification.Notifications")}
@@ -199,7 +205,7 @@ const HeaderUserNotification = memo(({ currentUser }: IHeaderUserNotificationPro
                     hasMore={hasMore}
                     isOnlyUnread={isOnlyUnread}
                     loadMore={loadMoreNotifications}
-                    onNavigate={closeNotifications}
+                    onNavigate={closeThenNavigate}
                     setUnreadCount={setUnreadCount}
                     timeRange={timeRange || "3d"}
                     updater={[updated, forceUpdate]}
@@ -213,7 +219,7 @@ interface IHeaderUserNotificationListProps {
     hasMore: bool;
     isOnlyUnread: bool;
     loadMore: (page: number) => Promise<bool>;
-    onNavigate: () => void;
+    onNavigate: (route: string) => void;
     setUnreadCount: React.Dispatch<React.SetStateAction<number>>;
     timeRange: IUserSettings["notifications_time_range"];
     updater: [number, React.DispatchWithoutAction];
@@ -282,7 +288,7 @@ function HeaderUserNotificationList({
 
 interface IHeaderUserNotificationItemProps {
     notification: UserNotification.TModel;
-    onNavigate: () => void;
+    onNavigate: (route: string) => void;
     setUnreadCount: React.Dispatch<React.SetStateAction<number>>;
     updater: [number, React.DispatchWithoutAction];
 }
@@ -290,7 +296,6 @@ interface IHeaderUserNotificationItemProps {
 const HeaderUserNotificationItem = memo(({ notification, onNavigate, setUnreadCount, updater }: IHeaderUserNotificationItemProps) => {
     const [_, forceUpdate] = updater;
     const [t, i18n] = useTranslation();
-    const navigate = usePageNavigateRef();
     const { send: sendReadUserNotification } = useReadUserNotificationHandlers();
     const { send: sendDeleteUserNotification } = useDeleteUserNotificationHandlers();
     const readAt = notification.useField("read_at");
@@ -335,8 +340,7 @@ const HeaderUserNotificationItem = memo(({ notification, onNavigate, setUnreadCo
     const movePage = () => {
         const route = getRoute(notification);
         readNotification(false);
-        onNavigate();
-        navigate(route);
+        onNavigate(route);
     };
     const messageVars = getNotificationMessageVars(notification);
     const ruleTranslationKey = getNotificationScheduleRuleTranslationKey(notification, messageVars);
