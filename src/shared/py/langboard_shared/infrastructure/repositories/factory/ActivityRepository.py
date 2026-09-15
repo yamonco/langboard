@@ -1,11 +1,25 @@
+from datetime import datetime
 from typing import Literal, TypeAlias, TypeVar, overload, override
+from sqlalchemy import String, cast, literal, or_, select, union_all
 from ....core.db import DbSession, SqlBuilder
 from ....core.db.queries.Select import SelectOfScalar
 from ....core.domain import BaseRepository
 from ....core.schema import TimeBasedPagination
 from ....core.types import SafeDateTime, SnowflakeID
 from ....core.types.ParamTypes import TCardParam, TColumnParam, TProjectParam, TUserOrBotParam, TUserParam, TWikiParam
-from ....domain.models import Bot, ProjectActivity, ProjectWikiActivity, User, UserActivity
+from ....domain.models import (
+    Bot,
+    Card,
+    Project,
+    ProjectActivity,
+    ProjectAssignedUser,
+    ProjectRole,
+    ProjectWiki,
+    ProjectWikiActivity,
+    ProjectWikiAssignedUser,
+    User,
+    UserActivity,
+)
 from ....domain.models.bases import BaseActivityModel
 from ....helpers import InfraHelper
 
@@ -18,6 +32,114 @@ _TUserOrBotActivityParam: TypeAlias = User | Bot | SnowflakeID | int | str
 
 
 class ActivityRepository(BaseRepository[BaseActivityModel]):
+    def get_shared_user_activities(
+        self,
+        viewer: User,
+        target: User,
+        pagination: TimeBasedPagination,
+        activity_uid: str | None = None,
+        scope: Literal["project", "wiki"] | None = None,
+        project_uid: str | None = None,
+        since: datetime | None = None,
+        until: datetime | None = None,
+    ) -> list:
+        """Authorize before paging; list queries never select editing history.
+
+        Even administrators must belong to the same board as the target here.
+        This is a collaboration history endpoint, not an administrator audit feed.
+        """
+        queries = []
+        for kind, model in (("project", ProjectActivity), ("wiki", ProjectWikiActivity)):
+            if scope and kind != scope:
+                continue
+            columns = [
+                model.column("id"),
+                model.column("created_at"),
+                model.column("activity_type"),
+                literal(kind).label("scope"),
+                Project.column("id").label("project_id"),
+                Project.column("title").label("project_title"),
+            ]
+            if kind == "project":
+                columns.extend([Card.column("id").label("resource_id"), Card.column("title").label("resource_title")])
+            else:
+                columns.extend(
+                    [
+                        ProjectWiki.column("id").label("resource_id"),
+                        ProjectWiki.column("title").label("resource_title"),
+                    ]
+                )
+            if activity_uid:
+                columns.append(model.column("activity_history"))
+            query = select(*columns).join(Project, Project.column("id") == model.column("project_id"))
+            if kind == "project":
+                query = query.outerjoin(Card, Card.column("id") == ProjectActivity.column("card_id"))
+            else:
+                query = query.join(
+                    ProjectWiki, ProjectWiki.column("id") == ProjectWikiActivity.column("project_wiki_id")
+                )
+                query = query.where(ProjectWiki.column("deleted_at").is_(None))
+            query = query.where(
+                model.column("user_id") == target.id,
+                Project.column("deleted_at").is_(None),
+                model.column("created_at") <= pagination.refer_time,
+            )
+            if project_uid:
+                query = query.where(Project.column("id") == InfraHelper.convert_id(project_uid))
+            if since:
+                query = query.where(model.column("created_at") >= since)
+            if until:
+                query = query.where(model.column("created_at") < until)
+            for person in (viewer, target):
+                membership = (
+                    select(ProjectAssignedUser.column("id"))
+                    .where(
+                        ProjectAssignedUser.column("project_id") == Project.column("id"),
+                        ProjectAssignedUser.column("user_id") == person.id,
+                    )
+                    .exists()
+                )
+                query = query.where(membership)
+                if not person.is_admin:
+                    actions = literal(",") + cast(ProjectRole.column("actions"), String) + literal(",")
+                    readable = (
+                        select(ProjectRole.column("id"))
+                        .where(
+                            ProjectRole.column("project_id") == Project.column("id"),
+                            ProjectRole.column("user_id") == person.id,
+                            or_(actions.contains(",read,"), actions.contains(",*,")),
+                        )
+                        .exists()
+                    )
+                    query = query.where(or_(Project.column("owner_id") == person.id, readable))
+                if kind == "wiki" and not person.is_admin:
+                    assigned = (
+                        select(ProjectWikiAssignedUser.column("id"))
+                        .where(
+                            ProjectWikiAssignedUser.column("project_wiki_id") == ProjectWiki.column("id"),
+                            ProjectWikiAssignedUser.column("user_id") == person.id,
+                        )
+                        .exists()
+                    )
+                    query = query.where(
+                        or_(
+                            ProjectWiki.column("is_public").is_(True),
+                            Project.column("owner_id") == person.id,
+                            assigned,
+                        )
+                    )
+            if activity_uid:
+                query = query.where(model.column("id") == InfraHelper.convert_id(activity_uid))
+            queries.append(query)
+        combined = union_all(*queries).subquery()
+        statement = select(combined).order_by(combined.c.created_at.desc(), combined.c.id.desc())
+        if not activity_uid:
+            statement = statement.offset((pagination.page - 1) * pagination.limit).limit(pagination.limit + 1)
+        else:
+            statement = statement.limit(1)
+        with DbSession.use(readonly=True) as db:
+            return list(db.exec(statement).all())
+
     @staticmethod
     @override
     def name() -> str:
