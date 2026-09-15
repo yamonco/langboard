@@ -1,7 +1,10 @@
+import json
+from datetime import datetime
 from typing import Any, Literal, cast, overload
 from ....core.db import BaseDbModel
 from ....core.domain import BaseDomainService
 from ....core.schema import TimeBasedPagination
+from ....core.types import SnowflakeID
 from ....core.types.ParamTypes import TCardParam, TColumnParam, TProjectParam, TUserOrBotParam, TUserParam, TWikiParam
 from ....helpers import InfraHelper
 from ...models import (
@@ -19,6 +22,64 @@ from ...models.bases import BaseActivityModel
 
 
 class ActivityService(BaseDomainService):
+    def get_shared_user_activities(
+        self,
+        viewer: User,
+        target_uid: str,
+        pagination: TimeBasedPagination,
+        activity_uid: str | None = None,
+        scope: Literal["project", "wiki"] | None = None,
+        offset: int = 0,
+        max_chars: int = 4000,
+        project_uid: str | None = None,
+        since: str | None = None,
+        until: str | None = None,
+    ) -> dict[str, Any]:
+        """Read another person's currently shared workspace history without side effects."""
+        if pagination.page < 1 or not 1 <= pagination.limit <= 50 or offset < 0 or not 1 <= max_chars <= 8000:
+            raise ValueError("Invalid pagination bounds")
+        if activity_uid and scope is None:
+            raise ValueError("Activity scope is required for detail")
+        start = datetime.fromisoformat(since) if since else None
+        end = datetime.fromisoformat(until) if until else None
+        if any(value is not None and value.utcoffset() is None for value in (start, end)):
+            raise ValueError("Period timestamps must include a timezone")
+        if start and end and start >= end:
+            raise ValueError("since must be earlier than until")
+        target = InfraHelper.get_by_id_like(User, target_uid)
+        if not target or target.deleted_at:
+            return {"activities": [], "has_more": False}
+        rows = self.repo.activity.get_shared_user_activities(
+            viewer, target, pagination, activity_uid, scope, project_uid, start, end
+        )
+        items = []
+        for row in rows[: pagination.limit]:
+            item = {
+                "activity_uid": SnowflakeID(row[0]).to_short_code(),
+                "created_at": str(row[1]),
+                "activity_type": row[2].value if hasattr(row[2], "value") else row[2],
+                "scope": row[3],
+                "project": {"uid": SnowflakeID(row[4]).to_short_code(), "title": row[5]},
+                "resource": {"uid": SnowflakeID(row[6]).to_short_code(), "title": row[7]} if row[6] else None,
+            }
+            if activity_uid:
+                history = json.dumps(row[8], ensure_ascii=False, sort_keys=True, default=str)
+                item.update(
+                    {
+                        "history_format": "json",
+                        "history_fragment": history[offset : offset + max_chars],
+                        "offset": offset,
+                        "next_offset": offset + max_chars if offset + max_chars < len(history) else None,
+                        "total_chars": len(history),
+                    }
+                )
+            items.append(item)
+        return {
+            "activities": items,
+            "has_more": not activity_uid and len(rows) > pagination.limit,
+            "refer_time": str(pagination.refer_time),
+        }
+
     @staticmethod
     def name() -> str:
         """DO NOT EDIT THIS METHOD"""
