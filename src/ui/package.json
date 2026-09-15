@@ -6,6 +6,7 @@
   "license": "SEE LICENSE IN LICENSE",
   "scripts": {
     "dev": "vite --force",
+    "test:markdown-numbers": "node --experimental-strip-types --test src/components/Editor/plugins/markdown/list-number.test.ts",
     "build": "tsc && vite build",
     "lint": "eslint . -c eslint.config.js --ignore-pattern node_modules/ --ignore-pattern dist/ --report-unused-disable-directives --max-warnings 0",
     "test:card-hierarchy": "node --experimental-strip-types src/pages/BoardPage/components/board/BoardColumnCardHierarchy.test.ts",
@@ -127,6 +128,8 @@
     "react-tweet": "^3.3.0",
     "rehype-mathjax": "^7.1.0",
     "rehype-raw": "^7.0.0",
+    "mdast-util-to-markdown": "2.1.0",
+    "unified": "11.0.5",
     "remark-emoji": "^5.0.2",
     "remark-gfm": "^4.0.1",
     "remark-math": "^6.0.0",
