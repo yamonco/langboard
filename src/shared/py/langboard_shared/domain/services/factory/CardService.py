@@ -417,13 +417,26 @@ class CardService(BaseDomainService):
             cards.append(api_card)
         return cards
 
-    def search_context_by_project(self, project: TProjectParam | None, input_value: str) -> list[dict[str, Any]]:
+    def search_context_by_project(
+        self,
+        project: TProjectParam | None,
+        input_value: str,
+        date_field: str = "updated_at",
+        since: SafeDateTime | None = None,
+        until: SafeDateTime | None = None,
+    ) -> list[dict[str, Any]]:
         project = InfraHelper.get_by_id_like(Project, project)
         if not project:
             return []
 
         cards = []
-        for card, column in self.repo.card.search_context_by_project(project, input_value):
+        for card, column in self.repo.card.search_context_by_project(
+            project,
+            input_value,
+            date_field=date_field,
+            since=since,
+            until=until,
+        ):
             description = card.description.content
             if len(description) > self.CONTEXT_DESCRIPTION_MAX_LENGTH:
                 description = f"{description[: self.CONTEXT_DESCRIPTION_MAX_LENGTH - 3]}..."
