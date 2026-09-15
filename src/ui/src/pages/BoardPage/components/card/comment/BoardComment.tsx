@@ -69,7 +69,7 @@ const BoardComment = memo(({ comment, deletedComment }: IBoardCommentProps): Rea
                 <Box>
                     <BoardCommentUserAvatar projectUID={projectUID} cardUID={card.uid} />
                 </Box>
-                <Flex direction="col" gap="2" className="max-w-full">
+                <Flex direction="col" gap="2" className="min-w-0 max-w-full">
                     <BoardCommentHeader />
                     {anchor && (
                         <button
