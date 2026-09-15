@@ -177,7 +177,17 @@ function BoardColumnCardCollapsible({ isDragging, compact = false }: IBoardColum
                                 compact ? "max-w-full text-sm font-medium text-muted-foreground" : "max-w-[calc(100%_-_theme(spacing.8))]"
                             )}
                         >
-                            {title}
+                            <button
+                                type="button"
+                                data-board-card-open=""
+                                className={cn(
+                                    "w-full rounded-sm text-left [font:inherit]",
+                                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                )}
+                                disabled={!!selectCardViewType && isDisabledCard(card.uid)}
+                            >
+                                {title}
+                            </button>
                         </Card.Title>
                         {!compact && (
                             <BoardGraphApprovalTargetBadge
