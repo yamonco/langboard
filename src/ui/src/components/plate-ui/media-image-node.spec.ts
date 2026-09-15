@@ -1,10 +1,38 @@
 import { expect, test } from "@playwright/test";
 
 for (const width of [390, 1440]) {
+    test(`static thumbnail uses the native viewer for extensionless images at viewport ${width}`, async ({ page }) => {
+        await page.setViewportSize({ width, height: 900 });
+        await page.goto("/src/components/plate-ui/media-image-node.fixture.html");
+        await expect(page.locator("[data-thumbnail-fixture]")).toHaveCount(3);
+        for (const thumbnail of await page.locator("[data-thumbnail-fixture]").all()) {
+            const image = thumbnail.locator("img");
+            await expect(image).toBeVisible();
+            const height = await image.evaluate((node) => node.getBoundingClientRect().height);
+            expect(height).toBeLessThanOrEqual(384);
+            await thumbnail.getByRole("button").click();
+            const preview = page.getByRole("dialog");
+            await expect(preview.locator("img")).toBeVisible();
+            const bounds = await preview
+                .locator("img")
+                .evaluate((node) => ({ width: node.getBoundingClientRect().width, height: node.getBoundingClientRect().height }));
+            expect(bounds.width).toBeLessThanOrEqual(width - 32);
+            expect(bounds.height).toBeLessThanOrEqual(836);
+            await page.keyboard.press("ArrowUp");
+            await expect(preview.locator("input").last()).toHaveValue("110");
+            await page.keyboard.press("Escape");
+            await expect(preview).toHaveCount(0);
+            await expect(thumbnail).toBeVisible();
+            await thumbnail.getByRole("button").focus();
+            await page.keyboard.press("Space");
+            await expect(preview.locator("img")).toBeVisible();
+            await page.keyboard.press("Escape");
+        }
+    });
     test(`large images retain their aspect ratio within a comment at viewport ${width}`, async ({ page }) => {
         await page.setViewportSize({ width, height: 900 });
         await page.goto("/src/components/plate-ui/media-image-node.fixture.html");
-        const images = page.locator("[data-slate-editor] img");
+        const images = page.locator("[data-dynamic-image-fixture] [data-slate-editor] img");
         await expect(images).toHaveCount(2);
         for (const image of await images.all()) {
             await expect.poll(() => image.evaluate((node: HTMLImageElement) => node.naturalWidth)).toBeGreaterThan(0);
