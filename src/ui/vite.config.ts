@@ -9,7 +9,9 @@ import path from "path";
 
 dns.setDefaultResultOrder("verbatim");
 
-const EXPECTED_ENV_PATHS = ["../../../", "../../", "../", "./"];
+// Resolve the repository env file from this config, not from process.cwd().
+// Production builds are invoked from both the repository root and src/ui.
+const EXPECTED_ENV_PATHS = ["../../.env", "../.env", "./.env", "../../../.env"];
 
 const removeUseClient = () => {
     const filter = createFilter(/.*\.(js|ts|jsx|tsx)$/);
@@ -33,7 +35,7 @@ const removeUseClient = () => {
 export default defineConfig(({ mode }) => {
     const isLocal = mode !== "production";
     for (let i = 0; i < EXPECTED_ENV_PATHS.length; ++i) {
-        const envPath = path.join(EXPECTED_ENV_PATHS[i], ".env");
+        const envPath = path.resolve(__dirname, EXPECTED_ENV_PATHS[i]);
         if (fs.existsSync(envPath)) {
             dotenv.config({ path: envPath });
             break;
@@ -46,6 +48,14 @@ export default defineConfig(({ mode }) => {
     const UI_SERVER = `http://localhost:${PORT}`;
     const API_SERVER = `http://localhost:${process.env.API_PORT}`;
     const SOCKET_SERVER = `http://localhost:${process.env.SOCKET_PORT}`;
+
+    if (mode === "production") {
+        for (const key of ["API_URL", "PUBLIC_UI_URL", "SOCKET_URL"]) {
+            if (!process.env[key]) {
+                throw new Error(`${key} is required for a production UI build`);
+            }
+        }
+    }
 
     let watchOptions = null;
     if (process.argv.includes("--watch") || process.argv.includes("-w")) {
