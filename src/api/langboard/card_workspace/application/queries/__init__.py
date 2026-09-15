@@ -81,7 +81,7 @@ def get_card_bundle(
         )
 
     details = source.details
-    core = pick(details, ("uid", "title", "created_at", "updated_at"))
+    core = pick(details, ("uid", "title", "created_at", "updated_at", "can_delete"))
     if CardBundleInclude.Description in requested:
         core["description"] = bounded_text(details.get("description"), CardBundleSection.CoreDescription).model_dump(
             mode="json"
