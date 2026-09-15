@@ -85,15 +85,16 @@ export function serializeListNumbers(editor: SlateEditor, options?: Parameters<t
                     if (parent?.type !== "list" || !parent.ordered) {
                         return native(node, parent, state, info);
                     }
-                    const marker = nodes[index++]?.listStart;
+                    const item = nodes[index++];
+                    const marker = item?.listRestart ?? item?.listStart ?? 1;
                     if (typeof marker !== "number") return native(node, parent, state, info);
                     return native(
                         node,
                         {
                             ...parent,
-                            start: marker - (state.options.incrementListMarker === false ? 0 : parent.children.indexOf(node)),
+                            start: marker,
                         },
-                        state,
+                        { ...state, options: { ...state.options, incrementListMarker: false } },
                         info
                     );
                 },

@@ -41,6 +41,16 @@ test("arbitrary markers survive conversion, native normalization and reload", ()
     );
 });
 
+test("small markers remain explicit at later positions in a long list", () => {
+    const source = "3. Three\n9. Nine\n2. Two\n1. One\n2. Again";
+    const { saved, reloaded } = roundTrip(source);
+    assert.equal(saved.trim(), source);
+    assert.deepEqual(
+        reloaded.map((node) => node.listStart ?? 1),
+        [3, 9, 2, 1, 2]
+    );
+});
+
 test("nested markers use their own widths and levels", () => {
     const { saved, reloaded } = roundTrip("3. Three\n100. Hundred\n\n     8. Eight\n     2. Two\n9. Nine");
     assert.match(saved, /100\. Hundred\n\s+8\. Eight\n\s+2\. Two/);
