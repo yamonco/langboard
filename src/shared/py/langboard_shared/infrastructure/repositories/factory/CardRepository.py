@@ -1,6 +1,6 @@
 from typing import Sequence
-from sqlalchemy import cast, func, or_, select, update
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import Text, cast, func, or_, select, update
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from ....core.db import DbSession, SqlBuilder
 from ....core.db.DbEngine import DbEngine
 from ....core.domain import BaseOrderRepository
@@ -14,7 +14,7 @@ from ....helpers import InfraHelper
 def _editor_search_text(column, dialect: str):
     """Decode the existing JSON string representation before literal text matching."""
     if dialect == "postgresql":
-        return cast(column, JSONB).op("#>>")("{}")
+        return cast(column, JSONB).op("#>>")(cast([], ARRAY(Text)))
     if dialect == "sqlite":
         return func.json_extract(column, "$")
     if dialect in {"mysql", "mariadb"}:
