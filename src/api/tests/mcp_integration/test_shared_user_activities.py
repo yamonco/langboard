@@ -147,6 +147,8 @@ def test_shared_history_filters_before_paging_and_reauthorizes_detail(monkeypatc
     )
     with DbSession.use(readonly=False) as db:
         db.insert(ProjectWikiAssignedUser(project_assigned_id=member.id, user_id=viewer.id, project_wiki_id=wiki.id))
+    mixed = service.get_shared_user_activities(viewer, target.get_uid(), TimeBasedPagination(limit=20))
+    assert {item["activity_type"] for item in mixed["activities"]} == {"project_updated", "wiki_updated"}
     assert (
         len(
             service.get_shared_user_activities(viewer, target.get_uid(), pagination, wiki_event.get_uid(), "wiki")[
