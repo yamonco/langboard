@@ -100,7 +100,7 @@ export function Board() {
             viewportClassName="!overflow-x-auto"
             viewportRef={setScrollableRef}
         >
-            <Flex direction="row" items="start" gap={{ initial: "6", sm: "8" }} p="4" h="full" className="min-h-0">
+            <Flex direction="row" items="start" gap="4" p="4" h="full" className="min-h-0">
                 <BoardDisplay scrollable={scrollable} scrollableRef={scrollableRef} />
             </Flex>
             <ScrollArea.Bar orientation="horizontal" />
@@ -110,7 +110,7 @@ export function Board() {
 
 function BoardDisplay({ scrollable, scrollableRef }: { scrollable: HTMLDivElement | null; scrollableRef: React.RefObject<HTMLDivElement | null> }) {
     const { chatResizableSidebar } = useBoardController();
-    const { project, columns: flatColumns, cardsMap, socket, canDragAndDrop } = useBoard();
+    const { project, columns: flatColumns, cardsMap, socket, canDragAndDrop, canDragCards } = useBoard();
     const updater = useReducer((x) => x + 1, 0);
     const [_, forceUpdate] = updater;
     const { columns } = useColumnReordered({
@@ -164,8 +164,8 @@ function BoardDisplay({ scrollable, scrollableRef }: { scrollable: HTMLDivElemen
     );
 
     useBoardTouchCardDnd({
-        enabled: canDragAndDrop,
-        scrollableRef,
+        enabled: canDragCards,
+        scrollable,
         columns,
         rowsMap: cardsMap,
         changeRowOrder,
