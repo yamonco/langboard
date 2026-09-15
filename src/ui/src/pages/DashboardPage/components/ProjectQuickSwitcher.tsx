@@ -63,7 +63,7 @@ const ProjectQuickSwitcherItem = ({
     const activityAt = projectActivityAt(project, activityKind);
 
     return (
-        <Command.Item value={`${title} ${projectType}`} onSelect={onSelect} className="gap-3 rounded-lg py-2.5">
+        <Command.Item value={project.uid} keywords={[title, projectType]} onSelect={onSelect} className="gap-3 rounded-lg py-2.5">
             <Flex items="center" justify="center" className="size-8 shrink-0 rounded-lg bg-secondary">
                 <IconComponent icon={starred ? "star" : "folder-kanban"} size="4" />
             </Flex>

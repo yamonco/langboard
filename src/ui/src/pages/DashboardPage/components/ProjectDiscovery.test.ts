@@ -7,6 +7,7 @@ import {
     parseProjectListView,
     projectQuickSwitcherShortcutLabel,
     projectListViewStorageKey,
+    searchProjects,
 } from "./ProjectDiscovery.ts";
 
 interface ITestProject {
@@ -129,4 +130,31 @@ test("quick switcher shows the shortcut for the active platform", () => {
     assert.equal(projectQuickSwitcherShortcutLabel("iPhone"), "⌘K");
     assert.equal(projectQuickSwitcherShortcutLabel("Win32"), "Ctrl K");
     assert.equal(projectQuickSwitcherShortcutLabel("Linux x86_64"), "Ctrl K");
+});
+
+test("recent work never promotes viewing-only projects and uses actual activity chronology", () => {
+    const sections = buildProjectDiscoverySections([
+        project("viewed", { view_count: 100, last_viewed_at: new Date("2099-01-01T00:00:00Z") }),
+        project("older-busy", { view_count: 100, last_activity_at: new Date("2026-09-01T00:00:00Z") }),
+        project("newer", { last_activity_at: new Date("2026-09-02T00:00:00Z") }),
+    ]);
+    assert.deepEqual(
+        sections.recent.map(({ uid }) => uid),
+        ["newer", "older-busy"]
+    );
+    assert.equal(sections.all.length, 3);
+});
+
+test("dashboard search reuses command fuzzy ranking without mutating inputs", () => {
+    const projects = [project("Langboard"), project("Unrelated"), project("Langboard Notes")];
+    assert.deepEqual(
+        searchProjects(projects, "lngbrd").map(({ uid }) => uid),
+        ["Langboard", "Langboard Notes"]
+    );
+    assert.equal(searchProjects(projects, "unmatched").length, 0);
+    assert.equal(searchProjects(projects, "  ").length, 3);
+    assert.deepEqual(
+        projects.map(({ uid }) => uid),
+        ["Langboard", "Unrelated", "Langboard Notes"]
+    );
 });

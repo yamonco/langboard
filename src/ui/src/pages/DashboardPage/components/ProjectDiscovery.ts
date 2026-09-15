@@ -1,4 +1,5 @@
 import { compareProjectActivityPriority, compareProjectRelatedActivity, type IProjectActivityPriority } from "./ProjectActivityPriority.ts";
+import { defaultFilter } from "cmdk";
 
 export const PROJECT_RECENT_WORK_LIMIT = 6;
 export const PROJECT_RELATED_TO_ME_LIMIT = 6;
@@ -26,7 +27,10 @@ export const buildProjectDiscoverySections = <TProject extends IProjectActivityP
             .filter((project) => !project.starred && project.related_to_current_user)
             .sort(compareProjectRelatedActivity)
             .slice(0, PROJECT_RELATED_TO_ME_LIMIT),
-        recent: all.filter((project) => !project.starred && !project.related_to_current_user).slice(0, recentLimit),
+        recent: all
+            .filter((project) => !project.starred && !project.related_to_current_user && project.last_activity_at)
+            .sort((a, b) => b.last_activity_at!.getTime() - a.last_activity_at!.getTime() || compareProjectActivityPriority(a, b, now))
+            .slice(0, recentLimit),
     };
 };
 
@@ -44,6 +48,16 @@ export const buildProjectQuickSwitcherSections = <TProject extends IProjectActiv
 export const projectListViewStorageKey = (userUID: string) => `langboard:project-list-view:${userUID}`;
 
 export const parseProjectListView = (value: string | null | undefined): TProjectListView => (value === "cards" ? "cards" : "compact");
+
+export const searchProjects = <TProject extends IProjectActivityPriority>(projects: readonly TProject[], query: string): TProject[] => {
+    const search = query.trim();
+    const now = Date.now();
+    return projects
+        .map((project) => ({ project, score: search ? defaultFilter(project.title, search) : 1 }))
+        .filter(({ score }) => score > 0)
+        .sort((a, b) => b.score - a.score || compareProjectActivityPriority(a.project, b.project, now))
+        .map(({ project }) => project);
+};
 
 export const isProjectQuickSwitcherShortcut = (event: Pick<KeyboardEvent, "altKey" | "ctrlKey" | "key" | "metaKey" | "shiftKey">) =>
     event.key.toLowerCase() === "k" && (event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey;

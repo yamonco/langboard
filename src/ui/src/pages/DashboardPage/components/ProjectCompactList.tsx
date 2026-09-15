@@ -3,6 +3,9 @@ import Flex from "@/components/base/Flex";
 import { Project } from "@/core/models";
 import ProjectCompactItem from "@/pages/DashboardPage/components/ProjectCompactItem";
 import type { TProjectActivityKind } from "@/pages/DashboardPage/components/ProjectActivityPriority";
+import InfiniteScroller from "@/components/InfiniteScroller";
+import useInfiniteScrollPager from "@/core/hooks/useInfiniteScrollPager";
+import Skeleton from "@/components/base/Skeleton";
 
 interface IProjectCompactListProps {
     activityKind?: TProjectActivityKind;
@@ -17,6 +20,7 @@ const ProjectCompactList = ({
     title,
     updateStarredProjects,
 }: IProjectCompactListProps): React.JSX.Element | null => {
+    const { items, nextPage } = useInfiniteScrollPager({ allItems: projects, size: 24 });
     if (!projects.length) return null;
 
     return (
@@ -27,8 +31,15 @@ const ProjectCompactList = ({
                     <span className="text-xs tabular-nums text-muted-foreground">{projects.length}</span>
                 </Flex>
             ) : null}
-            <Box className="grid gap-1 rounded-2xl border bg-card/60 p-1.5 md:grid-cols-2 xl:grid-cols-3">
-                {projects.map((project) => (
+            <InfiniteScroller.NoVirtual
+                as={Box}
+                className="grid gap-1 rounded-2xl border bg-card/60 p-1.5"
+                hasMore={items.length < projects.length}
+                loadMore={nextPage}
+                scrollable={() => document.getElementById("main")}
+                loader={<Skeleton className="h-16 w-full" />}
+            >
+                {items.map((project) => (
                     <ProjectCompactItem
                         key={project.uid}
                         activityKind={activityKind}
@@ -36,7 +47,7 @@ const ProjectCompactList = ({
                         updateStarredProjects={updateStarredProjects}
                     />
                 ))}
-            </Box>
+            </InfiniteScroller.NoVirtual>
         </Box>
     );
 };
