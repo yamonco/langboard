@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useReducer, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useReducer, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Search } from "lucide-react";
 import Box from "@/components/base/Box";
@@ -49,6 +49,14 @@ interface IProjectTabsProps {
     scrollAreaUpdater: [number, React.DispatchWithoutAction];
 }
 
+function ProjectDiscoveryObserver({ project, onChange }: { project: Project.TModel; onChange: () => void }) {
+    const title = project.useField("title");
+    const starred = project.useField("starred");
+    const lastActivityAt = project.useField("last_activity_at");
+    useEffect(onChange, [title, starred, lastActivityAt, onChange]);
+    return null;
+}
+
 const ProjectTabs = memo(
     ({
         userUID,
@@ -58,7 +66,8 @@ const ProjectTabs = memo(
         updateStarredProjects: updateHeaderStarredProjects,
         scrollAreaUpdater,
     }: IProjectTabsProps): React.JSX.Element => {
-        const [updatedStarredProjects, updateStarredProjects] = useReducer((x) => x + 1, 0);
+        const [projectDiscoveryRevision, updateProjectDiscovery] = useReducer((x) => x + 1, 0);
+        const onProjectDiscoveryChanged = useCallback(() => updateProjectDiscovery(), []);
         const [searchQuery, setSearchQuery] = useState("");
         const storageKey = projectListViewStorageKey(userUID);
         const [projectListView, setProjectListView] = useState<TProjectListView>(() => parseProjectListView(localStorage.getItem(storageKey)));
@@ -67,7 +76,7 @@ const ProjectTabs = memo(
         const [t] = useTranslation();
 
         const projectUIDs = useMemo(() => (projectsData?.projects ?? []).map((project) => project.uid), [projectsData]);
-        const loadedProjects = Project.Model.useModels((model) => projectUIDs.includes(model.uid), [projectUIDs, updatedStarredProjects]);
+        const loadedProjects = Project.Model.useModels((model) => projectUIDs.includes(model.uid), [projectUIDs, projectDiscoveryRevision]);
         const projects = useMemo(() => {
             const projectsByUID = new Map(loadedProjects.map((project) => [project.uid, project]));
             return projectUIDs.map((projectUID) => projectsByUID.get(projectUID)).filter((project): project is Project.TModel => !!project);
@@ -83,11 +92,14 @@ const ProjectTabs = memo(
 
         const updateStars = () => {
             updateHeaderStarredProjects();
-            updateStarredProjects();
+            updateProjectDiscovery();
         };
 
         return (
             <>
+                {projects.map((project) => (
+                    <ProjectDiscoveryObserver key={project.uid} project={project} onChange={onProjectDiscoveryChanged} />
+                ))}
                 <Flex items="center" gap="2" px="2" mt="3">
                     <Input
                         wrapperProps={{ className: "min-w-0 flex-1" }}
