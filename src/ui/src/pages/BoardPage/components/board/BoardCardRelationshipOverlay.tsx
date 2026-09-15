@@ -6,6 +6,7 @@ import {
     getVisibleRelationshipTarget,
     intersectRelationshipRects,
     relationshipCurve,
+    relationshipAnchor,
     type TRelationshipDirection,
 } from "@/pages/BoardPage/components/board/BoardRelationshipGeometry";
 import {
@@ -230,11 +231,14 @@ const BoardCardRelationshipOverlay = memo(({ scrollable }: IBoardCardRelationshi
 
                     if (visibleTarget) {
                         if (relatedCard.project_column_uid === sourceCard.project_column_uid) return;
-                        const source = { x: sourceIsParent ? sourceRect.right : sourceRect.left, y: sourceY };
-                        const target = {
-                            x: sourceIsParent ? visibleTarget.left : visibleTarget.right,
+                        const source = relationshipAnchor(sourceRect, {
+                            x: (visibleTarget.left + visibleTarget.right) / 2,
                             y: (visibleTarget.top + visibleTarget.bottom) / 2,
-                        };
+                        });
+                        const target = relationshipAnchor(visibleTarget, {
+                            x: (sourceRect.left + sourceRect.right) / 2,
+                            y: sourceY,
+                        });
                         edges.push({
                             uid: relationship.uid,
                             label,
@@ -278,11 +282,11 @@ const BoardCardRelationshipOverlay = memo(({ scrollable }: IBoardCardRelationshi
                               ? viewport.bottom - height - 12
                               : Math.max(viewport.top + 12, Math.min(sourceY - height / 2, viewport.bottom - height - 12));
                     targets.forEach((target) => {
-                        const source = { x: target.sourceIsParent ? sourceRect.right : sourceRect.left, y: sourceY };
                         const endpoint = {
                             x: side === "left" ? left + width : side === "right" ? left : left + width / 2,
                             y: side === "up" ? top + height : side === "down" ? top : top + height / 2,
                         };
+                        const source = relationshipAnchor(sourceRect, endpoint);
                         edges.push({
                             uid: target.relationshipUID,
                             label: "",

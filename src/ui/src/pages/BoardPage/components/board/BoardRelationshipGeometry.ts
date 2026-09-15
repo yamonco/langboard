@@ -31,9 +31,16 @@ export const getVisibleRelationshipTarget = (
     title: IRelationshipRect = card
 ): IRelationshipRect | undefined => (intersectRelationshipRects(title, viewport) ? intersectRelationshipRects(card, viewport) : undefined);
 
-/** Keep the arrow parent-to-child even when the hovered card is the child. */
+/** Attach to the edge facing the visible card or offscreen shortcut. */
+export const relationshipAnchor = (rect: IRelationshipRect, target: { x: number; y: number }) => {
+    const center = { x: (rect.left + rect.right) / 2, y: (rect.top + rect.bottom) / 2 };
+    if (target.x !== center.x) return { x: target.x < center.x ? rect.left : rect.right, y: center.y };
+    return { x: center.x, y: target.y < center.y ? rect.top : rect.bottom };
+};
+
+/** Geometry follows column position; arrow semantics remain parent-to-child. */
 export const relationshipCurve = (source: { x: number; y: number }, target: { x: number; y: number }, sourceIsParent: boolean) => {
     const [parent, child] = sourceIsParent ? [source, target] : [target, source];
-    const curve = Math.max(56, Math.abs(child.x - parent.x) * 0.42);
+    const curve = Math.max(56, Math.abs(child.x - parent.x) * 0.42) * (child.x < parent.x ? -1 : 1);
     return `M ${parent.x} ${parent.y} C ${parent.x + curve} ${parent.y}, ${child.x - curve} ${child.y}, ${child.x} ${child.y}`;
 };
