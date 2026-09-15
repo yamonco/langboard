@@ -12,6 +12,7 @@ import {
 import {
     BOARD_CARD_FOCUS_EVENT,
     BOARD_CARD_LOCATION_EVENT,
+    BOARD_CARD_RELATIONSHIP_PREVIEW_EVENT,
     BOARD_CARD_TOUCH_DND_ATTR,
     BOARD_COLUMN_TOUCH_DND_ATTR,
     IBoardCardFocusEventDetail,
@@ -114,6 +115,11 @@ const BoardCardRelationshipOverlay = memo(({ scrollable }: IBoardCardRelationshi
             const cardElement = (event.target as Element).closest<HTMLElement>(`[${BOARD_CARD_TOUCH_DND_ATTR}]`);
             if (cardElement) hoverIntent.openImmediately(cardElement);
         };
+        const onPreviewRequested = (event: Event) => {
+            const cardUID = getCardUID(event.target);
+            const cardElement = event.target instanceof Element ? event.target.closest<HTMLElement>(`[${BOARD_CARD_TOUCH_DND_ATTR}]`) : null;
+            if (cardUID && cardsMap[cardUID]?.relationships.length && cardElement) hoverIntent.openImmediately(cardElement);
+        };
         const onPointerOut = (event: PointerEvent | FocusEvent) => {
             const sourceCardUID = getCardUID(event.target);
             const nextElement = event.relatedTarget instanceof Element ? event.relatedTarget : undefined;
@@ -129,6 +135,7 @@ const BoardCardRelationshipOverlay = memo(({ scrollable }: IBoardCardRelationshi
         scrollable.addEventListener("pointerover", onPointerOver);
         scrollable.addEventListener("pointerout", onPointerOut);
         scrollable.addEventListener("focusin", onFocusIn);
+        scrollable.addEventListener(BOARD_CARD_RELATIONSHIP_PREVIEW_EVENT, onPreviewRequested);
         scrollable.addEventListener("focusout", onPointerOut);
         const close = hoverIntent.close;
         const onKeyDown = (event: KeyboardEvent) => {
@@ -141,6 +148,7 @@ const BoardCardRelationshipOverlay = memo(({ scrollable }: IBoardCardRelationshi
             scrollable.removeEventListener("pointerover", onPointerOver);
             scrollable.removeEventListener("pointerout", onPointerOut);
             scrollable.removeEventListener("focusin", onFocusIn);
+            scrollable.removeEventListener(BOARD_CARD_RELATIONSHIP_PREVIEW_EVENT, onPreviewRequested);
             scrollable.removeEventListener("focusout", onPointerOut);
             scrollable.removeEventListener("dragstart", close);
             window.removeEventListener("keydown", onKeyDown);

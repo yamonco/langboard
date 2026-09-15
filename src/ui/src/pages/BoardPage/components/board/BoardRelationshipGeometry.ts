@@ -7,6 +7,18 @@ export interface IRelationshipRect {
 
 export type TRelationshipDirection = "left" | "right" | "up" | "down";
 
+export const relationshipSideCounts = (sourceOrder: number | undefined, targets: { uid: string; order: number | undefined }[]) => {
+    const counts = { left: 0, right: 0 };
+    if (!Number.isFinite(sourceOrder)) return counts;
+    const seen = new Set<string>();
+    for (const target of targets) {
+        if (seen.has(target.uid) || !Number.isFinite(target.order) || target.order === sourceOrder) continue;
+        seen.add(target.uid);
+        counts[target.order! < sourceOrder! ? "left" : "right"]++;
+    }
+    return counts;
+};
+
 export const intersectRelationshipRects = (first: IRelationshipRect, second: IRelationshipRect): IRelationshipRect | undefined => {
     const result = {
         left: Math.max(first.left, second.left),

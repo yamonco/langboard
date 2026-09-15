@@ -6,6 +6,7 @@ import {
     intersectRelationshipRects,
     relationshipCurve,
     relationshipAnchor,
+    relationshipSideCounts,
 } from "./BoardRelationshipGeometry.ts";
 
 const board = { left: 0, top: 80, right: 1000, bottom: 700 };
@@ -71,4 +72,18 @@ test("reversed columns bend toward the child while preserving arrow direction", 
     assert.equal(relationshipCurve({ x: 900, y: 200 }, { x: 400, y: 500 }, true), "M 900 200 C 690 200, 610 500, 400 500");
     assert.equal(relationshipCurve({ x: 400, y: 500 }, { x: 900, y: 200 }, false), "M 900 200 C 690 200, 610 500, 400 500");
     assert.equal(relationshipCurve({ x: 400, y: 200 }, { x: 900, y: 500 }, true), "M 400 200 C 610 200, 690 500, 900 500");
+});
+
+test("direction badges merge mixed roles and duplicate edges without guessing unloaded columns", () => {
+    const targets = [
+        { uid: "parent", order: 0 },
+        { uid: "child", order: 0 },
+        { uid: "child", order: 0 },
+        { uid: "other", order: 4 },
+        { uid: "same-column", order: 2 },
+        { uid: "unloaded", order: undefined },
+    ];
+    assert.deepEqual(relationshipSideCounts(2, targets), { left: 2, right: 1 });
+    assert.deepEqual(relationshipSideCounts(undefined, targets), { left: 0, right: 0 });
+    assert.deepEqual(relationshipSideCounts(0, targets), { left: 0, right: 2 });
 });
