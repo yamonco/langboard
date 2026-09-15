@@ -16,6 +16,10 @@ for (const width of [390, 1440]) {
                 await expect(page.getByRole("dialog", { name: `Destination ${target}`, includeHidden: true })).toHaveCount(1);
                 await page.getByRole("button", { name: "Cancel", exact: true }).click();
                 await expect(page.getByRole("dialog", { name: `Destination ${target}` })).toBeVisible();
+                await page.getByRole("button", { name: "Notifications", exact: true }).click();
+                await page.keyboard.press("Escape");
+                await expect(page.getByRole("button", { name: "Cancel", exact: true })).toHaveCount(0);
+                await expect(page.getByRole("dialog", { name: `Destination ${target}` })).toBeVisible();
                 await page.getByRole("button", { name: "Close destination" }).click();
             }
             await page.getByRole("button", { name: "Notifications", exact: true }).click();
