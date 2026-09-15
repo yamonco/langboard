@@ -55,7 +55,7 @@ class ActivityRepository(BaseRepository[BaseActivityModel]):
             columns = [
                 model.column("id"),
                 model.column("created_at"),
-                model.column("activity_type"),
+                cast(model.column("activity_type"), String).label("activity_type"),
                 literal(kind).label("scope"),
                 Project.column("id").label("project_id"),
                 Project.column("title").label("project_title"),
