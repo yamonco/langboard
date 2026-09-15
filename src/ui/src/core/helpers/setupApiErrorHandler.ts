@@ -37,7 +37,7 @@ const DEFAULT_CONFIGS: IApiErrorHandlerMap = {
         toast: true,
     },
     code: {
-        message: (code) => t(`errors.requests.${code}`),
+        message: (code) => t(`errors.requests.${code}`, { defaultValue: t("errors.Internal server error") }),
         toast: true,
     },
     nonApi: {
