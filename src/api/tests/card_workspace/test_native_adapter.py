@@ -70,6 +70,7 @@ def _service(people: list[dict[str, Any]] | None = None) -> tuple[Any, list[tupl
         project_column=SimpleNamespace(get_by_id_like=lambda uid: column),
         card=SimpleNamespace(
             get_by_id_like=lambda uid: card,
+            can_delete=lambda actor, target: False,
             get_api_assigned_user_list=lambda target, limit: people or [],
             get_api_bot_scope_list=lambda target_project, target_card, limit: [],
             get_api_bot_schedule_list=lambda target_project, target_card, limit: [],

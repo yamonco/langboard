@@ -8,6 +8,8 @@ from .ProjectColumn import ProjectColumn
 
 
 class Card(BaseNotificationScheduleModel, table=True):
+    created_by_user_id: SnowflakeID | None = SnowflakeIDField(nullable=True, index=True)
+    created_by_bot_id: SnowflakeID | None = SnowflakeIDField(nullable=True, index=True)
     project_id: SnowflakeID = SnowflakeIDField(
         foreign_key=Project, nullable=False, index=True, api_field=ApiField(name="project_uid")
     )
