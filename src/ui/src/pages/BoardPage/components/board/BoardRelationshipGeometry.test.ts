@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { getRelationshipDirection, intersectRelationshipRects, relationshipCurve } from "./BoardRelationshipGeometry.ts";
+import {
+    getRelationshipDirection,
+    getVisibleRelationshipTarget,
+    intersectRelationshipRects,
+    relationshipCurve,
+} from "./BoardRelationshipGeometry.ts";
 
 const board = { left: 0, top: 80, right: 1000, bottom: 700 };
 const column = { left: 350, top: 160, right: 670, bottom: 550 };
@@ -16,6 +21,21 @@ test("keeps partially visible cards attached to their visible bounds", () => {
     const card = { left: 360, top: 140, right: 660, bottom: 200 };
     assert.deepEqual(intersectRelationshipRects(card, column), { left: 360, top: 160, right: 660, bottom: 200 });
     assert.equal(getRelationshipDirection(card, column), undefined);
+});
+
+test("a visible footer cannot hide the offscreen title shortcut", () => {
+    const card = { left: 360, top: 80, right: 660, bottom: 170 };
+    const title = { left: 370, top: 90, right: 650, bottom: 130 };
+    assert.ok(intersectRelationshipRects(card, column));
+    assert.equal(getVisibleRelationshipTarget(card, column, title), undefined);
+    assert.equal(getRelationshipDirection(title, column), "up");
+});
+
+test("a readable title keeps a partially clipped card attached", () => {
+    const card = { left: 360, top: 140, right: 660, bottom: 230 };
+    const title = { left: 370, top: 170, right: 650, bottom: 200 };
+    assert.deepEqual(getVisibleRelationshipTarget(card, column, title), { left: 360, top: 160, right: 660, bottom: 230 });
+    assert.deepEqual(getVisibleRelationshipTarget(card, column), intersectRelationshipRects(card, column));
 });
 
 test("excludes the floating navigation area from the usable board viewport", () => {
