@@ -6,6 +6,7 @@
   "license": "SEE LICENSE IN LICENSE",
   "scripts": {
     "dev": "vite --force",
+    "test:card-delete": "node --experimental-strip-types --test src/pages/BoardPage/components/card/action/BoardCardActionDelete.test.ts src/core/helpers/setupApiErrorHandler.test.ts",
     "build": "tsc && vite build",
     "test:board-graph": "node --experimental-strip-types --test src/pages/BoardPage/BoardGraphLayout.test.ts src/pages/BoardPage/BoardGraphPreference.test.ts",
     "lint": "eslint . -c eslint.config.js --ignore-pattern node_modules/ --ignore-pattern dist/ --report-unused-disable-directives --max-warnings 0",
