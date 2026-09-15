@@ -27,6 +27,7 @@ from ..projections import (
     bounded_items,
     bounded_text,
     pick,
+    public_actor,
     public_attachment,
     public_bot_schedule,
     public_bot_scope,
@@ -82,6 +83,8 @@ def get_card_bundle(
 
     details = source.details
     core = pick(details, ("uid", "title", "created_at", "updated_at", "can_delete"))
+    if isinstance(details.get("creator"), dict):
+        core["creator"] = public_actor(details["creator"])
     if CardBundleInclude.Description in requested:
         core["description"] = bounded_text(details.get("description"), CardBundleSection.CoreDescription).model_dump(
             mode="json"
