@@ -1,7 +1,8 @@
 """Bounded literal search across card text, comments and attachment names."""
 
+from datetime import timedelta
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, update
 from sqlalchemy.dialects import postgresql
 from ....core.db import DbSession, EditorContentModel
 from ....core.db.DbEngine import DbEngine
@@ -80,6 +81,51 @@ def test_search_matches_comment_only_unicode_and_deduplicates_without_cross_proj
         assert [c.title for c, _ in repository.search_context_by_project(project, "회의자료")] == ["Comment only"]
         assert repository.search_context_by_project(project, "삭제자료") == []
         assert len(repository.search_context_by_project(project, "only", limit=1)) == 1
+        start = SafeDateTime(2026, 9, 1)
+        with DbSession.use(readonly=False) as db:
+            for index, card in enumerate(cards):
+                db.exec(
+                    update(Card.__table__)
+                    .where(Card.column("id") == card.id)
+                    .values(
+                        created_at=start + timedelta(days=index),
+                        updated_at=start + timedelta(days=index + 10),
+                    )
+                )
+        assert [
+            c.title
+            for c, _ in repository.search_context_by_project(
+                project,
+                "",
+                date_field="created_at",
+                since=start,
+                until=start + timedelta(days=1),
+            )
+        ] == ["Comment only"]
+        assert [
+            c.title
+            for c, _ in repository.search_context_by_project(
+                project,
+                "",
+                date_field="created_at",
+                since=start + timedelta(days=1),
+                until=start + timedelta(days=2),
+            )
+        ] == ["Deleted comment"]
+        assert [
+            c.title
+            for c, _ in repository.search_context_by_project(
+                project,
+                "",
+                date_field="updated_at",
+                since=start + timedelta(days=10),
+                until=start + timedelta(days=11),
+            )
+        ] == ["Comment only"]
+        with pytest.raises(ValueError, match="date_field"):
+            repository.search_context_by_project(project, "", date_field="deadline_at")
+        with pytest.raises(ValueError, match="earlier"):
+            repository.search_context_by_project(project, "", since=start, until=start)
         expression = _editor_search_text(CardComment.column("content"), "postgresql")
         compiled = str(expression.compile(dialect=postgresql.dialect()))
         assert "#>>" in compiled and "TEXT[]" in compiled

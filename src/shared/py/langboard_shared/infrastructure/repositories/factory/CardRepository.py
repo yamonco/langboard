@@ -123,7 +123,13 @@ class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
             return list(db.exec(query).all())
 
     def search_context_by_project(
-        self, project: TProjectParam, input_value: str, limit: int = 20
+        self,
+        project: TProjectParam,
+        input_value: str,
+        limit: int = 20,
+        date_field: str = "updated_at",
+        since: SafeDateTime | None = None,
+        until: SafeDateTime | None = None,
     ) -> list[tuple[Card, ProjectColumn]]:
         project_id = InfraHelper.convert_id(project)
         escaped_input = input_value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
@@ -159,6 +165,15 @@ class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
             .order_by(Card.column("updated_at").desc(), Card.column("id").desc())
             .limit(limit)
         )
+        if date_field not in {"created_at", "updated_at"}:
+            raise ValueError("date_field must be created_at or updated_at")
+        if since is not None and until is not None and since >= until:
+            raise ValueError("since must be earlier than until")
+        date_column = Card.column(date_field)
+        if since is not None:
+            query = query.where(date_column >= since)
+        if until is not None:
+            query = query.where(date_column < until)
         with DbSession.use(readonly=True) as db:
             return db.exec(query).all()
 
