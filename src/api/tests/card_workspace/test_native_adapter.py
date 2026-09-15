@@ -158,7 +158,7 @@ def test_native_checkitem_continuation_reads_only_the_requested_checklist() -> N
     service = SimpleNamespace(
         project=SimpleNamespace(get_by_id_like=lambda _uid: project),
         project_column=SimpleNamespace(get_by_id_like=lambda _uid: column),
-        card=SimpleNamespace(get_by_id_like=lambda _uid: card),
+        card=SimpleNamespace(get_by_id_like=lambda _uid: card, can_delete=lambda *_args: False),
         checklist=SimpleNamespace(
             get_by_id_like=lambda _uid: checklist,
             get_api_list_by_card=lambda *_args, **_kwargs: pytest.fail("bulk checklist query used"),

@@ -192,7 +192,7 @@ def test_project_member_projection_does_not_expose_invitation_email_as_name() ->
     service = SimpleNamespace(
         project=SimpleNamespace(
             get_by_id_like=lambda _uid: object(),
-            get_api_assigned_user_list=lambda _project: [
+            get_api_assigned_user_list=lambda _project, limit: [
                 {
                     "uid": identity_type,
                     "username": "",
@@ -203,6 +203,7 @@ def test_project_member_projection_does_not_expose_invitation_email_as_name() ->
                 }
                 for identity_type in ("group_email", "unknown")
             ],
+            count_assigned_users=lambda _project: 2,
         )
     )
 
