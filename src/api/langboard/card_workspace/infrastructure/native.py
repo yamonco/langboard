@@ -48,6 +48,7 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
         if column is None or column.project_id != project.id:
             return None
         details = card.api_response()
+        details["creator"] = self._card_creator(card)
         details["project_column_name"] = column.name
 
         if "people" in requested_sections:
@@ -642,6 +643,20 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
         if not isinstance(actual, str):
             return False
         return SafeDateTime.fromisoformat(actual) == SafeDateTime.fromisoformat(desired)
+
+    def _card_creator(self, card: Any) -> dict[str, Any] | None:
+        """Resolve the stored author without inferring ownership from assignees."""
+
+        for field, service_name in (
+            ("created_by_user_id", "user"),
+            ("created_by_bot_id", "bot"),
+        ):
+            creator_id = getattr(card, field, None)
+            if creator_id is None:
+                continue
+            creator = getattr(self._service, service_name).get_by_id_like(creator_id)
+            return creator.api_response() if creator is not None else None
+        return None
 
     def _ensure_project_card(self, project_uid: str, card_uid: str) -> tuple[Any, Any]:
         project = self._service.project.get_by_id_like(project_uid)

@@ -17,6 +17,8 @@ class Card:
 
     project_id = 1
     project_column_id = 2
+    created_by_user_id = None
+    created_by_bot_id = None
 
     @staticmethod
     def api_response() -> dict[str, Any]:
@@ -57,6 +59,36 @@ def _service(people: list[dict[str, Any]] | None = None) -> tuple[Any, list[tupl
         metadata=SimpleNamespace(get_all_as_api=metadata),
     )
     return service, calls
+
+
+@pytest.mark.parametrize(
+    ("user_id", "bot_id", "service_name", "expected_type"),
+    [(7, None, "user", "user"), (None, 9, "bot", "bot")],
+)
+def test_native_source_resolves_the_stored_creator_only(
+    user_id: int | None,
+    bot_id: int | None,
+    service_name: str,
+    expected_type: str,
+) -> None:
+    service, _ = _service()
+    card = service.card.get_by_id_like("c1")
+    card.created_by_user_id = user_id
+    card.created_by_bot_id = bot_id
+    calls: list[tuple[str, int]] = []
+
+    def creator(actor_id: int) -> Any:
+        calls.append((service_name, actor_id))
+        return SimpleNamespace(api_response=lambda: {"uid": "creator", "type": expected_type})
+
+    service.user = SimpleNamespace(get_by_id_like=creator if service_name == "user" else pytest.fail)
+    service.bot = SimpleNamespace(get_by_id_like=creator if service_name == "bot" else pytest.fail)
+
+    source = NativeCardWorkspaceAdapter(object(), service).get_card_bundle_source("p1", "c1", frozenset())
+
+    assert source is not None
+    assert source.details["creator"] == {"uid": "creator", "type": expected_type}
+    assert calls == [(service_name, user_id if user_id is not None else bot_id)]
 
 
 def test_native_source_fetches_optional_sections_lazily_with_hard_query_limits() -> None:
