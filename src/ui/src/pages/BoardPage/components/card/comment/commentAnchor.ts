@@ -36,14 +36,23 @@ const getTextAfterRange = (root: HTMLElement, range: Range): string => {
 };
 
 const getBlockElements = (root: HTMLElement): HTMLElement[] =>
-    Array.from(root.querySelectorAll<HTMLElement>(SLATE_ELEMENT_SELECTOR)).filter(
-        (element) => !element.parentElement?.closest(SLATE_ELEMENT_SELECTOR)
-    );
+    Array.from(root.querySelectorAll<HTMLElement>(SLATE_ELEMENT_SELECTOR)).filter((element) => {
+        const parentBlock = element.parentElement?.closest(SLATE_ELEMENT_SELECTOR);
+        return !parentBlock || !root.contains(parentBlock);
+    });
 
 const findContainingBlock = (root: HTMLElement, node: Node): HTMLElement | null => {
     const element = node instanceof HTMLElement ? node : node.parentElement;
-    const block = element?.closest<HTMLElement>(SLATE_ELEMENT_SELECTOR) ?? null;
-    return block && root.contains(block) ? block : null;
+    let block = element?.closest<HTMLElement>(SLATE_ELEMENT_SELECTOR) ?? null;
+    if (!block || !root.contains(block)) return null;
+    for (
+        let parent = block.parentElement?.closest<HTMLElement>(SLATE_ELEMENT_SELECTOR);
+        parent && root.contains(parent);
+        parent = block.parentElement?.closest<HTMLElement>(SLATE_ELEMENT_SELECTOR)
+    ) {
+        block = parent;
+    }
+    return block;
 };
 
 export const captureCardCommentAnchor = (root: HTMLElement, selection: Selection | null): ICardCommentAnchor | null => {
@@ -64,7 +73,9 @@ export const captureCardCommentAnchor = (root: HTMLElement, selection: Selection
     const blocks = getBlockElements(root);
     const startBlock = findContainingBlock(root, range.startContainer);
     const endBlock = findContainingBlock(root, range.endContainer);
-    if (!startBlock || !endBlock) {
+    const startIndex = startBlock ? blocks.indexOf(startBlock) : -1;
+    const endIndex = endBlock ? blocks.indexOf(endBlock) : -1;
+    if (!startBlock || !endBlock || startIndex < 0 || endIndex < 0) {
         return null;
     }
 
@@ -76,8 +87,8 @@ export const captureCardCommentAnchor = (root: HTMLElement, selection: Selection
         suffix: getTextAfterRange(root, range),
         start_block: normalizeAnchorText(startBlock.textContent ?? ""),
         end_block: normalizeAnchorText(endBlock.textContent ?? ""),
-        start_path: [Math.max(0, blocks.indexOf(startBlock))],
-        end_path: [Math.max(0, blocks.indexOf(endBlock))],
+        start_path: [startIndex],
+        end_path: [endIndex],
     };
 };
 
