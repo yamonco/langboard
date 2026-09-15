@@ -91,6 +91,11 @@ const BoardCardDescription = memo((): React.JSX.Element => {
     const { registerSectionCancelHandler, registerSectionSaveHandler } = useBoardCardSectionSaveActions();
     const canEdit = hasRoleAction(ProjectRole.EAction.CardUpdate);
     const canStartEditing = canEdit && isCardEditing;
+    useEffect(() => {
+        if (canStartEditing) {
+            setIsEditing(true);
+        }
+    }, [canStartEditing]);
     const stopEditing = useCallback(() => {
         if (!editorRef.current) {
             return;
