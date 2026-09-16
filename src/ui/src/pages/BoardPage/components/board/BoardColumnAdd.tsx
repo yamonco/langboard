@@ -11,21 +11,23 @@ import { useBoard } from "@/core/providers/BoardProvider";
 import { cn } from "@/core/utils/ComponentUtils";
 import { BOARD_COLUMN_MAX_HEIGHT_CLASS_NAMES } from "@/pages/BoardPage/components/board/BoardConstants";
 import { BoardColumnNameInput } from "@/pages/BoardPage/components/board/BoardColumnName";
-import { memo, useState } from "react";
+import { createSubmitGuard } from "@/pages/BoardPage/components/board/BoardColumnSubmitGuard";
+import { memo, useCallback, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 const BoardColumnAdd = memo(() => {
     const { project, hasRoleAction } = useBoard();
     const [t] = useTranslation();
     const [isValidating, setIsValidating] = useState(false);
+    const columnSubmitGuard = useRef(createSubmitGuard()).current;
     const { mutateAsync: createProjectColumnMutateAsync } = useCreateProjectColumn({ interceptToast: true });
     const editorName = `${project.uid}-add-column`;
-    const { valueRef, isEditing, changeMode } = useChangeEditMode({
-        canEdit: () => hasRoleAction(ProjectRole.EAction.Update),
-        valueType: "input",
-        disableNewLine: true,
-        editorName,
-        save: (value, endCallback) => {
+    const saveColumn = useCallback(
+        (value: string, endCallback: () => void) => {
+            if (!columnSubmitGuard.tryStart()) {
+                return;
+            }
+
             setIsValidating(true);
 
             const promise = createProjectColumnMutateAsync({
@@ -46,11 +48,21 @@ const BoardColumnAdd = memo(() => {
                     return t("successes.Column added successfully.");
                 },
                 finally: () => {
+                    columnSubmitGuard.finish();
                     setIsValidating(false);
                     endCallback();
                 },
             });
         },
+        [createProjectColumnMutateAsync, hasRoleAction, project.uid, t]
+    );
+
+    const { valueRef, isEditing, changeMode } = useChangeEditMode({
+        canEdit: () => hasRoleAction(ProjectRole.EAction.Update),
+        valueType: "input",
+        disableNewLine: true,
+        editorName,
+        save: saveColumn,
     });
 
     const sharedRootClassNames = "my-1 ring-primary";
