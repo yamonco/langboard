@@ -1,12 +1,26 @@
 from typing import Sequence
-from sqlalchemy import func, literal, or_, update
+
+from sqlalchemy import Text, cast, func, literal, or_, select, update
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from ....core.db import DbSession, SqlBuilder
+from ....core.db.DbEngine import DbEngine
 from ....core.domain import BaseOrderRepository
 from ....core.schema import TimeBasedPagination
 from ....core.types import SafeDateTime
 from ....core.types.ParamTypes import TCardParam, TColumnParam, TProjectParam, TUserParam
-from ....domain.models import Card, CardAssignedUser, CardComment, Project, ProjectColumn, ProjectRole
+from ....domain.models import Card, CardAssignedUser, CardAttachment, CardComment, Project, ProjectColumn, ProjectRole
 from ....helpers import InfraHelper
+
+
+def _editor_search_text(column, dialect: str):
+    """Decode the existing JSON string representation before literal text matching."""
+    if dialect == "postgresql":
+        return cast(column, JSONB).op("#>>")(cast([], ARRAY(Text)))
+    if dialect == "sqlite":
+        return func.json_extract(column, "$")
+    if dialect in {"mysql", "mariadb"}:
+        return func.json_unquote(column)
+    raise ValueError("Unsupported database dialect for editor content search")
 
 
 class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
@@ -165,11 +179,33 @@ class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
         return records
 
     def search_context_by_project(
-        self, project: TProjectParam, input_value: str, limit: int = 20
+        self,
+        project: TProjectParam,
+        input_value: str,
+        limit: int = 20,
+        date_field: str = "updated_at",
+        since: SafeDateTime | None = None,
+        until: SafeDateTime | None = None,
     ) -> list[tuple[Card, ProjectColumn]]:
         project_id = InfraHelper.convert_id(project)
         escaped_input = input_value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
         title = Card.column("title")
+        pattern = f"%{escaped_input}%"
+        dialect = DbEngine.get_readonly_engine().dialect.name
+        comments = (
+            select(CardComment.column("id"))
+            .where(CardComment.column("card_id") == Card.column("id"))
+            .where(CardComment.column("deleted_at") == None)  # noqa: E711
+            .where(_editor_search_text(CardComment.column("content"), dialect).ilike(pattern, escape="\\"))
+            .exists()
+        )
+        attachments = (
+            select(CardAttachment.column("id"))
+            .where(CardAttachment.column("card_id") == Card.column("id"))
+            .where(CardAttachment.column("deleted_at") == None)  # noqa: E711
+            .where(CardAttachment.column("filename").ilike(pattern, escape="\\"))
+            .exists()
+        )
         query = (
             SqlBuilder.select.tables(Card, ProjectColumn)
             .join(ProjectColumn, Card.column("project_column_id") == ProjectColumn.column("id"))
@@ -177,13 +213,24 @@ class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
             .where(Card.column("source_type") == None)  # noqa: E711
             .where(
                 or_(
-                    literal(input_value).ilike("%" + title + "%"),
-                    title.ilike(f"%{escaped_input}%", escape="\\"),
+                    title.ilike(pattern, escape="\\"),
+                    _editor_search_text(Card.column("description"), dialect).ilike(pattern, escape="\\"),
+                    comments,
+                    attachments,
                 )
             )
             .order_by(Card.column("updated_at").desc(), Card.column("id").desc())
             .limit(limit)
         )
+        if date_field not in {"created_at", "updated_at"}:
+            raise ValueError("date_field must be created_at or updated_at")
+        if since is not None and until is not None and since >= until:
+            raise ValueError("since must be earlier than until")
+        date_column = Card.column(date_field)
+        if since is not None:
+            query = query.where(date_column >= since)
+        if until is not None:
+            query = query.where(date_column < until)
         with DbSession.use(readonly=True) as db:
             return db.exec(query).all()
 
