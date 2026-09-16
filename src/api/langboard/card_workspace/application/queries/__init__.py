@@ -81,7 +81,7 @@ def get_card_bundle(
         )
 
     details = source.details
-    core = pick(details, ("uid", "title", "created_at", "updated_at"))
+    core = pick(details, ("uid", "title", "created_at", "updated_at", "can_delete"))
     if isinstance(details.get("creator"), dict):
         core["creator"] = public_actor(details["creator"])
     if CardBundleInclude.Description in requested:
