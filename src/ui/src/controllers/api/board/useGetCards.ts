@@ -12,6 +12,7 @@ import {
     ProjectColumnBotSchedule,
 } from "@/core/models";
 import { Utils } from "@langboard/core/utils";
+import { mergeLinkedResourceProjection } from "@/controllers/api/board/mergeLinkedResourceProjection";
 
 export interface IGetCardsForm {
     project_uid: string;
@@ -42,10 +43,21 @@ const useGetCards = (params: IGetCardsForm, options?: TQueryOptions<unknown, IGe
             } as never,
         });
 
-        const cardUIDs = new Set<string>(res.data.cards.map((card: ProjectCard.TModel) => card.uid));
+        const cards = res.data.cards.map((card: ProjectCard.Interface) => {
+            if (!card.linked_resource) {
+                return card;
+            }
+
+            const existing = ProjectCard.Model.getModel(card.uid)?.linked_resource;
+            return {
+                ...card,
+                linked_resource: mergeLinkedResourceProjection(card.linked_resource, existing),
+            };
+        });
+        const cardUIDs = new Set<string>(cards.map((card: ProjectCard.Interface) => card.uid));
         const columnUIDs = new Set<string>(res.data.columns.map((column: ProjectColumn.TModel) => column.uid));
 
-        ProjectCard.Model.fromArray(res.data.cards, true);
+        ProjectCard.Model.fromArray(cards, true);
         const metadataModels: MetadataModel.Interface[] = Object.entries(metadataRes.data.metadata ?? {}).map(([cardUID, metadata]) => ({
             uid: cardUID,
             type: "card",
