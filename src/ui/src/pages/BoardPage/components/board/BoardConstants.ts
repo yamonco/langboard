@@ -28,6 +28,7 @@ export const BOARD_CARD_TOUCH_HANDLE_ATTR = "data-board-card-touch-handle" as co
 export const BOARD_CARD_RELATIONSHIP_DND_TYPE = "board-card-relationship-handle" as const;
 export const BOARD_CARD_FOCUS_EVENT = "board-card-focus" as const;
 export const BOARD_CARD_LOCATION_EVENT = "board-card-location" as const;
+export const BOARD_CARD_RELATIONSHIP_PREVIEW_EVENT = "board-card-relationship-preview" as const;
 export const BOARD_COLUMN_TOUCH_DND_ATTR = "data-board-column-touch-dnd-uid" as const;
 
 export interface IBoardCardFocusEventDetail {

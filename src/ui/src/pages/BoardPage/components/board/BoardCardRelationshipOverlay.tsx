@@ -3,13 +3,16 @@ import IconComponent from "@/components/base/IconComponent";
 import { useBoard } from "@/core/providers/BoardProvider";
 import {
     getRelationshipDirection,
+    getVisibleRelationshipTarget,
     intersectRelationshipRects,
     relationshipCurve,
+    relationshipAnchor,
     type TRelationshipDirection,
 } from "@/pages/BoardPage/components/board/BoardRelationshipGeometry";
 import {
     BOARD_CARD_FOCUS_EVENT,
     BOARD_CARD_LOCATION_EVENT,
+    BOARD_CARD_RELATIONSHIP_PREVIEW_EVENT,
     BOARD_CARD_TOUCH_DND_ATTR,
     BOARD_COLUMN_TOUCH_DND_ATTR,
     IBoardCardFocusEventDetail,
@@ -112,6 +115,11 @@ const BoardCardRelationshipOverlay = memo(({ scrollable }: IBoardCardRelationshi
             const cardElement = (event.target as Element).closest<HTMLElement>(`[${BOARD_CARD_TOUCH_DND_ATTR}]`);
             if (cardElement) hoverIntent.openImmediately(cardElement);
         };
+        const onPreviewRequested = (event: Event) => {
+            const cardUID = getCardUID(event.target);
+            const cardElement = event.target instanceof Element ? event.target.closest<HTMLElement>(`[${BOARD_CARD_TOUCH_DND_ATTR}]`) : null;
+            if (cardUID && cardsMap[cardUID]?.relationships.length && cardElement) hoverIntent.openImmediately(cardElement);
+        };
         const onPointerOut = (event: PointerEvent | FocusEvent) => {
             const sourceCardUID = getCardUID(event.target);
             const nextElement = event.relatedTarget instanceof Element ? event.relatedTarget : undefined;
@@ -127,6 +135,7 @@ const BoardCardRelationshipOverlay = memo(({ scrollable }: IBoardCardRelationshi
         scrollable.addEventListener("pointerover", onPointerOver);
         scrollable.addEventListener("pointerout", onPointerOut);
         scrollable.addEventListener("focusin", onFocusIn);
+        scrollable.addEventListener(BOARD_CARD_RELATIONSHIP_PREVIEW_EVENT, onPreviewRequested);
         scrollable.addEventListener("focusout", onPointerOut);
         const close = hoverIntent.close;
         const onKeyDown = (event: KeyboardEvent) => {
@@ -139,6 +148,7 @@ const BoardCardRelationshipOverlay = memo(({ scrollable }: IBoardCardRelationshi
             scrollable.removeEventListener("pointerover", onPointerOver);
             scrollable.removeEventListener("pointerout", onPointerOut);
             scrollable.removeEventListener("focusin", onFocusIn);
+            scrollable.removeEventListener(BOARD_CARD_RELATIONSHIP_PREVIEW_EVENT, onPreviewRequested);
             scrollable.removeEventListener("focusout", onPointerOut);
             scrollable.removeEventListener("dragstart", close);
             window.removeEventListener("keydown", onKeyDown);
@@ -206,7 +216,8 @@ const BoardCardRelationshipOverlay = memo(({ scrollable }: IBoardCardRelationshi
                     const targetElement =
                         candidates.find((element) => clip && intersectRelationshipRects(element.getBoundingClientRect(), clip)) ?? candidates[0];
                     const targetRect = targetElement?.getBoundingClientRect();
-                    const visibleTarget = targetRect && clip && intersectRelationshipRects(targetRect, clip);
+                    const targetTitleRect = targetElement?.querySelector("[data-board-card-open]")?.getBoundingClientRect();
+                    const visibleTarget = targetRect && clip && getVisibleRelationshipTarget(targetRect, clip, targetTitleRect);
                     const targetColumn = columnsMap.get(relatedCard.project_column_uid);
                     const label = sourceIsParent ? relationshipType.child_name : relationshipType.parent_name;
                     let virtualDirection: "up" | "down" | undefined;
@@ -228,11 +239,14 @@ const BoardCardRelationshipOverlay = memo(({ scrollable }: IBoardCardRelationshi
 
                     if (visibleTarget) {
                         if (relatedCard.project_column_uid === sourceCard.project_column_uid) return;
-                        const source = { x: sourceIsParent ? sourceRect.right : sourceRect.left, y: sourceY };
-                        const target = {
-                            x: sourceIsParent ? visibleTarget.left : visibleTarget.right,
+                        const source = relationshipAnchor(sourceRect, {
+                            x: (visibleTarget.left + visibleTarget.right) / 2,
                             y: (visibleTarget.top + visibleTarget.bottom) / 2,
-                        };
+                        });
+                        const target = relationshipAnchor(visibleTarget, {
+                            x: (sourceRect.left + sourceRect.right) / 2,
+                            y: sourceY,
+                        });
                         edges.push({
                             uid: relationship.uid,
                             label,
@@ -244,7 +258,7 @@ const BoardCardRelationshipOverlay = memo(({ scrollable }: IBoardCardRelationshi
                     }
 
                     let side = columnRect && getRelationshipDirection(columnRect, viewport);
-                    if (!side && targetRect && clip) side = getRelationshipDirection(targetRect, clip);
+                    if (!side && targetRect && clip) side = getRelationshipDirection(targetTitleRect ?? targetRect, clip);
                     side ??= virtualDirection;
                     if (!side) return;
                     const targets = previewGroups.get(side) ?? [];
@@ -276,11 +290,11 @@ const BoardCardRelationshipOverlay = memo(({ scrollable }: IBoardCardRelationshi
                               ? viewport.bottom - height - 12
                               : Math.max(viewport.top + 12, Math.min(sourceY - height / 2, viewport.bottom - height - 12));
                     targets.forEach((target) => {
-                        const source = { x: target.sourceIsParent ? sourceRect.right : sourceRect.left, y: sourceY };
                         const endpoint = {
                             x: side === "left" ? left + width : side === "right" ? left : left + width / 2,
                             y: side === "up" ? top + height : side === "down" ? top : top + height / 2,
                         };
+                        const source = relationshipAnchor(sourceRect, endpoint);
                         edges.push({
                             uid: target.relationshipUID,
                             label: "",

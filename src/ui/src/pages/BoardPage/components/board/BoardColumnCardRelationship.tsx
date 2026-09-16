@@ -5,14 +5,14 @@ import IconComponent from "@/components/base/IconComponent";
 import Toast from "@/components/base/Toast";
 import useUpdateCardRelationships from "@/controllers/api/card/useUpdateCardRelationships";
 import setupApiErrorHandler from "@/core/helpers/setupApiErrorHandler";
-import { ProjectCardRelationship } from "@/core/models";
+import { ProjectCard, ProjectCardRelationship, ProjectColumn } from "@/core/models";
 import { ModelRegistry } from "@/core/models/ModelRegistry";
-import { useBoardController } from "@/core/providers/BoardController";
 import { useBoard } from "@/core/providers/BoardProvider";
 import { cn } from "@/core/utils/ComponentUtils";
 import {
     BOARD_CARD_RELATIONSHIP_DND_TYPE,
     BOARD_CARD_TOUCH_DND_ATTR,
+    BOARD_CARD_RELATIONSHIP_PREVIEW_EVENT,
     IBoardColumnCardContextParams,
 } from "@/pages/BoardPage/components/board/BoardConstants";
 import {
@@ -23,7 +23,8 @@ import {
 } from "@/pages/BoardPage/components/board/BoardColumnCardHierarchy";
 import { draggable } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
 import { Utils } from "@langboard/core/utils";
-import { memo, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useReducer, useRef, useState } from "react";
+import { relationshipSideCounts } from "./BoardRelationshipGeometry";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 
@@ -33,19 +34,89 @@ export interface IBoardColumnCardRelationshipProps {
 }
 
 const BoardColumnCardRelationship = memo(({ attributes, compact = false }: IBoardColumnCardRelationshipProps) => {
+    const [t] = useTranslation();
+    const { model: card } = ModelRegistry.ProjectCard.useContext<IBoardColumnCardContextParams>();
+    const { cardsMap, columns, shouldShowArchivedCard } = useBoard();
+    const relationships = card.useForeignFieldArray("relationships");
+    const [, refresh] = useReducer((value: number) => value + 1, 0);
+    const onPositionChanged = useCallback(() => refresh(), []);
+    const relatedCards = [
+        ...new Set(
+            relationships
+                .filter((edge) => edge.parent_card_uid === card.uid || edge.child_card_uid === card.uid)
+                .map((edge) => (edge.parent_card_uid === card.uid ? edge.child_card_uid : edge.parent_card_uid))
+        ),
+    ]
+        .filter((uid) => uid !== card.uid)
+        .map((uid) => cardsMap[uid])
+        .filter((model): model is ProjectCard.TModel => !!model);
+    const columnOrders = new Map(columns.map((column) => [column.uid, column.order]));
+    const counts = relationshipSideCounts(
+        columnOrders.get(card.project_column_uid),
+        relatedCards.filter(shouldShowArchivedCard).map((model) => ({ uid: model.uid, order: columnOrders.get(model.project_column_uid) }))
+    );
+    const hasNavigation = counts.left + counts.right > 0;
     return (
         <>
-            <BoardColumnCardRelationshipButton type="parents" attributes={attributes} compact={compact} />
-            <BoardColumnCardRelationshipButton type="children" attributes={attributes} compact={compact} />
+            {[card, ...relatedCards].map((model) => (
+                <RelationshipPositionObserver key={model.uid} model={model} columns={columns} onChange={onPositionChanged} />
+            ))}
+            {(["left", "right"] as const)
+                .filter((side) => counts[side] > 0)
+                .map((side) => (
+                    <Button
+                        key={side}
+                        size="icon-sm"
+                        data-relationship-navigation-side={side}
+                        title={`${t("project.Parents")} / ${t("project.Children")}`}
+                        className={cn(
+                            "absolute top-1/2 z-50 -translate-y-1/2 rounded-full text-xs",
+                            side === "left" ? "-left-3" : "-right-3",
+                            compact && "size-5 p-0 text-[9px]"
+                        )}
+                        onClick={(event) => {
+                            event.stopPropagation();
+                            event.currentTarget.dispatchEvent(new CustomEvent(BOARD_CARD_RELATIONSHIP_PREVIEW_EVENT, { bubbles: true }));
+                        }}
+                        {...attributes}
+                    >
+                        +{Math.min(counts[side], 99)}
+                    </Button>
+                ))}
+            <BoardColumnCardRelationshipButton type="parents" attributes={attributes} compact={compact} hasNavigation={hasNavigation} />
+            <BoardColumnCardRelationshipButton type="children" attributes={attributes} compact={compact} hasNavigation={hasNavigation} />
         </>
     );
 });
 BoardColumnCardRelationship.displayName = "Board.ColumnCardRelationship";
 
+function RelationshipPositionObserver({
+    model,
+    columns,
+    onChange,
+}: {
+    model: ProjectCard.TModel;
+    columns: ProjectColumn.TModel[];
+    onChange: () => void;
+}) {
+    const columnUID = model.useField("project_column_uid");
+    const archivedAt = model.useField("archived_at");
+    useEffect(onChange, [columnUID, archivedAt, onChange]);
+    const column = columns.find((item) => item.uid === columnUID);
+    return column ? <RelationshipColumnOrderObserver key={column.uid} model={column} onChange={onChange} /> : null;
+}
+
+function RelationshipColumnOrderObserver({ model, onChange }: { model: ProjectColumn.TModel; onChange: () => void }) {
+    const order = model.useField("order");
+    useEffect(onChange, [order, onChange]);
+    return null;
+}
+
 export interface IBoardColumnCardRelationshipButtonProps {
     type: ProjectCardRelationship.TRelationship;
     attributes: Record<string, unknown>;
     compact: bool;
+    hasNavigation: bool;
 }
 
 interface IDragLine {
@@ -55,37 +126,35 @@ interface IDragLine {
     endY: number;
 }
 
-const BoardColumnCardRelationshipButton = memo(({ type, attributes, compact }: IBoardColumnCardRelationshipButtonProps) => {
+const BoardColumnCardRelationshipButton = memo(({ type, attributes, compact, hasNavigation }: IBoardColumnCardRelationshipButtonProps) => {
     const [t] = useTranslation();
     const { model: card, params } = ModelRegistry.ProjectCard.useContext<IBoardColumnCardContextParams>();
     const { setFilters } = params;
     const isParent = type === "parents";
-    const { filterRelationships } = useBoardController();
     const {
         cards,
         cardsMap,
         canDragAndDrop,
-        filterCard,
-        filterCardLabels,
-        filterCardMember,
-        filterCardRelationships,
         globalRelationshipTypes,
         project,
         shouldShowArchivedCard,
+        filterCard,
+        filterCardMember,
+        filterCardLabels,
+        filterCardRelationships,
     } = useBoard();
-    const flatRelationships = card.useForeignFieldArray("relationships");
-    const relationships = filterRelationships(card.uid, flatRelationships, isParent);
-    const visibleRelationshipCount = relationships.filter((relationship) => {
-        const relatedCardUID = isParent ? relationship.parent_card_uid : relationship.child_card_uid;
-        const relatedCard = cardsMap[relatedCardUID];
-        const isRelatedCardVisible =
-            !!relatedCard &&
-            shouldShowArchivedCard(relatedCard) &&
-            filterCard(relatedCard) &&
-            filterCardMember(relatedCard) &&
-            filterCardLabels(relatedCard) &&
-            filterCardRelationships(relatedCard);
-        return !isRelationshipRenderedInHierarchy(card, relatedCard, isRelatedCardVisible);
+    const relationships = card.useForeignFieldArray("relationships");
+    const hiddenSameColumnCount = relationships.filter((edge) => {
+        if ((isParent ? edge.child_card_uid : edge.parent_card_uid) !== card.uid) return false;
+        const related = cardsMap[isParent ? edge.parent_card_uid : edge.child_card_uid];
+        if (!related || related.project_column_uid !== card.project_column_uid) return false;
+        const visible =
+            shouldShowArchivedCard(related) &&
+            filterCard(related) &&
+            filterCardMember(related) &&
+            filterCardLabels(related) &&
+            filterCardRelationships(related);
+        return !isRelationshipRenderedInHierarchy(card, related, visible);
     }).length;
     const buttonRef = useRef<HTMLButtonElement | null>(null);
     const relationshipIndexRef = useRef<TCardRelationshipIndex | undefined>(undefined);
@@ -206,14 +275,12 @@ const BoardColumnCardRelationshipButton = memo(({ type, attributes, compact }: I
         }
     };
 
-    // A grouped descendant is a compact navigation chip, not another full
-    // relationship-editing surface. Keep meaningful cross-column counts, but
-    // do not surround every child chip with two empty creation handles.
-    if (!visibleRelationshipCount && (!canDragAndDrop || compact)) {
+    // Navigation badges own physical direction; these role-specific creation
+    // handles appear only on full cards and never overlap those badges.
+    if (!hiddenSameColumnCount && (!canDragAndDrop || compact)) {
         return null;
     }
 
-    const relationshipCount = visibleRelationshipCount > 99 ? "99" : visibleRelationshipCount;
     const targetCard = targetCardUID ? cardsMap[targetCardUID] : undefined;
     const title = canDragAndDrop
         ? t(`card.${isParent ? "Connect parent card" : "Connect child card"}`)
@@ -226,11 +293,12 @@ const BoardColumnCardRelationshipButton = memo(({ type, attributes, compact }: I
                 ref={buttonRef}
                 size="icon-sm"
                 className={cn(
-                    "pointer-events-none absolute top-1/2 z-50 -translate-y-1/2 transform rounded-full text-xs",
+                    "pointer-events-none absolute z-50 -translate-y-1/2 transform rounded-full text-xs",
+                    hasNavigation ? "top-3" : "top-1/2",
                     "opacity-0 transition-opacity hover:bg-primary/70",
                     "group-hover/relationship-card:pointer-events-auto group-hover/relationship-card:opacity-100",
                     "group-focus-within/relationship-card:pointer-events-auto group-focus-within/relationship-card:opacity-100",
-                    visibleRelationshipCount > 0 && "pointer-events-auto opacity-100",
+                    hiddenSameColumnCount > 0 && "pointer-events-auto opacity-100",
                     compact && "size-5 p-0 text-[9px] opacity-60 transition-opacity hover:opacity-100 focus-visible:opacity-100",
                     isParent ? (compact ? "-left-2" : "-left-3") : compact ? "-right-2" : "-right-3"
                 )}
@@ -243,8 +311,8 @@ const BoardColumnCardRelationshipButton = memo(({ type, attributes, compact }: I
                 }}
                 {...attributes}
             >
-                {visibleRelationshipCount ? (
-                    <>+{relationshipCount}</>
+                {hiddenSameColumnCount ? (
+                    <>+{Math.min(hiddenSameColumnCount, 99)}</>
                 ) : (
                     <IconComponent icon="git-fork" size={compact ? "3" : "4"} className={isParent ? undefined : "rotate-180"} />
                 )}
