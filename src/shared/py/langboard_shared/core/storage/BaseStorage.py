@@ -34,6 +34,16 @@ class BaseStorage(ABC):
         """
 
     @abstractmethod
+    def upload_named(
+        self,
+        file: BinaryIO,
+        filename: str,
+        storage_name: StorageName,
+        stored_filename: str,
+    ) -> FileModel | None:
+        """Upload to a caller-selected idempotent object key."""
+
+    @abstractmethod
     def delete(self, file_model: FileModel) -> bool:
         """Delete a file from the storage.
 
