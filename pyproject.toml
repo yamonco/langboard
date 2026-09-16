@@ -84,7 +84,12 @@ langboard = "langboard.CLI:execute"
 
 [tool.pytest.ini_options]
 minversion = "6.0"
-testpaths = ["src/api/tests", "src/api/langboard/wiki_workspace"]
+testpaths = [
+    "src/api/tests",
+    "src/api/langboard/wiki_workspace",
+    "src/api/langboard/migrations/card_comment_anchor_migration_test.py",
+    "src/shared/py/langboard_shared/domain/models/card_comment_anchor_test.py",
+]
 python_files = ["test_*.py", "*_test.py"]
 console_output_style = "progress"
 asyncio_mode = "auto"

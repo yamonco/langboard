@@ -9,7 +9,7 @@ from .Check import (
     ChangeCardCheckitemStatusForm,
 )
 from .Column import ColumnDescriptionForm, ColumnForm, CreateColumnForm
-from .Comment import ToggleCardCommentReactionForm
+from .Comment import CreateCardCommentForm, ToggleCardCommentReactionForm
 from .Project import (
     ChangeInternalBotForm,
     ChangeInternalBotSettingsForm,
@@ -55,6 +55,7 @@ __all__ = [
     "RejectGraphApprovalForm",
     "ChangeAttachmentNameForm",
     "ToggleCardCommentReactionForm",
+    "CreateCardCommentForm",
     "CardCheckRelatedForm",
     "ChangeCardCheckitemDeadlineForm",
     "ChangeCardCheckitemStatusForm",
