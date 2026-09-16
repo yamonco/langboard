@@ -6,6 +6,7 @@ import IconComponent from "@/components/base/IconComponent";
 import ShineBorder from "@/components/base/ShineBorder";
 import { UserAvatarList } from "@/components/UserAvatarList";
 import { DISABLE_DRAGGING_ATTR } from "@/constants";
+import { ProjectCheckitem } from "@/core/models";
 import { useBoardController } from "@/core/providers/BoardController";
 import { useBoard } from "@/core/providers/BoardProvider";
 import { ROUTES } from "@/core/routing/constants";
@@ -21,6 +22,13 @@ import useCardStore, { useCardIsCollapsed } from "@/core/stores/CardStore";
 import { useHasRunningBot } from "@/core/stores/BotStatusStore";
 import BoardGraphApprovalTargetBadge from "@/pages/BoardPage/components/board/BoardGraphApprovalTargetBadge";
 import { EGraphApprovalScopeTable } from "@/core/models/GraphApprovalRequestModel";
+import { Utils } from "@langboard/core/utils";
+import {
+    calculateChecklistProgress,
+    calculateDeadlinePressure,
+    getDeadlinePressureLevel,
+    type IBoardCardChecklistProgress,
+} from "@/pages/BoardPage/components/board/BoardColumnCardStatus";
 import BoardTaskMetadataBadges from "@/pages/BoardPage/components/task/BoardTaskMetadataBadges";
 import BoardCardMove from "@/pages/BoardPage/components/board/BoardCardMove";
 
@@ -91,6 +99,18 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
     const [t] = useTranslation();
     const { model: card } = ModelRegistry.ProjectCard.useContext<IBoardColumnCardContextParams>();
     const title = card.useField("title");
+    const deadlineAt = card.useField("deadline_at");
+    const checklistItems = ProjectCheckitem.Model.useModels((model) => model.card_uid === card.uid);
+    const checklistProgress = useMemo(() => calculateChecklistProgress(checklistItems), [checklistItems]);
+    const isChecklistCompleted = checklistProgress.total > 0 && checklistProgress.completed === checklistProgress.total;
+    const deadlinePressure = useMemo(
+        () => calculateDeadlinePressure({ deadlineAt, isCompleted: isChecklistCompleted, now: new Date() }),
+        [deadlineAt, isChecklistCompleted]
+    );
+    const deadlinePressureLevel = useMemo(
+        () => getDeadlinePressureLevel({ deadlineAt, isCompleted: isChecklistCompleted, now: new Date() }),
+        [deadlineAt, isChecklistCompleted]
+    );
     const projectMembers = project.useForeignFieldArray("all_members");
     const cardMemberUIDs = card.useField("member_uids") ?? [];
     const cardMembers = useMemo(
@@ -205,14 +225,33 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
         <>
             <Card.Root
                 id={`board-card-${card.uid}`}
+                data-deadline-pressure-level={deadlinePressureLevel}
                 className={cn(
                     "relative rounded-xl border-border/80 bg-card shadow-sm transition-[border-color,box-shadow] dark:bg-muted/70",
                     "hover:border-primary/60 hover:shadow-md",
+                    deadlinePressure > 0 && "board-card-deadline-aura",
                     compact && "rounded-lg shadow-none hover:shadow-sm",
                     !!selectCardViewType && isDisabledCard(card.uid) ? "cursor-not-allowed" : "cursor-pointer"
                 )}
+                style={{ "--board-card-deadline-pressure": deadlinePressure } as React.CSSProperties}
                 onClick={openCard}
             >
+                <BoardCardProgressTrace progress={checklistProgress} />
+                {checklistProgress.total > 0 && (
+                    <span className="sr-only">
+                        {[
+                            t("card.Checklist progress: {{completed}} of {{total}} complete", {
+                                completed: checklistProgress.completed,
+                                total: checklistProgress.total,
+                            }),
+                            deadlineAt && t("card.Deadline {{date}}", { date: Utils.String.formatDateLocale(deadlineAt) }),
+                            deadlinePressureLevel === "critical" && t("card.Due within a day"),
+                            deadlinePressureLevel === "overdue" && t("card.Overdue"),
+                        ]
+                            .filter(Boolean)
+                            .join(" ")}
+                    </span>
+                )}
                 {hasRunningBot && <ShineBorder className="z-50" />}
                 <Collapsible.Root
                     open={!compact && !isCollapsed}
@@ -315,6 +354,36 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
             </Card.Root>
             <SelectRelationshipDialog isOpened={isSelectRelationshipDialogOpened} setIsOpened={setIsSelectRelationshipDialogOpened} />
         </>
+    );
+}
+
+function BoardCardProgressTrace({ progress }: { progress: IBoardCardChecklistProgress }) {
+    if (!progress.total) {
+        return null;
+    }
+
+    const progressPct = progress.ratio * 100;
+
+    return (
+        <span aria-hidden="true" className="pointer-events-none absolute inset-0 z-[1] overflow-hidden rounded-[inherit]">
+            <svg className="h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+                <rect className="board-card-progress-track" x="1" y="1" width="98" height="98" rx="10" ry="10" pathLength={100} />
+                {progressPct > 0 && (
+                    <rect
+                        className="board-card-progress-value"
+                        x="1"
+                        y="1"
+                        width="98"
+                        height="98"
+                        rx="10"
+                        ry="10"
+                        pathLength={100}
+                        transform="rotate(90 50 50)"
+                        style={{ strokeDasharray: `${progressPct} 100` }}
+                    />
+                )}
+            </svg>
+        </span>
     );
 }
 BoardColumnCardCollapsible.displayName = "Board.ColumnCard.Collapsible";
