@@ -420,6 +420,7 @@ const BoardCardDescription = memo(({ scrollParentRef }: IBoardCardDescriptionPro
                     onCollaborativeValueResetReady={handleCollaborativeValueResetReady}
                     serializeOnChange={false}
                     focusOnReady
+                    focusOnReadyEdge="startEditor"
                     editorRef={editorRef}
                 />
             ) : (

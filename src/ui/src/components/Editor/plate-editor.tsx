@@ -63,6 +63,7 @@ interface IBasePlateEditorProps extends Omit<TUseCreateEditor, "plugins"> {
     onEditorReady?: (editor: TEditor) => void;
     serializeOnChange?: bool;
     focusOnReady?: bool;
+    focusOnReadyEdge?: "startEditor" | "endEditor";
     variant?: React.ComponentProps<typeof Editor>["variant"];
     className?: string;
     containerClassName?: string;
@@ -101,6 +102,7 @@ function EditorWrapper({
     variant = "ai",
     serializeOnChange = true,
     focusOnReady = false,
+    focusOnReadyEdge = "endEditor",
     className,
     containerClassName,
     setValue,
@@ -177,13 +179,13 @@ function EditorWrapper({
 
         window.setTimeout(() => {
             try {
-                editor.tf.focus({ edge: "endEditor", retries: 3 });
+                editor.tf.focus({ edge: focusOnReadyEdge, retries: 3 });
             } catch (e) {
                 console.log(e);
                 focusElement.focus();
             }
         }, 0);
-    }, [editor, focusOnReady, readOnly]);
+    }, [editor, focusOnReady, focusOnReadyEdge, readOnly]);
     const normalizeEditorValue = useCallback((value: Value) => {
         if (value.length) {
             return value;
