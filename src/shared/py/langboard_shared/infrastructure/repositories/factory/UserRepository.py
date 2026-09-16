@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from sqlalchemy import func, or_, select
 from ....core.db import DbSession, SqlBuilder
 from ....core.domain import BaseRepository
@@ -85,6 +86,8 @@ class UserRepository(BaseRepository[User]):
         sql = (
             SqlBuilder.select.table(User)
             .where(User.column("id") != user_id)
+            .where(User.column("deleted_at") == None)  # noqa: E711
+            .where(User.column("activated_at") != None)  # noqa: E711
             .where(search_clause)
             .order_by(User.column("firstname").asc(), User.column("lastname").asc(), User.column("id").asc())
             .limit(limit)
@@ -111,3 +114,46 @@ class UserRepository(BaseRepository[User]):
         with DbSession.use(readonly=True) as db:
             result = db.exec(sql)
             return result.all()
+
+    def get_direct_project_member_candidates(
+        self,
+        user: TUserParam,
+        candidate_users: Sequence[TUserParam],
+        can_search_all_users: bool,
+    ) -> list[User]:
+        """Resolve only active users inside the caller's candidate relationship scope."""
+
+        user_id = InfraHelper.convert_id(user)
+        candidate_ids = list(dict.fromkeys(InfraHelper.convert_id(candidate) for candidate in candidate_users))
+        if not candidate_ids:
+            return []
+
+        sql = (
+            SqlBuilder.select.table(User)
+            .where(User.column("id").in_(candidate_ids))
+            .where(User.column("id") != user_id)
+            .where(User.column("deleted_at") == None)  # noqa: E711
+            .where(User.column("activated_at") != None)  # noqa: E711
+            .order_by(User.column("id").asc())
+        )
+
+        if not can_search_all_users:
+            related_project_ids = select(ProjectAssignedUser.column("project_id")).where(
+                ProjectAssignedUser.column("user_id") == user_id
+            )
+            current_related_user_exists = (
+                select(ProjectAssignedUser.column("id"))
+                .where(ProjectAssignedUser.column("user_id") == User.column("id"))
+                .where(ProjectAssignedUser.column("project_id").in_(related_project_ids))
+                .exists()
+            )
+            historical_related_user_exists = (
+                select(ProjectUserRelationship.column("id"))
+                .where(ProjectUserRelationship.column("user_id") == user_id)
+                .where(ProjectUserRelationship.column("related_user_id") == User.column("id"))
+                .exists()
+            )
+            sql = sql.where(current_related_user_exists | historical_related_user_exists)
+
+        with DbSession.use(readonly=True) as db:
+            return db.exec(sql).all()

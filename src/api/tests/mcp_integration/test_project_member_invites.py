@@ -288,6 +288,212 @@ def test_external_invitation_acceptance_grants_card_work_without_admin_access() 
     )
 
 
+def test_existing_member_addition_bypasses_invitation_and_preserves_members() -> None:
+    """A known account receives project access immediately without an invite email."""
+
+    project = SimpleNamespace(id=10)
+    actor = User.model_construct()
+    employee = SimpleNamespace(id=20, api_response=lambda: {"name": "Grace"})
+    existing = SimpleNamespace(id=30, api_response=lambda: {"name": "Existing"})
+    assigned_rows = [(existing, object()), (employee, object())]
+    assigned_repository = SimpleNamespace(
+        get_all_by_project=Mock(side_effect=[[(existing, object())], assigned_rows]),
+        ensure_assigned=Mock(return_value=(object(), True)),
+    )
+    role_repository = SimpleNamespace(project=SimpleNamespace(grant_all=Mock()))
+    relationship_repository = SimpleNamespace(ensure_project_relationships=Mock())
+    user_repository = SimpleNamespace(get_direct_project_member_candidates=Mock(return_value=[employee]))
+    user_service = SimpleNamespace(can_search_all_users=Mock(return_value=False))
+    invitation_service = SimpleNamespace(get_api_invited_user_list_by_project=Mock(return_value=[]))
+    repository = SimpleNamespace(
+        project_assigned_user=assigned_repository,
+        role=role_repository,
+        project_user_relationship=relationship_repository,
+        user=user_repository,
+    )
+    service = ProjectService(lambda _: None, lambda _: None, repository)
+
+    with (
+        patch(
+            "langboard_shared.domain.services.factory.ProjectService.InfraHelper.get_by_id_like",
+            return_value=project,
+        ),
+        patch.object(
+            service,
+            "_get_service_by_name",
+            side_effect=lambda name: user_service if name == "user" else invitation_service,
+        ),
+        patch("langboard_shared.domain.services.factory.ProjectService.ProjectPublisher.assigned_users_updated"),
+        patch("langboard_shared.domain.services.factory.ProjectService.ProjectPublisher.assigned_to_users"),
+        patch(
+            "langboard_shared.domain.services.factory.ProjectService.ProjectActivityTask.project_assigned_users_updated"
+        ),
+    ):
+        result = service.add_existing_assigned_users(actor, project, [employee])
+
+    assert result == {"requested_count": 1, "changed_count": 1, "status": "updated"}
+    assigned_repository.ensure_assigned.assert_called_once_with(project, employee)
+    user_repository.get_direct_project_member_candidates.assert_called_once_with(
+        actor,
+        [employee],
+        can_search_all_users=False,
+    )
+    role_repository.project.grant_all.assert_called_once_with(user_id=20, project_id=10)
+    invitation_service.get_api_invited_user_list_by_project.assert_called_once_with(project)
+
+
+def test_active_email_match_outside_candidate_scope_stays_on_invitation_track() -> None:
+    """An existing non-admin target still receives an invitation instead of direct access."""
+
+    actor = User.model_construct(is_admin=False, preferred_lang="en-US", firstname="Actor", lastname="User")
+    target = User.model_construct(id=1, activated_at=object(), preferred_lang="en-US", firstname="Target")
+    project = SimpleNamespace(title="Project")
+    created_invitation = object()
+    invitation = InvitationRelatedResult()
+    invitation.emails_should_invite.add("employee@example.com")
+    invitation.users_by_email["employee@example.com"] = target
+    assigned = Mock()
+    email_service = SimpleNamespace(send_template=Mock())
+    notification_service = SimpleNamespace(notify_project_invited=Mock())
+    repository = SimpleNamespace(
+        project_invitation=SimpleNamespace(create_if_missing=Mock(return_value=created_invitation))
+    )
+    service = ProjectInvitationService(
+        lambda service_type: email_service if service_type.__name__ == "EmailService" else notification_service,
+        lambda _name: None,
+        repository,
+    )
+    setattr(service, "_ProjectInvitationService__assign_project_user", assigned)
+
+    with (
+        patch(
+            "langboard_shared.domain.services.factory.ProjectInvitationService.InfraHelper.get_by_id_like",
+            return_value=project,
+        ),
+        patch.object(
+            service, "_ProjectInvitationService__create_invitation_token_url", return_value="https://example.test"
+        ),
+    ):
+        service.invite_emails(actor, "project", invitation)
+
+    assigned.assert_not_called()
+    repository.project_invitation.create_if_missing.assert_called_once_with(
+        project,
+        "employee@example.com",
+        ANY,
+    )
+    notification_service.notify_project_invited.assert_called_once_with(actor, target, project, created_invitation)
+    email_service.send_template.assert_called_once()
+
+
+def test_existing_member_addition_rejects_arbitrary_uid_outside_candidate_scope() -> None:
+    """Resolving a real user object is insufficient without relationship-scoped eligibility."""
+
+    project = SimpleNamespace(id=10)
+    actor = User.model_construct(id=11)
+    unrelated = User.model_construct(id=20, activated_at=object())
+    assigned_repository = SimpleNamespace(
+        get_all_by_project=Mock(),
+        ensure_assigned=Mock(),
+    )
+    user_repository = SimpleNamespace(get_direct_project_member_candidates=Mock(return_value=[]))
+    service = ProjectService(
+        lambda _type: None,
+        lambda _name: None,
+        SimpleNamespace(project_assigned_user=assigned_repository, user=user_repository),
+    )
+    user_service = SimpleNamespace(can_search_all_users=Mock(return_value=False))
+
+    with (
+        patch(
+            "langboard_shared.domain.services.factory.ProjectService.InfraHelper.get_by_id_like",
+            return_value=project,
+        ),
+        patch.object(service, "_get_service_by_name", return_value=user_service),
+        pytest.raises(ValueError, match="not eligible"),
+    ):
+        service.add_existing_assigned_users(actor, project, [unrelated])
+
+    assigned_repository.get_all_by_project.assert_not_called()
+    assigned_repository.ensure_assigned.assert_not_called()
+
+
+def test_external_invitation_acceptance_grants_card_work_without_admin_access() -> None:
+    """Accepted guests can create and update cards but cannot manage or delete project data."""
+
+    project = SimpleNamespace(id=10)
+    guest = User.model_construct(id=20)
+    grant = Mock()
+    repository = SimpleNamespace(
+        project_assigned_user=SimpleNamespace(
+            ensure_assigned=Mock(return_value=(object(), True)),
+            get_all_by_project=Mock(return_value=[]),
+        ),
+        project_invitation=SimpleNamespace(get_all_by_project_with_user=Mock(return_value=[])),
+        project_user_relationship=SimpleNamespace(ensure_project_relationships=Mock()),
+        role=SimpleNamespace(project=SimpleNamespace(grant=grant)),
+    )
+    project_service = SimpleNamespace(get_api_assigned_user_list=Mock(return_value=[]))
+    service = ProjectInvitationService(
+        lambda service_type: project_service if service_type is ProjectService else None,
+        lambda _name: None,
+        repository,
+    )
+
+    with (
+        patch("langboard_shared.domain.services.factory.ProjectInvitationService.ProjectPublisher.assigned_to_users"),
+        patch("langboard_shared.domain.services.factory.ProjectInvitationService.ProjectInvitationPublisher.accepted"),
+        patch(
+            "langboard_shared.domain.services.factory.ProjectInvitationService.ProjectActivityTask.project_invited_user_accepted"
+        ),
+    ):
+        service._ProjectInvitationService__assign_project_user(project, guest)
+
+    grant.assert_called_once_with(
+        actions=[
+            ProjectRoleAction.Read.value,
+            ProjectRoleAction.CardWrite.value,
+            ProjectRoleAction.CardUpdate.value,
+        ],
+        user_id=guest.id,
+        project_id=project.id,
+    )
+
+
+def test_invitation_acceptance_preserves_an_existing_members_role() -> None:
+    """A stale invitation cannot downgrade a member who already has stronger access."""
+
+    project = SimpleNamespace(id=10)
+    member = User.model_construct(id=20)
+    grant = Mock()
+    repository = SimpleNamespace(
+        project_assigned_user=SimpleNamespace(
+            ensure_assigned=Mock(return_value=(object(), False)),
+            get_all_by_project=Mock(return_value=[]),
+        ),
+        project_invitation=SimpleNamespace(get_all_by_project_with_user=Mock(return_value=[])),
+        project_user_relationship=SimpleNamespace(ensure_project_relationships=Mock()),
+        role=SimpleNamespace(project=SimpleNamespace(grant=grant)),
+    )
+    project_service = SimpleNamespace(get_api_assigned_user_list=Mock(return_value=[]))
+    service = ProjectInvitationService(
+        lambda service_type: project_service if service_type is ProjectService else None,
+        lambda _name: None,
+        repository,
+    )
+
+    with (
+        patch("langboard_shared.domain.services.factory.ProjectInvitationService.ProjectPublisher.assigned_to_users"),
+        patch("langboard_shared.domain.services.factory.ProjectInvitationService.ProjectInvitationPublisher.accepted"),
+        patch(
+            "langboard_shared.domain.services.factory.ProjectInvitationService.ProjectActivityTask.project_invited_user_accepted"
+        ),
+    ):
+        service._ProjectInvitationService__assign_project_user(project, member)
+
+    grant.assert_not_called()
+
+
 def test_invite_tool_schema_and_legacy_replacement_tool_are_distinct() -> None:
     """Consumers can select additive invitations without changing the legacy contract."""
 
