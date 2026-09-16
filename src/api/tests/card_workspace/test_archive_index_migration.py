@@ -53,4 +53,4 @@ def test_archive_page_index_is_the_only_migration_head() -> None:
     config = Config(str(ROOT / "alembic.ini"))
     config.set_main_option("script_location", str(ROOT / "src/api/langboard/migrations"))
 
-    assert ScriptDirectory.from_config(config).get_heads() == ["4e8b1c7d2a90"]
+    assert ScriptDirectory.from_config(config).get_heads() == ["canary_integration_20260917"]
