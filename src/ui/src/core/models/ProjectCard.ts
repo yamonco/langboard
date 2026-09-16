@@ -33,6 +33,13 @@ export interface Interface extends IBaseModel {
     deadline_at?: Date;
     archived_at?: Date;
     can_delete?: bool;
+    creator?: {
+        uid: string;
+        type: "user" | "bot";
+        name: string;
+        avatar: string | null;
+        created_at: string;
+    };
     source_type?: "project_wiki" | (string & {});
     source_uid?: string;
     linked_resource?: {

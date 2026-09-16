@@ -7,7 +7,6 @@ import type { TEditor } from "@/components/Editor/editor-kit";
 import { PlateEditor } from "@/components/Editor/plate-editor";
 import { sanitizeEditorContent } from "@/components/Editor/utils";
 import { BotModel, ProjectCard, ProjectCardComment } from "@/core/models";
-import type { IEditorContent } from "@/core/models/Base";
 import type { TUserLikeModel } from "@/core/models/ModelRegistry";
 import { ProjectRole } from "@/core/models/roles";
 import { useBoardCard, useBoardCardPanel } from "@/core/providers/BoardCardProvider";
@@ -16,22 +15,17 @@ import { useBoardCardSectionSaveActions } from "@/pages/BoardPage/components/car
 import useGetCardComments from "@/controllers/api/card/comment/useGetCardComments";
 import { EEditorType } from "@langboard/core/constants";
 import { AIChatPlugin, AIPlugin } from "@platejs/ai/react";
-import { memo, startTransition, type MouseEvent, type PointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, type PointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { unified } from "unified";
-import remarkParse from "remark-parse";
-import remarkGfm from "remark-gfm";
-import type { Node as MarkdownNode } from "unist";
-import { descriptionChunkSource } from "@/pages/BoardPage/components/card/descriptionChunkSource";
 import { Utils } from "@langboard/core/utils";
+import { VirtualizedDescriptionContent } from "@/pages/BoardPage/components/card/description/VirtualizedDescriptionContent";
+import { buildDescriptionChunks } from "@/pages/BoardPage/components/card/description/descriptionChunks";
 import {
     captureCardCommentAnchor,
     normalizeAnchorPreview,
     resolveCardCommentAnchorElement,
     type ICardCommentAnchor,
 } from "@/pages/BoardPage/components/card/comment/commentAnchor";
-
-const FULL_COPY_TEXT_SAMPLE_LENGTH = 80;
 
 interface IAnchorComposerPosition {
     anchor: ICardCommentAnchor;
@@ -69,44 +63,8 @@ function AnchorCommentSubscription({ comment, onChange }: IAnchorCommentSubscrip
     return null;
 }
 
-function normalizeCopyText(value: string): string {
-    return value
-        .replace(/\uFEFF/g, "")
-        .replace(/\s+/g, "")
-        .trim();
-}
-
-function getRenderedDescriptionText(descriptionElement: HTMLElement): string {
-    return Array.from(descriptionElement.querySelectorAll("[data-slate-editor]"))
-        .map((editorElement) => editorElement.textContent ?? "")
-        .join("\n");
-}
-
-function hasHiddenDescriptionChunks(descriptionElement: HTMLElement, showMoreText: string, showAllText: string): bool {
-    return Array.from(descriptionElement.querySelectorAll("*")).some((element) => {
-        const text = element.textContent?.trim();
-        return text === showMoreText || text === showAllText;
-    });
-}
-
-function isFullRenderedDescriptionSelection(descriptionElement: HTMLElement, selectedText: string, showMoreText: string, showAllText: string): bool {
-    if (hasHiddenDescriptionChunks(descriptionElement, showMoreText, showAllText)) {
-        return false;
-    }
-
-    const renderedText = normalizeCopyText(getRenderedDescriptionText(descriptionElement));
-    const selected = normalizeCopyText(selectedText);
-    if (!renderedText || !selected) {
-        return false;
-    }
-
-    if (renderedText.length <= FULL_COPY_TEXT_SAMPLE_LENGTH * 2) {
-        return selected === renderedText;
-    }
-
-    const head = renderedText.slice(0, FULL_COPY_TEXT_SAMPLE_LENGTH);
-    const tail = renderedText.slice(-FULL_COPY_TEXT_SAMPLE_LENGTH);
-    return selected.startsWith(head) && selected.endsWith(tail);
+interface IBoardCardDescriptionProps {
+    scrollParentRef: React.RefObject<HTMLDivElement | null>;
 }
 
 export function SkeletonBoardCardDescription() {
@@ -119,7 +77,7 @@ export function SkeletonBoardCardDescription() {
     );
 }
 
-const BoardCardDescription = memo((): React.JSX.Element => {
+const BoardCardDescription = memo(({ scrollParentRef }: IBoardCardDescriptionProps): React.JSX.Element => {
     const { projectUID, card, currentUser, hasRoleAction, isCardEditing, anchoredCommentRef } = useBoardCard();
     const { setIsCommentPanelOpen } = useBoardCardPanel();
     const [t] = useTranslation();
@@ -140,6 +98,7 @@ const BoardCardDescription = memo((): React.JSX.Element => {
     const [anchorMarkers, setAnchorMarkers] = useState<IAnchorMarkerPosition[]>([]);
     const [anchorCommentSnapshots, setAnchorCommentSnapshots] = useState<Record<string, IAnchorCommentSnapshot>>({});
     const pointerDownPositionRef = useRef<{ x: number; y: number } | null>(null);
+    const descriptionSelectAllRef = useRef(false);
     const { registerSectionCancelHandler, registerSectionSaveHandler } = useBoardCardSectionSaveActions();
     const canEdit = hasRoleAction(ProjectRole.EAction.CardUpdate);
     const canStartEditing = canEdit && isCardEditing;
@@ -177,9 +136,7 @@ const BoardCardDescription = memo((): React.JSX.Element => {
         aiChatApi.aiChat?.hide?.();
     }, []);
 
-    const contentLines = description?.content?.split("\n").length ?? 0;
-    const shouldCollapse = !isEditing && contentLines > MAX_COLLAPSE_LINES;
-    const [visibleChunkCount, setVisibleChunkCount] = useState(1);
+    const chunks = useMemo(() => buildDescriptionChunks(description?.content ?? ""), [description?.content]);
     const handleCollaborativeValueReady = useCallback((updateValue: ((value: string) => void) | null) => {
         updateCollaborativeDescriptionRef.current = updateValue;
     }, []);
@@ -224,6 +181,18 @@ const BoardCardDescription = memo((): React.JSX.Element => {
             return;
         }
 
+        const containsSelectionNode = (node: Node | null) => node !== null && descriptionElement.contains(node);
+        const handleSelectAll = (event: KeyboardEvent) => {
+            if (event.key !== "a" || !(event.metaKey || event.ctrlKey)) {
+                return;
+            }
+
+            const selection = window.getSelection();
+            if (containsSelectionNode(selection?.anchorNode ?? null) || containsSelectionNode(selection?.focusNode ?? null)) {
+                descriptionSelectAllRef.current = true;
+            }
+        };
+
         const handleCopy = (event: ClipboardEvent) => {
             const descriptionElement = descriptionRef.current;
             const selection = window.getSelection();
@@ -233,23 +202,25 @@ const BoardCardDescription = memo((): React.JSX.Element => {
                 return;
             }
 
-            const containsSelectionNode = (node: Node | null) => node !== null && descriptionElement.contains(node);
             if (!containsSelectionNode(selection.anchorNode) && !containsSelectionNode(selection.focusNode)) {
                 return;
             }
 
             const markdownContent = description?.content;
-            const shouldCopyMarkdown =
-                Utils.Type.isString(markdownContent) &&
-                isFullRenderedDescriptionSelection(descriptionElement, selectedText, t("editor.Show more"), t("editor.Show all"));
+            const shouldCopyMarkdown = Utils.Type.isString(markdownContent) && descriptionSelectAllRef.current;
+            descriptionSelectAllRef.current = false;
 
             event.clipboardData.setData("text/plain", shouldCopyMarkdown ? markdownContent : selectedText);
             event.preventDefault();
         };
 
+        document.addEventListener("keydown", handleSelectAll, true);
         document.addEventListener("copy", handleCopy, true);
-        return () => document.removeEventListener("copy", handleCopy, true);
-    }, [description, isEditing, t]);
+        return () => {
+            document.removeEventListener("keydown", handleSelectAll, true);
+            document.removeEventListener("copy", handleCopy, true);
+        };
+    }, [description, isEditing]);
 
     const handlePointerDown = useCallback(
         (e: PointerEvent<HTMLDivElement>) => {
@@ -257,6 +228,7 @@ const BoardCardDescription = memo((): React.JSX.Element => {
                 return;
             }
 
+            descriptionSelectAllRef.current = false;
             pointerDownPositionRef.current = {
                 x: e.clientX,
                 y: e.clientY,
@@ -351,7 +323,7 @@ const BoardCardDescription = memo((): React.JSX.Element => {
         const observer = new ResizeObserver(updateMarkers);
         observer.observe(root);
         return () => observer.disconnect();
-    }, [anchorCommentSnapshots, comments, description?.content, isEditing, shouldCollapse, visibleChunkCount]);
+    }, [anchorCommentSnapshots, comments, description?.content, isEditing, chunks.length]);
 
     const openAnchoredComment = useCallback(
         (commentUID: string) => {
@@ -427,276 +399,39 @@ const BoardCardDescription = memo((): React.JSX.Element => {
                     </span>
                 </button>
             ))}
-            {shouldCollapse ? (
-                <CollapsibleDescriptionContent
-                    description={description}
+            {isEditing ? (
+                <PlateEditor
+                    value={description}
                     mentionables={mentionables}
-                    cards={cards}
-                    visibleChunkCount={visibleChunkCount}
-                    setVisibleChunkCount={setVisibleChunkCount}
+                    linkables={cards}
+                    currentUser={currentUser}
+                    containerClassName="overflow-y-visible"
+                    className="h-full min-h-[calc(theme(spacing.56)_-_theme(spacing.8))] px-6 py-3"
+                    readOnly={false}
+                    editorType={EEditorType.CardDescription}
+                    form={{
+                        project_uid: projectUID,
+                        card_uid: card.uid,
+                    }}
+                    placeholder={t("card.No description")}
+                    setValue={() => {}}
+                    authoritativeCollaborativeValue={description?.content ?? ""}
+                    onCollaborativeValueReady={handleCollaborativeValueReady}
+                    onCollaborativeValueResetReady={handleCollaborativeValueResetReady}
+                    serializeOnChange={false}
+                    focusOnReady
+                    editorRef={editorRef}
                 />
             ) : (
-                <Box>
-                    <PlateEditor
-                        value={description}
-                        mentionables={mentionables}
-                        linkables={cards}
-                        currentUser={currentUser}
-                        containerClassName="overflow-y-visible"
-                        className={cn("h-full min-h-[calc(theme(spacing.56)_-_theme(spacing.8))]", isEditing ? "px-6 py-3" : "")}
-                        readOnly={!isEditing}
-                        editorType={EEditorType.CardDescription}
-                        form={{
-                            project_uid: projectUID,
-                            card_uid: card.uid,
-                        }}
-                        placeholder={!isEditing ? t("card.No description") : undefined}
-                        setValue={() => {}}
-                        authoritativeCollaborativeValue={description?.content ?? ""}
-                        onCollaborativeValueReady={handleCollaborativeValueReady}
-                        onCollaborativeValueResetReady={handleCollaborativeValueResetReady}
-                        serializeOnChange={false}
-                        focusOnReady={isEditing}
-                        editorRef={editorRef}
-                    />
-                </Box>
-            )}
-        </Box>
-    );
-});
-
-interface ICollapsibleDescriptionContentProps {
-    description: IEditorContent | undefined;
-    mentionables: TUserLikeModel[];
-    cards: ProjectCard.TModel[];
-    visibleChunkCount: number;
-    setVisibleChunkCount: React.Dispatch<React.SetStateAction<number>>;
-}
-
-const MAX_COLLAPSE_LINES = 10;
-const MAX_CHUNK_BLOCKS = 10;
-const MAX_HEAVY_LIST_ITEMS = 6;
-const MAX_HEAVY_PARAGRAPH_LENGTH = 1200;
-const SHOW_ALL_BATCH_SIZE = 2;
-
-interface IMarkdownNode extends Pick<MarkdownNode, "position"> {
-    type?: string;
-    children?: IMarkdownNode[];
-    value?: string;
-    alt?: string | null;
-}
-
-function countMarkdownListItems(node: IMarkdownNode | undefined): number {
-    if (!node?.children) {
-        return 0;
-    }
-
-    return node.children.reduce((count, child) => {
-        if (child?.type !== "listItem") {
-            return count;
-        }
-
-        return count + 1;
-    }, 0);
-}
-
-function getMarkdownTextLength(node: IMarkdownNode | undefined): number {
-    if (!node) {
-        return 0;
-    }
-
-    const ownLength = Utils.Type.isString(node.value) ? node.value.length : Utils.Type.isString(node.alt) ? node.alt.length : 0;
-    if (!node.children?.length) {
-        return ownLength;
-    }
-
-    return ownLength + node.children.reduce((length, child) => length + getMarkdownTextLength(child), 0);
-}
-
-function isHeavyMarkdownBlock(node: IMarkdownNode | undefined): bool {
-    if (!node?.type) {
-        return false;
-    }
-
-    if (node.type === "table" || node.type === "code" || node.type === "blockquote") {
-        return true;
-    }
-
-    if (node.type === "list") {
-        return countMarkdownListItems(node) >= MAX_HEAVY_LIST_ITEMS;
-    }
-
-    if (node.type === "paragraph") {
-        return getMarkdownTextLength(node) >= MAX_HEAVY_PARAGRAPH_LENGTH;
-    }
-
-    return false;
-}
-
-const CollapsibleDescriptionContent = memo((props: ICollapsibleDescriptionContentProps): React.JSX.Element => {
-    const { description, mentionables, cards, visibleChunkCount, setVisibleChunkCount } = props;
-    const [t] = useTranslation();
-    const { projectUID, card, currentUser } = useBoardCard();
-    const chunkContents = useMemo(() => {
-        const content = description?.content ?? "";
-
-        if (!sanitizeEditorContent(content)) {
-            return [{ content: "" }];
-        }
-
-        const root = unified().use(remarkParse).use(remarkGfm).parse(content) as { children?: IMarkdownNode[] };
-        const children = Array.isArray(root.children) ? root.children : [];
-
-        if (children.length === 0) {
-            return [{ content }];
-        }
-
-        const chunks: IEditorContent[] = [];
-        let currentChunk: IMarkdownNode[] = [];
-
-        const pushChunk = (chunkChildren: IMarkdownNode[]) => {
-            if (chunkChildren.length === 0) {
-                return;
-            }
-
-            chunks.push({
-                content: descriptionChunkSource(content, chunkChildren),
-            });
-        };
-
-        for (const child of children) {
-            if (isHeavyMarkdownBlock(child)) {
-                pushChunk(currentChunk);
-                currentChunk = [];
-                pushChunk([child]);
-                continue;
-            }
-
-            currentChunk.push(child);
-            if (currentChunk.length >= MAX_CHUNK_BLOCKS) {
-                pushChunk(currentChunk);
-                currentChunk = [];
-            }
-        }
-
-        pushChunk(currentChunk);
-
-        return chunks;
-    }, [description]);
-    const totalChunkCount = Math.max(1, chunkContents.length);
-    const showAllFrameRef = useRef<number | null>(null);
-    const clampedVisibleChunkCount = Math.min(visibleChunkCount, totalChunkCount);
-    const hasMoreContent = clampedVisibleChunkCount < totalChunkCount;
-
-    useEffect(() => {
-        return () => {
-            if (showAllFrameRef.current !== null) {
-                cancelAnimationFrame(showAllFrameRef.current);
-            }
-        };
-    }, []);
-
-    const createChunk = useCallback(
-        (chunkIndex: number) => {
-            const chunkContent = chunkContents[chunkIndex] ?? { content: "" };
-
-            return (
-                <Box key={chunkIndex} className="[contain-intrinsic-size:auto_160px] [content-visibility:auto]">
-                    <PlateEditor
-                        value={chunkContent}
-                        mentionables={mentionables}
-                        linkables={cards}
-                        currentUser={currentUser}
-                        containerClassName="overflow-y-visible"
-                        className="h-full min-h-0"
-                        readOnly
-                        editorType={EEditorType.CardDescription}
-                        form={{
-                            project_uid: projectUID,
-                            card_uid: card.uid,
-                        }}
-                        placeholder={chunkIndex === 0 ? t("card.No description") : undefined}
-                        setValue={() => {}}
-                    />
-                </Box>
-            );
-        },
-        [chunkContents, mentionables, cards, currentUser, projectUID, card]
-    );
-
-    const handleExpand = useCallback((e: MouseEvent<HTMLDivElement> | PointerEvent<HTMLDivElement>) => {
-        e.stopPropagation();
-        e.preventDefault();
-        setVisibleChunkCount((prev) => prev + 1);
-    }, []);
-    const handleExpandAll = useCallback(
-        (e: MouseEvent<HTMLDivElement> | PointerEvent<HTMLDivElement>) => {
-            e.stopPropagation();
-            e.preventDefault();
-
-            if (showAllFrameRef.current !== null) {
-                cancelAnimationFrame(showAllFrameRef.current);
-            }
-
-            const expandNext = () => {
-                startTransition(() => {
-                    setVisibleChunkCount((prev) => {
-                        const next = Math.min(prev + SHOW_ALL_BATCH_SIZE, totalChunkCount);
-
-                        if (next < totalChunkCount) {
-                            showAllFrameRef.current = requestAnimationFrame(expandNext);
-                        } else {
-                            showAllFrameRef.current = null;
-                        }
-
-                        return next;
-                    });
-                });
-            };
-
-            expandNext();
-        },
-        [totalChunkCount]
-    );
-
-    return (
-        <Box position="relative">
-            {Array.from({ length: clampedVisibleChunkCount }, (_, chunkIndex) => createChunk(chunkIndex))}
-            {hasMoreContent && (
-                <>
-                    <Flex position="relative" justify="center" pb="2" z="50" gap="3" wrap>
-                        <Flex
-                            inline
-                            items="center"
-                            gap="1"
-                            textSize="sm"
-                            weight="semibold"
-                            className="text-accent-foreground/70 transition-colors hover:text-accent-foreground"
-                            cursor="pointer"
-                            onPointerDown={handleExpand}
-                        >
-                            {t("editor.Show more")}
-                            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                            </svg>
-                        </Flex>
-                        <Flex
-                            inline
-                            items="center"
-                            gap="1"
-                            textSize="sm"
-                            weight="semibold"
-                            className="text-accent-foreground/70 transition-colors hover:text-accent-foreground"
-                            cursor="pointer"
-                            onPointerDown={handleExpandAll}
-                        >
-                            {t("editor.Show all")}
-                            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v14m-7-7h14" />
-                            </svg>
-                        </Flex>
-                    </Flex>
-                </>
+                <VirtualizedDescriptionContent
+                    chunks={chunks}
+                    currentUser={currentUser}
+                    mentionables={mentionables}
+                    cards={cards}
+                    projectUID={projectUID}
+                    cardUID={card.uid}
+                    scrollParentRef={scrollParentRef}
+                />
             )}
         </Box>
     );

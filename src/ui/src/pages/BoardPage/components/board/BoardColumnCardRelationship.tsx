@@ -24,6 +24,12 @@ import {
 import { draggable } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
 import { Utils } from "@langboard/core/utils";
 import { memo, useCallback, useEffect, useReducer, useRef, useState } from "react";
+import {
+    RELATIONSHIP_HOLD_CIRCUMFERENCE,
+    RELATIONSHIP_HOLD_RADIUS,
+    relationshipHoldProgress,
+    relationshipHoldStrokeOffset,
+} from "./BoardRelationshipHoldProgress";
 import { relationshipSideCounts } from "./BoardRelationshipGeometry";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
@@ -164,7 +170,39 @@ const BoardColumnCardRelationshipButton = memo(({ type, attributes, compact, has
     const [targetCardUID, setTargetCardUID] = useState<string>();
     const [selectedRelationshipUID, setSelectedRelationshipUID] = useState<string>();
     const [isSaving, setIsSaving] = useState(false);
+    const [holdProgress, setHoldProgress] = useState(0);
+    const [isHoldArmed, setIsHoldArmed] = useState(false);
+    const holdRafRef = useRef<number>();
     const { mutateAsync: updateCardRelationships } = useUpdateCardRelationships({ interceptToast: true });
+
+    const stopHold = useCallback(() => {
+        if (holdRafRef.current) cancelAnimationFrame(holdRafRef.current);
+        holdRafRef.current = undefined;
+        setHoldProgress(0);
+        setIsHoldArmed(false);
+    }, []);
+
+    const startHold = useCallback(
+        (event: React.PointerEvent<HTMLButtonElement>) => {
+            // Hold-to-preview is desktop hover intent; touch keeps an explicit click path.
+            if (event.pointerType === "touch") return;
+            stopHold();
+            setIsHoldArmed(true);
+            const startTime = performance.now();
+            const advance = (now: number) => {
+                const elapsed = now - startTime;
+                setHoldProgress(relationshipHoldProgress(elapsed));
+                if (elapsed < RELATIONSHIP_HOLD_OPEN_MS) {
+                    holdRafRef.current = requestAnimationFrame(advance);
+                    return;
+                }
+                stopHold();
+                event.currentTarget.dispatchEvent(new CustomEvent(BOARD_CARD_RELATIONSHIP_PREVIEW_EVENT, { bubbles: true }));
+            };
+            holdRafRef.current = requestAnimationFrame(advance);
+        },
+        [stopHold]
+    );
 
     useEffect(() => {
         const button = buttonRef.current;
@@ -304,18 +342,52 @@ const BoardColumnCardRelationshipButton = memo(({ type, attributes, compact, has
                 )}
                 title={title}
                 titleSide={isParent ? "right" : "left"}
-                onClick={() => {
+                onPointerEnter={startHold}
+                onPointerDown={stopHold}
+                onPointerLeave={stopHold}
+                onPointerCancel={stopHold}
+                onBlur={stopHold}
+                onClick={(event) => {
+                    stopHold();
                     if (!draggedRef.current) {
                         setFilters(type);
                     }
+                    event.stopPropagation();
                 }}
                 {...attributes}
             >
-                {hiddenSameColumnCount ? (
-                    <>+{Math.min(hiddenSameColumnCount, 99)}</>
-                ) : (
-                    <IconComponent icon="git-fork" size={compact ? "3" : "4"} className={isParent ? undefined : "rotate-180"} />
-                )}
+                <span className="relative flex size-full items-center justify-center">
+                    <svg
+                        aria-hidden="true"
+                        viewBox="0 0 28 28"
+                        className={cn(
+                            "pointer-events-none absolute inset-0 h-full w-full text-primary transition-transform duration-200",
+                            holdProgress === 1 ? "scale-125" : isHoldArmed ? "scale-105" : "scale-100"
+                        )}
+                        style={isParent ? { transform: "scaleX(-1)" } : undefined}
+                    >
+                        <circle cx="14" cy="14" r={RELATIONSHIP_HOLD_RADIUS} fill="none" className="stroke-border" strokeWidth="2" />
+                        <circle
+                            cx="14"
+                            cy="14"
+                            r={RELATIONSHIP_HOLD_RADIUS}
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeDasharray={RELATIONSHIP_HOLD_CIRCUMFERENCE}
+                            strokeDashoffset={relationshipHoldStrokeOffset(holdProgress)}
+                            transform="rotate(-90 14 14)"
+                            className="transition-opacity"
+                            style={{ opacity: holdProgress > 0 ? 1 : 0 }}
+                        />
+                    </svg>
+                    {hiddenSameColumnCount ? (
+                        <>+{Math.min(hiddenSameColumnCount, 99)}</>
+                    ) : (
+                        <IconComponent icon="git-fork" size={compact ? "3" : "4"} className={isParent ? undefined : "rotate-180"} />
+                    )}
+                </span>
             </Button>
             {dragLine &&
                 createPortal(

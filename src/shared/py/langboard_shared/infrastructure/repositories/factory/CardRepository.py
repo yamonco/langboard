@@ -7,7 +7,17 @@ from ....core.domain import BaseOrderRepository
 from ....core.schema import TimeBasedPagination
 from ....core.types import SafeDateTime
 from ....core.types.ParamTypes import TCardParam, TColumnParam, TProjectParam, TUserParam
-from ....domain.models import Card, CardAssignedUser, CardAttachment, CardComment, Project, ProjectColumn, ProjectRole
+from ....domain.models import (
+    Bot,
+    Card,
+    CardAssignedUser,
+    CardAttachment,
+    CardComment,
+    Project,
+    ProjectColumn,
+    ProjectRole,
+    User,
+)
 from ....helpers import InfraHelper
 
 
@@ -124,6 +134,33 @@ class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
             cards = result.all()
 
         return cards
+
+    def get_board_creators(
+        self,
+        project: TProjectParam,
+        archive_visible_since: SafeDateTime,
+    ) -> dict[int, User | Bot]:
+        """Resolve immutable card authors with one query instead of per-card lookups."""
+
+        project_id = InfraHelper.convert_id(project)
+        query = (
+            SqlBuilder.select.tables(Card, User, Bot)
+            .outerjoin(User, Card.column("created_by_user_id") == User.column("id"))
+            .outerjoin(Bot, Card.column("created_by_bot_id") == Bot.column("id"))
+            .where(Card.column("project_id") == project_id)
+            .where(
+                (Card.column("archived_at") == None)  # noqa: E711
+                | (Card.column("archived_at") >= archive_visible_since)
+            )
+        )
+
+        creators: dict[int, User | Bot] = {}
+        with DbSession.use(readonly=True) as db:
+            for card, user, bot in db.exec(query).all():
+                creator = user if user is not None else bot
+                if creator is not None:
+                    creators[card.id] = creator
+        return creators
 
     def get_archived_page_by_project(
         self,

@@ -151,6 +151,8 @@ class CardService(BaseDomainService):
                 labels[card_label.card_id] = []
             labels[card_label.card_id].append(label.api_response())
 
+        creators = self.repo.card.get_board_creators(project, archive_visible_since)
+
         cards = []
         resource_payloads = self._get_linked_resource_payloads(
             user_or_bot,
@@ -164,12 +166,27 @@ class CardService(BaseDomainService):
                 member_uids=members.get(card.id, []),
                 relationships=relationships.get(card.id, []),
                 labels=labels.get(card.id, []),
+                creator=self._card_creator_projection(card, creators.get(card.id)),
             )
             if getattr(card, "is_linked_resource", False):
                 api_card["linked_resource"] = resource_payloads[card.get_uid()]
             cards.append(api_card)
 
         return cards
+
+    def _card_creator_projection(self, card: Card, creator: User | Bot | None) -> dict[str, Any] | None:
+        """Return only display-safe author data for the dense board list."""
+
+        if creator is None:
+            return None
+
+        return {
+            "uid": creator.get_uid(),
+            "type": User.USER_TYPE if isinstance(creator, User) else Bot.BOT_TYPE,
+            "name": creator.get_fullname(),
+            "avatar": creator.api_response().get("avatar"),
+            "created_at": card.created_at.isoformat(),
+        }
 
     def _get_linked_resource_payloads(
         self,

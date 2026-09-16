@@ -355,7 +355,7 @@ function BoardTaskCardResult({ isExpanded, setIsExpanded, onClose, onEditModeSta
                                         <BoardTaskMetadataSection cardUID={card.uid} />
                                         <BoardCardMobileActions />
                                         <BoardCardSection title="card.Description" className="relative min-h-56">
-                                            <BoardCardDescription key={`board-card-description-${card.uid}`} />
+                                            <BoardCardDescription key={`board-card-description-${card.uid}`} scrollParentRef={contentViewportRef} />
                                         </BoardCardSection>
                                         {checklists.length > 0 && (
                                             <BoardCardSection title="card.Checklists">

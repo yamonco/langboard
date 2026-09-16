@@ -18,6 +18,7 @@
   "Assign members": "Assign members",
   "Select members...": "Select members...",
   "Members": "Members",
+  "Created by {{name}}": "Created by {{name}}",
   "Deadline": "Deadline",
   "Checklist progress: {{completed}} of {{total}} complete": "Checklist progress: {{completed}} of {{total}} complete",
   "Deadline {{date}}": "Deadline {{date}}",

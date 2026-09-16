@@ -1,4 +1,5 @@
 import Button from "@/components/base/Button";
+import Avatar from "@/components/base/Avatar";
 import Card from "@/components/base/Card";
 import Collapsible from "@/components/base/Collapsible";
 import Flex from "@/components/base/Flex";
@@ -118,6 +119,7 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
         [projectMembers, cardMemberUIDs]
     );
     const commentCount = card.useField("count_comment");
+    const creator = card.useField("creator");
     const { updateCollapsed } = useCardStore();
     const isCollapsed = useCardIsCollapsed(card.uid);
     const labels = card.useForeignFieldArray("labels");
@@ -332,9 +334,29 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
                             </Card.Content>
                         )}
                         <Card.Footer className="flex items-center justify-between gap-2 px-3 pb-3 text-xs text-muted-foreground">
-                            <Flex items="center" gap="1.5" className={!commentCount ? "invisible" : undefined}>
-                                <IconComponent icon="message-square" size="3.5" />
-                                <span>{commentCount}</span>
+                            <Flex items="center" gap="2">
+                                {creator && (
+                                    <span
+                                        title={t("card.Created by {{name}}", {
+                                            name: creator.name,
+                                        })}
+                                        className="relative inline-flex shrink-0"
+                                    >
+                                        <Avatar.Root size="xs">
+                                            {creator.avatar && <Avatar.Image src={creator.avatar} alt={creator.name} />}
+                                            <Avatar.Fallback className="text-[10px] font-medium">
+                                                {Utils.String.getInitials(creator.name, "")}
+                                            </Avatar.Fallback>
+                                        </Avatar.Root>
+                                        <span className="pointer-events-none absolute -bottom-0.5 -right-0.5 rounded-full bg-background p-px">
+                                            <IconComponent icon="pen-line" size="2.5" />
+                                        </span>
+                                    </span>
+                                )}
+                                <Flex items="center" gap="1.5" className={!commentCount ? "invisible" : undefined}>
+                                    <IconComponent icon="message-square" size="3.5" />
+                                    <span>{commentCount}</span>
+                                </Flex>
                             </Flex>
                             <UserAvatarList
                                 maxVisible={3}

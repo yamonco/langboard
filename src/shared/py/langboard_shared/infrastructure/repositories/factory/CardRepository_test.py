@@ -1,5 +1,10 @@
 """Bounded literal search across card text, comments and attachment names."""
 
+import os
+
+
+os.environ.setdefault("PROJECT_NAME", "langboard")
+
 from datetime import timedelta
 import pytest
 from sqlalchemy import create_engine, update
@@ -8,7 +13,8 @@ from ....core.db import DbSession, EditorContentModel
 from ....core.db.DbEngine import DbEngine
 from ....core.storage import FileModel
 from ....core.types import SafeDateTime
-from ....domain.models import Card, CardAttachment, CardComment, Project, ProjectColumn, User
+from ....domain.models import Bot, Card, CardAttachment, CardComment, Project, ProjectColumn, User
+from ....domain.models.BaseBotModel import BotPlatform, BotPlatformRunningType
 from .CardRepository import CardRepository, _editor_search_text
 
 
@@ -131,5 +137,71 @@ def test_search_matches_comment_only_unicode_and_deduplicates_without_cross_proj
         assert "#>>" in compiled and "TEXT[]" in compiled
         with pytest.raises(ValueError, match="Unsupported"):
             _editor_search_text(CardComment.column("content"), "unknown")
+    finally:
+        engine.dispose()
+
+
+def test_board_creators_resolve_visible_user_and_bot_authors_without_hiding_recent_archives(monkeypatch):
+    """Keep visible recent archive authors while excluding hidden old archive cards."""
+    engine = create_engine("sqlite://")
+    for model in (User, Bot, Project, ProjectColumn, Card):
+        model.__table__.create(engine)
+    monkeypatch.setattr(DbEngine, "get_main_engine", lambda: engine)
+    monkeypatch.setattr(DbEngine, "get_readonly_engine", lambda: engine)
+    try:
+        archive_visible_since = SafeDateTime(2026, 9, 10)
+        with DbSession.use(readonly=False) as db:
+            author = User(firstname="Card", lastname="Author", email="creator@example.invalid", password="test-only")
+            bot = Bot(
+                name="Integration",
+                bot_uname="integration",
+                platform=BotPlatform.Default,
+                platform_running_type=BotPlatformRunningType.Default,
+                app_api_token="test-only",
+            )
+            db.insert(author)
+            db.insert(bot)
+            project = Project(owner_id=author.id, title="Creator projection fixture")
+            db.insert(project)
+            column = ProjectColumn(project_id=project.id, name="Todo")
+            db.insert(column)
+            cards = {
+                "active": Card(
+                    project_id=project.id,
+                    project_column_id=column.id,
+                    title="Active",
+                    created_by_user_id=author.id,
+                ),
+                "bot": Card(
+                    project_id=project.id,
+                    project_column_id=column.id,
+                    title="Bot created",
+                    created_by_bot_id=bot.id,
+                ),
+                "recent_archive": Card(
+                    project_id=project.id,
+                    project_column_id=column.id,
+                    title="Recent archive",
+                    created_by_user_id=author.id,
+                    archived_at=archive_visible_since + timedelta(days=1),
+                ),
+                "old_archive": Card(
+                    project_id=project.id,
+                    project_column_id=column.id,
+                    title="Old archive",
+                    created_by_user_id=author.id,
+                    archived_at=archive_visible_since - timedelta(days=1),
+                ),
+            }
+            for card in cards.values():
+                db.insert(card)
+        repository = CardRepository(lambda _: None, lambda _: None)
+        creators = repository.get_board_creators(project, archive_visible_since)
+
+        assert set(creators) == {cards["active"].id, cards["bot"].id, cards["recent_archive"].id}
+        assert creators[cards["active"].id].id == author.id
+        assert creators[cards["recent_archive"].id].id == author.id
+        assert creators[cards["bot"].id].id == bot.id
+        assert cards["old_archive"].id not in creators
     finally:
         engine.dispose()

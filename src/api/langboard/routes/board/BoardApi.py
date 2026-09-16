@@ -295,6 +295,13 @@ def get_archived_project_cards(
                                 "member_uids": "string[]",
                                 "relationships": [CardRelationship],
                                 "labels": [ProjectLabel],
+                                "creator?": {
+                                    "uid": "string",
+                                    "type": "Enum[user, bot]",
+                                    "name": "string",
+                                    "avatar": "string?",
+                                    "created_at": "string",
+                                },
                                 "linked_resource?": {
                                     "type": "string",
                                     "uid": "string",
