@@ -1,5 +1,11 @@
 from .Attachment import ChangeAttachmentNameForm
-from .Card import ChangeCardDetailsForm, CreateCardForm, UpdateCardLabelsForm, UpdateCardRelationshipsForm
+from .Card import (
+    ChangeCardDetailsForm,
+    CreateCardForm,
+    PatchCardGraphForm,
+    UpdateCardLabelsForm,
+    UpdateCardRelationshipsForm,
+)
 from .Chat import CreateChatTemplate, UpdateChatTemplate
 from .Check import (
     CardChecklistNotifyForm,
@@ -40,6 +46,7 @@ __all__ = [
     "CreateCardForm",
     "UpdateCardLabelsForm",
     "UpdateCardRelationshipsForm",
+    "PatchCardGraphForm",
     "ChangeCardDetailsForm",
     "CreateChatTemplate",
     "UpdateChatTemplate",

@@ -113,3 +113,63 @@ def test_concurrent_graph_patches_cannot_create_duplicates_or_cycles(
             connection.execute(text("DROP TABLE IF EXISTS card"))
             connection.execute(text("DROP TABLE IF EXISTS project"))
         engine.dispose()
+
+
+def test_concurrent_additive_patches_preserve_both_new_relationships(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Two sessions adding different edges never replace each other's committed work."""
+
+    assert DATABASE_URL is not None
+    engine = create_engine(DATABASE_URL)
+    with engine.begin() as connection:
+        connection.execute(text("DROP TABLE IF EXISTS card_relationship"))
+        connection.execute(text("DROP TABLE IF EXISTS card"))
+        connection.execute(text("DROP TABLE IF EXISTS project"))
+        connection.execute(text("CREATE TABLE project (id BIGINT PRIMARY KEY, deleted_at TIMESTAMP)"))
+        connection.execute(
+            text("CREATE TABLE card (id BIGINT PRIMARY KEY, project_id BIGINT NOT NULL, deleted_at TIMESTAMP)")
+        )
+        connection.execute(
+            text(
+                """
+                CREATE TABLE card_relationship (
+                    id BIGINT PRIMARY KEY,
+                    created_at TIMESTAMP NOT NULL,
+                    updated_at TIMESTAMP NOT NULL,
+                    relationship_type_id BIGINT NOT NULL,
+                    card_id_parent BIGINT NOT NULL,
+                    card_id_child BIGINT NOT NULL
+                )
+                """
+            )
+        )
+        connection.execute(text("INSERT INTO project (id) VALUES (1)"))
+        connection.execute(text("INSERT INTO card (id, project_id) VALUES (10, 1), (20, 1), (30, 1)"))
+
+    monkeypatch.setattr(DbEngine, "get_main_engine", lambda: engine)
+    repository = CardRelationshipRepository(lambda _type: None, lambda _name: None)
+    project = Project.model_construct(id=SnowflakeID(1))
+    start = Barrier(2)
+
+    def add(child_id: int) -> None:
+        start.wait()
+        repository.apply_graph_patch(
+            project, {}, {"anchor": 10, "child": child_id}, [("anchor", "child", 1)], lambda _snapshot: []
+        )
+
+    try:
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            futures = [executor.submit(add, 20), executor.submit(add, 30)]
+            for future in futures:
+                future.result(timeout=10)
+
+        with engine.connect() as connection:
+            edges = connection.execute(
+                text("SELECT card_id_parent, card_id_child FROM card_relationship ORDER BY card_id_child")
+            ).all()
+        assert edges == [(10, 20), (10, 30)]
+    finally:
+        with engine.begin() as connection:
+            connection.execute(text("DROP TABLE IF EXISTS card_relationship"))
+            connection.execute(text("DROP TABLE IF EXISTS card"))
+            connection.execute(text("DROP TABLE IF EXISTS project"))
+        engine.dispose()

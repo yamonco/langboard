@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Board touch gesture fixture</title>
+        <style>
+            #board {
+                width: 320px;
+                overflow-x: auto;
+            }
+            #track {
+                width: 3200px;
+                height: 120px;
+            }
+        </style>
+    </head>
+    <body>
+        <div id="board"><div id="track"></div></div>
+        <div id="empty-column" data-drop-order="unset"></div>
+        <script type="module">
+            import { startBoardTouchAutoScroll } from "/src/pages/BoardPage/components/board/BoardTouchAutoScroll.ts";
+            import { nextCardOrder } from "/src/pages/BoardPage/components/board/BoardGestureData.ts";
+
+            const board = document.querySelector("#board");
+            const emptyColumn = document.querySelector("#empty-column");
+            let pointerX = 0;
+            let stop = null;
+            const touchX = (event) => event.changedTouches[0]?.clientX ?? pointerX;
+
+            board.addEventListener("touchstart", (event) => {
+                pointerX = touchX(event);
+                stop?.();
+                stop = startBoardTouchAutoScroll(board, () => pointerX);
+            });
+            board.addEventListener("touchmove", (event) => {
+                pointerX = touchX(event);
+            });
+            board.addEventListener("touchend", (event) => {
+                pointerX = touchX(event);
+                stop?.();
+                stop = null;
+                emptyColumn.dataset.dropOrder = String(nextCardOrder([], "empty"));
+            });
+        </script>
+    </body>
+</html>
