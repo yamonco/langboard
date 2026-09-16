@@ -47,6 +47,7 @@ const BoardCardActionDelete = memo(({ buttonClassName }: IBoardCardActionDeleteP
                 return messageRef.message;
             },
             success: () => {
+                deleteCardModel(card.uid, true);
                 setTimeout(() => {
                     navigate(ROUTES.BOARD.MAIN(projectUID), { replace: true });
                 }, 0);
@@ -55,7 +56,6 @@ const BoardCardActionDelete = memo(({ buttonClassName }: IBoardCardActionDeleteP
             finally: () => {
                 setIsValidating(false);
                 setIsOpened(false);
-                deleteCardModel(card.uid, true);
             },
         });
     };
