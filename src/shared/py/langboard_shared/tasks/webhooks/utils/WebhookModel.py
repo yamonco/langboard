@@ -6,7 +6,10 @@ from ....ai.BotDefaultTrigger import BotDefaultTrigger
 from ....domain.models.bases.BotTriggerCondition import BotTriggerCondition
 
 
-WEBHOOK_EVENT_NAMES = frozenset(trigger.value for trigger in (*BotTriggerCondition, *BotDefaultTrigger))
+WORK_EVENT_NAME = "work_event"
+WEBHOOK_EVENT_NAMES = frozenset(
+    [*(trigger.value for trigger in (*BotTriggerCondition, *BotDefaultTrigger)), WORK_EVENT_NAME]
+)
 
 
 def validate_webhook_events(events: list[str] | None) -> list[str] | None:
