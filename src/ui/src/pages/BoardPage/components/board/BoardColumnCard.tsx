@@ -48,7 +48,7 @@ const outerStyles: { [Key in TRowState["type"]]?: string } = {
 };
 
 function BoardColumnCard({ card, hierarchyDepth = 0, grouped = false }: { card: ProjectCard.TModel; hierarchyDepth?: number; grouped?: boolean }) {
-    const { canDragCards } = useBoard();
+    const { canDragAndDrop } = useBoard();
     const outerRef = useRef<HTMLDivElement | null>(null);
     const innerRef = useRef<HTMLDivElement | null>(null);
     const [state, setState] = useState<TRowState>(ROW_IDLE);
@@ -140,9 +140,8 @@ function BoardColumnCardDisplay({
     };
 
     const cardClassName = cn(
-        "group/relationship-card relative min-w-0",
-        "data-[relationship-drop-target=true]:ring-2 data-[relationship-drop-target=true]:ring-primary",
-        canDragCards
+        "relative min-w-0",
+        canDragAndDrop
             ? "cursor-pointer touch-pan-y"
             : cn(
                   !selectCardViewType || !isDisabledCard(card.uid) ? "cursor-pointer" : "cursor-not-allowed",
@@ -181,13 +180,7 @@ function BoardColumnCardDisplay({
                             {relationshipSelectionActor.name}
                         </Box>
                     ) : null}
-                    <Box
-                        ref={innerRef}
-                        className={cn(
-                            "w-full rounded-xl transition-shadow data-[member-drop-target=true]:ring-2 data-[member-drop-target=true]:ring-primary",
-                            "data-[member-drop-target=true]:ring-offset-2 data-[member-drop-target=true]:ring-offset-background"
-                        )}
-                    >
+                    <Box ref={innerRef} className="w-full">
                         <BoardColumnCardCollapsible isDragging={state.type !== "idle"} compact={grouped} />
                     </Box>
                 </Box>

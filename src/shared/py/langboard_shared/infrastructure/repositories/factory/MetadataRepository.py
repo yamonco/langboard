@@ -77,18 +77,18 @@ class MetadataRepository(BaseRepository):
         if foreign_key not in model_cls.model_fields:
             return None
 
-        metadata = None
-        with DbSession.use(readonly=True) as db:
+        with DbSession.use(readonly=False) as db:
+            if not self.__lock_foreign_model(db, foreign_model):
+                return None
             result = db.exec(
                 SqlBuilder.select.table(model_cls)
                 .where(
                     (model_cls.column(foreign_key) == foreign_model.id) & (model_cls.column("key") == (old_key or key))
                 )
                 .limit(1)
+                .with_for_update()
             )
             metadata = result.first()
-
-        with DbSession.use(readonly=False) as db:
             if not metadata:
                 params: dict[str, Any] = {
                     "key": key,
@@ -117,6 +117,8 @@ class MetadataRepository(BaseRepository):
 
         metadata = None
         with DbSession.use(readonly=False) as db:
+            if not self.__lock_foreign_model(db, foreign_model):
+                return None
             result = db.exec(
                 SqlBuilder.select.table(model_cls)
                 .where((model_cls.column(foreign_key) == foreign_model.id) & (model_cls.column("key") == key))
@@ -153,6 +155,8 @@ class MetadataRepository(BaseRepository):
             keys = [keys]
 
         with DbSession.use(readonly=False) as db:
+            if not self.__lock_foreign_model(db, foreign_model):
+                return False
             db.exec(
                 SqlBuilder.delete.table(model_cls).where(
                     (model_cls.column(foreign_key) == foreign_model.id) & (model_cls.column("key").in_(keys))
@@ -160,6 +164,18 @@ class MetadataRepository(BaseRepository):
             )
 
         return True
+
+    @staticmethod
+    def __lock_foreign_model(db: DbSession, foreign_model: BaseDbModel) -> bool:
+        return (
+            db.exec(
+                SqlBuilder.select.table(type(foreign_model))
+                .where(type(foreign_model).column("id") == foreign_model.id)
+                .limit(1)
+                .with_for_update()
+            ).first()
+            is not None
+        )
 
     def __get_foreign_key(self, foreign_model: BaseDbModel) -> str:
         return f"{foreign_model.__tablename__}_id"

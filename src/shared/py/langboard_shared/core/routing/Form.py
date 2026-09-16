@@ -43,11 +43,12 @@ def form_model(cls: type[_TFormModel]) -> type[_TFormModel]:
 
     for field_name in cls.model_fields:
         field = cls.model_fields[field_name]
+        default = ... if field.is_required() else field.get_default(call_default_factory=True)
         new_parameters.append(
             Parameter(
                 field.alias if field.alias else field_name,
                 Parameter.POSITIONAL_ONLY,
-                default=Form(...) if field.is_required() else Form(field.default),
+                default=Form(default),
                 annotation=field.annotation,
             )
         )
@@ -60,7 +61,7 @@ def form_model(cls: type[_TFormModel]) -> type[_TFormModel]:
 
     sig = signature(from_form)
     sig = sig.replace(parameters=new_parameters)
-    from_form.__signature__ = sig
+    setattr(from_form, "__signature__", sig)
     setattr(cls, "from_form", from_form)
     setattr(cls, "scope", scope)
     return cls

@@ -226,17 +226,6 @@ const BoardColumnCardList = memo(({ column, updateBoard, scrollableRef, onCardCo
     }, [columnCards.length, onCardCountChange]);
 
     const hierarchyGroups = useMemo(() => buildBoardColumnCardHierarchy(columnCards), [columnCards]);
-    const cardGroupIndices = useMemo(() => {
-        const indices = new Map<string, number[]>();
-        hierarchyGroups.forEach((group, index) => {
-            [group.root, ...group.descendants.map(({ card }) => card)].forEach((card) => {
-                const positions = indices.get(card.uid) ?? [];
-                positions.push(index);
-                indices.set(card.uid, positions);
-            });
-        });
-        return indices;
-    }, [hierarchyGroups]);
 
     const virtualizer = useVirtualizer({
         count: hierarchyGroups.length,

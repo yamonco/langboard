@@ -10,6 +10,8 @@ import useDeleteProject from "@/controllers/api/board/settings/useDeleteProject"
 import useCopyProjectAsTemplate from "@/controllers/api/board/settings/useCopyProjectAsTemplate";
 import { deleteProjectModel } from "@/core/helpers/ModelHelper";
 import setupApiErrorHandler from "@/core/helpers/setupApiErrorHandler";
+import useRoleActionFilter from "@/core/hooks/useRoleActionFilter";
+import { SettingRole } from "@/core/models/roles";
 import { usePageNavigateRef } from "@/core/hooks/usePageNavigate";
 import { useBoardSettings } from "@/core/providers/BoardSettingsProvider";
 import { ROUTES } from "@/core/routing/constants";
@@ -20,7 +22,9 @@ import { useTranslation } from "react-i18next";
 const BoardSettingsOther = memo(() => {
     const navigate = usePageNavigateRef();
     const { currentUser, project } = useBoardSettings();
-    const isAdmin = currentUser.useField("is_admin");
+    const settingRoleActions = currentUser.useField("setting_role_actions");
+    const { hasRoleAction } = useRoleActionFilter(settingRoleActions);
+    const canCreateTemplate = hasRoleAction(SettingRole.EAction.ProjectTemplateCreate);
     const [isValidating, setIsValidating] = useState(false);
     const [isApplyingWorkflow, setIsApplyingWorkflow] = useState(false);
     const [isOpened, setIsOpened] = useState(false);
@@ -111,7 +115,7 @@ const BoardSettingsOther = memo(() => {
 
     return (
         <Flex direction="col" py="4" gap="4" items="end">
-            {isAdmin && (
+            {canCreateTemplate && (
                 <Popover.Root open={isTemplateOpen} onOpenChange={setIsTemplateOpen}>
                     <Popover.Trigger asChild>
                         <Button variant="outline" size="sm">

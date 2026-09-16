@@ -30,6 +30,13 @@ if config.config_file_name is not None:
 # target_metadata = mymodel.Base.metadata
 target_metadata = BaseDbModel.metadata
 
+LANGGRAPH_MANAGED_TABLES = {
+    "checkpoint_blobs",
+    "checkpoint_migrations",
+    "checkpoint_writes",
+    "checkpoints",
+}
+
 # other values from the config, defined by the needs of env.py,
 # can be acquired:
 # my_important_option = config.get_main_option("my_important_option")
@@ -80,6 +87,12 @@ def compare_type(
     if isinstance(inspected_type, DateTime) and isinstance(metadata_type, DateTime):
         return False
     return None
+
+
+def include_object(obj: Any, name: str | None, type_: str, reflected: bool, compare_to: Any) -> bool:
+    if type_ != "table" or not reflected or compare_to is not None:
+        return True
+    return name not in LANGGRAPH_MANAGED_TABLES
 
 
 def __is_sqlite_id_column_noise(operation: ops.MigrateOperation) -> bool:
@@ -146,6 +159,7 @@ def run_migrations_offline() -> None:
         dialect_opts={"paramstyle": "named"},
         render_item=render_item,
         compare_type=compare_type,
+        include_object=include_object,
         process_revision_directives=process_revision_directives,
         render_as_batch=render_as_batch,
     )
@@ -163,6 +177,7 @@ def do_run_migrations(connection: Connection) -> None:
         target_metadata=target_metadata,
         render_item=render_item,
         compare_type=compare_type,
+        include_object=include_object,
         process_revision_directives=process_revision_directives,
         render_as_batch=render_as_batch,
     )

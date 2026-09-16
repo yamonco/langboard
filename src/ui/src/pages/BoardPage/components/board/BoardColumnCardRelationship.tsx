@@ -26,6 +26,8 @@ import { Utils } from "@langboard/core/utils";
 import { memo, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
+import { useBoard } from "@/core/providers/BoardProvider";
+import { isRelationshipRenderedInHierarchy } from "@/pages/BoardPage/components/board/BoardColumnCardHierarchy";
 
 export interface IBoardColumnCardRelationshipProps {
     attributes: Record<string, unknown>;
@@ -61,21 +63,9 @@ const BoardColumnCardRelationshipButton = memo(({ type, attributes, compact }: I
     const { setFilters } = params;
     const isParent = type === "parents";
     const { filterRelationships } = useBoardController();
-    const {
-        cards,
-        cardsMap,
-        canDragAndDrop,
-        filterCard,
-        filterCardLabels,
-        filterCardMember,
-        filterCardRelationships,
-        globalRelationshipTypes,
-        project,
-        shouldShowArchivedCard,
-    } = useBoard();
+    const { cardsMap, filterCard, filterCardLabels, filterCardMember, filterCardRelationships, shouldShowArchivedCard } = useBoard();
     const flatRelationships = card.useForeignFieldArray("relationships");
-    const relationships = filterRelationships(card.uid, flatRelationships, isParent);
-    const visibleRelationshipCount = relationships.filter((relationship) => {
+    const relationships = filterRelationships(card.uid, flatRelationships, isParent).filter((relationship) => {
         const relatedCardUID = isParent ? relationship.parent_card_uid : relationship.child_card_uid;
         const relatedCard = cardsMap[relatedCardUID];
         const isRelatedCardVisible =
@@ -86,16 +76,7 @@ const BoardColumnCardRelationshipButton = memo(({ type, attributes, compact }: I
             filterCardLabels(relatedCard) &&
             filterCardRelationships(relatedCard);
         return !isRelationshipRenderedInHierarchy(card, relatedCard, isRelatedCardVisible);
-    }).length;
-    const buttonRef = useRef<HTMLButtonElement | null>(null);
-    const relationshipIndexRef = useRef<TCardRelationshipIndex | undefined>(undefined);
-    const highlightedTargetRef = useRef<HTMLElement | null>(null);
-    const draggedRef = useRef(false);
-    const [dragLine, setDragLine] = useState<IDragLine>();
-    const [targetCardUID, setTargetCardUID] = useState<string>();
-    const [selectedRelationshipUID, setSelectedRelationshipUID] = useState<string>();
-    const [isSaving, setIsSaving] = useState(false);
-    const { mutateAsync: updateCardRelationships } = useUpdateCardRelationships({ interceptToast: true });
+    });
 
     useEffect(() => {
         const button = buttonRef.current;

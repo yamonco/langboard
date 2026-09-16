@@ -138,7 +138,7 @@ class BotTaskHelper:
             bots = [bots]
 
         if emit_webhook:
-            WebhookTask.webhook_task(WebhookModel(event=event.value, data=data))
+            WebhookTask.webhook_task(WebhookModel(event=event.value, data=WebhookTask.minimal_event_data(data)))
 
         if BotTaskHelper.is_bot_authored_event(data):
             logger.info("Skipped scoped bot cascade for bot-authored event: event=%s", event.value)

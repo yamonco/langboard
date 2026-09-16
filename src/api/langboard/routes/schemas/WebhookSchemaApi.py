@@ -40,7 +40,7 @@ _DETERMINISTIC_EVENT_SCHEMAS: dict[str, dict[str, Any]] = {
     "bot_created": {"executor": {}},
     "bot_cron_scheduled": {
         "project_uid": "string",
-        "project_column_uid": "string",
+        "project_column_uid?": "string",
         "card_uid?": "string",
     },
 }
@@ -57,7 +57,7 @@ def webhook_openapi() -> JsonResponse:
 
     registered_schemas = Broker.get_schema("webhook")
     schemas = {
-        event: _DETERMINISTIC_EVENT_SCHEMAS.get(event, registered_schemas.get(event, {}))
+        event: _DETERMINISTIC_EVENT_SCHEMAS.get(event, registered_schemas.get(event) or {})
         for event in sorted(WEBHOOK_EVENT_NAMES)
     }
     bot_schema = {
@@ -165,8 +165,7 @@ def _minimal_event_schema(schema: dict[str, Any]) -> dict[str, Any]:
     result = {
         key: value
         for key, value in schema.items()
-        if key.removesuffix("?") in _SAFE_EVENT_SCHEMA_IDENTIFIERS
-        or key.removesuffix("?") in _SAFE_EVENT_SCHEMA_FIELDS
+        if key.removesuffix("?") in _SAFE_EVENT_SCHEMA_IDENTIFIERS or key.removesuffix("?") in _SAFE_EVENT_SCHEMA_FIELDS
     }
     if "executor" in schema:
         result["executor"] = {"uid": "string", "type": "string", "display_name": "string"}

@@ -5,7 +5,10 @@ from ....core.domain import BaseRepository
 from ....core.types import SnowflakeID
 from ....core.types.ParamTypes import TProjectParam
 from ....domain.models import Project, ProjectEmailNotificationPolicy, ProjectEmailNotificationRecipient, User
-from ....domain.models.ProjectEmailNotificationPolicy import ProjectEmailNotificationCategory
+from ....domain.models.ProjectEmailNotificationPolicy import (
+    ProjectEmailNotificationCategory,
+    ProjectEmailNotificationDeliveryStatus,
+)
 from ....helpers import InfraHelper
 
 
@@ -53,15 +56,22 @@ class ProjectEmailNotificationRepository(BaseRepository[ProjectEmailNotification
         card_move_target_columns: list[str],
         recipient_user_ids: list[SnowflakeID],
         external_recipient_emails: list[str],
-    ) -> ProjectEmailNotificationPolicy:
+    ) -> tuple[ProjectEmailNotificationPolicy, list[str]]:
         """Replace policy and recipients atomically."""
 
         with DbSession.use(readonly=False) as db:
+            locked_project = db.exec(
+                SqlBuilder.select.table(Project).where(Project.column("id") == project.id).limit(1).with_for_update()
+            ).first()
+            if locked_project is None:
+                raise ValueError("Project not found")
+
             policy = db.exec(
                 SqlBuilder.select.table(ProjectEmailNotificationPolicy).where(
                     ProjectEmailNotificationPolicy.column("project_id") == project.id
                 )
             ).first()
+            previous_external_recipient_emails = list(policy.external_recipient_emails) if policy else []
             if policy is None:
                 policy = ProjectEmailNotificationPolicy(
                     project_id=project.id,
@@ -89,7 +99,7 @@ class ProjectEmailNotificationRepository(BaseRepository[ProjectEmailNotification
                 ProjectEmailNotificationRecipient(policy_id=policy.id, user_id=user_id)
                 for user_id in recipient_user_ids
             )
-            return policy
+            return policy, previous_external_recipient_emails
 
     def record_delivery(
         self,
@@ -110,7 +120,11 @@ class ProjectEmailNotificationRepository(BaseRepository[ProjectEmailNotification
             ).first()
             if policy is None:
                 return
-            policy.last_delivery_status = "succeeded" if succeeded else "failed"
+            policy.last_delivery_status = (
+                ProjectEmailNotificationDeliveryStatus.Succeeded
+                if succeeded
+                else ProjectEmailNotificationDeliveryStatus.Failed
+            )
             policy.last_delivery_at = datetime.now(timezone.utc)
             policy.last_delivery_recipient_email = recipient_email
             policy.last_delivery_error = None if succeeded else (error or "SMTP delivery failed")[:1000]

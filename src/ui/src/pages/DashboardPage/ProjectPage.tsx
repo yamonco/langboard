@@ -51,7 +51,7 @@ const ProjectPage = memo(({ currentTab, updateStarredProjects, scrollAreaUpdater
 
     useEffect(() => {
         setPageAliasRef.current("Dashboard");
-    }, [setPageAliasRef]);
+    }, []);
 
     useEffect(() => {
         if (error) {

@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useSocket } from "@/core/providers/SocketProvider";
 import { useEditorData } from "@/core/providers/EditorDataProvider";
 import { IEditorContent } from "@/core/models/Base";
@@ -12,28 +11,16 @@ import { EditorKit } from "@/components/Editor/editor-kit";
 import { DndKit } from "@/components/Editor/plugins/dnd-kit";
 import { createYjsKit } from "@/components/Editor/plugins/yjs-kit";
 
-const EMPTY_PLUGINS: PlatePlugin<any>[] = [];
+const EMPTY_PLUGINS: PlatePlugin[] = [];
 const EMPTY_EDITOR_VALUE: Value = [{ type: "p", children: [{ text: "" }] }];
 
-interface IBaseUseCreateEditor {
-    plugins?: PlatePlugin<any>[];
+export interface TUseCreateEditor {
+    plugins?: PlatePlugin[];
     value?: IEditorContent;
     readOnly?: bool;
     deserializedValue?: Value;
     onCollaborativeSyncChange?: (isSynced: bool) => void;
 }
-
-export interface IUseReadonlyEditor extends IBaseUseCreateEditor {
-    readOnly: true;
-    value: IEditorContent;
-}
-
-export interface IUseEditor extends IBaseUseCreateEditor {
-    readOnly?: false;
-    value?: IEditorContent;
-}
-
-export type TUseCreateEditor = IUseReadonlyEditor | IUseEditor;
 
 export const useCreateEditor = (props: TUseCreateEditor) => {
     const socket = useSocket();
@@ -51,15 +38,15 @@ export const useCreateEditor = (props: TUseCreateEditor) => {
 
     const plugins = useMemo(() => {
         const pluginList = [...EditorKit, ...(customPlugins ?? EMPTY_PLUGINS)];
-        if (!readOnly && socketEvents) {
+        if (!readOnly && socketEvents && chatEventKey && copilotEventKey) {
             const { chatEvents, copilotEvents } = socketEvents;
             const commonEventData = documentID ? { ...formRef.current, document_name: documentID } : formRef.current;
             pluginList.push(
                 ...DndKit,
-                ...createAiKit({ socket, eventKey: chatEventKey!, events: chatEvents, commonEventData }),
+                ...createAiKit({ socket, eventKey: chatEventKey, events: chatEvents, commonEventData }),
                 ...createCopilotKit({
                     socket,
-                    eventKey: copilotEventKey!,
+                    eventKey: copilotEventKey,
                     events: copilotEvents,
                     commonEventData,
                 })

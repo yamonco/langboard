@@ -11,8 +11,6 @@
     "paths": {
       "@/*": ["./src/*"]
     },
-    "baseUrl": ".",
-    "ignoreDeprecations": "6.0",
     "types": ["@langboard/core/global", "react", "react-dom", "vite/client", "node"]
   },
   "include": ["vite.config.ts"]

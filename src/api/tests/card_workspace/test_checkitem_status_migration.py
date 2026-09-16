@@ -4,10 +4,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[4]
-MIGRATION = (
-    ROOT
-    / "src/api/langboard/migrations/versions/20260806132500-a4c79b2e1d63.py"
-)
+MIGRATION = ROOT / "src/api/langboard/migrations/versions/20260806132500-a4c79b2e1d63.py"
 
 
 def test_checkitem_status_migration_matches_enum_like_varchar_storage() -> None:

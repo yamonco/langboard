@@ -30,62 +30,6 @@ export interface IBoardColumnCardCollapsibleProps {
 }
 
 function BoardColumnCardCollapsible({ isDragging, compact = false }: IBoardColumnCardCollapsibleProps) {
-    const { model: card } = ModelRegistry.ProjectCard.useContext<IBoardColumnCardContextParams>();
-
-    if (card.source_type === "project_wiki") {
-        return <BoardColumnWikiCard isDragging={isDragging} />;
-    }
-
-    return <BoardColumnTaskCard isDragging={isDragging} compact={compact} />;
-}
-
-function BoardColumnWikiCard({ isDragging }: IBoardColumnCardCollapsibleProps) {
-    const { selectCardViewType } = useBoardController();
-    const { project, navigateWithFilters } = useBoard();
-    const [t] = useTranslation();
-    const { model: card } = ModelRegistry.ProjectCard.useContext<IBoardColumnCardContextParams>();
-    const resource = card.useField("linked_resource");
-    const openCard = useCallback(() => {
-        if (selectCardViewType || isDragging) {
-            return;
-        }
-
-        navigateWithFilters(ROUTES.BOARD.CARD(project.uid, card.uid));
-    }, [card.uid, isDragging, navigateWithFilters, project.uid, selectCardViewType]);
-
-    if (!resource) {
-        return null;
-    }
-
-    const isAvailable = resource.status === "available";
-    const resourceTitle = isAvailable ? resource.title : undefined;
-    const fallbackTitle = resource.status === "forbidden" ? t("wiki.Restricted wiki") : t("wiki.Source unavailable");
-
-    return (
-        <Card.Root
-            id={`board-card-${card.uid}`}
-            className={cn(
-                "group relative cursor-pointer overflow-hidden border-amber-400/35 bg-gradient-to-br from-amber-50/85 to-background",
-                "shadow-sm transition hover:border-amber-500/65 hover:shadow-md dark:from-amber-950/20 dark:to-card",
-                !!selectCardViewType && "cursor-not-allowed opacity-50"
-            )}
-            onClick={openCard}
-        >
-            <Card.Header className="space-y-2 px-5 py-4">
-                <Flex items="center" justify="between" gap="2">
-                    <Flex items="center" gap="2" className="min-w-0 text-amber-700 dark:text-amber-300">
-                        <IconComponent icon={isAvailable ? "book-text" : "lock"} size="4" />
-                        <span className="text-xs font-semibold uppercase tracking-[0.12em]">{t("wiki.Linked wiki")}</span>
-                    </Flex>
-                    <IconComponent icon="external-link" size="3.5" className="shrink-0 text-muted-foreground opacity-60" />
-                </Flex>
-                <Card.Title className="break-words text-[0.95rem] leading-snug">{resourceTitle || fallbackTitle}</Card.Title>
-            </Card.Header>
-        </Card.Root>
-    );
-}
-
-function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCollapsibleProps) {
     const { selectCardViewType, selectedRelationshipUIDs, currentCardUIDRef, isDisabledCard } = useBoardController();
     const { project, filters, cardsMap, globalRelationshipTypes, navigateWithFilters } = useBoard();
     const [t] = useTranslation();
@@ -206,9 +150,8 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
             <Card.Root
                 id={`board-card-${card.uid}`}
                 className={cn(
-                    "relative rounded-xl border-border/80 bg-card shadow-sm transition-[border-color,box-shadow] dark:bg-muted/70",
-                    "hover:border-primary/60 hover:shadow-md",
-                    compact && "rounded-lg shadow-none hover:shadow-sm",
+                    "relative hover:border-primary",
+                    compact && "border-border/60 bg-background/80 shadow-none transition-colors hover:bg-background",
                     !!selectCardViewType && isDisabledCard(card.uid) ? "cursor-not-allowed" : "cursor-pointer"
                 )}
                 onClick={openCard}
@@ -220,7 +163,7 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
                         updateCollapsed(card.uid, !opened);
                     }}
                 >
-                    <Card.Header className={cn("relative block space-y-0", compact ? "min-h-11 px-3 py-3 md:min-h-0 md:py-2" : "px-3 py-3")}>
+                    <Card.Header className={cn("relative block space-y-0", compact ? "px-3 py-2" : "py-4")}>
                         {!compact && !isCollapsed && !!labels.length && (
                             <Flex items="center" gap="1" mb="1.5" wrap>
                                 {labels.map((label) => (
@@ -231,23 +174,12 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
                         {!compact && !isCollapsed && <BoardTaskMetadataBadges cardUID={card.uid} compact className="mb-1.5" />}
                         <Card.Title
                             className={cn(
-                                "break-words text-sm font-medium leading-5",
-                                compact ? "pr-8 text-muted-foreground md:pr-0" : "pr-16 md:pr-8"
+                                "break-all leading-tight",
+                                compact ? "max-w-full text-sm font-medium text-muted-foreground" : "max-w-[calc(100%_-_theme(spacing.8))]"
                             )}
                         >
-                            <button
-                                type="button"
-                                data-board-card-open=""
-                                className={cn(
-                                    "w-full rounded-sm text-left [font:inherit]",
-                                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                                )}
-                                disabled={!!selectCardViewType && isDisabledCard(card.uid)}
-                            >
-                                {title}
-                            </button>
+                            {title}
                         </Card.Title>
-                        <BoardCardMove card={card} compact={compact} />
                         {!compact && (
                             <BoardGraphApprovalTargetBadge
                                 projectUID={project.uid}
@@ -259,7 +191,7 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
                         {!compact && (
                             <Button
                                 variant="ghost"
-                                className={cn("absolute right-0 top-0 mt-0 size-11 md:right-1 md:top-1 md:size-8")}
+                                className={cn("absolute right-2.5 top-2.5 mt-0")}
                                 size="icon-sm"
                                 title={t(`common.${!isCollapsed ? "Collapse" : "Expand"}`)}
                                 titleSide="top"
@@ -292,9 +224,9 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
                                 ))}
                             </Card.Content>
                         )}
-                        <Card.Footer className="flex items-center justify-between gap-2 px-3 pb-3 text-xs text-muted-foreground">
-                            <Flex items="center" gap="1.5" className={!commentCount ? "invisible" : undefined}>
-                                <IconComponent icon="message-square" size="3.5" />
+                        <Card.Footer className="flex items-end justify-between gap-1.5 pb-4">
+                            <Flex items="center" gap="2">
+                                <IconComponent icon="message-square" size="4" className="text-secondary" strokeWidth="4" />
                                 <span>{commentCount}</span>
                             </Flex>
                             <UserAvatarList
@@ -311,7 +243,7 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
                         </Card.Footer>
                     </Collapsible.Content>
                 </Collapsible.Root>
-                <BoardColumnCardRelationship attributes={attributes} compact={compact} />
+                <BoardColumnCardRelationship attributes={attributes} />
             </Card.Root>
             <SelectRelationshipDialog isOpened={isSelectRelationshipDialogOpened} setIsOpened={setIsSelectRelationshipDialogOpened} />
         </>

@@ -7,15 +7,14 @@ import Switch from "@/components/base/Switch";
 import Toast from "@/components/base/Toast";
 import { EMAIL_REGEX } from "@/constants";
 import {
-    TProjectEmailNotificationCategory,
+    EProjectEmailNotificationCategory,
+    EProjectEmailNotificationDeliveryStatus,
     useGetProjectEmailNotificationPolicy,
     useUpdateProjectEmailNotificationPolicy,
 } from "@/controllers/api/board/settings/useProjectEmailNotificationPolicy";
 import { useBoardSettings } from "@/core/providers/BoardSettingsProvider";
 import { memo, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-
-const CATEGORIES: TProjectEmailNotificationCategory[] = ["board", "cards", "comments", "attachments", "checklists", "wiki"];
 
 const BoardSettingsEmailNotifications = memo(() => {
     const [t] = useTranslation();
@@ -24,10 +23,12 @@ const BoardSettingsEmailNotifications = memo(() => {
     const { mutateAsync, isPending } = useUpdateProjectEmailNotificationPolicy(project.uid);
     const [enabled, setEnabled] = useState(false);
     const [notifyAllMembers, setNotifyAllMembers] = useState(false);
-    const [categories, setCategories] = useState<TProjectEmailNotificationCategory[]>([]);
+    const [categories, setCategories] = useState<EProjectEmailNotificationCategory[]>([]);
     const [recipientUIDs, setRecipientUIDs] = useState<string[]>([]);
     const [externalEmails, setExternalEmails] = useState<string[]>([]);
     const [targetColumns, setTargetColumns] = useState<string[]>([]);
+    const hasRecipient = notifyAllMembers || recipientUIDs.length > 0 || externalEmails.length > 0;
+    const isInvalidEnabledPolicy = enabled && (categories.length === 0 || !hasRecipient);
 
     useEffect(() => {
         if (!policy) return;
@@ -76,11 +77,11 @@ const BoardSettingsEmailNotifications = memo(() => {
                     {t("project.settings.Configure SMTP before enabling board email notifications.")}
                 </Alert>
             )}
-            {policy.last_delivery_status === "failed" && (
+            {policy.last_delivery_status === EProjectEmailNotificationDeliveryStatus.Failed && (
                 <Alert variant="destructive" title={t("project.settings.Recent email delivery failed")}>
                     <p className="text-sm">
                         {policy.last_delivery_recipient_email}
-                        {policy.last_delivery_at ? ` · ${new Date(policy.last_delivery_at).toLocaleString()}` : ""}
+                        {policy.last_delivery_at ? ` - ${new Date(policy.last_delivery_at).toLocaleString()}` : ""}
                     </p>
                     {policy.last_delivery_error && <p className="text-xs">{policy.last_delivery_error}</p>}
                 </Alert>
@@ -95,7 +96,7 @@ const BoardSettingsEmailNotifications = memo(() => {
             <div className="grid gap-2">
                 <strong className="text-sm">{t("project.settings.Events")}</strong>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    {CATEGORIES.map((category) => (
+                    {Object.values(EProjectEmailNotificationCategory).map((category) => (
                         <Checkbox
                             key={category}
                             checked={categories.includes(category)}
@@ -139,7 +140,7 @@ const BoardSettingsEmailNotifications = memo(() => {
                             checked={recipientUIDs.includes(recipient.uid)}
                             onCheckedChange={() => setRecipientUIDs(toggle(recipientUIDs, recipient.uid))}
                             disabled={!canEditBasicInfo || isPending}
-                            label={`${recipient.firstname} ${recipient.lastname} · ${recipient.email}`}
+                            label={`${recipient.firstname} ${recipient.lastname} - ${recipient.email}`}
                         />
                     ))}
                 <div className="grid gap-2 pt-2">
@@ -159,7 +160,7 @@ const BoardSettingsEmailNotifications = memo(() => {
             </div>
             {canEditBasicInfo && (
                 <Flex justify="end">
-                    <Button onClick={() => void save()} disabled={isPending || (enabled && !policy.smtp_available)}>
+                    <Button onClick={() => void save()} disabled={isPending || isInvalidEnabledPolicy || (enabled && !policy.smtp_available)}>
                         {t("common.Save")}
                     </Button>
                 </Flex>

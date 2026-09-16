@@ -1,22 +1,28 @@
 import { Routing } from "@langboard/core/constants";
 import { api } from "@/core/helpers/Api";
-import { TMutationOptions, useQueryMutation } from "@/core/helpers/QueryMutation";
+import { TQueryOptions, useQueryMutation } from "@/core/helpers/QueryMutation";
 
 export interface IWebhookEventOption {
     label: string;
     value: string;
 }
 
-const useGetWebhookEvents = (options?: TMutationOptions<{}, IWebhookEventOption[]>) => {
-    const { mutate } = useQueryMutation();
+interface IWebhookSchemaResponse {
+    components?: {
+        schemas?: Record<string, { title?: string }>;
+    };
+}
+
+const useGetWebhookEvents = (options?: TQueryOptions<IWebhookEventOption[]>) => {
+    const { query } = useQueryMutation();
 
     const getWebhookEvents = async (): Promise<IWebhookEventOption[]> => {
-        const res = await api.get(Routing.API.SETTINGS.SCHEMAS.WEBHOOK, {
+        const res = await api.get<IWebhookSchemaResponse>(Routing.API.SETTINGS.SCHEMAS.WEBHOOK, {
             env: {
-                noToast: options?.interceptToast,
+                interceptToast: options?.interceptToast,
             } as never,
         });
-        const schemas = (res.data.components?.schemas ?? {}) as Record<string, { title?: string }>;
+        const schemas = res.data.components?.schemas ?? {};
 
         return Object.entries(schemas)
             .map(([value, schema]) => ({
@@ -26,7 +32,7 @@ const useGetWebhookEvents = (options?: TMutationOptions<{}, IWebhookEventOption[
             .sort((a, b) => a.label.localeCompare(b.label));
     };
 
-    return mutate(["get-webhook-events"], getWebhookEvents, {
+    return query(["get-webhook-events"], getWebhookEvents, {
         ...options,
         retry: 0,
     });

@@ -1,4 +1,5 @@
 import os
+from contextlib import contextmanager
 from types import SimpleNamespace
 import pytest
 
@@ -6,7 +7,9 @@ import pytest
 os.environ.setdefault("PROJECT_NAME", "langboard")
 
 from langboard_shared.ai import BotScopeHelper
-from langboard_shared.domain.models import Bot, BotSchedule
+from langboard_shared.core.db import DbSession
+from langboard_shared.core.types import SnowflakeID
+from langboard_shared.domain.models import Bot, BotSchedule, Project, ProjectBotScope
 from langboard_shared.domain.models.bases import BotTriggerCondition
 from langboard_shared.domain.services.factory.BotService import BotService
 from langboard_shared.helpers import BotHelper, InfraHelper
@@ -22,6 +25,64 @@ class FakeScopeModel:
     @staticmethod
     def get_scope_column_name() -> str:
         return "card_id"
+
+
+def test_scope_upsert_locks_target_before_updating_existing_scope(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Serialize hook upserts on the native target row."""
+
+    bot = Bot.model_construct(id=SnowflakeID(1))
+    project = Project.model_construct(id=SnowflakeID(2))
+    scope = ProjectBotScope.model_construct(
+        id=SnowflakeID(3),
+        bot_id=bot.id,
+        project_id=project.id,
+        conditions=[],
+        default_scope_branch_id=SnowflakeID(4),
+    )
+    statements: list[object] = []
+    updates: list[object] = []
+
+    class Result:
+        def __init__(self, *, first: object | None = None, all_items: list[object] | None = None) -> None:
+            self._first = first
+            self._all = all_items or []
+
+        def first(self) -> object | None:
+            return self._first
+
+        def all(self) -> list[object]:
+            return self._all
+
+    class Database:
+        def exec(self, statement: object) -> Result:
+            statements.append(statement)
+            if len(statements) == 1:
+                return Result(first=project)
+            return Result(all_items=[scope])
+
+        def update(self, model: object) -> None:
+            updates.append(model)
+
+    @contextmanager
+    def use_database(*, readonly: bool):
+        assert readonly is False
+        yield Database()
+
+    monkeypatch.setattr(DbSession, "use", use_database)
+    monkeypatch.setattr(InfraHelper, "get_by_id_like", lambda model, value: bot)
+
+    result = BotScopeHelper.upsert_conditions(
+        ProjectBotScope,
+        bot,
+        project,
+        [BotTriggerCondition.CardMoved],
+    )
+
+    assert result == (scope, False)
+    assert getattr(statements[0], "_for_update_arg", None) is not None
+    assert scope.conditions == [BotTriggerCondition.CardMoved]
+    assert scope.default_scope_branch_id is None
+    assert updates == [scope]
 
 
 def test_upsert_hook_reuses_native_scope_and_returns_service_language(

@@ -1,5 +1,6 @@
 from typing import NoReturn
 from langboard_shared.ai import BotScheduleHelper
+from langboard_shared.core.schema import TimeBasedPagination
 from langboard_shared.core.types import SafeDateTime
 from langboard_shared.domain.models import (
     Bot,
@@ -18,13 +19,25 @@ from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.domain.services.DomainService import DomainService
 from langboard_shared.domain.services.factory.BotService import BotServiceError
 from langboard_shared.security import RoleFinder
+from pydantic import Field
+from ..Constants import MCP_DEFAULT_LIST_LIMIT, TMcpListLimit
 from ..mcp_integration import McpRoleFilter, McpTool
+
+
+class BotSchedulePagination(TimeBasedPagination):
+    limit: int = Field(default=50, ge=1, le=100)
 
 
 @McpTool.add(description="Get bot schedules for a project.")
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Update], RoleFinder.project)
 def get_bot_schedules_by_project(
-    bot_uid: str, project_uid: str, user_or_bot: User | Bot, service: DomainService
+    bot_uid: str,
+    project_uid: str,
+    user_or_bot: User | Bot,
+    service: DomainService,
+    limit: int = 50,
+    page: int = 1,
+    refer_time: str | None = None,
 ) -> dict:
     _ensure_bot_author(user_or_bot, bot_uid)
     bot = service.bot.get_by_id_like(bot_uid)
@@ -35,7 +48,13 @@ def get_bot_schedules_by_project(
     if not project:
         raise ValueError("Project not found")
 
-    schedules = BotScheduleHelper.get_all_by_scope(ProjectBotSchedule, bot, project, as_api=True)
+    schedules = BotScheduleHelper.get_all_by_scope(
+        ProjectBotSchedule,
+        bot,
+        project,
+        as_api=True,
+        pagination=_schedule_pagination(limit, page, refer_time),
+    )
 
     return {"schedules": schedules, "target": project.api_response()}
 
@@ -43,7 +62,14 @@ def get_bot_schedules_by_project(
 @McpTool.add(description="Get bot schedules for a card.")
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Update], RoleFinder.project)
 def get_bot_schedules_by_card(
-    project_uid: str, bot_uid: str, card_uid: str, user_or_bot: User | Bot, service: DomainService
+    project_uid: str,
+    bot_uid: str,
+    card_uid: str,
+    user_or_bot: User | Bot,
+    service: DomainService,
+    limit: int = 50,
+    page: int = 1,
+    refer_time: str | None = None,
 ) -> dict:
     _ensure_bot_author(user_or_bot, bot_uid)
     bot = service.bot.get_by_id_like(bot_uid)
@@ -55,7 +81,13 @@ def get_bot_schedules_by_card(
         raise ValueError("Card not found")
     _require_target_project(service, card, project_uid)
 
-    schedules = BotScheduleHelper.get_all_by_scope(CardBotSchedule, bot, card, as_api=True)
+    schedules = BotScheduleHelper.get_all_by_scope(
+        CardBotSchedule,
+        bot,
+        card,
+        as_api=True,
+        pagination=_schedule_pagination(limit, page, refer_time),
+    )
 
     return {"schedules": schedules, "target": card.api_response()}
 
@@ -63,7 +95,14 @@ def get_bot_schedules_by_card(
 @McpTool.add(description="Get bot schedules for a column.")
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Update], RoleFinder.project)
 def get_bot_schedules_by_column(
-    project_uid: str, bot_uid: str, column_uid: str, user_or_bot: User | Bot, service: DomainService
+    project_uid: str,
+    bot_uid: str,
+    column_uid: str,
+    user_or_bot: User | Bot,
+    service: DomainService,
+    limit: int = 50,
+    page: int = 1,
+    refer_time: str | None = None,
 ) -> dict:
     _ensure_bot_author(user_or_bot, bot_uid)
     bot = service.bot.get_by_id_like(bot_uid)
@@ -75,7 +114,13 @@ def get_bot_schedules_by_column(
         raise ValueError("Column not found")
     _require_target_project(service, column, project_uid)
 
-    schedules = BotScheduleHelper.get_all_by_scope(ProjectColumnBotSchedule, bot, column, as_api=True)
+    schedules = BotScheduleHelper.get_all_by_scope(
+        ProjectColumnBotSchedule,
+        bot,
+        column,
+        as_api=True,
+        pagination=_schedule_pagination(limit, page, refer_time),
+    )
 
     return {"schedules": schedules, "target": column.api_response()}
 
@@ -299,39 +344,59 @@ def _require_target_project(service: DomainService, target: Project | ProjectCol
         _raise_bot_service_error(error)
 
 
+def _schedule_pagination(limit: int, page: int, refer_time: str | None) -> BotSchedulePagination:
+    return BotSchedulePagination(
+        limit=limit,
+        page=page,
+        **({"refer_time": SafeDateTime.fromisoformat(refer_time)} if refer_time else {}),
+    )
+
+
 @McpTool.add(description="Get bot scopes for a project.")
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Update], RoleFinder.project)
-def get_project_bot_scopes(project_uid: str, service: DomainService) -> dict:
+def get_project_bot_scopes(
+    project_uid: str,
+    service: DomainService,
+    limit: TMcpListLimit = MCP_DEFAULT_LIST_LIMIT,
+) -> dict:
     project = service.project.get_by_id_like(project_uid)
     if not project:
         raise ValueError("Project not found")
 
-    scopes = service.project.get_api_bot_scope_list(project)
+    scopes = service.project.get_api_bot_scope_list(project, limit=limit)
     return {"scopes": scopes}
 
 
 @McpTool.add(description="Get bot scopes for a card.")
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Update], RoleFinder.project)
-def get_card_bot_scopes(project_uid: str, card_uid: str, service: DomainService) -> dict:
+def get_card_bot_scopes(
+    project_uid: str,
+    card_uid: str,
+    service: DomainService,
+    limit: TMcpListLimit = MCP_DEFAULT_LIST_LIMIT,
+) -> dict:
     card = service.card.get_by_id_like(card_uid)
     if not card:
         raise ValueError("Card not found")
     _require_target_project(service, card, project_uid)
 
     project = service.project.get_by_id_like(card.project_id)
-    scopes = service.card.get_api_bot_scope_list(project, card)
+    scopes = service.card.get_api_bot_scope_list(project, card, limit=limit)
     return {"scopes": scopes}
 
 
 @McpTool.add(description="Get bot scopes for a column.")
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Update], RoleFinder.project)
-def get_column_bot_scopes(project_uid: str, column_uid: str, service: DomainService) -> dict:
+def get_column_bot_scopes(
+    project_uid: str,
+    column_uid: str,
+    service: DomainService,
+    limit: TMcpListLimit = MCP_DEFAULT_LIST_LIMIT,
+) -> dict:
     column = service.project_column.get_by_id_like(column_uid)
     if not column:
         raise ValueError("Column not found")
     _require_target_project(service, column, project_uid)
 
-    scopes = service.project_column.get_api_bot_scopes_by_project(column.project_id)
-
-    column_scopes = [s for s in scopes if s.get("project_column_uid") == column_uid]
-    return {"scopes": column_scopes}
+    scopes = service.project_column.get_api_bot_scopes_by_column(column, limit=limit)
+    return {"scopes": scopes}

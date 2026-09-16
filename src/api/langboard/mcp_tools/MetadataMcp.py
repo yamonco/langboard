@@ -14,18 +14,25 @@ from langboard_shared.domain.services.DomainService import DomainService
 from langboard_shared.helpers import InfraHelper
 from langboard_shared.publishers import MetadataPublisher
 from langboard_shared.security import RoleFinder
+from ..Constants import MCP_DEFAULT_LIST_LIMIT, TMcpListLimit
 from ..mcp_integration import McpRoleFilter, McpTool
 
 
 @McpTool.add(description="Get card metadata.")
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
-def get_card_metadata(project_uid: str, card_uid: str, user_or_bot: User | Bot, service: DomainService) -> dict:
+def get_card_metadata(
+    project_uid: str,
+    card_uid: str,
+    user_or_bot: User | Bot,
+    service: DomainService,
+    limit: TMcpListLimit = MCP_DEFAULT_LIST_LIMIT,
+) -> dict:
     params = InfraHelper.get_records_with_foreign_by_params((Project, project_uid), (Card, card_uid))
     if not params:
         raise ValueError("Project or card not found")
 
     _, card = params
-    metadata = service.metadata.get_all_as_api(CardMetadata, card, as_dict=True)
+    metadata = service.metadata.get_all_as_api(CardMetadata, card, as_dict=True, limit=limit)
     return {"metadata": metadata}
 
 
@@ -85,7 +92,13 @@ def delete_card_metadata(
 
 @McpTool.add(description="Get wiki metadata.")
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
-def get_wiki_metadata(project_uid: str, wiki_uid: str, user_or_bot: User | Bot, service: DomainService) -> dict:
+def get_wiki_metadata(
+    project_uid: str,
+    wiki_uid: str,
+    user_or_bot: User | Bot,
+    service: DomainService,
+    limit: TMcpListLimit = MCP_DEFAULT_LIST_LIMIT,
+) -> dict:
     params = InfraHelper.get_records_with_foreign_by_params((Project, project_uid), (ProjectWiki, wiki_uid))
     if not params:
         raise ValueError("Project or wiki not found")
@@ -95,7 +108,7 @@ def get_wiki_metadata(project_uid: str, wiki_uid: str, user_or_bot: User | Bot, 
     if isinstance(user_or_bot, User) and not service.project_wiki.is_assigned(user_or_bot, wiki):
         raise ValueError("User not assigned to wiki")
 
-    metadata = service.metadata.get_all_as_api(ProjectWikiMetadata, wiki, as_dict=True)
+    metadata = service.metadata.get_all_as_api(ProjectWikiMetadata, wiki, as_dict=True, limit=limit)
     return {"metadata": metadata}
 
 

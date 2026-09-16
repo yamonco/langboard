@@ -2,7 +2,7 @@ from typing import Sequence
 from ...core.broker import Broker
 from ...domain.models import Bot, Card, Project, ProjectActivity, User
 from ...domain.models.ProjectActivity import ProjectActivityType
-from .UserActivityTask import record_project_activity
+from . import UserActivityTask
 from .utils import ActivityTaskHelper
 
 
@@ -32,7 +32,7 @@ async def card_relationship_updated(
         activity_history,
         **_get_activity_params(ProjectActivityType.CardRelationshipsUpdated, project, card),
     )
-    record_project_activity(user_or_bot, activity)
+    UserActivityTask.record_project_activity(user_or_bot, activity)
 
 
 def _get_activity_params(activity_type: ProjectActivityType, project: Project, card: Card):

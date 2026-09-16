@@ -4,7 +4,7 @@ import Button from "@/components/base/Button";
 import Dialog from "@/components/base/Dialog";
 import Table from "@/components/base/Table";
 import Toast from "@/components/base/Toast";
-import useGetWebhookEvents, { IWebhookEventOption } from "@/controllers/api/settings/webhooks/useGetWebhookEvents";
+import useGetWebhookEvents from "@/controllers/api/settings/webhooks/useGetWebhookEvents";
 import useUpdateWebhook from "@/controllers/api/settings/webhooks/useUpdateWebhook";
 import setupApiErrorHandler from "@/core/helpers/setupApiErrorHandler";
 import { usePageNavigateRef } from "@/core/hooks/usePageNavigate";
@@ -27,11 +27,10 @@ function WebhookEvents(): React.JSX.Element {
     const { hasRoleAction } = useRoleActionFilter(settingRoleActions);
     const canUpdateWebhook = hasRoleAction(SettingRole.EAction.WebhookUpdate);
     const { mutateAsync, isPending } = useUpdateWebhook(webhook, { interceptToast: true });
-    const { mutate: getWebhookEvents } = useGetWebhookEvents({ interceptToast: true });
     const [opened, setOpened] = useState(false);
+    const { data: eventOptions = [] } = useGetWebhookEvents({ enabled: opened, interceptToast: true });
     const [allEvents, setAllEvents] = useState(currentEvents === null);
     const [selectedEvents, setSelectedEvents] = useState<string[]>(currentEvents ?? []);
-    const [eventOptions, setEventOptions] = useState<IWebhookEventOption[]>([]);
     const [error, setError] = useState<string>();
 
     const changeOpenedState = (nextOpened: bool) => {
@@ -47,14 +46,6 @@ function WebhookEvents(): React.JSX.Element {
         setAllEvents(currentEvents === null);
         setSelectedEvents(currentEvents ?? []);
         setError(undefined);
-        if (!eventOptions.length) {
-            getWebhookEvents(
-                {},
-                {
-                    onSuccess: setEventOptions,
-                }
-            );
-        }
     };
 
     const save = () => {

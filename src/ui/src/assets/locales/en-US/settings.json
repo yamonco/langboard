@@ -180,6 +180,7 @@
   "errors": {
     "missing": {
       "api_key_name": "Enter an API key name.",
+      "api_key_ip_whitelist": "Add at least one IP address or select Allow all.",
       "bot_name": "Enter a bot name.",
       "bot_uname": "Enter a bot unique name.",
       "bot_url": "Enter an API URL.",

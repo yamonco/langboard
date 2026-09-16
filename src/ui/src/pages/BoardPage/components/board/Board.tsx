@@ -191,7 +191,7 @@ function BoardDisplay({ scrollable, scrollableRef }: { scrollable: HTMLDivElemen
             changeColumnOrder,
             changeRowOrder,
         });
-    }, [cardsMap, changeColumnOrder, changeRowOrder, chatResizableSidebar, columns, scrollableRef]);
+    }, [cardsMap, changeColumnOrder, changeRowOrder, chatResizableSidebar, columns]);
 
     // Panning the board
     useEffect(() => {

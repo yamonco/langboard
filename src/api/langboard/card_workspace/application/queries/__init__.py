@@ -27,10 +27,12 @@ from ..projections import (
     bounded_items,
     bounded_text,
     pick,
+    public_actor,
     public_attachment,
     public_bot_schedule,
     public_bot_scope,
     public_card_summary,
+    public_checkitem,
     public_checklist,
     public_comment,
     public_label,
@@ -81,6 +83,8 @@ def get_card_bundle(
 
     details = source.details
     core = pick(details, ("uid", "title", "created_at", "updated_at"))
+    if isinstance(details.get("creator"), dict):
+        core["creator"] = public_actor(details["creator"])
     if CardBundleInclude.Description in requested:
         core["description"] = bounded_text(details.get("description"), CardBundleSection.CoreDescription).model_dump(
             mode="json"
@@ -206,13 +210,10 @@ def get_public_card_metadata_by_key(
     """Return one public metadata entry by an explicitly safe key."""
 
     normalized_key = require_public_metadata_key(key)
-    metadata = port.get_public_card_metadata(project_uid, card_uid)
+    metadata = port.get_public_card_metadata_by_key(project_uid, card_uid, normalized_key)
     if metadata is None:
-        raise ValueError("Card not found in project")
-    entries = {entry["key"]: entry for entry in public_metadata(metadata)}
-    if normalized_key not in entries:
         raise ValueError("Metadata not found")
-    return entries[normalized_key]
+    return public_metadata({metadata["key"]: metadata["value"]})[0]
 
 
 def _comment_page(
@@ -273,8 +274,6 @@ def _section_continuation(
             )
             if raw is None:
                 raise ValueError("Checklist continuation no longer exists")
-            from ..projections import public_checkitem
-
             items = [public_checkitem(item) for item in raw if isinstance(item, dict)]
         else:
             items = collections.get(section)

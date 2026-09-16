@@ -57,7 +57,7 @@ class WebhookModel extends BaseModel<Interface> {
         return this.getValue("last_used_at");
     }
     public set last_used_at(value: string | Date | null) {
-        this.update({ last_used_at: value as unknown as Date });
+        this.update({ last_used_at: value ? new Date(value) : null });
     }
 
     public get total_used_count() {

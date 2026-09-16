@@ -8,6 +8,7 @@ from ...core.types import SnowflakeID
 from ...domain.models import ProjectActivity, ProjectWikiActivity
 from ...domain.services import DomainService
 from ...helpers import InfraHelper
+from .ProjectEmailNotificationQueue import register_project_activity_email_task
 
 
 logger = Logger.use("project-email-notification")
@@ -31,12 +32,13 @@ class ProjectEmailDeliveryTask(Task):
         if len(args) >= 3:
             activity = _get_activity(str(args[0]), SnowflakeID(args[1]))
             if activity:
-                DomainService().project_email_notification.record_delivery(
-                    activity,
-                    str(args[2]),
-                    succeeded=False,
-                    error=str(exc),
-                )
+                with DomainService.use() as service:
+                    service.project_email_notification.record_delivery(
+                        activity,
+                        str(args[2]),
+                        succeeded=False,
+                        error=str(exc),
+                    )
         super().on_failure(exc, task_id, args, kwargs, einfo)
 
 
@@ -64,11 +66,17 @@ async def fanout_project_activity_email(activity_table: str, activity_id: Snowfl
     activity = _get_activity(activity_table, activity_id)
     if not activity:
         return
-    service = DomainService().project_email_notification
-    recipients = service.get_delivery_recipients(activity)
-    logger.info("Scheduling board activity email: activity=%s/%s recipients=%d", activity_table, activity_id, len(recipients))
+    with DomainService.use() as service:
+        recipients = service.project_email_notification.get_delivery_recipients(activity)
+    logger.info(
+        "Scheduling board activity email: activity=%s/%s recipients=%d", activity_table, activity_id, len(recipients)
+    )
     for recipient in recipients:
         deliver_project_activity_email(activity_table, activity_id, recipient.email)
+
+
+def register() -> None:
+    register_project_activity_email_task(fanout_project_activity_email)
 
 
 @Broker.wrap_async_task_decorator(_DELIVERY_RETRY)
@@ -79,20 +87,32 @@ async def deliver_project_activity_email(
 ) -> None:
     """Deliver one activity email and fail visibly for bounded retry."""
 
-    activity = _get_activity(activity_table, activity_id)
-    if not activity:
-        return
-    accepted = await asyncio.to_thread(
-        DomainService().project_email_notification.send_activity_email,
-        activity,
+    delivered = await asyncio.to_thread(
+        _deliver_project_activity_email,
+        activity_table,
+        activity_id,
         recipient_email,
     )
-    if not accepted:
-        raise ProjectEmailDeliveryError(
-            f"SMTP delivery failed: activity={activity_table}/{activity_id} recipient={recipient_email}"
-        )
-    DomainService().project_email_notification.record_delivery(activity, recipient_email, succeeded=True)
-    logger.info("Board activity email accepted: activity=%s/%s recipient=%s", activity_table, activity_id, recipient_email)
+    if delivered:
+        logger.info("Board activity email accepted: activity=%s/%s", activity_table, activity_id)
+
+
+def _deliver_project_activity_email(
+    activity_table: str,
+    activity_id: SnowflakeID,
+    recipient_email: str,
+) -> bool:
+    """Own database and service resources entirely inside the delivery thread."""
+
+    activity = _get_activity(activity_table, activity_id)
+    if not activity:
+        return False
+    with DomainService.use() as service:
+        accepted = service.project_email_notification.send_activity_email(activity, recipient_email)
+        if not accepted:
+            raise ProjectEmailDeliveryError(f"SMTP delivery failed: activity={activity_table}/{activity_id}")
+        service.project_email_notification.record_delivery(activity, recipient_email, succeeded=True)
+    return True
 
 
 def _get_activity(
@@ -106,3 +126,6 @@ def _get_activity(
     if not model:
         return None
     return InfraHelper.get_by_id_like(model, activity_id)
+
+
+register()

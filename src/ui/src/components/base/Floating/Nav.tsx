@@ -77,8 +77,9 @@ function Nav({
                         {item.badge && (
                             <span
                                 className={cn(
-                                    "absolute -right-1 -top-1 inline-flex min-w-5 items-center justify-center rounded-full bg-destructive",
-                                    "px-1.5 py-0.5 text-[10px] font-bold leading-none text-destructive-foreground shadow"
+                                    "absolute -right-1 -top-1 inline-flex min-w-5 items-center justify-center rounded-full",
+                                    "bg-destructive px-1.5 py-0.5 text-[10px] font-bold leading-none",
+                                    "text-destructive-foreground shadow"
                                 )}
                             >
                                 {item.badge}

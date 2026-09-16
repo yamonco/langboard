@@ -10,7 +10,7 @@ export interface ICreateYjsKit {
     onSyncChange?: (isSynced: bool) => void;
 }
 
-export const createYjsKit = ({ socket, userName, documentID, onSyncChange }: ICreateYjsKit) => {
+export const createYjsKit = ({ socket, userName, documentID, onSyncChange }: ICreateYjsKit): ReturnType<typeof YjsPlugin.configure> | null => {
     const url = socket.getAuthorizedWebSocketUrl("editor-sync");
     if (!url) {
         return null;

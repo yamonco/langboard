@@ -7,9 +7,9 @@ const useGetWebhooks = (options?: TMutationOptions) => {
     const { mutate } = useQueryMutation();
 
     const getWebhooks = async () => {
-        const res = await api.get(Routing.API.SETTINGS.WEBHOOKS.GET_LIST, {
+        const res = await api.get<{ webhooks: WebhookModel.Interface[] }>(Routing.API.SETTINGS.WEBHOOKS.GET_LIST, {
             env: {
-                noToast: options?.interceptToast,
+                interceptToast: options?.interceptToast,
             } as never,
         });
 

@@ -1,4 +1,5 @@
 import os
+from contextlib import contextmanager
 from types import SimpleNamespace
 from unittest.mock import ANY, Mock, patch
 import pytest
@@ -8,14 +9,20 @@ os.environ.setdefault("PROJECT_NAME", "langboard")
 
 from langboard.mcp_integration import McpTool
 from langboard.mcp_tools import ProjectMcp
-from langboard_shared.domain.models import IdentityProvider, User
+from langboard.routes.board.BoardApi import search_project_member_candidates
+from langboard_shared.core.db import DbSession
+from langboard_shared.core.types import SnowflakeID
+from langboard_shared.domain.models import Project, ProjectAssignedUser, ProjectRole, User
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
-from langboard_shared.domain.services.factory.IdentityLinkService import IdentityLinkService
 from langboard_shared.domain.services.factory.ProjectInvitationService import (
     InvitationRelatedResult,
     ProjectInvitationService,
 )
 from langboard_shared.domain.services.factory.ProjectService import ProjectService
+from langboard_shared.filter import RoleFilter
+from langboard_shared.infrastructure.repositories.factory.ProjectAssignedUserRepository import (
+    ProjectAssignedUserRepository,
+)
 
 
 def test_additive_invitation_data_preserves_existing_members_and_invites() -> None:
@@ -183,109 +190,36 @@ def test_additive_retry_is_a_complete_noop() -> None:
     assigned_users.assert_not_called()
 
 
-def test_existing_member_addition_bypasses_invitation_and_preserves_members() -> None:
-    """A known account receives project access immediately without an invite email."""
+def test_additive_invitation_reports_a_concurrent_duplicate_as_unchanged() -> None:
+    """A repository race loser reports no change after the atomic insert is skipped."""
 
-    project = SimpleNamespace(id=10)
-    actor = User.model_construct()
-    employee = SimpleNamespace(id=20, api_response=lambda: {"name": "Grace"})
-    existing = SimpleNamespace(id=30, api_response=lambda: {"name": "Existing"})
-    assigned_rows = [(existing, object()), (employee, object())]
-    assigned_repository = SimpleNamespace(
-        get_all_by_project=Mock(side_effect=[[(existing, object())], assigned_rows]),
-        ensure_assigned=Mock(return_value=(object(), True)),
+    project = object()
+    invitation_data = InvitationRelatedResult()
+    invitation_data.emails_should_invite.add("pending@example.com")
+
+    def lose_insert_race(_user: User, _project: object, result: InvitationRelatedResult) -> bool:
+        result.applied_count = 0
+        return True
+
+    invitation_service = SimpleNamespace(
+        get_additive_invitation_related_data=Mock(return_value=invitation_data),
+        invite_emails=Mock(side_effect=lose_insert_race),
+        get_api_invited_user_list_by_project=Mock(return_value=[]),
     )
-    role_repository = SimpleNamespace(project=SimpleNamespace(grant_all=Mock()))
-    relationship_repository = SimpleNamespace(ensure_project_relationships=Mock())
-    invitation_service = SimpleNamespace(get_api_invited_user_list_by_project=Mock(return_value=[]))
-    repository = SimpleNamespace(
-        project_assigned_user=assigned_repository,
-        role=role_repository,
-        project_user_relationship=relationship_repository,
-    )
+    assigned_users = Mock(return_value=[])
+    repository = SimpleNamespace(project_assigned_user=SimpleNamespace(get_all_by_project=assigned_users))
     service = ProjectService(lambda _: None, lambda _: None, repository)
 
     with (
         patch(
-            "langboard_shared.domain.services.factory.ProjectService.InfraHelper.get_by_id_like", return_value=project
+            "langboard_shared.domain.services.factory.ProjectService.InfraHelper.get_by_id_like",
+            return_value=project,
         ),
         patch.object(service, "_get_service_by_name", return_value=invitation_service),
-        patch("langboard_shared.domain.services.factory.ProjectService.ProjectPublisher.assigned_users_updated"),
-        patch("langboard_shared.domain.services.factory.ProjectService.ProjectPublisher.assigned_to_users"),
-        patch("langboard_shared.domain.services.factory.ProjectService.ProjectActivityTask.project_assigned_users_updated"),
     ):
-        result = service.add_existing_assigned_users(actor, project, [employee])
+        result = service.invite_assigned_users(User.model_construct(), project, ["pending@example.com"])
 
-    assert result == {"requested_count": 1, "changed_count": 1, "status": "updated"}
-    assigned_repository.ensure_assigned.assert_called_once_with(project, employee)
-    role_repository.project.grant_all.assert_called_once_with(user_id=20, project_id=10)
-    invitation_service.get_api_invited_user_list_by_project.assert_called_once_with(project)
-
-
-def test_federated_active_account_is_added_without_an_email_invitation() -> None:
-    """Federated accounts become members immediately while classic accounts retain the invite flow."""
-
-    target = User.model_construct(id=1, activated_at=object())
-    invitation = InvitationRelatedResult()
-    invitation.emails_should_invite.add("employee@example.com")
-    invitation.users_by_email["employee@example.com"] = target
-    assigned = Mock()
-    email_service = SimpleNamespace(send_template=Mock())
-    identity_link = SimpleNamespace(
-        get_by_user_provider=lambda _user, provider: object() if provider is IdentityProvider.Oidc else None
-    )
-    service = ProjectInvitationService(
-        lambda service_type: identity_link if service_type is IdentityLinkService else email_service,
-        lambda _name: None,
-        SimpleNamespace(),
-    )
-    setattr(service, "_ProjectInvitationService__assign_project_user", assigned)
-
-    with patch(
-        "langboard_shared.domain.services.factory.ProjectInvitationService.InfraHelper.get_by_id_like",
-        return_value=SimpleNamespace(),
-    ):
-        service.invite_emails(User.model_construct(), "project", invitation)
-
-    assigned.assert_called_once_with(ANY, target)
-    email_service.send_template.assert_not_called()
-
-
-def test_external_invitation_acceptance_grants_card_work_without_admin_access() -> None:
-    """Accepted guests can create and update cards but cannot manage or delete project data."""
-
-    project = SimpleNamespace(id=10)
-    guest = User.model_construct(id=20)
-    grant = Mock()
-    repository = SimpleNamespace(
-        project_assigned_user=SimpleNamespace(ensure_assigned=Mock(), get_all_by_project=Mock(return_value=[])),
-        project_invitation=SimpleNamespace(get_all_by_project_with_user=Mock(return_value=[])),
-        project_user_relationship=SimpleNamespace(ensure_project_relationships=Mock()),
-        role=SimpleNamespace(project=SimpleNamespace(grant=grant)),
-    )
-    project_service = SimpleNamespace(get_api_assigned_user_list=Mock(return_value=[]))
-    service = ProjectInvitationService(
-        lambda service_type: project_service if service_type is ProjectService else None,
-        lambda _name: None,
-        repository,
-    )
-
-    with (
-        patch("langboard_shared.domain.services.factory.ProjectInvitationService.ProjectPublisher.assigned_to_users"),
-        patch("langboard_shared.domain.services.factory.ProjectInvitationService.ProjectInvitationPublisher.accepted"),
-        patch("langboard_shared.domain.services.factory.ProjectInvitationService.ProjectActivityTask.project_invited_user_accepted"),
-    ):
-        service._ProjectInvitationService__assign_project_user(project, guest)
-
-    grant.assert_called_once_with(
-        actions=[
-            ProjectRoleAction.Read.value,
-            ProjectRoleAction.CardWrite.value,
-            ProjectRoleAction.CardUpdate.value,
-        ],
-        user_id=guest.id,
-        project_id=project.id,
-    )
+    assert result == {"requested_count": 1, "changed_count": 0, "status": "unchanged"}
 
 
 def test_invite_tool_schema_and_legacy_replacement_tool_are_distinct() -> None:
@@ -294,3 +228,54 @@ def test_invite_tool_schema_and_legacy_replacement_tool_are_distinct() -> None:
     invite_schema = McpTool.get_tool("invite_project_members")["input_schema"]
     assert invite_schema["required"] == ["project_uid", "emails"]
     assert McpTool.get_tool("update_project_members") is not None
+
+
+def test_member_candidate_search_requires_project_update() -> None:
+    role_model, actions, _, _ = RoleFilter.get_filtered(search_project_member_candidates)
+
+    assert role_model is ProjectRole
+    assert actions == [ProjectRoleAction.Update.value]
+
+
+def test_member_assignment_locks_project_before_checking_for_duplicates(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Concurrent invitation acceptance is serialized on the owning project row."""
+
+    project = Project.model_construct(id=SnowflakeID(1))
+    user = User.model_construct(id=SnowflakeID(2))
+    existing = ProjectAssignedUser.model_construct(
+        id=SnowflakeID(3),
+        project_id=project.id,
+        user_id=user.id,
+    )
+    statements: list[object] = []
+    inserts: list[ProjectAssignedUser] = []
+
+    class Result:
+        def __init__(self, value: object | None) -> None:
+            self.value = value
+
+        def first(self) -> object | None:
+            return self.value
+
+    class Database:
+        def exec(self, statement: object) -> Result:
+            statements.append(statement)
+            return Result(project if len(statements) == 1 else existing)
+
+        def insert(self, assigned_user: ProjectAssignedUser) -> None:
+            inserts.append(assigned_user)
+
+    @contextmanager
+    def use_database(*, readonly: bool):
+        assert readonly is False
+        yield Database()
+
+    monkeypatch.setattr(DbSession, "use", use_database)
+    repository = ProjectAssignedUserRepository(lambda *_: None, lambda *_: None)
+
+    assigned_user, created = repository.ensure_assigned(project, user)
+
+    assert assigned_user is existing
+    assert created is False
+    assert getattr(statements[0], "_for_update_arg", None) is not None
+    assert inserts == []

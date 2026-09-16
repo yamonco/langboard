@@ -3,6 +3,7 @@ from langboard_shared.domain.models import Bot, ProjectRole, User
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.domain.services.DomainService import DomainService
 from langboard_shared.security import RoleFinder
+from ..Constants import EMAIL_REGEX, MCP_DEFAULT_LIST_LIMIT, TMcpListLimit
 from ..mcp_integration import McpRoleFilter, McpTool
 
 
@@ -12,20 +13,28 @@ def _normalize_invitation_emails(emails: list[str]) -> list[str]:
     if not 1 <= len(emails) <= 10:
         raise ValueError("Provide between 1 and 10 email addresses")
     normalized = list(dict.fromkeys(email.strip().casefold() for email in emails))
-    if any(fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email) is None for email in normalized):
+    if any(fullmatch(EMAIL_REGEX, email) is None for email in normalized):
         raise ValueError("Invalid email address")
     return normalized
 
 
 @McpTool.add("user", description="Get starred projects for the current user.")
-def get_starred_projects(user: User, service: DomainService) -> dict:
-    projects = service.project.get_api_starred_project_list(user)
+def get_starred_projects(
+    user: User,
+    service: DomainService,
+    limit: TMcpListLimit = MCP_DEFAULT_LIST_LIMIT,
+) -> dict:
+    projects = service.project.get_api_starred_project_list(user, limit=limit)
     return {"projects": projects}
 
 
 @McpTool.add("user", description="Get all projects for the current user.")
-def get_projects(user: User, service: DomainService) -> dict:
-    projects, _ = service.project.get_api_list(user)
+def get_projects(
+    user: User,
+    service: DomainService,
+    limit: TMcpListLimit = MCP_DEFAULT_LIST_LIMIT,
+) -> dict:
+    projects, _ = service.project.get_api_list(user, limit=limit)
     return {"projects": projects}
 
 
@@ -54,13 +63,18 @@ def is_project_available(project_uid: str, service: DomainService) -> dict:
 
 @McpTool.add(description="Get project details.")
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
-def get_project(project_uid: str, user_or_bot: User | Bot, service: DomainService) -> dict:
-    result = service.project.get_details(user_or_bot, project_uid, False)
+def get_project(
+    project_uid: str,
+    user_or_bot: User | Bot,
+    service: DomainService,
+    limit: TMcpListLimit = MCP_DEFAULT_LIST_LIMIT,
+) -> dict:
+    result = service.project.get_details(user_or_bot, project_uid, False, limit=limit)
     if not result:
         raise ValueError("Project not found")
     project, response = result
-    bot_scopes = service.project.get_api_bot_scope_list(project)
-    bot_schedules = service.project.get_api_bot_schedule_list(project)
+    bot_scopes = service.project.get_api_bot_scope_list(project, limit=limit)
+    bot_schedules = service.project.get_api_bot_schedule_list(project, limit=limit)
     if isinstance(user_or_bot, User):
         service.project.set_last_view(user_or_bot, project)
     return {"project": response, "project_bot_scopes": bot_scopes, "project_bot_schedules": bot_schedules}
@@ -68,38 +82,54 @@ def get_project(project_uid: str, user_or_bot: User | Bot, service: DomainServic
 
 @McpTool.add(description="Get project assigned users.")
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
-def get_project_assigned_users(project_uid: str, service: DomainService) -> list[dict]:
+def get_project_assigned_users(
+    project_uid: str,
+    service: DomainService,
+    limit: TMcpListLimit = MCP_DEFAULT_LIST_LIMIT,
+) -> list[dict]:
     p = service.project.get_by_id_like(project_uid)
     if not p:
         raise ValueError("Project not found")
-    return service.project.get_api_assigned_user_list(p)
+    return service.project.get_api_assigned_user_list(p, limit=limit)
 
 
 @McpTool.add(description="Get project columns.")
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
-def get_project_columns(project_uid: str, service: DomainService) -> list[dict]:
+def get_project_columns(
+    project_uid: str,
+    service: DomainService,
+    limit: TMcpListLimit = MCP_DEFAULT_LIST_LIMIT,
+) -> list[dict]:
     p = service.project.get_by_id_like(project_uid)
     if not p:
         raise ValueError("Project not found")
-    return service.project_column.get_api_list_by_project(p)
+    return service.project_column.get_api_list_by_project(p, limit=limit)
 
 
 @McpTool.add(description="Get project labels.")
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
-def get_project_labels(project_uid: str, service: DomainService) -> list[dict]:
+def get_project_labels(
+    project_uid: str,
+    service: DomainService,
+    limit: TMcpListLimit = MCP_DEFAULT_LIST_LIMIT,
+) -> list[dict]:
     p = service.project.get_by_id_like(project_uid)
     if not p:
         raise ValueError("Project not found")
-    return service.project_label.get_api_list_by_project(p)
+    return service.project_label.get_api_list_by_project(p, limit=limit)
 
 
 @McpTool.add(description="Get project checklists.")
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
-def get_project_checklists(project_uid: str, service: DomainService) -> dict:
+def get_project_checklists(
+    project_uid: str,
+    service: DomainService,
+    limit: TMcpListLimit = MCP_DEFAULT_LIST_LIMIT,
+) -> dict:
     p = service.project.get_by_id_like(project_uid)
     if not p:
         raise ValueError("Project not found")
-    checklists = service.checklist.get_api_list_only_by_project(p)
+    checklists = service.checklist.get_api_list_only_by_project(p, limit=limit)
     return {"checklists": checklists}
 
 
@@ -109,24 +139,17 @@ def get_global_relationships(service: DomainService) -> dict:
     return {"global_relationships": global_rels}
 
 
-@McpTool.add(description="Get bot scopes for all columns in a project.")
-@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
-def get_column_bot_scopes(project_uid: str, service: DomainService) -> dict:
-    p = service.project.get_by_id_like(project_uid)
-    if not p:
-        raise ValueError("Project not found")
-    col_bot_scopes = service.project_column.get_api_bot_scopes_by_project(p)
-    return {"column_bot_scopes": col_bot_scopes}
-
-
 @McpTool.add(description="Get bot schedules for all columns in a project.")
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
-def get_column_bot_schedules(project_uid: str, service: DomainService) -> dict:
+def get_column_bot_schedules(
+    project_uid: str,
+    service: DomainService,
+    limit: TMcpListLimit = MCP_DEFAULT_LIST_LIMIT,
+) -> dict:
     p = service.project.get_by_id_like(project_uid)
     if not p:
         raise ValueError("Project not found")
-    columns = service.project_column.get_api_list_by_project([p])
-    col_bot_schedules = service.project_column.get_api_bot_schedule_list_by_project(p, columns)
+    col_bot_schedules = service.project_column.get_api_bot_schedule_list_by_project(p, limit=limit)
     return {"column_bot_schedules": col_bot_schedules}
 
 

@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from html import escape
-from typing import Any, cast
+from typing import Any
 from urllib.parse import urlparse
 from pydantic import EmailStr, TypeAdapter, ValidationError
 from ....core.domain import BaseDomainService
@@ -109,9 +109,7 @@ class ProjectEmailNotificationService(BaseDomainService):
         policy, recipients = self.repo.project_email_notification.get_with_recipients(project_model)
         members = self.repo.project_assigned_user.get_all_by_project(project_model)
         columns = [
-            column
-            for column, _ in self.repo.project_column.get_all_by_project(project_model)
-            if not column.is_archive
+            column for column, _ in self.repo.project_column.get_all_by_project(project_model) if not column.is_archive
         ]
         return {
             "is_enabled": policy.is_enabled if policy else False,
@@ -132,7 +130,9 @@ class ProjectEmailNotificationService(BaseDomainService):
             ],
             "available_columns": [column.name for column in sorted(columns, key=lambda item: item.order)],
             "smtp_available": self.smtp_available(),
-            "last_delivery_status": policy.last_delivery_status if policy else None,
+            "last_delivery_status": policy.last_delivery_status.value
+            if policy and policy.last_delivery_status
+            else None,
             "last_delivery_at": policy.last_delivery_at if policy else None,
             "last_delivery_recipient_email": policy.last_delivery_recipient_email if policy else None,
             "last_delivery_error": policy.last_delivery_error if policy else None,
@@ -155,7 +155,6 @@ class ProjectEmailNotificationService(BaseDomainService):
         project_model = InfraHelper.get_by_id_like(Project, project)
         if not project_model:
             return None
-        existing_policy, _ = self.repo.project_email_notification.get_with_recipients(project_model)
         if len(categories) != len(set(categories)):
             raise ValueError("Email notification categories must be unique")
         if len(recipient_user_uids) != len(set(recipient_user_uids)):
@@ -176,8 +175,7 @@ class ProjectEmailNotificationService(BaseDomainService):
         if not set(normalized_columns).issubset(project_columns):
             raise ValueError("Every card move target column must exist on the project")
         if is_enabled and (
-            not categories
-            or (not notify_all_members and not recipient_user_uids and not normalized_external_emails)
+            not categories or (not notify_all_members and not recipient_user_uids and not normalized_external_emails)
         ):
             raise ValueError("Enabled email notifications require a category and recipient")
 
@@ -191,7 +189,7 @@ class ProjectEmailNotificationService(BaseDomainService):
         if set(recipient_ids) != set(eligible_members):
             raise ValueError("Every email notification recipient must be an active project member")
 
-        self.repo.project_email_notification.replace(
+        _, previous_external_recipient_emails = self.repo.project_email_notification.replace(
             project_model,
             is_enabled=is_enabled,
             notify_all_members=notify_all_members,
@@ -200,14 +198,14 @@ class ProjectEmailNotificationService(BaseDomainService):
             recipient_user_ids=recipient_ids,
             external_recipient_emails=normalized_external_emails,
         )
-        previous_external_emails = set(existing_policy.external_recipient_emails if existing_policy else [])
+        previous_external_emails = set(previous_external_recipient_emails)
         current_external_emails = set(normalized_external_emails)
         if actor and previous_external_emails != current_external_emails:
             ProjectActivityTask.project_email_notification_policy_updated(
                 actor,
                 project_model,
-                sorted(current_external_emails - previous_external_emails),
-                sorted(previous_external_emails - current_external_emails),
+                len(current_external_emails - previous_external_emails),
+                len(previous_external_emails - current_external_emails),
             )
         response = self.get_api_policy(project_model)
         if response is None:
@@ -240,14 +238,16 @@ class ProjectEmailNotificationService(BaseDomainService):
             return []
 
         if policy.notify_all_members:
-            recipients = [member for member, _ in self.repo.project_assigned_user.get_all_by_project(activity.project_id)]
+            recipients = [
+                member for member, _ in self.repo.project_assigned_user.get_all_by_project(activity.project_id)
+            ]
         else:
             recipient_ids = [recipient.id for recipient in recipients]
             current_members = self.repo.project_assigned_user.get_all_by_project(activity.project_id, recipient_ids)
             current_member_ids = {member.id for member, _ in current_members}
             recipients = [recipient for recipient in recipients if recipient.id in current_member_ids]
 
-        actor = cast(User | None, InfraHelper.get_by_id_like(User, activity.user_id)) if activity.user_id else None
+        actor = InfraHelper.get_by_id_like(User, activity.user_id) if activity.user_id else None
         actor_email = actor.email.casefold() if actor and actor.email else None
         resolved: dict[str, ProjectEmailDeliveryRecipient] = {}
         for recipient in recipients:
@@ -274,13 +274,10 @@ class ProjectEmailNotificationService(BaseDomainService):
     ) -> bool:
         """Send one policy-authorized activity email through the existing SMTP service."""
 
-        recipient = next(
-            (item for item in self.get_delivery_recipients(activity) if item.email == recipient_email.casefold()),
-            None,
-        )
+        recipient = self._get_delivery_recipient(activity, recipient_email)
         if recipient is None:
             return True
-        project = cast(Project | None, InfraHelper.get_by_id_like(Project, activity.project_id))
+        project = InfraHelper.get_by_id_like(Project, activity.project_id)
         if not project:
             return True
         notifier = self._get_activity_notifier(activity)
@@ -303,6 +300,51 @@ class ProjectEmailNotificationService(BaseDomainService):
             },
             reply_to=self._project_owner_email(project),
         )
+
+    def _get_delivery_recipient(
+        self,
+        activity: ProjectActivity | ProjectWikiActivity,
+        recipient_email: str,
+    ) -> ProjectEmailDeliveryRecipient | None:
+        """Revalidate one queued recipient without loading every project member."""
+
+        category = self.category_for_activity(activity.activity_type.value)
+        policy, configured_recipients = self.repo.project_email_notification.get_with_recipients(activity.project_id)
+        if (
+            category is None
+            or not policy
+            or not policy.is_enabled
+            or category not in policy.categories
+            or not self._matches_card_move_target(activity, policy)
+        ):
+            return None
+
+        email = recipient_email.casefold()
+        actor = InfraHelper.get_by_id_like(User, activity.user_id) if activity.user_id else None
+        if actor and actor.email and actor.email.casefold() == email:
+            return None
+
+        member = next(
+            (
+                recipient
+                for recipient in configured_recipients
+                if recipient.email and recipient.email.casefold() == email
+            ),
+            None,
+        )
+        if policy.notify_all_members and member is None:
+            candidate, _ = self.repo.user.get_by_email(email)
+            if candidate and candidate.email and candidate.email.casefold() == email:
+                member = candidate
+
+        if member and member.deleted_at is None and member.activated_at is not None:
+            assignment = self.repo.project_assigned_user.get_by_user_and_project(member, activity.project_id)
+            if assignment:
+                return ProjectEmailDeliveryRecipient(email=email, language=member.preferred_lang)
+
+        if email in {external.casefold() for external in policy.external_recipient_emails}:
+            return ProjectEmailDeliveryRecipient(email=email, language="en-US")
+        return None
 
     def record_delivery(
         self,
@@ -345,7 +387,7 @@ class ProjectEmailNotificationService(BaseDomainService):
     def _project_owner_email(project: Project) -> str | None:
         """Resolve Reply-To from the board owner instead of another mutable setting."""
 
-        owner = cast(User | None, InfraHelper.get_by_id_like(User, project.owner_id))
+        owner = InfraHelper.get_by_id_like(User, project.owner_id)
         return owner.email if owner and owner.email else None
 
     @staticmethod
@@ -364,7 +406,7 @@ class ProjectEmailNotificationService(BaseDomainService):
         if not policy.card_move_target_columns:
             return True
         if not isinstance(activity, ProjectActivity) or activity.activity_type != ProjectActivityType.CardMoved:
-            return False
+            return True
         column = activity.activity_history.get("column")
         return isinstance(column, dict) and column.get("name") in policy.card_move_target_columns
 
@@ -382,9 +424,11 @@ class ProjectEmailNotificationService(BaseDomainService):
 
     @staticmethod
     def _get_activity_notifier(activity: ProjectActivity | ProjectWikiActivity) -> User | Bot | None:
-        model = User if activity.user_id else Bot
-        identifier = activity.user_id or activity.bot_id
-        return cast(User | Bot | None, InfraHelper.get_by_id_like(model, identifier, with_deleted=True))
+        if activity.user_id:
+            return InfraHelper.get_by_id_like(User, activity.user_id, with_deleted=True)
+        if activity.bot_id:
+            return InfraHelper.get_by_id_like(Bot, activity.bot_id, with_deleted=True)
+        return None
 
     @staticmethod
     def _create_redirect_url(project: Project, activity: ProjectActivity | ProjectWikiActivity) -> str:

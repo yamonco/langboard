@@ -1,9 +1,12 @@
 import { TGetListForm } from "@/controllers/api/shared/types";
 import { Routing } from "@langboard/core/constants";
 import { ActivityModel, ApiKeySettingModel, User } from "@/core/models";
+import { TCreatedAtModelName } from "@/core/models/ModelRegistry";
 import { Utils } from "@langboard/core/utils";
 
-export const getListRequestData = (form: TGetListForm) => {
+type TListModelClass = typeof ActivityModel.Model | typeof User.Model | typeof ApiKeySettingModel.Model;
+
+export const getListRequestData = (form: TGetListForm<TCreatedAtModelName>): readonly [TListModelClass, string] => {
     let model;
     let url;
     switch (form.listType) {

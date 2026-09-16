@@ -86,22 +86,40 @@ class BotScopeHelper:
             return None
 
         scope_column_name = model_cls.get_scope_column_name()
-        records = BotScopeHelper.get_list(model_cls, None, bot_id=bot.id, **{scope_column_name: scope.id})
+        scope_model_cls = type(scope)
+        with DbSession.use(readonly=False) as db:
+            locked_scope = db.exec(
+                SqlBuilder.select.table(scope_model_cls)
+                .where(scope_model_cls.column("id") == scope.id)
+                .limit(1)
+                .with_for_update()
+            ).first()
+            if locked_scope is None:
+                return None
 
-        if records:
-            model = records[0]
-            if model.conditions != conditions or model.default_scope_branch_id is not None:
-                model.conditions = conditions
-                model.default_scope_branch_id = None
-                with DbSession.use(readonly=False) as db:
+            query = InfraHelper.where_recursive(
+                SqlBuilder.select.table(model_cls),
+                model_cls,
+                bot_id=bot.id,
+                **{scope_column_name: scope.id},
+            )
+            records = db.exec(query).all()
+            if records:
+                model = records[0]
+                if model.conditions != conditions or model.default_scope_branch_id is not None:
+                    model.conditions = conditions
+                    model.default_scope_branch_id = None
                     db.update(model)
-            return model, False
+                return model, False
 
-        model = BotScopeHelper.create(model_cls, bot, scope, conditions, **kwargs)
-        if not model:
-            return None
-
-        return model, True
+            model = model_cls(
+                bot_id=bot.id,
+                conditions=conditions,
+                **{scope_column_name: scope.id},
+                **kwargs,
+            )
+            db.insert(model)
+            return model, True
 
     @staticmethod
     def toggle_trigger_condition(

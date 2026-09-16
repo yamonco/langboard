@@ -4,6 +4,7 @@ import Button from "@/components/base/Button";
 import Flex from "@/components/base/Flex";
 import IconComponent from "@/components/base/IconComponent";
 import Tooltip from "@/components/base/Tooltip";
+import { useBotValueDefaultInput } from "@/components/bots/BotValueInput/DefaultProvider";
 import useSuggestBotActions, { type IBotActionSuggestion } from "@/controllers/api/settings/bots/useSuggestBotActions";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -32,6 +33,7 @@ function BotActionSuggestionPanel({
     onApplySuggestion,
 }: IBotActionSuggestionPanelProps): React.JSX.Element {
     const [t] = useTranslation();
+    const { valuesRef } = useBotValueDefaultInput();
     const [suggestions, setSuggestions] = useState<IBotActionSuggestion[]>(initialSuggestions ?? []);
     const { mutate, isPending } = useSuggestBotActions({ interceptToast: true });
     const hasPrompt = !!prompt.trim();
@@ -48,6 +50,7 @@ function BotActionSuggestionPanel({
         mutate(
             {
                 prompt,
+                value: valuesRef.current,
                 selected_api_names: selectedApis,
                 selected_comfort_tool_names: selectedComfortTools,
                 limit: 8,

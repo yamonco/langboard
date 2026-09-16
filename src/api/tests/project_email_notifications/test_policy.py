@@ -55,9 +55,27 @@ def test_empty_target_columns_preserve_category_wide_notifications() -> None:
     )
 
 
+def test_target_columns_do_not_suppress_non_move_notifications() -> None:
+    policy = ProjectEmailNotificationPolicy(
+        project_id=1,
+        is_enabled=True,
+        categories=[ProjectEmailNotificationCategory.Comments],
+        card_move_target_columns=["Review"],
+    )
+    activity = ProjectActivity(
+        project_id=1,
+        card_id=3,
+        user_id=4,
+        activity_type=ProjectActivityType.CardCommentAdded,
+        activity_history={"card": {"title": "Release"}},
+    )
+
+    assert ProjectEmailNotificationService._matches_card_move_target(activity, policy)
+
+
 def test_update_response_uses_written_policy_when_read_replica_is_stale(monkeypatch: pytest.MonkeyPatch) -> None:
     written: dict[str, object] = {}
-    recorded: list[tuple[object, object, list[str], list[str]]] = []
+    recorded: list[tuple[object, object, int, int]] = []
     project = SimpleNamespace(id=1)
     actor = SimpleNamespace(id=4)
     repository = SimpleNamespace(
@@ -66,8 +84,7 @@ def test_update_response_uses_written_policy_when_read_replica_is_stale(monkeypa
         ),
         project_assigned_user=SimpleNamespace(get_all_by_project=lambda _project, _ids: []),
         project_email_notification=SimpleNamespace(
-            get_with_recipients=lambda _project: (None, []),
-            replace=lambda _project, **values: written.update(values),
+            replace=lambda _project, **values: (written.update(values), ["old@example.com"]),
         ),
     )
     service = ProjectEmailNotificationService(lambda _service: None, lambda _name: None, repository)
@@ -110,7 +127,7 @@ def test_update_response_uses_written_policy_when_read_replica_is_stale(monkeypa
     }
     assert written["notify_all_members"] is True
     assert written["external_recipient_emails"] == ["customer@example.com"]
-    assert recorded == [(actor, project, ["customer@example.com"], [])]
+    assert recorded == [(actor, project, 1, 1)]
 
 
 def test_invalid_external_email_is_rejected() -> None:
@@ -147,3 +164,40 @@ def test_delivery_recipients_merge_members_and_external_addresses(monkeypatch: p
         ("customer@example.com", "en-US"),
         ("edge@example.com", "en-US"),
     ]
+
+
+def test_single_delivery_revalidation_does_not_reload_all_project_members(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Each delivery task validates only its recipient instead of repeating fanout."""
+
+    actor = SimpleNamespace(id=4, email="owner@example.com")
+    member = SimpleNamespace(
+        id=5,
+        email="member@example.com",
+        preferred_lang="en-GB",
+        deleted_at=None,
+        activated_at=object(),
+    )
+    policy = ProjectEmailNotificationPolicy(
+        project_id=1,
+        is_enabled=True,
+        notify_all_members=True,
+        categories=[ProjectEmailNotificationCategory.Cards],
+    )
+    repository = SimpleNamespace(
+        project_email_notification=SimpleNamespace(get_with_recipients=lambda _project: (policy, [])),
+        project_assigned_user=SimpleNamespace(
+            get_all_by_project=lambda *_args: (_ for _ in ()).throw(AssertionError("bulk member query")),
+            get_by_user_and_project=lambda candidate, _project: object() if candidate is member else None,
+        ),
+        user=SimpleNamespace(get_by_email=lambda _email: (member, None)),
+    )
+    service = ProjectEmailNotificationService(lambda _service: None, lambda _name: None, repository)
+    monkeypatch.setattr(InfraHelper, "get_by_id_like", lambda _model, identifier: actor if identifier == 4 else None)
+
+    recipient = service._get_delivery_recipient(_card_moved_activity("Review"), "MEMBER@example.com")
+
+    assert recipient is not None
+    assert recipient.email == "member@example.com"
+    assert recipient.language == "en-GB"
