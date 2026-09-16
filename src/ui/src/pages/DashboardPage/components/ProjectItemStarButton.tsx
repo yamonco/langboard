@@ -55,6 +55,7 @@ const ProjectCardStarButton = memo(({ isUpdating, setIsUpdating, updateStarredPr
             className={cn(!compact && "absolute right-2.5 top-1 mt-0", compact && "shrink-0 rounded-lg shadow-none")}
             size={compact ? "icon-sm" : "icon"}
             title={t(`dashboard.${starred ? "Unstar this project" : "Star this project"}`)}
+            aria-label={t(`dashboard.${starred ? "Unstar this project" : "Star this project"}`)}
             titleSide="bottom"
             onClick={toggleStar}
             disabled={isUpdating}
