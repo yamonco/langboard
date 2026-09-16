@@ -86,6 +86,7 @@ export function Board() {
     const scrollportId = "board-scrollport";
 
     return (
+        <>
             <ScrollArea.Root
                 viewportId={scrollportId}
                 className={cn(
