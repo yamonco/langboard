@@ -51,6 +51,13 @@ test("small markers remain explicit at later positions in a long list", () => {
     );
 });
 
+test("plain underscores survive serializer escaping", () => {
+    const source = "purpose=test\nexpires_at=2026-09-16";
+    const { saved, reloaded } = roundTrip(source);
+    assert.equal(saved.trim(), source);
+    assert.equal(reloaded.map((node) => node.children?.map((child) => child.text).join("")).join("\n"), source);
+});
+
 test("nested markers use their own widths and levels", () => {
     const { saved, reloaded } = roundTrip("3. Three\n100. Hundred\n\n     8. Eight\n     2. Two\n9. Nine");
     assert.match(saved, /100\. Hundred\n\s+8\. Eight\n\s+2\. Two/);
