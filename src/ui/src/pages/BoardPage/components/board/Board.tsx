@@ -88,7 +88,6 @@ export function Board() {
     return (
 <<<<<<< HEAD
         <>
-            <ScrollArea.Root
                 viewportId={scrollportId}
                 className={cn(
                     "h-[calc(100dvh_-_theme(spacing.28)_-_theme(spacing.2)_-_theme(spacing.16))]",
@@ -106,14 +105,6 @@ export function Board() {
         </>
 =======
         <ScrollArea.Root className="min-h-0 flex-1" viewportClassName="!overflow-x-auto !overflow-y-hidden" viewportRef={scrollableRef}>
-            <Flex direction="row" items="start" gap={{ initial: "6", sm: "8" }} p="4" h="full" className="min-h-0">
-                <BoardDisplay scrollableRef={scrollableRef} />
-            </Flex>
-            <ScrollArea.Bar orientation="horizontal" />
-        </ScrollArea.Root>
->>>>>>> origin/pr/102
-    );
-}
 
 function BoardDisplay({ scrollable, scrollableRef }: { scrollable: HTMLDivElement | null; scrollableRef: React.RefObject<HTMLDivElement | null> }) {
     const { chatResizableSidebar } = useBoardController();
