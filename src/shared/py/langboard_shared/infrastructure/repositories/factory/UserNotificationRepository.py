@@ -41,6 +41,9 @@ class UserNotificationRepository(BaseRepository[UserNotification]):
         if unread_only:
             query = query.where(UserNotification.column("read_at") == None)  # noqa
 
+        if unread_only:
+            query = query.where(UserNotification.column("read_at") == None)  # noqa
+
         if time_range.endswith("d"):
             days = int(time_range[:-1])
             query = query.where(UserNotification.column("created_at") >= SafeDateTime.now() - timedelta(days=days))
