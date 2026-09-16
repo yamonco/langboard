@@ -6,6 +6,7 @@ import {
     isProjectQuickSwitcherShortcut,
     parseProjectListView,
     projectListViewStorageKey,
+    searchProjects,
 } from "./ProjectDiscovery.ts";
 
 interface ITestProject {
@@ -107,4 +108,38 @@ test("quick switcher uses the conventional unmodified command shortcut", () => {
     assert.equal(isProjectQuickSwitcherShortcut({ key: "K", metaKey: false, ctrlKey: true, altKey: false, shiftKey: false }), true);
     assert.equal(isProjectQuickSwitcherShortcut({ key: "k", metaKey: true, ctrlKey: false, altKey: false, shiftKey: true }), false);
     assert.equal(isProjectQuickSwitcherShortcut({ key: "p", metaKey: true, ctrlKey: false, altKey: false, shiftKey: false }), false);
+});
+
+test("quick switcher shows the shortcut for the active platform", () => {
+    assert.equal(projectQuickSwitcherShortcutLabel("MacIntel"), "⌘K");
+    assert.equal(projectQuickSwitcherShortcutLabel("iPhone"), "⌘K");
+    assert.equal(projectQuickSwitcherShortcutLabel("Win32"), "Ctrl K");
+    assert.equal(projectQuickSwitcherShortcutLabel("Linux x86_64"), "Ctrl K");
+});
+
+test("recent work excludes projects without actual activity and preserves chronology", () => {
+    const sections = buildProjectDiscoverySections([
+        project("viewed"),
+        project("older-busy", { last_activity_at: new Date("2026-09-01T00:00:00Z") }),
+        project("newer", { last_activity_at: new Date("2026-09-02T00:00:00Z") }),
+    ]);
+    assert.deepEqual(
+        sections.recent.map(({ uid }) => uid),
+        ["newer", "older-busy"]
+    );
+    assert.equal(sections.all.length, 3);
+});
+
+test("dashboard search reuses command fuzzy ranking without mutating inputs", () => {
+    const projects = [project("Langboard"), project("Unrelated"), project("Langboard Notes")];
+    assert.deepEqual(
+        searchProjects(projects, "lngbrd").map(({ uid }) => uid),
+        ["Langboard", "Langboard Notes"]
+    );
+    assert.equal(searchProjects(projects, "unmatched").length, 0);
+    assert.equal(searchProjects(projects, "  ").length, 3);
+    assert.deepEqual(
+        projects.map(({ uid }) => uid),
+        ["Langboard", "Unrelated", "Langboard Notes"]
+    );
 });

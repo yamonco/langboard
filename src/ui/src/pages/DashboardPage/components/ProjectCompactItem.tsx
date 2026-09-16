@@ -10,6 +10,8 @@ import { usePageNavigateRef } from "@/core/hooks/usePageNavigate";
 import { ROUTES } from "@/core/routing/constants";
 import { Utils } from "@langboard/core/utils";
 import ProjectItemStarButton from "@/pages/DashboardPage/components/ProjectItemStarButton";
+import ContextMenu from "@/components/base/ContextMenu";
+import { projectTypeLabel } from "@/pages/DashboardPage/components/ProjectTypeCopy";
 
 interface IProjectCompactItemProps {
     project: Project.TModel;
@@ -22,32 +24,48 @@ const ProjectCompactItem = memo(({ project, updateStarredProjects }: IProjectCom
     const [isUpdating, setIsUpdating] = useState(false);
     const title = project.useField("title");
     const projectType = project.useField("project_type");
-    const lastActivityAt = project.useField("last_activity_at");
-    const createdAt = project.useField("created_at");
-    const activityAt = lastActivityAt ?? createdAt;
+    const activityAt = project.last_activity_at ?? project.created_at;
 
     return (
         <ModelRegistry.Project.Provider model={project}>
-            <Flex items="center" className="rounded-xl border border-transparent pr-2 hover:border-border hover:bg-accent/70">
-                <Button
-                    variant="ghost"
-                    className="flex h-auto min-w-0 flex-1 justify-start gap-3 rounded-xl px-3 py-2.5 text-left hover:bg-transparent"
-                    onClick={() => navigate(ROUTES.BOARD.MAIN(project.uid))}
-                >
-                    <Flex items="center" justify="center" className="size-9 shrink-0 rounded-lg bg-secondary text-secondary-foreground">
-                        <IconComponent icon="folder-kanban" size="4" />
+            <ContextMenu.Root>
+                <ContextMenu.Trigger asChild>
+                    <Flex items="center" className="group rounded-xl border border-transparent pr-2 hover:border-border hover:bg-accent/70">
+                        <Button
+                            variant="ghost"
+                            className="flex h-auto min-w-0 flex-1 justify-start gap-3 rounded-xl px-3 py-2.5 text-left hover:bg-transparent"
+                            onClick={() => navigate(ROUTES.BOARD.MAIN(project.uid))}
+                        >
+                            <Flex items="center" justify="center" className="size-9 shrink-0 rounded-lg bg-secondary text-secondary-foreground">
+                                <IconComponent icon="folder-kanban" size="4" />
+                            </Flex>
+                            <Box className="min-w-0 flex-1">
+                                <Box className="truncate text-sm font-semibold">{title}</Box>
+                                <Flex items="center" gap="1.5" className="mt-0.5 min-w-0 text-xs text-muted-foreground">
+                                    <span className="truncate">{projectTypeLabel(t, projectType)}</span>
+                                    <span aria-hidden="true">·</span>
+                                    <span className="shrink-0">{Utils.String.formatDateDistance(i18n, t, activityAt)}</span>
+                                </Flex>
+                            </Box>
+                        </Button>
+                        <ProjectItemStarButton
+                            compact
+                            isUpdating={isUpdating}
+                            setIsUpdating={setIsUpdating}
+                            updateStarredProjects={updateStarredProjects}
+                        />
                     </Flex>
-                    <Box className="min-w-0 flex-1">
-                        <Box className="truncate text-sm font-semibold">{title}</Box>
-                        <Flex items="center" gap="1.5" className="mt-0.5 min-w-0 text-xs text-muted-foreground">
-                            <span className="truncate">{t(projectType === "Other" ? "common.Other" : `project.types.${projectType}`)}</span>
-                            <span aria-hidden="true">·</span>
-                            <span className="shrink-0">{Utils.String.formatDateDistance(i18n, t, activityAt)}</span>
-                        </Flex>
-                    </Box>
-                </Button>
-                <ProjectItemStarButton compact isUpdating={isUpdating} setIsUpdating={setIsUpdating} updateStarredProjects={updateStarredProjects} />
-            </Flex>
+                </ContextMenu.Trigger>
+                <ContextMenu.Content>
+                    <ContextMenu.Item onSelect={() => navigate(ROUTES.BOARD.MAIN(project.uid))}>{title}</ContextMenu.Item>
+                    <ProjectItemStarButton
+                        menuItem
+                        isUpdating={isUpdating}
+                        setIsUpdating={setIsUpdating}
+                        updateStarredProjects={updateStarredProjects}
+                    />
+                </ContextMenu.Content>
+            </ContextMenu.Root>
         </ModelRegistry.Project.Provider>
     );
 });
