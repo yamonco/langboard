@@ -112,11 +112,10 @@ def test_literal_search_filters_private_and_deleted_wikis_before_paging(monkeypa
         )
         first_history = repository.revisions("project", records[0].get_uid(), None, 1)
         history = repository.revisions("project", records[0].get_uid(), first_history["next_cursor"], 1)
-        assert {
-            tuple(item["content_sides"])
-            for page in (first_history, history)
-            for item in page["items"]
-        } == {(), ("before", "after")}
+        assert {tuple(item["content_sides"]) for page in (first_history, history) for item in page["items"]} == {
+            (),
+            ("before", "after"),
+        }
         assert history["next_cursor"] is None
         assert "activity_history" not in str(first_history) + str(history)
         old_page = repository.revision_page("project", records[0].get_uid(), activity.get_uid(), "before", None, 16000)

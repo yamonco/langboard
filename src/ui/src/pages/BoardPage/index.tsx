@@ -61,8 +61,6 @@ import { Utils } from "@langboard/core/utils";
 
 const BoardGraphPage = lazy(() => import("@/pages/BoardPage/BoardGraphPage"));
 
-const BoardGraphPage = lazy(() => import("@/pages/BoardPage/BoardGraphPage"));
-
 const getCurrentPage = (pageRoute?: string): TBoardViewType => {
     switch (pageRoute) {
         case "card":

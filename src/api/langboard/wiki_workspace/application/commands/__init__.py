@@ -43,9 +43,7 @@ def replace_wiki(
     return {"wiki_uid": wiki_uid, "revision": WikiSnapshot(wiki_uid, before.title, after).revision}
 
 
-def delete_wiki(
-    repository: WikiRepository, project_uid: str, wiki_uid: str, expected_revision: str
-) -> dict[str, bool]:
+def delete_wiki(repository: WikiRepository, project_uid: str, wiki_uid: str, expected_revision: str) -> dict[str, bool]:
     """Delete one exact reviewed wiki without title-based guessing."""
 
     before = repository.snapshot(project_uid, wiki_uid)

@@ -2,7 +2,6 @@
 
 from datetime import datetime
 from typing import Literal
-
 from langboard_shared.core.types import SafeDateTime
 from langboard_shared.domain.models import ProjectRole, User
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction

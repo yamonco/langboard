@@ -1,4 +1,3 @@
-import { compareProjectActivityPriority, type IActivityPriorityProject } from "./ProjectActivityPriority.ts";
 import { compareProjectActivityPriority, type IProjectActivityPriority as IActivityPriorityProject } from "./ProjectActivityPriority.ts";
 import { defaultFilter } from "cmdk";
 
@@ -23,9 +22,12 @@ export const buildProjectDiscoverySections = <TProject extends IActivityPriority
     return {
         all,
         favorites: all.filter((project) => project.starred),
-        related: all.filter((project) => !project.starred && project.related_to_current_user).slice(0, PROJECT_RELATED_TO_ME_LIMIT),
-        recent: all.filter((project) => !project.starred && !project.related_to_current_user).slice(0, recentLimit),
-        recent: all.filter((project) => !project.starred && project.last_activity_at).slice(0, recentLimit),
+    related: all
+        .filter((project) => !project.starred && project.related_to_current_user)
+        .slice(0, PROJECT_RELATED_TO_ME_LIMIT),
+    recent: all
+        .filter((project) => !project.starred && !project.related_to_current_user && project.last_activity_at)
+        .slice(0, recentLimit),
     };
 };
 

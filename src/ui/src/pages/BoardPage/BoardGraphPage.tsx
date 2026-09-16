@@ -73,7 +73,6 @@ const BoardGraphPage = ({ project }: IBoardRelatedPageProps): React.JSX.Element 
         if (currentUser) updateSettingsByKey("graph_view_modes", { ...getUserSettingsStore().settings.graph_view_modes, [currentUser.uid]: next });
     };
     const [focusColumn, setFocusColumn] = useState<{ uid: string }>();
-    const { data, isError, refetch } = useGetCards({ project_uid: project.uid });
     const { data, error, isError, refetch } = useGetCards({ project_uid: project.uid });
     const cards = ProjectCard.Model.useModels((card) => card.project_uid === project.uid, [project, data]);
     const columns = ProjectColumn.Model.useModels((column) => column.project_uid === project.uid, [project, data]);

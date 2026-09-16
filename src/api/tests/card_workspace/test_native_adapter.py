@@ -553,7 +553,7 @@ def test_conditional_description_emits_effects_only_after_save(monkeypatch: pyte
     from langboard_shared.tasks.bots import CardBotTask
 
     project = SimpleNamespace(id=1)
-    card = SimpleNamespace(description=EditorContentModel(content="before"))
+    card = SimpleNamespace(description=EditorContentModel(content="before"), is_linked_resource=False)
     conditional = Mock(return_value=saved)
     unconditional = Mock()
     service = CardService(

@@ -176,9 +176,11 @@ class ProjectInvitationService(BaseDomainService):
         if not user.activated_at:
             return False
         identity_link = self._get_service(IdentityLinkService)
+        identity_provider = getattr(identity_link, "get_by_user_provider", None)
+        if identity_provider is None:
+            return False
         return any(
-            identity_link.get_by_user_provider(user, provider) is not None
-            for provider in (IdentityProvider.Oidc, IdentityProvider.Scim)
+            identity_provider(user, provider) is not None for provider in (IdentityProvider.Oidc, IdentityProvider.Scim)
         )
 
     def update_by_signed_up(self, user: User) -> None:

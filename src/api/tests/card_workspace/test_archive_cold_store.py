@@ -124,10 +124,13 @@ def test_board_route_passes_one_request_cutoff_to_cards_and_checklists(monkeypat
         project_column=SimpleNamespace(
             get_api_list_by_project=lambda _project: [],
             get_api_bot_scopes_by_project=lambda _project: [],
-            get_api_bot_schedule_list_by_project=lambda _project: [],
+            get_api_bot_schedule_list_by_project=lambda _project, _columns: [],
         ),
         card=SimpleNamespace(
-            get_board_list=lambda _project, cutoff: (calls.__setitem__("cards", cutoff), [])[1],
+            get_board_list=lambda _project, _user_or_bot, cutoff: (
+                calls.__setitem__("cards", cutoff),
+                [],
+            )[1],
         ),
         checklist=SimpleNamespace(
             get_api_list_only_by_project=lambda _project, *, archive_visible_since: (
@@ -220,7 +223,14 @@ def test_hot_queries_share_the_exact_boundary_and_hide_cold_relationship_endpoin
         )
         connection.execute(
             ProjectColumn.__table__.insert(),
-            {"id": 10, "project_id": 1, "name": "Work", "order": 0, "is_archive": False},
+            {
+                "id": 10,
+                "project_id": 1,
+                "name": "Work",
+                "order": 0,
+                "is_archive": False,
+                "description": "",
+            },
         )
         connection.execute(
             Card.__table__.insert(),

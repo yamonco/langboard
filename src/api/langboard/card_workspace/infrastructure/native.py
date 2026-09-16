@@ -67,7 +67,9 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
                 details["title"] = resource.get("title", "")
                 details["description"] = resource.get("content")
             else:
-                details["title"] = "Restricted reference" if resource.get("status") == "forbidden" else "Source unavailable"
+                details["title"] = (
+                    "Restricted reference" if resource.get("status") == "forbidden" else "Source unavailable"
+                )
                 details["description"] = None
             return CardBundleSource(
                 details=details,

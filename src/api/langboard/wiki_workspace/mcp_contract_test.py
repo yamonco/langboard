@@ -29,7 +29,9 @@ def test_self_assignment_identity_is_never_a_caller_argument() -> None:
 def test_self_assignment_returns_onboarding_guidance_instead_of_an_internal_error() -> None:
     """A non-member receives an actionable validation result and no hidden retry."""
     service = SimpleNamespace(
-        card=SimpleNamespace(assign_self=Mock(side_effect=ValueError("Current user must first be onboarded to this project")))
+        card=SimpleNamespace(
+            assign_self=Mock(side_effect=ValueError("Current user must first be onboarded to this project"))
+        )
     )
 
     with pytest.raises(ValidationError, match="Ask a board updater to onboard you"):
@@ -107,9 +109,7 @@ def test_wiki_patch_and_delete_require_exact_identity_and_revision() -> None:
             WikiWorkspaceMcp.delete_project_wiki("p", "w", "stale", None, None)
         repository.delete.assert_not_called()
 
-        deleted = WikiWorkspaceMcp.delete_project_wiki(
-            "p", "w", repository.snapshot.return_value.revision, None, None
-        )
+        deleted = WikiWorkspaceMcp.delete_project_wiki("p", "w", repository.snapshot.return_value.revision, None, None)
         assert deleted == {"deleted": True}
         repository.delete.assert_called_once_with("p", "w", "one two")
 

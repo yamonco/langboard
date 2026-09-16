@@ -1,3 +1,4 @@
+from datetime import timedelta
 from typing import Any, Literal, Sequence, cast, overload
 from sqlalchemy.exc import IntegrityError
 from ....ai import BotScheduleHelper, BotScopeHelper
@@ -117,20 +118,23 @@ class CardService(BaseDomainService):
         self,
         project: TProjectParam | None,
         user_or_bot: TUserOrBot | None = None,
+        archive_visible_since: SafeDateTime | None = None,
     ) -> list[dict[str, Any]]:
         project = InfraHelper.get_by_id_like(Project, project)
         if not project:
             return []
 
-        raw_cards = self.repo.card.get_board_list(project)
-        raw_members = self.repo.card_assigned_user.get_all_by_project(project)
+        if archive_visible_since is None:
+            archive_visible_since = SafeDateTime.now() - timedelta(days=project.archive_visible_days)
+        raw_cards = self.repo.card.get_board_list(project, archive_visible_since)
+        raw_members = self.repo.card_assigned_user.get_all_by_project(project, archive_visible_since)
         members: dict[int, list[str]] = {}
         for user, card_assigned_user in raw_members:
             if card_assigned_user.card_id not in members:
                 members[card_assigned_user.card_id] = []
             members[card_assigned_user.card_id].append(user.get_uid())
 
-        raw_relationships = self.repo.card_relationship.get_all_by_project(project)
+        raw_relationships = self.repo.card_relationship.get_all_by_project(project, archive_visible_since)
         relationships: dict[int, list[dict[str, Any]]] = {}
         for relationship, _ in raw_relationships:
             if relationship.card_id_parent not in relationships:
@@ -140,7 +144,7 @@ class CardService(BaseDomainService):
             relationships[relationship.card_id_parent].append(relationship.api_response())
             relationships[relationship.card_id_child].append(relationship.api_response())
 
-        raw_labels = self.repo.project_label.get_all_card_labels_by_project(project)
+        raw_labels = self.repo.project_label.get_all_card_labels_by_project(project, archive_visible_since)
         labels: dict[int, list[dict[str, Any]]] = {}
         for label, card_label in raw_labels:
             if card_label.card_id not in labels:
@@ -151,7 +155,7 @@ class CardService(BaseDomainService):
         resource_payloads = self._get_linked_resource_payloads(
             user_or_bot,
             project,
-            [card for card, _ in raw_cards if card.is_linked_resource],
+            [card for card, _ in raw_cards if getattr(card, "is_linked_resource", False)],
             include_content=False,
         )
         for card, count_comment in raw_cards:
@@ -161,7 +165,7 @@ class CardService(BaseDomainService):
                 relationships=relationships.get(card.id, []),
                 labels=labels.get(card.id, []),
             )
-            if card.is_linked_resource:
+            if getattr(card, "is_linked_resource", False):
                 api_card["linked_resource"] = resource_payloads[card.get_uid()]
             cards.append(api_card)
 
@@ -190,6 +194,8 @@ class CardService(BaseDomainService):
             if card.source_type == Card.LINKED_RESOURCE_PROJECT_WIKI and card.source_uid is not None
         ]
         wiki_uids = {cast(str, card.source_uid) for card in wiki_cards}
+        if not wiki_cards:
+            return payloads
         if include_content:
             wikis = self.repo.project_wiki.get_by_project_and_uids(project, wiki_uids)
             wiki_map: dict[str, Any] = {wiki.get_uid(): wiki for wiki in wikis}
@@ -315,6 +321,39 @@ class CardService(BaseDomainService):
         )[card.get_uid()]
         CardPublisher.created(project, column, {"card": payload})
         return card, payload, True
+
+    def get_api_archived_page_by_project(
+        self,
+        project: TProjectParam | None,
+        limit: int,
+        before_archived_at: SafeDateTime | None = None,
+        before_card: TCardParam | None = None,
+        input_value: str | None = None,
+    ) -> tuple[list[dict[str, Any]], int, tuple[str, str] | None] | None:
+        """Return an archive-only page kept separate from the board hot path."""
+
+        project = InfraHelper.get_by_id_like(Project, project)
+        if not project:
+            return None
+        records = self.repo.card.get_archived_page_by_project(
+            project,
+            limit,
+            before_archived_at,
+            before_card,
+            input_value,
+        )
+        has_more = len(records) > limit
+        page = records[:limit]
+        cards: list[dict[str, Any]] = []
+        for card, column in page:
+            api_card = card.api_response()
+            api_card["project_column_name"] = column.name
+            cards.append(api_card)
+        next_fields = None
+        if has_more and page:
+            last_card = page[-1][0]
+            next_fields = (last_card.archived_at.isoformat(), last_card.get_uid())
+        return cards, self.repo.card.count_archived_by_project(project, input_value), next_fields
 
     def get_dashboard_list(
         self, user: User, pagination: TimeBasedPagination

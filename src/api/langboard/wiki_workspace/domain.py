@@ -90,9 +90,7 @@ def append_content(snapshot: WikiSnapshot, expected_revision: str, text: str) ->
     return snapshot.content + ("\n\n" if snapshot.content else "") + text
 
 
-def replace_content(
-    snapshot: WikiSnapshot, expected_revision: str, edits: list[tuple[str, str]]
-) -> str:
+def replace_content(snapshot: WikiSnapshot, expected_revision: str, edits: list[tuple[str, str]]) -> str:
     """Apply bounded exact replacements without guessing through stale or ambiguous text."""
 
     if snapshot.revision != expected_revision:

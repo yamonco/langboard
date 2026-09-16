@@ -87,7 +87,9 @@ class IdentityService:
         return SimpleNamespace(**kwargs)
 
 
-def make_service(repository: Any, identity: IdentityService, user_service: Any | None = None) -> ScimProvisioningService:
+def make_service(
+    repository: Any, identity: IdentityService, user_service: Any | None = None
+) -> ScimProvisioningService:
     services = {
         "identity_link": identity,
         "user": user_service or SimpleNamespace(),
@@ -106,9 +108,7 @@ def test_external_id_does_not_auto_link_an_existing_email() -> None:
     service = make_service(SimpleNamespace(), identity, user_service)
 
     with pytest.raises(ScimProvisioningException.Conflict):
-        service.create_or_upsert_user(
-            {"externalId": "employee-7", "userName": "person@example.com"}
-        )
+        service.create_or_upsert_user({"externalId": "employee-7", "userName": "person@example.com"})
 
     assert identity.upserts == []
 
@@ -196,17 +196,11 @@ def test_project_role_groups_reconcile_membership_role_and_revocation() -> None:
         102: [(SimpleNamespace(user_id=employee.id), employee)],
     }
     role_repository = RoleRepository()
-    assigned_repository = AssignedRepository(
-        [owner, employee, stale_employee, external], role_repository
-    )
+    assigned_repository = AssignedRepository([owner, employee, stale_employee, external], role_repository)
     relationship_calls: list[set[int]] = []
     repository = SimpleNamespace(
-        scim_group=SimpleNamespace(
-            get_by_external_id=lambda external_id, **_kwargs: groups.get(external_id)
-        ),
-        scim_group_member=SimpleNamespace(
-            get_users_by_group=lambda group, **_kwargs: members.get(group.id, [])
-        ),
+        scim_group=SimpleNamespace(get_by_external_id=lambda external_id, **_kwargs: groups.get(external_id)),
+        scim_group_member=SimpleNamespace(get_users_by_group=lambda group, **_kwargs: members.get(group.id, [])),
         project_assigned_user=assigned_repository,
         project_user_relationship=SimpleNamespace(
             ensure_project_relationships=lambda _project, user_ids: relationship_calls.append(set(user_ids))
@@ -282,9 +276,7 @@ def test_deactivation_removes_group_memberships_before_reconciling_access(
     project = SimpleNamespace(id=10)
     calls: list[tuple[str, Any]] = []
     identity = IdentityService({user.id})
-    user_service = SimpleNamespace(
-        update=lambda target, form, **_kwargs: calls.append(("deactivate", (target, form)))
-    )
+    user_service = SimpleNamespace(update=lambda target, form, **_kwargs: calls.append(("deactivate", (target, form))))
     repository = SimpleNamespace(
         scim_group_member=SimpleNamespace(
             delete_all_by_user=lambda target: calls.append(("delete_memberships", target))

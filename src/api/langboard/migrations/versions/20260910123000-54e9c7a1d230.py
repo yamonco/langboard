@@ -1,7 +1,7 @@
 """add provider-neutral external import lineage
 
 Revision ID: 54e9c7a1d230
-Revises: 6f4a9d18c2e1
+Revises: da39f306364b
 Create Date: 2026-09-10 12:30:00
 """
 
@@ -11,7 +11,7 @@ from alembic import op
 
 
 revision: str = "54e9c7a1d230"
-down_revision: str | None = "6f4a9d18c2e1"
+down_revision: str | None = "da39f306364b"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
@@ -31,7 +31,10 @@ def upgrade() -> None:
         sa.Column("target_uid", sa.String(), nullable=False),
         sa.Column("source_fingerprint", sa.String(), nullable=False),
         sa.Column("batch_id", sa.String(), nullable=False),
-        sa.Column("provenance", sa.Text(), nullable=False, server_default="{}"),
+        sa.Column("provenance", sa.Text(), nullable=False, server_default=sa.text("'{}'")),
+        sa.Column("effects_dispatched_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("effects_attempts", sa.Integer(), server_default=sa.text("0"), nullable=False),
+        sa.Column("effects_error", sa.Text(), nullable=True),
         sa.ForeignKeyConstraint(
             ["project_id"],
             ["project.id"],
@@ -47,16 +50,39 @@ def upgrade() -> None:
             "source_record_id",
             name="uq_external_import_record_source_record",
         ),
+        if_not_exists=True,
     )
-    op.create_index(op.f("ix_external_import_record_project_id"), "external_import_record", ["project_id"])
-    op.create_index(op.f("ix_external_import_record_source_namespace"), "external_import_record", ["source_namespace"])
-    op.create_index(op.f("ix_external_import_record_record_type"), "external_import_record", ["record_type"])
-    op.create_index(op.f("ix_external_import_record_batch_id"), "external_import_record", ["batch_id"])
+    op.create_index(
+        op.f("ix_external_import_record_project_id"),
+        "external_import_record",
+        ["project_id"],
+        if_not_exists=True,
+    )
+    op.create_index(
+        op.f("ix_external_import_record_source_namespace"),
+        "external_import_record",
+        ["source_namespace"],
+        if_not_exists=True,
+    )
+    op.create_index(
+        op.f("ix_external_import_record_record_type"),
+        "external_import_record",
+        ["record_type"],
+        if_not_exists=True,
+    )
+    op.create_index(
+        op.f("ix_external_import_record_batch_id"),
+        "external_import_record",
+        ["batch_id"],
+        if_not_exists=True,
+    )
 
 
 def downgrade() -> None:
-    op.drop_index(op.f("ix_external_import_record_batch_id"), table_name="external_import_record")
-    op.drop_index(op.f("ix_external_import_record_record_type"), table_name="external_import_record")
-    op.drop_index(op.f("ix_external_import_record_source_namespace"), table_name="external_import_record")
-    op.drop_index(op.f("ix_external_import_record_project_id"), table_name="external_import_record")
-    op.drop_table("external_import_record")
+    op.drop_index(op.f("ix_external_import_record_batch_id"), table_name="external_import_record", if_exists=True)
+    op.drop_index(op.f("ix_external_import_record_record_type"), table_name="external_import_record", if_exists=True)
+    op.drop_index(
+        op.f("ix_external_import_record_source_namespace"), table_name="external_import_record", if_exists=True
+    )
+    op.drop_index(op.f("ix_external_import_record_project_id"), table_name="external_import_record", if_exists=True)
+    op.drop_table("external_import_record", if_exists=True)

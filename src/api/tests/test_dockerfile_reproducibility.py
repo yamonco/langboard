@@ -47,7 +47,7 @@ def test_api_runtime_excludes_document_processing_extra() -> None:
 
     required, optional = pyproject.split("[project.optional-dependencies]", maxsplit=1)
     assert '"docling>=2.105.0"' not in required
-    assert 'document-processing = [' in optional
+    assert "document-processing = [" in optional
     assert '"docling>=2.105.0"' in optional
     assert "FROM base AS with-document-processing" in dockerfile
     assert "uv sync --locked --no-dev --extra document-processing" in dockerfile

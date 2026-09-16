@@ -109,9 +109,7 @@ class ProjectEmailNotificationService(BaseDomainService):
         policy, recipients = self.repo.project_email_notification.get_with_recipients(project_model)
         members = self.repo.project_assigned_user.get_all_by_project(project_model)
         columns = [
-            column
-            for column, _ in self.repo.project_column.get_all_by_project(project_model)
-            if not column.is_archive
+            column for column, _ in self.repo.project_column.get_all_by_project(project_model) if not column.is_archive
         ]
         return {
             "is_enabled": policy.is_enabled if policy else False,
@@ -176,8 +174,7 @@ class ProjectEmailNotificationService(BaseDomainService):
         if not set(normalized_columns).issubset(project_columns):
             raise ValueError("Every card move target column must exist on the project")
         if is_enabled and (
-            not categories
-            or (not notify_all_members and not recipient_user_uids and not normalized_external_emails)
+            not categories or (not notify_all_members and not recipient_user_uids and not normalized_external_emails)
         ):
             raise ValueError("Enabled email notifications require a category and recipient")
 
@@ -240,7 +237,9 @@ class ProjectEmailNotificationService(BaseDomainService):
             return []
 
         if policy.notify_all_members:
-            recipients = [member for member, _ in self.repo.project_assigned_user.get_all_by_project(activity.project_id)]
+            recipients = [
+                member for member, _ in self.repo.project_assigned_user.get_all_by_project(activity.project_id)
+            ]
         else:
             recipient_ids = [recipient.id for recipient in recipients]
             current_members = self.repo.project_assigned_user.get_all_by_project(activity.project_id, recipient_ids)

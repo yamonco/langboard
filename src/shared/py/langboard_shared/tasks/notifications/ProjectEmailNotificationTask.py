@@ -66,7 +66,9 @@ async def fanout_project_activity_email(activity_table: str, activity_id: Snowfl
         return
     service = DomainService().project_email_notification
     recipients = service.get_delivery_recipients(activity)
-    logger.info("Scheduling board activity email: activity=%s/%s recipients=%d", activity_table, activity_id, len(recipients))
+    logger.info(
+        "Scheduling board activity email: activity=%s/%s recipients=%d", activity_table, activity_id, len(recipients)
+    )
     for recipient in recipients:
         deliver_project_activity_email(activity_table, activity_id, recipient.email)
 
@@ -92,7 +94,9 @@ async def deliver_project_activity_email(
             f"SMTP delivery failed: activity={activity_table}/{activity_id} recipient={recipient_email}"
         )
     DomainService().project_email_notification.record_delivery(activity, recipient_email, succeeded=True)
-    logger.info("Board activity email accepted: activity=%s/%s recipient=%s", activity_table, activity_id, recipient_email)
+    logger.info(
+        "Board activity email accepted: activity=%s/%s recipient=%s", activity_table, activity_id, recipient_email
+    )
 
 
 def _get_activity(

@@ -114,9 +114,7 @@ def test_identity_migration_accepts_an_already_projected_constraint(
         migration.sa,
         "inspect",
         lambda _bind: SimpleNamespace(
-            get_unique_constraints=lambda _table: [
-                {"name": "uq_user_identity_link_provider_issuer_external_id"}
-            ]
+            get_unique_constraints=lambda _table: [{"name": "uq_user_identity_link_provider_issuer_external_id"}]
         ),
     )
     monkeypatch.setattr(migration.op, "execute", lambda _statement: calls.append("execute"))

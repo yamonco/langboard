@@ -148,7 +148,11 @@ const ProjectTabs = memo(
                 </Flex>
                 <Box>
                     <ProjectCompactList title={t("dashboard.Favorites")} projects={discoverySections.favorites} updateStarredProjects={updateStars} />
-                    <ProjectCompactList title={t("dashboard.Related to me")} projects={discoverySections.related} updateStarredProjects={updateStars} />
+                    <ProjectCompactList
+                        title={t("dashboard.Related to me")}
+                        projects={discoverySections.related}
+                        updateStarredProjects={updateStars}
+                    />
                     {(isProjectsLoading || isProjectsFetching) && currentProjects.length === 0 ? (
                         <SkeletonProjectList />
                     ) : currentProjects.length === 0 ? (

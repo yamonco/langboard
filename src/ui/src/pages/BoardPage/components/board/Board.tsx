@@ -104,6 +104,7 @@ export function Board() {
             <BoardMinimap scrollable={scrollable} scrollportId={scrollportId} />
         </>
     );
+}
 
 function BoardDisplay({ scrollable, scrollableRef }: { scrollable: HTMLDivElement | null; scrollableRef: React.RefObject<HTMLDivElement | null> }) {
     const { chatResizableSidebar } = useBoardController();

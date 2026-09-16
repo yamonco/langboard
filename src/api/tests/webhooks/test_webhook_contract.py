@@ -16,6 +16,7 @@ from langboard_shared.tasks.bots.utils.BotTaskDataHelper import BotTaskDataHelpe
 from langboard_shared.tasks.webhooks import WebhookTask  # noqa: E402
 from langboard_shared.tasks.webhooks.utils import (  # noqa: E402
     WEBHOOK_EVENT_NAMES,
+    ResolvedWebhookTarget,
     WebhookModel,
     validate_webhook_url,
 )
@@ -23,9 +24,7 @@ from langboard_shared.tasks.webhooks.utils import (  # noqa: E402
 
 app_setting_module = importlib.import_module("langboard_shared.domain.services.factory.AppSettingService")
 webhook_schema_module = importlib.import_module("langboard.routes.schemas.WebhookSchemaApi")
-webhook_url_policy_module = importlib.import_module(
-    "langboard_shared.tasks.webhooks.utils.WebhookUrlPolicy"
-)
+webhook_url_policy_module = importlib.import_module("langboard_shared.tasks.webhooks.utils.WebhookUrlPolicy")
 settings_form_module = importlib.import_module("langboard.routes.settings.Form")
 
 
@@ -494,8 +493,12 @@ async def test_endpoint_delivery_failure_is_bounded_and_retryable(monkeypatch: p
     )
     observed_timeout: list[object] = []
 
-    async def allow_public_url(url: str) -> str:
-        return url
+    async def allow_public_url(url: str) -> ResolvedWebhookTarget:
+        return ResolvedWebhookTarget(
+            url=url,
+            host_header="example.invalid",
+            sni_hostname="example.invalid",
+        )
 
     class FakeClient:
         def __init__(self, *, timeout: object, follow_redirects: bool) -> None:
