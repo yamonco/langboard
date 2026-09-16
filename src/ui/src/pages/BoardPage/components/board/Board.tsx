@@ -86,8 +86,7 @@ export function Board() {
     const scrollportId = "board-scrollport";
 
     return (
-<<<<<<< HEAD
-        <>
+            <ScrollArea.Root
                 viewportId={scrollportId}
                 className={cn(
                     "h-[calc(100dvh_-_theme(spacing.28)_-_theme(spacing.2)_-_theme(spacing.16))]",
@@ -103,8 +102,7 @@ export function Board() {
             </ScrollArea.Root>
             <BoardMinimap scrollable={scrollable} scrollportId={scrollportId} />
         </>
-=======
-        <ScrollArea.Root className="min-h-0 flex-1" viewportClassName="!overflow-x-auto !overflow-y-hidden" viewportRef={scrollableRef}>
+    );
 
 function BoardDisplay({ scrollable, scrollableRef }: { scrollable: HTMLDivElement | null; scrollableRef: React.RefObject<HTMLDivElement | null> }) {
     const { chatResizableSidebar } = useBoardController();
