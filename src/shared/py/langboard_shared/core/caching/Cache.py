@@ -35,6 +35,9 @@ class Cache(BaseCache):
     def set(self, key: str, value: Any, ttl: int = 0) -> None:
         self._cache.set(key, value, ttl)
 
+    def set_if_absent(self, key: str, value: Any, ttl: int) -> bool:
+        return self._cache.set_if_absent(key, value, ttl)
+
     def delete(self, key: str) -> None:
         self._cache.delete(key)
 

@@ -30,13 +30,21 @@ class UserIdentityLinkRepository(BaseRepository[UserIdentityLink]):
             result = db.exec(SqlBuilder.select.table(UserIdentityLink).where(condition).limit(1))
             return result.first()
 
-    def get_by_user_provider(self, user: TUserParam, provider: IdentityProvider) -> UserIdentityLink | None:
+    def get_by_user_provider(
+        self,
+        user: TUserParam,
+        provider: IdentityProvider,
+        issuer: str | None = None,
+    ) -> UserIdentityLink | None:
         user_id = InfraHelper.convert_id(user)
+        normalized_issuer = issuer.strip().rstrip("/") if issuer else ""
         with DbSession.use(readonly=True) as db:
             result = db.exec(
                 SqlBuilder.select.table(UserIdentityLink)
                 .where(
-                    (UserIdentityLink.column("user_id") == user_id) & (UserIdentityLink.column("provider") == provider)
+                    (UserIdentityLink.column("user_id") == user_id)
+                    & (UserIdentityLink.column("provider") == provider)
+                    & (UserIdentityLink.column("issuer") == normalized_issuer)
                 )
                 .limit(1)
             )

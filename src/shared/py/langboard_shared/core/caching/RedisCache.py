@@ -33,6 +33,12 @@ class RedisCache(BaseCache):
         casted_value = self._cast_set(value)
         self.__run_redis_method("set", key, casted_value, ex=ttl if ttl > 0 else None)
 
+    def set_if_absent(self, key: str, value: Any, ttl: int) -> bool:
+        if ttl <= 0:
+            raise ValueError("Atomic cache entries require a positive TTL")
+        casted_value = self._cast_set(value)
+        return bool(self.__run_redis_method("set", key, casted_value, ex=ttl, nx=True))
+
     def delete(self, key: str) -> None:
         if self.__run_redis_method("exists", key):
             self.__run_redis_method("delete", key)

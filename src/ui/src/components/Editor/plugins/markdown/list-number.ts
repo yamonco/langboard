@@ -101,7 +101,6 @@ export function serializeListNumbers(editor: SlateEditor, options?: Parameters<t
             },
         },
     });
-<<<<<<< HEAD
 
     // A wide parent marker makes remark indent child items to its content
     // column. Keep the separating blank line so CommonMark parses them as

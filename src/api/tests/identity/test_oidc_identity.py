@@ -7,6 +7,9 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 import pytest
+import sqlalchemy as sa
+from alembic.migration import MigrationContext
+from alembic.operations import Operations
 from jwt import encode as jwt_encode
 from starlette.datastructures import Headers
 
@@ -20,6 +23,7 @@ from langboard_shared.helpers import MiddlewareHelper  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[4]
 MIGRATION = ROOT / "src/api/langboard/migrations/versions/20260910223340-7b7818743022.py"
+MULTI_ISSUER_MIGRATION = ROOT / "src/api/langboard/migrations/versions/20260909173000-a3d9f6c27b41.py"
 
 
 def test_access_token_requires_the_configured_resource_audience(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -135,3 +139,61 @@ def test_identity_migration_accepts_an_already_projected_constraint(
     migration.upgrade()
 
     assert calls == ["execute", "alter"]
+
+
+def test_multi_issuer_migration_enforces_the_new_database_boundary() -> None:
+    spec = importlib.util.spec_from_file_location("multi_issuer_identity", MULTI_ISSUER_MIGRATION)
+    assert spec and spec.loader
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+    metadata = sa.MetaData()
+    identity_link = sa.Table(
+        "user_identity_link",
+        metadata,
+        sa.Column("id", sa.Integer(), primary_key=True),
+        sa.Column("user_id", sa.Integer(), nullable=False),
+        sa.Column("provider", sa.String(), nullable=False),
+        sa.Column("issuer", sa.String(), nullable=False),
+        sa.Column("external_id", sa.String(), nullable=False),
+        sa.UniqueConstraint("user_id", "provider", name="uq_user_identity_link_user_provider"),
+        sa.UniqueConstraint(
+            "provider",
+            "issuer",
+            "external_id",
+            name="uq_user_identity_link_provider_issuer_external_id",
+        ),
+    )
+    engine = sa.create_engine("sqlite://")
+    with engine.begin() as connection:
+        metadata.create_all(connection)
+        connection.execute(
+            identity_link.insert().values(
+                id=1,
+                user_id=41,
+                provider="oidc",
+                issuer="https://issuer-one.example",
+                external_id="subject-one",
+            )
+        )
+        migration.op = Operations(MigrationContext.configure(connection))
+        migration.upgrade()
+        reflected = sa.Table("user_identity_link", sa.MetaData(), autoload_with=connection)
+        connection.execute(
+            reflected.insert().values(
+                id=2,
+                user_id=41,
+                provider="oidc",
+                issuer="https://issuer-two.example",
+                external_id="subject-two",
+            )
+        )
+        with pytest.raises(sa.exc.IntegrityError):
+            connection.execute(
+                reflected.insert().values(
+                    id=3,
+                    user_id=41,
+                    provider="oidc",
+                    issuer="https://issuer-two.example",
+                    external_id="subject-three",
+                )
+            )
