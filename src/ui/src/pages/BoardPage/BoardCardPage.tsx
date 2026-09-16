@@ -1,4 +1,6 @@
 import Dialog from "@/components/base/Dialog";
+import { isNotificationInteraction } from "@/components/Header/useNotificationNavigation";
+import { CARD_WINDOW_EMBEDDED_OVERLAY_CLASS, CARD_WINDOW_HEIGHT_CLASS, CARD_WINDOW_OVERLAY_CLASS } from "./cardWindowLayout";
 import { usePageNavigateRef } from "@/core/hooks/usePageNavigate";
 import { useAuth } from "@/core/providers/AuthProvider";
 import { ROUTES } from "@/core/routing/constants";
@@ -130,6 +132,7 @@ const BoardCardPageComponent = ({
                                         "2xl:w-[min(calc(100vw-theme(spacing.16)),theme(screens.2xl))]",
                                         "2xl:max-w-[min(calc(100vw-theme(spacing.16)),theme(screens.2xl))]"
                                     ),
+                                !isExpanded && CARD_WINDOW_HEIGHT_CLASS,
                                 shouldHideForCardSelection && "pointer-events-none -z-[9998] opacity-0"
                             )}
                             overlayClassName={
@@ -137,7 +140,9 @@ const BoardCardPageComponent = ({
                                     ? "!pointer-events-none bg-transparent opacity-0 backdrop-blur-none"
                                     : isExpanded
                                       ? "!pointer-events-none !absolute !inset-0 !z-[1] bg-transparent backdrop-blur-none"
-                                      : undefined
+                                      : embedded
+                                        ? CARD_WINDOW_EMBEDDED_OVERLAY_CLASS
+                                        : CARD_WINDOW_OVERLAY_CLASS
                             }
                             overlayContentClassName={shouldHideForCardSelection || isExpanded ? "pointer-events-none" : undefined}
                             contentWrapperClassName={
@@ -156,6 +161,10 @@ const BoardCardPageComponent = ({
                             disablePortal={embedded}
                             viewportRef={viewportRef}
                             onInteractOutside={(event) => {
+                                if (isNotificationInteraction(event.detail.originalEvent.target)) {
+                                    event.preventDefault();
+                                    return;
+                                }
                                 if (isCardEditingRef.current) {
                                     event.preventDefault();
                                     handleCloseRequest();
@@ -167,6 +176,10 @@ const BoardCardPageComponent = ({
                                 }
                             }}
                             onOverlayInteract={(event) => {
+                                if (isNotificationInteraction(event.target)) {
+                                    event.preventDefault();
+                                    return;
+                                }
                                 if (isCardEditingRef.current) {
                                     event.preventDefault();
                                     event.stopPropagation();
