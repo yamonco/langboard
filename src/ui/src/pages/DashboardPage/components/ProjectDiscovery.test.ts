@@ -4,6 +4,7 @@ import {
     buildProjectDiscoverySections,
     buildProjectQuickSwitcherSections,
     isProjectQuickSwitcherShortcut,
+    projectQuickSwitcherShortcutLabel,
     parseProjectListView,
     projectListViewStorageKey,
     searchProjects,
