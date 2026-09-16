@@ -27,7 +27,7 @@ const BoardSettingsList = memo(() => {
     );
 
     return (
-        <Flex direction="col" gap="3" px={{ initial: "4", md: "6", lg: "8" }} pt={{ initial: "4", md: "6", lg: "8" }} pb="28" items="center">
+        <Flex direction="col" gap="3" p={{ initial: "4", md: "6", lg: "8" }} items="center">
             <BoardSettingsSection title="project.settings.Basic info">
                 <BoardSettingsBasic />
             </BoardSettingsSection>
@@ -35,20 +35,20 @@ const BoardSettingsList = memo(() => {
                 <BoardSettingsEmailNotifications />
             </BoardSettingsSection>
             <BoardSettingsSection title="project.settings.Internal bots">
-                <BoardSettingsInternalBotList />
+                <BoardSettingsInternalBotList key={`board-settings-internal-bots-${project.uid}`} />
             </BoardSettingsSection>
             {numMembers > 0 && (
                 <BoardSettingsSection title="project.settings.Member roles">
-                    <BoardSettingsMemberRoleList />
+                    <BoardSettingsMemberRoleList key={`board-settings-member-roles-${project.uid}`} />
                 </BoardSettingsSection>
             )}
             <BoardSettingsSection title="project.settings.Label">
                 <BoardSettingsLabelList />
             </BoardSettingsSection>
             <BoardSettingsSection title="project.settings.Chat templates">
-                <BoardSettingsChatTemplateList />
+                <BoardSettingsChatTemplateList key={`board-settings-chat-templates-${project.uid}`} />
             </BoardSettingsSection>
-            {isAdmin || ownerUID === currentUser.uid ? (
+            {isAdmin || project.owner_uid === currentUser.uid ? (
                 <BoardSettingsSection title="common.Other">
                     <BoardSettingsOther />
                 </BoardSettingsSection>

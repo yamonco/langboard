@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef } from "react";
 import { useAuth } from "@/core/providers/AuthProvider";
 import useSocketStore, {
@@ -7,8 +8,6 @@ import useSocketStore, {
     TEventName,
     TSocketAddEventProps,
     TSocketRemoveEventProps,
-    TSocketSubscriptionAddEventProps,
-    TSocketSubscriptionRemoveEventProps,
 } from "@/core/stores/SocketStore";
 import useAuthStore from "@/core/stores/AuthStore";
 import { ESocketTopic } from "@langboard/core/enums";
@@ -19,7 +18,7 @@ interface IBaseSocketSendProps {
     topic?: ESocketTopic;
     topicId?: string;
     eventName: Exclude<TEventName, "open" | "close" | "error">;
-    data: unknown;
+    data: any;
 }
 
 interface INoneOrGlobalTopicSocketSendProps extends IBaseSocketSendProps {
@@ -34,10 +33,6 @@ interface ITopicSocketSendProps extends IBaseSocketSendProps {
 
 export type TSocketSendProps = INoneOrGlobalTopicSocketSendProps | ITopicSocketSendProps;
 
-type TWithoutCallback<T> = T extends unknown ? Omit<T, "callback"> : never;
-type TSocketStreamAddEventProps = TWithoutCallback<TSocketSubscriptionAddEventProps<unknown>>;
-type TSocketStreamRemoveEventProps = TWithoutCallback<TSocketSubscriptionRemoveEventProps<unknown>>;
-
 export interface IStreamCallbackMap<TStartResponse = unknown, TBufferResponse = unknown, TEndResponse = unknown> {
     start: ISocketEvent<TStartResponse>;
     buffer: ISocketEvent<TBufferResponse>;
@@ -50,16 +45,12 @@ export interface ISocketContext {
     reconnect: () => void;
     getAuthorizedWebSocketUrl: (path?: string) => string | null;
     on: <TResponse>(props: TSocketAddEventProps<TResponse>) => void;
-    off: <TResponse>(props: TSocketRemoveEventProps<TResponse>) => void;
+    off: (props: TSocketRemoveEventProps) => void;
     send: (props: TSocketSendProps) => { isConnected: bool };
     stream: <TStartResponse = unknown, TBufferResponse = unknown, TEndResponse = unknown>(
-        props: TSocketStreamAddEventProps & { callbacks: IStreamCallbackMap<TStartResponse, TBufferResponse, TEndResponse> }
+        props: Omit<TSocketAddEventProps<unknown>, "callback"> & { callbacks: IStreamCallbackMap<TStartResponse, TBufferResponse, TEndResponse> }
     ) => void;
-    streamOff: <TStartResponse = unknown, TBufferResponse = unknown, TEndResponse = unknown>(
-        props: TSocketStreamRemoveEventProps & {
-            callbacks: IStreamCallbackMap<TStartResponse, TBufferResponse, TEndResponse>;
-        }
-    ) => void;
+    streamOff: (props: Omit<TSocketRemoveEventProps, "callback"> & { callbacks: IStreamCallbackMap<any, any, any> }) => void;
     subscribe: ISocketStore["subscribe"];
     unsubscribe: ISocketStore["unsubscribe"];
     subscribeTopicNotifier: ISocketStore["subscribeTopicNotifier"];
@@ -116,7 +107,7 @@ const createSharedSocketHandlers = () => {
     };
 
     const on: ISocketContext["on"] = (props) => {
-        addEvent(props);
+        addEvent(props as never);
     };
 
     const off: ISocketContext["off"] = (props) => {
@@ -125,67 +116,51 @@ const createSharedSocketHandlers = () => {
 
     const stream: ISocketContext["stream"] = (props) => {
         const { callbacks } = props;
-        const addStreamEvent = <TResponse,>(suffix: "start" | "buffer" | "end", callback: ISocketEvent<TResponse>) => {
-            const event = `${props.event}:${suffix}`;
-            if (props.topic === ESocketTopic.None || props.topic === ESocketTopic.Global) {
-                on({
-                    topic: props.topic,
-                    event,
-                    eventKey: props.eventKey,
-                    callback,
-                });
-                return;
-            }
-            if (props.topicId === undefined) {
-                throw new Error(`Socket topic ${props.topic} requires a topic ID`);
-            }
+        on({
+            ...props,
+            topic: props.topic as never,
+            event: `${props.event}:start`,
+            callback: callbacks.start,
+        });
+        on({
+            ...props,
+            topic: props.topic as never,
+            event: `${props.event}:buffer`,
+            callback: callbacks.buffer,
+        });
+        on({
+            ...props,
+            topic: props.topic as never,
+            event: `${props.event}:end`,
+            callback: callbacks.end,
+        });
 
-            on({
-                topic: props.topic,
-                topicId: props.topicId,
-                event,
-                eventKey: props.eventKey,
-                callback,
-            });
-        };
-
-        addStreamEvent("start", callbacks.start);
-        addStreamEvent("buffer", callbacks.buffer);
-        addStreamEvent("end", callbacks.end);
-
-        setStreamErrorCallback(props.topic, props.event, callbacks.error);
+        const topic = props.topic ?? ESocketTopic.None;
+        setStreamErrorCallback(topic, props.event, callbacks.error);
     };
 
     const streamOff: ISocketContext["streamOff"] = (props) => {
-        const removeStreamEvent = <TResponse,>(suffix: "start" | "buffer" | "end", callback: ISocketEvent<TResponse>) => {
-            const event = `${props.event}:${suffix}`;
-            if (props.topic === ESocketTopic.None || props.topic === ESocketTopic.Global) {
-                off({
-                    topic: props.topic,
-                    event,
-                    eventKey: props.eventKey,
-                    callback,
-                });
-                return;
-            }
-            if (props.topicId === undefined) {
-                throw new Error(`Socket topic ${props.topic} requires a topic ID`);
-            }
+        off({
+            ...props,
+            topic: props.topic as never,
+            event: `${props.event}:start`,
+            callback: props.callbacks.start,
+        });
+        off({
+            ...props,
+            topic: props.topic as never,
+            event: `${props.event}:buffer`,
+            callback: props.callbacks.buffer,
+        });
+        off({
+            ...props,
+            topic: props.topic as never,
+            event: `${props.event}:end`,
+            callback: props.callbacks.end,
+        });
 
-            off({
-                topic: props.topic,
-                topicId: props.topicId,
-                event,
-                eventKey: props.eventKey,
-                callback,
-            });
-        };
-
-        removeStreamEvent("start", props.callbacks.start);
-        removeStreamEvent("buffer", props.callbacks.buffer);
-        removeStreamEvent("end", props.callbacks.end);
-
-        removeStreamErrorCallback(props.topic, props.event);
+        const topic = props.topic ?? ESocketTopic.None;
+        removeStreamErrorCallback(topic, props.event);
     };
 
     const send = (props: TSocketSendProps) => {

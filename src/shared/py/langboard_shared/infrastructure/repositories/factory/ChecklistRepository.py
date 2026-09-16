@@ -32,17 +32,16 @@ class ChecklistRepository(BaseOrderRepository[Checklist, Card]):
         with DbSession.use(readonly=True) as db:
             return list(db.exec(query).all())
 
-    def get_all_by_project(self, project: TProjectParam, limit: int | None = None) -> list[Checklist]:
+    def get_all_by_project(self, project: TProjectParam) -> list[Checklist]:
         project_id = InfraHelper.convert_id(project)
 
-        query = (
-            SqlBuilder.select.table(Checklist)
-            .join(Card, Checklist.column("card_id") == Card.column("id"))
-            .where(Card.column("project_id") == project_id)
-            .order_by(Checklist.column("id").asc())
-        )
-        if limit is not None:
-            query = query.limit(limit)
-
+        checklists = []
         with DbSession.use(readonly=True) as db:
-            return list(db.exec(query).all())
+            result = db.exec(
+                SqlBuilder.select.table(Checklist)
+                .join(Card, Checklist.column("card_id") == Card.column("id"))
+                .where(Card.column("project_id") == project_id)
+            )
+            checklists = result.all()
+
+        return checklists

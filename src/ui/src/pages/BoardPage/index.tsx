@@ -96,8 +96,6 @@ const BoardProxy = memo((): React.JSX.Element => {
             return;
         }
 
-        let retryTimeout: ReturnType<typeof setTimeout> | undefined;
-
         const { handle } = setupApiErrorHandler({
             [EHttpStatus.HTTP_403_FORBIDDEN]: {
                 after: () => navigate(ROUTES.ERROR(EHttpStatus.HTTP_403_FORBIDDEN), { replace: true }),
@@ -107,19 +105,14 @@ const BoardProxy = memo((): React.JSX.Element => {
             },
             network: {
                 after: () => {
-                    retryTimeout = setTimeout(() => {
-                        void refetch();
+                    setTimeout(() => {
+                        refetch();
                     }, 5000);
                 },
             },
         });
 
         handle(error);
-        return () => {
-            if (retryTimeout) {
-                clearTimeout(retryTimeout);
-            }
-        };
     }, [error]);
 
     useEffect(() => {

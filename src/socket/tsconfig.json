@@ -6,6 +6,8 @@
     "lib": ["ESNext"],
     "module": "ESNext",
     "skipLibCheck": true,
+    "baseUrl": ".",
+    "ignoreDeprecations": "6.0",
     "outDir": "dist",
     "paths": {
       "@/*": ["./src/*"]

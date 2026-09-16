@@ -73,9 +73,7 @@ def enqueue_card_moved_webhook(
     """Freeze and queue a move webhook before optional bot execution."""
 
     data = create_card_moved_data(user_or_bot, project, card, old_column, current_column)
-    WebhookTask.webhook_task(
-        WebhookModel(event=BotTriggerCondition.CardMoved.value, data=WebhookTask.minimal_event_data(data))
-    )
+    WebhookTask.webhook_task(WebhookModel(event=BotTriggerCondition.CardMoved.value, data=data))
 
 
 def create_card_moved_data(

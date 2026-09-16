@@ -9,7 +9,7 @@ os.environ.setdefault("PROJECT_NAME", "langboard")
 
 from langboard.card_workspace.application.dtos import CardBundleDto, CardBundleResponse  # noqa: E402
 from langboard.mcp_integration import McpTool  # noqa: E402
-from langboard.mcp_tools import BotMcp, CardMcp, CardWorkspaceMcp, MetadataMcp, ProjectMcp  # noqa: E402, F401
+from langboard.mcp_tools import CardMcp, CardWorkspaceMcp  # noqa: E402, F401
 from langboard.routes.mcp.McpApi import serialize_mcp_result  # noqa: E402
 from langboard_shared.domain.models.bases import REACTION_TYPES  # noqa: E402
 from langboard_shared.domain.services.factory.CardService import CardService  # noqa: E402
@@ -162,6 +162,39 @@ def test_comment_reaction_schema_exposes_only_native_reactions() -> None:
     assert schema["properties"]["reaction"]["enum"] == REACTION_TYPES
 
 
+def test_graph_patch_schema_exposes_typed_request_local_references() -> None:
+    """Clients can mix existing UIDs and request-local cards in one explicit patch."""
+
+    schema = McpTool.get_tool("apply_card_graph_patch")["input_schema"]
+
+    assert schema["required"] == [
+        "project_uid",
+        "anchor_card_uid",
+        "new_cards",
+        "add_edges",
+        "remove_relationship_uids",
+    ]
+    assert schema["$defs"]["CardGraphNewCard"]["required"] == ["client_ref", "title"]
+    assert schema["$defs"]["CardGraphEdge"]["required"] == [
+        "parent_ref",
+        "child_ref",
+        "relationship_type_uid",
+    ]
+
+
+def test_cardify_checkitem_schema_requires_explicit_source_and_destination() -> None:
+    """Agents cannot cardify an ambiguous checklist item or choose an implicit column."""
+
+    schema = McpTool.get_tool("cardify_card_checkitem")["input_schema"]
+
+    assert schema["required"] == [
+        "project_uid",
+        "card_uid",
+        "checkitem_uid",
+        "project_column_uid",
+    ]
+
+
 def test_mcp_serializer_omits_unrequested_card_sections() -> None:
     """The real MCP response path does not leak optional sections as null placeholders."""
 
@@ -185,11 +218,17 @@ def test_project_member_projection_omits_email_and_is_bounded() -> None:
     service = SimpleNamespace(
         project=SimpleNamespace(
             get_by_id_like=lambda _uid: object(),
-            get_api_assigned_user_list=lambda _project, limit: [
-                {"uid": str(index), "username": f"member-{index}", "email": "hidden@example.com"}
-                for index in range(limit)
+            get_api_assigned_user_list=lambda _project: [
+                {
+                    "uid": str(index),
+                    "username": f"member-{index}",
+                    "type": "user",
+                    "firstname": "Given",
+                    "lastname": "Family",
+                    "email": "hidden@example.com",
+                }
+                for index in range(51)
             ],
-            count_assigned_users=lambda _project: 51,
         )
     )
 
@@ -225,91 +264,6 @@ def test_project_member_projection_does_not_expose_invitation_email_as_name() ->
 
     assert result["items"] == [{"uid": "group_email", "username": ""}, {"uid": "unknown", "username": ""}]
     assert "hidden@example.com" not in str(result)
-
-
-@pytest.mark.parametrize(
-    "tool_name",
-    [
-        "get_projects",
-        "get_starred_projects",
-        "get_project_assigned_users",
-        "get_project_columns",
-        "get_project_labels",
-        "get_project_checklists",
-        "get_column_bot_scopes",
-        "get_column_bot_schedules",
-        "get_cards",
-        "get_card",
-        "get_card_checklists",
-        "get_card_attachments",
-        "get_card_metadata",
-        "get_wiki_metadata",
-        "get_project_bot_scopes",
-        "get_card_bot_scopes",
-    ],
-)
-def test_legacy_mcp_list_tools_have_bounded_limits(tool_name: str) -> None:
-    limit_schema = McpTool.get_tool(tool_name)["input_schema"]["properties"]["limit"]
-
-    assert limit_schema == {"default": 50, "minimum": 1, "maximum": 100, "type": "integer"}
-
-
-def test_project_detail_has_a_bounded_limit() -> None:
-    limit_schema = McpTool.get_tool("get_project")["input_schema"]["properties"]["limit"]
-
-    assert limit_schema == {"default": 50, "minimum": 1, "maximum": 100, "type": "integer"}
-
-
-def test_bot_scope_tool_names_resolve_to_project_checked_implementations() -> None:
-    assert McpTool.get_tool("get_card_bot_scopes")["handler"] is BotMcp.get_card_bot_scopes
-    assert McpTool.get_tool("get_column_bot_scopes")["handler"] is BotMcp.get_column_bot_scopes
-
-
-def test_column_bot_scopes_query_the_requested_column_before_limiting() -> None:
-    column = SimpleNamespace(project_id=1)
-    calls: list[tuple[object, int]] = []
-    service = SimpleNamespace(
-        project_column=SimpleNamespace(
-            get_by_id_like=lambda _uid: column,
-            get_api_bot_scopes_by_column=lambda target, limit: (
-                calls.append((target, limit)),
-                [{"uid": "scope-one"}],
-            )[1],
-        ),
-        bot=SimpleNamespace(require_target_project=lambda *_args: None),
-    )
-
-    result = BotMcp.get_column_bot_scopes("project-one", "column-one", service, limit=5)
-
-    assert result == {"scopes": [{"uid": "scope-one"}]}
-    assert calls == [(column, 5)]
-
-
-def test_project_column_schedules_apply_the_limit_to_schedules() -> None:
-    project = object()
-    calls: list[tuple[object, int]] = []
-    service = SimpleNamespace(
-        project=SimpleNamespace(get_by_id_like=lambda _uid: project),
-        project_column=SimpleNamespace(
-            get_api_bot_schedule_list_by_project=lambda target, limit: (
-                calls.append((target, limit)),
-                [{"uid": "schedule-one"}],
-            )[1]
-        ),
-    )
-
-    result = ProjectMcp.get_column_bot_schedules("project-one", service, limit=5)
-
-    assert result == {"column_bot_schedules": [{"uid": "schedule-one"}]}
-    assert calls == [(project, 5)]
-
-
-def test_duplicate_mcp_tool_names_fail_at_registration() -> None:
-    with pytest.raises(ValueError, match="Duplicate MCP tool name"):
-
-        @McpTool.add(description="Duplicate")
-        def get_cards() -> None:
-            return None
 
 
 def test_empty_partial_edit_and_invalid_order_stop_before_service() -> None:

@@ -3,9 +3,8 @@
 from typing import Any
 from ...domain import (
     MAX_CHECKITEMS_PER_CHECKLIST,
-    MAX_METADATA_VALUE_CHARS,
-    MAX_SECTION_LIMIT,
-    MAX_TEXT_CHARS,
+    MAX_GRAPH_EDGE_CHANGES,
+    MAX_GRAPH_NEW_CARDS,
     CardBundleSection,
     CardDescriptionPatch,
     CardGraphEdge,
@@ -42,7 +41,7 @@ def create_project_board(
     normalized_template = _required_text(template_name, "Template name") if template_name is not None else None
     return port.create_project_board(
         _required_text(title, "Project title"),
-        _optional_text(description, "Project description"),
+        description,
         normalized_template,
         infer_template_prefix,
     )
@@ -60,7 +59,7 @@ def create_card_in_leftmost_column(
     return port.create_card_in_leftmost_column(
         project_uid,
         _required_text(title, "Card title"),
-        _optional_text(description, "Card description"),
+        description,
         _unique_uids(assign_user_uids, "assign_user_uids") if assign_user_uids is not None else None,
     )
 
@@ -143,8 +142,7 @@ def replace_card_description(
 def add_card_comment(port: CardWorkspaceCommandPort, project_uid: str, card_uid: str, content: str) -> dict[str, Any]:
     """Create and return a sanitized card comment."""
 
-    normalized_content = _required_text(content, "Comment")
-    return {"comment": public_comment(port.add_card_comment(project_uid, card_uid, normalized_content))}
+    return {"comment": public_comment(port.add_card_comment(project_uid, card_uid, _required_text(content, "Comment")))}
 
 
 def update_card_comment(
@@ -309,8 +307,6 @@ def set_card_relationships(
     """Replace one relationship direction after validating every requested edge."""
 
     _optional_bool(is_parent, "is_parent", required=True)
-    if len(relationships) > MAX_SECTION_LIMIT:
-        raise ValueError(f"relationships exceeds {MAX_SECTION_LIMIT} items")
     normalized: list[tuple[str, str]] = []
     seen: set[tuple[str, str]] = set()
     for edge in relationships:
@@ -371,16 +367,7 @@ def save_public_card_metadata(
 
     normalized_key = require_public_metadata_key(key)
     normalized_old_key = require_public_metadata_key(old_key) if old_key is not None else None
-    normalized_value = _optional_text(value, "Metadata value", MAX_METADATA_VALUE_CHARS)
-    if normalized_value is None:
-        raise ValueError("Metadata value must be a string")
-    metadata = port.save_public_card_metadata(
-        project_uid,
-        card_uid,
-        normalized_key,
-        normalized_value,
-        normalized_old_key,
-    )
+    metadata = port.save_public_card_metadata(project_uid, card_uid, normalized_key, value, normalized_old_key)
     entries = public_metadata(metadata)
     return next(entry for entry in entries if entry["key"] == normalized_key)
 
@@ -395,8 +382,6 @@ def delete_public_card_metadata(
 
     if not keys:
         raise ValueError("At least one metadata key is required")
-    if len(keys) > MAX_SECTION_LIMIT:
-        raise ValueError(f"metadata keys exceeds {MAX_SECTION_LIMIT} items")
     normalized = [require_public_metadata_key(key) for key in keys]
     if len(normalized) != len(set(normalized)):
         raise ValueError("Duplicate metadata key")
@@ -441,22 +426,10 @@ def reconcile_card_checklist_projection(
     }
 
 
-def _required_text(value: Any, label: str, max_chars: int = MAX_TEXT_CHARS) -> str:
+def _required_text(value: Any, label: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{label} is required")
-    if len(value) > max_chars:
-        raise ValueError(f"{label} exceeds {max_chars} characters")
     return value.strip()
-
-
-def _optional_text(value: Any, label: str, max_chars: int = MAX_TEXT_CHARS) -> str | None:
-    if value is None:
-        return None
-    if not isinstance(value, str):
-        raise ValueError(f"{label} must be a string")
-    if len(value) > max_chars:
-        raise ValueError(f"{label} exceeds {max_chars} characters")
-    return value
 
 
 def _optional_bool(value: bool | None, label: str, required: bool = False) -> None:
@@ -467,8 +440,6 @@ def _optional_bool(value: bool | None, label: str, required: bool = False) -> No
 
 
 def _unique_uids(values: list[str] | None, label: str) -> list[str]:
-    if values is not None and len(values) > MAX_SECTION_LIMIT:
-        raise ValueError(f"{label} exceeds {MAX_SECTION_LIMIT} items")
     normalized = [_required_text(value, label) for value in values or []]
     if len(normalized) != len(set(normalized)):
         raise ValueError(f"{label} contains duplicates")

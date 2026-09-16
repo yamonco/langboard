@@ -18,14 +18,11 @@ const useInternalBotCreatedHandlers = ({ callback }: IBaseUseSocketHandlersProps
             callback,
             responseConverter: (data) => {
                 const url = Utils.String.format(Routing.API.GLOBAL.INTERNAL_BOTS.GET, { bot_uid: data.uid });
-                void api
-                    .get(url, {
-                        env: { interceptToast: true } as never,
-                    })
-                    .then((res) => {
-                        InternalBotModel.Model.fromOne(res.data.internal_bot, true);
-                    })
-                    .catch(() => undefined);
+                api.get(url, {
+                    env: { interceptToast: true } as never,
+                }).then((res) => {
+                    InternalBotModel.Model.fromOne(res.data.internal_bot, true);
+                });
                 return {};
             },
         },

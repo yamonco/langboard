@@ -1,6 +1,7 @@
 """Safe native MCP tools for room-bound Langboard project workspaces."""
 
 from typing import Annotated, Any, Literal
+from fastmcp.exceptions import ValidationError
 from langboard_shared.domain.models import Bot, ProjectRole, User
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.domain.services import DomainService
@@ -53,7 +54,16 @@ from ..card_workspace.infrastructure import NativeCardWorkspaceAdapter
 from ..mcp_integration import McpRoleFilter, McpTool
 
 
-MAX_PROJECT_MEMBER_ITEMS = 50
+@McpTool.add("user", description="Assign the authenticated user to this card, preserving every existing assignee.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+def assign_card_to_me(project_uid: str, card_uid: str, user: User, service: DomainService) -> dict[str, Any]:
+    """Use the server-authenticated identity, never a caller-supplied user UID."""
+    try:
+        return service.card.assign_self(user, project_uid, card_uid)
+    except ValueError as exc:
+        raise ValidationError(
+            f"{exc}. No assignment was made. Ask a board updater to onboard you as a member, then retry once."
+        ) from exc
 
 
 def _as_card_bundle_include(value: str | CardBundleInclude) -> CardBundleInclude:
@@ -90,6 +100,36 @@ CardCommentReactionType = Literal[
     "rocket",
     "thumbs-down",
     "thumbs-up",
+]
+
+
+def _as_card_graph_new_card(value: dict[str, Any] | CardGraphNewCard) -> CardGraphNewCard:
+    """Parse one request-local card without leaking transport types inward."""
+
+    return value if isinstance(value, CardGraphNewCard) else CardGraphNewCard(**value)
+
+
+def _as_card_graph_edge(value: dict[str, Any] | CardGraphEdge) -> CardGraphEdge:
+    """Parse one typed graph edge without leaking transport types inward."""
+
+    return value if isinstance(value, CardGraphEdge) else CardGraphEdge(**value)
+
+
+JsonCardGraphNewCard = Annotated[CardGraphNewCard, BeforeValidator(_as_card_graph_new_card)]
+JsonCardGraphEdge = Annotated[CardGraphEdge, BeforeValidator(_as_card_graph_edge)]
+
+
+def _as_exact_text_replacement(
+    value: dict[str, Any] | ExactTextReplacement,
+) -> ExactTextReplacement:
+    """Parse one transport edit into the immutable domain value."""
+
+    return value if isinstance(value, ExactTextReplacement) else ExactTextReplacement(**value)
+
+
+JsonExactTextReplacement = Annotated[
+    ExactTextReplacement,
+    BeforeValidator(_as_exact_text_replacement),
 ]
 
 
@@ -136,7 +176,35 @@ def create_card_in_leftmost_column(
 
 @McpTool.add(
     description=(
-        "Read compact card core, public creator identity, and workflow fields. Request description, people, classification, checklists, "
+        "Atomically create up to seven cards and add or remove typed parent-child relationships. "
+        "References beginning with 'new:' address cards created by this same request."
+    )
+)
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+def apply_card_graph_patch(
+    project_uid: str,
+    anchor_card_uid: str,
+    new_cards: list[JsonCardGraphNewCard],
+    add_edges: list[JsonCardGraphEdge],
+    remove_relationship_uids: list[str],
+    user_or_bot: User | Bot,
+    service: DomainService,
+) -> dict[str, Any]:
+    """Apply one approved card graph patch without partial persistence."""
+
+    return apply_graph_patch(
+        _adapter(user_or_bot, service),
+        project_uid,
+        anchor_card_uid,
+        new_cards,
+        add_edges,
+        remove_relationship_uids,
+    )
+
+
+@McpTool.add(
+    description=(
+        "Read compact card core and workflow fields. Request description, people, classification, checklists, "
         "comments, attachments, public metadata, or automation explicitly. Use returned opaque cursors for "
         "rich description and every collection."
     )
@@ -185,10 +253,15 @@ def list_project_members(project_uid: str, service: DomainService) -> dict[str, 
     project = service.project.get_by_id_like(project_uid)
     if not project:
         raise ValueError("Project not found")
-    members = service.project.get_api_assigned_user_list(project, limit=MAX_PROJECT_MEMBER_ITEMS)
-    total_count = service.project.count_assigned_users(project)
-    items = [{key: member[key] for key in ("uid", "username") if key in member} for member in members]
-    return {"items": items, "total_count": total_count, "truncated": total_count > len(items)}
+    members = service.project.get_api_assigned_user_list(project)
+    items = []
+    for member in members[:50]:
+        fields = ("uid", "username")
+        # Invitation placeholders store an email in firstname; expose names only for real users.
+        if member.get("type") == User.USER_TYPE:
+            fields += ("firstname", "lastname")
+        items.append({key: member[key] for key in fields if key in member})
+    return {"items": items, "total_count": len(members), "truncated": len(members) > 50}
 
 
 @McpTool.add(description="List a bounded newest-updated-first page of cards in a project.")

@@ -23,7 +23,6 @@ interface IAuthStore {
 }
 
 let accessToken: string | null = null;
-let tokenUpdateVersion = 0;
 const HAS_SET_LANG_STORAGE_KEY = `has-set-lang-${APP_SHORT_NAME}`;
 
 const useAuthStore = create(
@@ -34,25 +33,22 @@ const useAuthStore = create(
             pageLoaded: false,
             getToken: () => accessToken,
             updateToken: async (token: string, api: AxiosInstance) => {
-                const updateVersion = ++tokenUpdateVersion;
-                accessToken = token;
-                if (get().state === "initial") {
-                    set({ state: "pending" });
+                if (get().state === "pending") {
+                    return;
                 }
+
+                accessToken = token;
 
                 const tryGetUser = async () => {
                     const MAX_ATTEMPTS = 5;
                     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
-                        if (updateVersion !== tokenUpdateVersion) {
-                            return undefined;
-                        }
                         try {
                             const response = await api.get<{
                                 user: AuthUser.Interface;
                                 bots: BotModel.Interface[];
                             }>(Routing.API.AUTH.ABOUT_ME, {
                                 headers: {
-                                    Authorization: `Bearer ${token}`,
+                                    Authorization: `Bearer ${accessToken}`,
                                 },
                                 withCredentials: true,
                             });
@@ -63,7 +59,7 @@ const useAuthStore = create(
 
                             return response.data;
                         } catch {
-                            if (updateVersion !== tokenUpdateVersion || attempt === MAX_ATTEMPTS - 1) {
+                            if (attempt === MAX_ATTEMPTS - 1) {
                                 return undefined;
                             }
 
@@ -75,9 +71,6 @@ const useAuthStore = create(
                 };
 
                 const data = await tryGetUser();
-                if (updateVersion !== tokenUpdateVersion || accessToken !== token) {
-                    return;
-                }
                 if (!data) {
                     set({ currentUser: null, state: "loaded" });
                     return;
@@ -90,7 +83,6 @@ const useAuthStore = create(
             },
             removeToken: () => {
                 useSocketStore.getState().close();
-                tokenUpdateVersion += 1;
                 accessToken = null;
                 set({ currentUser: null, state: "loaded" });
             },

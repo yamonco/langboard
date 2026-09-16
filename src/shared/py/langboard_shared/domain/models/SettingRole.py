@@ -48,10 +48,6 @@ class SettingRoleAction(Enum):
     # Ollama Management
     OllamaRead = "ollama_read"
 
-    # Project Template Management
-    ProjectTemplateCreate = "project_template_create"
-    ProjectTemplateUpdate = "project_template_update"
-
 
 class SettingRoleCategory(Enum):
     User = "user"
@@ -62,7 +58,6 @@ class SettingRoleCategory(Enum):
     NotificationSchedule = "notification_schedule"
     ApiComfortTool = "api_comfort_tool"
     Ollama = "ollama"
-    ProjectTemplate = "project_template"
 
 
 class SettingRole(BaseRoleModel, table=True):

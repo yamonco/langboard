@@ -175,7 +175,7 @@ const BoardCardDescription = memo((): React.JSX.Element => {
 
         document.addEventListener("copy", handleCopy, true);
         return () => document.removeEventListener("copy", handleCopy, true);
-    }, [description, isEditing]);
+    }, [description, isEditing, t]);
 
     const handlePointerDown = useCallback(
         (e: PointerEvent<HTMLDivElement>) => {

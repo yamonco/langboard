@@ -51,8 +51,7 @@ from .ProjectColumnBotDefaultScope import ProjectColumnBotDefaultScope
 from .ProjectColumnBotLog import ProjectColumnBotLog
 from .ProjectColumnBotSchedule import ProjectColumnBotSchedule
 from .ProjectColumnBotScope import ProjectColumnBotScope
-from .ProjectEmailNotificationPolicy import ProjectEmailNotificationPolicy
-from .ProjectEmailNotificationRecipient import ProjectEmailNotificationRecipient
+from .ProjectEmailNotificationPolicy import ProjectEmailNotificationPolicy, ProjectEmailNotificationRecipient
 from .ProjectInvitation import ProjectInvitation
 from .ProjectLabel import ProjectLabel
 from .ProjectRole import ProjectRole

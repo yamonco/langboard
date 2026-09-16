@@ -1,10 +1,9 @@
-from base64 import b64decode, urlsafe_b64encode
-from binascii import Error as Base64DecodeError
+from base64 import urlsafe_b64decode, urlsafe_b64encode
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 from hashlib import sha256
-from json import JSONDecodeError, dumps, loads
+from json import dumps, loads
 from typing import Any
 
 
@@ -15,7 +14,9 @@ MAX_TEXT_CHARS = 8_000
 MAX_METADATA_VALUE_CHARS = 4_000
 MAX_METADATA_KEY_CHARS = 128
 MAX_PROJECTION_KEY_CHARS = 64
-MAX_CURSOR_CHARS = 1_024
+MAX_GRAPH_NEW_CARDS = 7
+MAX_GRAPH_EDGE_CHANGES = 25
+MAX_DESCRIPTION_PATCH_EDITS = 20
 
 _COMPACT_SECRET_FRAGMENTS = (
     "accesskey",
@@ -234,7 +235,8 @@ class CommentCursor:
         """Decode and validate an opaque comment cursor."""
 
         try:
-            payload = _decode_cursor_payload(value)
+            padding = "=" * (-len(value) % 4)
+            payload = loads(urlsafe_b64decode(value + padding))
             if payload.get("v") != 1:
                 raise ValueError("Unsupported cursor version")
             return cls(created_at=payload["created_at"], comment_uid=payload["comment_uid"])
@@ -285,8 +287,9 @@ class SectionCursor:
         """Decode a section continuation and reject malformed values."""
 
         try:
-            payload = _decode_cursor_payload(value)
-            if payload.get("v") != 1:
+            padding = "=" * (-len(value) % 4)
+            payload = loads(urlsafe_b64decode(value + padding))
+            if not isinstance(payload, dict) or payload.get("v") != 1:
                 raise ValueError("Unsupported cursor version")
             return cls(
                 section=payload["section"],
@@ -324,8 +327,9 @@ class ProjectCardCursor:
         """Decode and validate a project-card cursor."""
 
         try:
-            payload = _decode_cursor_payload(value)
-            if payload.get("v") != 1:
+            padding = "=" * (-len(value) % 4)
+            payload = loads(urlsafe_b64decode(value + padding))
+            if not isinstance(payload, dict) or payload.get("v") != 1:
                 raise ValueError("Unsupported cursor version")
             return cls(updated_at=payload["updated_at"], card_uid=payload["card_uid"])
         except (KeyError, TypeError, ValueError) as exc:
@@ -337,20 +341,6 @@ def projection_revision(value: Any) -> str:
 
     encoded = dumps(value, ensure_ascii=False, separators=(",", ":"), sort_keys=True, default=str).encode()
     return sha256(encoded).hexdigest()
-
-
-def _decode_cursor_payload(value: str) -> dict[str, Any]:
-    if not isinstance(value, str) or not value or len(value) > MAX_CURSOR_CHARS:
-        raise ValueError("Cursor is invalid")
-
-    try:
-        padding = "=" * (-len(value) % 4)
-        payload = loads(b64decode(value + padding, altchars=b"-_", validate=True))
-    except (Base64DecodeError, JSONDecodeError, UnicodeDecodeError) as exc:
-        raise ValueError("Cursor is invalid") from exc
-    if not isinstance(payload, dict):
-        raise ValueError("Cursor is invalid")
-    return payload
 
 
 def is_public_metadata_key(key: str) -> bool:

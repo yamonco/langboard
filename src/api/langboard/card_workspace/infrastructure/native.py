@@ -53,7 +53,12 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
         if column is None or column.project_id != project.id:
             return None
         details = card.api_response()
-        details["creator"] = self._card_creator(card)
+        details["can_delete"] = self._service.card.can_delete(self._actor, card)
+        # Native REST wraps Markdown in EditorContentModel; MCP projects the
+        # editable text so read revisions match the patch command's input.
+        description = details.get("description")
+        if isinstance(description, dict) and isinstance(description.get("content"), str):
+            details["description"] = description["content"]
         details["project_column_name"] = column.name
 
         if "people" in requested_sections:
@@ -82,27 +87,11 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
         else:
             details["relationships"] = []
 
-        checkitem_section = next(
-            (section for section in requested_sections if section.startswith("checkitems:")),
-            None,
+        wants_checklists = "checklists" in requested_sections or any(
+            section.startswith("checkitems:") for section in requested_sections
         )
-        if checkitem_section:
-            checklist = self._ensure_checklist(project_uid, card_uid, checkitem_section.partition(":")[2])
-            checklists = [
-                {
-                    **checklist.api_response(),
-                    "checkitems": self._bounded_source(
-                        self._service.checkitem.get_api_list_by_checklist(
-                            card,
-                            checklist,
-                            limit=_SOURCE_QUERY_LIMIT,
-                        ),
-                        "checkitems",
-                    ),
-                }
-            ]
-        elif "checklists" in requested_sections:
-            checklists = self._bounded_source(
+        checklists = (
+            self._bounded_source(
                 self._service.checklist.get_api_list_by_card(
                     card,
                     limit=_SOURCE_QUERY_LIMIT,
@@ -110,8 +99,9 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
                 ),
                 "checklists",
             )
-        else:
-            checklists = []
+            if wants_checklists
+            else []
+        )
         for checklist in checklists:
             checklist["checkitems"] = self._bounded_source(checklist.get("checkitems", []), "checkitems")
 
@@ -188,7 +178,7 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
                     "order": int(column["order"]),
                 }
                 for column in self._bounded_source(
-                    self._service.project_column.get_api_list_by_project(project, limit=_SOURCE_QUERY_LIMIT),
+                    self._service.project_column.get_api_list_by_project(project),
                     "project columns",
                 )
                 if not column.get("is_archive")
@@ -231,18 +221,6 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
             "metadata",
         )
         return {str(key): str(value) for key, value in metadata.items()}
-
-    def get_public_card_metadata_by_key(
-        self,
-        project_uid: str,
-        card_uid: str,
-        key: str,
-    ) -> dict[str, str] | None:
-        card = self._ensure_card(project_uid, card_uid)
-        metadata = self._service.metadata.get_by_key_as_api(CardMetadata, card, key)
-        if metadata is None:
-            return None
-        return {"key": str(metadata["key"]), "value": str(metadata["value"])}
 
     def create_project_board(
         self,
@@ -289,10 +267,7 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
         columns = sorted(
             (
                 column
-                for column in self._bounded_source(
-                    self._service.project_column.get_api_list_by_project(project, limit=_SOURCE_QUERY_LIMIT),
-                    "project columns",
-                )
+                for column in self._service.project_column.get_api_list_by_project(project)
                 if not column["is_archive"]
             ),
             key=lambda column: (column["order"], column["uid"]),
@@ -556,11 +531,7 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
             if related_uid in related_uids:
                 raise ValueError(f"Duplicate related card: {related_uid}")
             related_uids.add(related_uid)
-        existing_relationships = self._bounded_source(
-            self._service.card_relationship.get_api_list_by_card(card, limit=_SOURCE_QUERY_LIMIT),
-            "relationships",
-        )
-        for existing in existing_relationships:
+        for existing in self._service.card_relationship.get_api_list_by_card(card):
             parent_uid = existing.get("parent_card_uid")
             child_uid = existing.get("child_card_uid")
             opposite_uid = child_uid if parent_uid == card_uid else parent_uid
@@ -615,7 +586,7 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
         metadata = self._service.metadata.save(CardMetadata, card, key, value, old_key)
         if metadata is None:
             raise RuntimeError("Failed to save metadata")
-        return {metadata.key: metadata.value}
+        return self.get_public_card_metadata(project_uid, card_uid) or {}
 
     def delete_public_card_metadata(self, project_uid: str, card_uid: str, keys: list[str]) -> None:
         normalized = [require_public_metadata_key(key) for key in keys]
@@ -757,20 +728,6 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
         if not isinstance(actual, str):
             return False
         return SafeDateTime.fromisoformat(actual) == SafeDateTime.fromisoformat(desired)
-
-    def _card_creator(self, card: Any) -> dict[str, Any] | None:
-        """Resolve the stored author without inferring ownership from assignees."""
-
-        for field, service_name in (
-            ("created_by_user_id", "user"),
-            ("created_by_bot_id", "bot"),
-        ):
-            creator_id = getattr(card, field, None)
-            if creator_id is None:
-                continue
-            creator = getattr(self._service, service_name).get_by_id_like(creator_id)
-            return creator.api_response() if creator is not None else None
-        return None
 
     def _ensure_project_card(self, project_uid: str, card_uid: str) -> tuple[Any, Any]:
         project = self._service.project.get_by_id_like(project_uid)

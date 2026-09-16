@@ -103,11 +103,7 @@ class McpAuthMiddleware(BaseMiddleware):
                 await response(scope, receive, send)
                 return
 
-        if (
-            isinstance(validation_result, User)
-            and not validation_result.is_admin
-            and validation_result.email not in Env.FULL_ADMIN_ACCESS_EMAILS
-        ):
+        if isinstance(validation_result, User) and not validation_result.is_admin:
             mcp_role = service.mcp_tool_group.get_role(validation_result)
             if not mcp_role or not mcp_role.is_granted(McpRoleAction.Read):
                 response = JsonResponse(ApiErrorCode.PE1001, status_code=status.HTTP_403_FORBIDDEN)

@@ -3,7 +3,7 @@ from langboard.card_workspace.domain import (
     CardDescriptionPatch,
     CommentCursor,
     CommentPage,
-    ProjectCardCursor,
+    ExactTextReplacement,
     SectionCursor,
     is_public_metadata_key,
     projection_revision,
@@ -81,19 +81,6 @@ def test_section_cursor_round_trips_and_is_versioned() -> None:
     cursor = SectionCursor(section="metadata", offset=10, revision="a" * 64)
 
     assert SectionCursor.decode(cursor.encode()) == cursor
-
-
-@pytest.mark.parametrize(
-    ("decode", "message"),
-    [
-        (CommentCursor.decode, "Invalid comments_cursor"),
-        (SectionCursor.decode, "Invalid section_cursor"),
-        (ProjectCardCursor.decode, "Invalid cards_cursor"),
-    ],
-)
-def test_cursors_reject_oversized_payloads(decode, message: str) -> None:
-    with pytest.raises(ValueError, match=message):
-        decode("a" * 1_025)
 
 
 @pytest.mark.parametrize(

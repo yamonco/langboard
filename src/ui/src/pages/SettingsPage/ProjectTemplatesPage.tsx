@@ -19,21 +19,16 @@ function ProjectTemplatesPage() {
     const [selected, setSelected] = useState<string>();
     const { mutateAsync: getTemplates } = useGetProjectTemplates({ interceptToast: true });
     const { mutateAsync: setDefault, isPending } = useSetDefaultProjectTemplate({ interceptToast: true });
+    const selectedTemplate = templates.find((template) => template.name === selected);
+
     useEffect(() => {
-        let isActive = true;
         setPageAliasRef.current(t("settings.Project templates"));
         getTemplates({})
             .then((items) => {
-                if (!isActive) return;
                 setTemplates(items);
                 setSelected(items.find((item) => item.is_default)?.name ?? items[0]?.name);
             })
-            .catch(() => {
-                if (isActive) Toast.Add.error(t("errors.Internal server error"));
-            });
-        return () => {
-            isActive = false;
-        };
+            .catch(() => Toast.Add.error(t("errors.Internal server error")));
     }, []);
 
     const save = () => {
@@ -55,16 +50,16 @@ function ProjectTemplatesPage() {
                 {t("settings.Project templates")}
             </Box>
             <Box className="text-muted-foreground">{t("settings.New projects use this template when no template is specified.")}</Box>
-            <Flex gap="2" items="end" maxW="96">
+            <Flex gap="2" items="end" maxW="xl">
                 <Box className="grow">
-                    <Select.Root value={selected ?? ""} onValueChange={setSelected}>
+                    <Select.Root value={selected} onValueChange={setSelected}>
                         <Select.Trigger>
                             <Select.Value placeholder={t("settings.Select a template")} />
                         </Select.Trigger>
                         <Select.Content>
                             {templates.map((template) => (
                                 <Select.Item key={template.uid} value={template.name}>
-                                    {template.name}: {template.columns.join(" -> ")}
+                                    {template.name} · {template.columns.join(" → ")}
                                 </Select.Item>
                             ))}
                         </Select.Content>
