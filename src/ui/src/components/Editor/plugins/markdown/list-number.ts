@@ -74,7 +74,7 @@ export function serializeListNumbers(editor: SlateEditor, options?: Parameters<t
         .data("toMarkdownExtensions") as Options[] | undefined;
     const native = merged.remarkStringifyOptions?.handlers?.listItem ?? listHandler(extensions) ?? defaultHandlers.listItem;
     let index = 0;
-    return serializeMd(editor, {
+    const serialized = serializeMd(editor, {
         ...merged,
         value,
         remarkStringifyOptions: {
@@ -101,4 +101,17 @@ export function serializeListNumbers(editor: SlateEditor, options?: Parameters<t
             },
         },
     });
+<<<<<<< HEAD
+
+    // A wide parent marker makes remark indent child items to its content
+    // column. Keep the separating blank line so CommonMark parses them as
+    // nested items instead of lazy paragraph continuation text.
+    return (
+        serialized
+            // Underscores are safe literal text outside emphasis spans, but
+            // remark escapes them even in ordinary identifiers. Undo only
+            // single escapes so intentional backslashes remain intact.
+            .replace(/(?<!\\)\\_/g, "_")
+            .replace(/^(\s*\d+[.)][^\n]*)\n(?=\s{4,}\d+[.)]\s)/gm, "$1\n\n")
+    );
 }
