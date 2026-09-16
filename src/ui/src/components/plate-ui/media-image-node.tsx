@@ -4,7 +4,7 @@
 import type { TImageElement } from "platejs";
 import type { PlateElementProps } from "platejs/react";
 import { useDraggable } from "@platejs/dnd";
-import { Image, ImagePlugin, useMediaState } from "@platejs/media/react";
+import { Image, ImagePlugin, openImagePreview, useMediaState } from "@platejs/media/react";
 import { ResizableProvider, useResizableValue } from "@platejs/resizable";
 import { PlateElement, useEditorRef, withHOC } from "platejs/react";
 import { cn } from "@/core/utils/ComponentUtils";
@@ -12,14 +12,16 @@ import { Caption, CaptionTextarea } from "@/components/plate-ui/caption";
 import { MediaToolbar } from "@/components/plate-ui/media-toolbar";
 import { insertParagraphBesideBlock } from "@/components/plate-ui/block-gap-insertion";
 import { mediaResizeHandleVariants, Resizable, ResizeHandle } from "@/components/plate-ui/resize-handle";
+import { getInitialImageWidth } from "@/components/plate-ui/media-image-width";
 import { useTranslation } from "react-i18next";
-import type { MouseEvent } from "react";
+import type { MouseEvent, SyntheticEvent } from "react";
 
 export const ImageElement = withHOC(ResizableProvider, function ImageElement(props: PlateElementProps<TImageElement>) {
     const [t] = useTranslation();
     const { align = "center", focused, readOnly, selected } = useMediaState();
     const width = useResizableValue("width");
     const editor = useEditorRef();
+    const hasExplicitWidth = props.element.width !== undefined;
 
     const { isDragging, handleRef } = useDraggable({
         element: props.element,
@@ -32,6 +34,20 @@ export const ImageElement = withHOC(ResizableProvider, function ImageElement(pro
         event.preventDefault();
         event.stopPropagation();
         insertParagraphBesideBlock(editor, props.element, edge);
+    };
+    const setInitialImageWidth = (event: SyntheticEvent<HTMLImageElement>) => {
+        if (readOnly || hasExplicitWidth) {
+            return;
+        }
+
+        const image = event.currentTarget;
+        const initialWidth = getInitialImageWidth(image);
+        const path = editor.api.findPath(props.element);
+        if (!path || initialWidth <= 0) {
+            return;
+        }
+
+        editor.tf.setNodes({ width: initialWidth }, { at: path });
     };
 
     return (
@@ -50,12 +66,32 @@ export const ImageElement = withHOC(ResizableProvider, function ImageElement(pro
                         <Image
                             ref={handleRef}
                             className={cn(
-                                "block w-full max-w-full cursor-pointer object-cover px-0",
+                                "block h-auto max-w-full cursor-pointer object-cover px-0",
+                                hasExplicitWidth ? "w-full" : "w-auto",
+                                !hasExplicitWidth && "max-w-[min(100%,42rem)]",
+                                !hasExplicitWidth && align === "center" && "mx-auto",
+                                !hasExplicitWidth && align === "right" && "ml-auto",
                                 "rounded-sm",
+                                readOnly && "max-h-[min(60vh,24rem)] w-auto object-contain",
                                 focused && selected && "ring-2 ring-ring ring-offset-2",
                                 isDragging && "opacity-50"
                             )}
                             alt={(props.attributes as any).alt}
+                            role={readOnly ? "button" : undefined}
+                            tabIndex={readOnly ? 0 : undefined}
+                            aria-label={readOnly ? t("editor.Image") : undefined}
+                            onClick={readOnly ? () => openImagePreview(editor, props.element) : undefined}
+                            onKeyDown={
+                                readOnly
+                                    ? (event) => {
+                                          if (event.key === "Enter" || event.key === " ") {
+                                              event.preventDefault();
+                                              openImagePreview(editor, props.element);
+                                          }
+                                      }
+                                    : undefined
+                            }
+                            onLoad={setInitialImageWidth}
                         />
                         <ResizeHandle
                             className={mediaResizeHandleVariants({
