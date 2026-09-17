@@ -36,6 +36,7 @@ class Card(BaseNotificationScheduleModel, table=True):
             "member_uids": member_uids,
             "relationships": relationships,
             "labels": labels,
+            "has_description": bool(self.description.content.strip()),
         }
 
     def notification_data(self) -> dict[str, Any]:
