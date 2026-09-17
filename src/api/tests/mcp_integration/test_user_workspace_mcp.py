@@ -101,6 +101,34 @@ def test_project_search_reuses_native_bounded_search() -> None:
     assert calls == [("project-1", "release")]
 
 
+def test_my_work_lookup_is_governed_read_only_and_notified_read_state_independent() -> None:
+    """My Work reads only accessible projects and never invokes notification reads."""
+
+    calls: list[list[str]] = []
+    user = SimpleNamespace()
+
+    def get_my_work_cards(_user, project_uids, _purposes, _mentioned, _due, _field, _since, _until, _limit):
+        calls.append(project_uids)
+        return [{"uid": "c1"}]
+
+    service = SimpleNamespace(
+        project=SimpleNamespace(get_api_list=lambda _user: ([{"uid": "allowed"}, {"uid": "revoked"}], [])),
+        notification=SimpleNamespace(get_mentioned_card_ids=lambda _user: [101]),
+        card=SimpleNamespace(get_my_work_cards=get_my_work_cards),
+    )
+
+    result = UserWorkspaceMcp.get_my_work_cards(
+        user,
+        service,
+        purposes=["mentioned"],
+        project_uid="allowed",
+        limit=10,
+    )
+
+    assert result == {"cards": [{"uid": "c1"}], "returned_count": 1}
+    assert calls == [[{"uid": "allowed"}]]
+
+
 def test_user_workspace_tool_schemas_keep_reads_and_mutations_distinct() -> None:
     """Tool schemas expose explicit unread and read-transition commands."""
 
@@ -108,6 +136,7 @@ def test_user_workspace_tool_schemas_keep_reads_and_mutations_distinct() -> None
     assert McpTool.get_tool("mark_notification_read")["input_schema"]["required"] == ["notification_uid"]
     assert McpTool.get_tool("mark_all_notifications_read")["input_schema"].get("required", []) == []
     assert McpTool.get_tool("search_project_cards")["input_schema"]["required"] == ["project_uid", "query"]
+    assert McpTool.get_tool("get_my_work_cards")["input_schema"].get("required", []) == []
 
 
 @pytest.mark.parametrize("query", ["", " ", "x" * 1001])

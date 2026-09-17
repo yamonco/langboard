@@ -172,6 +172,11 @@ class NotificationService(BaseDomainService):
     def read_all(self, user: User):
         self.repo.user_notification.read_all_by_user(user)
 
+    def get_mentioned_card_ids(self, user: User, limit: int = 500) -> list[int]:
+        """Return recent card ids behind card/comment mentions without changing read state."""
+
+        return self.repo.user_notification.get_mentioned_card_ids(user, limit)
+
     def delete(self, user: User, notification: TNotificationParam | None) -> bool:
         notification = InfraHelper.get_by_id_like(UserNotification, notification)
         if not notification or notification.receiver_id != user.id:
