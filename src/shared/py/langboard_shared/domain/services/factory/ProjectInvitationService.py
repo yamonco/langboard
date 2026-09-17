@@ -34,10 +34,12 @@ class ProjectInvitationService(BaseDomainService):
         """DO NOT EDIT THIS METHOD"""
         return "project_invitation"
 
-    def get_api_invited_user_list_by_project(self, project: TProjectParam | None) -> list[dict[str, Any]]:
+    def get_api_invited_user_list_by_project(
+        self, project: TProjectParam | None, limit: int | None = None
+    ) -> list[dict[str, Any]]:
         if not project:
             return []
-        raw_users = self.repo.project_invitation.get_all_by_project_with_user(project)
+        raw_users = self.repo.project_invitation.get_all_by_project_with_user(project, limit=limit)
 
         users = []
         for invitation, invited_user in raw_users:

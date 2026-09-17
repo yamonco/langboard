@@ -20,6 +20,7 @@ class ProjectAssignedUserRepository(BaseRepository[ProjectAssignedUser]):
         self,
         project: TProjectParam,
         where_users_in: Sequence[TUserParam] | None = None,
+        limit: int | None = None,
         *,
         consistent: bool = False,
     ) -> list[tuple[User, ProjectAssignedUser]]:
@@ -31,6 +32,10 @@ class ProjectAssignedUserRepository(BaseRepository[ProjectAssignedUser]):
                 User.column("id") == ProjectAssignedUser.column("user_id"),
             )
             .where(ProjectAssignedUser.column("project_id") == project_id)
+            .order_by(
+                ProjectAssignedUser.column("created_at").desc(),
+                ProjectAssignedUser.column("id").desc(),
+            )
         )
 
         if where_users_in is not None:
@@ -38,6 +43,8 @@ class ProjectAssignedUserRepository(BaseRepository[ProjectAssignedUser]):
                 where_users_in = [where_users_in]
             user_ids = [InfraHelper.convert_id(user) for user in where_users_in]
             query = query.where(User.column("id").in_(user_ids))
+        if limit is not None:
+            query = query.limit(limit)
 
         users = []
         with DbSession.use(readonly=not consistent) as db:

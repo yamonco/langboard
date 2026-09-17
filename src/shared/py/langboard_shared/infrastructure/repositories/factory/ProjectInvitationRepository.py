@@ -25,7 +25,9 @@ class ProjectInvitationRepository(BaseRepository[ProjectInvitation]):
             invitations = result.all()
         return invitations
 
-    def get_all_by_project_with_user(self, project: TProjectParam) -> list[tuple[ProjectInvitation, User | None]]:
+    def get_all_by_project_with_user(
+        self, project: TProjectParam, limit: int | None = None
+    ) -> list[tuple[ProjectInvitation, User | None]]:
         project_id = InfraHelper.convert_id(project)
         users = []
         with DbSession.use(readonly=True) as db:
@@ -42,6 +44,10 @@ class ProjectInvitationRepository(BaseRepository[ProjectInvitation]):
                     | (User.column("id") == UserEmail.column("user_id")),
                 )
                 .where(ProjectInvitation.column("project_id") == project_id)
+                .order_by(
+                    ProjectInvitation.column("created_at").desc(),
+                    ProjectInvitation.column("id").desc(),
+                )
             )
             users = result.all()
         return list(users)
