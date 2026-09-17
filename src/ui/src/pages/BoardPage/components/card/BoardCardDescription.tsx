@@ -20,6 +20,7 @@ import { useTranslation } from "react-i18next";
 import { Utils } from "@langboard/core/utils";
 import { VirtualizedDescriptionContent } from "@/pages/BoardPage/components/card/description/VirtualizedDescriptionContent";
 import { buildDescriptionChunks } from "@/pages/BoardPage/components/card/description/descriptionChunks";
+import { areAnchorMarkersEqual } from "@/pages/BoardPage/components/card/anchorMarkers";
 import {
     captureCardCommentAnchor,
     normalizeAnchorPreview,
@@ -316,7 +317,7 @@ const BoardCardDescription = memo(({ scrollParentRef }: IBoardCardDescriptionPro
                     },
                 ];
             });
-            setAnchorMarkers(next);
+            setAnchorMarkers((previous) => (areAnchorMarkersEqual(previous, next) ? previous : next));
         };
 
         updateMarkers();

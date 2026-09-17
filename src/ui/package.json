@@ -24,7 +24,7 @@
     "test:relationship-hold-progress": "node --experimental-strip-types --test src/pages/BoardPage/components/board/BoardRelationshipHoldProgress.test.ts",
     "test:board-card-status": "node --experimental-strip-types --test src/pages/BoardPage/components/board/BoardColumnCardStatus.test.ts",
     "test:board-column-submit": "node --experimental-strip-types --test src/pages/BoardPage/components/board/BoardColumnSubmitGuard.test.ts",
-    "test:description-content": "node --experimental-strip-types --test src/pages/BoardPage/components/card/description/descriptionChunks.test.ts src/pages/BoardPage/components/card/description/descriptionOverviewRailData.test.ts",
+    "test:description-content": "node --experimental-strip-types --test src/pages/BoardPage/components/card/anchorMarkers.test.ts src/pages/BoardPage/components/card/description/descriptionChunks.test.ts src/pages/BoardPage/components/card/description/descriptionOverviewRailData.test.ts",
     "test:comment-anchor": "node --experimental-strip-types src/pages/BoardPage/components/card/comment/commentAnchor.test.ts",
     "test:comment-anchor-capture": "playwright test -c playwright.comment-anchor.config.ts",
     "test:board-touch-scroll": "node --experimental-strip-types src/pages/BoardPage/components/board/BoardTouchAutoScroll.test.ts",
