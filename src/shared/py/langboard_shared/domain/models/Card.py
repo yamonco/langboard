@@ -61,6 +61,8 @@ class Card(BaseNotificationScheduleModel, table=True):
         relationships: list[dict[str, Any]],
         labels: list[dict[str, Any]],
         creator: dict[str, Any] | None = None,
+        completed: bool = False,
+        is_check_card: bool = False,
     ) -> dict[str, Any]:
         return {
             **self.api_response(),
@@ -70,6 +72,8 @@ class Card(BaseNotificationScheduleModel, table=True):
             "labels": labels,
             "creator": creator,
             "has_description": bool(self.description.content.strip()),
+            "completed": completed,
+            "is_check_card": is_check_card,
         }
 
     def notification_data(self) -> dict[str, Any]:

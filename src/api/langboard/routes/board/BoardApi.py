@@ -293,6 +293,8 @@ def get_archived_project_cards(
                                 "project_column_name": "string",
                                 "count_comment": "integer",
                                 "has_description": "boolean",
+                                "completed": "boolean",
+                                "is_check_card": "boolean",
                                 "member_uids": "string[]",
                                 "relationships": [CardRelationship],
                                 "labels": [ProjectLabel],
