@@ -20,13 +20,14 @@ class ProjectLabelService(BaseDomainService):
         self,
         project: TProjectParam | None,
         where_in: list[TProjectLabelParam] | None = None,
+        limit: int | None = None,
     ) -> list[dict[str, Any]]:
-        """Return project labels, optionally restricted to requested identities."""
+        """Return project labels, optionally restricted and row-limited."""
 
         project = InfraHelper.get_by_id_like(Project, project)
         if not project:
             return []
-        labels = self.repo.project_label.get_all_by_project(project, where_in=where_in)
+        labels = self.repo.project_label.get_all_by_project(project, where_in=where_in, limit=limit)
         return [label.api_response() for label in labels]
 
     def get_api_list_by_card(self, card: TCardParam | None, limit: int | None = None) -> list[dict[str, Any]]:
