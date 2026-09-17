@@ -124,7 +124,6 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
     );
     const commentCount = card.useField("count_comment");
     const creator = card.useField("creator");
-    const creator = card.useField("creator");
     const hasDescription = card.useField("has_description");
     const isCheckCard = card.useField("is_check_card") ?? false;
     const completed = card.useField("completed") ?? false;
