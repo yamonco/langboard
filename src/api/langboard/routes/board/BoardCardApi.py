@@ -47,6 +47,7 @@ from .forms import (
     ChangeCardDetailsForm,
     ChangeChildOrderForm,
     CreateCardForm,
+    SetCardCompletedForm,
     UpdateCardLabelsForm,
     UpdateCardRelationshipsForm,
 )
@@ -489,6 +490,39 @@ def update_card_relationships(
         create_editor_collaboration_document_id(EEditorCollaborationType.Card, "{card_uid}", "relationships-children")
     ),
 )
+@AppRouter.schema(form=SetCardCompletedForm, permission=ApiPermission.Edit)
+@AppRouter.api.post(
+    "/board/{project_uid}/card/{card_uid}/completion",
+    tags=["Board.Card"],
+    description="Set a title-only check card's completion state.",
+    responses=(
+        OpenApiSchema()
+        .suc(
+            {
+                "completed": "boolean",
+            }
+        )
+        .auth()
+        .forbidden()
+        .err(404, ApiErrorCode.NF2003)
+        .get()
+    ),
+)
+@RoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+@AuthFilter.add()
+def set_card_completed(
+    project_uid: str,
+    card_uid: str,
+    form: SetCardCompletedForm,
+    user_or_bot: User | Bot = Auth.scope("all"),
+    service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    result = service.card.set_card_completed(user_or_bot, project_uid, card_uid, form.completed)
+    if not result:
+        raise ApiException.NotFound_404(ApiErrorCode.NF2003)
+    return JsonResponse({"completed": form.completed})
+
+
 @AppRouter.schema(permission=ApiPermission.Delete)
 @AppRouter.api.put(
     "/board/{project_uid}/card/{card_uid}/archive",

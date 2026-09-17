@@ -18,6 +18,7 @@ from ...models import (
     CardBotSchedule,
     CardBotScope,
     Checkitem,
+    Checklist,
     Project,
     ProjectColumn,
     User,
@@ -108,13 +109,20 @@ class CardService(BaseDomainService):
                 labels[card_label.card_id] = []
             labels[card_label.card_id].append(label.api_response())
 
+        raw_checklists = self.repo.checklist.get_all_by_project(project)
+        completed_by_card = {checklist.card_id: checklist.is_checked for checklist in raw_checklists if checklist.is_system}
+        user_checklist_card_ids = {checklist.card_id for checklist in raw_checklists if not checklist.is_system}
+
         cards = []
         for card, count_comment in raw_cards:
+            is_check_card = not card.description.content.strip() and card.id not in user_checklist_card_ids
             api_card = card.board_api_response(
                 count_comment=count_comment,
                 member_uids=members.get(card.id, []),
                 relationships=relationships.get(card.id, []),
                 labels=labels.get(card.id, []),
+                completed=completed_by_card.get(card.id, False),
+                is_check_card=is_check_card,
             )
             cards.append(api_card)
 
@@ -269,6 +277,82 @@ class CardService(BaseDomainService):
 
         return schedules
 
+    COMPLETION_CHECKLIST_TITLE = ""
+
+    def _get_completion_checklist(self, card: Card) -> Checklist | None:
+        """Return the hidden system checklist backing a card's completion checkbox."""
+
+        for checklist in self.repo.checklist.get_all_by_card(card):
+            if checklist.is_system:
+                return checklist
+        return None
+
+    def is_check_card(self, card: Card) -> bool:
+        """A check card carries no description and no user checklist of its own."""
+
+        if card.description.content.strip():
+            return False
+        return not any(not checklist.is_system for checklist in self.repo.checklist.get_all_by_card(card))
+
+    def ensure_completion_checklist(self, card: Card, completed: bool = False) -> Checklist:
+        """Create the hidden completion checklist silently when it does not exist yet."""
+
+        existing = self._get_completion_checklist(card)
+        if existing:
+            return existing
+
+        checklist = Checklist(
+            card_id=card.id,
+            title=self.COMPLETION_CHECKLIST_TITLE,
+            order=self.repo.checklist.get_next_order(card),
+            is_system=True,
+            is_checked=completed,
+        )
+        self.repo.checklist.insert(checklist)
+        self.repo.checkitem.insert(Checkitem(checklist_id=checklist.id, title=card.title, is_checked=completed))
+        return checklist
+
+    def remove_completion_checklist(self, card: Card) -> None:
+        """Drop the hidden completion checklist without leaving user-visible traces."""
+
+        existing = self._get_completion_checklist(card)
+        if existing:
+            self.repo.checklist.delete(existing)
+
+    def sync_completion_checkitem_title(self, card: Card) -> None:
+        """Keep the hidden completion item's text aligned with the card title."""
+
+        checklist = self._get_completion_checklist(card)
+        if not checklist:
+            return
+        for checkitem, _, _ in self.repo.checkitem.get_all_by_checklist(checklist):
+            checkitem.title = card.title
+            self.repo.checkitem.update(checkitem)
+
+    def set_card_completed(self, user_or_bot: TUserOrBot, project: TProjectParam, card: TCardParam, completed: bool) -> bool | None:
+        """Toggle a check card's completion state, creating the backing checklist lazily."""
+
+        params = InfraHelper.get_records_with_foreign_by_params((Project, project), (Card, card))
+        if not params:
+            return None
+        project, card = params
+
+        if not self.is_check_card(card):
+            return False
+
+        checklist = self.ensure_completion_checklist(card, completed=completed)
+        checkitems = self.repo.checkitem.get_all_by_checklist(checklist)
+        if not checkitems:
+            return False
+
+        checkitem = checkitems[0][0]
+        if checkitem.is_checked != completed:
+            checkitem_service = self._get_service(CheckitemService)
+            checkitem_service.toggle_checked(user_or_bot, project, card, checkitem)
+            checklist.is_checked = completed
+            self.repo.checklist.update(checklist)
+        return True
+
     def create(
         self,
         user_or_bot: TUserOrBot,
@@ -306,7 +390,11 @@ class CardService(BaseDomainService):
                 users.append(assign_user)
                 self.repo.card_assigned_user.insert(card_assigned_user)
 
-        api_card = card.board_api_response(0, [user.get_uid() for user in users], [], [])
+        is_check_card = not card.description.content.strip()
+        if is_check_card:
+            self.ensure_completion_checklist(card)
+
+        api_card = card.board_api_response(0, [user.get_uid() for user in users], [], [], completed=False, is_check_card=is_check_card)
         model = {"card": api_card}
 
         CardPublisher.created(project, column, model)
@@ -342,6 +430,13 @@ class CardService(BaseDomainService):
             if checkitem_cardified_from:
                 checkitem_cardified_from.title = card.title
                 self.repo.checkitem.update(checkitem_cardified_from)
+            self.sync_completion_checkitem_title(card)
+
+        if "description" in old_record:
+            if card.description.content.strip():
+                self.remove_completion_checklist(card)
+            elif self.is_check_card(card):
+                self.ensure_completion_checklist(card)
 
         self.repo.card.update(card)
 

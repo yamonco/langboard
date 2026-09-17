@@ -19,6 +19,11 @@ class ChangeCardDetailsForm(BaseFormModel):
 
 
 @form_model
+class SetCardCompletedForm(BaseFormModel):
+    completed: bool = Field(..., title="Whether the check card's completion item is checked")
+
+
+@form_model
 class UpdateCardLabelsForm(BaseFormModel):
     labels: list[str] = Field(..., title="List of label UIDs")
 
