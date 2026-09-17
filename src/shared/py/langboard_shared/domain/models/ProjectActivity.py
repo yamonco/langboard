@@ -71,7 +71,10 @@ class ProjectActivityType(Enum):
 
 
 class ProjectActivity(BaseActivityModel, table=True):
-    __table_args__ = (Index("ix_project_activity_project_id_created_at", "project_id", "created_at"),)
+    __table_args__ = (
+        Index("ix_project_activity_project_id_created_at", "project_id", "created_at"),
+        Index("ix_project_activity_card_id_created_at", "card_id", "created_at"),
+    )
 
     project_id: SnowflakeID = SnowflakeIDField(foreign_key=Project, index=True)
     project_column_id: SnowflakeID | None = SnowflakeIDField(foreign_key=ProjectColumn, nullable=True)

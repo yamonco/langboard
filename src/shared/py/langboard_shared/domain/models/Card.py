@@ -1,5 +1,5 @@
 from typing import Any, ClassVar
-from sqlalchemy import TEXT, CheckConstraint
+from sqlalchemy import TEXT, CheckConstraint, Index
 from ...core.db import ApiField, DateTimeField, EditorContentModel, Field, ModelColumnType, SnowflakeIDField
 from ...core.types import SafeDateTime, SnowflakeID
 from .BaseNotificationScheduleModel import BaseNotificationScheduleModel
@@ -14,6 +14,7 @@ class Card(BaseNotificationScheduleModel, table=True):
             "(source_type IS NULL) = (source_uid IS NULL)",
             name="linked_source_complete",
         ),
+        Index("ix_card_project_archive_page", "project_id", "archived_at", "id"),
     )
 
     created_by_user_id: SnowflakeID | None = SnowflakeIDField(nullable=True, index=True)
