@@ -13,7 +13,7 @@ import { useTranslation } from "react-i18next";
  * Members, deadline, and the description section header stay hidden; the edit
  * button is the explicit way to fill the body and graduate into a normal card.
  */
-function BoardCardCheckBody(): React.JSX.Element {
+function BoardCardCheckBody({ scrollParentRef }: { scrollParentRef: React.RefObject<HTMLDivElement | null> }): React.JSX.Element {
     const { card, enterCardEditMode } = useBoardCard();
     const [t] = useTranslation();
     const title = card.useField("title");
@@ -26,7 +26,7 @@ function BoardCardCheckBody(): React.JSX.Element {
             <Box textSize="sm" className="text-muted-foreground">
                 {t("card.Fill the body to turn this into a normal card")}
             </Box>
-            <BoardCardDescription key={`board-card-check-description-${card.uid}`} />
+            <BoardCardDescription key={`board-card-check-description-${card.uid}`} scrollParentRef={scrollParentRef} />
             <Button variant="outline" size="sm" className="w-fit" onClick={enterCardEditMode}>
                 <IconComponent icon="pencil" size="4" />
                 {t("common.Edit")}
