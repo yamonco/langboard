@@ -3,7 +3,7 @@ import { usePlateEditor } from "platejs/react";
 import { memo, useMemo } from "react";
 
 import { BaseEditorKit } from "@/components/Editor/editor-base-kit";
-import { InternalLinkKit } from "@/components/Editor/plugins/internal-link-kit";
+import { BaseInternalLinkKit } from "@/components/Editor/plugins/internal-link-base-kit";
 import Box from "@/components/base/Box";
 import { EditorStatic } from "@/components/plate-ui/editor-static";
 import { EditorDataProvider } from "@/core/providers/EditorDataProvider";
@@ -12,7 +12,7 @@ import type { TUserLikeModel } from "@/core/models/ModelRegistry";
 
 import type { IDescriptionChunk } from "./descriptionChunks";
 
-const DescriptionStaticKit = [...BaseEditorKit, ...InternalLinkKit];
+const DescriptionStaticKit = [...BaseEditorKit, ...BaseInternalLinkKit];
 
 interface IBoardCardDescriptionStaticChunkProps {
     chunk: IDescriptionChunk;
