@@ -18,6 +18,7 @@ import useBoardBotScopeTriggerConditionsUpdatedHandlers from "@/controllers/sock
 import useBoardChatTemplateCreatedHandlers from "@/controllers/socket/board/chat/useBoardChatTemplateCreatedHandlers";
 import useBoardColumnCreatedHandlers from "@/controllers/socket/board/column/useBoardColumnCreatedHandlers";
 import useBoardColumnNameChangedHandlers from "@/controllers/socket/board/column/useBoardColumnNameChangedHandlers";
+import useBoardColumnDockChangedHandlers from "@/controllers/socket/board/column/useBoardColumnDockChangedHandlers";
 import useBoardLabelCreatedHandlers from "@/controllers/socket/board/label/useBoardLabelCreatedHandlers";
 import useBoardLabelDeletedHandlers from "@/controllers/socket/board/label/useBoardLabelDeletedHandlers";
 import useCardRelationshipsUpdatedHandlers from "@/controllers/socket/card/useCardRelationshipsUpdatedHandlers";
@@ -38,8 +39,9 @@ import useDashboardProjectColumnNameChangedHandlers from "@/controllers/socket/d
 import useDashboardProjectColumnOrderChangedHandlers from "@/controllers/socket/dashboard/project/useDashboardProjectColumnOrderChangedHandlers";
 import useProjectDeletedHandlers from "@/controllers/socket/shared/useProjectDeletedHandlers";
 import { IBaseModel, BaseModel } from "@/core/models/Base";
-import { registerModel } from "@/core/models/ModelRegistry";
+import { IModelMap, registerModel, TPickedModel } from "@/core/models/ModelRegistry";
 import { parseProjectActivityTimestamp } from "@/core/models/projectActivityTimestamp";
+import { monotonicProjectDockRevision, ProjectDockSnapshot } from "@/core/models/projectDock";
 import { Utils } from "@langboard/core/utils";
 import { ProjectRole } from "@/core/models/roles";
 
@@ -50,6 +52,7 @@ export interface Interface extends IBaseModel {
     title: string;
     project_type: string;
     archive_visible_days: number;
+    dock_revision?: number;
 }
 
 export interface IStore extends Interface {
@@ -78,6 +81,13 @@ export interface IStore extends Interface {
 }
 
 class Project extends BaseModel<IStore> {
+    public latestDockSnapshot: ProjectDockSnapshot | null = null;
+    protected override update<TUpdateModel extends Partial<IStore | TPickedModel<keyof IModelMap>>>(model: TUpdateModel) {
+        super.update(
+            "dock_revision" in model ? { ...model, dock_revision: monotonicProjectDockRevision(this.dock_revision, model.dock_revision) } : model
+        );
+    }
+
     public static override get FOREIGN_MODELS() {
         return {
             all_members: User.Model.MODEL_NAME,
@@ -99,6 +109,7 @@ class Project extends BaseModel<IStore> {
             [
                 useBoardColumnCreatedHandlers,
                 useBoardColumnNameChangedHandlers,
+                useBoardColumnDockChangedHandlers,
                 useBoardDetailsChangedHandlers,
                 useBoardAssignedUsersUpdatedHandlers,
                 useBoardUserRolesUpdatedHandlers,
@@ -145,8 +156,12 @@ class Project extends BaseModel<IStore> {
         if (Utils.Type.isString(model.last_viewed_at)) {
             model.last_viewed_at = new Date(model.last_viewed_at);
         }
-        model.last_activity_at = parseProjectActivityTimestamp(model.last_activity_at);
-        model.related_activity_at = parseProjectActivityTimestamp(model.related_activity_at);
+        if ("last_activity_at" in model) {
+            model.last_activity_at = parseProjectActivityTimestamp(model.last_activity_at);
+        }
+        if ("related_activity_at" in model) {
+            model.related_activity_at = parseProjectActivityTimestamp(model.related_activity_at);
+        }
 
         if (!Utils.Type.isNullOrUndefined(model.internal_bot_settings)) {
             const newSettings = {} as IStore["internal_bot_settings"];
@@ -182,6 +197,13 @@ class Project extends BaseModel<IStore> {
 
     public get archive_visible_days() {
         return this.getValue("archive_visible_days");
+    }
+
+    public get dock_revision() {
+        return this.getValue("dock_revision") ?? 0;
+    }
+    public set dock_revision(value) {
+        this.update({ dock_revision: value });
     }
     public set archive_visible_days(value) {
         this.update({ archive_visible_days: value });

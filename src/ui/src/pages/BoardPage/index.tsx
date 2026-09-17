@@ -648,6 +648,7 @@ function BoardProxyDisplay({ pageRoute, isFetching, project }: IBoardProxyDispla
                                 <BoardFloatingNavigation
                                     project={project}
                                     currentUser={currentUser}
+                                    dockEnabled={renderedViewType === "board"}
                                     items={floatingNavs.map((nav, index) => ({
                                         key: index,
                                         label: nav.name,

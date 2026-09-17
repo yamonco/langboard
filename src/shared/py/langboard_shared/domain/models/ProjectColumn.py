@@ -5,6 +5,10 @@ from ...core.types import SnowflakeID
 from .Project import Project
 
 
+class ProjectColumnDockConflict(Exception):
+    """The shared shortcut configuration changed after the caller read it."""
+
+
 class ProjectColumn(SoftDeleteModel, table=True):
     DEFAULT_ARCHIVE_COLUMN_NAME: ClassVar[str] = "Archive"
     project_id: SnowflakeID = SnowflakeIDField(
@@ -13,6 +17,7 @@ class ProjectColumn(SoftDeleteModel, table=True):
     name: str = Field(nullable=False, api_field=ApiField())
     description: str = Field(default="", nullable=False, sa_type=TEXT, api_field=ApiField())
     order: int = Field(default=0, nullable=False, api_field=ApiField())
+    dock_order: int | None = Field(default=None, nullable=True, api_field=ApiField())
     is_archive: bool = Field(default=False, nullable=False, api_field=ApiField())
 
     def notification_data(self) -> dict[str, Any]:

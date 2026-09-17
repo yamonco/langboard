@@ -1,6 +1,7 @@
 import Flex from "@/components/base/Flex";
 import { useBoardSettings } from "@/core/providers/BoardSettingsProvider";
 import BoardSettingsBasic from "@/pages/BoardPage/components/settings/BoardSettingsBasic";
+import BoardSettingsDock from "@/pages/BoardPage/components/settings/BoardSettingsDock";
 import BoardSettingsEmailNotifications from "@/pages/BoardPage/components/settings/BoardSettingsEmailNotifications";
 import BoardSettingsOther from "@/pages/BoardPage/components/settings/BoardSettingsOther";
 import BoardSettingsSection from "@/pages/BoardPage/components/settings/BoardSettingsSection";
@@ -30,6 +31,9 @@ const BoardSettingsList = memo(() => {
         <Flex direction="col" gap="3" p={{ initial: "4", md: "6", lg: "8" }} items="center">
             <BoardSettingsSection title="project.settings.Basic info">
                 <BoardSettingsBasic />
+            </BoardSettingsSection>
+            <BoardSettingsSection title="board.Shared dock">
+                <BoardSettingsDock key={project.uid} />
             </BoardSettingsSection>
             <BoardSettingsSection title="project.settings.Email notifications">
                 <BoardSettingsEmailNotifications />

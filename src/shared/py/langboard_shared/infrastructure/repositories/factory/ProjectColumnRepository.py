@@ -1,9 +1,11 @@
-from sqlalchemy import func
+from typing import Any
+from sqlalchemy import case, func, select
 from ....ai import BotScheduleHelper, BotScopeHelper
 from ....core.db import DbSession, SqlBuilder
 from ....core.domain import BaseOrderRepository
 from ....core.types.ParamTypes import TColumnParam, TProjectParam
 from ....domain.models import Card, Project, ProjectColumn, ProjectColumnBotSchedule, ProjectColumnBotScope
+from ....domain.models.ProjectColumn import ProjectColumnDockConflict
 from ....helpers import InfraHelper
 
 
@@ -23,7 +25,132 @@ class ProjectColumnRepository(BaseOrderRepository[ProjectColumn, Project]):
     def get_by_id_like(self, column: TColumnParam | None) -> ProjectColumn | None:
         return InfraHelper.get_by_id_like(ProjectColumn, column)
 
-    def get_all_by_project(self, projects: TProjectParam | list[TProjectParam]) -> list[tuple[ProjectColumn, int]]:
+    def get_dock_snapshot(self, project: TProjectParam) -> dict[str, Any] | None:
+        # One primary-database statement keeps the revision and ordered slots coherent.
+        query = (
+            select(Project, ProjectColumn)
+            .outerjoin(
+                ProjectColumn,
+                (ProjectColumn.project_id == Project.id)
+                & ProjectColumn.deleted_at.is_(None)
+                & (ProjectColumn.is_archive == False)  # noqa: E712
+                & ProjectColumn.dock_order.is_not(None),
+            )
+            .where((Project.id == InfraHelper.convert_id(project)) & Project.deleted_at.is_(None))
+            .order_by(ProjectColumn.dock_order.asc(), ProjectColumn.id.asc())
+        )
+        with DbSession.use(readonly=False) as db:
+            rows = db.exec(query).all()
+        if not rows:
+            return None
+        return {
+            "column_uids": [column.get_uid() for _, column in rows if column is not None],
+            "revision": rows[0][0].dock_revision,
+        }
+
+    def replace_dock_columns(
+        self, project: TProjectParam, column_uids: list[str], expected_revision: int
+    ) -> dict[str, Any] | None:
+        """Replace shared shortcuts without changing board column positions."""
+        if len(column_uids) != len(set(column_uids)):
+            return None
+        project_id = InfraHelper.convert_id(project)
+        conflict = False
+        with DbSession.use(readonly=False) as db:
+            # Serialize whole-list replacements, including an initially empty dock.
+            locked = db.exec(
+                SqlBuilder.select.table(Project).where(Project.column("id") == project_id).with_for_update()
+            ).first()
+            if locked is None:
+                return None
+            if locked.dock_revision != expected_revision:
+                conflict = True
+            else:
+                columns = db.exec(
+                    SqlBuilder.select.table(ProjectColumn).where(ProjectColumn.column("project_id") == project_id)
+                ).all()
+                eligible = {column.get_uid(): column.id for column in columns if not column.is_archive}
+                if any(uid not in eligible for uid in column_uids):
+                    return None
+                positions = {eligible[uid]: index for index, uid in enumerate(column_uids)}
+                if all(column.dock_order == positions.get(column.id) for column in columns):
+                    return {"column_uids": column_uids, "revision": locked.dock_revision}
+                value = case(positions, value=ProjectColumn.column("id"), else_=None) if positions else None
+                db.exec(
+                    SqlBuilder.update.table(ProjectColumn)
+                    .values(dock_order=value)
+                    .where(
+                        (ProjectColumn.column("project_id") == project_id)
+                        & (ProjectColumn.column("deleted_at").is_(None))
+                    )
+                )
+                revision = locked.dock_revision + 1
+                db.exec(
+                    SqlBuilder.update.table(Project)
+                    .values(dock_revision=revision)
+                    .where(Project.column("id") == project_id)
+                )
+        if conflict:
+            # A rejected intent is not a failed database transaction.
+            raise ProjectColumnDockConflict()
+        return {"column_uids": column_uids, "revision": revision}
+
+    def delete_with_dock_snapshot(self, project: TProjectParam, column: TColumnParam) -> dict[str, Any] | None:
+        project_id = InfraHelper.convert_id(project)
+        column_id = InfraHelper.convert_id(column)
+        with DbSession.use(readonly=False) as db:
+            locked = db.exec(
+                SqlBuilder.select.table(Project).where(Project.column("id") == project_id).with_for_update()
+            ).first()
+            if locked is None:
+                return None
+            columns = db.exec(
+                SqlBuilder.select.table(ProjectColumn).where(ProjectColumn.column("project_id") == project_id)
+            ).all()
+            target = next((item for item in columns if item.id == column_id and not item.is_archive), None)
+            if target is None:
+                return None
+            pinned = sorted(
+                (
+                    item
+                    for item in columns
+                    if item.id != target.id and not item.is_archive and item.dock_order is not None
+                ),
+                key=lambda item: (item.dock_order, item.id),
+            )
+            db.exec(SqlBuilder.delete.table(ProjectColumn).where(ProjectColumn.column("id") == target.id))
+            db.exec(
+                SqlBuilder.update.table(ProjectColumn)
+                .values({ProjectColumn.order: ProjectColumn.order - 1})
+                .where(
+                    (ProjectColumn.column("project_id") == project_id) & (ProjectColumn.column("order") > target.order)
+                )
+            )
+            revision = locked.dock_revision
+            if target.dock_order is not None:
+                positions = {item.id: index for index, item in enumerate(pinned)}
+                value = case(positions, value=ProjectColumn.column("id"), else_=None) if positions else None
+                db.exec(
+                    SqlBuilder.update.table(ProjectColumn)
+                    .values(dock_order=value)
+                    .where(
+                        (ProjectColumn.column("project_id") == project_id)
+                        & ProjectColumn.column("deleted_at").is_(None)
+                    )
+                )
+                revision += 1
+                db.exec(
+                    SqlBuilder.update.table(Project)
+                    .values(dock_revision=revision)
+                    .where(Project.column("id") == project_id)
+                )
+        return {"column_uids": [item.get_uid() for item in pinned], "revision": revision}
+
+    def get_all_by_project(
+        self,
+        projects: TProjectParam | list[TProjectParam],
+        limit: int | None = None,
+    ) -> list[tuple[ProjectColumn, int]]:
         if not isinstance(projects, list):
             projects = [projects]
         project_ids = [InfraHelper.convert_id(project) for project in projects]
@@ -134,15 +261,3 @@ class ProjectColumnRepository(BaseOrderRepository[ProjectColumn, Project]):
             result = db.exec(sql_query)
             count = result.first() or 0
         return count
-
-    def reorder_after_deleted(self, project: TProjectParam, deleted_order: int) -> None:
-        project_id = InfraHelper.convert_id(project)
-
-        with DbSession.use(readonly=False) as db:
-            db.exec(
-                SqlBuilder.update.table(ProjectColumn)
-                .values({ProjectColumn.order: ProjectColumn.order - 1})
-                .where(
-                    (ProjectColumn.column("project_id") == project_id) & (ProjectColumn.column("order") > deleted_order)
-                )
-            )

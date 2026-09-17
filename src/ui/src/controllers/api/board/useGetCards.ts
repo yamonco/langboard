@@ -13,6 +13,7 @@ import {
 } from "@/core/models";
 import { Utils } from "@langboard/core/utils";
 import { mergeLinkedResourceProjection } from "@/controllers/api/board/mergeLinkedResourceProjection";
+import refreshProjectColumnDock from "@/controllers/api/board/refreshProjectColumnDock";
 
 export interface IGetCardsForm {
     project_uid: string;
@@ -77,6 +78,7 @@ const useGetCards = (params: IGetCardsForm, options?: TQueryOptions<unknown, IGe
 
         ProjectColumnBotScope.Model.fromArray(res.data.column_bot_scopes, true);
         ProjectColumnBotSchedule.Model.fromArray(res.data.column_bot_schedules, true);
+        await refreshProjectColumnDock(params.project_uid);
 
         return { isUpdated: true };
     };

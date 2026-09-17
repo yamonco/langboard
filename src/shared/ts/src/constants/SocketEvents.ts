@@ -55,6 +55,7 @@ const SERVER = {
         },
         COLUMN: {
             CREATED: "board:column:created:{uid}",
+            DOCK_CHANGED: "board:column:dock:changed:{uid}",
             NAME_CHANGED: "board:column:name:changed:{uid}",
             DESCRIPTION_CHANGED: "board:column:description:changed:{uid}",
             ORDER_CHANGED: "board:column:order:changed:{uid}",

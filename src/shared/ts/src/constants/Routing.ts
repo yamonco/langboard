@@ -112,6 +112,8 @@ const API = {
         },
         COPY_AS_TEMPLATE: "/board/{uid}/settings/copy-as-template",
         COLUMN: {
+            GET_LIST: "/board/{uid}/columns",
+            REPLACE_DOCK: "/board/{uid}/column/dock",
             CREATE: "/board/{uid}/column",
             CHANGE_NAME: "/board/{uid}/column/{project_column_uid}/name",
             CHANGE_DESCRIPTION: "/board/{uid}/column/{project_column_uid}/description",

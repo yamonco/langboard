@@ -155,8 +155,7 @@ def run_migrations_offline() -> None:
 
 
 def do_run_migrations(connection: Connection) -> None:
-    driver_type = DbConfigHelper.get_driver_type(Env.MAIN_DATABASE_URL)
-    render_as_batch = driver_type == "sqlite"
+    render_as_batch = connection.dialect.name == "sqlite"
 
     context.configure(
         connection=connection,
@@ -192,7 +191,11 @@ def run_migrations() -> None:
 def run_migrations_online() -> None:
     """Run migrations in 'online' mode."""
 
-    run_migrations()
+    connection = config.attributes.get("connection")
+    if connection is not None:
+        do_run_migrations(connection)
+    else:
+        run_migrations()
 
 
 if context.is_offline_mode():

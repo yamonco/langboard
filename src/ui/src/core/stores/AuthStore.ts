@@ -13,6 +13,7 @@ interface IAuthStore {
     currentUser: AuthUser.TModel | null;
     pageLoaded: bool;
     getToken: () => string | null;
+    getSessionVersion: () => number;
     updateToken: (token: string, api: AxiosInstance) => Promise<void>;
     removeToken: () => void;
     hasSetPreferredLang: () => bool;
@@ -23,6 +24,7 @@ interface IAuthStore {
 }
 
 let accessToken: string | null = null;
+let tokenUpdateVersion = 0;
 const HAS_SET_LANG_STORAGE_KEY = `has-set-lang-${APP_SHORT_NAME}`;
 
 const useAuthStore = create(
@@ -32,12 +34,14 @@ const useAuthStore = create(
             currentUser: null,
             pageLoaded: false,
             getToken: () => accessToken,
+            getSessionVersion: () => tokenUpdateVersion,
             updateToken: async (token: string, api: AxiosInstance) => {
                 if (get().state === "pending") {
                     return;
                 }
 
                 accessToken = token;
+                tokenUpdateVersion += 1;
 
                 const tryGetUser = async () => {
                     const MAX_ATTEMPTS = 5;
@@ -84,6 +88,7 @@ const useAuthStore = create(
             removeToken: () => {
                 useSocketStore.getState().close();
                 accessToken = null;
+                tokenUpdateVersion += 1;
                 set({ currentUser: null, state: "loaded" });
             },
             hasSetPreferredLang: () => localStorage.getItem(HAS_SET_LANG_STORAGE_KEY) === "true",

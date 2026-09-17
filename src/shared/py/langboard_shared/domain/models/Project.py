@@ -15,6 +15,12 @@ class Project(BaseNotificationScheduleModel, table=True):
     ai_description: str | None = Field(default=None, sa_type=TEXT, api_field=ApiField())
     project_type: str = Field(default="Other", nullable=False, api_field=ApiField())
     archive_visible_days: int = Field(default=3, nullable=False, api_field=ApiField())
+    dock_revision: int = Field(
+        default=0,
+        nullable=False,
+        sa_column_kwargs={"server_default": "0"},
+        api_field=ApiField(),
+    )
 
     def notification_data(self) -> dict[str, Any]:
         return {

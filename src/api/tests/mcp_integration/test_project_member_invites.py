@@ -8,11 +8,9 @@ os.environ.setdefault("PROJECT_NAME", "langboard")
 
 from langboard.mcp_integration import McpTool
 from langboard.mcp_tools import ProjectMcp
-from langboard.routes.board.BoardApi import search_project_member_candidates
 from langboard.routes.board.forms.Project import InviteProjectMemberForm
-from langboard_shared.core.db import DbSession
 from langboard_shared.core.types import SnowflakeID
-from langboard_shared.domain.models import IdentityProvider, Project, ProjectAssignedUser, ProjectRole, User
+from langboard_shared.domain.models import IdentityProvider, User
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.domain.services.factory.IdentityLinkService import IdentityLinkService
 from langboard_shared.domain.services.factory.ProjectInvitationService import (

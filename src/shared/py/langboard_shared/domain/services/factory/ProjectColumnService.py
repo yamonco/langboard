@@ -148,6 +148,20 @@ class ProjectColumnService(BaseDomainService):
 
         return True
 
+    def get_dock_snapshot(self, project: TProjectParam) -> dict[str, Any] | None:
+        return self.repo.project_column.get_dock_snapshot(project)
+
+    def replace_dock_columns(
+        self, project: TProjectParam | None, column_uids: list[str], expected_revision: int
+    ) -> dict[str, Any] | None:
+        project = InfraHelper.get_by_id_like(Project, project)
+        if not project:
+            return None
+        result = self.repo.project_column.replace_dock_columns(project, column_uids, expected_revision)
+        if result is not None:
+            ProjectColumnPublisher.dock_changed(project, result)
+        return result
+
     def delete(self, user_or_bot: TUserOrBot, project: TProjectParam | None, column: TColumnParam | None) -> bool:
         params = InfraHelper.get_records_with_foreign_by_params((Project, project), (ProjectColumn, column))
         if not params:
@@ -172,11 +186,12 @@ class ProjectColumnService(BaseDomainService):
             reason="project column deleted",
         )
 
-        self.repo.project_column.delete(column)
-
-        self.repo.project_column.reorder_after_deleted(project, column.order)
+        dock_snapshot = self.repo.project_column.delete_with_dock_snapshot(project, column)
+        if dock_snapshot is None:
+            return False
 
         ProjectColumnPublisher.deleted(project, column, archive_column, current_time, count_cards_in_archive)
+        ProjectColumnPublisher.dock_changed(project, dock_snapshot)
         ProjectColumnActivityTask.project_column_deleted(user_or_bot, project, column)
         ProjectColumnBotTask.project_column_deleted(user_or_bot, project, column)
 

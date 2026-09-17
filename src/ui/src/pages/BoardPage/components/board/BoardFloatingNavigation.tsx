@@ -1,116 +1,126 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useQueryClient } from "@tanstack/react-query";
 import { dropTargetForElements, monitorForElements } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
-import { combine } from "@atlaskit/pragmatic-drag-and-drop/combine";
 import Floating from "@/components/base/Floating";
 import { IFloatingNavItem } from "@/components/base/Floating/Nav";
+import Button from "@/components/base/Button";
 import IconComponent from "@/components/base/IconComponent";
-import Toast from "@/components/base/Toast";
-import useArchiveCard from "@/controllers/api/card/useArchiveCard";
 import useRoleActionFilter from "@/core/hooks/useRoleActionFilter";
-import setupApiErrorHandler from "@/core/helpers/setupApiErrorHandler";
-import { AuthUser, Project, ProjectCard } from "@/core/models";
+import { AuthUser, Project, ProjectColumn } from "@/core/models";
+import { pinnedProjectDockColumns } from "@/core/models/projectDock";
 import { ProjectRole } from "@/core/models/roles";
 import { cn } from "@/core/utils/ComponentUtils";
-import { BOARD_DND_SYMBOL_SET } from "@/pages/BoardPage/components/board/BoardConstants";
+import { BOARD_COLUMN_TOUCH_DND_ATTR, BOARD_DND_SYMBOL_SET } from "@/pages/BoardPage/components/board/BoardConstants";
 import { draggedBoardCard } from "@/pages/BoardPage/components/board/BoardGestureData";
+import useProjectDockSync from "@/controllers/api/board/useProjectDockSync";
+
+function acceptsCard(data: Record<string | symbol, unknown>, projectUID: string): boolean {
+    return window.matchMedia("(min-width: 768px) and (pointer: fine)").matches && !!draggedBoardCard(data, BOARD_DND_SYMBOL_SET.row, projectUID);
+}
 
 export default function BoardFloatingNavigation({
     project,
     currentUser,
     items,
+    dockEnabled = false,
 }: {
     project: Project.TModel;
     currentUser: AuthUser.TModel;
     items: IFloatingNavItem[];
+    dockEnabled?: boolean;
 }) {
+    useProjectDockSync(project.uid);
     const roles = project.useField("current_auth_role_actions");
     const isAdmin = currentUser.useField("is_admin");
     const { hasRoleAction } = useRoleActionFilter(roles);
-    const enabled = isAdmin || hasRoleAction(ProjectRole.EAction.CardUpdate);
-    const target = useRef<HTMLDivElement>(null);
-    const pending = useRef(false);
+    const canDrop = dockEnabled && (isAdmin || hasRoleAction(ProjectRole.EAction.CardUpdate));
+    const columns = ProjectColumn.Model.useModels((column) => column.project_uid === project.uid);
+    project.useField("dock_revision");
+    const pinned = pinnedProjectDockColumns(columns);
+    const archive = columns.find((column) => column.is_archive);
     const [dragging, setDragging] = useState(false);
-    const [over, setOver] = useState(false);
-    const [t] = useTranslation();
-    const queryClient = useQueryClient();
-    const { mutateAsync } = useArchiveCard({ interceptToast: true });
 
     useEffect(() => {
-        if (!enabled || !target.current) return;
-        const cardFrom = (data: Record<string | symbol, unknown>) => {
-            const uid = draggedBoardCard(data, BOARD_DND_SYMBOL_SET.row, project.uid);
-            return ProjectCard.Model.getModels((card) => card.uid === uid && card.project_uid === project.uid && !card.archived_at)[0];
-        };
-        const accepts = ({ source }: { source: { data: Record<string | symbol, unknown> } }) =>
-            !pending.current && window.matchMedia("(min-width: 768px) and (pointer: fine)").matches && !!cardFrom(source.data);
-        return combine(
-            monitorForElements({
-                canMonitor: accepts,
-                onDragStart: () => setDragging(true),
-                onDrop: () => {
-                    setDragging(false);
-                    setOver(false);
-                },
-            }),
-            dropTargetForElements({
-                element: target.current,
-                canDrop: accepts,
-                getData: () => ({ type: "board-card-archive" }),
-                onDragEnter: () => setOver(true),
-                onDragLeave: () => setOver(false),
-                onDrop: ({ source }) => {
-                    const card = cardFrom(source.data);
-                    if (!card || pending.current) return;
-                    pending.current = true;
-                    const promise = mutateAsync({ project_uid: project.uid, card_uid: card.uid }).then(() =>
-                        queryClient.invalidateQueries({ queryKey: [`get-cards-${project.uid}`] })
-                    );
-                    Toast.Add.promise(promise, {
-                        loading: t("common.Updating..."),
-                        success: t("successes.Card archived successfully."),
-                        error: (error) => {
-                            const message = { message: "" };
-                            setupApiErrorHandler({}, message).handle(error);
-                            return message.message;
-                        },
-                        finally: () => {
-                            pending.current = false;
-                        },
-                    });
-                },
-            })
-        );
-    }, [enabled, mutateAsync, project, queryClient, t]);
+        if (!canDrop) return;
+        return monitorForElements({
+            canMonitor: ({ source }) => acceptsCard(source.data, project.uid),
+            onDragStart: () => setDragging(true),
+            onDrop: () => setDragging(false),
+        });
+    }, [canDrop, project.uid]);
 
     return (
         <Floating.Nav
             fixed
             items={items}
             className="board-floating-navigation"
-            contentClassName={cn("transition-transform duration-200 motion-reduce:transition-none", dragging && "md:-translate-y-2 md:shadow-xl")}
+            contentClassName={cn(
+                "max-w-[calc(100vw-1rem)] transition-transform duration-200 motion-reduce:transition-none",
+                dragging && "md:-translate-y-2 md:shadow-xl"
+            )}
             trailing={
-                <div
-                    className={cn(
-                        "hidden overflow-hidden transition-[width,opacity] duration-200 motion-reduce:transition-none md:block",
-                        dragging ? "w-44 opacity-100" : "w-0 opacity-0"
-                    )}
-                    aria-hidden={!dragging}
-                >
-                    <div
-                        ref={target}
-                        data-board-archive-drop=""
-                        className={cn(
-                            "ml-1 flex h-11 w-40 items-center justify-center gap-2 rounded-full border border-dashed text-sm",
-                            over ? "border-primary bg-primary text-primary-foreground" : "border-primary/60 bg-primary/10 text-foreground"
+                dockEnabled && (
+                    <div className="hidden min-w-0 items-center md:flex">
+                        {pinned.length > 0 && (
+                            <>
+                                <span role="separator" aria-orientation="vertical" className="mx-1 h-6 w-px shrink-0 bg-border" />
+                                <div className="flex min-w-0 max-w-[35vw] gap-1 overflow-x-auto">
+                                    {pinned.map((column) => (
+                                        <DockTarget key={column.uid} column={column} canDrop={canDrop} dragging={dragging} />
+                                    ))}
+                                </div>
+                            </>
                         )}
-                    >
-                        <IconComponent icon="archive" size="4" />
-                        {t(over ? "board.Release to archive" : "board.Drop to archive")}
+                        {archive && (
+                            <>
+                                <span role="separator" aria-orientation="vertical" className="mx-1 h-6 w-px shrink-0 bg-border" />
+                                <DockTarget column={archive} canDrop={canDrop} dragging={dragging} />
+                            </>
+                        )}
                     </div>
-                </div>
+                )
             }
         />
+    );
+}
+
+function DockTarget({ column, canDrop, dragging }: { column: ProjectColumn.TModel; canDrop: boolean; dragging: boolean }) {
+    const target = useRef<HTMLButtonElement>(null);
+    const [over, setOver] = useState(false);
+    const name = column.useField("name");
+    const isArchive = column.useField("is_archive");
+    const [t] = useTranslation();
+    useEffect(() => {
+        if (!canDrop || !target.current) return;
+        return dropTargetForElements({
+            element: target.current,
+            canDrop: ({ source }) => acceptsCard(source.data, column.project_uid),
+            // The board root owns optimistic movement, API submission and undo.
+            getData: () => ({ [BOARD_DND_SYMBOL_SET.column]: true, column }),
+            onDragEnter: () => setOver(true),
+            onDragLeave: () => setOver(false),
+            onDrop: () => setOver(false),
+        });
+    }, [canDrop, column]);
+    return (
+        <Button
+            ref={target}
+            type="button"
+            variant={over ? "default" : "ghost"}
+            className={cn("h-11 max-w-40 shrink-0 gap-2 rounded-full", dragging && "border border-dashed border-primary/60")}
+            aria-label={isArchive ? t("board.Archive") : name}
+            onClick={() => {
+                const element = document.querySelector<HTMLElement>(`[${BOARD_COLUMN_TOUCH_DND_ATTR}="${CSS.escape(column.uid)}"]`);
+                const scrollport = document.getElementById("board-scrollport");
+                if (!element || !scrollport) return;
+                scrollport.scrollBy({
+                    left: element.getBoundingClientRect().left - scrollport.getBoundingClientRect().left - 16,
+                    behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth",
+                });
+            }}
+        >
+            <IconComponent icon={isArchive ? "archive" : "pin"} size="4" />
+            <span className="truncate text-xs">{isArchive ? t(over ? "board.Release to archive" : "board.Archive") : name}</span>
+        </Button>
     );
 }

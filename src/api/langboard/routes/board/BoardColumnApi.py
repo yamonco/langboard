@@ -14,11 +14,63 @@ from langboard_shared.core.routing import (
 )
 from langboard_shared.core.schema import OpenApiSchema
 from langboard_shared.domain.models import Bot, ProjectColumn, ProjectRole, User
+from langboard_shared.domain.models.ProjectColumn import ProjectColumnDockConflict
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.domain.services import DomainService
 from langboard_shared.filter import RoleFilter
 from langboard_shared.security import Auth, RoleFinder
 from .forms import ChangeRootOrderForm, ColumnDescriptionForm, ColumnForm, CreateColumnForm
+from .forms.Column import ReplaceColumnDockForm
+
+
+@AppRouter.schema(permission=ApiPermission.Read)
+@AppRouter.api.get(
+    "/board/{project_uid}/column/dock",
+    tags=["Board.Column"],
+    description="Read a coherent shared column shortcut snapshot.",
+    responses=OpenApiSchema()
+    .suc({"column_uids": "string[]", "revision": "integer"})
+    .auth()
+    .forbidden()
+    .err(404, ApiErrorCode.NF2001)
+    .get(),
+)
+@RoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+@AuthFilter.add()
+def get_project_column_dock(project_uid: str, service: DomainService = DomainService.scope()) -> JsonResponse:
+    result = service.project_column.get_dock_snapshot(project_uid)
+    if result is None:
+        raise ApiException.NotFound_404(ApiErrorCode.NF2001)
+    return JsonResponse(content=result)
+
+
+@AppRouter.schema(form=ReplaceColumnDockForm, permission=ApiPermission.Edit)
+@AppRouter.api.put(
+    "/board/{project_uid}/column/dock",
+    tags=["Board.Column"],
+    description="Replace shared column shortcuts without changing board order.",
+    responses=OpenApiSchema()
+    .suc({"column_uids": "string[]", "revision": "integer"})
+    .auth()
+    .forbidden()
+    .err(404, ApiErrorCode.NF2004)
+    .err(409, ApiErrorCode.EX2001)
+    .get(),
+)
+@RoleFilter.add(ProjectRole, [ProjectRoleAction.Update], RoleFinder.project)
+@AuthFilter.add("user")
+def replace_project_column_dock(
+    project_uid: str,
+    form: ReplaceColumnDockForm,
+    service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    try:
+        result = service.project_column.replace_dock_columns(project_uid, form.column_uids, form.expected_revision)
+    except ProjectColumnDockConflict:
+        raise ApiException.Conflict_409(ApiErrorCode.EX2001) from None
+    if result is None:
+        raise ApiException.NotFound_404(ApiErrorCode.NF2004)
+    return JsonResponse(content=result)
 
 
 @AppRouter.schema(form=CreateColumnForm, permission=ApiPermission.Create)

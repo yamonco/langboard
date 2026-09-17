@@ -5,9 +5,6 @@ from ...domain import (
     MAX_CHECKITEMS_PER_CHECKLIST,
     MAX_GRAPH_EDGE_CHANGES,
     MAX_GRAPH_NEW_CARDS,
-    MAX_METADATA_VALUE_CHARS,
-    MAX_SECTION_LIMIT,
-    MAX_TEXT_CHARS,
     CardBundleSection,
     CardDescriptionPatch,
     CardGraphEdge,
@@ -17,6 +14,15 @@ from ...domain import (
     projection_revision,
     require_projection_key,
     require_public_metadata_key,
+)
+from ...domain import (
+    MAX_METADATA_VALUE_CHARS as MAX_METADATA_VALUE_CHARS,
+)
+from ...domain import (
+    MAX_SECTION_LIMIT as MAX_SECTION_LIMIT,
+)
+from ...domain import (
+    MAX_TEXT_CHARS as MAX_TEXT_CHARS,
 )
 from ..ports import CardWorkspaceCommandPort
 from ..projections import (
