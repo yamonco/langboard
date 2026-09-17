@@ -32,6 +32,7 @@ import {
 } from "@/pages/BoardPage/components/board/BoardColumnCardStatus";
 import BoardTaskMetadataBadges from "@/pages/BoardPage/components/task/BoardTaskMetadataBadges";
 import BoardCardMove from "@/pages/BoardPage/components/board/BoardCardMove";
+import { getBoardCardWidgetVisibility } from "@/pages/BoardPage/components/board/BoardCardWidgetVisibility";
 
 export interface IBoardColumnCardCollapsibleProps {
     isDragging: bool;
@@ -120,6 +121,11 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
     );
     const commentCount = card.useField("count_comment");
     const creator = card.useField("creator");
+    const hasDescription = card.useField("has_description");
+    const widgetVisibility = useMemo(
+        () => getBoardCardWidgetVisibility({ has_description: hasDescription, count_comment: commentCount }),
+        [hasDescription, commentCount]
+    );
     const { updateCollapsed } = useCardStore();
     const isCollapsed = useCardIsCollapsed(card.uid);
     const labels = card.useForeignFieldArray("labels");
@@ -335,6 +341,14 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
                         )}
                         <Card.Footer className="flex items-center justify-between gap-2 px-3 pb-3 text-xs text-muted-foreground">
                             <Flex items="center" gap="2">
+                                {widgetVisibility.showDescriptionIcon && (
+                                    <IconComponent
+                                        icon="text"
+                                        size="3.5"
+                                        {...attributes}
+                                        aria-label={t("card.Description")}
+                                    />
+                                )}
                                 {creator && (
                                     <span
                                         title={t("card.Created by {{name}}", {

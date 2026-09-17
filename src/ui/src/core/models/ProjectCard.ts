@@ -60,6 +60,8 @@ export interface IStore extends Interface {
     project_members: User.Interface[];
     labels: ProjectLabel.Interface[];
     relationships: ProjectCardRelationship.Interface[];
+    // summary flag from the board API; absent on stale payloads and treated as false
+    has_description?: bool;
 
     // variable set from the client side
     isCollapseOpened?: bool;

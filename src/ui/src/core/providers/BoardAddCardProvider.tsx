@@ -92,18 +92,11 @@ export const BoardAddCardProvider = ({ column, viewportRef, toLastPage, children
                     handle(error);
                     return messageRef.message;
                 },
-                success: (data) => {
-                    const openCard = () => {
-                        const card = document.getElementById(`board-card-${data.uid}`);
-                        if (!card) {
-                            return setTimeout(openCard, 50);
-                        }
-
-                        toLastPage();
-                        scrollToBottom();
-                        card.click();
-                    };
-                    openCard();
+                success: () => {
+                    // Card creation stays lightweight: insert into the board without opening the viewer.
+                    // The user opens the viewer only through an explicit card or widget interaction.
+                    toLastPage();
+                    scrollToBottom();
                     return t("successes.Card added successfully.");
                 },
                 finally: () => {
