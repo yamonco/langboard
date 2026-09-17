@@ -1,4 +1,3 @@
-import { Utils } from "@langboard/core/utils";
 import { type TMentionElement } from "platejs";
 import { convertNodesSerialize, MentionNode as IBaseMentionNode, MdLink, SerializeMdOptions } from "@platejs/markdown";
 import type { Node, Parent, Link, RootContent } from "mdast";
@@ -12,6 +11,14 @@ export interface IMentionNode extends IBaseMentionNode {
 export interface IMentionElement extends TMentionElement {
     key: string;
 }
+
+const isAbsoluteWebURL = (value: string): bool => {
+    try {
+        return ["http:", "https:"].includes(new URL(value).protocol);
+    } catch {
+        return false;
+    }
+};
 
 declare module "mdast" {
     interface StaticPhrasingContent {
@@ -32,7 +39,7 @@ export const remark: Plugin = function () {
             if (
                 !parent ||
                 typeof index !== "number" ||
-                Utils.String.isValidURL(node.url) ||
+                isAbsoluteWebURL(node.url) ||
                 node.children?.[0].type !== "strong" ||
                 node.children[0].children?.[0].type !== "text"
             )

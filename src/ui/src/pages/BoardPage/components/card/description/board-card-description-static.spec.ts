@@ -7,6 +7,7 @@ test("static description chunks render internal links without runtime Plate hook
     await page.goto("/src/pages/BoardPage/components/card/description/board-card-description-static.fixture.html");
     await expect(page.locator("[data-card-description-chunk]")).toBeVisible();
     await expect(page.locator(".internal-link")).toHaveText(/fixture-card/);
+    await expect(page.locator("a").filter({ hasText: "https://example.com/fixture" })).toBeVisible();
     await page.waitForTimeout(250);
 
     expect(pageErrors).not.toContain("Plate hooks must be used inside a Plate or PlateController");

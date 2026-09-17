@@ -6,7 +6,7 @@ import "@/assets/styles/main.css";
 
 const chunk = {
     id: "internal-link-chunk",
-    content: "Before [[card:fixture-card]] after",
+    content: "Before [[card:fixture-card]] after https://example.com/fixture",
     metadata: {
         type: "paragraph",
         previewText: "Before [[card:fixture-card]] after",
