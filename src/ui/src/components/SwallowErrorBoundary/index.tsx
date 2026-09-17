@@ -16,7 +16,12 @@ interface TState {
 let lastErrorOccurred = 0;
 let lastError: Error | null = null;
 let clearLastErrorTimeout: NodeJS.Timeout | null = null;
+
+const BOUNDARY_INSTANCE_RETRY_LIMIT = 3;
+
 class SwallowErrorBoundary extends React.Component<TProps, TState> {
+    private instanceErrorCount = 0;
+
     constructor(props: TProps) {
         super(props);
         this.state = { error: null };
@@ -27,6 +32,8 @@ class SwallowErrorBoundary extends React.Component<TProps, TState> {
     }
 
     componentDidCatch(error: Error): void {
+        this.instanceErrorCount += 1;
+
         if (lastError && error.message === lastError.message) {
             ++lastErrorOccurred;
             return;
@@ -38,6 +45,7 @@ class SwallowErrorBoundary extends React.Component<TProps, TState> {
         }
 
         lastError = error;
+        lastErrorOccurred = 1;
         clearLastErrorTimeout = setTimeout(() => {
             lastError = null;
             if (clearLastErrorTimeout) {
@@ -50,6 +58,11 @@ class SwallowErrorBoundary extends React.Component<TProps, TState> {
             description: t("errors.Please report this issue to the developers that how you got this error."),
         });
     }
+
+    private handleRetry = (): void => {
+        this.instanceErrorCount = 0;
+        this.forceUpdate();
+    };
 
     render() {
         if (lastErrorOccurred > 5) {
@@ -77,6 +90,20 @@ class SwallowErrorBoundary extends React.Component<TProps, TState> {
                         </Dialog.Footer>
                     </Dialog.Content>
                 </Dialog.Root>
+            );
+        }
+
+        // A repeatedly crashing subtree must not re-render forever: cap retries
+        // per boundary instance and fall back to a small inline error with a
+        // manual retry so the rest of the page stays usable.
+        if (this.instanceErrorCount >= BOUNDARY_INSTANCE_RETRY_LIMIT) {
+            return (
+                <Box className="flex items-center gap-2 rounded-md border border-dashed p-3 text-sm text-muted-foreground">
+                    <span>{t("errors.This section failed to render.")}</span>
+                    <Button size="sm" variant="outline" onClick={this.handleRetry}>
+                        {t("common.Retry")}
+                    </Button>
+                </Box>
             );
         }
 
