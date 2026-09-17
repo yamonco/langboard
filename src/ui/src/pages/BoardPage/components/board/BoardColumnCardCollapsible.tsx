@@ -353,48 +353,52 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
                         )}
                     </Card.Header>
                     {showCollapsedOnly ? (
-                        <div className="flex items-center gap-2 px-4 pb-2 opacity-0 transition-opacity duration-200 group-hover/card:opacity-100">
-                            {creator && (
-                                <span
-                                    title={t("card.Created by {{name}}", {
-                                        name: creator.name,
-                                    })}
-                                    className="relative inline-flex shrink-0"
-                                    {...attributes}
-                                >
-                                    <Avatar.Root size="xs">
-                                        {creator.avatar && <Avatar.Image src={Utils.String.convertServerFileURL(creator.avatar)} alt={creator.name} />}
-                                        <Avatar.Fallback className="text-[10px] font-medium">
-                                            {Utils.String.getInitials(creator.name, "")}
-                                        </Avatar.Fallback>
-                                    </Avatar.Root>
-                                    <span className="pointer-events-none absolute -bottom-0.5 -right-0.5 rounded-full bg-background p-px">
-                                        <IconComponent icon="pen-line" size="2.5" />
-                                    </span>
-                                </span>
+                        <>
+                            {!!cardMembers.length && (
+                                <div className="flex items-center justify-end px-4 pb-1.5">
+                                    <UserAvatarList
+                                        maxVisible={3}
+                                        userOrBots={cardMembers}
+                                        scope={{
+                                            projectUID: project.uid,
+                                            cardUID: card.uid,
+                                        }}
+                                        size="sm"
+                                        {...attributes}
+                                        className="cursor-default"
+                                    />
+                                </div>
                             )}
-                            <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                                {commentCount ? (
-                                    <>
-                                        <IconComponent icon="message-square" size="3.5" />
-                                        <span>{commentCount}</span>
-                                    </>
-                                ) : null}
-                            </span>
-                            <span className="ml-auto">
-                                <UserAvatarList
-                                    maxVisible={3}
-                                    userOrBots={cardMembers}
-                                    scope={{
-                                        projectUID: project.uid,
-                                        cardUID: card.uid,
-                                    }}
-                                    size="sm"
-                                    {...attributes}
-                                    className="cursor-default"
-                                />
-                            </span>
-                        </div>
+                            <div className="flex items-center gap-2 px-4 pb-2 opacity-0 transition-opacity duration-200 group-hover/card:opacity-100">
+                                {creator && (
+                                    <span
+                                        title={t("card.Created by {{name}}", {
+                                            name: creator.name,
+                                        })}
+                                        className="relative inline-flex shrink-0"
+                                        {...attributes}
+                                    >
+                                        <Avatar.Root size="xs">
+                                            {creator.avatar && <Avatar.Image src={Utils.String.convertServerFileURL(creator.avatar)} alt={creator.name} />}
+                                            <Avatar.Fallback className="text-[10px] font-medium">
+                                                {Utils.String.getInitials(creator.name, "")}
+                                            </Avatar.Fallback>
+                                        </Avatar.Root>
+                                        <span className="pointer-events-none absolute -bottom-0.5 -right-0.5 rounded-full bg-background p-px">
+                                            <IconComponent icon="pen-line" size="2.5" />
+                                        </span>
+                                    </span>
+                                )}
+                                <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                    {commentCount ? (
+                                        <>
+                                            <IconComponent icon="message-square" size="3.5" />
+                                            <span>{commentCount}</span>
+                                        </>
+                                    ) : null}
+                                </span>
+                            </div>
+                        </>
                     ) : (
                         <Collapsible.Content
                             className={cn(
@@ -425,7 +429,7 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
                                         title={t("card.Created by {{name}}", {
                                             name: creator.name,
                                         })}
-                                        className="relative inline-flex shrink-0"
+                                        className="relative inline-flex shrink-0 opacity-0 transition-opacity duration-200 group-hover/card:opacity-100"
                                         {...attributes}
                                     >
                                         <Avatar.Root size="xs">
@@ -438,7 +442,7 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
                                             <IconComponent icon="pen-line" size="2.5" />
                                         </span>
                                     </span>
-                            )}
+                                    )}
                                     {widgetVisibility.showDescriptionIcon && (
                                         <IconComponent
                                             icon="file-text"
@@ -465,7 +469,7 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
                                     }}
                                     size="sm"
                                     {...attributes}
-                                    className="cursor-default opacity-0 transition-opacity duration-200 group-hover/card:opacity-100"
+                                    className="cursor-default"
                                 />
                             </Card.Footer>
                         </Collapsible.Content>
