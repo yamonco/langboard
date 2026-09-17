@@ -21,6 +21,7 @@ import { useBoardCardSectionSaveActions } from "@/pages/BoardPage/components/car
 import BoardCardColumnName, { SkeletonBoardCardColumnName } from "@/pages/BoardPage/components/card/BoardCardColumnName";
 import BoardCardDeadline, { SkeletonBoardCardDeadline } from "@/pages/BoardPage/components/card/BoardCardDeadline";
 import BoardCardDescription, { SkeletonBoardCardDescription } from "@/pages/BoardPage/components/card/BoardCardDescription";
+import BoardCardCheckBody from "@/pages/BoardPage/components/card/BoardCardCheckBody";
 import BoardCardAttachmentList, { SkeletonBoardCardAttachmentList } from "@/pages/BoardPage/components/card/attachment/BoardCardAttachmentList";
 import BoardCardTitle, { SkeletonBoardCardTitle } from "@/pages/BoardPage/components/card/BoardCardTitle";
 import BoardCommentForm from "@/pages/BoardPage/components/card/comment/BoardCommentForm";
@@ -247,6 +248,12 @@ function BoardTaskCardResult({ isExpanded, setIsExpanded, onClose, onEditModeSta
     const [t] = useTranslation();
     const attachments = ProjectCardAttachment.Model.useModels((model) => model.card_uid === card.uid);
     const checklists = ProjectChecklist.Model.useModels((model) => model.card_uid === card.uid);
+    const description = card.useField("description");
+    // Check-card view: no body and no user checklist. Comments, members, and deadlines never affect it.
+    const isCheckCardView = useMemo(() => {
+        const content = typeof description?.content === "string" ? description.content : "";
+        return !content.trim() && checklists.length === 0;
+    }, [description, checklists.length]);
     const hasRunningBot = useHasRunningBot({ type: "card", targetUID: card.uid });
     const contentViewportRef = useRef<HTMLDivElement | null>(null);
 
@@ -344,28 +351,34 @@ function BoardTaskCardResult({ isExpanded, setIsExpanded, onClose, onEditModeSta
                             <Flex gap="3" direction={{ initial: "col-reverse", sm: "row" }} className="min-h-0 flex-1">
                                 <Box ref={contentViewportRef} className="min-h-0 flex-1 overflow-y-auto">
                                     <Flex direction="col" gap="4" className="min-w-0 pb-6 pr-1">
-                                        <Flex direction={{ initial: "col", sm: "row" }} gap="4">
-                                            <BoardCardSection title="card.Members" className="sm:w-1/2" contentClassName="flex gap-1">
-                                                <BoardCardMemberList key={`board-card-member-list-${card.uid}`} />
-                                            </BoardCardSection>
-                                            <BoardCardSection title="card.Deadline" className="sm:w-1/2">
-                                                <BoardCardDeadline key={`board-card-deadline-${card.uid}`} />
-                                            </BoardCardSection>
-                                        </Flex>
-                                        <BoardTaskMetadataSection cardUID={card.uid} />
-                                        <BoardCardMobileActions />
-                                        <BoardCardSection title="card.Description" className="relative min-h-56">
-                                            <BoardCardDescription key={`board-card-description-${card.uid}`} scrollParentRef={contentViewportRef} />
-                                        </BoardCardSection>
-                                        {checklists.length > 0 && (
-                                            <BoardCardSection title="card.Checklists">
-                                                <BoardCardChecklistGroup key={`board-card-checklist-${card.uid}`} />
-                                            </BoardCardSection>
-                                        )}
-                                        {attachments.length > 0 && (
-                                            <BoardCardSection title="card.Attached files">
-                                                <BoardCardAttachmentList key={`board-card-attachment-list-${card.uid}`} />
-                                            </BoardCardSection>
+                                        {isCheckCardView ? (
+                                            <BoardCardCheckBody key={`board-card-check-body-${card.uid}`} />
+                                        ) : (
+                                            <>
+                                                    <Flex direction={{ initial: "col", sm: "row" }} gap="4">
+                                                        <BoardCardSection title="card.Members" className="sm:w-1/2" contentClassName="flex gap-1">
+                                                            <BoardCardMemberList key={`board-card-member-list-${card.uid}`} />
+                                                        </BoardCardSection>
+                                                        <BoardCardSection title="card.Deadline" className="sm:w-1/2">
+                                                            <BoardCardDeadline key={`board-card-deadline-${card.uid}`} />
+                                                        </BoardCardSection>
+                                                    </Flex>
+                                                    <BoardTaskMetadataSection cardUID={card.uid} />
+                                                    <BoardCardMobileActions />
+                                                    <BoardCardSection title="card.Description" className="relative min-h-56">
+                                                        <BoardCardDescription key={`board-card-description-${card.uid}`} scrollParentRef={contentViewportRef} />
+                                                    </BoardCardSection>
+                                                    {checklists.length > 0 && (
+                                                        <BoardCardSection title="card.Checklists">
+                                                            <BoardCardChecklistGroup key={`board-card-checklist-${card.uid}`} />
+                                                        </BoardCardSection>
+                                                    )}
+                                                    {attachments.length > 0 && (
+                                                        <BoardCardSection title="card.Attached files">
+                                                            <BoardCardAttachmentList key={`board-card-attachment-list-${card.uid}`} />
+                                                        </BoardCardSection>
+                                                    )}
+                                            </>
                                         )}
                                         <BoardCardMobileComments scrollableRef={contentViewportRef} />
                                     </Flex>
