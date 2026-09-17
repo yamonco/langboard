@@ -244,29 +244,33 @@ function BoardColumnCardCollapsible({ isDragging, compact = false }: IBoardColum
                         )}
                     </Card.Header>
                     {showCollapsedOnly ? (
-                        <div className="flex items-center gap-2 px-4 pb-2 opacity-0 transition-opacity duration-200 group-hover/card:opacity-100">
-                            <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                                {commentCount ? (
-                                    <>
-                                        <IconComponent icon="message-square" size="3.5" />
-                                        <span>{commentCount}</span>
-                                    </>
-                                ) : null}
-                            </span>
-                            <span className="ml-auto">
-                                <UserAvatarList
-                                    maxVisible={3}
-                                    userOrBots={cardMembers}
-                                    scope={{
-                                        projectUID: project.uid,
-                                        cardUID: card.uid,
-                                    }}
-                                    size="sm"
-                                    {...attributes}
-                                    className="cursor-default"
-                                />
-                            </span>
-                        </div>
+                        <>
+                            {!!cardMembers.length && (
+                                <div className="flex items-center justify-end px-4 pb-1.5">
+                                    <UserAvatarList
+                                        maxVisible={3}
+                                        userOrBots={cardMembers}
+                                        scope={{
+                                            projectUID: project.uid,
+                                            cardUID: card.uid,
+                                        }}
+                                        size="sm"
+                                        {...attributes}
+                                        className="cursor-default"
+                                    />
+                                </div>
+                            )}
+                            <div className="flex items-center gap-2 px-4 pb-2 opacity-0 transition-opacity duration-200 group-hover/card:opacity-100">
+                                <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                    {commentCount ? (
+                                        <>
+                                            <IconComponent icon="message-square" size="3.5" />
+                                            <span>{commentCount}</span>
+                                        </>
+                                    ) : null}
+                                </span>
+                            </div>
+                        </>
                     ) : (
                         <Collapsible.Content
                             className={cn(
@@ -318,7 +322,7 @@ function BoardColumnCardCollapsible({ isDragging, compact = false }: IBoardColum
                                     }}
                                     size="sm"
                                     {...attributes}
-                                    className="cursor-default opacity-0 transition-opacity duration-200 group-hover/card:opacity-100"
+                                    className="cursor-default"
                                 />
                             </Card.Footer>
                         </Collapsible.Content>
