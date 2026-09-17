@@ -103,5 +103,7 @@
     "You have unsaved card changes.\nLeaving now will discard them.": "You have unsaved card changes.\nLeaving now will discard them.",
     "Keep editing": "Keep editing",
     "Discard changes": "Discard changes"
-  }
+  },
+  "Mark as done": "Mark as done",
+  "Mark as not done": "Mark as not done"
 }
