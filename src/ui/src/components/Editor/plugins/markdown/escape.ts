@@ -1,6 +1,7 @@
 import { SlateEditor } from "platejs";
 import { deserializeInlineMd, deserializeMd, DeserializeMdOptions } from "@platejs/markdown";
 import { preserveListNumbers } from "./list-number";
+import { escapeAngleOpenings } from "@/components/Editor/plugins/markdown/escape-angles";
 
 const escapeNonHtmlAngles = (str: string): string => {
     const htmlTagRegex = /^<\/?[a-zA-Z][\w:-]*(\s+[a-zA-Z_:][\w:.-]*(\s*=\s*(".*?"|'.*?'|[^'"<>\s]+))?)*\s*\/?>/;
@@ -207,7 +208,21 @@ export const deserialize = (isInline: bool) => (editor: SlateEditor, text: strin
     const segments = splitProtectedBlocks(text);
     const processed = segments.map(({ isProtected, content }) => (isProtected ? content : escapeNonMathContent(content))).join("");
 
-    return isInline
-        ? deserializeInlineMd(editor, processed, options)
-        : preserveListNumbers(editor, processed, deserializeMd(editor, processed, options), options);
+    const deserializeInput = (input: string) =>
+        isInline
+            ? deserializeInlineMd(editor, input, options)
+            : preserveListNumbers(editor, input, deserializeMd(editor, input, options), options);
+
+    try {
+        return deserializeInput(processed);
+    } catch {
+        // Allowed HTML tags still fail MDX parsing when they are never closed, for example a literal
+        // `action=<a>` inside prose. Render the angle brackets as text instead of crashing the editor.
+        const escaped = escapeAngleOpenings(processed);
+        try {
+            return deserializeInput(escaped);
+        } catch {
+            return [{ text }];
+        }
+    }
 };
