@@ -201,6 +201,7 @@ const HeaderUserNotification = memo(({ currentUser }: IHeaderUserNotificationPro
                     setUnreadCount={setUnreadCount}
                     timeRange={timeRange || "3d"}
                     updater={[updated, forceUpdate]}
+                    closePanel={() => setIsOpened(false)}
                 />
             </Popover.Content>
         </Popover.Root>
@@ -214,9 +215,18 @@ interface IHeaderUserNotificationListProps {
     setUnreadCount: React.Dispatch<React.SetStateAction<number>>;
     timeRange: IUserSettings["notifications_time_range"];
     updater: [number, React.DispatchWithoutAction];
+    closePanel: () => void;
 }
 
-function HeaderUserNotificationList({ hasMore, isOnlyUnread, loadMore, setUnreadCount, timeRange, updater }: IHeaderUserNotificationListProps) {
+function HeaderUserNotificationList({
+    hasMore,
+    isOnlyUnread,
+    loadMore,
+    setUnreadCount,
+    timeRange,
+    updater,
+    closePanel,
+}: IHeaderUserNotificationListProps) {
     const [t] = useTranslation();
     const [updated] = updater;
     const flatNotifications = UserNotification.Model.useModels(() => true, [updated]);
@@ -261,6 +271,7 @@ function HeaderUserNotificationList({ hasMore, isOnlyUnread, loadMore, setUnread
                         notification={notification}
                         setUnreadCount={setUnreadCount}
                         updater={updater}
+                        closePanel={closePanel}
                     />
                 ))}
             </InfiniteScroller.Default>
@@ -272,9 +283,10 @@ interface IHeaderUserNotificationItemProps {
     notification: UserNotification.TModel;
     setUnreadCount: React.Dispatch<React.SetStateAction<number>>;
     updater: [number, React.DispatchWithoutAction];
+    closePanel: () => void;
 }
 
-const HeaderUserNotificationItem = memo(({ notification, setUnreadCount, updater }: IHeaderUserNotificationItemProps) => {
+const HeaderUserNotificationItem = memo(({ notification, setUnreadCount, updater, closePanel }: IHeaderUserNotificationItemProps) => {
     const [_, forceUpdate] = updater;
     const [t, i18n] = useTranslation();
     const navigate = usePageNavigateRef();
@@ -322,6 +334,7 @@ const HeaderUserNotificationItem = memo(({ notification, setUnreadCount, updater
     const movePage = () => {
         const route = getRoute(notification);
         readNotification(false);
+        closePanel();
         navigate(route);
     };
     const messageVars = getNotificationMessageVars(notification);
