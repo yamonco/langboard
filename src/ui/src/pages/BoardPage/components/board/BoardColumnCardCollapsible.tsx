@@ -22,6 +22,7 @@ import { useHasRunningBot } from "@/core/stores/BotStatusStore";
 import BoardGraphApprovalTargetBadge from "@/pages/BoardPage/components/board/BoardGraphApprovalTargetBadge";
 import { EGraphApprovalScopeTable } from "@/core/models/GraphApprovalRequestModel";
 import BoardTaskMetadataBadges from "@/pages/BoardPage/components/task/BoardTaskMetadataBadges";
+import { getBoardCardWidgetVisibility } from "@/pages/BoardPage/components/board/BoardCardWidgetVisibility";
 
 export interface IBoardColumnCardCollapsibleProps {
     isDragging: bool;
@@ -41,6 +42,11 @@ function BoardColumnCardCollapsible({ isDragging, compact = false }: IBoardColum
         [projectMembers, cardMemberUIDs]
     );
     const commentCount = card.useField("count_comment");
+    const hasDescription = card.useField("has_description");
+    const widgetVisibility = useMemo(
+        () => getBoardCardWidgetVisibility({ has_description: hasDescription, count_comment: commentCount }),
+        [hasDescription, commentCount]
+    );
     const { updateCollapsed } = useCardStore();
     const isCollapsed = useCardIsCollapsed(card.uid);
     const labels = card.useForeignFieldArray("labels");
@@ -225,8 +231,22 @@ function BoardColumnCardCollapsible({ isDragging, compact = false }: IBoardColum
                         )}
                         <Card.Footer className="flex items-end justify-between gap-1.5 pb-4">
                             <Flex items="center" gap="2">
-                                <IconComponent icon="message-square" size="4" className="text-secondary" strokeWidth="4" />
-                                <span>{commentCount}</span>
+                                {widgetVisibility.showDescriptionIcon && (
+                                    <IconComponent
+                                        icon="file-text"
+                                        size="4"
+                                        className="text-secondary"
+                                        strokeWidth="4"
+                                        {...attributes}
+                                        aria-label={t("card.Description")}
+                                    />
+                                )}
+                                {widgetVisibility.showCommentCount && (
+                                    <>
+                                        <IconComponent icon="message-square" size="4" className="text-secondary" strokeWidth="4" />
+                                        <span>{commentCount}</span>
+                                    </>
+                                )}
                             </Flex>
                             <UserAvatarList
                                 maxVisible={3}
