@@ -7,6 +7,8 @@ import "@/i18n";
 import { Outlet } from "react-router";
 import { PageHeaderProvider } from "@/core/providers/PageHeaderProvider";
 import { GlobalSocketHandlersSubscriber } from "@/core/providers/GlobalSocketHandlersSubscriber";
+import ProjectQuickSwitcher from "@/pages/DashboardPage/components/ProjectQuickSwitcher";
+import { useAuth } from "@/core/providers/AuthProvider";
 
 const queryClient = new QueryClient();
 
@@ -19,6 +21,7 @@ function App() {
                         <SocketProvider>
                             <GlobalSocketHandlersSubscriber>
                                 <Outlet />
+                                <AuthenticatedProjectQuickSwitcher />
                                 <Toast.Area richColors />
                             </GlobalSocketHandlersSubscriber>
                         </SocketProvider>
@@ -27,6 +30,11 @@ function App() {
             </PageHeaderProvider>
         </QueryClientProvider>
     );
+}
+
+function AuthenticatedProjectQuickSwitcher(): React.JSX.Element | null {
+    const { currentUser } = useAuth();
+    return currentUser ? <ProjectQuickSwitcher /> : null;
 }
 
 export default App;

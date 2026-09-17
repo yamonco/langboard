@@ -1,5 +1,6 @@
 import { memo, useMemo, useReducer, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { projectTypeLabel } from "@/pages/DashboardPage/components/ProjectTypeCopy";
 import Card from "@/components/base/Card";
 import Flex from "@/components/base/Flex";
 import Skeleton from "@/components/base/Skeleton";
@@ -89,7 +90,7 @@ const ProjectItem = memo(({ project, updateStarredProjects, ...props }: IProject
             <ModelRegistry.Project.Provider model={project}>
                 <Card.Header className="relative block pt-5">
                     <Card.Title className="max-w-[calc(100%_-_theme(spacing.8))] text-sm leading-tight text-gray-500">
-                        {t(projectType === "Other" ? "common.Other" : `project.types.${projectType}`)}
+                        {projectTypeLabel(t, projectType)}
                     </Card.Title>
                     <Card.Title className="max-w-[calc(100%_-_theme(spacing.8))] leading-tight">{title}</Card.Title>
                     <ProjectItemStarButton isUpdating={isUpdating} setIsUpdating={setIsUpdating} updateStarredProjects={updateStarredProjects} />
@@ -97,7 +98,7 @@ const ProjectItem = memo(({ project, updateStarredProjects, ...props }: IProject
                 <Card.Content></Card.Content>
                 <Card.Footer className="flex items-center gap-1.5">
                     {columns.map((column) => (
-                        <ProjectItemColumn key={Utils.String.Token.shortUUID()} column={column} />
+                        <ProjectItemColumn key={column.uid} column={column} />
                     ))}
                 </Card.Footer>
             </ModelRegistry.Project.Provider>

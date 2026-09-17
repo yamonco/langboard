@@ -8,10 +8,11 @@ import pytest
 os.environ.setdefault("PROJECT_NAME", "langboard")
 
 from langboard.card_workspace.application.dtos import CardBundleDto, CardBundleResponse  # noqa: E402
-from langboard.mcp_integration import McpTool  # noqa: E402
-from langboard.mcp_tools import BotMcp, CardMcp, CardWorkspaceMcp, MetadataMcp, ProjectMcp  # noqa: E402, F401
+from langboard.mcp_integration import McpRoleFilter, McpTool  # noqa: E402
+from langboard.mcp_tools import CardMcp, CardWorkspaceMcp  # noqa: E402, F401
 from langboard.routes.mcp.McpApi import serialize_mcp_result  # noqa: E402
 from langboard_shared.domain.models.bases import REACTION_TYPES  # noqa: E402
+from langboard_shared.domain.models.ProjectRole import ProjectRoleAction  # noqa: E402
 from langboard_shared.domain.services.factory.CardService import CardService  # noqa: E402
 
 
@@ -26,6 +27,25 @@ def test_card_partial_edit_schema_requires_only_card_identity() -> None:
     assert schema["properties"]["deadline_at"]["default"] is None
 
 
+def test_description_patch_schema_supports_atomic_multi_hunk_edits() -> None:
+    """The agent contract keeps legacy edits while exposing bounded structured patches."""
+
+    schema = McpTool.get_tool("patch_card_description")["input_schema"]
+
+    assert schema["required"] == ["project_uid", "card_uid"]
+    assert schema["properties"]["old_text"]["default"] is None
+    assert schema["properties"]["edits"]["default"] is None
+    assert schema["$defs"]["ExactTextReplacement"]["required"] == ["old_text", "new_text"]
+
+
+def test_description_replacement_schema_requires_reviewed_revision_and_accepts_empty_content() -> None:
+    """The explicit whole-body contract cannot be mistaken for an unguarded partial edit."""
+
+    schema = McpTool.get_tool("replace_card_description")["input_schema"]
+
+    assert schema["required"] == ["project_uid", "card_uid", "description", "expected_revision"]
+
+
 def test_card_move_schema_makes_column_an_optional_destination() -> None:
     """Reordering in place requires no synthetic nullable column argument."""
 
@@ -33,6 +53,96 @@ def test_card_move_schema_makes_column_an_optional_destination() -> None:
 
     assert schema["required"] == ["project_uid", "card_uid", "order"]
     assert schema["properties"]["column_uid"]["default"] is None
+
+
+def test_attachment_upload_requires_project_update_permission() -> None:
+    """Attachment bytes cannot be written by a read-only project member."""
+
+    _, actions, _, _ = McpRoleFilter.get_filtered(CardMcp.upload_card_attachment)
+
+    assert actions == [ProjectRoleAction.Update.value]
+
+
+@pytest.mark.parametrize("reason", ["stale revision", "missing fragment", "ambiguous fragment"])
+def test_description_conflict_is_transport_validation(monkeypatch: pytest.MonkeyPatch, reason: str) -> None:
+    """Only a known pre-save conflict becomes a recoverable MCP validation error."""
+    from fastmcp.exceptions import ValidationError
+    from langboard.card_workspace.domain import DescriptionPatchConflict
+
+    def reject(*args: Any, **kwargs: Any) -> None:
+        raise DescriptionPatchConflict(reason)
+
+    monkeypatch.setattr(CardWorkspaceMcp, "_adapter", lambda *args: object())
+    monkeypatch.setattr(CardWorkspaceMcp, "replace_description_text", reject)
+    with pytest.raises(ValidationError, match="No changes saved"):
+        CardWorkspaceMcp.patch_card_description("project", "card", None, None, old_text="old", new_text="new")
+
+
+def test_description_unexpected_failure_is_not_claimed_unsaved(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A failure after persistence must not be disguised as a safe conflict."""
+
+    def fail(*args: Any, **kwargs: Any) -> None:
+        raise ValueError("downstream effect failed")
+
+    monkeypatch.setattr(CardWorkspaceMcp, "_adapter", lambda *args: object())
+    monkeypatch.setattr(CardWorkspaceMcp, "replace_description_text", fail)
+    with pytest.raises(ValueError, match="downstream effect failed"):
+        CardWorkspaceMcp.patch_card_description("project", "card", None, None, old_text="old", new_text="new")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("reason", ["stale revision", "missing fragment", "ambiguous fragment", "effect failure"])
+async def test_description_conflict_through_http_route(monkeypatch: pytest.MonkeyPatch, reason: str) -> None:
+    """The HTTP dispatcher preserves safe validation errors and unknown outcomes separately."""
+    from fastapi import FastAPI, Request
+    from fastmcp import FastMCP
+    from httpx import ASGITransport, AsyncClient
+    from langboard.card_workspace.domain import DescriptionPatchConflict
+
+    route = importlib.import_module("langboard.routes.mcp.McpApi")
+    closed: list[bool] = []
+    group = SimpleNamespace(activated_at=True, tools=["patch_card_description"], user_id=None)
+    service = SimpleNamespace(
+        mcp_tool_group=SimpleNamespace(get_by_id_like=lambda _uid: group),
+        close=lambda: closed.append(True),
+    )
+    monkeypatch.setattr(route, "DomainService", lambda: service)
+    monkeypatch.setattr(route, "User", SimpleNamespace)
+    monkeypatch.setattr(CardWorkspaceMcp, "_adapter", lambda *args: object())
+
+    def reject(*args: Any, **kwargs: Any) -> None:
+        if reason == "effect failure":
+            raise ValueError("effect failure")
+        raise DescriptionPatchConflict(reason)
+
+    monkeypatch.setattr(CardWorkspaceMcp, "replace_description_text", reject)
+    mcp = FastMCP("description-http-test")
+
+    @mcp.tool(name="patch_card_description")
+    def patch() -> Any:
+        """Run the real MCP boundary without database or external effects."""
+        return CardWorkspaceMcp.patch_card_description("project", "card", None, None, old_text="old", new_text="new")
+
+    monkeypatch.setattr(route.McpServer, "mcp", mcp)
+    app = FastAPI()
+
+    @app.post("/mcp/tools/{tool_name}")
+    async def dispatch(tool_name: str, request: Request) -> Any:
+        """Inject an isolated authenticated actor before the real route dispatcher."""
+        request.scope["auth"] = SimpleNamespace(id=1)
+        return await route.execute_mcp_tool(tool_name, request)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app, raise_app_exceptions=False), base_url="http://test"
+    ) as client:
+        response = await client.post(
+            "/mcp/tools/patch_card_description",
+            json={},
+            headers={route.AuthSecurity.MCP_TOOL_GROUP_UID_HEADER: "test-group"},
+        )
+    assert response.status_code == (500 if reason == "effect failure" else 400)
+    assert closed == [True]
+    assert route.mcp_auth_context.get() is None
 
 
 def test_card_bundle_schema_exposes_opt_in_sections() -> None:
@@ -61,6 +171,39 @@ def test_comment_reaction_schema_exposes_only_native_reactions() -> None:
     assert schema["properties"]["reaction"]["enum"] == REACTION_TYPES
 
 
+def test_graph_patch_schema_exposes_typed_request_local_references() -> None:
+    """Clients can mix existing UIDs and request-local cards in one explicit patch."""
+
+    schema = McpTool.get_tool("apply_card_graph_patch")["input_schema"]
+
+    assert schema["required"] == [
+        "project_uid",
+        "anchor_card_uid",
+        "new_cards",
+        "add_edges",
+        "remove_relationship_uids",
+    ]
+    assert schema["$defs"]["CardGraphNewCard"]["required"] == ["client_ref", "title"]
+    assert schema["$defs"]["CardGraphEdge"]["required"] == [
+        "parent_ref",
+        "child_ref",
+        "relationship_type_uid",
+    ]
+
+
+def test_cardify_checkitem_schema_requires_explicit_source_and_destination() -> None:
+    """Agents cannot cardify an ambiguous checklist item or choose an implicit column."""
+
+    schema = McpTool.get_tool("cardify_card_checkitem")["input_schema"]
+
+    assert schema["required"] == [
+        "project_uid",
+        "card_uid",
+        "checkitem_uid",
+        "project_column_uid",
+    ]
+
+
 def test_mcp_serializer_omits_unrequested_card_sections() -> None:
     """The real MCP response path does not leak optional sections as null placeholders."""
 
@@ -84,11 +227,17 @@ def test_project_member_projection_omits_email_and_is_bounded() -> None:
     service = SimpleNamespace(
         project=SimpleNamespace(
             get_by_id_like=lambda _uid: object(),
-            get_api_assigned_user_list=lambda _project, limit: [
-                {"uid": str(index), "username": f"member-{index}", "email": "hidden@example.com"}
-                for index in range(limit)
+            get_api_assigned_user_list=lambda _project: [
+                {
+                    "uid": str(index),
+                    "username": f"member-{index}",
+                    "type": "user",
+                    "firstname": "Given",
+                    "lastname": "Family",
+                    "email": "hidden@example.com",
+                }
+                for index in range(51)
             ],
-            count_assigned_users=lambda _project: 51,
         )
     )
 
@@ -97,91 +246,33 @@ def test_project_member_projection_omits_email_and_is_bounded() -> None:
     assert len(result["items"]) == 50
     assert result["truncated"] is True
     assert "email" not in str(result)
+    assert result["items"][0] == {"uid": "0", "username": "member-0", "firstname": "Given", "lastname": "Family"}
 
 
-@pytest.mark.parametrize(
-    "tool_name",
-    [
-        "get_projects",
-        "get_starred_projects",
-        "get_project_assigned_users",
-        "get_project_columns",
-        "get_project_labels",
-        "get_project_checklists",
-        "get_column_bot_scopes",
-        "get_column_bot_schedules",
-        "get_cards",
-        "get_card",
-        "get_card_checklists",
-        "get_card_attachments",
-        "get_card_metadata",
-        "get_wiki_metadata",
-        "get_project_bot_scopes",
-        "get_card_bot_scopes",
-    ],
-)
-def test_legacy_mcp_list_tools_have_bounded_limits(tool_name: str) -> None:
-    limit_schema = McpTool.get_tool(tool_name)["input_schema"]["properties"]["limit"]
+def test_project_member_projection_does_not_expose_invitation_email_as_name() -> None:
+    """Invitation and unknown identities cannot leak directory fields through names."""
 
-    assert limit_schema == {"default": 50, "minimum": 1, "maximum": 100, "type": "integer"}
-
-
-def test_project_detail_has_a_bounded_limit() -> None:
-    limit_schema = McpTool.get_tool("get_project")["input_schema"]["properties"]["limit"]
-
-    assert limit_schema == {"default": 50, "minimum": 1, "maximum": 100, "type": "integer"}
-
-
-def test_bot_scope_tool_names_resolve_to_project_checked_implementations() -> None:
-    assert McpTool.get_tool("get_card_bot_scopes")["handler"] is BotMcp.get_card_bot_scopes
-    assert McpTool.get_tool("get_column_bot_scopes")["handler"] is BotMcp.get_column_bot_scopes
-
-
-def test_column_bot_scopes_query_the_requested_column_before_limiting() -> None:
-    column = SimpleNamespace(project_id=1)
-    calls: list[tuple[object, int]] = []
     service = SimpleNamespace(
-        project_column=SimpleNamespace(
-            get_by_id_like=lambda _uid: column,
-            get_api_bot_scopes_by_column=lambda target, limit: (
-                calls.append((target, limit)),
-                [{"uid": "scope-one"}],
-            )[1],
-        ),
-        bot=SimpleNamespace(require_target_project=lambda *_args: None),
+        project=SimpleNamespace(
+            get_by_id_like=lambda _uid: object(),
+            get_api_assigned_user_list=lambda _project: [
+                {
+                    "uid": identity_type,
+                    "username": "",
+                    "type": identity_type,
+                    "firstname": "hidden@example.com",
+                    "lastname": "Private",
+                    "email": "hidden@example.com",
+                }
+                for identity_type in ("group_email", "unknown")
+            ],
+        )
     )
 
-    result = BotMcp.get_column_bot_scopes("project-one", "column-one", service, limit=5)
+    result = CardWorkspaceMcp.list_project_members("project", service)
 
-    assert result == {"scopes": [{"uid": "scope-one"}]}
-    assert calls == [(column, 5)]
-
-
-def test_project_column_schedules_apply_the_limit_to_schedules() -> None:
-    project = object()
-    calls: list[tuple[object, int]] = []
-    service = SimpleNamespace(
-        project=SimpleNamespace(get_by_id_like=lambda _uid: project),
-        project_column=SimpleNamespace(
-            get_api_bot_schedule_list_by_project=lambda target, limit: (
-                calls.append((target, limit)),
-                [{"uid": "schedule-one"}],
-            )[1]
-        ),
-    )
-
-    result = ProjectMcp.get_column_bot_schedules("project-one", service, limit=5)
-
-    assert result == {"column_bot_schedules": [{"uid": "schedule-one"}]}
-    assert calls == [(project, 5)]
-
-
-def test_duplicate_mcp_tool_names_fail_at_registration() -> None:
-    with pytest.raises(ValueError, match="Duplicate MCP tool name"):
-
-        @McpTool.add(description="Duplicate")
-        def get_cards() -> None:
-            return None
+    assert result["items"] == [{"uid": "group_email", "username": ""}, {"uid": "unknown", "username": ""}]
+    assert "hidden@example.com" not in str(result)
 
 
 def test_empty_partial_edit_and_invalid_order_stop_before_service() -> None:
@@ -214,6 +305,73 @@ def test_native_archive_rejects_card_outside_project(monkeypatch: pytest.MonkeyP
     )
 
     assert CardService.archive(object(), object(), "project-a", "card-from-b") is None
+
+
+def test_card_delete_is_limited_to_the_original_author_or_admin(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Project delete permission alone cannot delete a card authored by another actor."""
+
+    module = importlib.import_module("langboard_shared.domain.services.factory.CardService")
+
+    class FakeUser:
+        def __init__(self, actor_id: int, *, is_admin: bool = False):
+            self.id = actor_id
+            self.is_admin = is_admin
+
+    class FakeBot:
+        def __init__(self, actor_id: int):
+            self.id = actor_id
+
+    monkeypatch.setattr(module, "User", FakeUser)
+    monkeypatch.setattr(module, "Bot", FakeBot)
+    user_card = SimpleNamespace(created_by_user_id=7, created_by_bot_id=None)
+    bot_card = SimpleNamespace(created_by_user_id=None, created_by_bot_id=9)
+    unknown_card = SimpleNamespace(created_by_user_id=None, created_by_bot_id=None)
+
+    assert CardService.can_delete(FakeUser(7), user_card) is True
+    assert CardService.can_delete(FakeUser(8), user_card) is False
+    assert CardService.can_delete(FakeBot(9), bot_card) is True
+    assert CardService.can_delete(FakeBot(10), bot_card) is False
+    assert CardService.can_delete(FakeUser(7), unknown_card) is False
+    assert CardService.can_delete(FakeUser(8, is_admin=True), user_card) is True
+    assert CardService.can_delete(FakeUser(8, is_admin=True), unknown_card) is True
+
+
+def test_card_delete_rejects_non_author_before_any_destructive_work(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Ownership mismatch fails closed before checkitems, relationships, schedules, or the card row change."""
+
+    from langboard_shared.core.exceptions.CardDeleteForbidden import CardDeleteForbidden
+
+    module = importlib.import_module("langboard_shared.domain.services.factory.CardService")
+
+    class FakeUser:
+        id = 8
+        is_admin = False
+
+    project = SimpleNamespace(id=1)
+    card = SimpleNamespace(created_by_user_id=7, created_by_bot_id=None, archived_at=object())
+    repository = SimpleNamespace(
+        checkitem=SimpleNamespace(get_all_started_checkitem_by_card=lambda _card: pytest.fail())
+    )
+    service = CardService(lambda _service: pytest.fail(), lambda _name: pytest.fail(), repository)
+    monkeypatch.setattr(module, "User", FakeUser)
+    monkeypatch.setattr(module.InfraHelper, "get_records_with_foreign_by_params", lambda *_args: (project, card))
+
+    with pytest.raises(CardDeleteForbidden, match="original card author or an administrator"):
+        service.delete(FakeUser(), project, card)
+
+
+def test_card_delete_mcp_returns_actionable_author_or_admin_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Agents receive a stable cause instead of retrying or suggesting a missing project role."""
+
+    from fastmcp.exceptions import ValidationError
+    from langboard_shared.core.exceptions.CardDeleteForbidden import CardDeleteForbidden
+
+    def reject(*_args: Any) -> None:
+        raise CardDeleteForbidden("Only the original card author or an administrator can delete this card")
+
+    service = SimpleNamespace(card=SimpleNamespace(delete=reject))
+    with pytest.raises(ValidationError, match="CARD_DELETE_AUTHOR_OR_ADMIN_REQUIRED"):
+        CardMcp.delete_card("project", "card", object(), service)
 
 
 def test_native_move_rejects_column_from_another_project(

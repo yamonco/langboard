@@ -1,12 +1,16 @@
 import useBoardColumnDeletedHandlers from "@/controllers/socket/board/column/useBoardColumnDeletedHandlers";
+import useBoardColumnDescriptionChangedHandlers from "@/controllers/socket/board/column/useBoardColumnDescriptionChangedHandlers";
 import useBoardCardCreatedHandlers from "@/controllers/socket/board/useBoardCardCreatedHandlers";
 import { BaseModel, IBaseModel } from "@/core/models/Base";
-import { registerModel } from "@/core/models/ModelRegistry";
+import { IModelMap, registerModel, TPickedModel } from "@/core/models/ModelRegistry";
+import { preserveProjectDockMetadata } from "@/core/models/projectDock";
 
 export interface Interface extends IBaseModel {
     project_uid: string;
     name: string;
+    description?: string;
     order: number;
+    dock_order?: number | null;
     is_archive: bool;
 }
 
@@ -15,14 +19,20 @@ export interface IStore extends Interface {
 }
 
 class ProjectColumn extends BaseModel<IStore> {
+    protected override update<TUpdateModel extends Partial<IStore | TPickedModel<keyof IModelMap>>>(model: TUpdateModel) {
+        // Metadata hydration is not a coherent Dock snapshot. Field setters remain
+        // available to the revision-checked snapshot projection.
+        super.update("uid" in model && "dock_order" in model ? preserveProjectDockMetadata(model, this.dock_order) : model);
+    }
+
     public static get MODEL_NAME() {
         return "ProjectColumn" as const;
     }
 
     constructor(model: Record<string, unknown>) {
-        super(model);
+        super({ ...model, dock_order: null });
 
-        this.subscribeSocketEvents([useBoardCardCreatedHandlers, useBoardColumnDeletedHandlers], {
+        this.subscribeSocketEvents([useBoardCardCreatedHandlers, useBoardColumnDeletedHandlers, useBoardColumnDescriptionChangedHandlers], {
             projectUID: this.project_uid,
             columnUID: this.uid,
             column: this,
@@ -46,12 +56,26 @@ class ProjectColumn extends BaseModel<IStore> {
     public get order() {
         return this.getValue("order");
     }
+
+    public get description() {
+        return this.getValue("description") ?? "";
+    }
+    public set description(value) {
+        this.update({ description: value });
+    }
     public set order(value) {
         this.update({ order: value });
     }
 
     public get count() {
         return this.getValue("count");
+    }
+
+    public get dock_order() {
+        return this.getValue("dock_order") ?? null;
+    }
+    public set dock_order(value) {
+        this.update({ dock_order: value });
     }
     public set count(value) {
         this.update({ count: value });

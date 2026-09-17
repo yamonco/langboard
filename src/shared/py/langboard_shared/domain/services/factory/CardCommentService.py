@@ -8,6 +8,7 @@ from ....publishers import CardCommentPublisher
 from ....tasks.activities import CardCommentActivityTask
 from ....tasks.bots import CardCommentBotTask
 from ...models import Bot, Card, CardComment, CardCommentReaction, Project, User
+from ...models.CardComment import CardCommentAnchorModel
 from .NotificationService import NotificationService
 from .ReactionService import ReactionService
 
@@ -113,11 +114,14 @@ class CardCommentService(BaseDomainService):
         project: TProjectParam | None,
         card: TCardParam | None,
         content: EditorContentModel | dict[str, Any],
+        anchor: CardCommentAnchorModel | dict[str, Any] | None = None,
     ) -> CardComment | None:
         params = InfraHelper.get_records_with_foreign_by_params((Project, project), (Card, card))
         if not params:
             return None
         project, card = params
+        if card.is_linked_resource:
+            return None
 
         if isinstance(content, dict):
             content = EditorContentModel(**content)
@@ -125,6 +129,7 @@ class CardCommentService(BaseDomainService):
         comment_params = {
             "card_id": card.id,
             "content": content,
+            "anchor": CardCommentAnchorModel.model_validate(anchor).model_dump() if anchor else None,
         }
 
         if isinstance(user_or_bot, User):

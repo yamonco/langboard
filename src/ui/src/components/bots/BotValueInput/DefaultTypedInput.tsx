@@ -52,8 +52,7 @@ function DefaultStringInput({ input, disabled }: { input: IStringAgentFormInput;
     const inputID = useId();
     const collaborationField = `${selectedProvider}:${input.name}`;
     const [isDefault, setIsDefault] = useState(!!input.checkDefault && valuesRef.current[input.name] === input.checkDefault);
-    const storedValue = valuesRef.current[input.name];
-    const defaultValue = Utils.Type.isString(storedValue) ? storedValue : (input.defaultValue ?? "");
+    const defaultValue = valuesRef.current[input.name] ?? input.defaultValue ?? "";
 
     useEffect(() => {
         if (Utils.Type.isNullOrUndefined(valuesRef.current[input.name]) && !Utils.Type.isNullOrUndefined(input.defaultValue)) {
@@ -113,10 +112,7 @@ function DefaultStringInput({ input, disabled }: { input: IStringAgentFormInput;
 function DefaultSelectInput({ input, disabled }: { input: ISelectAgentFormInput; disabled?: bool }) {
     const [t] = useTranslation();
     const { selectedProvider, valuesRef, setInputRef, setValue, isValidating, required, collaborationType, uid, section } = useBotValueDefaultInput();
-    const getInitialValue = useCallback(() => {
-        const storedValue = valuesRef.current[input.name];
-        return Utils.Type.isString(storedValue) ? storedValue : (input.defaultValue ?? input.options[0]);
-    }, [input]);
+    const getInitialValue = useCallback(() => valuesRef.current[input.name] ?? input.defaultValue ?? input.options[0], [input]);
     const collaborationField = `${selectedProvider}:${input.name}`;
     const [currentValue, setCurrentValue] = useState(getInitialValue);
     const [options, setOptions] = useState<string[]>(input.options);
@@ -262,8 +258,7 @@ function DefaultIntegerInput({ input, disabled }: { input: IIntegerAgentFormInpu
     const { selectedProvider, valuesRef, setValue, required, isValidating, setInputRef, collaborationType, uid, section } = useBotValueDefaultInput();
     const inputID = useId();
     const collaborationField = `${selectedProvider}:${input.name}`;
-    const storedValue = valuesRef.current[input.name];
-    const defaultValue = Utils.Type.isNumber(storedValue) ? storedValue : (input.defaultValue ?? input.min);
+    const defaultValue = valuesRef.current[input.name] ?? input.defaultValue ?? input.min;
 
     useEffect(() => {
         if (Utils.Type.isNullOrUndefined(valuesRef.current[input.name])) {

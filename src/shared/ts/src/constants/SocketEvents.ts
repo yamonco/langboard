@@ -1,11 +1,13 @@
 const SERVER = {
     DASHBOARD: {
         PROJECT: {
+            ACTIVITY_RECORDED: "dashboard:project:activity:recorded:{uid}",
             ASSIGNED_USERS_UPDATED: "dashboard:project:assigned-users:updated:{uid}",
             DELETED: "dashboard:project:deleted:{uid}",
             COLUMN: {
                 CREATED: "dashboard:project:column:created:{uid}",
                 NAME_CHANGED: "dashboard:project:column:name:changed:{uid}",
+                DESCRIPTION_CHANGED: "dashboard:project:column:description:changed:{uid}",
                 ORDER_CHANGED: "dashboard:project:column:order:changed:{uid}",
                 DELETED: "dashboard:project:column:deleted:{uid}",
             },
@@ -53,7 +55,9 @@ const SERVER = {
         },
         COLUMN: {
             CREATED: "board:column:created:{uid}",
+            DOCK_CHANGED: "board:column:dock:changed:{uid}",
             NAME_CHANGED: "board:column:name:changed:{uid}",
+            DESCRIPTION_CHANGED: "board:column:description:changed:{uid}",
             ORDER_CHANGED: "board:column:order:changed:{uid}",
             DELETED: "board:column:deleted:{uid}",
         },
@@ -61,6 +65,7 @@ const SERVER = {
             CREATED: "board:card:created:{uid}",
             ORDER_CHANGED: "board:card:order:changed:{uid}",
             DETAILS_CHANGED: "board:card:details:changed:{uid}",
+            LINKED_RESOURCE_CHANGED: "board:card:linked-resource:changed:{uid}",
             ASSIGNED_USERS_UPDATED: "board:card:assigned-users:updated:{uid}",
             RELATIONSHIPS_UPDATED: "board:card:relationships:updated:{uid}",
             LABELS_UPDATED: "board:card:labels:updated:{uid}",

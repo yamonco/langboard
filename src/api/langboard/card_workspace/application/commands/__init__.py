@@ -3,18 +3,32 @@
 from typing import Any
 from ...domain import (
     MAX_CHECKITEMS_PER_CHECKLIST,
-    MAX_METADATA_VALUE_CHARS,
-    MAX_SECTION_LIMIT,
-    MAX_TEXT_CHARS,
+    MAX_GRAPH_EDGE_CHANGES,
+    MAX_GRAPH_NEW_CARDS,
     CardBundleSection,
+    CardDescriptionPatch,
+    CardGraphEdge,
+    CardGraphNewCard,
     ChecklistProjectionItem,
+    ExactTextReplacement,
+    projection_revision,
     require_projection_key,
     require_public_metadata_key,
+)
+from ...domain import (
+    MAX_METADATA_VALUE_CHARS as MAX_METADATA_VALUE_CHARS,
+)
+from ...domain import (
+    MAX_SECTION_LIMIT as MAX_SECTION_LIMIT,
+)
+from ...domain import (
+    MAX_TEXT_CHARS as MAX_TEXT_CHARS,
 )
 from ..ports import CardWorkspaceCommandPort
 from ..projections import (
     bounded_items,
     public_attachment,
+    public_card_summary,
     public_checkitem,
     public_checklist,
     public_comment,
@@ -36,7 +50,7 @@ def create_project_board(
     normalized_template = _required_text(template_name, "Template name") if template_name is not None else None
     return port.create_project_board(
         _required_text(title, "Project title"),
-        _optional_text(description, "Project description"),
+        description,
         normalized_template,
         infer_template_prefix,
     )
@@ -54,16 +68,90 @@ def create_card_in_leftmost_column(
     return port.create_card_in_leftmost_column(
         project_uid,
         _required_text(title, "Card title"),
-        _optional_text(description, "Card description"),
+        description,
         _unique_uids(assign_user_uids, "assign_user_uids") if assign_user_uids is not None else None,
     )
+
+
+def apply_card_graph_patch(
+    port: CardWorkspaceCommandPort,
+    project_uid: str,
+    anchor_card_uid: str,
+    new_cards: list[CardGraphNewCard],
+    add_edges: list[CardGraphEdge],
+    remove_relationship_uids: list[str],
+) -> dict[str, Any]:
+    """Validate and atomically apply one bounded card relationship graph patch."""
+
+    if not new_cards and not add_edges and not remove_relationship_uids:
+        raise ValueError("Graph patch must contain at least one change")
+    if len(new_cards) > MAX_GRAPH_NEW_CARDS:
+        raise ValueError(f"Graph patch cannot create more than {MAX_GRAPH_NEW_CARDS} cards")
+    if len(add_edges) + len(remove_relationship_uids) > MAX_GRAPH_EDGE_CHANGES:
+        raise ValueError(f"Graph patch cannot change more than {MAX_GRAPH_EDGE_CHANGES} relationships")
+
+    client_refs = [card.client_ref for card in new_cards]
+    if len(client_refs) != len(set(client_refs)):
+        raise ValueError("New card client_ref values contain duplicates")
+    edge_keys = [(edge.parent_ref, edge.child_ref, edge.relationship_type_uid) for edge in add_edges]
+    if len(edge_keys) != len(set(edge_keys)):
+        raise ValueError("Graph patch contains duplicate relationship additions")
+    removals = [_required_text(uid, "Relationship UID") for uid in remove_relationship_uids]
+    if len(removals) != len(set(removals)):
+        raise ValueError("Graph patch contains duplicate relationship removals")
+
+    return port.apply_card_graph_patch(
+        _required_text(project_uid, "Project UID"),
+        _required_text(anchor_card_uid, "Anchor card UID"),
+        [CardGraphNewCard(card.client_ref, card.title.strip(), card.description) for card in new_cards],
+        add_edges,
+        removals,
+    )
+
+
+def patch_card_description(
+    port: CardWorkspaceCommandPort,
+    project_uid: str,
+    card_uid: str,
+    edits: list[ExactTextReplacement],
+    expected_revision: str | None = None,
+) -> dict[str, Any]:
+    """Apply one atomic, conflict-detecting Markdown patch."""
+
+    content = port.patch_card_description(
+        project_uid,
+        card_uid,
+        CardDescriptionPatch(tuple(edits), expected_revision),
+    )
+    return {
+        "changed": True,
+        "description_revision": projection_revision(content),
+        "description_chars": len(content),
+        "applied_edits": len(edits),
+    }
+
+
+def replace_card_description(
+    port: CardWorkspaceCommandPort,
+    project_uid: str,
+    card_uid: str,
+    description: str,
+    expected_revision: str,
+) -> dict[str, Any]:
+    """Replace the complete reviewed description without losing concurrent edits."""
+
+    content = port.replace_card_description(project_uid, card_uid, description, expected_revision)
+    return {
+        "changed": True,
+        "description_revision": projection_revision(content),
+        "description_chars": len(content),
+    }
 
 
 def add_card_comment(port: CardWorkspaceCommandPort, project_uid: str, card_uid: str, content: str) -> dict[str, Any]:
     """Create and return a sanitized card comment."""
 
-    normalized_content = _required_text(content, "Comment")
-    return {"comment": public_comment(port.add_card_comment(project_uid, card_uid, normalized_content))}
+    return {"comment": public_comment(port.add_card_comment(project_uid, card_uid, _required_text(content, "Comment")))}
 
 
 def update_card_comment(
@@ -148,6 +236,25 @@ def create_card_checkitem(
     }
 
 
+def cardify_card_checkitem(
+    port: CardWorkspaceCommandPort,
+    project_uid: str,
+    card_uid: str,
+    checkitem_uid: str,
+    project_column_uid: str,
+) -> dict[str, Any]:
+    """Create and return a bounded card from one existing checkitem."""
+
+    normalized_checkitem_uid = _required_text(checkitem_uid, "Checkitem UID")
+    card = port.cardify_card_checkitem(
+        _required_text(project_uid, "Project UID"),
+        _required_text(card_uid, "Card UID"),
+        normalized_checkitem_uid,
+        _required_text(project_column_uid, "Project column UID"),
+    )
+    return {"card": public_card_summary(card), "source_checkitem_uid": normalized_checkitem_uid}
+
+
 def update_card_checkitem(
     port: CardWorkspaceCommandPort,
     project_uid: str,
@@ -209,8 +316,6 @@ def set_card_relationships(
     """Replace one relationship direction after validating every requested edge."""
 
     _optional_bool(is_parent, "is_parent", required=True)
-    if len(relationships) > MAX_SECTION_LIMIT:
-        raise ValueError(f"relationships exceeds {MAX_SECTION_LIMIT} items")
     normalized: list[tuple[str, str]] = []
     seen: set[tuple[str, str]] = set()
     for edge in relationships:
@@ -271,16 +376,7 @@ def save_public_card_metadata(
 
     normalized_key = require_public_metadata_key(key)
     normalized_old_key = require_public_metadata_key(old_key) if old_key is not None else None
-    normalized_value = _optional_text(value, "Metadata value", MAX_METADATA_VALUE_CHARS)
-    if normalized_value is None:
-        raise ValueError("Metadata value must be a string")
-    metadata = port.save_public_card_metadata(
-        project_uid,
-        card_uid,
-        normalized_key,
-        normalized_value,
-        normalized_old_key,
-    )
+    metadata = port.save_public_card_metadata(project_uid, card_uid, normalized_key, value, normalized_old_key)
     entries = public_metadata(metadata)
     return next(entry for entry in entries if entry["key"] == normalized_key)
 
@@ -295,8 +391,6 @@ def delete_public_card_metadata(
 
     if not keys:
         raise ValueError("At least one metadata key is required")
-    if len(keys) > MAX_SECTION_LIMIT:
-        raise ValueError(f"metadata keys exceeds {MAX_SECTION_LIMIT} items")
     normalized = [require_public_metadata_key(key) for key in keys]
     if len(normalized) != len(set(normalized)):
         raise ValueError("Duplicate metadata key")
@@ -341,22 +435,10 @@ def reconcile_card_checklist_projection(
     }
 
 
-def _required_text(value: Any, label: str, max_chars: int = MAX_TEXT_CHARS) -> str:
+def _required_text(value: Any, label: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{label} is required")
-    if len(value) > max_chars:
-        raise ValueError(f"{label} exceeds {max_chars} characters")
     return value.strip()
-
-
-def _optional_text(value: Any, label: str, max_chars: int = MAX_TEXT_CHARS) -> str | None:
-    if value is None:
-        return None
-    if not isinstance(value, str):
-        raise ValueError(f"{label} must be a string")
-    if len(value) > max_chars:
-        raise ValueError(f"{label} exceeds {max_chars} characters")
-    return value
 
 
 def _optional_bool(value: bool | None, label: str, required: bool = False) -> None:
@@ -367,8 +449,6 @@ def _optional_bool(value: bool | None, label: str, required: bool = False) -> No
 
 
 def _unique_uids(values: list[str] | None, label: str) -> list[str]:
-    if values is not None and len(values) > MAX_SECTION_LIMIT:
-        raise ValueError(f"{label} exceeds {MAX_SECTION_LIMIT} items")
     normalized = [_required_text(value, label) for value in values or []]
     if len(normalized) != len(set(normalized)):
         raise ValueError(f"{label} contains duplicates")

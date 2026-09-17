@@ -25,6 +25,8 @@ export type TNotificationPublishData = {
 
     email_template_name?: string;
     email_formats?: Record<string, string>;
+    source_notification_persisted?: boolean;
+    web_notification_visible?: boolean;
 };
 
 @Entity({ name: "user_notification_unsubscription" })

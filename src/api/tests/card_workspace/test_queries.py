@@ -9,7 +9,6 @@ from langboard.card_workspace.application.queries import (
     get_card_bundle,
     get_project_identity,
     get_public_card_metadata,
-    get_public_card_metadata_by_key,
     list_project_cards,
 )
 from langboard.card_workspace.domain import CardBundleInclude, CommentPage, SectionPage
@@ -82,7 +81,10 @@ class FakeQueryPort:
                 "content": "y" * 9_000 if i == 0 else f"Comment {i}",
                 "created_at": f"2026-08-04T10:0{i}:00+09:00",
                 "user": {"uid": "assigned", "email": "member@example.com"},
-                "reactions": {"secret": ["u1"]},
+                "reactions": {
+                    "thumbs-up": ["u1", "u2"],
+                    "secret": ["must-not-leak"],
+                },
             }
             for i in range(limit)
         ]
@@ -134,15 +136,6 @@ class FakeQueryPort:
     def get_public_card_metadata(self, project_uid: str, card_uid: str) -> dict[str, str] | None:
         return self.source.metadata
 
-    def get_public_card_metadata_by_key(
-        self,
-        project_uid: str,
-        card_uid: str,
-        key: str,
-    ) -> dict[str, str] | None:
-        value = self.source.metadata.get(key)
-        return {"key": key, "value": value} if value is not None else None
-
 
 def test_initial_card_bundle_is_bounded_and_privacy_preserving() -> None:
     """The initial aggregate exposes assigned facts only and emits independent cursors."""
@@ -171,6 +164,7 @@ def test_initial_card_bundle_is_bounded_and_privacy_preserving() -> None:
     assert len(response.card.classification.labels.items) == 10
     assert response.card.classification.labels.next_cursor
     assert response.card.core["description"]["total_chars"] == 8_050
+    assert len(response.card.core["description"]["revision"]) == 64
     assert response.card.core["description"]["next_cursor"]
     checklist = response.card.checklists.items[0]
     assert len(checklist["checkitems"]) == 25
@@ -179,6 +173,8 @@ def test_initial_card_bundle_is_bounded_and_privacy_preserving() -> None:
     assert response.card.comments.items[0]["content_total_chars"] == 9_000
     assert len(response.card.comments.items[0]["content"]) == 8_000
     assert response.card.comments.items[0]["content_truncated"] is True
+    assert response.card.comments.items[0]["reactions"] == {"thumbs-up": ["u1", "u2"]}
+    assert response.card.comments.items[0]["reaction_counts"] == {"thumbs-up": 2}
     attachment = response.card.attachments.items[0]  # type: ignore[union-attr]
     assert attachment["user"] == {"uid": "assigned", "username": "member"}
     assert "storage_key" not in attachment
@@ -202,6 +198,34 @@ def test_project_identity_exposes_only_bounded_move_destinations() -> None:
     ]
     assert response.columns.total_count == 3
     assert response.columns.next_cursor is None
+
+
+def test_checkitem_projection_exposes_only_cardified_card_identity() -> None:
+    """Cardification can be read back without leaking the generated card body."""
+
+    port = FakeQueryPort()
+    port.source.checklists[0]["checkitems"][0]["cardified_card"] = {
+        "uid": "promoted-card",
+        "title": "Promoted task",
+        "description": "must-not-leak",
+        "created_at": "2026-08-04T12:00:00+09:00",
+    }
+
+    response = get_card_bundle(
+        port,
+        "p1",
+        "c1",
+        CommentPage(),
+        SectionPage(),
+        [CardBundleInclude.Checklists],
+    )
+
+    assert response.card is not None
+    assert response.card.checklists.items[0]["checkitems"][0]["cardified_card"] == {
+        "uid": "promoted-card",
+        "title": "Promoted task",
+        "created_at": "2026-08-04T12:00:00+09:00",
+    }
 
 
 def test_section_continuation_rejects_changed_projection() -> None:
@@ -317,20 +341,3 @@ def test_public_metadata_exposes_opaque_continuation() -> None:
     second = get_public_card_metadata(port, "p1", "c1", limit=1, cursor=first.next_cursor)
 
     assert second.items[0]["key"] != first.items[0]["key"]
-
-
-def test_public_metadata_key_uses_the_single_record_port() -> None:
-    """A key lookup does not materialize the card's metadata collection."""
-
-    class KeyOnlyQueryPort(FakeQueryPort):
-        def get_public_card_metadata(self, project_uid: str, card_uid: str) -> dict[str, str] | None:
-            raise AssertionError("single-key lookup loaded the metadata collection")
-
-    result = get_public_card_metadata_by_key(KeyOnlyQueryPort(), "p1", "c1", "public.topic")
-
-    assert result == {
-        "key": "public.topic",
-        "value": "delivery",
-        "total_chars": 8,
-        "truncated": False,
-    }

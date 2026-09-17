@@ -13,6 +13,7 @@ interface IAuthStore {
     currentUser: AuthUser.TModel | null;
     pageLoaded: bool;
     getToken: () => string | null;
+    getSessionVersion: () => number;
     updateToken: (token: string, api: AxiosInstance) => Promise<void>;
     removeToken: () => void;
     hasSetPreferredLang: () => bool;
@@ -33,26 +34,25 @@ const useAuthStore = create(
             currentUser: null,
             pageLoaded: false,
             getToken: () => accessToken,
+            getSessionVersion: () => tokenUpdateVersion,
             updateToken: async (token: string, api: AxiosInstance) => {
-                const updateVersion = ++tokenUpdateVersion;
-                accessToken = token;
-                if (get().state === "initial") {
-                    set({ state: "pending" });
+                if (get().state === "pending") {
+                    return;
                 }
+
+                accessToken = token;
+                tokenUpdateVersion += 1;
 
                 const tryGetUser = async () => {
                     const MAX_ATTEMPTS = 5;
                     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
-                        if (updateVersion !== tokenUpdateVersion) {
-                            return undefined;
-                        }
                         try {
                             const response = await api.get<{
                                 user: AuthUser.Interface;
                                 bots: BotModel.Interface[];
                             }>(Routing.API.AUTH.ABOUT_ME, {
                                 headers: {
-                                    Authorization: `Bearer ${token}`,
+                                    Authorization: `Bearer ${accessToken}`,
                                 },
                                 withCredentials: true,
                             });
@@ -63,7 +63,7 @@ const useAuthStore = create(
 
                             return response.data;
                         } catch {
-                            if (updateVersion !== tokenUpdateVersion || attempt === MAX_ATTEMPTS - 1) {
+                            if (attempt === MAX_ATTEMPTS - 1) {
                                 return undefined;
                             }
 
@@ -75,9 +75,6 @@ const useAuthStore = create(
                 };
 
                 const data = await tryGetUser();
-                if (updateVersion !== tokenUpdateVersion || accessToken !== token) {
-                    return;
-                }
                 if (!data) {
                     set({ currentUser: null, state: "loaded" });
                     return;
@@ -90,8 +87,8 @@ const useAuthStore = create(
             },
             removeToken: () => {
                 useSocketStore.getState().close();
-                tokenUpdateVersion += 1;
                 accessToken = null;
+                tokenUpdateVersion += 1;
                 set({ currentUser: null, state: "loaded" });
             },
             hasSetPreferredLang: () => localStorage.getItem(HAS_SET_LANG_STORAGE_KEY) === "true",

@@ -45,6 +45,8 @@ class CardAttachmentService(BaseDomainService):
         if not params:
             return None
         project, card = params
+        if card.is_linked_resource:
+            return None
 
         card_attachment = CardAttachment(
             user_id=user.id,

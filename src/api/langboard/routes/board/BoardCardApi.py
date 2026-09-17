@@ -1,5 +1,6 @@
 from fastapi import status
 from langboard_shared.core.db import EditorContentModel
+from langboard_shared.core.exceptions.CardDeleteForbidden import CardDeleteForbidden
 from langboard_shared.core.filter import AuthFilter
 from langboard_shared.core.routing import (
     ApiErrorCode,
@@ -39,14 +40,15 @@ from langboard_shared.domain.services import DomainService
 from langboard_shared.filter import RoleFilter
 from langboard_shared.helpers import InfraHelper
 from langboard_shared.security import Auth, RoleFinder
-from ...card_workspace.application import get_card_bundle
-from ...card_workspace.domain import CardBundleInclude, CommentPage, SectionPage
+from ...card_workspace.application import apply_card_graph_patch, get_card_bundle
+from ...card_workspace.domain import CardBundleInclude, CardGraphEdge, CardGraphNewCard, CommentPage, SectionPage
 from ...card_workspace.infrastructure import NativeCardWorkspaceAdapter
 from .forms import (
     AssignUsersForm,
     ChangeCardDetailsForm,
     ChangeChildOrderForm,
     CreateCardForm,
+    PatchCardGraphForm,
     UpdateCardLabelsForm,
     UpdateCardRelationshipsForm,
 )
@@ -72,6 +74,15 @@ from .forms import (
                             "member_uids": "string[]",
                             "relationships": [CardRelationship],
                             "current_auth_role_actions": [ALL_GRANTED, ProjectRoleAction],
+                            "can_delete": "boolean",
+                            "linked_resource?": {
+                                "type": "string",
+                                "uid": "string",
+                                "status": "Enum[available, forbidden, missing]",
+                                "title?": "string",
+                                "preview?": "string",
+                                "content?": EditorContentModel,
+                            },
                         }
                     },
                 ),
@@ -122,24 +133,26 @@ def get_card_details(
     if not params:
         raise ApiException.NotFound_404(ApiErrorCode.NF2003)
     project, card = params
-    api_card = service.card.get_details(project, card)
+    api_card = service.card.get_details(project, card, user_or_bot)
     if api_card is None:
         raise ApiException.NotFound_404(ApiErrorCode.NF2003)
-    global_relationships = service.app_setting.get_api_global_relationship_list()
+    is_linked_resource = card.is_linked_resource
+    global_relationships = [] if is_linked_resource else service.app_setting.get_api_global_relationship_list()
     bot_scopes = []
     can_set_scopes = isinstance(user_or_bot, Bot)
     if isinstance(user_or_bot, User):
         actions = service.project.get_user_role_actions_by_project(user_or_bot, project)
         api_card["current_auth_role_actions"] = actions
         can_set_scopes = ALL_GRANTED in actions or ProjectRoleAction.Update.value in actions
-    if can_set_scopes:
+    api_card["can_delete"] = service.card.can_delete(user_or_bot, card)
+    if can_set_scopes and not is_linked_resource:
         bot_scopes = service.card.get_api_bot_scope_list(project, card)
 
     project_columns = service.project_column.get_api_list_by_project(project.id)
-    project_labels = service.project_label.get_api_list_by_project(project)
+    project_labels = [] if is_linked_resource else service.project_label.get_api_list_by_project(project)
 
-    checklists = service.checklist.get_api_list_by_card(card)
-    attachments = service.card_attachment.get_api_list_by_card(card)
+    checklists = [] if is_linked_resource else service.checklist.get_api_list_by_card(card)
+    attachments = [] if is_linked_resource else service.card_attachment.get_api_list_by_card(card)
 
     return JsonResponse(
         content={
@@ -382,6 +395,31 @@ def update_card_assigned_users(
     return JsonResponse()
 
 
+@AppRouter.schema(permission=ApiPermission.Edit)
+@AppRouter.api.put(
+    "/board/{project_uid}/card/{card_uid}/assigned-users/{assignee_uid}",
+    tags=["Board.Card"],
+    description="Add one active project member to a card without replacing its existing assignees.",
+    responses=OpenApiSchema().auth().forbidden().err(404, ApiErrorCode.NF2005).get(),
+)
+@RoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+@AuthFilter.add()
+def add_card_assignee(
+    project_uid: str,
+    card_uid: str,
+    assignee_uid: str,
+    user_or_bot: User | Bot = Auth.scope("all"),
+    service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    try:
+        result = service.card.assign_member(user_or_bot, project_uid, card_uid, assignee_uid)
+    except LookupError as exc:
+        raise ApiException.NotFound_404(ApiErrorCode.NF2003) from exc
+    except ValueError as exc:
+        raise ApiException.NotFound_404(ApiErrorCode.NF2005) from exc
+    return JsonResponse(content=result)
+
+
 @AppRouter.schema(form=ChangeChildOrderForm, permission=ApiPermission.Edit)
 @AppRouter.api.put(
     "/board/{project_uid}/card/{card_uid}/order",
@@ -471,6 +509,41 @@ def update_card_relationships(
 
 
 @collaborative_edit(
+    collaborative_block(
+        create_editor_collaboration_document_id(EEditorCollaborationType.Card, "{card_uid}", "relationships-parents")
+    ),
+    collaborative_block(
+        create_editor_collaboration_document_id(EEditorCollaborationType.Card, "{card_uid}", "relationships-children")
+    ),
+)
+@AppRouter.schema(form=PatchCardGraphForm, permission=ApiPermission.Edit)
+@AppRouter.api.post(
+    "/board/{project_uid}/card/{card_uid}/relationships/patch",
+    tags=["Board.Card"],
+    description="Atomically add or remove card relationships against the current project graph.",
+    responses=OpenApiSchema().auth().forbidden().err(404, ApiErrorCode.NF2003).get(),
+)
+@RoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+@AuthFilter.add()
+def patch_card_relationships(
+    project_uid: str,
+    card_uid: str,
+    form: PatchCardGraphForm,
+    user_or_bot: User | Bot = Auth.scope("all"),
+    service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    result = apply_card_graph_patch(
+        NativeCardWorkspaceAdapter(user_or_bot, service),
+        project_uid,
+        card_uid,
+        [CardGraphNewCard(item.client_ref, item.title, item.description) for item in form.new_cards],
+        [CardGraphEdge(item.parent_ref, item.child_ref, item.relationship_type_uid) for item in form.add_edges],
+        form.remove_relationship_uids,
+    )
+    return JsonResponse(content=result)
+
+
+@collaborative_edit(
     collaborative_block(create_editor_collaboration_document_id(EEditorCollaborationType.Card, "{card_uid}", "title")),
     collaborative_block(
         create_editor_collaboration_document_id(EEditorCollaborationType.Card, "{card_uid}", "description")
@@ -538,8 +611,8 @@ def archive_card(
 @AppRouter.api.delete(
     "/board/{project_uid}/card/{card_uid}",
     tags=["Board.Card"],
-    description="Delete a card. (Only available for archived cards)",
-    responses=OpenApiSchema().auth().forbidden().err(404, ApiErrorCode.NF2003).get(),
+    description="Delete an archived card when the signed-in actor is its original author or an administrator.",
+    responses=OpenApiSchema().auth().forbidden().err(403, ApiErrorCode.PE2006).err(404, ApiErrorCode.NF2003).get(),
 )
 @RoleFilter.add(ProjectRole, [ProjectRoleAction.CardDelete], RoleFinder.project)
 @AuthFilter.add()
@@ -549,7 +622,10 @@ def delete_card(
     user_or_bot: User | Bot = Auth.scope("all"),
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
-    result = service.card.delete(user_or_bot, project_uid, card_uid)
+    try:
+        result = service.card.delete(user_or_bot, project_uid, card_uid)
+    except CardDeleteForbidden as exc:
+        raise ApiException.Forbidden_403(ApiErrorCode.PE2006) from exc
     if not result:
         raise ApiException.NotFound_404(ApiErrorCode.NF2003)
 

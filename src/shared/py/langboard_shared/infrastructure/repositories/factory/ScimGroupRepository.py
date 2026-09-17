@@ -33,11 +33,11 @@ class ScimGroupRepository(BaseRepository[ScimGroup]):
                 )
             ).all()
 
-    def get_by_external_id(self, external_id: str) -> ScimGroup | None:
+    def get_by_external_id(self, external_id: str, *, consistent: bool = False) -> ScimGroup | None:
         if not external_id:
             return None
 
-        with DbSession.use(readonly=True) as db:
+        with DbSession.use(readonly=not consistent) as db:
             return db.exec(
                 SqlBuilder.select.table(ScimGroup).where(ScimGroup.column("external_id") == external_id).limit(1)
             ).first()

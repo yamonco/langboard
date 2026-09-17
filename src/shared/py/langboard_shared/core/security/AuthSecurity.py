@@ -25,6 +25,7 @@ class AuthSecurity:
     API_TOKEN_HEADER = "X-Api-Token"
     API_KEY_HEADER = "X-Api-Key"
     MCP_TOOL_GROUP_UID_HEADER = "X-MCP-Tool-Group-UID"
+    MCP_USER_ASSERTION_HEADER = "X-MCP-User-Assertion"
 
     @staticmethod
     def authenticate(user_id: SnowflakeID) -> tuple[str, str]:

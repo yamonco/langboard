@@ -27,6 +27,8 @@ import { ESocketTopic } from "@langboard/core/enums";
 import useSwitchSocketHandlers from "@/core/hooks/useSwitchSocketHandlers";
 import useBoardCardMetadataDeletedHandlers from "@/controllers/socket/metadata/useBoardCardMetadataDeletedHandlers";
 import useBoardCardMetadataUpdatedHandlers from "@/controllers/socket/metadata/useBoardCardMetadataUpdatedHandlers";
+import useCardLinkedResourceChangedHandlers from "@/controllers/socket/card/useCardLinkedResourceChangedHandlers";
+import { useQueryClient } from "@tanstack/react-query";
 
 const DEFAULT_ARCHIVE_CARD_VISIBLE_DAYS = 3;
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
@@ -60,6 +62,7 @@ export interface IBoardContext {
     filterCardLabels: (card: ProjectCard.TModel) => bool;
     filterCardRelationships: (card: ProjectCard.TModel) => bool;
     canDragAndDrop: bool;
+    canDragCards: bool;
 }
 
 interface IBoardProviderProps {
@@ -87,6 +90,7 @@ const initialContext = {
     filterCardLabels: () => true,
     filterCardRelationships: () => true,
     canDragAndDrop: false,
+    canDragCards: false,
 };
 
 const BoardContext = createContext<IBoardContext>(initialContext);
@@ -94,6 +98,7 @@ const BoardContext = createContext<IBoardContext>(initialContext);
 export const BoardProvider = memo(({ project, currentUser, children }: IBoardProviderProps): React.ReactNode => {
     const navigate = usePageNavigateRef();
     const socket = useSocket();
+    const queryClient = useQueryClient();
     const { selectCardViewType } = useBoardController();
     const [t] = useTranslation();
     const members = project.useForeignFieldArray("all_members");
@@ -131,6 +136,22 @@ export const BoardProvider = memo(({ project, currentUser, children }: IBoardPro
             ]),
         [cardUIDs, handleMetadataChanged]
     );
+    const linkedCardUIDs = useMemo(() => cards.filter((card) => card.source_type === "project_wiki").map((card) => card.uid), [cards]);
+    const linkedResourceHandlers = useMemo(
+        () =>
+            linkedCardUIDs.map((cardUID) =>
+                useCardLinkedResourceChangedHandlers({
+                    projectUID: project.uid,
+                    cardUID,
+                    callback: () => queryClient.invalidateQueries({ queryKey: [`get-cards-${project.uid}`] }),
+                })
+            ),
+        [linkedCardUIDs, project, queryClient]
+    );
+    const boardSocketHandlers = useMemo(
+        () => [...boardCardMetadataHandlers, ...linkedResourceHandlers],
+        [boardCardMetadataHandlers, linkedResourceHandlers]
+    );
     const cardMetadataRecords = MetadataModel.Model.useModels((model) => model.type === "card", [cards, metadataUpdated]);
     const forbiddenMessageIdRef = useRef<string | number | null>(null);
     const cardsMap = useMemo(() => {
@@ -149,6 +170,7 @@ export const BoardProvider = memo(({ project, currentUser, children }: IBoardPro
     }, [cardMetadataRecords, metadataUpdated]);
     const globalRelationshipTypes = GlobalRelationshipType.Model.useModels(() => true, [selectCardViewType, filters]);
     const canDragAndDrop = useMemo(() => hasRoleAction(ProjectRole.EAction.Update) && !selectCardViewType, [hasRoleAction, selectCardViewType]);
+    const canDragCards = (isAdmin || hasRoleAction(ProjectRole.EAction.CardUpdate)) && !selectCardViewType;
 
     useEffect(() => {
         if (isAdmin || !members.length || members.some((member) => member.uid === currentUser.uid) || forbiddenMessageIdRef.current) {
@@ -180,8 +202,8 @@ export const BoardProvider = memo(({ project, currentUser, children }: IBoardPro
 
     useSwitchSocketHandlers({
         socket,
-        handlers: boardCardMetadataHandlers,
-        dependencies: boardCardMetadataHandlers,
+        handlers: boardSocketHandlers,
+        dependencies: boardSocketHandlers,
     });
 
     const navigateWithFilters = (to?: To, options?: IPageNavigateOptions) => {
@@ -383,6 +405,7 @@ export const BoardProvider = memo(({ project, currentUser, children }: IBoardPro
                 filterCardLabels,
                 filterCardRelationships,
                 canDragAndDrop,
+                canDragCards,
             }}
         >
             {children}

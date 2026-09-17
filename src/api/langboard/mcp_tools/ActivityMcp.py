@@ -1,17 +1,48 @@
+from typing import Literal
 from langboard_shared.core.schema import TimeBasedPagination
-from langboard_shared.core.types import SafeDateTime
 from langboard_shared.domain.models import ProjectRole, User
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.domain.services.DomainService import DomainService
 from langboard_shared.security import RoleFinder
-from pydantic import Field
 from ..mcp_integration import McpRoleFilter, McpTool
 
 
 class ActivityPagination(TimeBasedPagination):
-    limit: int = Field(default=50, ge=1, le=100)
     assignee_uid: str | None = None
     only_count: bool = False
+
+
+@McpTool.add(
+    "user",
+    description="Read compact activity history in boards shared by viewer and target; fetch bounded details by activity UID and scope. Never changes read state.",
+)
+def get_shared_user_activities(
+    user_uid: str,
+    user: User,
+    service: DomainService,
+    page: int = 1,
+    limit: int = 20,
+    refer_time: str | None = None,
+    activity_uid: str | None = None,
+    scope: Literal["project", "wiki"] | None = None,
+    offset: int = 0,
+    max_chars: int = 4000,
+    project_uid: str | None = None,
+    since: str | None = None,
+    until: str | None = None,
+) -> dict:
+    return service.activity.get_shared_user_activities(
+        user,
+        user_uid,
+        ActivityPagination(page=page, limit=limit, refer_time=refer_time),
+        activity_uid,
+        scope,
+        offset,
+        max_chars,
+        project_uid,
+        since,
+        until,
+    )
 
 
 @McpTool.add("user", description="Get activities for the current user.")
@@ -33,11 +64,7 @@ def get_project_activities(
     page: int = 1,
     refer_time: str | None = None,
 ) -> dict:
-    pagination = (
-        ActivityPagination(page=page, limit=limit, refer_time=SafeDateTime.fromisoformat(refer_time))
-        if refer_time
-        else ActivityPagination(page=page, limit=limit)
-    )
+    pagination = ActivityPagination(page=page, limit=limit, refer_time=refer_time)
     result = service.activity.get_api_list_by_project(project_uid, pagination)
     if not result:
         return {

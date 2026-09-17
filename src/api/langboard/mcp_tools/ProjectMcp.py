@@ -3,7 +3,6 @@ from langboard_shared.domain.models import Bot, ProjectRole, User
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.domain.services.DomainService import DomainService
 from langboard_shared.security import RoleFinder
-from ..Constants import EMAIL_REGEX, MCP_DEFAULT_LIST_LIMIT, TMcpListLimit
 from ..mcp_integration import McpRoleFilter, McpTool
 
 
@@ -13,28 +12,20 @@ def _normalize_invitation_emails(emails: list[str]) -> list[str]:
     if not 1 <= len(emails) <= 10:
         raise ValueError("Provide between 1 and 10 email addresses")
     normalized = list(dict.fromkeys(email.strip().casefold() for email in emails))
-    if any(fullmatch(EMAIL_REGEX, email) is None for email in normalized):
+    if any(fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email) is None for email in normalized):
         raise ValueError("Invalid email address")
     return normalized
 
 
 @McpTool.add("user", description="Get starred projects for the current user.")
-def get_starred_projects(
-    user: User,
-    service: DomainService,
-    limit: TMcpListLimit = MCP_DEFAULT_LIST_LIMIT,
-) -> dict:
-    projects = service.project.get_api_starred_project_list(user, limit=limit)
+def get_starred_projects(user: User, service: DomainService) -> dict:
+    projects = service.project.get_api_starred_project_list(user)
     return {"projects": projects}
 
 
 @McpTool.add("user", description="Get all projects for the current user.")
-def get_projects(
-    user: User,
-    service: DomainService,
-    limit: TMcpListLimit = MCP_DEFAULT_LIST_LIMIT,
-) -> dict:
-    projects, _ = service.project.get_api_list(user, limit=limit)
+def get_projects(user: User, service: DomainService) -> dict:
+    projects, _ = service.project.get_api_list(user)
     return {"projects": projects}
 
 
@@ -63,18 +54,13 @@ def is_project_available(project_uid: str, service: DomainService) -> dict:
 
 @McpTool.add(description="Get project details.")
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
-def get_project(
-    project_uid: str,
-    user_or_bot: User | Bot,
-    service: DomainService,
-    limit: TMcpListLimit = MCP_DEFAULT_LIST_LIMIT,
-) -> dict:
-    result = service.project.get_details(user_or_bot, project_uid, False, limit=limit)
+def get_project(project_uid: str, user_or_bot: User | Bot, service: DomainService) -> dict:
+    result = service.project.get_details(user_or_bot, project_uid, False)
     if not result:
         raise ValueError("Project not found")
     project, response = result
-    bot_scopes = service.project.get_api_bot_scope_list(project, limit=limit)
-    bot_schedules = service.project.get_api_bot_schedule_list(project, limit=limit)
+    bot_scopes = service.project.get_api_bot_scope_list(project)
+    bot_schedules = service.project.get_api_bot_schedule_list(project)
     if isinstance(user_or_bot, User):
         service.project.set_last_view(user_or_bot, project)
     return {"project": response, "project_bot_scopes": bot_scopes, "project_bot_schedules": bot_schedules}
@@ -82,54 +68,38 @@ def get_project(
 
 @McpTool.add(description="Get project assigned users.")
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
-def get_project_assigned_users(
-    project_uid: str,
-    service: DomainService,
-    limit: TMcpListLimit = MCP_DEFAULT_LIST_LIMIT,
-) -> list[dict]:
+def get_project_assigned_users(project_uid: str, service: DomainService) -> list[dict]:
     p = service.project.get_by_id_like(project_uid)
     if not p:
         raise ValueError("Project not found")
-    return service.project.get_api_assigned_user_list(p, limit=limit)
+    return service.project.get_api_assigned_user_list(p)
 
 
 @McpTool.add(description="Get project columns.")
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
-def get_project_columns(
-    project_uid: str,
-    service: DomainService,
-    limit: TMcpListLimit = MCP_DEFAULT_LIST_LIMIT,
-) -> list[dict]:
+def get_project_columns(project_uid: str, service: DomainService) -> list[dict]:
     p = service.project.get_by_id_like(project_uid)
     if not p:
         raise ValueError("Project not found")
-    return service.project_column.get_api_list_by_project(p, limit=limit)
+    return service.project_column.get_api_list_by_project(p)
 
 
 @McpTool.add(description="Get project labels.")
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
-def get_project_labels(
-    project_uid: str,
-    service: DomainService,
-    limit: TMcpListLimit = MCP_DEFAULT_LIST_LIMIT,
-) -> list[dict]:
+def get_project_labels(project_uid: str, service: DomainService) -> list[dict]:
     p = service.project.get_by_id_like(project_uid)
     if not p:
         raise ValueError("Project not found")
-    return service.project_label.get_api_list_by_project(p, limit=limit)
+    return service.project_label.get_api_list_by_project(p)
 
 
 @McpTool.add(description="Get project checklists.")
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
-def get_project_checklists(
-    project_uid: str,
-    service: DomainService,
-    limit: TMcpListLimit = MCP_DEFAULT_LIST_LIMIT,
-) -> dict:
+def get_project_checklists(project_uid: str, service: DomainService) -> dict:
     p = service.project.get_by_id_like(project_uid)
     if not p:
         raise ValueError("Project not found")
-    checklists = service.checklist.get_api_list_only_by_project(p, limit=limit)
+    checklists = service.checklist.get_api_list_only_by_project(p)
     return {"checklists": checklists}
 
 
@@ -139,17 +109,24 @@ def get_global_relationships(service: DomainService) -> dict:
     return {"global_relationships": global_rels}
 
 
-@McpTool.add(description="Get bot schedules for all columns in a project.")
+@McpTool.add(description="Get bot scopes for all columns in a project.")
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
-def get_column_bot_schedules(
-    project_uid: str,
-    service: DomainService,
-    limit: TMcpListLimit = MCP_DEFAULT_LIST_LIMIT,
-) -> dict:
+def get_column_bot_scopes(project_uid: str, service: DomainService) -> dict:
     p = service.project.get_by_id_like(project_uid)
     if not p:
         raise ValueError("Project not found")
-    col_bot_schedules = service.project_column.get_api_bot_schedule_list_by_project(p, limit=limit)
+    col_bot_scopes = service.project_column.get_api_bot_scopes_by_project(p)
+    return {"column_bot_scopes": col_bot_scopes}
+
+
+@McpTool.add(description="Get bot schedules for all columns in a project.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+def get_column_bot_schedules(project_uid: str, service: DomainService) -> dict:
+    p = service.project.get_by_id_like(project_uid)
+    if not p:
+        raise ValueError("Project not found")
+    columns = service.project_column.get_api_list_by_project([p])
+    col_bot_schedules = service.project_column.get_api_bot_schedule_list_by_project(p, columns)
     return {"column_bot_schedules": col_bot_schedules}
 
 
@@ -176,6 +153,69 @@ def invite_project_members(
     if not isinstance(user_or_bot, User):
         raise ValueError("Only users can access this endpoint")
     result = service.project.invite_assigned_users(user_or_bot, project_uid, _normalize_invitation_emails(emails))
+    if result is None:
+        raise ValueError("Project not found")
+    return result
+
+
+def _compact_member(member: User | dict[str, object]) -> dict[str, str] | None:
+    """Return safe display fields from either a native user or its API projection."""
+
+    if isinstance(member, dict):
+        if member.get("type") != User.USER_TYPE:
+            return None
+        uid = member.get("uid")
+        firstname = member.get("firstname")
+        lastname = member.get("lastname")
+        username = member.get("username")
+        if not all(isinstance(value, str) for value in (uid, firstname, lastname, username)):
+            return None
+        return {"uid": uid, "firstname": firstname, "lastname": lastname, "username": username}
+
+    return {
+        "uid": member.get_uid(),
+        "firstname": member.firstname,
+        "lastname": member.lastname,
+        "username": member.username,
+    }
+
+
+@McpTool.add(description="Search existing people who can be added to a project without exposing email addresses.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Update], RoleFinder.project)
+def search_project_people(
+    project_uid: str, query: str, user_or_bot: User | Bot, service: DomainService
+) -> dict[str, list[dict[str, str]]]:
+    """Find bounded, permission-scoped people for one project updater."""
+
+    if not isinstance(user_or_bot, User):
+        raise ValueError("Only users can search project people")
+    normalized_query = query.strip()
+    if len(normalized_query) < 2:
+        raise ValueError("Use at least two characters to search people")
+    candidates = service.project.search_member_candidates(user_or_bot, project_uid, normalized_query)
+    if candidates is None:
+        raise ValueError("Project not found")
+    return {"items": [compact for candidate in candidates if (compact := _compact_member(candidate)) is not None]}
+
+
+@McpTool.add(description="Add existing people to a project without replacing current members.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Update], RoleFinder.project)
+def add_project_people(
+    project_uid: str, member_uids: list[str], user_or_bot: User | Bot, service: DomainService
+) -> dict[str, int | str]:
+    """Immediately add up to ten known people without invitations or member replacement."""
+
+    if not isinstance(user_or_bot, User):
+        raise ValueError("Only users can add project people")
+    if not 1 <= len(member_uids) <= 10:
+        raise ValueError("Provide between 1 and 10 people")
+    selected_uids = list(dict.fromkeys(member_uids))
+    selected_people = [service.user.get_by_id_like(member_uid) for member_uid in selected_uids]
+    if any(person is None or person.deleted_at is not None for person in selected_people):
+        raise ValueError("One or more selected people no longer exist")
+    result = service.project.add_existing_assigned_users(
+        user_or_bot, project_uid, [person for person in selected_people if person is not None]
+    )
     if result is None:
         raise ValueError("Project not found")
     return result

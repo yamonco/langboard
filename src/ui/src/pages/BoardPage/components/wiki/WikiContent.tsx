@@ -7,7 +7,9 @@ import { TEditor } from "@/components/Editor/editor-kit";
 import { PlateEditor } from "@/components/Editor/plate-editor";
 import { sanitizeEditorContent } from "@/components/Editor/utils";
 import useChangeWikiDetails from "@/controllers/api/wiki/useChangeWikiDetails";
+import useCreateWikiLinkedCard from "@/controllers/api/wiki/useCreateWikiLinkedCard";
 import useBoardUIWikiDeletedHandlers from "@/controllers/socket/wiki/useBoardUIWikiDeletedHandlers";
+import useCardDeletedHandlers from "@/controllers/socket/card/useCardDeletedHandlers";
 import setupApiErrorHandler from "@/core/helpers/setupApiErrorHandler";
 import { usePageNavigateRef } from "@/core/hooks/usePageNavigate";
 import useSwitchSocketHandlers from "@/core/hooks/useSwitchSocketHandlers";
@@ -20,6 +22,8 @@ import WikiPrivateOption, { SkeletonWikiPrivateOption } from "@/pages/BoardPage/
 import WikiTitle from "@/pages/BoardPage/components/wiki/WikiTitle";
 import { EEditorType } from "@langboard/core/constants";
 import { EHttpStatus } from "@langboard/core/enums";
+import { ProjectRole } from "@/core/models/roles";
+import useRoleActionFilter from "@/core/hooks/useRoleActionFilter";
 import { AIChatPlugin, AIPlugin } from "@platejs/ai/react";
 import { memo, type PointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -75,7 +79,12 @@ const WikiContent = memo(({ wiki }: IWikiContentProps) => {
         [isPublic, assignedMembers, projectMembers, bots]
     );
     const content = wiki.useField("content");
+    const linkedCardUID = wiki.useField("linked_card_uid");
+    const roleActions = project.useField("current_auth_role_actions");
+    const { hasRoleAction } = useRoleActionFilter(roleActions);
+    const { mutateAsync: createLinkedCard, isPending: isCreatingLinkedCard } = useCreateWikiLinkedCard({ interceptToast: true });
     const canStartEditing = canEditWiki(wiki.uid);
+    const canCreateLinkedCard = hasRoleAction(ProjectRole.EAction.CardUpdate);
     const editorRef = useRef<TEditor>(null);
     const [isEditing, setIsEditing] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
@@ -163,11 +172,28 @@ const WikiContent = memo(({ wiki }: IWikiContentProps) => {
             }),
         []
     );
+    const linkedCardDeletedHandler = useMemo(
+        () =>
+            linkedCardUID
+                ? useCardDeletedHandlers({
+                      projectUID: project.uid,
+                      cardUID: linkedCardUID,
+                      callback: () => {
+                          wiki.linked_card_uid = undefined;
+                      },
+                  })
+                : null,
+        [linkedCardUID, project, wiki]
+    );
+    const wikiSocketHandlers = useMemo(
+        () => (linkedCardDeletedHandler ? [boardUIWikiDeletedHandlers, linkedCardDeletedHandler] : [boardUIWikiDeletedHandlers]),
+        [boardUIWikiDeletedHandlers, linkedCardDeletedHandler]
+    );
 
     useSwitchSocketHandlers({
         socket,
-        handlers: boardUIWikiDeletedHandlers,
-        dependencies: [boardUIWikiDeletedHandlers],
+        handlers: wikiSocketHandlers,
+        dependencies: wikiSocketHandlers,
     });
 
     useEffect(() => {
@@ -297,6 +323,40 @@ const WikiContent = memo(({ wiki }: IWikiContentProps) => {
                 <Button variant="secondary" onClick={() => navigate(ROUTES.BOARD.WIKI_METADATA(project.uid, wiki.uid))}>
                     {t("metadata.Metadata")}
                 </Button>
+                {linkedCardUID ? (
+                    <Button variant="secondary" onClick={() => navigate(ROUTES.BOARD.CARD(project.uid, linkedCardUID))}>
+                        {t("wiki.View on board")}
+                    </Button>
+                ) : (
+                    canCreateLinkedCard && (
+                        <Button
+                            variant="secondary"
+                            disabled={isCreatingLinkedCard}
+                            onClick={async () => {
+                                const promise = createLinkedCard({ project_uid: project.uid, wiki_uid: wiki.uid });
+                                Toast.Add.promise(promise, {
+                                    loading: t("common.Creating..."),
+                                    error: (error) => {
+                                        const messageRef = { message: "" };
+                                        const { handle } = setupApiErrorHandler({}, messageRef);
+                                        handle(error);
+                                        return messageRef.message;
+                                    },
+                                    success: ({ created }) => (created ? t("wiki.Linked card created") : t("wiki.Linked card already exists")),
+                                });
+                                try {
+                                    const { card } = await promise;
+                                    wiki.linked_card_uid = card.uid;
+                                    navigate(ROUTES.BOARD.CARD(project.uid, card.uid));
+                                } catch {
+                                    // The toast above owns the error presentation.
+                                }
+                            }}
+                        >
+                            {t("wiki.Show on board")}
+                        </Button>
+                    )
+                )}
             </Flex>
         </Box>
     );

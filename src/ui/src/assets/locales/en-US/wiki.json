@@ -8,5 +8,16 @@
   "No content": "No content",
   "Select members and bots...": "Select members and bots...",
   "Start your first wiki": "Start your first wiki",
-  "Add your first wiki page to keep everything in one place.": "Add your first wiki page to keep everything in one place."
+  "Add your first wiki page to keep everything in one place.": "Add your first wiki page to keep everything in one place.",
+  "Linked wiki": "Linked wiki",
+  "Show on board": "Show on board",
+  "View on board": "View on board",
+  "Linked card created": "Linked card created.",
+  "Linked card already exists": "The existing linked card was opened.",
+  "Restricted wiki": "Restricted wiki",
+  "Source unavailable": "Source unavailable",
+  "Open original": "Open original",
+  "Remove from board": "Remove from board",
+  "Remove linked card question": "Remove this linked card from the board? The original wiki will remain unchanged.",
+  "Linked card removed": "Linked card removed from the board."
 }

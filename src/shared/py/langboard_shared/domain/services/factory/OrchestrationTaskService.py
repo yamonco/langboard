@@ -98,6 +98,8 @@ class OrchestrationTaskService(BaseDomainService):
         if not params:
             return {}
         _, card = params
+        if card.is_linked_resource:
+            return {}
 
         metadata_service = self._get_service(MetadataService)
         saved: dict[str, str] = {}
@@ -125,6 +127,8 @@ class OrchestrationTaskService(BaseDomainService):
         if not params:
             return None
         project, card = params
+        if card.is_linked_resource:
+            return None
 
         metadata_service = self._get_service(MetadataService)
         verification = {**verification}
@@ -179,6 +183,8 @@ class OrchestrationTaskService(BaseDomainService):
         if not params:
             return None
         _, card = params
+        if card.is_linked_resource:
+            return None
 
         run = {**run}
         run.setdefault("recorded_at", SafeDateTime.now().isoformat())
@@ -198,6 +204,8 @@ class OrchestrationTaskService(BaseDomainService):
         if not params:
             return None
         _, card = params
+        if card.is_linked_resource:
+            return None
 
         serialized = dumps(suggestions, ensure_ascii=False)
         key = SYSTEM_TASK_METADATA_KEYS["suggestions"]
@@ -216,6 +224,8 @@ class OrchestrationTaskService(BaseDomainService):
         if not params:
             return None
         project, card = params
+        if card.is_linked_resource:
+            return None
 
         bypass = self.__evaluate_bypass_policy(bypass)
         bypass.setdefault("checked_at", SafeDateTime.now().isoformat())
@@ -249,6 +259,8 @@ class OrchestrationTaskService(BaseDomainService):
         if not params:
             return None
         project, parent_card = params
+        if parent_card.is_linked_resource:
+            return None
 
         title = str(suggestion.get("title") or "").strip()
         if not title:

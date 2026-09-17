@@ -13,6 +13,9 @@ class ApiErrorCode(Enum):
     EX1002 = "The email is already primary."
     EX1003 = "The email is already in use."
     EX1004 = "The account is already activated."
+    EX1005 = "An existing account with this email must be linked explicitly before SCIM provisioning."
+    EX1006 = "The external identity is already linked and cannot be reassigned."
+    EX2001 = "Shared column shortcuts changed since they were loaded."
     EX3001 = "Bot uname already exists."
     EX3002 = "Default internal bot cannot be deleted."
     EX3003 = "MCP tool name already exists."
@@ -25,6 +28,7 @@ class ApiErrorCode(Enum):
     PE2003 = "No permission to access this checkitem."
     PE2004 = "No permission to access this comment."
     PE2005 = "No permission to access this wiki."
+    PE2006 = "Only the original card author or an administrator can delete this card."
 
     # Not Found Errors
     NF1001 = "Subemail not found or subemail's user and current user don't match."
