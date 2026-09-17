@@ -233,7 +233,7 @@ function BoardColumnCardCollapsible({ isDragging, compact = false }: IBoardColum
                             <Flex items="center" gap="2">
                                 {widgetVisibility.showDescriptionIcon && (
                                     <IconComponent
-                                        icon="text"
+                                        icon="file-text"
                                         size="4"
                                         className="text-secondary"
                                         strokeWidth="4"
