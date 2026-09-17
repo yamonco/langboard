@@ -27,6 +27,7 @@ class SwallowErrorBoundary extends React.Component<TProps, TState> {
     }
 
     componentDidCatch(error: Error): void {
+        console.error('[SwallowErrorBoundary]', error);
         if (lastError && error.message === lastError.message) {
             ++lastErrorOccurred;
             return;
