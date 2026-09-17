@@ -343,7 +343,7 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
                             <Flex items="center" gap="2">
                                 {widgetVisibility.showDescriptionIcon && (
                                     <IconComponent
-                                        icon="text"
+                                        icon="file-text"
                                         size="3.5"
                                         {...attributes}
                                         aria-label={t("card.Description")}
