@@ -127,7 +127,11 @@ class ProjectInvitationService(BaseDomainService):
         return invitation_result
 
     def invite_emails(
-        self, user: User, project: TProjectParam | None, invitation_result: InvitationRelatedResult
+        self,
+        user: User,
+        project: TProjectParam | None,
+        invitation_result: InvitationRelatedResult,
+        direct_user_ids: set[SnowflakeID] | None = None,
     ) -> bool:
         project = InfraHelper.get_by_id_like(Project, project)
         if not project:
@@ -144,7 +148,11 @@ class ProjectInvitationService(BaseDomainService):
         for email in invitation_result.emails_should_invite:
             preferred_lang = user.preferred_lang
             target_user = invitation_result.users_by_email.get(email)
-            if target_user and (user.is_admin or self._is_federated_active_user(target_user)):
+            if target_user and (
+                user.is_admin
+                or (direct_user_ids is not None and target_user.id in direct_user_ids)
+                or self._is_federated_active_user(target_user)
+            ):
                 self.__assign_project_user(project, target_user)
                 continue
 

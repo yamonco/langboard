@@ -116,11 +116,27 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
         else:
             details["relationships"] = []
 
-        wants_checklists = "checklists" in requested_sections or any(
-            section.startswith("checkitems:") for section in requested_sections
-        )
-        checklists = (
-            self._bounded_source(
+        checklists = []
+        checkitem_sections = [
+            section.removeprefix("checkitems:") for section in requested_sections if section.startswith("checkitems:")
+        ]
+        if checkitem_sections:
+            for checklist_uid in checkitem_sections:
+                checklist = self._service.checklist.get_by_id_like(checklist_uid)
+                if checklist is None or checklist.card_id != card.id:
+                    continue
+                checklist_payload = checklist.api_response()
+                checklist_payload["checkitems"] = self._bounded_source(
+                    self._service.checkitem.get_api_list_by_checklist(
+                        card,
+                        checklist,
+                        _SOURCE_QUERY_LIMIT,
+                    ),
+                    "checkitems",
+                )
+                checklists.append(checklist_payload)
+        elif "checklists" in requested_sections:
+            checklists = self._bounded_source(
                 self._service.checklist.get_api_list_by_card(
                     card,
                     limit=_SOURCE_QUERY_LIMIT,
@@ -128,9 +144,6 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
                 ),
                 "checklists",
             )
-            if wants_checklists
-            else []
-        )
         for checklist in checklists:
             checklist["checkitems"] = self._bounded_source(checklist.get("checkitems", []), "checkitems")
 

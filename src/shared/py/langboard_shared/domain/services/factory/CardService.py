@@ -154,11 +154,11 @@ class CardService(BaseDomainService):
         creators = self.repo.card.get_board_creators(project, archive_visible_since)
 
         cards = []
-        resource_payloads = self._get_linked_resource_payloads(
-            user_or_bot,
-            project,
-            [card for card, _ in raw_cards if getattr(card, "is_linked_resource", False)],
-            include_content=False,
+        linked_cards = [card for card, _ in raw_cards if getattr(card, "is_linked_resource", False)]
+        resource_payloads = (
+            self._get_linked_resource_payloads(user_or_bot, project, linked_cards, include_content=False)
+            if linked_cards
+            else {}
         )
         for card, count_comment in raw_cards:
             api_card = card.board_api_response(
@@ -379,12 +379,23 @@ class CardService(BaseDomainService):
 
         api_cards = []
         api_projects: dict[int, dict[str, Any]] = {}
+        linked_resources_by_project: dict[int, tuple[Project, list[Card], list[dict[str, Any]]]] = {}
         for card, project, column in records:
             api_card = card.api_response()
             api_card["project_column_name"] = column.name
+            if card.is_linked_resource:
+                resource_group = linked_resources_by_project.setdefault(project.id, (project, [], []))
+                resource_group[1].append(card)
+                resource_group[2].append(api_card)
             if project.id not in api_projects:
                 api_projects[project.id] = project.api_response()
             api_cards.append(api_card)
+
+        for project, linked_cards, linked_api_cards in linked_resources_by_project.values():
+            payloads = self._get_linked_resource_payloads(user, project, linked_cards, include_content=False)
+            for card, api_card in zip(linked_cards, linked_api_cards, strict=True):
+                api_card["linked_resource"] = payloads[card.get_uid()]
+
         return api_cards, list(api_projects.values())
 
     def get_api_list_by_project(
@@ -451,6 +462,7 @@ class CardService(BaseDomainService):
         limit: int,
         before_updated_at: SafeDateTime | None = None,
         before_card: TCardParam | None = None,
+        user_or_bot: TUserOrBot | None = None,
     ) -> tuple[list[dict[str, Any]], int, tuple[str, str] | None] | None:
         """Return a bounded newest-updated-first card page and opaque cursor fields."""
 
@@ -460,10 +472,18 @@ class CardService(BaseDomainService):
         records = self.repo.card.get_page_by_project(project, limit, before_updated_at, before_card)
         has_more = len(records) > limit
         page = records[:limit]
+        resource_payloads = self._get_linked_resource_payloads(
+            user_or_bot,
+            project,
+            [card for card, _ in page if card.is_linked_resource],
+            include_content=False,
+        )
         cards: list[dict[str, Any]] = []
         for card, column in page:
             api_card = card.api_response()
             api_card["project_column_name"] = column.name
+            if card.is_linked_resource:
+                api_card["linked_resource"] = resource_payloads[card.get_uid()]
             cards.append(api_card)
         next_fields = None
         if has_more and page:

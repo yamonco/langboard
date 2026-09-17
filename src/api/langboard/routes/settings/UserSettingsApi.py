@@ -1,3 +1,4 @@
+from urllib.parse import urlparse
 from fastapi import status
 from langboard_shared.core.filter import AuthFilter
 from langboard_shared.core.routing import (
@@ -34,6 +35,19 @@ from .Form import (
 )
 
 
+def _is_allowed_oidc_issuer(issuer: str) -> bool:
+    """Require TLS except for loopback issuers used by local development."""
+
+    parsed = urlparse(issuer)
+    if parsed.scheme == "https" and parsed.netloc:
+        return True
+    return (
+        Env.ENVIRONMENT == "development"
+        and parsed.scheme == "http"
+        and parsed.hostname in {"localhost", "127.0.0.1", "::1"}
+    )
+
+
 @AppRouter.api.put(
     "/settings/users/{user_uid}/identity-links/oidc",
     tags=["AppSettings.User"],
@@ -62,7 +76,7 @@ def link_user_oidc_identity(
 
     issuer = form.issuer.strip().rstrip("/")
     subject = form.subject.strip()
-    if not issuer.startswith("https://") or not subject:
+    if not subject or not _is_allowed_oidc_issuer(issuer):
         raise ApiException.BadRequest_400()
 
     current = service.identity_link.get_by_provider_external_id(IdentityProvider.Oidc, subject, issuer)

@@ -150,6 +150,81 @@ def test_native_source_rejects_over_bound_people_before_projection() -> None:
         adapter.get_card_bundle_source("p1", "c1", frozenset({"people"}))
 
 
+def test_native_source_projects_linked_wiki_content_without_task_sections() -> None:
+    project = SimpleNamespace(id=1)
+    card = SimpleNamespace(project_id=1, project_column_id=2, is_linked_resource=True)
+    column = SimpleNamespace(id=2, project_id=1, name="Reference")
+    actor = object()
+    get_details = Mock(
+        return_value={
+            "uid": "c1",
+            "title": "",
+            "project_column_uid": "column-1",
+            "project_column_name": "Reference",
+            "linked_resource": {
+                "status": "available",
+                "title": "Runbook",
+                "content": {"content": "Canonical Wiki body"},
+            },
+        }
+    )
+    service = SimpleNamespace(
+        project=SimpleNamespace(get_by_id_like=lambda _uid: project),
+        project_column=SimpleNamespace(get_by_id_like=lambda _uid: column),
+        card=SimpleNamespace(get_by_id_like=lambda _uid: card, get_details=get_details),
+    )
+
+    source = NativeCardWorkspaceAdapter(actor, service).get_card_bundle_source(
+        "p1",
+        "c1",
+        frozenset({"description", "people", "checklists", "attachments", "metadata", "automation.bot_scopes"}),
+    )
+
+    assert source is not None
+    assert source.details["title"] == "Runbook"
+    assert source.details["description"] == {"content": "Canonical Wiki body"}
+    assert source.checklists == []
+    assert source.attachments == []
+    assert source.metadata == {}
+    assert source.bot_scopes == []
+    assert source.bot_schedules == []
+    get_details.assert_called_once_with(project, card, actor, limit=MAX_NATIVE_SECTION_SOURCE + 1)
+
+
+def test_native_checkitem_continuation_reads_only_the_requested_checklist() -> None:
+    project = SimpleNamespace(id=1)
+    card = SimpleNamespace(id=2, project_id=1, project_column_id=3, api_response=lambda: {"uid": "c1"})
+    column = SimpleNamespace(id=3, project_id=1, name="Backlog")
+    checklist = SimpleNamespace(id=4, card_id=2, api_response=lambda: {"uid": "cl1", "title": "Checklist"})
+    calls: list[tuple[Any, Any, int]] = []
+    service = SimpleNamespace(
+        project=SimpleNamespace(get_by_id_like=lambda _uid: project),
+        project_column=SimpleNamespace(get_by_id_like=lambda _uid: column),
+        card=SimpleNamespace(
+            get_by_id_like=lambda _uid: card,
+            can_delete=lambda actor, target: False,
+        ),
+        checklist=SimpleNamespace(
+            get_by_id_like=lambda _uid: checklist,
+            get_api_list_by_card=lambda *_args, **_kwargs: pytest.fail("bulk checklist query used"),
+        ),
+        checkitem=SimpleNamespace(
+            get_api_list_by_checklist=lambda target_card, target_checklist, limit: (
+                calls.append((target_card, target_checklist, limit)),
+                [{"uid": "ci1", "title": "Item"}],
+            )[1]
+        ),
+    )
+
+    source = NativeCardWorkspaceAdapter(object(), service).get_card_bundle_source(
+        "p1", "c1", frozenset({"checkitems:cl1"})
+    )
+
+    assert source is not None
+    assert source.checklists[0]["checkitems"] == [{"uid": "ci1", "title": "Item"}]
+    assert calls == [(card, checklist, MAX_NATIVE_SECTION_SOURCE + 1)]
+
+
 def test_native_cardify_reads_back_created_card() -> None:
     """Cardification returns the exact card linked by the source checkitem."""
 

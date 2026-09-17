@@ -24,7 +24,7 @@ class ProjectRepository(BaseRepository[Project]):
 
     def get_all_by_user(
         self, user: TUserParam, limit: int | None = None
-    ) -> list[tuple[Project, ProjectAssignedUser, SafeDateTime | None, bool]]:
+    ) -> list[tuple[Project, ProjectAssignedUser, SafeDateTime | None, bool, SafeDateTime | None]]:
         user_id = InfraHelper.convert_id(user)
         last_activity_at = self._last_activity_at()
         related_to_current_user = self._related_to_user(user_id)
@@ -44,6 +44,8 @@ class ProjectRepository(BaseRepository[Project]):
                 Project.column("id").desc(),
             )
         )
+        if limit is not None:
+            query = query.limit(limit)
 
         projects = []
         with DbSession.use(readonly=True) as db:
@@ -53,28 +55,32 @@ class ProjectRepository(BaseRepository[Project]):
 
     def get_all_starred(
         self, user: TUserParam, limit: int | None = None
-    ) -> list[tuple[Project, ProjectAssignedUser, SafeDateTime | None, bool]]:
+    ) -> list[tuple[Project, ProjectAssignedUser, SafeDateTime | None, bool, SafeDateTime | None]]:
         user_id = InfraHelper.convert_id(user)
         last_activity_at = self._last_activity_at()
         related_to_current_user = self._related_to_user(user_id)
         related_activity = self._related_activity_by_project(user_id)
+        query = (
+            SqlBuilder.select.tables(Project, ProjectAssignedUser)
+            .add_columns(last_activity_at, related_to_current_user, related_activity.c.related_activity_at)
+            .join(
+                ProjectAssignedUser,
+                ProjectAssignedUser.column("project_id") == Project.column("id"),
+            )
+            .outerjoin(related_activity, related_activity.c.project_id == Project.column("id"))
+            .where(ProjectAssignedUser.column("user_id") == user_id)
+            .where(ProjectAssignedUser.column("starred") == True)  # noqa: E712
+            .order_by(
+                func.coalesce(last_activity_at, Project.column("created_at")).desc(),
+                Project.column("id").desc(),
+            )
+        )
+        if limit is not None:
+            query = query.limit(limit)
+
         projects = []
         with DbSession.use(readonly=True) as db:
-            result = db.exec(
-                SqlBuilder.select.tables(Project, ProjectAssignedUser)
-                .add_columns(last_activity_at, related_to_current_user, related_activity.c.related_activity_at)
-                .join(
-                    ProjectAssignedUser,
-                    ProjectAssignedUser.column("project_id") == Project.column("id"),
-                )
-                .outerjoin(related_activity, related_activity.c.project_id == Project.column("id"))
-                .where(ProjectAssignedUser.column("user_id") == user_id)
-                .where(ProjectAssignedUser.column("starred") == True)  # noqa
-                .order_by(
-                    func.coalesce(last_activity_at, Project.column("created_at")).desc(),
-                    Project.column("id").desc(),
-                )
-            )
+            result = db.exec(query)
             projects = result.all()
         return projects
 

@@ -73,8 +73,14 @@ def _service(card_repository: Any, calls: dict[str, Any] | None = None) -> CardS
 
         return inner
 
+    def capture_creators(_project: Any, archive_visible_since: SafeDateTime) -> dict[int, Any]:
+        calls["creators"] = archive_visible_since
+        return {}
+
+    card_repository_methods = vars(card_repository) if isinstance(card_repository, SimpleNamespace) else {}
+    card_repository_methods["get_board_creators"] = capture_creators
     repository = SimpleNamespace(
-        card=card_repository,
+        card=SimpleNamespace(**card_repository_methods),
         card_assigned_user=SimpleNamespace(get_all_by_project=capture("members")),
         card_relationship=SimpleNamespace(get_all_by_project=capture("relationships")),
         project_label=SimpleNamespace(get_all_card_labels_by_project=capture("labels")),
@@ -109,6 +115,7 @@ def test_board_list_passes_one_visibility_cutoff_to_all_hot_path_queries(
             "member_uids": [],
             "relationships": [],
             "labels": [],
+            "creator": None,
         }
     ]
 
