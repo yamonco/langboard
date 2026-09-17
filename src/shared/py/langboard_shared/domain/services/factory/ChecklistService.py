@@ -34,7 +34,7 @@ class ChecklistService(BaseDomainService):
         if not card:
             return []
 
-        raw_checklists = self.repo.checklist.get_all_by_card(card, limit=limit)
+        raw_checklists = [checklist for checklist in self.repo.checklist.get_all_by_card(card, limit=limit) if not checklist.is_system]
         if not raw_checklists:
             return []
 
@@ -64,7 +64,7 @@ class ChecklistService(BaseDomainService):
         if not card:
             return []
 
-        checklists = self.repo.checklist.get_all_by_card(card)
+        checklists = [checklist for checklist in self.repo.checklist.get_all_by_card(card) if not checklist.is_system]
         return [checklist.api_response() for checklist in checklists]
 
     def get_api_list_only_by_project(
@@ -74,7 +74,7 @@ class ChecklistService(BaseDomainService):
         if not project:
             return []
 
-        checklists = self.repo.checklist.get_all_by_project(project, limit=limit)
+        checklists = [checklist for checklist in self.repo.checklist.get_all_by_project(project, limit=limit) if not checklist.is_system]
         return [checklist.api_response() for checklist in checklists]
 
     def create(
@@ -87,6 +87,9 @@ class ChecklistService(BaseDomainService):
 
         checklist = Checklist(card_id=card.id, title=title, order=self.repo.checklist.get_next_order(card))
         self.repo.checklist.insert(checklist)
+
+        card_service = self._get_service_by_name("card")
+        card_service.remove_completion_checklist(card)
 
         ChecklistPublisher.created(card, checklist)
         CardChecklistActivityTask.card_checklist_created(user_or_bot, project, card, checklist)
@@ -230,5 +233,10 @@ class ChecklistService(BaseDomainService):
         ChecklistPublisher.deleted(card, checklist)
         CardChecklistActivityTask.card_checklist_deleted(user_or_bot, project, card, checklist)
         CardChecklistBotTask.card_checklist_deleted(user_or_bot, project, card, checklist)
+
+        if not checklist.is_system:
+            card_service = self._get_service_by_name("card")
+            if card_service.is_check_card(card):
+                card_service.ensure_completion_checklist(card)
 
         return True

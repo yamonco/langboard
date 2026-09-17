@@ -25,3 +25,15 @@ def test_board_api_response_reports_has_description(description: str, expected: 
 
     response = _card(description).board_api_response(0, [], [], [])
     assert response["has_description"] is expected
+
+
+def test_board_api_response_reports_completion_flags() -> None:
+    """Board summaries carry the check-card state the board UI branches on."""
+
+    response = _card("본문").board_api_response(0, [], [], [], completed=True, is_check_card=False)
+    assert response["completed"] is True
+    assert response["is_check_card"] is False
+
+    defaults = _card("").board_api_response(0, [], [], [])
+    assert defaults["completed"] is False
+    assert defaults["is_check_card"] is False

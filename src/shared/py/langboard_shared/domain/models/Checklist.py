@@ -11,6 +11,9 @@ class Checklist(SoftDeleteModel, table=True):
     title: str = Field(nullable=False, api_field=ApiField())
     order: int = Field(default=0, nullable=False, api_field=ApiField())
     is_checked: bool = Field(default=False, nullable=False, api_field=ApiField())
+    # System checklists back hidden single-object behaviors (for example the completion
+    # checkbox on a title-only card) and never render as user checklists.
+    is_system: bool = Field(default=False, nullable=False, api_field=ApiField())
 
     def notification_data(self) -> dict[str, Any]:
         return {
@@ -19,4 +22,4 @@ class Checklist(SoftDeleteModel, table=True):
         }
 
     def _get_repr_keys(self) -> list[str | tuple[str, str]]:
-        return ["card_id", "title", "order", "is_checked"]
+        return ["card_id", "title", "order", "is_checked", "is_system"]
