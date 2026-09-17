@@ -1032,7 +1032,13 @@ class CardService(BaseDomainService):
 
     @staticmethod
     def can_delete(user_or_bot: TUserOrBot, card: Card) -> bool:
-        """Allow administrators or the immutable creator; unknown legacy authors otherwise fail closed."""
+        """Allow administrators or the immutable creator.
+
+        Legacy cards without any recorded creator are deletable by whoever already
+        passed the CardDelete role gate; cards with a known creator stay protected."""
+
+        if card.created_by_user_id is None and card.created_by_bot_id is None:
+            return True
 
         if isinstance(user_or_bot, User):
             return user_or_bot.is_admin or (
