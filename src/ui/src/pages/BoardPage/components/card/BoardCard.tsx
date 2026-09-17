@@ -352,7 +352,7 @@ function BoardTaskCardResult({ isExpanded, setIsExpanded, onClose, onEditModeSta
                                 <Box ref={contentViewportRef} className="min-h-0 flex-1 overflow-y-auto">
                                     <Flex direction="col" gap="4" className="min-w-0 pb-6 pr-1">
                                         {isCheckCardView ? (
-                                            <BoardCardCheckBody key={`board-card-check-body-${card.uid}`} />
+                                            <BoardCardCheckBody key={`board-card-check-body-${card.uid}`} scrollParentRef={contentViewportRef} />
                                         ) : (
                                             <>
                                                     <Flex direction={{ initial: "col", sm: "row" }} gap="4">
