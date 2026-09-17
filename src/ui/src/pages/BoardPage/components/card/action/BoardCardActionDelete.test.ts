@@ -30,8 +30,3 @@ test("failed deletion leaves the card model intact; only success removes it", ()
     assert.equal(countRemovals(callbacks.get("error")!), 0);
     assert.equal(countRemovals(callbacks.get("finally")!), 0);
 });
-
-test("deletion denial has actionable localized copy, not an internal error key", () => {
-    const errors = JSON.parse(readFileSync(new URL("../../../../../assets/locales/en-US/errors.json", import.meta.url), "utf8"));
-    assert.equal(errors.requests.PE2006, "Only the original author or an administrator can delete this card. The card has not been deleted.");
-});

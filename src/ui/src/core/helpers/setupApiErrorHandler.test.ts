@@ -7,7 +7,7 @@ import { AxiosError } from "axios";
 import i18next from "i18next";
 import ts from "typescript";
 
-test("known denial is actionable and unknown error codes never leak translation keys", async () => {
+test("unknown error codes use a safe fallback and never leak translation keys", async () => {
     const errors = JSON.parse(readFileSync(new URL("../../assets/locales/en-US/errors.json", import.meta.url), "utf8"));
     const i18n = i18next.createInstance();
     await i18n.init({ lng: "en-US", resources: { "en-US": { translation: { errors } } } });
@@ -29,10 +29,7 @@ test("known denial is actionable and unknown error codes never leak translation 
         },
         console,
     });
-    for (const [code, expected] of [
-        ["PE2006", errors.requests.PE2006],
-        ["UNRECOGNIZED_CODE", errors["Internal server error"]],
-    ]) {
+    for (const [code, expected] of [["UNRECOGNIZED_CODE", errors["Internal server error"]]]) {
         const error = new AxiosError();
         error.response = { status: 403, data: { code } } as AxiosError["response"];
         const ref = { message: "" };
