@@ -357,7 +357,7 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
                                         className="relative inline-flex shrink-0"
                                     >
                                         <Avatar.Root size="xs">
-                                            {creator.avatar && <Avatar.Image src={creator.avatar} alt={creator.name} />}
+                                            {creator.avatar && <Avatar.Image src={Utils.String.convertServerFileURL(creator.avatar)} alt={creator.name} />}
                                             <Avatar.Fallback className="text-[10px] font-medium">
                                                 {Utils.String.getInitials(creator.name, "")}
                                             </Avatar.Fallback>
