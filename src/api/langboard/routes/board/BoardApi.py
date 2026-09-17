@@ -235,6 +235,7 @@ def get_project_card_context(
                             "schema": {
                                 "project_column_name": "string",
                                 "count_comment": "integer",
+                                "has_description": "boolean",
                                 "member_uids": "string[]",
                                 "relationships": [CardRelationship],
                                 "labels": [ProjectLabel],
