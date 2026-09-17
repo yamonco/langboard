@@ -369,13 +369,13 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
                                     />
                                 </div>
                             )}
-                            <div className="flex items-center gap-2 px-4 pb-2 opacity-0 transition-opacity duration-200 group-hover/card:opacity-100">
+                            <div className="flex items-center px-4 pb-2 opacity-0 transition-opacity duration-200 group-hover/card:opacity-100">
                                 {creator && (
                                     <span
                                         title={t("card.Created by {{name}}", {
                                             name: creator.name,
                                         })}
-                                        className="relative inline-flex shrink-0"
+                                        className="mr-0 inline-flex max-w-0 overflow-hidden opacity-0 transition-all duration-200 ease-out group-hover/card:mr-2 group-hover/card:max-w-8 group-hover/card:opacity-100"
                                         {...attributes}
                                     >
                                         <Avatar.Root size="xs">
@@ -384,9 +384,6 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
                                                 {Utils.String.getInitials(creator.name, "")}
                                             </Avatar.Fallback>
                                         </Avatar.Root>
-                                        <span className="pointer-events-none absolute -bottom-0.5 -right-0.5 rounded-full bg-background p-px">
-                                            <IconComponent icon="pen-line" size="2.5" />
-                                        </span>
                                     </span>
                                 )}
                                 <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -423,25 +420,22 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
                                 </Card.Content>
                             )}
                             <Card.Footer className="flex items-end justify-between gap-1.5 pb-4">
-                                <Flex items="center" gap="2">
+                                <Flex items="center">
                                     {creator && (
-                                    <span
-                                        title={t("card.Created by {{name}}", {
-                                            name: creator.name,
-                                        })}
-                                        className="relative inline-flex shrink-0 opacity-0 transition-opacity duration-200 group-hover/card:opacity-100"
-                                        {...attributes}
-                                    >
-                                        <Avatar.Root size="xs">
-                                            {creator.avatar && <Avatar.Image src={Utils.String.convertServerFileURL(creator.avatar)} alt={creator.name} />}
-                                            <Avatar.Fallback className="text-[10px] font-medium">
-                                                {Utils.String.getInitials(creator.name, "")}
-                                            </Avatar.Fallback>
-                                        </Avatar.Root>
-                                        <span className="pointer-events-none absolute -bottom-0.5 -right-0.5 rounded-full bg-background p-px">
-                                            <IconComponent icon="pen-line" size="2.5" />
+                                        <span
+                                            title={t("card.Created by {{name}}", {
+                                                name: creator.name,
+                                            })}
+                                            className="mr-0 inline-flex max-w-0 overflow-hidden opacity-0 transition-all duration-200 ease-out group-hover/card:mr-2 group-hover/card:max-w-8 group-hover/card:opacity-100"
+                                            {...attributes}
+                                        >
+                                            <Avatar.Root size="xs">
+                                                {creator.avatar && <Avatar.Image src={Utils.String.convertServerFileURL(creator.avatar)} alt={creator.name} />}
+                                                <Avatar.Fallback className="text-[10px] font-medium">
+                                                    {Utils.String.getInitials(creator.name, "")}
+                                                </Avatar.Fallback>
+                                            </Avatar.Root>
                                         </span>
-                                    </span>
                                     )}
                                     {widgetVisibility.showDescriptionIcon && (
                                         <IconComponent
@@ -454,10 +448,10 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
                                         />
                                     )}
                                     {widgetVisibility.showCommentCount && (
-                                        <>
+                                        <span className="ml-2 flex items-center gap-1">
                                             <IconComponent icon="message-square" size="4" className="text-secondary" strokeWidth="4" />
                                             <span>{commentCount}</span>
-                                        </>
+                                        </span>
                                     )}
                                 </Flex>
                                 <UserAvatarList
