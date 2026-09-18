@@ -15,6 +15,9 @@ class CardComment(SoftDeleteModel, table=True):
     content: EditorContentModel = Field(
         default=EditorContentModel(), sa_type=ModelColumnType(EditorContentModel), api_field=ApiField()
     )
+    # Optional anchor tying a comment to a specific description section heading,
+    # enabling the reverse gutter navigation from body blocks to comment threads.
+    section_anchor: str | None = Field(default=None, nullable=True, api_field=ApiField())
 
     @classmethod
     def api_schema(cls, schema: dict | None = None) -> dict[str, Any]:
