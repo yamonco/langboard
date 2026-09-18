@@ -27,3 +27,8 @@ class UpdateCardLabelsForm(BaseFormModel):
 class UpdateCardRelationshipsForm(BaseFormModel):
     is_parent: bool = Field(..., title="Is the card that is being updated the parent card?")
     relationships: list[tuple[str, str]] = Field(..., title="List of tuples of card UID and relationship type UID")
+
+
+@form_model
+class CardifySelectionForm(BaseFormModel):
+    selected_markdown: str = Field(..., min_length=3, max_length=32000, title="Selected body markdown to extract into a child card")

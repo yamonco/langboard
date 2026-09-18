@@ -44,6 +44,7 @@ from ...card_workspace.domain import CardBundleInclude, CommentPage, SectionPage
 from ...card_workspace.infrastructure import NativeCardWorkspaceAdapter
 from .forms import (
     AssignUsersForm,
+    CardifySelectionForm,
     ChangeCardDetailsForm,
     ChangeChildOrderForm,
     CreateCardForm,
@@ -489,6 +490,41 @@ def update_card_relationships(
         create_editor_collaboration_document_id(EEditorCollaborationType.Card, "{card_uid}", "relationships-children")
     ),
 )
+@AppRouter.schema(form=CardifySelectionForm, permission=ApiPermission.Edit)
+@AppRouter.api.post(
+    "/board/{project_uid}/card/{card_uid}/cardify",
+    tags=["Board.Card"],
+    description="Extract the selected body fragment into a child card with a [[link]] back.",
+    responses=(
+        OpenApiSchema()
+        .suc(
+            {
+                "child_card_uid": "string",
+                "child_card_title": "string",
+                "link_markdown": "string",
+            }
+        )
+        .auth()
+        .forbidden()
+        .err(404, ApiErrorCode.NF2003)
+        .get()
+    ),
+)
+@RoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+@AuthFilter.add()
+def cardify_selection(
+    project_uid: str,
+    card_uid: str,
+    form: CardifySelectionForm,
+    user_or_bot: User | Bot = Auth.scope("all"),
+    service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    result = service.card.cardify_selection(user_or_bot, project_uid, card_uid, form.selected_markdown)
+    if not result:
+        raise ApiException.NotFound_404(ApiErrorCode.NF2003)
+    return JsonResponse(result)
+
+
 @AppRouter.schema(permission=ApiPermission.Delete)
 @AppRouter.api.put(
     "/board/{project_uid}/card/{card_uid}/archive",
