@@ -46,6 +46,7 @@ from .forms import (
     AssignUsersForm,
     ChangeCardDetailsForm,
     ChangeChildOrderForm,
+    CopySelectionToWikiForm,
     CreateCardForm,
     UpdateCardLabelsForm,
     UpdateCardRelationshipsForm,
@@ -489,6 +490,41 @@ def update_card_relationships(
         create_editor_collaboration_document_id(EEditorCollaborationType.Card, "{card_uid}", "relationships-children")
     ),
 )
+@AppRouter.schema(form=CopySelectionToWikiForm, permission=ApiPermission.Edit)
+@AppRouter.api.post(
+    "/board/{project_uid}/card/{card_uid}/copy-to-wiki",
+    tags=["Board.Card"],
+    description="Copy the selected body fragment into a new project wiki. The card body is preserved unchanged.",
+    responses=(
+        OpenApiSchema()
+        .suc(
+            {
+                "wiki_uid": "string",
+                "wiki_title": "string",
+                "card_body_unchanged": "boolean",
+            }
+        )
+        .auth()
+        .forbidden()
+        .err(404, ApiErrorCode.NF2003)
+        .get()
+    ),
+)
+@RoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+@AuthFilter.add()
+def copy_selection_to_wiki(
+    project_uid: str,
+    card_uid: str,
+    form: CopySelectionToWikiForm,
+    user_or_bot: User | Bot = Auth.scope("all"),
+    service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    result = service.card.copy_selection_to_wiki(user_or_bot, project_uid, card_uid, form.selected_markdown, form.wiki_title)
+    if not result:
+        raise ApiException.NotFound_404(ApiErrorCode.NF2003)
+    return JsonResponse(result)
+
+
 @AppRouter.schema(permission=ApiPermission.Delete)
 @AppRouter.api.put(
     "/board/{project_uid}/card/{card_uid}/archive",
