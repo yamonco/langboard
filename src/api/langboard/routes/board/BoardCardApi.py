@@ -489,6 +489,42 @@ def update_card_relationships(
         create_editor_collaboration_document_id(EEditorCollaborationType.Card, "{card_uid}", "relationships-children")
     ),
 )
+@AppRouter.schema(permission=ApiPermission.Edit)
+@AppRouter.api.post(
+    "/board/{project_uid}/card/{card_uid}/convert-checkboxes",
+    tags=["Board.Card"],
+    description="Convert markdown checkboxes in the card body into a native checklist.",
+    responses=(
+        OpenApiSchema()
+        .suc(
+            {
+                "checklist_uid?": "string",
+                "item_count": "integer",
+                "checked_count?": "integer",
+                "remaining_markdown?": "string",
+                "message?": "string",
+            }
+        )
+        .auth()
+        .forbidden()
+        .err(404, ApiErrorCode.NF2003)
+        .get()
+    ),
+)
+@RoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+@AuthFilter.add()
+def convert_card_checkboxes(
+    project_uid: str,
+    card_uid: str,
+    user_or_bot: User | Bot = Auth.scope("all"),
+    service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    result = service.card.convert_description_checkboxes(user_or_bot, project_uid, card_uid)
+    if not result:
+        raise ApiException.NotFound_404(ApiErrorCode.NF2003)
+    return JsonResponse(result)
+
+
 @AppRouter.schema(permission=ApiPermission.Delete)
 @AppRouter.api.put(
     "/board/{project_uid}/card/{card_uid}/archive",

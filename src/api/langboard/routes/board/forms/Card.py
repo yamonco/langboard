@@ -27,3 +27,8 @@ class UpdateCardLabelsForm(BaseFormModel):
 class UpdateCardRelationshipsForm(BaseFormModel):
     is_parent: bool = Field(..., title="Is the card that is being updated the parent card?")
     relationships: list[tuple[str, str]] = Field(..., title="List of tuples of card UID and relationship type UID")
+
+
+@form_model
+class ConvertCheckboxesForm(BaseFormModel):
+    pass

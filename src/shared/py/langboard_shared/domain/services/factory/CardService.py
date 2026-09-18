@@ -319,6 +319,77 @@ class CardService(BaseDomainService):
 
         return card, api_card
 
+    def convert_description_checkboxes(
+        self,
+        user_or_bot: TUserOrBot,
+        project: TProjectParam | None,
+        card: TCardParam | None,
+    ) -> dict[str, Any] | None:
+        """Convert markdown checkboxes in the card body into a native checklist.
+
+        Parses `- [ ]` / `- [x]` lines, creates a native checklist preserving
+        completion state, removes the checkbox lines from the description, and
+        returns the created checklist summary.
+        """
+        import re
+
+        params = InfraHelper.get_records_with_foreign_by_params((Project, project), (Card, card))
+        if not params:
+            return None
+        project, card = params
+
+        markdown = card.description.content or ""
+        pattern = re.compile(r"^[\t ]*(?:[-*+]|\d+\.)\s+\[([ xX])\]\s+(.+)$", re.MULTILINE)
+        matches = list(pattern.finditer(markdown))
+        if not matches:
+            return {"checklist_uid": None, "item_count": 0, "message": "No markdown checkboxes found"}
+
+        # Build checklist items preserving completion state
+        items = []
+        for match in matches:
+            is_checked = match.group(1).lower() == "x"
+            title = match.group(2).strip()
+            if title:
+                items.append({"title": title, "is_checked": is_checked})
+
+        if not items:
+            return {"checklist_uid": None, "item_count": 0, "message": "No valid checkbox titles"}
+
+        # Create the native checklist via ChecklistService
+        checklist_service = self._get_service_by_name("checklist")
+        checklist = checklist_service.create(
+            user_or_bot, project, card.get_uid(), "Converted checklist"
+        )
+        if not checklist:
+            return None
+
+        # Create checkitems with completion state
+        checkitem_service = self._get_service_by_name("checkitem")
+        for item in items:
+            created = checkitem_service.create(
+                user_or_bot, project, card.get_uid(), checklist.get_uid(), item["title"]
+            )
+            if created and item["is_checked"]:
+                created.is_checked = True
+                self.repo.checkitem.update(created)
+
+        # Remove checkbox lines from the description
+        lines = markdown.split("\n")
+        kept = [line for line in lines if not pattern.match(line)]
+        new_markdown = "\n".join(kept)
+        new_markdown = re.sub(r"\n{3,}", "\n\n", new_markdown).strip()
+
+        card.description = EditorContentModel(content=new_markdown)
+        self.repo.card.update(card)
+        CardPublisher.updated(project, card, None, {"description": "checkboxes converted"})
+
+        return {
+            "checklist_uid": checklist.get_uid(),
+            "item_count": len(items),
+            "checked_count": sum(1 for item in items if item["is_checked"]),
+            "remaining_markdown": new_markdown,
+        }
+
     def update(
         self, user_or_bot: TUserOrBot, project: TProjectParam | None, card: TCardParam | None, form: dict[str, Any]
     ) -> dict[str, Any] | Literal[True] | None:
