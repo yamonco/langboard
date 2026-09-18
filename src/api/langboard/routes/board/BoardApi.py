@@ -255,6 +255,56 @@ def get_project_card_context(
         .get()
     ),
 )
+@AppRouter.schema(permission=ApiPermission.Read)
+@AppRouter.api.get(
+    "/board/{project_uid}/change-feed",
+    tags=["Board"],
+    description="Get a cursor-based board change feed for external orchestrators.",
+    responses=(
+        OpenApiSchema()
+        .suc(
+            {
+                "entries": [
+                    {
+                        "activity_uid": "string",
+                        "activity_type": "string",
+                        "card_uid?": "string",
+                        "project_uid": "string",
+                        "actor_user_uid?": "string",
+                        "actor_bot_uid?": "string",
+                        "created_at": "string",
+                    }
+                ],
+                "has_more": "boolean",
+                "next_cursor?": "string",
+            }
+        )
+        .auth()
+        .forbidden()
+        .err(404, ApiErrorCode.NF2001)
+        .get()
+    ),
+)
+@RoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+@AuthFilter.add()
+def get_board_change_feed(
+    project_uid: str,
+    limit: int = 50,
+    cursor: str | None = None,
+    service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    """Return board changes for external consumption with cursor-based pagination."""
+
+    project = service.project.get_by_id_like(project_uid)
+    if project is None:
+        raise ApiException.NotFound_404(ApiErrorCode.NF2001)
+
+    result = service.card.get_change_feed(project_uid, limit=limit, before_activity_uid=cursor)
+    if result is None:
+        raise ApiException.NotFound_404(ApiErrorCode.NF2001)
+    return JsonResponse(result)
+
+
 @RoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
 @AuthFilter.add()
 def get_project_cards(project_uid: str, service: DomainService = DomainService.scope()) -> JsonResponse:
