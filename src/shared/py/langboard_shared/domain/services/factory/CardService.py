@@ -319,6 +319,27 @@ class CardService(BaseDomainService):
 
         return card, api_card
 
+    def get_section_comment_counts(
+        self,
+        project: TProjectParam | None,
+        card: TCardParam | None,
+    ) -> list[dict[str, Any]] | None:
+        """Return comment counts grouped by section_anchor for the gutter UI."""
+
+        params = InfraHelper.get_records_with_foreign_by_params((Project, project), (Card, card))
+        if not params:
+            return None
+        project, card = params
+
+        raw_comments = self.repo.card_comment.get_all_by_card(card)
+        counts: dict[str, int] = {}
+        for comment, _ in raw_comments:
+            anchor_value = getattr(comment, "section_anchor", None)
+            if anchor_value:
+                counts[anchor_value] = counts.get(anchor_value, 0) + 1
+
+        return [{"anchor": anchor_value, "count": count} for anchor_value, count in sorted(counts.items())]
+
     def update(
         self, user_or_bot: TUserOrBot, project: TProjectParam | None, card: TCardParam | None, form: dict[str, Any]
     ) -> dict[str, Any] | Literal[True] | None:
