@@ -17,6 +17,7 @@ from ...models import (
     CardAssignedUser,
     CardBotSchedule,
     CardBotScope,
+    CardRelationship,
     Checkitem,
     Project,
     ProjectColumn,
@@ -318,6 +319,78 @@ class CardService(BaseDomainService):
             notification_service.notify_assigned_to_card(user_or_bot, user, project, card)
 
         return card, api_card
+
+    def cardify_selection(
+        self,
+        user_or_bot: TUserOrBot,
+        project: TProjectParam | None,
+        card: TCardParam | None,
+        selected_markdown: str,
+    ) -> dict[str, Any] | None:
+        """Extract the selected body fragment into a child card with a link back.
+
+        Creates a child card in the parent's column, links them with the first
+        global parent-child relationship type, replaces the selection with a
+        [[title]] link, and returns the child card summary.
+        """
+        params = InfraHelper.get_records_with_foreign_by_params((Project, project), (Card, card))
+        if not params:
+            return None
+        project, card = params
+
+        selected_markdown = selected_markdown.strip()
+        if not selected_markdown:
+            return None
+
+        # Derive a concise title from the first meaningful line
+        first_line = next(
+            (line.lstrip("#-*> ").strip() for line in selected_markdown.split("\n") if line.strip()),
+            "Untitled",
+        )
+        title = first_line[:80] + ("..." if len(first_line) > 80 else "")
+
+        # Create the child card in the same column
+        child = Card(
+            project_id=project.id,
+            project_column_id=card.project_column_id,
+            title=title,
+            description=EditorContentModel(content=selected_markdown),
+            order=self.repo.card.get_next_order(
+                InfraHelper.get_by_id_like(ProjectColumn, card.project_column_id),
+                {"project_id": project.id},
+            ),
+        )
+        self.repo.card.insert(child)
+
+        # Link parent → child with the first global relationship type
+        global_types = self.repo.card_relationship.get_global_relationship_types_map([])
+        if global_types:
+            relationship_type_id = next(iter(global_types.values())).id
+            self.repo.card_relationship.insert(
+                CardRelationship(
+                    card_id_parent=card.id,
+                    card_id_child=child.id,
+                    relationship_type_id=relationship_type_id,
+                )
+            )
+
+        # Replace the selection with a link in the parent body
+        full_markdown = card.description.content or ""
+        link = f"[[{title}]]"
+        index = full_markdown.find(selected_markdown)
+        if index != -1:
+            new_markdown = full_markdown[:index] + link + full_markdown[index + len(selected_markdown):]
+            card.description = EditorContentModel(content=new_markdown)
+            self.repo.card.update(card)
+
+        CardPublisher.updated(project, card, None, {"description": link})
+        CardActivityTask.card_created(user_or_bot, project, child)
+
+        return {
+            "child_card_uid": child.get_uid(),
+            "child_card_title": title,
+            "link_markdown": link,
+        }
 
     def update(
         self, user_or_bot: TUserOrBot, project: TProjectParam | None, card: TCardParam | None, form: dict[str, Any]
