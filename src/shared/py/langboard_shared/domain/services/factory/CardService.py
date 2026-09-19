@@ -1,6 +1,7 @@
 from typing import Any, Literal, Sequence, cast, overload
+from sqlalchemy import text
 from ....ai import BotScheduleHelper, BotScopeHelper
-from ....core.db import EditorContentModel
+from ....core.db import DbSession, EditorContentModel
 from ....core.domain import BaseDomainService
 from ....core.domain.BaseDomainService import TMutableValidatorMap
 from ....core.schema import TimeBasedPagination
@@ -34,10 +35,44 @@ from .ProjectService import ProjectService
 class CardService(BaseDomainService):
     CONTEXT_DESCRIPTION_MAX_LENGTH = 1200
 
+    UNREAD_TARGET_DESCRIPTION = "description"
+    UNREAD_TARGET_COMMENT = "comment"
+    UNREAD_TARGET_CARD = "card"
+
     @staticmethod
     def name() -> str:
         """DO NOT EDIT THIS METHOD"""
         return "card"
+
+    @staticmethod
+    def next_change_seq() -> int:
+        """Draw the next monotonic cursor from the global change sequence."""
+
+        with DbSession.use(readonly=False) as db:
+            return int(db.exec(text("SELECT nextval('content_change_seq')")).scalar() or 0)
+
+    def mark_card_changed(
+        self,
+        card: Card,
+        target_type: str,
+        target_id: SnowflakeID | None = None,
+    ) -> None:
+        """Stamp the newest change snapshot on a card (O(1), no member fan-out)."""
+
+        card.last_change_seq = self.next_change_seq()
+        card.last_change_target_type = target_type
+        card.last_change_target_id = target_id
+        card.last_change_at = SafeDateTime.now()
+        self.repo.card.update(card)
+
+    def mark_card_seen(self, user: User, card: TCardParam | None) -> dict[str, Any] | None:
+        """Advance one user's read cursor after a card was actually shown."""
+
+        card = InfraHelper.get_by_id_like(Card, card)
+        if not card:
+            return None
+        self.repo.user_card_read_state.upsert_seen(user, card, card.last_change_seq)
+        return {"card_uid": card.get_uid(), "seen_change_seq": card.last_change_seq}
 
     def get_by_id_like(self, card: TCardParam | None) -> Card | None:
         card = InfraHelper.get_by_id_like(Card, card)
@@ -78,7 +113,7 @@ class CardService(BaseDomainService):
         api_card["relationships"] = card_relationship_service.get_api_list_by_card(card, limit=limit)
         return api_card
 
-    def get_board_list(self, project: TProjectParam | None) -> list[dict[str, Any]]:
+    def get_board_list(self, project: TProjectParam | None, user: User | None = None) -> list[dict[str, Any]]:
         project = InfraHelper.get_by_id_like(Project, project)
         if not project:
             return []
@@ -86,10 +121,10 @@ class CardService(BaseDomainService):
         raw_cards = self.repo.card.get_board_list(project)
         raw_members = self.repo.card_assigned_user.get_all_by_project(project)
         members: dict[int, list[str]] = {}
-        for user, card_assigned_user in raw_members:
+        for member, card_assigned_user in raw_members:
             if card_assigned_user.card_id not in members:
                 members[card_assigned_user.card_id] = []
-            members[card_assigned_user.card_id].append(user.get_uid())
+            members[card_assigned_user.card_id].append(member.get_uid())
 
         raw_relationships = self.repo.card_relationship.get_all_by_project(project)
         relationships: dict[int, list[dict[str, Any]]] = {}
@@ -108,6 +143,16 @@ class CardService(BaseDomainService):
                 labels[card_label.card_id] = []
             labels[card_label.card_id].append(label.api_response())
 
+        seen_map: dict[int, int] = {}
+        baseline_seq = 0
+        if user is not None:
+            assigned = self.repo.project_assigned_user.get_by_user_and_project(user, project)
+            if assigned:
+                baseline_seq = assigned.card_unread_baseline_seq
+            seen_map = self.repo.user_card_read_state.get_seen_seq_map(
+                user.id, [card.id for card, _ in raw_cards]
+            )
+
         cards = []
         for card, count_comment in raw_cards:
             api_card = card.board_api_response(
@@ -116,6 +161,15 @@ class CardService(BaseDomainService):
                 relationships=relationships.get(card.id, []),
                 labels=labels.get(card.id, []),
             )
+            if user is not None:
+                cursor = max(seen_map.get(card.id, 0), baseline_seq)
+                api_card["has_unread_change"] = card.last_change_seq > cursor
+                api_card["latest_change"] = {
+                    "seq": card.last_change_seq,
+                    "target_type": card.last_change_target_type,
+                    "target_uid": card.last_change_target_id.to_short_code() if card.last_change_target_id else None,
+                    "at": card.last_change_at.isoformat() if card.last_change_at else None,
+                }
             cards.append(api_card)
 
         return cards
@@ -292,6 +346,9 @@ class CardService(BaseDomainService):
             description=description or EditorContentModel(),
             order=self.repo.card.get_next_order(column, {"project_id": project.id}),
         )
+        card.last_change_seq = self.next_change_seq()
+        card.last_change_target_type = self.UNREAD_TARGET_CARD
+        card.last_change_at = SafeDateTime.now()
         self.repo.card.insert(card)
 
         users: list[User] = []
@@ -343,6 +400,11 @@ class CardService(BaseDomainService):
                 checkitem_cardified_from.title = card.title
                 self.repo.checkitem.update(checkitem_cardified_from)
 
+        target_type = self.UNREAD_TARGET_DESCRIPTION if "description" in old_record else self.UNREAD_TARGET_CARD
+        card.last_change_seq = self.next_change_seq()
+        card.last_change_target_type = target_type
+        card.last_change_target_id = None
+        card.last_change_at = SafeDateTime.now()
         self.repo.card.update(card)
 
         model: dict[str, Any] = {}

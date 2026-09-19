@@ -554,3 +554,25 @@ def delete_card(
         raise ApiException.NotFound_404(ApiErrorCode.NF2003)
 
     return JsonResponse()
+
+
+@AppRouter.schema(permission=ApiPermission.Update)
+@AppRouter.api.post(
+    "/board/{project_uid}/card/{card_uid}/seen",
+    tags=["Board.Card"],
+    description="Mark the card's latest change as seen for the current user.",
+    responses=OpenApiSchema().suc({"card_uid": "string", "seen_change_seq": "integer"}).auth().forbidden().err(404, ApiErrorCode.NF2004).get(),
+)
+@RoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+@AuthFilter.add("user")
+def mark_card_seen(
+    project_uid: str,
+    card_uid: str,
+    user: User = Auth.scope("user"),
+    service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    result = service.card.mark_card_seen(user, card_uid)
+    if result is None:
+        raise ApiException.NotFound_404(ApiErrorCode.NF2004)
+
+    return JsonResponse(content=result)

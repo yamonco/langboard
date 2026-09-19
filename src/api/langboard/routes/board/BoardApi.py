@@ -257,13 +257,15 @@ def get_project_card_context(
 )
 @RoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
 @AuthFilter.add()
-def get_project_cards(project_uid: str, service: DomainService = DomainService.scope()) -> JsonResponse:
+def get_project_cards(
+    project_uid: str, user: User = Auth.scope("user"), service: DomainService = DomainService.scope()
+) -> JsonResponse:
     project = service.project.get_by_id_like(project_uid)
     if project is None:
         raise ApiException.NotFound_404(ApiErrorCode.NF2001)
     global_relationships = service.app_setting.get_api_global_relationship_list()
     columns = service.project_column.get_api_list_by_project(project)
-    cards = service.card.get_board_list(project)
+    cards = service.card.get_board_list(project, user=user)
     checklists = service.checklist.get_api_list_only_by_project(project)
     column_bot_scopes = service.project_column.get_api_bot_scopes_by_project(project)
     column_bot_schedules = service.project_column.get_api_bot_schedule_list_by_project(project)
