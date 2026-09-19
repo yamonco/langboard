@@ -63,7 +63,7 @@ const BoardComment = memo(({ comment, deletedComment }: IBoardCommentProps): Rea
             model={comment}
             params={{ author: commentAuthor, deletedComment, valueRef, editorName, isCurrentEditor, editorRef }}
         >
-            <Box display="grid" gap="2" className="grid-cols-[theme(spacing.8),minmax(0,1fr)]">
+            <Box data-card-comment-uid={comment.uid} display="grid" gap="2" className="grid-cols-[theme(spacing.8),minmax(0,1fr)]">
                 <Box>
                     <BoardCommentUserAvatar projectUID={projectUID} cardUID={card.uid} />
                 </Box>

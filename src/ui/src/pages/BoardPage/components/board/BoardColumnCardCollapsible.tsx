@@ -41,6 +41,7 @@ function BoardColumnCardCollapsible({ isDragging, compact = false }: IBoardColum
         [projectMembers, cardMemberUIDs]
     );
     const commentCount = card.useField("count_comment");
+    const hasUnreadChange = card.useField("has_unread_change") ?? false;
     const { updateCollapsed } = useCardStore();
     const isCollapsed = useCardIsCollapsed(card.uid);
     const labels = card.useForeignFieldArray("labels");
@@ -156,6 +157,13 @@ function BoardColumnCardCollapsible({ isDragging, compact = false }: IBoardColum
                 onClick={openCard}
             >
                 {hasRunningBot && <ShineBorder className="z-50" />}
+                {hasUnreadChange && (
+                    <span
+                        aria-label={t("board.Unread changes")}
+                        title={t("board.Unread changes")}
+                        className="absolute right-1.5 top-1.5 z-40 size-2 rounded-full bg-primary"
+                    />
+                )}
                 <Collapsible.Root
                     open={!compact && !isCollapsed}
                     onOpenChange={(opened) => {

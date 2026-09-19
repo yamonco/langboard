@@ -27,5 +27,6 @@
   "Enter a title": "Enter a title",
   "Select parent cards": "Select parent cards",
   "Select child cards": "Select child cards",
-  "{count} selected": "{{count}} selected"
+  "{count} selected": "{{count}} selected",
+  "Unread changes": "Unread changes"
 }

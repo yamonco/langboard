@@ -32,6 +32,11 @@ export interface Interface extends IBaseModel {
     order: number;
     deadline_at?: Date;
     archived_at?: Date;
+    last_change_seq?: number;
+    last_change_target_type?: string;
+    last_change_target_uid?: string;
+    last_change_at?: Date | null;
+    has_unread_change?: bool;
 }
 
 export interface IStore extends Interface {
@@ -154,6 +159,21 @@ class ProjectCard extends BaseModel<IStore> {
     }
     public set count_comment(value) {
         this.update({ count_comment: value });
+    }
+
+    public get has_unread_change(): bool {
+        return this.getValue("has_unread_change") ?? false;
+    }
+    public set has_unread_change(value: bool) {
+        this.update({ has_unread_change: value });
+    }
+
+    public get last_change_target_type(): string | undefined {
+        return this.getValue("last_change_target_type");
+    }
+
+    public get last_change_target_uid(): string | undefined {
+        return this.getValue("last_change_target_uid");
     }
 
     public get member_uids() {
