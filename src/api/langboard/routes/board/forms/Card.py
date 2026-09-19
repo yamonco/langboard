@@ -56,3 +56,8 @@ class PatchCardGraphForm(BaseFormModel):
 @form_model
 class CardifySelectionForm(BaseFormModel):
     selected_markdown: str = Field(..., min_length=3, max_length=32000, title="Selected body markdown to extract into a child card")
+
+
+@form_model
+class ConvertCheckboxesForm(BaseFormModel):
+    pass
