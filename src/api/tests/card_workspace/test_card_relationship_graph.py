@@ -35,6 +35,17 @@ def test_disconnected_new_card_is_not_part_of_the_anchor_tree() -> None:
     assert CardRelationshipService._all_connected(edges, 1, {"new:child", "new:orphan"}) is False
 
 
+def test_unrelated_legacy_cycle_does_not_block_a_valid_new_edge() -> None:
+    """Validation is scoped to the proposed edge when old board data already contains a cycle."""
+
+    edges: set[tuple[str | int, str | int]] = {(1, 2), (2, 1), (10, 20)}
+
+    assert CardRelationshipService._has_cycle(edges) is True
+    assert CardRelationshipService._edge_would_create_cycle(edges, 30, 40) is False
+    assert CardRelationshipService._edge_would_create_cycle(edges, 20, 10) is True
+    assert CardRelationshipService._edge_would_create_cycle(edges, 30, 30) is True
+
+
 @pytest.mark.parametrize(
     "value",
     [
