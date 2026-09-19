@@ -943,6 +943,48 @@ class CardService(BaseDomainService):
         return [{"anchor": anchor_value, "count": count} for anchor_value, count in sorted(counts.items())]
 
 
+    def copy_selection_to_wiki(
+        self,
+        user_or_bot: TUserOrBot,
+        project: TProjectParam | None,
+        card: TCardParam | None,
+        selected_markdown: str,
+        wiki_title: str | None = None,
+    ) -> dict[str, Any] | None:
+        """Copy the selected body fragment into a new project wiki.
+
+        The original card body is preserved unchanged; no relationship or link
+        is created between the card and the wiki.
+        """
+        params = InfraHelper.get_records_with_foreign_by_params((Project, project), (Card, card))
+        if not params:
+            return None
+        project, card = params
+
+        selected_markdown = selected_markdown.strip()
+        if not selected_markdown:
+            return None
+
+        # Derive title from the first meaningful line or use the provided one
+        if not wiki_title:
+            wiki_title = next(
+                (line.lstrip("#-*> ").strip() for line in selected_markdown.split("\n") if line.strip()),
+                "Untitled wiki",
+            )
+            wiki_title = wiki_title[:300]
+
+        wiki_service = self._get_service_by_name("project_wiki")
+        result = wiki_service.create(user_or_bot, project, wiki_title, EditorContentModel(content=selected_markdown))
+        if not result:
+            return None
+
+        wiki, api_wiki = result
+        return {
+            "wiki_uid": wiki.get_uid(),
+            "wiki_title": wiki_title,
+            "card_body_unchanged": True,
+        }
+
     def update(
         self,
         user_or_bot: TUserOrBot,

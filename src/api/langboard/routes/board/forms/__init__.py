@@ -1,6 +1,7 @@
 from .Attachment import ChangeAttachmentNameForm
 from .Card import (
     CardifySelectionForm,
+    CopySelectionToWikiForm,
     ChangeCardDetailsForm,
     ConvertCheckboxesForm,
     CreateCardForm,
@@ -51,6 +52,7 @@ __all__ = [
     "UpdateCardRelationshipsForm",
     "PatchCardGraphForm",
     "CardifySelectionForm",
+    "CopySelectionToWikiForm",
     "ConvertCheckboxesForm",
     "ChangeCardDetailsForm",
     "SetCardCompletedForm",

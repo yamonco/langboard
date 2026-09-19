@@ -61,3 +61,9 @@ class CardifySelectionForm(BaseFormModel):
 @form_model
 class ConvertCheckboxesForm(BaseFormModel):
     pass
+
+
+@form_model
+class CopySelectionToWikiForm(BaseFormModel):
+    selected_markdown: str = Field(..., min_length=3, max_length=32000, title="Selected body markdown to copy into a wiki")
+    wiki_title: str | None = Field(default=None, max_length=300, title="Optional title for the new wiki")
