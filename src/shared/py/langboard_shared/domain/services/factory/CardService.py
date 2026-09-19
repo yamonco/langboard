@@ -997,7 +997,7 @@ class CardService(BaseDomainService):
         stable cursor for pagination. Consumers use the cursor for idempotent
         incremental polling.
         """
-        from ...domain.models import ProjectActivity
+        from ...models import ProjectActivity
 
         project = InfraHelper.get_by_id_like(Project, project)
         if not project:
