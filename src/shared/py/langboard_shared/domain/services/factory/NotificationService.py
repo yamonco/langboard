@@ -47,10 +47,18 @@ class NotificationService(BaseDomainService):
         page: int = 1,
         limit: int = 20,
         unread_only: bool = False,
+        authorized_projects_only: bool = False,
     ) -> tuple[list[dict[str, Any]], bool, int]:
         """Return one notification page, optionally limited to unread rows."""
 
-        raw_notifications = self.repo.user_notification.get_list(user, time_range, page, limit, unread_only)
+        raw_notifications = self.repo.user_notification.get_list(
+            user,
+            time_range,
+            page,
+            limit,
+            unread_only,
+            authorized_projects_only,
+        )
         has_more = len(raw_notifications) > limit
         raw_notifications = raw_notifications[:limit]
         unread_count = self.repo.user_notification.count_unread(user)

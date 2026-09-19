@@ -3,7 +3,6 @@
 from typing import Literal
 from langboard_shared.domain.models import ProjectRole, User
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
-from langboard_shared.domain.models.UserNotification import NotificationType
 from langboard_shared.domain.services import DomainService
 from langboard_shared.security import RoleFinder
 from ..mcp_integration import McpRoleFilter, McpTool
@@ -33,15 +32,8 @@ def get_unread_notifications(
         page,
         limit,
         unread_only=True,
+        authorized_projects_only=True,
     )
-    accessible_projects, _ = service.project.get_api_list(user)
-    accessible_project_uids = {project["uid"] for project in accessible_projects}
-    notifications = [
-        notification
-        for notification in notifications
-        if notification["type"] == NotificationType.ProjectInvited.value
-        or notification.get("records", {}).get("project", {}).get("uid") in accessible_project_uids
-    ]
     return {
         "notifications": notifications,
         "returned_count": len(notifications),

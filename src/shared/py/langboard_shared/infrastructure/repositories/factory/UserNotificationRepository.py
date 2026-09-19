@@ -1,13 +1,13 @@
 from datetime import timedelta
 from typing import Literal
 from dateutil.relativedelta import relativedelta
-from sqlalchemy import String
+from sqlalchemy import String, literal, or_, select
 from sqlalchemy import cast as sql_cast
 from ....core.db import DbSession, SqlBuilder
 from ....core.domain import BaseRepository
 from ....core.types import SafeDateTime
 from ....core.types.ParamTypes import TUserParam
-from ....domain.models import UserNotification
+from ....domain.models import Project, ProjectAssignedUser, UserNotification
 from ....domain.models.UserNotification import NotificationType
 from ....helpers import InfraHelper
 
@@ -28,6 +28,7 @@ class UserNotificationRepository(BaseRepository[UserNotification]):
         page: int = 1,
         limit: int = 20,
         unread_only: bool = False,
+        authorized_projects_only: bool = False,
     ):
         """Return one ordered notification page for a user."""
 
@@ -36,6 +37,29 @@ class UserNotificationRepository(BaseRepository[UserNotification]):
 
         if unread_only:
             query = query.where(UserNotification.column("read_at") == None)  # noqa
+
+        if authorized_projects_only:
+            record_list_text = sql_cast(UserNotification.column("record_list"), String)
+            project_id_text = sql_cast(ProjectAssignedUser.column("project_id"), String)
+            authorized_project = (
+                select(ProjectAssignedUser.column("id"))
+                .join(Project, ProjectAssignedUser.column("project_id") == Project.column("id"))
+                .where(ProjectAssignedUser.column("user_id") == user_id)
+                .where(Project.column("deleted_at") == None)  # noqa: E711
+                .where(
+                    or_(
+                        record_list_text.like(literal('%["project", ') + project_id_text + literal("]%")),
+                        record_list_text.like(literal('%["project",') + project_id_text + literal("]%")),
+                    )
+                )
+                .exists()
+            )
+            query = query.where(
+                or_(
+                    UserNotification.column("notification_type") == NotificationType.ProjectInvited,
+                    authorized_project,
+                )
+            )
 
         if time_range.endswith("d"):
             days = int(time_range[:-1])
