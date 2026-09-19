@@ -668,6 +668,42 @@ def convert_card_checkboxes(
     return JsonResponse(result)
 
 
+@AppRouter.schema(permission=ApiPermission.Read)
+@AppRouter.api.get(
+    "/board/{project_uid}/card/{card_uid}/comment-counts",
+    tags=["Board.Card"],
+    description="Get comment counts grouped by description section anchor.",
+    responses=(
+        OpenApiSchema()
+        .suc(
+            {
+                "counts": [
+                    {
+                        "anchor": "string",
+                        "count": "integer",
+                    }
+                ]
+            }
+        )
+        .auth()
+        .forbidden()
+        .err(404, ApiErrorCode.NF2003)
+        .get()
+    ),
+)
+@RoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+@AuthFilter.add()
+def get_card_comment_counts(
+    project_uid: str,
+    card_uid: str,
+    service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    counts = service.card.get_section_comment_counts(project_uid, card_uid)
+    if counts is None:
+        raise ApiException.NotFound_404(ApiErrorCode.NF2003)
+    return JsonResponse({"counts": counts})
+
+
 @AppRouter.schema(permission=ApiPermission.Delete)
 @AppRouter.api.put(
     "/board/{project_uid}/card/{card_uid}/archive",
