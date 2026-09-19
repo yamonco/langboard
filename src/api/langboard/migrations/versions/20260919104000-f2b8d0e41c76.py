@@ -1,7 +1,7 @@
 """add card_content_block table
 
 Revision ID: f2b8d0e41c76
-Revises: da39f306364b
+Revises: e7a3c1d90b84
 Create Date: 2026-09-19 10:40:00.000000
 
 """
@@ -14,7 +14,7 @@ from langboard_shared.core.db.ColumnTypes import SnowflakeIDType
 
 # revision identifiers, used by Alembic.
 revision: str = "f2b8d0e41c76"
-down_revision: Union[str, None] = "da39f306364b"
+down_revision: Union[str, None] = "e7a3c1d90b84"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

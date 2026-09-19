@@ -109,6 +109,9 @@ def get_card_bundle(
     if CardBundleInclude.Checklists in requested:
         checklists = [public_checklist(item) for item in source.checklists if isinstance(item, dict)]
         bundle.checklists = bounded_items(checklists, CardBundleSection.Checklists, section_page.limit)
+    if CardBundleInclude.ContentBlocks in requested:
+        blocks = port.get_card_content_blocks(project_uid, card_uid) or []
+        bundle.content_blocks = bounded_items(blocks, CardBundleSection.Checklists, section_page.limit)
     if comment_projection is not None:
         bundle.comments = comment_projection
     if CardBundleInclude.Attachments in requested:

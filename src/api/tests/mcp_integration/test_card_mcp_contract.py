@@ -159,6 +159,7 @@ def test_card_bundle_schema_exposes_opt_in_sections() -> None:
         "attachments",
         "metadata",
         "automation",
+        "content_blocks",
     ]
     assert schema["properties"]["include"]["default"] is None
 
