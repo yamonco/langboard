@@ -468,6 +468,7 @@ class CardService(BaseDomainService):
         self,
         project: TProjectParam | None,
         user_or_bot: TUserOrBot | None = None,
+        limit: int | None = None,
     ) -> list[dict[str, Any]]:
         project = InfraHelper.get_by_id_like(Project, project)
         if not project:
