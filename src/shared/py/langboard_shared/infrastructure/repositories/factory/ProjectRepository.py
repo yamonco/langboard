@@ -1,5 +1,5 @@
 from typing import cast
-from sqlalchemy import exists, func
+from sqlalchemy import exists, func, select
 from sqlalchemy.orm import aliased
 from sqlalchemy.orm.attributes import InstrumentedAttribute
 from ....core.db import DbSession, SqlBuilder
@@ -30,10 +30,9 @@ class ProjectRepository(BaseRepository[Project]):
         rows = []
         with DbSession.use(readonly=True) as db:
             rows = db.exec(
-                SqlBuilder.select.table(Card)
-                .add_columns(Card.column("project_id"), func.max(Card.column("last_change_seq")))
-                .where(Card.column("project_id").in_(project_ids))
-                .group_by(Card.column("project_id"))
+                select(Card.project_id, func.max(Card.last_change_seq))
+                .where(Card.project_id.in_(project_ids))
+                .group_by(Card.project_id)
             ).all()
         return {int(row[0]): int(row[1] or 0) for row in rows}
 
