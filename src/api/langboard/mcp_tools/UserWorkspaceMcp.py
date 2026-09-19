@@ -1,6 +1,6 @@
 """Current-user notification and governed project-search MCP tools."""
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Literal
 from langboard_shared.core.types import SafeDateTime
 from langboard_shared.domain.models import ProjectRole, User
@@ -12,6 +12,7 @@ from ..mcp_integration import McpRoleFilter, McpTool
 
 
 NotificationTimeRange = Literal["3d", "7d", "1m", "all"]
+MyWorkPurpose = Literal["assigned", "mentioned", "due_soon", "overdue", "created"]
 
 
 @McpTool.add(
@@ -108,4 +109,67 @@ def search_project_cards(
             since=lower,
             until=upper,
         )
+    }
+
+
+@McpTool.add(
+    "user",
+    description=(
+        "List the current user's active work across readable projects. Results are deduplicated and "
+        "independent of notification read state."
+    ),
+)
+def get_my_work_cards(
+    user: User,
+    service: DomainService,
+    purposes: list[MyWorkPurpose] | None = None,
+    project_uid: str | None = None,
+    date_field: Literal["created_at", "updated_at"] = "updated_at",
+    since: str | None = None,
+    until: str | None = None,
+    due_within_days: int = 7,
+    limit: int = 20,
+) -> dict:
+    """Return a compact My Work queue filtered by current-user relationships."""
+
+    selected = set(purposes or ["assigned", "mentioned", "due_soon", "overdue", "created"])
+    if not selected <= {"assigned", "mentioned", "due_soon", "overdue", "created"}:
+        raise ValueError("purposes contain an unsupported value")
+    if not 1 <= due_within_days <= 30 or not 1 <= limit <= 50:
+        raise ValueError("due_within_days must be 1-30 and limit must be 1-50")
+
+    def parse_bound(value: str | None) -> SafeDateTime | None:
+        if value is None:
+            return None
+        parsed = datetime.fromisoformat(value)
+        if parsed.utcoffset() is None:
+            raise ValueError("Date bounds must include a timezone")
+        return SafeDateTime.fromisoformat(value)
+
+    lower, upper = parse_bound(since), parse_bound(until)
+    if lower is not None and upper is not None and lower >= upper:
+        raise ValueError("since must be earlier than until")
+
+    accessible_projects, _ = service.project.get_api_list(user)
+    if project_uid is not None:
+        accessible_projects = [project for project in accessible_projects if project["uid"] == project_uid]
+        if not accessible_projects:
+            raise ValueError("Project not found or not readable")
+
+    mentioned_card_ids = service.notification.get_mentioned_card_ids(user) if "mentioned" in selected else []
+    due_before = SafeDateTime.now() + timedelta(days=due_within_days)
+    cards = service.card.get_my_work_cards(
+        user,
+        accessible_projects,
+        selected,
+        mentioned_card_ids,
+        due_before,
+        date_field,
+        lower,
+        upper,
+        limit,
+    )
+    return {
+        "cards": cards,
+        "returned_count": len(cards),
     }

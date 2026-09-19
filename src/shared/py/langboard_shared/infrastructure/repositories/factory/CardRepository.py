@@ -1,5 +1,5 @@
-from typing import Sequence
-from sqlalchemy import Text, cast, func, or_, select, update
+from typing import Any, Sequence
+from sqlalchemy import Text, cast, false, func, or_, select, update
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from ....core.db import DbSession, SqlBuilder
 from ....core.db.DbEngine import DbEngine
@@ -322,6 +322,70 @@ class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
             query = query.where(date_column >= since)
         if until is not None:
             query = query.where(date_column < until)
+        with DbSession.use(readonly=True) as db:
+            return db.exec(query).all()
+
+    def get_my_work_page(
+        self,
+        user: TUserParam,
+        project_uids: Sequence[TProjectParam],
+        purposes: set[str],
+        mentioned_card_ids: Sequence[int],
+        now: SafeDateTime,
+        due_before: SafeDateTime,
+        date_field: str,
+        since: SafeDateTime | None,
+        until: SafeDateTime | None,
+        limit: int,
+    ) -> list[tuple[Card, Project, ProjectColumn]]:
+        """Return one bounded cross-project page of user-focused, non-archived cards."""
+
+        user_id = InfraHelper.convert_id(user)
+        assigned = (
+            select(CardAssignedUser.column("id"))
+            .where(CardAssignedUser.column("card_id") == Card.column("id"))
+            .where(CardAssignedUser.column("user_id") == user_id)
+            .exists()
+        )
+        mentioned = Card.column("id").in_(set(mentioned_card_ids)) if mentioned_card_ids else false()
+        mine = or_(assigned, Card.column("created_by_user_id") == user_id, mentioned)
+        conditions: list[Any] = []
+        if "assigned" in purposes:
+            conditions.append(assigned)
+        if "created" in purposes:
+            conditions.append(Card.column("created_by_user_id") == user_id)
+        if "mentioned" in purposes:
+            conditions.append(mentioned)
+        if "due_soon" in purposes:
+            conditions.append(
+                mine
+                & Card.column("deadline_at").is_not(None)
+                & (Card.column("deadline_at") >= now)
+                & (Card.column("deadline_at") <= due_before)
+            )
+        if "overdue" in purposes:
+            conditions.append(mine & Card.column("deadline_at").is_not(None) & (Card.column("deadline_at") < now))
+
+        if date_field not in {"created_at", "updated_at"}:
+            raise ValueError("date_field must be created_at or updated_at")
+        if since is not None and until is not None and since >= until:
+            raise ValueError("since must be earlier than until")
+        date_column = Card.column(date_field)
+
+        query = (
+            SqlBuilder.select.tables(Card, Project, ProjectColumn)
+            .join(Project, Card.column("project_id") == Project.column("id"))
+            .join(ProjectColumn, Card.column("project_column_id") == ProjectColumn.column("id"))
+            .where(Project.column("id").in_([InfraHelper.convert_id(project) for project in project_uids]))
+            .where(Project.column("deleted_at") == None)  # noqa: E711
+            .where(Card.column("archived_at") == None)  # noqa: E711
+            .where(or_(*conditions))
+        )
+        if since is not None:
+            query = query.where(date_column >= since)
+        if until is not None:
+            query = query.where(date_column < until)
+        query = query.order_by(Card.column("updated_at").desc(), Card.column("id").desc()).limit(limit)
         with DbSession.use(readonly=True) as db:
             return db.exec(query).all()
 

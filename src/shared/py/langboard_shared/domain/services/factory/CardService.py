@@ -533,6 +533,57 @@ class CardService(BaseDomainService):
             )
         return cards
 
+    def get_my_work_cards(
+        self,
+        user: User,
+        projects: list[dict[str, Any]],
+        purposes: set[str],
+        mentioned_card_ids: list[int],
+        due_before: SafeDateTime,
+        date_field: str,
+        since: SafeDateTime | None,
+        until: SafeDateTime | None,
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        """Return a token-efficient cross-project work queue with match reasons."""
+
+        records = self.repo.card.get_my_work_page(
+            user,
+            [project["uid"] for project in projects],
+            purposes,
+            mentioned_card_ids,
+            SafeDateTime.now(),
+            due_before,
+            date_field,
+            since,
+            until,
+            limit,
+        )
+        cards: list[dict[str, Any]] = []
+        for card, project, column in records:
+            reasons = []
+            if card.deadline_at is not None and card.deadline_at <= SafeDateTime.now():
+                reasons.append("overdue")
+            elif card.deadline_at is not None and card.deadline_at <= due_before:
+                reasons.append("due_soon")
+            if card.created_by_user_id == user.id:
+                reasons.append("created")
+            if card.id in mentioned_card_ids:
+                reasons.append("mentioned")
+            cards.append(
+                {
+                    "uid": card.get_uid(),
+                    "title": card.title,
+                    "project_uid": project.get_uid(),
+                    "project_title": project.title,
+                    "project_column_name": column.name,
+                    "deadline_at": card.deadline_at.isoformat() if card.deadline_at else None,
+                    "updated_at": card.updated_at.isoformat(),
+                    "reasons": reasons,
+                }
+            )
+        return cards
+
     def get_api_page_by_project(
         self,
         project: TProjectParam | None,
