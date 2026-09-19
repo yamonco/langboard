@@ -150,6 +150,11 @@ class CardService(BaseDomainService):
 
         card_relationship_service = self._get_service(CardRelationshipService)
         api_card["relationships"] = card_relationship_service.get_api_list_by_card(card)
+
+        blocks = self._get_service(CardContentBlockService).get_blocks_by_card(card)
+        if blocks:
+            api_card["content_blocks"] = self._get_service(CardContentBlockService).api_blocks_by_card(card)
+            api_card["description_content_source"] = "blocks"
         return api_card
 
     def get_board_list(
