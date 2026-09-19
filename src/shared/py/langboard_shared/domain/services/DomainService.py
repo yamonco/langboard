@@ -147,6 +147,10 @@ class DomainService(Factory):
         return self._create_or_get_product(factory.CardCommentService)
 
     @property
+    def card_content_block(self):
+        return self._create_or_get_product(factory.CardContentBlockService)
+
+    @property
     def docling_metadata(self):
         return self._create_or_get_product(factory.DoclingMetadataService)
 
