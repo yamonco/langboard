@@ -38,6 +38,7 @@ import useDashboardProjectColumnOrderChangedHandlers from "@/controllers/socket/
 import useProjectDeletedHandlers from "@/controllers/socket/shared/useProjectDeletedHandlers";
 import { IBaseModel, BaseModel } from "@/core/models/Base";
 import { registerModel } from "@/core/models/ModelRegistry";
+import { parseProjectActivityTimestamp } from "@/core/models/projectActivityTimestamp";
 import { Utils } from "@langboard/core/utils";
 import { ProjectRole } from "@/core/models/roles";
 
@@ -67,6 +68,9 @@ export interface IStore extends Interface {
     description: string;
     ai_description?: string;
     last_viewed_at: Date;
+    last_activity_at: Date | null;
+    related_to_current_user: bool;
+    related_activity_at: Date | null;
 
     member_roles: Record<string, ProjectRole.TActions[]>; // This will be used in board setting.
 }
@@ -137,6 +141,12 @@ class Project extends BaseModel<IStore> {
     public static convertModel(model: IStore): Interface {
         if (Utils.Type.isString(model.last_viewed_at)) {
             model.last_viewed_at = new Date(model.last_viewed_at);
+        }
+        if ("last_activity_at" in model) {
+            model.last_activity_at = parseProjectActivityTimestamp(model.last_activity_at);
+        }
+        if ("related_activity_at" in model) {
+            model.related_activity_at = parseProjectActivityTimestamp(model.related_activity_at);
         }
 
         if (!Utils.Type.isNullOrUndefined(model.internal_bot_settings)) {
@@ -246,6 +256,27 @@ class Project extends BaseModel<IStore> {
     }
     public set last_viewed_at(value: string | Date) {
         this.update({ last_viewed_at: value as unknown as Date });
+    }
+
+    public get last_activity_at(): Date | null {
+        return this.getValue("last_activity_at") ?? null;
+    }
+    public set last_activity_at(value: string | Date | null) {
+        this.update({ last_activity_at: parseProjectActivityTimestamp(value) as unknown as Date | null });
+    }
+
+    public get related_to_current_user(): bool {
+        return this.getValue("related_to_current_user") ?? false;
+    }
+    public set related_to_current_user(value: bool) {
+        this.update({ related_to_current_user: value });
+    }
+
+    public get related_activity_at(): Date | null {
+        return this.getValue("related_activity_at") ?? null;
+    }
+    public set related_activity_at(value: Date | null) {
+        this.update({ related_activity_at: value });
     }
 
     public get member_roles() {
