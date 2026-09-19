@@ -6,6 +6,7 @@ from .BotLogService import BotLogService
 from .BotService import BotService
 from .CardAttachmentService import CardAttachmentService
 from .CardCommentService import CardCommentService
+from .CardContentBlockService import CardContentBlockService
 from .CardRelationshipService import CardRelationshipService
 from .CardService import CardService
 from .ChatService import ChatService
@@ -43,6 +44,7 @@ __all__ = [
     "BotService",
     "CardAttachmentService",
     "CardCommentService",
+    "CardContentBlockService",
     "CardRelationshipService",
     "CardService",
     "ChatService",
