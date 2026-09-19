@@ -686,3 +686,24 @@ def mark_card_seen(
         raise ApiException.NotFound_404(ApiErrorCode.NF2004)
 
     return JsonResponse(content=result)
+
+@AppRouter.api.put(
+    "/board/{project_uid}/card/{card_uid}/content-blocks",
+    tags=["Board.Card"],
+    description="Atomically replace every structured content block of a card (editor full-save).",
+    responses=OpenApiSchema().suc({"blocks": "object[]"}).auth().forbidden().err(404, ApiErrorCode.NF2004).get(),
+)
+@RoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+@AuthFilter.add("all")
+def replace_card_content_blocks(
+    project_uid: str,
+    card_uid: str,
+    blocks: list[dict] = None,
+    user_or_bot: User | Bot = Auth.scope("all"),
+    service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    result = service.card_content_block.replace_blocks(user_or_bot, project_uid, card_uid, blocks or [])
+    if result is None and blocks is None:
+        raise ApiException.NotFound_404(ApiErrorCode.NF2004)
+
+    return JsonResponse(content={"blocks": result})

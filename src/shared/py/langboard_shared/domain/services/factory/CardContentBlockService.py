@@ -188,3 +188,49 @@ class CardContentBlockService(BaseDomainService):
         card_service = self._get_service(CardService)
         card_service.mark_card_changed(card, "card", moving.id)
         return True
+
+    def replace_blocks(
+        self,
+        user_or_bot: TUserOrBot,
+        project: TProjectParam | None,
+        card: TCardParam | None,
+        blocks: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        """Atomically replace every block of a card (editor full-save).
+
+        Each entry: {block_type, payload, order}. Order is renumbered
+        from the given sequence; empty list clears the card's blocks so
+        the viewer falls back to the legacy description.
+        """
+
+        params = InfraHelper.get_records_with_foreign_by_params((Project, project), (Card, card))
+        if not params:
+            return []
+        _project, card = params
+
+        for entry in blocks:
+            resolved_type = ContentBlockType(entry["block_type"])
+            build_payload(resolved_type, entry["payload"])
+
+        existing = self.repo.card_content_block.get_all_by_card(card)
+        for block in existing:
+            self.repo.card_content_block.delete(block)
+
+        created = []
+        for index, entry in enumerate(blocks):
+            resolved_type = ContentBlockType(entry["block_type"])
+            block = CardContentBlock(
+                card_id=card.id,
+                block_type=resolved_type.value,
+                order=index,
+                revision=1,
+                payload=build_payload(resolved_type, entry["payload"]),
+            )
+            self.repo.card_content_block.insert(block)
+            created.append(block)
+
+        from .CardService import CardService
+
+        card_service = self._get_service(CardService)
+        card_service.mark_card_changed(card, "card", created[-1].id if created else None)
+        return self.api_blocks_by_card(card)
