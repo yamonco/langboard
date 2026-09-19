@@ -18,6 +18,13 @@ class ChecklistService(BaseDomainService):
         """DO NOT EDIT THIS METHOD"""
         return "checklist"
 
+    def _mark_card_changed_for_unread(self, card, target_type: str, target_id=None) -> None:
+        """Stamp the unread cursor for this card change (lazy import avoids cycles)."""
+        from .CardService import CardService
+
+        card_service = self._get_service(CardService)
+        card_service.mark_card_changed(card, target_type, target_id)
+
     def get_by_id_like(self, checklist: TChecklistParam | None) -> Checklist | None:
         checklist = InfraHelper.get_by_id_like(Checklist, checklist)
         return checklist
@@ -105,6 +112,7 @@ class ChecklistService(BaseDomainService):
         card_service.remove_completion_checklist(card)
 
         ChecklistPublisher.created(card, checklist)
+        self._mark_card_changed_for_unread(card, "checklist", checklist.id)
         CardChecklistActivityTask.card_checklist_created(user_or_bot, project, card, checklist)
         CardChecklistBotTask.card_checklist_created(user_or_bot, project, card, checklist)
 
@@ -134,6 +142,7 @@ class ChecklistService(BaseDomainService):
         self.repo.checklist.update(checklist)
 
         ChecklistPublisher.title_changed(card, checklist)
+        self._mark_card_changed_for_unread(card, "checklist", checklist.id)
         CardChecklistActivityTask.card_checklist_title_changed(user_or_bot, project, card, old_title, checklist)
         CardChecklistBotTask.card_checklist_title_changed(user_or_bot, project, card, checklist)
 
@@ -180,6 +189,8 @@ class ChecklistService(BaseDomainService):
         self.repo.checklist.update(checklist)
 
         ChecklistPublisher.checked_changed(card, checklist)
+        if not checklist.is_system:
+            self._mark_card_changed_for_unread(card, "checklist", checklist.id)
 
         if checklist.is_checked:
             CardChecklistActivityTask.card_checklist_checked(user_or_bot, project, card, checklist)
@@ -244,6 +255,7 @@ class ChecklistService(BaseDomainService):
         self.repo.checklist.delete(checklist)
 
         ChecklistPublisher.deleted(card, checklist)
+        self._mark_card_changed_for_unread(card, "checklist")
         CardChecklistActivityTask.card_checklist_deleted(user_or_bot, project, card, checklist)
         CardChecklistBotTask.card_checklist_deleted(user_or_bot, project, card, checklist)
 

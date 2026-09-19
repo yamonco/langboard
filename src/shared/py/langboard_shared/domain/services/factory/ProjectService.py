@@ -47,7 +47,8 @@ class ProjectService(BaseDomainService):
 
     def get_api_list(self, user: User, limit: int | None = None) -> tuple[list[dict[str, Any]], list[SnowflakeID]]:
         raw_projects = self.repo.project.get_all_by_user(user, limit=limit)
-        return self.__convert_project_list(user, raw_projects)
+        board_change = self.repo.project.get_max_card_change_seq([project.id for project, *_ in raw_projects])
+        return self.__convert_project_list(user, raw_projects, board_change)
 
     def get_api_assigned_user_list(
         self,
@@ -186,6 +187,7 @@ class ProjectService(BaseDomainService):
         raw_projects: list[
             tuple[Project, ProjectAssignedUser, SafeDateTime | None, bool, SafeDateTime | None]
         ],
+        board_change: dict[int, int] | None = None,
     ) -> tuple[list[dict[str, Any]], list[SnowflakeID]]:
         projects = []
         roles_dict = {}
@@ -212,6 +214,8 @@ class ProjectService(BaseDomainService):
             api_project["related_to_current_user"] = related_to_current_user
             api_project["related_activity_at"] = related_activity_at
             api_project["current_auth_role_actions"] = roles_dict[project.id] if not user.is_admin else [ALL_GRANTED]
+            if board_change is not None:
+                api_project["board_has_unread_change"] = board_change.get(project.id, 0) > (assigned_user.board_seen_seq or 0)
             projects.append(api_project)
 
         return projects, project_ids

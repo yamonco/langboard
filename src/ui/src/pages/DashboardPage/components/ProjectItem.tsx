@@ -62,6 +62,7 @@ const ProjectItem = memo(({ project, updateStarredProjects, ...props }: IProject
     const [isUpdating, setIsUpdating] = useState(false);
     const title = project.useField("title");
     const projectType = project.useField("project_type");
+    const boardHasUnread = project.useField("board_has_unread_change") ?? false;
     const flatColumns = ProjectColumn.Model.useModels((model) => model.project_uid === project.uid);
     const [updated, forceUpdate] = useReducer((x) => x + 1, 0);
     const columns = useMemo(() => flatColumns.sort((a, b) => a.order - b.order), [flatColumns, updated]);
@@ -89,6 +90,13 @@ const ProjectItem = memo(({ project, updateStarredProjects, ...props }: IProject
         <Card.Root {...props} className={cn(props.className, "cursor-pointer")} onClick={toBoard}>
             <ModelRegistry.Project.Provider model={project}>
                 <Card.Header className="relative block pt-5">
+                    {boardHasUnread ? (
+                        <span
+                            aria-label={t("board.Unread changes")}
+                            title={t("board.Unread changes")}
+                            className="absolute right-1.5 top-1.5 z-10 size-2 rounded-full bg-primary"
+                        />
+                    ) : null}
                     <Card.Title className="max-w-[calc(100%_-_theme(spacing.8))] text-sm leading-tight text-gray-500">
                         {projectTypeLabel(t, projectType)}
                     </Card.Title>

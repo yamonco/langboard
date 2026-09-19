@@ -22,6 +22,24 @@ class ProjectRepository(BaseRepository[Project]):
     def get_by_id_like(self, project: TProjectParam | None) -> Project | None:
         return InfraHelper.get_by_id_like(Project, project)
 
+    def get_max_card_change_seq(self, project_ids: list[SnowflakeID]) -> dict[int, int]:
+        """Newest card change cursor per project (indexed top row per project)."""
+
+        if not project_ids:
+            return {}
+        rows = []
+        with DbSession.use(readonly=True) as db:
+            rows = db.exec(
+                SqlBuilder.select.columns(
+                    Card.column("project_id"),
+                    func.max(Card.column("last_change_seq")),
+                )
+                .table(Card)
+                .where(Card.column("project_id").in_(project_ids))
+                .group_by(Card.column("project_id"))
+            ).all()
+        return {int(row[0]): int(row[1] or 0) for row in rows}
+
     def get_all_by_organization(self, organization_id: SnowflakeID, limit: int | None = None) -> list[Project]:
         """List projects mapped to one organization, newest first."""
 
