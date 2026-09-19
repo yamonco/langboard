@@ -1,5 +1,6 @@
 from .Attachment import ChangeAttachmentNameForm
 from .Card import (
+    CardifySelectionForm,
     ChangeCardDetailsForm,
     CreateCardForm,
     PatchCardGraphForm,
@@ -48,6 +49,7 @@ __all__ = [
     "UpdateCardLabelsForm",
     "UpdateCardRelationshipsForm",
     "PatchCardGraphForm",
+    "CardifySelectionForm",
     "ChangeCardDetailsForm",
     "SetCardCompletedForm",
     "CreateChatTemplate",

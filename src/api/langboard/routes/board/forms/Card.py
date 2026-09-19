@@ -51,3 +51,8 @@ class PatchCardGraphForm(BaseFormModel):
     new_cards: list[CardGraphNewCardForm] = Field(default_factory=list, max_length=7)
     add_edges: list[CardGraphEdgeForm] = Field(default_factory=list, max_length=25)
     remove_relationship_uids: list[str] = Field(default_factory=list, max_length=25)
+
+
+@form_model
+class CardifySelectionForm(BaseFormModel):
+    selected_markdown: str = Field(..., min_length=3, max_length=32000, title="Selected body markdown to extract into a child card")
