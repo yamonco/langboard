@@ -37,6 +37,7 @@ from .McpRole import McpRole
 from .McpToolGroup import McpToolGroup
 from .McpToolGroupUsage import McpToolGroupUsage
 from .NotificationScheduleRule import NotificationScheduleRule
+from .Organization import Organization
 from .Project import Project
 from .ProjectActivity import ProjectActivity
 from .ProjectAssignedInternalBot import ProjectAssignedInternalBot
@@ -121,6 +122,7 @@ __all__ = [
     "McpToolGroup",
     "McpToolGroupUsage",
     "NotificationScheduleRule",
+    "Organization",
     "Project",
     "ProjectActivity",
     "ProjectEmailNotificationPolicy",

@@ -20,6 +20,7 @@ from .McpToolGroupService import McpToolGroupService
 from .MetadataService import MetadataService
 from .NotificationService import NotificationService
 from .OrchestrationTaskService import OrchestrationTaskService
+from .OrganizationService import OrganizationService
 from .ProjectColumnService import ProjectColumnService
 from .ProjectEmailNotificationService import ProjectEmailNotificationService
 from .ProjectInvitationService import ProjectInvitationService
@@ -57,6 +58,7 @@ __all__ = [
     "MetadataService",
     "NotificationService",
     "OrchestrationTaskService",
+    "OrganizationService",
     "ProjectColumnService",
     "ProjectEmailNotificationService",
     "ProjectInvitationService",

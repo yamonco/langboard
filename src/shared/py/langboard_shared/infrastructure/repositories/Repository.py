@@ -156,6 +156,10 @@ class Repository(Factory):
         return self._create_or_get_product(factory.ScimGroupRepository)
 
     @property
+    def organization(self):
+        return self._create_or_get_product(factory.OrganizationRepository)
+
+    @property
     def scim_group_member(self):
         return self._create_or_get_product(factory.ScimGroupMemberRepository)
 
