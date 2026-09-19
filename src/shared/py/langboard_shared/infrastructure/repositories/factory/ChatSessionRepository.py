@@ -44,6 +44,11 @@ class ChatSessionRepository(BaseRepository[ChatSession]):
             result = result.first()
         return result
 
+    def insert_bound_session(self, bound_session: _TForeignSessionModel) -> None:
+        """Persist the filterable-bound row that anchors a chat session."""
+
+        self.insert(bound_session)
+
     def get_all_by_user_and_filterable(
         self, user: TUserParam, session_model: type[_TForeignSessionModel], filterable: TFilterableParam
     ) -> list[tuple[ChatSession, _TForeignSessionModel]]:
