@@ -1,7 +1,7 @@
 """card unread change sequence and read states
 
 Revision ID: e7a3c1d90b84
-Revises: da39f306364b
+Revises: c8d2e4f17a90
 Create Date: 2026-09-19 09:30:00.000000
 
 """
@@ -14,7 +14,7 @@ from langboard_shared.core.db.ColumnTypes import SnowflakeIDType
 
 # revision identifiers, used by Alembic.
 revision: str = "e7a3c1d90b84"
-down_revision: Union[str, None] = "da39f306364b"
+down_revision: Union[str, None] = "c8d2e4f17a90"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
