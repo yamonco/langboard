@@ -8,20 +8,17 @@ export const CARD_ANIMATION_EASING = "cubic-bezier(0.2, 0.8, 0.2, 1)";
  * Uses transform and opacity only — no layout-triggering properties.
  */
 export const cardOpenAnimation = (): string =>
-    `transform ${CARD_ANIMATION_DURATION_MS}ms ${CARD_ANIMATION_EASING}, ` +
-    `opacity ${CARD_ANIMATION_DURATION_MS}ms ${CARD_ANIMATION_EASING}`;
+    `transform ${CARD_ANIMATION_DURATION_MS}ms ${CARD_ANIMATION_EASING}, ` + `opacity ${CARD_ANIMATION_DURATION_MS}ms ${CARD_ANIMATION_EASING}`;
 
 /**
  * Check if the user prefers reduced motion.
  */
-export const prefersReducedMotion = (): boolean =>
-    typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+export const prefersReducedMotion = (): boolean => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 /**
  * Get the effective animation duration, 0 if reduced motion is preferred.
  */
-export const effectiveAnimationDuration = (): number =>
-    prefersReducedMotion() ? 0 : CARD_ANIMATION_DURATION_MS;
+export const effectiveAnimationDuration = (): number => (prefersReducedMotion() ? 0 : CARD_ANIMATION_DURATION_MS);
 
 /**
  * Build the initial (closed) transform for a card at a given position.

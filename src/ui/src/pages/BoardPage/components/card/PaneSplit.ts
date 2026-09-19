@@ -1,6 +1,6 @@
 /** Comment pane split ratio logic: clamp, persist, and derive CSS values. */
 
-export const PANE_MIN_RATIO = 0.40;
+export const PANE_MIN_RATIO = 0.4;
 export const PANE_MAX_RATIO = 0.55;
 export const PANE_DEFAULT_RATIO = 0.45;
 export const PANE_STORAGE_KEY = "card-viewer-comment-pane-ratio";
