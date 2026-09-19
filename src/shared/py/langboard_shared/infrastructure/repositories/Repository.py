@@ -52,6 +52,10 @@ class Repository(Factory):
         return self._create_or_get_product(factory.CardAttachmentRepository)
 
     @property
+    def card_content_block(self):
+        return self._create_or_get_product(factory.CardContentBlockRepository)
+
+    @property
     def card_comment(self):
         return self._create_or_get_product(factory.CardCommentRepository)
 
