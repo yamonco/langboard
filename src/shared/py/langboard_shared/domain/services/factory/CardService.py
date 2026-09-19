@@ -565,8 +565,10 @@ class CardService(BaseDomainService):
             limit,
         )
         cards: list[dict[str, Any]] = []
-        for card, project, column in records:
+        for card, project, column, is_assigned in records:
             reasons = []
+            if is_assigned:
+                reasons.append("assigned")
             if card.deadline_at is not None and card.deadline_at <= SafeDateTime.now():
                 reasons.append("overdue")
             elif card.deadline_at is not None and card.deadline_at <= due_before:

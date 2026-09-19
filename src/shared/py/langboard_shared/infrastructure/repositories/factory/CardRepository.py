@@ -337,7 +337,7 @@ class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
         since: SafeDateTime | None,
         until: SafeDateTime | None,
         limit: int,
-    ) -> list[tuple[Card, Project, ProjectColumn]]:
+    ) -> list[tuple[Card, Project, ProjectColumn, bool]]:
         """Return one bounded cross-project page of user-focused, non-archived cards."""
 
         user_id = InfraHelper.convert_id(user)
@@ -373,7 +373,7 @@ class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
         date_column = Card.column(date_field)
 
         query = (
-            SqlBuilder.select.tables(Card, Project, ProjectColumn)
+            SqlBuilder.select.tables(Card, Project, ProjectColumn, assigned.label("is_assigned"))
             .join(Project, Card.column("project_id") == Project.column("id"))
             .join(ProjectColumn, Card.column("project_column_id") == ProjectColumn.column("id"))
             .where(Project.column("id").in_([InfraHelper.convert_id(project) for project in project_uids]))

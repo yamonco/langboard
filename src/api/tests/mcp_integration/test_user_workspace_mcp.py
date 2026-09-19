@@ -1,4 +1,5 @@
 import os
+from datetime import timezone
 from types import SimpleNamespace
 import pytest
 
@@ -101,6 +102,27 @@ def test_project_search_reuses_native_bounded_search() -> None:
     assert calls == [("project-1", "release")]
 
 
+def test_project_search_normalizes_offset_bounds_to_utc() -> None:
+    """Offset-aware bounds compare consistently with UTC-backed database timestamps."""
+
+    captured: dict[str, object] = {}
+    service = SimpleNamespace(
+        card=SimpleNamespace(search_context_by_project=lambda *_args, **filters: captured.update(filters) or [])
+    )
+
+    UserWorkspaceMcp.search_project_cards(
+        "project-1",
+        "release",
+        service,
+        since="2026-09-20T09:00:00+09:00",
+        until="2026-09-20T10:00:00+09:00",
+    )
+
+    assert captured["since"].tzinfo == timezone.utc
+    assert captured["since"].isoformat() == "2026-09-20T00:00:00+00:00"
+    assert captured["until"].isoformat() == "2026-09-20T01:00:00+00:00"
+
+
 def test_my_work_lookup_is_governed_read_only_and_notified_read_state_independent() -> None:
     """My Work reads only accessible projects and never invokes notification reads."""
 
@@ -129,6 +151,37 @@ def test_my_work_lookup_is_governed_read_only_and_notified_read_state_independen
     assert calls == [[{"uid": "allowed"}]]
 
 
+def test_my_work_due_filters_include_mentioned_cards_and_normalize_bounds() -> None:
+    """Temporal purposes preserve mention-only ownership and UTC date comparisons."""
+
+    captured: list[object] = []
+    user = SimpleNamespace()
+
+    def get_my_work_cards(*args):
+        captured.extend(args)
+        return []
+
+    mention_calls: list[object] = []
+    service = SimpleNamespace(
+        project=SimpleNamespace(get_api_list=lambda _user: ([{"uid": "allowed"}], [])),
+        notification=SimpleNamespace(get_mentioned_card_ids=lambda actor: mention_calls.append(actor) or [101]),
+        card=SimpleNamespace(get_my_work_cards=get_my_work_cards),
+    )
+
+    UserWorkspaceMcp.get_my_work_cards(
+        user,
+        service,
+        purposes=["due_soon"],
+        since="2026-09-20T09:00:00+09:00",
+        until="2026-09-20T10:00:00+09:00",
+    )
+
+    assert mention_calls == [user]
+    assert captured[3] == [101]
+    assert captured[6].isoformat() == "2026-09-20T00:00:00+00:00"
+    assert captured[7].isoformat() == "2026-09-20T01:00:00+00:00"
+
+
 def test_user_workspace_tool_schemas_keep_reads_and_mutations_distinct() -> None:
     """Tool schemas expose explicit unread and read-transition commands."""
 
@@ -137,6 +190,11 @@ def test_user_workspace_tool_schemas_keep_reads_and_mutations_distinct() -> None
     assert McpTool.get_tool("mark_all_notifications_read")["input_schema"].get("required", []) == []
     assert McpTool.get_tool("search_project_cards")["input_schema"]["required"] == ["project_uid", "query"]
     assert McpTool.get_tool("get_my_work_cards")["input_schema"].get("required", []) == []
+    my_work_properties = McpTool.get_tool("get_my_work_cards")["input_schema"]["properties"]
+    assert (
+        my_work_properties["due_within_days"] | {"minimum": 1, "maximum": 30} == my_work_properties["due_within_days"]
+    )
+    assert my_work_properties["limit"] | {"minimum": 1, "maximum": 50} == my_work_properties["limit"]
 
 
 @pytest.mark.parametrize("query", ["", " ", "x" * 1001])
