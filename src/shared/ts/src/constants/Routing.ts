@@ -132,6 +132,7 @@ const API = {
             UPDATE_RELATIONSHIPS: "/board/{uid}/card/{card_uid}/relationships",
             PATCH_RELATIONSHIPS: "/board/{uid}/card/{card_uid}/relationships/patch",
             ARCHIVE: "/board/{uid}/card/{card_uid}/archive",
+            SET_COMPLETED: "/board/{uid}/card/{card_uid}/completion",
             DELETE: "/board/{uid}/card/{card_uid}",
             ATTACHMENT: {
                 UPLOAD: "/board/{uid}/card/{card_uid}/attachment",

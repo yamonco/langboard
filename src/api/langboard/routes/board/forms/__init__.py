@@ -3,6 +3,7 @@ from .Card import (
     ChangeCardDetailsForm,
     CreateCardForm,
     PatchCardGraphForm,
+    SetCardCompletedForm,
     UpdateCardLabelsForm,
     UpdateCardRelationshipsForm,
 )
@@ -48,6 +49,7 @@ __all__ = [
     "UpdateCardRelationshipsForm",
     "PatchCardGraphForm",
     "ChangeCardDetailsForm",
+    "SetCardCompletedForm",
     "CreateChatTemplate",
     "UpdateChatTemplate",
     "InviteProjectMemberForm",

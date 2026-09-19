@@ -327,7 +327,9 @@ class CheckitemService(BaseDomainService):
         checkitem.cardified_id = new_card.id
         self.repo.checkitem.update(checkitem)
 
-        api_card = new_card.board_api_response(0, [], [], [])
+        card_service = self._get_service_by_name("card")
+        card_service.ensure_completion_checklist(new_card)
+        api_card = new_card.board_api_response(0, [], [], [], completed=False, is_check_card=True)
         CheckitemPublisher.cardified(card, checkitem, target_column, api_card)
         CardCheckitemActivityTask.card_checkitem_cardified(user_or_bot, project, card, checkitem)
         CardCheckitemBotTask.card_checkitem_cardified(user_or_bot, project, card, checkitem, new_card)
