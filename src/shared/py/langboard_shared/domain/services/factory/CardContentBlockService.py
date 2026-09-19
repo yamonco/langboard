@@ -2,6 +2,7 @@ from typing import Any
 from ....core.domain import BaseDomainService
 from ....core.types.ParamTypes import TCardParam, TProjectParam, TUserOrBot
 from ....helpers import InfraHelper
+from ...contracts.content_block_migration import extract_legacy_blocks
 from ...contracts.content_blocks import (
     ContentBlockType,
     build_payload,
@@ -234,3 +235,67 @@ class CardContentBlockService(BaseDomainService):
         card_service = self._get_service(CardService)
         card_service.mark_card_changed(card, "card", created[-1].id if created else None)
         return self.api_blocks_by_card(card)
+
+    def migrate_card_description(
+        self,
+        user_or_bot: TUserOrBot,
+        project: TProjectParam | None,
+        card: TCardParam | None,
+    ) -> list[dict[str, Any]] | None:
+        """Migrate one card's legacy description into blocks (idempotent).
+
+        Cards that already have blocks are skipped unchanged. Cards whose
+        description has no code/diagram segments are skipped too — the
+        legacy description remains the render source.
+        """
+
+        params = InfraHelper.get_records_with_foreign_by_params((Project, project), (Card, card))
+        if not params:
+            return None
+        _project, card = params
+
+        if self.repo.card_content_block.get_all_by_card(card):
+            return []  # already migrated
+
+        blocks = extract_legacy_blocks(card.description.content or "")
+        if not blocks:
+            return []
+
+        return self.replace_blocks(user_or_bot, project, card, blocks)
+
+    def migrate_project(
+        self,
+        user_or_bot: TUserOrBot,
+        project: TProjectParam | None,
+        limit: int | None = None,
+    ) -> dict[str, Any]:
+        """Batch-migrate every legacy card of a project; returns an audit report."""
+
+        project = InfraHelper.get_by_id_like(Project, project)
+        if not project:
+            return {"scanned": 0, "migrated": 0, "skipped_has_blocks": 0, "skipped_no_segments": 0, "failed": []}
+        cards = self.repo.card.get_all_by_project(project, limit=limit)
+        scanned = migrated = skipped_blocks = skipped_plain = 0
+        failures: list[str] = []
+        for card in cards:
+            scanned += 1
+            try:
+                result = self.migrate_card_description(user_or_bot, project, card)
+                if result is None:
+                    failures.append(card.get_uid())
+                elif result == []:
+                    if self.repo.card_content_block.get_all_by_card(card):
+                        skipped_blocks += 1
+                    else:
+                        skipped_plain += 1
+                else:
+                    migrated += 1
+            except Exception:
+                failures.append(card.get_uid())
+        return {
+            "scanned": scanned,
+            "migrated": migrated,
+            "skipped_has_blocks": skipped_blocks,
+            "skipped_no_segments": skipped_plain,
+            "failed": failures,
+        }
