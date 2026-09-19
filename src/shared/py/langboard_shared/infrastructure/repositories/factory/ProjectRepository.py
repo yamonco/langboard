@@ -30,11 +30,8 @@ class ProjectRepository(BaseRepository[Project]):
         rows = []
         with DbSession.use(readonly=True) as db:
             rows = db.exec(
-                SqlBuilder.select.columns(
-                    Card.column("project_id"),
-                    func.max(Card.column("last_change_seq")),
-                )
-                .table(Card)
+                SqlBuilder.select.table(Card)
+                .add_columns(Card.column("project_id"), func.max(Card.column("last_change_seq")))
                 .where(Card.column("project_id").in_(project_ids))
                 .group_by(Card.column("project_id"))
             ).all()
