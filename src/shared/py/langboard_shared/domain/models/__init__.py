@@ -67,6 +67,7 @@ from .ScimGroupMember import ScimGroupMember
 from .SettingRole import SettingRole
 from .User import User
 from .UserActivity import UserActivity
+from .UserCardReadState import UserCardReadState
 from .UserEmail import UserEmail
 from .UserGroup import UserGroup
 from .UserGroupAssignedEmail import UserGroupAssignedEmail
@@ -149,6 +150,7 @@ __all__ = [
     "ScimGroupMember",
     "User",
     "UserActivity",
+    "UserCardReadState",
     "UserEmail",
     "UserSignInHistory",
     "UserGroup",

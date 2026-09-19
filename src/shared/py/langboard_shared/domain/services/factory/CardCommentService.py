@@ -8,6 +8,7 @@ from ....publishers import CardCommentPublisher
 from ....tasks.activities import CardCommentActivityTask
 from ....tasks.bots import CardCommentBotTask
 from ...models import Bot, Card, CardComment, CardCommentReaction, Project, User
+from .CardService import CardService
 from .NotificationService import NotificationService
 from .ReactionService import ReactionService
 
@@ -135,6 +136,9 @@ class CardCommentService(BaseDomainService):
         comment = CardComment(**comment_params)
         self.repo.card_comment.insert(comment)
 
+        card_service = self._get_service(CardService)
+        card_service.mark_card_changed(card, CardService.UNREAD_TARGET_COMMENT, comment.id)
+
         CardCommentPublisher.created(user_or_bot, project, card, comment)
 
         notification_service = self._get_service(NotificationService)
@@ -169,6 +173,9 @@ class CardCommentService(BaseDomainService):
         comment.content = content
         self.repo.card_comment.update(comment)
 
+        card_service = self._get_service(CardService)
+        card_service.mark_card_changed(card, CardService.UNREAD_TARGET_COMMENT, comment.id)
+
         CardCommentPublisher.updated(project, card, comment)
 
         notification_service = self._get_service(NotificationService)
@@ -196,6 +203,9 @@ class CardCommentService(BaseDomainService):
             return None
 
         self.repo.card_comment.delete(comment)
+
+        card_service = self._get_service(CardService)
+        card_service.mark_card_changed(card, CardService.UNREAD_TARGET_COMMENT, comment.id)
 
         CardCommentPublisher.deleted(project, card, comment)
         CardCommentActivityTask.card_comment_deleted(user_or_bot, project, card, comment)

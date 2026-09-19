@@ -22,6 +22,14 @@ class Card(BaseNotificationScheduleModel, table=True):
     deadline_at: SafeDateTime | None = DateTimeField(default=None, nullable=True, api_field=ApiField())
     order: int = Field(default=0, nullable=False, api_field=ApiField())
     archived_at: SafeDateTime | None = DateTimeField(default=None, nullable=True, api_field=ApiField())
+    last_change_seq: int = Field(default=0, nullable=False, sa_column_kwargs={"server_default": "0"}, api_field=ApiField())
+    last_change_target_type: str = Field(
+        default="none", nullable=False, sa_column_kwargs={"server_default": "none"}, api_field=ApiField()
+    )
+    last_change_target_id: SnowflakeID | None = SnowflakeIDField(
+        nullable=True, api_field=ApiField(name="last_change_target_uid")
+    )
+    last_change_at: SafeDateTime | None = DateTimeField(default=None, nullable=True, api_field=ApiField())
 
     def board_api_response(
         self,
@@ -72,4 +80,4 @@ class Card(BaseNotificationScheduleModel, table=True):
         }
 
     def _get_repr_keys(self) -> list[str | tuple[str, str]]:
-        return ["project_id", "project_column_id", "title", "deadline_at", "order", "archived_at"]
+        return ["project_id", "project_column_id", "title", "deadline_at", "order", "archived_at", "last_change_seq"]
