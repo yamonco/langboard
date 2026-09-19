@@ -468,13 +468,12 @@ class CardService(BaseDomainService):
         self,
         project: TProjectParam | None,
         user_or_bot: TUserOrBot | None = None,
-        limit: int | None = None,
     ) -> list[dict[str, Any]]:
         project = InfraHelper.get_by_id_like(Project, project)
         if not project:
             return []
 
-        records = self.repo.card.get_all_by_project(project, limit=limit)
+        records = self.repo.card.get_all_by_project(project)
         resource_payloads = self._get_linked_resource_payloads(
             user_or_bot,
             project,
