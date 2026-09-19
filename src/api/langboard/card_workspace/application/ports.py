@@ -69,6 +69,11 @@ class CardWorkspaceQueryPort(Protocol):
         """Load one bounded project-card keyset page."""
         ...
 
+    def get_card_content_blocks(self, project_uid: str, card_uid: str) -> list[dict[str, Any]] | None:
+        """Return the ordered public content blocks of a card."""
+
+        ...
+
     def get_public_card_metadata(self, project_uid: str, card_uid: str) -> dict[str, str] | None:
         """Load raw card metadata after ancestry validation."""
         ...
@@ -104,6 +109,48 @@ class CardWorkspaceCommandPort(Protocol):
         assign_user_uids: list[str] | None,
     ) -> dict[str, Any]:
         """Create a card in the server-selected leftmost active column."""
+        ...
+
+    def create_card_content_block(
+        self,
+        project_uid: str,
+        card_uid: str,
+        block_type: str,
+        payload: dict[str, Any],
+        order: int | None,
+        after_block_uid: str | None,
+    ) -> dict[str, Any] | None:
+        """Create one typed content block on a card."""
+
+        ...
+
+    def update_card_content_block(
+        self,
+        project_uid: str,
+        card_uid: str,
+        block_uid: str,
+        expected_revision: int,
+        payload: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        """Partially update one content block under optimistic locking."""
+
+        ...
+
+    def delete_card_content_block(self, project_uid: str, card_uid: str, block_uid: str) -> bool | None:
+        """Delete one content block."""
+
+        ...
+
+    def move_card_content_block(
+        self,
+        project_uid: str,
+        card_uid: str,
+        block_uid: str,
+        after_block_uid: str | None,
+        order: int | None,
+    ) -> bool | None:
+        """Reposition one content block."""
+
         ...
 
     def add_card_comment(self, project_uid: str, card_uid: str, content: str) -> dict[str, Any]:
