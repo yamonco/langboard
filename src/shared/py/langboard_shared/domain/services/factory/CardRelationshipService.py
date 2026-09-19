@@ -182,10 +182,10 @@ class CardRelationshipService(BaseDomainService):
                 child: str | int = child_ref if child_ref in new_refs else ref_ids[child_ref]
                 if (parent, child) in symbolic_edges:
                     raise ValueError("Relationship already exists")
+                if self._edge_would_create_cycle(symbolic_edges, parent, child):
+                    raise ValueError("Graph patch would create a relationship cycle")
                 symbolic_edges.add((parent, child))
 
-            if self._has_cycle(symbolic_edges):
-                raise ValueError("Graph patch would create a relationship cycle")
             if new_refs and not self._all_connected(symbolic_edges, anchor_card.id, new_refs):
                 raise ValueError("Every new card must connect to the anchor card")
             return selected_removals
@@ -264,6 +264,17 @@ class CardRelationshipService(BaseDomainService):
             visited.add(node)
             pending.extend(children_by_parent.get(node, ()))
         return False
+
+    @classmethod
+    def _edge_would_create_cycle(
+        cls,
+        edges: set[tuple[str | int, str | int]],
+        parent: str | int,
+        child: str | int,
+    ) -> bool:
+        """Reject only cycles closed by the proposed edge, not unrelated legacy cycles."""
+
+        return parent == child or cls._has_path(edges, child, parent)
 
     @staticmethod
     def _has_cycle(edges: set[tuple[str | int, str | int]]) -> bool:
