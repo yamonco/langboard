@@ -1,7 +1,7 @@
 from typing import Any
 from ..core.publisher import BaseSocketPublisher, SocketPublishModel
 from ..core.routing import SocketTopic
-from ..core.types import SnowflakeID
+from ..core.types import SafeDateTime, SnowflakeID
 from ..core.utils.decorators import staticclass
 from ..domain.models import ChatTemplate, Project, ProjectAssignedInternalBot, User
 from ..domain.models.InternalBot import InternalBotType
@@ -9,6 +9,19 @@ from ..domain.models.InternalBot import InternalBotType
 
 @staticclass
 class ProjectPublisher(BaseSocketPublisher):
+    @staticmethod
+    def activity_recorded(project_id: SnowflakeID, recorded_at: SafeDateTime):
+        topic_id = project_id.to_short_code()
+        ProjectPublisher.put_dispather(
+            {"last_activity_at": recorded_at},
+            SocketPublishModel(
+                topic=SocketTopic.Dashboard,
+                topic_id=topic_id,
+                event=f"dashboard:project:activity:recorded:{topic_id}",
+                data_keys="last_activity_at",
+            ),
+        )
+
     @staticmethod
     def updated(project: Project, model: dict[str, Any]):
         topic_id = project.get_uid()
