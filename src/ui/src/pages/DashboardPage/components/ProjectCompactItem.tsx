@@ -24,6 +24,7 @@ const ProjectCompactItem = memo(({ project, updateStarredProjects }: IProjectCom
     const [isUpdating, setIsUpdating] = useState(false);
     const title = project.useField("title");
     const projectType = project.useField("project_type");
+    const boardHasUnread = project.useField("board_has_unread_change") ?? false;
     const activityAt = project.last_activity_at ?? project.created_at;
 
     return (
@@ -36,8 +37,19 @@ const ProjectCompactItem = memo(({ project, updateStarredProjects }: IProjectCom
                             className="flex h-auto min-w-0 flex-1 justify-start gap-3 rounded-xl px-3 py-2.5 text-left hover:bg-transparent"
                             onClick={() => navigate(ROUTES.BOARD.MAIN(project.uid))}
                         >
-                            <Flex items="center" justify="center" className="size-9 shrink-0 rounded-lg bg-secondary text-secondary-foreground">
+                            <Flex
+                                items="center"
+                                justify="center"
+                                className="relative size-9 shrink-0 rounded-lg bg-secondary text-secondary-foreground"
+                            >
                                 <IconComponent icon="folder-kanban" size="4" />
+                                {boardHasUnread ? (
+                                    <span
+                                        aria-label={t("board.Unread changes")}
+                                        title={t("board.Unread changes")}
+                                        className="absolute -right-1 -top-1 z-10 size-2 rounded-full bg-primary"
+                                    />
+                                ) : null}
                             </Flex>
                             <Box className="min-w-0 flex-1">
                                 <Box className="truncate text-sm font-semibold">{title}</Box>
