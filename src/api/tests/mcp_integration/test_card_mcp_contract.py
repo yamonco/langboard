@@ -55,12 +55,12 @@ def test_card_move_schema_makes_column_an_optional_destination() -> None:
     assert schema["properties"]["column_uid"]["default"] is None
 
 
-def test_attachment_upload_requires_project_update_permission() -> None:
+def test_attachment_upload_requires_card_update_permission() -> None:
     """Attachment bytes cannot be written by a read-only project member."""
 
     _, actions, _, _ = McpRoleFilter.get_filtered(CardMcp.upload_card_attachment)
 
-    assert actions == [ProjectRoleAction.Update.value]
+    assert actions == [ProjectRoleAction.CardUpdate.value]
 
 
 @pytest.mark.parametrize("reason", ["stale revision", "missing fragment", "ambiguous fragment"])
