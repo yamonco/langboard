@@ -27,6 +27,7 @@ import {
     resolveCardCommentAnchorElement,
     type ICardCommentAnchor,
 } from "@/pages/BoardPage/components/card/comment/commentAnchor";
+import CardContentBlockList from "@/pages/BoardPage/components/card/CardContentBlockList";
 
 interface IAnchorComposerPosition {
     anchor: ICardCommentAnchor;
@@ -94,6 +95,7 @@ const BoardCardDescription = memo(({ scrollParentRef }: IBoardCardDescriptionPro
     const { data: commentsData } = useGetCardComments({ project_uid: projectUID, card_uid: card.uid });
     const comments = commentsData?.comments ?? modelComments;
     const description = card.useField("description");
+    const contentBlocks = (card as unknown as { content_blocks?: import("@/core/models/ProjectCard").IContentBlock[] }).content_blocks ?? [];
     const [isEditing, setIsEditing] = useState(false);
     const [anchorComposer, setAnchorComposer] = useState<IAnchorComposerPosition | null>(null);
     const [anchorMarkers, setAnchorMarkers] = useState<IAnchorMarkerPosition[]>([]);
@@ -400,7 +402,9 @@ const BoardCardDescription = memo(({ scrollParentRef }: IBoardCardDescriptionPro
                     </span>
                 </button>
             ))}
-            {isEditing ? (
+            {!isEditing && contentBlocks.length ? (
+                <CardContentBlockList blocks={contentBlocks} />
+            ) : isEditing ? (
                 <PlateEditor
                     value={description}
                     mentionables={mentionables}

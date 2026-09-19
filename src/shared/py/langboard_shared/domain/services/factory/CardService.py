@@ -38,6 +38,7 @@ from ...models import (
     User,
 )
 from ...models.Checkitem import CheckitemStatus
+from .CardContentBlockService import CardContentBlockService
 from .CardRelationshipService import CardRelationshipService
 from .CheckitemService import CheckitemService
 from .GraphApprovalRequestService import GraphApprovalRequestService
@@ -472,19 +473,24 @@ class CardService(BaseDomainService):
         if not project:
             return []
 
-        records = self.repo.card.get_all_by_project(project)
+        records = self.repo.card.get_all_by_project(project, limit=limit)
         resource_payloads = self._get_linked_resource_payloads(
             user_or_bot,
             project,
             [card for card, _ in records if card.is_linked_resource],
             include_content=False,
         )
+        block_service = self._get_service(CardContentBlockService)
         cards = []
         for card, column in records:
             api_card = card.api_response()
             api_card["project_column_name"] = column.name
             if card.is_linked_resource:
                 api_card["linked_resource"] = resource_payloads[card.get_uid()]
+            blocks = block_service.get_blocks_by_card(card)
+            if blocks:
+                api_card["content_blocks"] = block_service.api_blocks_by_card(card)
+                api_card["description_content_source"] = "blocks"
             cards.append(api_card)
         return cards
 
