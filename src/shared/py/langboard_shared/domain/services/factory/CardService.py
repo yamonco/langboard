@@ -985,6 +985,60 @@ class CardService(BaseDomainService):
             "card_body_unchanged": True,
         }
 
+    def get_change_feed(
+        self,
+        project: TProjectParam | None,
+        limit: int = 50,
+        before_activity_uid: str | None = None,
+    ) -> dict[str, Any] | None:
+        """Return a cursor-based board change feed for external orchestrators.
+
+        Each entry contains the activity type, actor, affected card, and a
+        stable cursor for pagination. Consumers use the cursor for idempotent
+        incremental polling.
+        """
+        from ...domain.models import ProjectActivity
+
+        project = InfraHelper.get_by_id_like(Project, project)
+        if not project:
+            return None
+
+        raw_activities = self.repo.activity.get_list_by_project(
+            project,
+            TimeBasedPagination(page=1, limit=limit + 1),
+        )
+        activities, _ = raw_activities if isinstance(raw_activities, tuple) else (raw_activities, 0)
+
+        # Filter to card-level activities only (external orchestrators care about cards)
+        card_activities = []
+        for activity in activities:
+            if not isinstance(activity, ProjectActivity):
+                continue
+            if not hasattr(activity, "card_id") or activity.card_id is None:
+                continue
+            card_activities.append(activity)
+
+        has_more = len(card_activities) > limit
+        page = card_activities[:limit]
+
+        entries = []
+        for activity in page:
+            entry = {
+                "activity_uid": activity.get_uid(),
+                "activity_type": activity.activity_type.value if hasattr(activity.activity_type, "value") else str(activity.activity_type),
+                "card_uid": activity.card_id.to_short_code() if activity.card_id else None,
+                "project_uid": project.get_uid(),
+                "created_at": str(activity.created_at),
+            }
+            if hasattr(activity, "user_id") and activity.user_id:
+                entry["actor_user_uid"] = activity.user_id.to_short_code()
+            elif hasattr(activity, "bot_id") and activity.bot_id:
+                entry["actor_bot_uid"] = activity.bot_id.to_short_code()
+            entries.append(entry)
+
+        next_cursor = page[-1].get_uid() if has_more and page else None
+        return {"entries": entries, "has_more": has_more, "next_cursor": next_cursor}
+
     def update(
         self,
         user_or_bot: TUserOrBot,
