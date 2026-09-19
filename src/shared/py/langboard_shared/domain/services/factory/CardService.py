@@ -65,7 +65,8 @@ class CardService(BaseDomainService):
         """Draw the next monotonic cursor from the global change sequence."""
 
         with DbSession.use(readonly=False) as db:
-            return int(db.exec(text("SELECT nextval('content_change_seq')")).scalar() or 0)
+            result = db.exec(text("SELECT nextval('content_change_seq')"))
+            return int(result if isinstance(result, int) else (result.scalar() or 0))
 
     def mark_card_changed(
         self,
