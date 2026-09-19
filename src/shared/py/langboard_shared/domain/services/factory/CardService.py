@@ -23,6 +23,7 @@ from ...models import (
     User,
 )
 from ...models.Checkitem import CheckitemStatus
+from .CardContentBlockService import CardContentBlockService
 from .CardRelationshipService import CardRelationshipService
 from .CheckitemService import CheckitemService
 from .GraphApprovalRequestService import GraphApprovalRequestService
