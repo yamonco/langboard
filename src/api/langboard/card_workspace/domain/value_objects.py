@@ -46,6 +46,7 @@ class CardBundleInclude(StrEnum):
     Attachments = "attachments"
     Metadata = "metadata"
     Automation = "automation"
+    ContentBlocks = "content_blocks"
 
 
 class CardBundleSection(StrEnum):
