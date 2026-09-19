@@ -152,6 +152,10 @@ class CardService(BaseDomainService):
             seen_map = self.repo.user_card_read_state.get_seen_seq_map(
                 user.id, [card.id for card, _ in raw_cards]
             )
+            board_seq = max((card.last_change_seq for card, _ in raw_cards), default=0)
+            if assigned is not None and board_seq > (assigned.board_seen_seq or 0):
+                assigned.board_seen_seq = board_seq
+                self.repo.project_assigned_user.update(assigned)
 
         cards = []
         for card, count_comment in raw_cards:
@@ -461,6 +465,13 @@ class CardService(BaseDomainService):
 
         CardPublisher.order_changed(project, card, old_column, cast(ProjectColumn, new_column))
 
+        if new_column is not None:
+            card.last_change_seq = self.next_change_seq()
+            card.last_change_target_type = self.UNREAD_TARGET_CARD
+            card.last_change_target_id = None
+            card.last_change_at = SafeDateTime.now()
+            self.repo.card.update(card)
+
         if new_column:
             CardBotTask.enqueue_card_moved_webhook(
                 user_or_bot, project, card, old_column, cast(ProjectColumn, new_column)
@@ -504,6 +515,7 @@ class CardService(BaseDomainService):
                 new_users.append(user)
 
         CardPublisher.assigned_users_updated(project, card, new_users)
+        self.mark_card_changed(card, self.UNREAD_TARGET_CARD)
 
         notification_service = self._get_service(NotificationService)
         for user in new_users:
@@ -542,6 +554,7 @@ class CardService(BaseDomainService):
             self.repo.card_assigned_project_label.insert(card_assigned_label)
 
         CardPublisher.labels_updated(project, card, new_labels)
+        self.mark_card_changed(card, self.UNREAD_TARGET_CARD)
         CardActivityTask.card_labels_updated(
             user_or_bot,
             project,

@@ -22,6 +22,13 @@ class CardAttachmentService(BaseDomainService):
         """DO NOT EDIT THIS METHOD"""
         return "card_attachment"
 
+    def _mark_card_changed_for_unread(self, card, target_type: str, target_id=None) -> None:
+        """Stamp the unread cursor for this card change (lazy import avoids cycles)."""
+        from .CardService import CardService
+
+        card_service = self._get_service(CardService)
+        card_service.mark_card_changed(card, target_type, target_id)
+
     def get_by_id_like(self, attachment: TAttachmentParam | None) -> CardAttachment | None:
         attachment = InfraHelper.get_by_id_like(CardAttachment, attachment)
         return attachment
@@ -61,6 +68,7 @@ class CardAttachmentService(BaseDomainService):
             self._queue_docling_index_task(card_attachment)
 
         CardAttachmentPublisher.uploaded(user, card, card_attachment)
+        self._mark_card_changed_for_unread(card, "attachment", card_attachment.id)
         CardAttachmentActivityTask.card_attachment_uploaded(user, project, card, card_attachment)
         CardAttachmentBotTask.card_attachment_uploaded(user, project, card, card_attachment)
 
@@ -109,6 +117,7 @@ class CardAttachmentService(BaseDomainService):
         self.repo.card_attachment.update(card_attachment)
 
         CardAttachmentPublisher.name_changed(card, card_attachment)
+        self._mark_card_changed_for_unread(card, "attachment", card_attachment.id)
         CardAttachmentActivityTask.card_attachment_name_changed(user, project, card, old_name, card_attachment)
         CardAttachmentBotTask.card_attachment_name_changed(user, project, card, card_attachment)
 
@@ -135,6 +144,7 @@ class CardAttachmentService(BaseDomainService):
         self.repo.card_attachment.reoder_after_delete(card, card_attachment.order)
 
         CardAttachmentPublisher.deleted(card, card_attachment)
+        self._mark_card_changed_for_unread(card, "attachment")
         CardAttachmentActivityTask.card_attachment_deleted(user, project, card, card_attachment)
         CardAttachmentBotTask.card_attachment_deleted(user, project, card, card_attachment)
 
