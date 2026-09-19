@@ -308,8 +308,10 @@ def test_native_archive_rejects_card_outside_project(monkeypatch: pytest.MonkeyP
     assert CardService.archive(object(), object(), "project-a", "card-from-b") is None
 
 
-def test_card_delete_is_limited_to_the_original_author_or_admin(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Project delete permission alone cannot delete a card authored by another actor."""
+def test_card_delete_preserves_known_authors_and_allows_role_gated_legacy_cards(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Known authors stay protected while creator-less legacy cards rely on the outer role gate."""
 
     module = importlib.import_module("langboard_shared.domain.services.factory.CardService")
 
@@ -332,7 +334,7 @@ def test_card_delete_is_limited_to_the_original_author_or_admin(monkeypatch: pyt
     assert CardService.can_delete(FakeUser(8), user_card) is False
     assert CardService.can_delete(FakeBot(9), bot_card) is True
     assert CardService.can_delete(FakeBot(10), bot_card) is False
-    assert CardService.can_delete(FakeUser(7), unknown_card) is False
+    assert CardService.can_delete(FakeUser(7), unknown_card) is True
     assert CardService.can_delete(FakeUser(8, is_admin=True), user_card) is True
     assert CardService.can_delete(FakeUser(8, is_admin=True), unknown_card) is True
 
