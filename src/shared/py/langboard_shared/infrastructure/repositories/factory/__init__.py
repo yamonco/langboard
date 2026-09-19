@@ -11,6 +11,7 @@ from .CardAttachmentRepository import CardAttachmentRepository
 from .CardBotDefaultScopeRepository import CardBotDefaultScopeRepository
 from .CardBotScopeRepository import CardBotScopeRepository
 from .CardCommentRepository import CardCommentRepository
+from .CardContentBlockRepository import CardContentBlockRepository
 from .CardRelationshipRepository import CardRelationshipRepository
 from .CardRepository import CardRepository
 from .ChatHistoryRepository import ChatHistoryRepository
@@ -72,6 +73,7 @@ __all__ = [
     "CardBotDefaultScopeRepository",
     "CardBotScopeRepository",
     "CardCommentRepository",
+    "CardContentBlockRepository",
     "CardRelationshipRepository",
     "CardRepository",
     "ChatHistoryRepository",
