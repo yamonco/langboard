@@ -10,6 +10,7 @@ import Skeleton from "@/components/base/Skeleton";
 import Toast from "@/components/base/Toast";
 import useChangeCardDetails from "@/controllers/api/card/useChangeCardDetails";
 import useGetCardDetails from "@/controllers/api/card/useGetCardDetails";
+import useUnreadChangeNavigation from "@/pages/BoardPage/components/card/useUnreadChangeNavigation";
 import setupApiErrorHandler from "@/core/helpers/setupApiErrorHandler";
 import { BoardCardProvider, useBoardCard, useBoardCardPanel } from "@/core/providers/BoardCardProvider";
 import { useBoardController } from "@/core/providers/BoardController";
@@ -256,6 +257,8 @@ function BoardTaskCardResult({ isExpanded, setIsExpanded, onClose, onEditModeSta
     }, [description, checklists.length]);
     const hasRunningBot = useHasRunningBot({ type: "card", targetUID: card.uid });
     const contentViewportRef = useRef<HTMLDivElement | null>(null);
+
+    useUnreadChangeNavigation();
 
     useEffect(() => {
         return () => {

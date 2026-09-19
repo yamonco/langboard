@@ -131,6 +131,7 @@ const API = {
             UPDATE_LABELS: "/board/{uid}/card/{card_uid}/labels",
             UPDATE_RELATIONSHIPS: "/board/{uid}/card/{card_uid}/relationships",
             PATCH_RELATIONSHIPS: "/board/{uid}/card/{card_uid}/relationships/patch",
+            MARK_SEEN: "/board/{uid}/card/{card_uid}/seen",
             ARCHIVE: "/board/{uid}/card/{card_uid}/archive",
             SET_COMPLETED: "/board/{uid}/card/{card_uid}/completion",
             DELETE: "/board/{uid}/card/{card_uid}",
