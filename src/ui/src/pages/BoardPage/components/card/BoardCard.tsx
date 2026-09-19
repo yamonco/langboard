@@ -10,6 +10,8 @@ import Skeleton from "@/components/base/Skeleton";
 import Toast from "@/components/base/Toast";
 import useChangeCardDetails from "@/controllers/api/card/useChangeCardDetails";
 import useGetCardDetails from "@/controllers/api/card/useGetCardDetails";
+import useReplaceCardContentBlocks from "@/controllers/api/board/useReplaceCardContentBlocks";
+import { extractContentBlocks } from "@/pages/BoardPage/components/card/contentBlockSerializer";
 import setupApiErrorHandler from "@/core/helpers/setupApiErrorHandler";
 import { BoardCardProvider, useBoardCard, useBoardCardPanel } from "@/core/providers/BoardCardProvider";
 import { useBoardController } from "@/core/providers/BoardController";
@@ -467,6 +469,7 @@ function BoardCardFloatingNav({ isExpanded }: { isExpanded: bool }): React.JSX.E
     const [isSaving, setIsSaving] = useState(false);
     const isMobile = useIsMobile();
     const { mutateAsync: changeCardDetailsMutateAsync } = useChangeCardDetails({ interceptToast: true });
+    const { mutateAsync: replaceContentBlocksAsync } = useReplaceCardContentBlocks({ interceptToast: true });
     const shouldShowChatButton = !!boardChat && !!chatResizableSidebar && (isExpanded || isMobile);
 
     const handleSaveEditing = useCallback(async () => {
@@ -509,11 +512,26 @@ function BoardCardFloatingNav({ isExpanded }: { isExpanded: bool }): React.JSX.E
                 }
             }
 
+            if (details && details.description) {
+                const blocks = extractContentBlocks(details.description.content ?? "");
+                if (blocks.length >= 0) {
+                    try {
+                        await replaceContentBlocksAsync({
+                            project_uid: projectUID,
+                            card_uid: card.uid,
+                            blocks,
+                        });
+                    } catch {
+                        // 블록 동기화 실패는 본문 저장를 롤백하지 않는다 — 다음 저장 시 재동기화
+                    }
+                }
+            }
+
             leaveCardEditMode();
         } finally {
             setIsSaving(false);
         }
-    }, [card, changeCardDetailsMutateAsync, isSaving, leaveCardEditMode, projectUID, saveSections]);
+    }, [card, changeCardDetailsMutateAsync, isSaving, leaveCardEditMode, projectUID, replaceContentBlocksAsync, saveSections]);
 
     const handleCancelEditing = useCallback(() => {
         try {
