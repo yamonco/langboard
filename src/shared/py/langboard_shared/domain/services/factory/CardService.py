@@ -1,8 +1,9 @@
 from datetime import timedelta
 from typing import Any, Literal, Sequence, cast, overload
+from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from ....ai import BotScheduleHelper, BotScopeHelper
-from ....core.db import EditorContentModel
+from ....core.db import DbSession, EditorContentModel
 from ....core.domain import BaseDomainService
 from ....core.domain.BaseDomainService import TMutableValidatorMap
 from ....core.exceptions.CardDeleteForbidden import CardDeleteForbidden
@@ -50,10 +51,44 @@ class CardService(BaseDomainService):
     CONTEXT_DESCRIPTION_MAX_LENGTH = 1200
     LINKED_RESOURCE_PREVIEW_MAX_LENGTH = 240
 
+    UNREAD_TARGET_DESCRIPTION = "description"
+    UNREAD_TARGET_COMMENT = "comment"
+    UNREAD_TARGET_CARD = "card"
+
     @staticmethod
     def name() -> str:
         """DO NOT EDIT THIS METHOD"""
         return "card"
+
+    @staticmethod
+    def next_change_seq() -> int:
+        """Draw the next monotonic cursor from the global change sequence."""
+
+        with DbSession.use(readonly=False) as db:
+            return int(db.exec(text("SELECT nextval('content_change_seq')")).scalar() or 0)
+
+    def mark_card_changed(
+        self,
+        card: Card,
+        target_type: str,
+        target_id: SnowflakeID | None = None,
+    ) -> None:
+        """Stamp the newest change snapshot on a card (O(1), no member fan-out)."""
+
+        card.last_change_seq = self.next_change_seq()
+        card.last_change_target_type = target_type
+        card.last_change_target_id = target_id
+        card.last_change_at = SafeDateTime.now()
+        self.repo.card.update(card)
+
+    def mark_card_seen(self, user: User, card: TCardParam | None) -> dict[str, Any] | None:
+        """Advance one user's read cursor after a card was actually shown."""
+
+        card = InfraHelper.get_by_id_like(Card, card)
+        if not card:
+            return None
+        self.repo.user_card_read_state.upsert_seen(user, card, card.last_change_seq)
+        return {"card_uid": card.get_uid(), "seen_change_seq": card.last_change_seq}
 
     def get_by_id_like(self, card: TCardParam | None) -> Card | None:
         card = InfraHelper.get_by_id_like(Card, card)
@@ -130,10 +165,10 @@ class CardService(BaseDomainService):
         raw_cards = self.repo.card.get_board_list(project, archive_visible_since)
         raw_members = self.repo.card_assigned_user.get_all_by_project(project, archive_visible_since)
         members: dict[int, list[str]] = {}
-        for user, card_assigned_user in raw_members:
+        for member, card_assigned_user in raw_members:
             if card_assigned_user.card_id not in members:
                 members[card_assigned_user.card_id] = []
-            members[card_assigned_user.card_id].append(user.get_uid())
+            members[card_assigned_user.card_id].append(member.get_uid())
 
         raw_relationships = self.repo.card_relationship.get_all_by_project(project, archive_visible_since)
         relationships: dict[int, list[dict[str, Any]]] = {}
@@ -157,6 +192,15 @@ class CardService(BaseDomainService):
         completed_by_card = {checklist.card_id: checklist.is_checked for checklist in raw_checklists if checklist.is_system}
         user_checklist_card_ids = {checklist.card_id for checklist in raw_checklists if not checklist.is_system}
 
+        user = user_or_bot if isinstance(user_or_bot, User) else None
+        seen_map: dict[int, int] = {}
+        baseline_seq = 0
+        if user is not None:
+            assigned = self.repo.project_assigned_user.get_by_user_and_project(user, project)
+            if assigned:
+                baseline_seq = assigned.card_unread_baseline_seq
+            seen_map = self.repo.user_card_read_state.get_seen_seq_map(user.id, [card.id for card, _ in raw_cards])
+
         cards = []
         linked_cards = [card for card, _ in raw_cards if getattr(card, "is_linked_resource", False)]
         resource_payloads = (
@@ -177,6 +221,15 @@ class CardService(BaseDomainService):
             )
             if getattr(card, "is_linked_resource", False):
                 api_card["linked_resource"] = resource_payloads[card.get_uid()]
+            if user is not None:
+                cursor = max(seen_map.get(card.id, 0), baseline_seq)
+                api_card["has_unread_change"] = card.last_change_seq > cursor
+                api_card["latest_change"] = {
+                    "seq": card.last_change_seq,
+                    "target_type": card.last_change_target_type,
+                    "target_uid": card.last_change_target_id.to_short_code() if card.last_change_target_id else None,
+                    "at": card.last_change_at.isoformat() if card.last_change_at else None,
+                }
             cards.append(api_card)
 
         return cards
@@ -674,6 +727,9 @@ class CardService(BaseDomainService):
             description=description or EditorContentModel(),
             order=self.repo.card.get_next_order(column, {"project_id": project.id}),
         )
+        card.last_change_seq = self.next_change_seq()
+        card.last_change_target_type = self.UNREAD_TARGET_CARD
+        card.last_change_at = SafeDateTime.now()
         self.repo.card.insert(card)
 
         users: list[User] = []
@@ -748,10 +804,18 @@ class CardService(BaseDomainService):
             elif self.is_check_card(card):
                 self.ensure_completion_checklist(card)
 
+        target_type = self.UNREAD_TARGET_DESCRIPTION if "description" in old_record else self.UNREAD_TARGET_CARD
+        card.last_change_seq = self.next_change_seq()
+        card.last_change_target_type = target_type
+        card.last_change_target_id = None
+        card.last_change_at = SafeDateTime.now()
+
         if expected_description is None:
             self.repo.card.update(card)
         elif not self.repo.card.update_description_if_current(card, expected_description):
             raise CardDescriptionConflict("Card description changed after review: concurrent update")
+        else:
+            self.repo.card.update(card)
 
         model: dict[str, Any] = {}
         for key in form:

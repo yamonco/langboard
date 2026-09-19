@@ -47,6 +47,7 @@ from .ReactionRepository import ReactionRepository
 from .RoleRepository import RoleRepository
 from .ScimGroupMemberRepository import ScimGroupMemberRepository
 from .ScimGroupRepository import ScimGroupRepository
+from .UserCardReadStateRepository import UserCardReadStateRepository
 from .UserEmailRepository import UserEmailRepository
 from .UserGroupAssignedEmailRepository import UserGroupAssignedEmailRepository
 from .UserGroupRepository import UserGroupRepository
@@ -109,6 +110,7 @@ __all__ = [
     "RoleRepository",
     "ScimGroupMemberRepository",
     "ScimGroupRepository",
+    "UserCardReadStateRepository",
     "UserEmailRepository",
     "UserGroupAssignedEmailRepository",
     "UserGroupRepository",
