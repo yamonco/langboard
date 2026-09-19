@@ -34,10 +34,21 @@ export interface Interface extends IBaseModel {
     archived_at?: Date;
 }
 
+export interface IContentBlock {
+    block_uid: string;
+    type: "rich_text" | "code" | "diagram";
+    order: number;
+    revision: number;
+    payload: Record<string, unknown>;
+    updated_at: string | null;
+}
+
 export interface IStore extends Interface {
     count_comment: number;
     member_uids: string[];
     project_column_name: string;
+    content_blocks?: IContentBlock[];
+    description_content_source?: "blocks" | "description";
     current_auth_role_actions: ProjectRole.TActions[];
     project_members: User.Interface[];
     labels: ProjectLabel.Interface[];
@@ -151,6 +162,10 @@ class ProjectCard extends BaseModel<IStore> {
 
     public get count_comment() {
         return this.getValue("count_comment");
+    }
+
+    public get content_blocks(): IContentBlock[] {
+        return (this.getValue("content_blocks") as IContentBlock[] | undefined) ?? [];
     }
     public set count_comment(value) {
         this.update({ count_comment: value });
