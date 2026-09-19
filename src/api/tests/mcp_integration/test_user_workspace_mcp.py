@@ -23,7 +23,6 @@ def test_unread_query_is_bounded_side_effect_free_and_project_governed() -> None
         return (
             [
                 {"uid": "n1", "type": "mentioned_in_card", "records": {"project": {"uid": "allowed"}}},
-                {"uid": "n2", "type": "mentioned_in_card", "records": {"project": {"uid": "revoked"}}},
                 {"uid": "n3", "type": "project_invited", "records": {"project": {"uid": "invited"}}},
             ],
             False,
@@ -32,7 +31,6 @@ def test_unread_query_is_bounded_side_effect_free_and_project_governed() -> None
 
     service = SimpleNamespace(
         notification=SimpleNamespace(get_api_list=get_api_list),
-        project=SimpleNamespace(get_api_list=lambda _user: ([{"uid": "allowed"}], [])),
     )
 
     result = UserWorkspaceMcp.get_unread_notifications(user, service, limit=10)
@@ -41,7 +39,7 @@ def test_unread_query_is_bounded_side_effect_free_and_project_governed() -> None
     assert result["returned_count"] == 2
     assert "has_more" not in result
     assert "unread_count" not in result
-    assert calls == [((user, "all", 1, 10), {"unread_only": True})]
+    assert calls == [((user, "all", 1, 10), {"unread_only": True, "authorized_projects_only": True})]
 
 
 def test_notification_read_tools_mutate_only_when_called() -> None:
