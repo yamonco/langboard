@@ -124,6 +124,32 @@ class UserNotificationRepository(BaseRepository[UserNotification]):
             )
             return result.first() or 0
 
+    def get_mentioned_card_ids(self, user: TUserParam, limit: int = 500) -> list[int]:
+        """Return recent card ids mentioned in notifications for one receiver."""
+
+        user_id = InfraHelper.convert_id(user)
+        notifications = []
+        with DbSession.use(readonly=True) as db:
+            notifications = db.exec(
+                SqlBuilder.select.table(UserNotification)
+                .where(UserNotification.column("receiver_id") == user_id)
+                .where(UserNotification.column("web_visible") == True)  # noqa: E712
+                .where(
+                    UserNotification.column("notification_type").in_(
+                        [NotificationType.MentionedInCard, NotificationType.MentionedInComment]
+                    )
+                )
+                .order_by(UserNotification.column("created_at").desc(), UserNotification.column("id").desc())
+                .limit(max(1, min(limit, 500)))
+            ).all()
+
+        card_ids: list[int] = []
+        for notification in notifications:
+            for table_name, record_id in notification.record_list:
+                if table_name == "card":
+                    card_ids.append(record_id)
+        return card_ids
+
     def read_all_by_user(self, user: TUserParam):
         user_id = InfraHelper.convert_id(user)
         with DbSession.use(readonly=False) as db:

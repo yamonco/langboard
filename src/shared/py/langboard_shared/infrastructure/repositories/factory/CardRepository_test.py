@@ -13,8 +13,20 @@ from ....core.db import DbSession, EditorContentModel
 from ....core.db.DbEngine import DbEngine
 from ....core.storage import FileModel
 from ....core.types import SafeDateTime
-from ....domain.models import Bot, Card, CardAttachment, CardComment, Project, ProjectColumn, User
+from ....domain.models import (
+    Bot,
+    Card,
+    CardAssignedUser,
+    CardAttachment,
+    CardComment,
+    Project,
+    ProjectAssignedUser,
+    ProjectColumn,
+    User,
+    UserNotification,
+)
 from ....domain.models.BaseBotModel import BotPlatform, BotPlatformRunningType
+from ....domain.models.UserNotification import NotificationType
 from .CardRepository import CardRepository, _editor_search_text
 
 
@@ -137,6 +149,80 @@ def test_search_matches_comment_only_unicode_and_deduplicates_without_cross_proj
         assert "#>>" in compiled and "TEXT[]" in compiled
         with pytest.raises(ValueError, match="Unsupported"):
             _editor_search_text(CardComment.column("content"), "unknown")
+    finally:
+        engine.dispose()
+
+
+def test_my_work_page_deduplicates_user_relationships_across_projects(monkeypatch):
+    """Assigned, created and mentioned cards collapse into one bounded queue."""
+
+    engine = create_engine("sqlite://")
+    for model in (
+        User,
+        Project,
+        ProjectColumn,
+        Card,
+        CardAssignedUser,
+        ProjectAssignedUser,
+        UserNotification,
+    ):
+        model.__table__.create(engine)
+    monkeypatch.setattr(DbEngine, "get_main_engine", lambda: engine)
+    monkeypatch.setattr(DbEngine, "get_readonly_engine", lambda: engine)
+    try:
+        with DbSession.use(readonly=False) as db:
+            worker = User(firstname="Work", lastname="Worker", email="work@example.invalid", password="test-only")
+            owner = User(firstname="Board", lastname="Owner", email="owner@example.invalid", password="test-only")
+            db.insert(worker)
+            db.insert(owner)
+            projects = [Project(owner_id=owner.id, title=f"My Work {index}") for index in range(2)]
+            for project in projects:
+                db.insert(project)
+            assignment = ProjectAssignedUser(project_id=projects[0].id, user_id=worker.id)
+            db.insert(assignment)
+            columns = [ProjectColumn(project_id=project.id, name="Doing") for project in projects]
+            for column in columns:
+                db.insert(column)
+            assigned = Card(project_id=projects[0].id, project_column_id=columns[0].id, title="Assigned")
+            mentioned = Card(project_id=projects[1].id, project_column_id=columns[1].id, title="Mentioned")
+            foreign = Card(project_id=projects[1].id, project_column_id=columns[1].id, title="Foreign")
+            for card in (assigned, mentioned, foreign):
+                db.insert(card)
+            db.insert(CardAssignedUser(project_assigned_id=assignment.id, card_id=assigned.id, user_id=worker.id))
+            db.insert(
+                UserNotification(
+                    notifier_type="user",
+                    notifier_id=owner.id,
+                    receiver_id=worker.id,
+                    notification_type=NotificationType.MentionedInComment,
+                    record_list=[("card", mentioned.id)],
+                    read_at=SafeDateTime.now(),
+                )
+            )
+            db.insert(
+                UserNotification(
+                    notifier_type="user",
+                    notifier_id=owner.id,
+                    receiver_id=owner.id,
+                    notification_type=NotificationType.MentionedInComment,
+                    record_list=[("card", foreign.id)],
+                )
+            )
+        repository = CardRepository(lambda _: None, lambda _: None)
+        now = SafeDateTime.now()
+        records = repository.get_my_work_page(
+            worker,
+            [project.get_uid() for project in projects],
+            {"assigned", "mentioned", "due_soon", "overdue", "created"},
+            [mentioned.id],
+            now,
+            now + timedelta(days=7),
+            "updated_at",
+            None,
+            None,
+            10,
+        )
+        assert sorted(card.title for card, _, _ in records) == ["Assigned", "Mentioned"]
     finally:
         engine.dispose()
 
