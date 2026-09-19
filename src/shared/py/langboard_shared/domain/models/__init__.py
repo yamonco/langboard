@@ -18,6 +18,7 @@ from .CardBotSchedule import CardBotSchedule
 from .CardBotScope import CardBotScope
 from .CardComment import CardComment
 from .CardCommentReaction import CardCommentReaction
+from .CardContentBlock import CardContentBlock
 from .CardMetadata import CardMetadata
 from .CardRelationship import CardRelationship
 from .ChatGraphApprovalRequest import ChatGraphApprovalRequest
@@ -100,6 +101,7 @@ __all__ = [
     "CardBotScope",
     "CardComment",
     "CardCommentReaction",
+    "CardContentBlock",
     "CardMetadata",
     "CardRelationship",
     "ChatHistory",

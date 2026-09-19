@@ -21,6 +21,7 @@ import remarkGfm from "remark-gfm";
 import { toMarkdown } from "mdast-util-to-markdown";
 import { gfmToMarkdown } from "mdast-util-gfm";
 import { Utils } from "@langboard/core/utils";
+import CardContentBlockList from "@/pages/BoardPage/components/card/CardContentBlockList";
 
 const FULL_COPY_TEXT_SAMPLE_LENGTH = 80;
 
@@ -75,6 +76,7 @@ export function SkeletonBoardCardDescription() {
 }
 
 const BoardCardDescription = memo((): React.JSX.Element => {
+    // structured content blocks — Phase 4 렌더 우선 경로 (legacy description 폴백 유지)
     const { projectUID, card, currentUser, hasRoleAction, isCardEditing } = useBoardCard();
     const [t] = useTranslation();
     const editorRef = useRef<TEditor>(null);
@@ -86,6 +88,7 @@ const BoardCardDescription = memo((): React.JSX.Element => {
     const mentionables = useMemo(() => [...projectMembers, ...bots], [projectMembers, bots]);
     const cards = ProjectCard.Model.useModels((model) => model.uid !== card.uid && model.project_uid === projectUID, [projectUID, card]);
     const description = card.useField("description");
+    const contentBlocks = (card as unknown as { content_blocks?: import("@/core/models/ProjectCard").IContentBlock[] }).content_blocks ?? [];
     const [isEditing, setIsEditing] = useState(false);
     const pointerDownPositionRef = useRef<{ x: number; y: number } | null>(null);
     const { registerSectionCancelHandler, registerSectionSaveHandler } = useBoardCardSectionSaveActions();
@@ -222,7 +225,9 @@ const BoardCardDescription = memo((): React.JSX.Element => {
             onPointerDown={handlePointerDown}
             onPointerUp={handlePointerUp}
         >
-            {shouldCollapse ? (
+            {!isEditing && contentBlocks.length ? (
+                <CardContentBlockList blocks={contentBlocks} />
+            ) : shouldCollapse ? (
                 <CollapsibleDescriptionContent
                     description={description}
                     mentionables={mentionables}
