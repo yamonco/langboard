@@ -1,6 +1,6 @@
 from datetime import timedelta
 from typing import Any, Literal, Sequence, cast, overload
-from sqlalchemy import text
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from ....ai import BotScheduleHelper, BotScopeHelper
 from ....core.db import DbSession, EditorContentModel
@@ -65,8 +65,7 @@ class CardService(BaseDomainService):
         """Draw the next monotonic cursor from the global change sequence."""
 
         with DbSession.use(readonly=False) as db:
-            result = db.exec(text("SELECT nextval('content_change_seq')"))
-            return int(result if isinstance(result, int) else (result.scalar() or 0))
+            return int(db.exec(select(func.nextval("content_change_seq"))).first() or 0)
 
     def mark_card_changed(
         self,
