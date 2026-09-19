@@ -94,3 +94,4 @@ def test_checklist_model_declares_one_active_system_row_constraint() -> None:
     assert [column.name for column in index.columns] == ["card_id"]
     assert str(index.dialect_options["postgresql"]["where"]) == "is_system AND deleted_at IS NULL"
     assert str(index.dialect_options["sqlite"]["where"]) == "is_system = 1 AND deleted_at IS NULL"
+    assert Checklist.__table__.c.is_system.server_default is not None
