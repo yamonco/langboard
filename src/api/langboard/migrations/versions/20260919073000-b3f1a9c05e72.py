@@ -1,7 +1,7 @@
 """add organization tenant entity
 
 Revision ID: b3f1a9c05e72
-Revises: da39f306364b
+Revises: c4e7a92b1d63
 Create Date: 2026-09-19 07:30:00.000000
 
 """
@@ -14,7 +14,7 @@ from langboard_shared.core.db.ColumnTypes import SnowflakeIDType
 
 # revision identifiers, used by Alembic.
 revision: str = "b3f1a9c05e72"
-down_revision: Union[str, None] = "da39f306364b"
+down_revision: Union[str, None] = "c4e7a92b1d63"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
