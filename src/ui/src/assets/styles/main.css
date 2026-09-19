@@ -159,3 +159,46 @@
         border-radius: 0;
     }
 }
+
+/* ─── Card open/close animation (UoW-26) ─── */
+
+@keyframes card-viewer-open {
+    from {
+        opacity: 0;
+        transform: var(--card-origin-transform, scale(0.9));
+    }
+    to {
+        opacity: 1;
+        transform: translate(0, 0) scale(1, 1);
+    }
+}
+
+@keyframes card-viewer-close {
+    from {
+        opacity: 1;
+        transform: translate(0, 0) scale(1, 1);
+    }
+    to {
+        opacity: 0;
+        transform: var(--card-origin-transform, scale(0.9));
+    }
+}
+
+[data-radix-dialog-content][data-state="open"] {
+    animation: card-viewer-open 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    will-change: transform, opacity;
+}
+
+[data-radix-dialog-content][data-state="closed"] {
+    animation: card-viewer-close 180ms cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+    will-change: transform, opacity;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    [data-radix-dialog-content][data-state="open"],
+    [data-radix-dialog-content][data-state="closed"] {
+        animation: none;
+        opacity: 1;
+        transform: none;
+    }
+}
