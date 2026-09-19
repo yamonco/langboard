@@ -666,7 +666,7 @@ def delete_card(
     return JsonResponse()
 
 
-@AppRouter.schema(permission=ApiPermission.Update)
+@AppRouter.schema(permission=ApiPermission.Edit)
 @AppRouter.api.post(
     "/board/{project_uid}/card/{card_uid}/seen",
     tags=["Board.Card"],
