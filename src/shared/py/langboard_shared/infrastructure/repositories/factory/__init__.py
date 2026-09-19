@@ -26,6 +26,7 @@ from .McpToolGroupRepository import McpToolGroupRepository
 from .McpToolGroupUsageRepository import McpToolGroupUsageRepository
 from .MetadataRepository import MetadataRepository
 from .NotificationScheduleRuleRepository import NotificationScheduleRuleRepository
+from .OrganizationRepository import OrganizationRepository
 from .ProjectAssignedInternalBotRepository import ProjectAssignedInternalBotRepository
 from .ProjectAssignedUserRepository import ProjectAssignedUserRepository
 from .ProjectBotDefaultScopeRepository import ProjectBotDefaultScopeRepository
@@ -87,6 +88,7 @@ __all__ = [
     "McpToolGroupUsageRepository",
     "MetadataRepository",
     "NotificationScheduleRuleRepository",
+    "OrganizationRepository",
     "ProjectAssignedInternalBotRepository",
     "ProjectAssignedUserRepository",
     "ProjectBotDefaultScopeRepository",
