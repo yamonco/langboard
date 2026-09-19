@@ -31,6 +31,7 @@ import useDashboardCheckitemDeletedHandlers from "@/controllers/socket/dashboard
 import useDashboardCheckitemStatusChangedHandlers from "@/controllers/socket/dashboard/checkitem/useDashboardCheckitemStatusChangedHandlers";
 import useDashboardCheckitemTitleChangedHandlers from "@/controllers/socket/dashboard/checkitem/useDashboardCheckitemTitleChangedHandlers";
 import useDashboardProjectAssignedUsersUpdatedHandlers from "@/controllers/socket/dashboard/project/useDashboardProjectAssignedUsersUpdatedHandlers";
+import useDashboardProjectActivityRecordedHandlers from "@/controllers/socket/dashboard/project/useDashboardProjectActivityRecordedHandlers";
 import useDashboardProjectColumnCreatedHandlers from "@/controllers/socket/dashboard/project/useDashboardProjectColumnCreatedHandlers";
 import useDashboardProjectColumnDeletedHandlers from "@/controllers/socket/dashboard/project/useDashboardProjectColumnDeletedHandlers";
 import useDashboardProjectColumnNameChangedHandlers from "@/controllers/socket/dashboard/project/useDashboardProjectColumnNameChangedHandlers";
@@ -114,6 +115,7 @@ class Project extends BaseModel<IStore> {
                 useBoardBotLogCreatedHandlers,
                 useBoardBotLogStackAddedHandlers,
                 useDashboardProjectAssignedUsersUpdatedHandlers,
+                useDashboardProjectActivityRecordedHandlers,
                 useDashboardProjectColumnCreatedHandlers,
                 useDashboardProjectColumnNameChangedHandlers,
                 useDashboardProjectColumnOrderChangedHandlers,

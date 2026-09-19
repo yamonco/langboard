@@ -1,6 +1,7 @@
 const SERVER = {
     DASHBOARD: {
         PROJECT: {
+            ACTIVITY_RECORDED: "dashboard:project:activity:recorded:{uid}",
             ASSIGNED_USERS_UPDATED: "dashboard:project:assigned-users:updated:{uid}",
             DELETED: "dashboard:project:deleted:{uid}",
             COLUMN: {
