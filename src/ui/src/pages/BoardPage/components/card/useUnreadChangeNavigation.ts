@@ -42,6 +42,22 @@ function waitForElement(selector: string): Promise<Element | null> {
     });
 }
 
+function nextFrames(): Promise<void> {
+    return new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+}
+
+async function scrollIntoViewStable(element: Element): Promise<void> {
+    for (let attempt = 0; attempt < 3; attempt++) {
+        await nextFrames();
+        element.scrollIntoView({ behavior: attempt === 0 ? "smooth" : "auto", block: "center" });
+        await new Promise((resolve) => window.setTimeout(resolve, 350));
+        const rect = element.getBoundingClientRect();
+        if (rect.top >= 0 && rect.bottom <= window.innerHeight) {
+            return;
+        }
+    }
+}
+
 /**
  * Jump once to the newest unread change of a card and highlight it.
  * Navigation is best-effort; the read cursor advances as soon as the
@@ -72,7 +88,7 @@ export function useUnreadChangeNavigation(): void {
                 setIsCommentPanelOpen(true);
                 const element = await waitForElement(`[data-card-comment-uid="${targetUID}"]`);
                 if (element) {
-                    element.scrollIntoView({ behavior: "smooth", block: "center" });
+                    await scrollIntoViewStable(element);
                     highlightElement(element);
                 }
                 return;
@@ -80,7 +96,7 @@ export function useUnreadChangeNavigation(): void {
             if (targetType === "description" || targetType === "card") {
                 const element = await waitForElement("[data-card-description]");
                 if (element) {
-                    element.scrollIntoView({ behavior: "smooth", block: "start" });
+                    await scrollIntoViewStable(element);
                     highlightElement(element);
                 }
             }

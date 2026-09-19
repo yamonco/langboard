@@ -15,6 +15,13 @@ class CardRelationshipService(BaseDomainService):
         """DO NOT EDIT THIS METHOD"""
         return "card_relationship"
 
+    def _mark_card_changed_for_unread(self, card, target_type: str, target_id=None) -> None:
+        """Stamp the unread cursor for this card change (lazy import avoids cycles)."""
+        from .CardService import CardService
+
+        card_service = self._get_service(CardService)
+        card_service.mark_card_changed(card, target_type, target_id)
+
     def get_api_list_by_card(self, card: TCardParam | None, limit: int | None = None) -> list[dict[str, Any]]:
         """Return relationships, optionally enforcing a repository row limit."""
 
@@ -99,6 +106,7 @@ class CardRelationshipService(BaseDomainService):
         new_relationships = self.get_api_list_by_card(card)
 
         CardRelationshipPublisher.updated(project, card, new_relationships)
+        self._mark_card_changed_for_unread(card, "relationship")
         CardRelationshipActivityTask.card_relationship_updated(
             user_or_bot,
             project,
