@@ -68,3 +68,43 @@ class OrganizationService(BaseDomainService):
         organization.suspended_at = None if is_active else SafeDateTime.now()
         self.repo.organization.update(organization)
         return organization
+
+    def assign_project(self, user: User, organization: TUserParam | None, project) -> Organization:
+        """Map a project into this organization; owners only."""
+
+        from ...models import Project  # local import avoids model-registration ordering issues
+
+        organization = InfraHelper.get_by_id_like(Organization, organization)
+        project = InfraHelper.get_by_id_like(Project, project)
+        if not organization or not project or organization.owner_user_id != user.id:
+            raise ValueError("organization or project not found")
+
+        project.organization_id = organization.id
+        self.repo.project.update(project)
+        return organization
+
+    def unassign_project(self, user: User, organization: TUserParam | None, project) -> Organization | None:
+        """Detach a project from its organization; owners only."""
+
+        from ...models import Project
+
+        organization = InfraHelper.get_by_id_like(Organization, organization)
+        project = InfraHelper.get_by_id_like(Project, project)
+        if not organization or not project or organization.owner_user_id != user.id:
+            return None
+        if project.organization_id != organization.id:
+            return None
+
+        project.organization_id = None
+        self.repo.project.update(project)
+        return organization
+
+    def get_api_project_list(self, user: User, organization: TUserParam | None) -> list[dict[str, Any]]:
+        """List an organization's projects as API payloads; owners only."""
+
+        organization = InfraHelper.get_by_id_like(Organization, organization)
+        if not organization or organization.owner_user_id != user.id:
+            return []
+
+        projects = self.repo.project.get_all_by_organization(organization.id)
+        return [project.api_response() for project in projects]

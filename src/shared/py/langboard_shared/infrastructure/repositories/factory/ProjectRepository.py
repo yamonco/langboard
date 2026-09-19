@@ -3,6 +3,7 @@ from sqlalchemy.orm import aliased
 from sqlalchemy.orm.attributes import InstrumentedAttribute
 from ....core.db import DbSession, SqlBuilder
 from ....core.domain import BaseRepository
+from ....core.types import SnowflakeID
 from ....core.types.ParamTypes import TProjectParam, TUserParam
 from ....domain.models import Project, ProjectAssignedUser
 from ....helpers import InfraHelper
@@ -19,6 +20,20 @@ class ProjectRepository(BaseRepository[Project]):
 
     def get_by_id_like(self, project: TProjectParam | None) -> Project | None:
         return InfraHelper.get_by_id_like(Project, project)
+
+    def get_all_by_organization(self, organization_id: SnowflakeID, limit: int | None = None) -> list[Project]:
+        """List projects mapped to one organization, newest first."""
+
+        query = (
+            SqlBuilder.select.table(Project)
+            .where(Project.column("organization_id") == organization_id)
+            .order_by(Project.column("updated_at").desc(), Project.column("id").desc())
+        )
+        if limit is not None:
+            query = query.limit(limit)
+
+        with DbSession.use(readonly=True) as db:
+            return db.exec(query).all()
 
     def get_all_by_user(self, user: TUserParam, limit: int | None = None) -> list[tuple[Project, ProjectAssignedUser]]:
         user_id = InfraHelper.convert_id(user)
