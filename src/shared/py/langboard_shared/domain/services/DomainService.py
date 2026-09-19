@@ -31,6 +31,10 @@ class DomainService(Factory):
         return self._create_or_get_product(factory.UserService)
 
     @property
+    def organization(self):
+        return self._create_or_get_product(factory.OrganizationService)
+
+    @property
     def project(self):
         return self._create_or_get_product(factory.ProjectService)
 
