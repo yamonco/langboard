@@ -280,21 +280,21 @@ class Project extends BaseModel<IStore> {
     }
 
     public get last_activity_at(): Date | null {
-        return this.getValue("last_activity_at");
+        return this.getValue("last_activity_at") ?? null;
     }
     public set last_activity_at(value: string | Date | null) {
-        this.update({ last_activity_at: value as unknown as Date | null });
+        this.update({ last_activity_at: parseProjectActivityTimestamp(value) as unknown as Date | null });
     }
 
     public get related_to_current_user(): bool {
-        return this.getValue("related_to_current_user");
+        return this.getValue("related_to_current_user") ?? false;
     }
     public set related_to_current_user(value: bool) {
         this.update({ related_to_current_user: value });
     }
 
     public get related_activity_at(): Date | null {
-        return this.getValue("related_activity_at");
+        return this.getValue("related_activity_at") ?? null;
     }
     public set related_activity_at(value: Date | null) {
         this.update({ related_activity_at: value });
