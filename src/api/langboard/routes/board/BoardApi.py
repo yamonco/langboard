@@ -1,3 +1,4 @@
+from datetime import timedelta
 from fastapi import Query
 from langboard_shared.core.filter import AuthFilter
 from langboard_shared.core.routing import (
@@ -12,6 +13,7 @@ from langboard_shared.core.routing import (
     create_editor_collaboration_document_id,
 )
 from langboard_shared.core.schema import OpenApiSchema
+from langboard_shared.core.types import SafeDateTime
 from langboard_shared.domain.models import (
     Bot,
     Card,
@@ -255,6 +257,43 @@ def get_project_card_context(
         .get()
     ),
 )
+@RoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+@AuthFilter.add()
+def get_project_cards(
+    project_uid: str,
+    user_or_bot: User | Bot = Auth.scope("all"),
+    service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    project = service.project.get_by_id_like(project_uid)
+    if project is None:
+        raise ApiException.NotFound_404(ApiErrorCode.NF2001)
+    global_relationships = service.app_setting.get_api_global_relationship_list()
+    columns = service.project_column.get_api_list_by_project(project)
+    archive_visible_since = SafeDateTime.now() - timedelta(days=project.archive_visible_days)
+    cards = service.card.get_board_list(project, user_or_bot, archive_visible_since)
+    checklists = service.checklist.get_api_list_only_by_project(
+        project,
+        archive_visible_since=archive_visible_since,
+    )
+    column_bot_scopes = service.project_column.get_api_bot_scopes_by_project(project)
+    column_bot_schedules = service.project_column.get_api_bot_schedule_list_by_project(project, columns)
+
+    column_names_by_uid = {col["uid"]: col["name"] for col in columns}
+    for card in cards:
+        card["project_column_name"] = column_names_by_uid.get(card["project_column_uid"], "")
+
+    return JsonResponse(
+        content={
+            "cards": cards,
+            "checklists": checklists,
+            "global_relationships": global_relationships,
+            "columns": columns,
+            "column_bot_scopes": column_bot_scopes,
+            "column_bot_schedules": column_bot_schedules,
+        }
+    )
+
+
 @AppRouter.schema(permission=ApiPermission.Read)
 @AppRouter.api.get(
     "/board/{project_uid}/change-feed",
@@ -303,35 +342,6 @@ def get_board_change_feed(
     if result is None:
         raise ApiException.NotFound_404(ApiErrorCode.NF2001)
     return JsonResponse(result)
-
-
-@RoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
-@AuthFilter.add()
-def get_project_cards(project_uid: str, service: DomainService = DomainService.scope()) -> JsonResponse:
-    project = service.project.get_by_id_like(project_uid)
-    if project is None:
-        raise ApiException.NotFound_404(ApiErrorCode.NF2001)
-    global_relationships = service.app_setting.get_api_global_relationship_list()
-    columns = service.project_column.get_api_list_by_project(project)
-    cards = service.card.get_board_list(project)
-    checklists = service.checklist.get_api_list_only_by_project(project)
-    column_bot_scopes = service.project_column.get_api_bot_scopes_by_project(project)
-    column_bot_schedules = service.project_column.get_api_bot_schedule_list_by_project(project)
-
-    column_names_by_uid = {col["uid"]: col["name"] for col in columns}
-    for card in cards:
-        card["project_column_name"] = column_names_by_uid.get(card["project_column_uid"], "")
-
-    return JsonResponse(
-        content={
-            "cards": cards,
-            "checklists": checklists,
-            "global_relationships": global_relationships,
-            "columns": columns,
-            "column_bot_scopes": column_bot_scopes,
-            "column_bot_schedules": column_bot_schedules,
-        }
-    )
 
 
 @collaborative_edit(
