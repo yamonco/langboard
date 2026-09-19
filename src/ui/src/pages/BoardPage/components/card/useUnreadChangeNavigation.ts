@@ -91,3 +91,5 @@ export function useUnreadChangeNavigation(): void {
         model.has_unread_change = false;
     }, [card, markSeen, projectUID, setIsCommentPanelOpen]);
 }
+
+export default useUnreadChangeNavigation;
