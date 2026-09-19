@@ -14,6 +14,7 @@ import { useAuth } from "@/core/providers/AuthProvider";
 import { Project } from "@/core/models";
 import { useTranslation } from "react-i18next";
 import { SkeletonProjecTabs } from "@/pages/DashboardPage/components/ProjectTabs";
+import { PROJECT_QUICK_SWITCHER_EVENT } from "@/pages/DashboardPage/components/ProjectDiscovery";
 
 const DashboardProxy = memo((): React.JSX.Element => {
     const [t] = useTranslation();
@@ -87,6 +88,11 @@ const DashboardProxy = memo((): React.JSX.Element => {
                 navigate(`${location.pathname}/my-activity`);
             },
         },
+        {
+            icon: "search",
+            name: t("dashboard.Quick switcher"),
+            onClick: () => window.dispatchEvent(new Event(PROJECT_QUICK_SWITCHER_EVENT)),
+        },
     ];
 
     let pageContent;
@@ -112,11 +118,11 @@ const DashboardProxy = memo((): React.JSX.Element => {
                     skeletonContent = <SkeletonProjecTabs />;
                     break;
                 default:
-                    return <Navigate to={ROUTES.DASHBOARD.PROJECTS.STARRED} />;
+                    return <Navigate to={ROUTES.DASHBOARD.PROJECTS.ALL} />;
             }
             break;
         default:
-            return <Navigate to={ROUTES.DASHBOARD.PROJECTS.STARRED} />;
+            return <Navigate to={ROUTES.DASHBOARD.PROJECTS.ALL} />;
     }
 
     return (
