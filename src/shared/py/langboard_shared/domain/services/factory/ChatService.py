@@ -1,5 +1,5 @@
 from typing import Any, Literal, TypeVar
-from ....core.db import BaseDbModel
+from ....core.db import BaseDbModel, ChatContentModel
 from ....core.domain import BaseDomainService
 from ....core.schema import TimeBasedPagination
 from ....core.types.ParamTypes import TBaseParam, TChatHistoryParam, TChatSessionParam, TChatTemplateParam
@@ -47,6 +47,51 @@ class ChatService(BaseDomainService):
             chat_sessions.append({**chat_session.api_response(), **session.api_response()})
 
         return chat_sessions
+
+    def ensure_session(
+        self,
+        user: User,
+        session_model: type[_TForeignSessionModel],
+        filterable: BaseDbModel,
+        title: str = "",
+    ) -> tuple[ChatSession, _TForeignSessionModel]:
+        """Get or create the durable chat session bound to one filterable."""
+
+        existing = self.get_session_by_filterable(session_model, None, filterable)
+        if existing:
+            return existing
+
+        chat_session = ChatSession(user_id=user.id, title=title, last_messaged_at=None)
+        self.repo.chat_session.insert(chat_session)
+
+        bound_session = session_model(chat_session_id=chat_session.id)
+        setattr(bound_session, session_model.get_filterable_column(), filterable.id)
+        self.repo.chat_session.insert_bound_session(bound_session)
+        return chat_session, bound_session
+
+    def record_message(
+        self,
+        user: User,
+        chat_session: TChatSessionParam | None,
+        content: str,
+        *,
+        is_received: bool = False,
+    ) -> ChatHistory | None:
+        """Persist one history message and refresh session recency."""
+
+        chat_session = InfraHelper.get_by_id_like(ChatSession, chat_session)
+        if not chat_session or chat_session.user_id != user.id:
+            return None
+
+        chat_history = ChatHistory(
+            chat_session_id=chat_session.id,
+            message=ChatContentModel(content=content),
+            is_received=is_received,
+        )
+        self.repo.chat_history.insert(chat_history)
+        chat_session.last_messaged_at = chat_history.created_at
+        self.repo.chat_session.update(chat_session)
+        return chat_history
 
     def update_session(
         self, chat_session: TChatSessionParam | None, title: str | None = None, api_permission_level: str | None = None
