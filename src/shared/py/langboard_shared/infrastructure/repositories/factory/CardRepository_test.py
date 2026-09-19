@@ -222,7 +222,10 @@ def test_my_work_page_deduplicates_user_relationships_across_projects(monkeypatc
             None,
             10,
         )
-        assert sorted(card.title for card, _, _ in records) == ["Assigned", "Mentioned"]
+        assert sorted((card.title, is_assigned) for card, _, _, is_assigned in records) == [
+            ("Assigned", True),
+            ("Mentioned", False),
+        ]
     finally:
         engine.dispose()
 

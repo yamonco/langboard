@@ -1,18 +1,28 @@
 """Current-user notification and governed project-search MCP tools."""
 
-from datetime import datetime, timedelta
-from typing import Literal
+from datetime import datetime, timedelta, timezone
+from typing import Annotated, Literal
 from langboard_shared.core.types import SafeDateTime
 from langboard_shared.domain.models import ProjectRole, User
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.domain.models.UserNotification import NotificationType
 from langboard_shared.domain.services import DomainService
 from langboard_shared.security import RoleFinder
+from pydantic import Field
 from ..mcp_integration import McpRoleFilter, McpTool
 
 
 NotificationTimeRange = Literal["3d", "7d", "1m", "all"]
 MyWorkPurpose = Literal["assigned", "mentioned", "due_soon", "overdue", "created"]
+
+
+def _parse_time_bound(value: str | None) -> SafeDateTime | None:
+    if value is None:
+        return None
+    parsed = datetime.fromisoformat(value)
+    if parsed.utcoffset() is None:
+        raise ValueError("Date bounds must include a timezone")
+    return SafeDateTime.fromtimestamp(parsed.timestamp(), timezone.utc)
 
 
 @McpTool.add(
@@ -90,15 +100,7 @@ def search_project_cards(
     if not 1 <= len(normalized_query) <= 1000:
         raise ValueError("query must contain between 1 and 1000 characters")
 
-    def parse_bound(value: str | None) -> SafeDateTime | None:
-        if value is None:
-            return None
-        parsed = datetime.fromisoformat(value)
-        if parsed.utcoffset() is None:
-            raise ValueError("Date bounds must include a timezone")
-        return SafeDateTime.fromisoformat(value)
-
-    lower, upper = parse_bound(since), parse_bound(until)
+    lower, upper = _parse_time_bound(since), _parse_time_bound(until)
     if lower is not None and upper is not None and lower >= upper:
         raise ValueError("since must be earlier than until")
     return {
@@ -127,8 +129,8 @@ def get_my_work_cards(
     date_field: Literal["created_at", "updated_at"] = "updated_at",
     since: str | None = None,
     until: str | None = None,
-    due_within_days: int = 7,
-    limit: int = 20,
+    due_within_days: Annotated[int, Field(ge=1, le=30)] = 7,
+    limit: Annotated[int, Field(ge=1, le=50)] = 20,
 ) -> dict:
     """Return a compact My Work queue filtered by current-user relationships."""
 
@@ -138,15 +140,7 @@ def get_my_work_cards(
     if not 1 <= due_within_days <= 30 or not 1 <= limit <= 50:
         raise ValueError("due_within_days must be 1-30 and limit must be 1-50")
 
-    def parse_bound(value: str | None) -> SafeDateTime | None:
-        if value is None:
-            return None
-        parsed = datetime.fromisoformat(value)
-        if parsed.utcoffset() is None:
-            raise ValueError("Date bounds must include a timezone")
-        return SafeDateTime.fromisoformat(value)
-
-    lower, upper = parse_bound(since), parse_bound(until)
+    lower, upper = _parse_time_bound(since), _parse_time_bound(until)
     if lower is not None and upper is not None and lower >= upper:
         raise ValueError("since must be earlier than until")
 
@@ -156,7 +150,8 @@ def get_my_work_cards(
         if not accessible_projects:
             raise ValueError("Project not found or not readable")
 
-    mentioned_card_ids = service.notification.get_mentioned_card_ids(user) if "mentioned" in selected else []
+    mention_sensitive = {"mentioned", "due_soon", "overdue"}
+    mentioned_card_ids = service.notification.get_mentioned_card_ids(user) if selected & mention_sensitive else []
     due_before = SafeDateTime.now() + timedelta(days=due_within_days)
     cards = service.card.get_my_work_cards(
         user,
