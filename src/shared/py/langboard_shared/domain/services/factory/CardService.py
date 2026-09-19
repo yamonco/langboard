@@ -196,8 +196,13 @@ class CardService(BaseDomainService):
             labels[card_label.card_id].append(label.api_response())
 
         creators = self.repo.card.get_board_creators(project, archive_visible_since)
-        raw_checklists = self.repo.checklist.get_all_by_project(project)
-        completed_by_card = {checklist.card_id: checklist.is_checked for checklist in raw_checklists if checklist.is_system}
+        raw_checklists = self.repo.checklist.get_all_by_project(
+            project,
+            archive_visible_since=archive_visible_since,
+        )
+        completed_by_card = {
+            checklist.card_id: checklist.is_checked for checklist in raw_checklists if checklist.is_system
+        }
         user_checklist_card_ids = {checklist.card_id for checklist in raw_checklists if not checklist.is_system}
 
         user = user_or_bot if isinstance(user_or_bot, User) else None
@@ -699,17 +704,15 @@ class CardService(BaseDomainService):
     def _get_completion_checklist(self, card: Card) -> Checklist | None:
         """Return the hidden system checklist backing a card's completion checkbox."""
 
-        for checklist in self.repo.checklist.get_all_by_card(card):
-            if checklist.is_system:
-                return checklist
-        return None
+        checklists = self.repo.checklist.get_all_by_card(card, limit=1, is_system=True)
+        return checklists[0] if checklists else None
 
     def is_check_card(self, card: Card) -> bool:
         """A check card carries no description and no user checklist of its own."""
 
         if card.description.content.strip():
             return False
-        return not any(not checklist.is_system for checklist in self.repo.checklist.get_all_by_card(card))
+        return not self.repo.checklist.get_all_by_card(card, limit=1, is_system=False)
 
     def ensure_completion_checklist(self, card: Card, completed: bool = False) -> Checklist:
         """Create the hidden completion checklist silently when it does not exist yet."""
@@ -725,8 +728,14 @@ class CardService(BaseDomainService):
             is_system=True,
             is_checked=completed,
         )
-        self.repo.checklist.insert(checklist)
-        self.repo.checkitem.insert(Checkitem(checklist_id=checklist.id, title=card.title, is_checked=completed))
+        checkitem = Checkitem(checklist_id=checklist.id, title=card.title, is_checked=completed)
+        try:
+            self.repo.checklist.insert_completion(checklist, checkitem)
+        except IntegrityError:
+            existing = self._get_completion_checklist(card)
+            if existing:
+                return existing
+            raise
         return checklist
 
     def remove_completion_checklist(self, card: Card) -> None:
@@ -746,7 +755,9 @@ class CardService(BaseDomainService):
             checkitem.title = card.title
             self.repo.checkitem.update(checkitem)
 
-    def set_card_completed(self, user_or_bot: TUserOrBot, project: TProjectParam, card: TCardParam, completed: bool) -> bool | None:
+    def set_card_completed(
+        self, user_or_bot: TUserOrBot, project: TProjectParam, card: TCardParam, completed: bool
+    ) -> bool | None:
         """Toggle a check card's completion state, creating the backing checklist lazily."""
 
         params = InfraHelper.get_records_with_foreign_by_params((Project, project), (Card, card))
@@ -816,7 +827,9 @@ class CardService(BaseDomainService):
         if is_check_card:
             self.ensure_completion_checklist(card)
 
-        api_card = card.board_api_response(0, [user.get_uid() for user in users], [], [], completed=False, is_check_card=is_check_card)
+        api_card = card.board_api_response(
+            0, [user.get_uid() for user in users], [], [], completed=False, is_check_card=is_check_card
+        )
         model = {"card": api_card}
 
         CardPublisher.created(project, column, model)
@@ -888,7 +901,7 @@ class CardService(BaseDomainService):
         link = f"[[{title}]]"
         index = full_markdown.find(selected_markdown)
         if index != -1:
-            new_markdown = full_markdown[:index] + link + full_markdown[index + len(selected_markdown):]
+            new_markdown = full_markdown[:index] + link + full_markdown[index + len(selected_markdown) :]
             card.description = EditorContentModel(content=new_markdown)
             self.repo.card.update(card)
 
@@ -939,18 +952,14 @@ class CardService(BaseDomainService):
 
         # Create the native checklist via ChecklistService
         checklist_service = self._get_service_by_name("checklist")
-        checklist = checklist_service.create(
-            user_or_bot, project, card.get_uid(), "Converted checklist"
-        )
+        checklist = checklist_service.create(user_or_bot, project, card.get_uid(), "Converted checklist")
         if not checklist:
             return None
 
         # Create checkitems with completion state
         checkitem_service = self._get_service_by_name("checkitem")
         for item in items:
-            created = checkitem_service.create(
-                user_or_bot, project, card.get_uid(), checklist.get_uid(), item["title"]
-            )
+            created = checkitem_service.create(user_or_bot, project, card.get_uid(), checklist.get_uid(), item["title"])
             if created and item["is_checked"]:
                 created.is_checked = True
                 self.repo.checkitem.update(created)
@@ -992,7 +1001,6 @@ class CardService(BaseDomainService):
                 counts[anchor_value] = counts.get(anchor_value, 0) + 1
 
         return [{"anchor": anchor_value, "count": count} for anchor_value, count in sorted(counts.items())]
-
 
     def copy_selection_to_wiki(
         self,
@@ -1076,7 +1084,9 @@ class CardService(BaseDomainService):
         for activity in page:
             entry = {
                 "activity_uid": activity.get_uid(),
-                "activity_type": activity.activity_type.value if hasattr(activity.activity_type, "value") else str(activity.activity_type),
+                "activity_type": activity.activity_type.value
+                if hasattr(activity.activity_type, "value")
+                else str(activity.activity_type),
                 "card_uid": activity.card_id.to_short_code() if activity.card_id else None,
                 "project_uid": project.get_uid(),
                 "created_at": str(activity.created_at),
@@ -1127,12 +1137,6 @@ class CardService(BaseDomainService):
                 self.repo.checkitem.update(checkitem_cardified_from)
             self.sync_completion_checkitem_title(card)
 
-        if "description" in old_record:
-            if card.description.content.strip():
-                self.remove_completion_checklist(card)
-            elif self.is_check_card(card):
-                self.ensure_completion_checklist(card)
-
         target_type = self.UNREAD_TARGET_DESCRIPTION if "description" in old_record else self.UNREAD_TARGET_CARD
         card.last_change_seq = self.next_change_seq()
         card.last_change_target_type = target_type
@@ -1145,6 +1149,12 @@ class CardService(BaseDomainService):
             raise CardDescriptionConflict("Card description changed after review: concurrent update")
         else:
             self.repo.card.update(card)
+
+        if "description" in old_record:
+            if card.description.content.strip():
+                self.remove_completion_checklist(card)
+            elif self.is_check_card(card):
+                self.ensure_completion_checklist(card)
 
         model: dict[str, Any] = {}
         for key in form:

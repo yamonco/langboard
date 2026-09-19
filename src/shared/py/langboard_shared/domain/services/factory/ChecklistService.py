@@ -41,7 +41,7 @@ class ChecklistService(BaseDomainService):
         if not card:
             return []
 
-        raw_checklists = [checklist for checklist in self.repo.checklist.get_all_by_card(card, limit=limit) if not checklist.is_system]
+        raw_checklists = self.repo.checklist.get_all_by_card(card, limit=limit, is_system=False)
         if not raw_checklists:
             return []
 
@@ -71,7 +71,7 @@ class ChecklistService(BaseDomainService):
         if not card:
             return []
 
-        checklists = [checklist for checklist in self.repo.checklist.get_all_by_card(card) if not checklist.is_system]
+        checklists = self.repo.checklist.get_all_by_card(card, is_system=False)
         return [checklist.api_response() for checklist in checklists]
 
     def get_api_list_only_by_project(
@@ -84,15 +84,12 @@ class ChecklistService(BaseDomainService):
         if not project:
             return []
 
-        checklists = [
-            checklist
-            for checklist in self.repo.checklist.get_all_by_project(
-                project,
-                archive_visible_since=archive_visible_since,
-                limit=limit,
-            )
-            if not checklist.is_system
-        ]
+        checklists = self.repo.checklist.get_all_by_project(
+            project,
+            archive_visible_since=archive_visible_since,
+            limit=limit,
+            is_system=False,
+        )
         return [checklist.api_response() for checklist in checklists]
 
     def create(
