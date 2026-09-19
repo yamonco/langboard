@@ -1,4 +1,5 @@
 from typing import Any, Literal, Sequence, cast, overload
+from sqlalchemy.exc import IntegrityError
 from ....ai import BotScheduleHelper, BotScopeHelper
 from ....core.db import EditorContentModel
 from ....core.domain import BaseDomainService
@@ -110,7 +111,9 @@ class CardService(BaseDomainService):
             labels[card_label.card_id].append(label.api_response())
 
         raw_checklists = self.repo.checklist.get_all_by_project(project)
-        completed_by_card = {checklist.card_id: checklist.is_checked for checklist in raw_checklists if checklist.is_system}
+        completed_by_card = {
+            checklist.card_id: checklist.is_checked for checklist in raw_checklists if checklist.is_system
+        }
         user_checklist_card_ids = {checklist.card_id for checklist in raw_checklists if not checklist.is_system}
 
         cards = []
@@ -282,17 +285,15 @@ class CardService(BaseDomainService):
     def _get_completion_checklist(self, card: Card) -> Checklist | None:
         """Return the hidden system checklist backing a card's completion checkbox."""
 
-        for checklist in self.repo.checklist.get_all_by_card(card):
-            if checklist.is_system:
-                return checklist
-        return None
+        checklists = self.repo.checklist.get_all_by_card(card, limit=1, is_system=True)
+        return checklists[0] if checklists else None
 
     def is_check_card(self, card: Card) -> bool:
         """A check card carries no description and no user checklist of its own."""
 
         if card.description.content.strip():
             return False
-        return not any(not checklist.is_system for checklist in self.repo.checklist.get_all_by_card(card))
+        return not self.repo.checklist.get_all_by_card(card, limit=1, is_system=False)
 
     def ensure_completion_checklist(self, card: Card, completed: bool = False) -> Checklist:
         """Create the hidden completion checklist silently when it does not exist yet."""
@@ -308,8 +309,14 @@ class CardService(BaseDomainService):
             is_system=True,
             is_checked=completed,
         )
-        self.repo.checklist.insert(checklist)
-        self.repo.checkitem.insert(Checkitem(checklist_id=checklist.id, title=card.title, is_checked=completed))
+        checkitem = Checkitem(checklist_id=checklist.id, title=card.title, is_checked=completed)
+        try:
+            self.repo.checklist.insert_completion(checklist, checkitem)
+        except IntegrityError:
+            existing = self._get_completion_checklist(card)
+            if existing:
+                return existing
+            raise
         return checklist
 
     def remove_completion_checklist(self, card: Card) -> None:
@@ -329,7 +336,9 @@ class CardService(BaseDomainService):
             checkitem.title = card.title
             self.repo.checkitem.update(checkitem)
 
-    def set_card_completed(self, user_or_bot: TUserOrBot, project: TProjectParam, card: TCardParam, completed: bool) -> bool | None:
+    def set_card_completed(
+        self, user_or_bot: TUserOrBot, project: TProjectParam, card: TCardParam, completed: bool
+    ) -> bool | None:
         """Toggle a check card's completion state, creating the backing checklist lazily."""
 
         params = InfraHelper.get_records_with_foreign_by_params((Project, project), (Card, card))
@@ -394,7 +403,9 @@ class CardService(BaseDomainService):
         if is_check_card:
             self.ensure_completion_checklist(card)
 
-        api_card = card.board_api_response(0, [user.get_uid() for user in users], [], [], completed=False, is_check_card=is_check_card)
+        api_card = card.board_api_response(
+            0, [user.get_uid() for user in users], [], [], completed=False, is_check_card=is_check_card
+        )
         model = {"card": api_card}
 
         CardPublisher.created(project, column, model)
