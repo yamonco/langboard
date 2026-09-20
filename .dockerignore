@@ -2,3 +2,5 @@
 **/*_test.py
 .ruff_cache
 **/__pycache__
+.canary-ui-*
+**/dist.rollback-*
