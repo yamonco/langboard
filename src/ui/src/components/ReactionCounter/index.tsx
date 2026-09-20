@@ -76,7 +76,15 @@ function ReactionCounter({ reactions, reactionActorNames, toggleCallback, isActi
                     size="sm"
                     className="!mt-0 h-auto max-w-[100vw] flex-wrap gap-1 px-1 py-0 xs:h-12"
                 >
-                    {reactionOrders.map((reaction) => ReactionCounterButton({ reaction, isDock: true, toggleCallback: toggle, disabled }))}
+                    {reactionOrders.map((reaction) => (
+                        <ReactionCounterButton
+                            key={`reaction-dock-${reaction}`}
+                            reaction={reaction}
+                            isDock
+                            toggleCallback={toggle}
+                            disabled={disabled}
+                        />
+                    ))}
                 </Dock.Root>
             </Popover.Content>
         </Popover.Root>
@@ -178,7 +186,6 @@ function ReactionCounterButton({
     if (Utils.Type.isUndefined(reactionData)) {
         return (
             <Dock.Button
-                key={`reaction-dock-${reaction}`}
                 buttonProps={{
                     type: "button",
                     className: "size-full p-3",
