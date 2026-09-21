@@ -6,7 +6,9 @@
   "license": "SEE LICENSE IN LICENSE",
   "scripts": {
     "dev": "vite --force",
-    "build": "tsc && vite build",
+    "build": "node scripts/retain-build-assets.mjs prepare && tsc && vite build && node scripts/retain-build-assets.mjs prune --delete",
+    "build:assets:dry-run": "node scripts/retain-build-assets.mjs prune",
+    "test:asset-retention": "node --test scripts/retain-build-assets.test.mjs",
     "lint": "eslint . -c eslint.config.js --ignore-pattern node_modules/ --ignore-pattern dist/ --report-unused-disable-directives --max-warnings 0",
     "test:card-hierarchy": "node --experimental-strip-types src/pages/BoardPage/components/board/BoardColumnCardHierarchy.test.ts",
     "preview": "vite preview",
