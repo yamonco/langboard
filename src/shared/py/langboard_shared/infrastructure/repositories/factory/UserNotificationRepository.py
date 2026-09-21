@@ -27,9 +27,17 @@ class UserNotificationRepository(BaseRepository[UserNotification]):
         time_range: Literal["3d", "7d", "1m", "all"] = "3d",
         page: int = 1,
         limit: int = 20,
+        unread_only: bool = False,
     ):
         user_id = InfraHelper.convert_id(user)
-        query = SqlBuilder.select.table(UserNotification).where((UserNotification.column("receiver_id") == user_id))
+        query = (
+            SqlBuilder.select.table(UserNotification)
+            .where(UserNotification.column("receiver_id") == user_id)
+            .where(UserNotification.column("web_visible") == True)  # noqa: E712
+        )
+
+        if unread_only:
+            query = query.where(UserNotification.column("read_at") == None)  # noqa: E711
 
         if time_range.endswith("d"):
             days = int(time_range[:-1])
@@ -69,14 +77,26 @@ class UserNotificationRepository(BaseRepository[UserNotification]):
             notification = result.first()
         return notification
 
-    def count_unread(self, user: TUserParam) -> int:
+    def count_unread(
+        self, user: TUserParam, time_range: Literal["3d", "7d", "1m", "all"] = "all"
+    ) -> int:
         user_id = InfraHelper.convert_id(user)
-        with DbSession.use(readonly=True) as db:
-            result = db.exec(
-                SqlBuilder.select.count(UserNotification, UserNotification.column("id")).where(
-                    (UserNotification.column("receiver_id") == user_id) & (UserNotification.column("read_at") == None)  # noqa
-                )
+        query = SqlBuilder.select.count(UserNotification, UserNotification.column("id")).where(
+            (UserNotification.column("receiver_id") == user_id)
+            & (UserNotification.column("web_visible") == True)  # noqa: E712
+            & (UserNotification.column("read_at") == None)  # noqa: E711
+        )
+        if time_range.endswith("d"):
+            query = query.where(
+                UserNotification.column("created_at") >= SafeDateTime.now() - timedelta(days=int(time_range[:-1]))
             )
+        elif time_range.endswith("m"):
+            query = query.where(
+                UserNotification.column("created_at") >= SafeDateTime.now() - relativedelta(months=int(time_range[:-1]))
+            )
+
+        with DbSession.use(readonly=True) as db:
+            result = db.exec(query)
             return result.first() or 0
 
     def read_all_by_user(self, user: TUserParam):

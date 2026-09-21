@@ -41,12 +41,17 @@ class NotificationService(BaseDomainService):
         return "notification"
 
     def get_api_list(
-        self, user: User, time_range: Literal["3d", "7d", "1m", "all"] = "3d", page: int = 1, limit: int = 20
+        self,
+        user: User,
+        time_range: Literal["3d", "7d", "1m", "all"] = "3d",
+        page: int = 1,
+        limit: int = 20,
+        unread_only: bool = False,
     ) -> tuple[list[dict[str, Any]], bool, int]:
-        raw_notifications = self.repo.user_notification.get_list(user, time_range, page, limit)
+        raw_notifications = self.repo.user_notification.get_list(user, time_range, page, limit, unread_only)
         has_more = len(raw_notifications) > limit
         raw_notifications = raw_notifications[:limit]
-        unread_count = self.repo.user_notification.count_unread(user)
+        unread_count = self.repo.user_notification.count_unread(user, time_range)
 
         references: list[tuple[str, int]] = []
         for notification in raw_notifications:
