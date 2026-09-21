@@ -64,7 +64,7 @@ class NotificationService(BaseDomainService):
         )
         has_more = len(raw_notifications) > limit
         raw_notifications = raw_notifications[:limit]
-        unread_count = self.repo.user_notification.count_unread(user)
+        unread_count = self.repo.user_notification.count_unread(user, time_range)
 
         references: list[tuple[str, int]] = []
         for notification in raw_notifications:

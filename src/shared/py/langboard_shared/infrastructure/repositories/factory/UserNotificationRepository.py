@@ -42,9 +42,6 @@ class UserNotificationRepository(BaseRepository[UserNotification]):
         if unread_only:
             query = query.where(UserNotification.column("read_at") == None)  # noqa
 
-        if unread_only:
-            query = query.where(UserNotification.column("read_at") == None)  # noqa
-
         if authorized_projects_only:
             record_list_text = sql_cast(UserNotification.column("record_list"), String)
             project_id_text = sql_cast(ProjectAssignedUser.column("project_id"), String)
@@ -136,16 +133,26 @@ class UserNotificationRepository(BaseRepository[UserNotification]):
                 .where(UserNotification.column("work_event_dispatched_at") == None)  # noqa: E711
             )
 
-    def count_unread(self, user: TUserParam) -> int:
+    def count_unread(
+        self, user: TUserParam, time_range: Literal["3d", "7d", "1m", "all"] = "all"
+    ) -> int:
         user_id = InfraHelper.convert_id(user)
-        with DbSession.use(readonly=True) as db:
-            result = db.exec(
-                SqlBuilder.select.count(UserNotification, UserNotification.column("id")).where(
-                    (UserNotification.column("receiver_id") == user_id)
-                    & (UserNotification.column("web_visible") == True)  # noqa: E712
-                    & (UserNotification.column("read_at") == None)  # noqa: E711
-                )
+        query = SqlBuilder.select.count(UserNotification, UserNotification.column("id")).where(
+            (UserNotification.column("receiver_id") == user_id)
+            & (UserNotification.column("web_visible") == True)  # noqa: E712
+            & (UserNotification.column("read_at") == None)  # noqa: E711
+        )
+        if time_range.endswith("d"):
+            query = query.where(
+                UserNotification.column("created_at") >= SafeDateTime.now() - timedelta(days=int(time_range[:-1]))
             )
+        elif time_range.endswith("m"):
+            query = query.where(
+                UserNotification.column("created_at") >= SafeDateTime.now() - relativedelta(months=int(time_range[:-1]))
+            )
+
+        with DbSession.use(readonly=True) as db:
+            result = db.exec(query)
             return result.first() or 0
 
     def get_mentioned_card_ids(self, user: TUserParam, limit: int = 500) -> list[int]:

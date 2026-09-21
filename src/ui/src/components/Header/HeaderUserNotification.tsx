@@ -99,12 +99,13 @@ const HeaderUserNotification = memo(({ currentUser }: IHeaderUserNotificationPro
             time_range: timeRange || "3d",
             page: 1,
             limit: NOTIFICATION_PAGE_SIZE,
+            unread_only: isOnlyUnread,
         }).then((res) => {
             setHasMore(!!res.has_more);
             setUnreadCount(res.unread_count || 0);
             forceUpdate();
         });
-    }, [timeRange]);
+    }, [timeRange, isOnlyUnread, mutateAsync]);
 
     const loadMoreNotifications = useCallback(
         async (page: number) => {
@@ -112,13 +113,14 @@ const HeaderUserNotification = memo(({ currentUser }: IHeaderUserNotificationPro
                 time_range: timeRange || "3d",
                 page,
                 limit: NOTIFICATION_PAGE_SIZE,
+                unread_only: isOnlyUnread,
             });
             setHasMore(!!res.has_more);
             setUnreadCount(res.unread_count || 0);
             forceUpdate();
             return true;
         },
-        [timeRange, mutateAsync]
+        [timeRange, isOnlyUnread, mutateAsync]
     );
 
     return (

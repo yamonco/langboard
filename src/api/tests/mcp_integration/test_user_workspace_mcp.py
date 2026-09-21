@@ -73,7 +73,7 @@ def test_unread_service_query_does_not_cleanup_missing_references(monkeypatch: p
     deleted: list[list[int]] = []
     user_notification = SimpleNamespace(
         get_list=lambda *args: [notification],
-        count_unread=lambda _user: 1,
+        count_unread=lambda _user, _time_range: 1,
         delete_all_by_ids=lambda ids: deleted.append(ids),
     )
     service = NotificationService(
