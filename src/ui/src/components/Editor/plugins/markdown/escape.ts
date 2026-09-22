@@ -1,6 +1,7 @@
-import { SlateEditor } from "platejs";
-import { deserializeInlineMd, deserializeMd, DeserializeMdOptions } from "@platejs/markdown";
-import { escapeAngleOpenings } from "@/components/Editor/plugins/markdown/escape-angles";
+import type { SlateEditor } from "platejs";
+import { deserializeInlineMd, deserializeMd } from "@platejs/markdown";
+import type { DeserializeMdOptions } from "@platejs/markdown";
+import { escapeAngleOpenings } from "./escape-angles.ts";
 
 const escapeNonHtmlAngles = (str: string): string => {
     const htmlTagRegex = /^<\/?[a-zA-Z][\w:-]*(\s+[a-zA-Z_:][\w:.-]*(\s*=\s*(".*?"|'.*?'|[^'"<>\s]+))?)*\s*\/?>/;
@@ -216,7 +217,7 @@ export const deserialize = (isInline: bool) => (editor: SlateEditor, text: strin
         try {
             return isInline ? deserializeInlineMd(editor, escaped, options) : deserializeMd(editor, escaped, options);
         } catch {
-            return [{ text }];
+            return isInline ? [{ text }] : [{ type: "p", children: [{ text }] }];
         }
     }
 };
