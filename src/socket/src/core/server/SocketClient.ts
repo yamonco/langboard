@@ -11,6 +11,7 @@ import { SOCKET_MAX_BUFFER_MB } from "@/Constants";
 class SocketClient implements ISocketClient {
     #ws: WebSocket;
     #user: User;
+    #authorizationToken: string;
     #eventListeners: Partial<Record<keyof WebSocket.WebSocketEventMap, ((...args: any[]) => void)[]>>;
     #closeHandlers: Set<() => void>;
     #closed: boolean;
@@ -19,9 +20,14 @@ class SocketClient implements ISocketClient {
         return this.#user;
     }
 
-    constructor(ws: WebSocket, user: User) {
+    public get authorizationToken(): string {
+        return this.#authorizationToken;
+    }
+
+    constructor(ws: WebSocket, user: User, authorizationToken: string) {
         this.#ws = ws;
         this.#user = user;
+        this.#authorizationToken = authorizationToken;
         this.#closeHandlers = new Set();
         this.#closed = false;
         this.#eventListeners = {

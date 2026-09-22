@@ -1,4 +1,4 @@
-import { EDITOR_SYNC_MAX_CONCURRENCY, EDITOR_SYNC_MAX_REQUEST_SIZE_MB } from "@/Constants";
+import { EDITOR_SYNC_MAX_CONCURRENCY, EDITOR_SYNC_MAX_REQUEST_SIZE_MB, EDITOR_SYNC_OWNER } from "@/Constants";
 import { JsonResponse } from "@/core/server/ApiResponse";
 import Routes, { TRouteHandler } from "@/core/server/Routes";
 import {
@@ -16,6 +16,10 @@ let activeRequests = 0;
 
 const registerEditorSyncRoute = (path: string, handler: TRouteHandler) => {
     Routes.post(path, async (context) => {
+        if (EDITOR_SYNC_OWNER !== "node") {
+            context.req.resume();
+            return JsonResponse({ message: "Node is not the editor sync owner." }, EHttpStatus.HTTP_503_SERVICE_UNAVAILABLE);
+        }
         if (activeRequests >= EDITOR_SYNC_MAX_CONCURRENCY) {
             context.req.resume();
             return JsonResponse({ message: "Too many concurrent editor sync requests." }, EHttpStatus.HTTP_503_SERVICE_UNAVAILABLE);
@@ -151,7 +155,15 @@ registerEditorSyncRoute("/editor-sync/rich/patch-request", async ({ req, user })
         return JsonResponse({});
     } catch (error) {
         const reason = error instanceof Error ? error.message : "Failed to request editor sync rich patch.";
-        return JsonResponse({ message: reason }, EHttpStatus.HTTP_403_FORBIDDEN);
+        let status = EHttpStatus.HTTP_403_FORBIDDEN;
+        if (reason === "timeout") {
+            status = EHttpStatus.HTTP_504_GATEWAY_TIMEOUT;
+        } else if (["busy", "conflict", "inactive"].includes(reason)) {
+            status = EHttpStatus.HTTP_409_CONFLICT;
+        } else if (reason === "frame-too-large") {
+            status = EHttpStatus.HTTP_413_REQUEST_ENTITY_TOO_LARGE;
+        }
+        return JsonResponse({ message: reason }, status);
     }
 });
 

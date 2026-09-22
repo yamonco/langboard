@@ -10,10 +10,12 @@ from ....domain.models import (
     Bot,
     BotLog,
     Card,
+    ChatGraphApprovalRequest,
     ChatHistory,
     ChatSession,
     GraphApprovalRequest,
     InternalBot,
+    InternalBotRun,
     Project,
     ProjectColumn,
     ProjectWiki,
@@ -22,6 +24,7 @@ from ....domain.models import (
 from ....domain.models.bases import BaseGraphApprovalBotRequest, BaseGraphApprovalRequestModel
 from ....domain.models.BotLog import BotLogType
 from ....domain.models.GraphApprovalRequest import GraphApprovalOriginType, GraphApprovalStatus
+from ....domain.models.InternalBotRun import InternalBotRunKind, InternalBotRunStatus
 from ....Env import Env
 from ....helpers import InfraHelper
 from ....publishers import GraphApprovalPublisher, ProjectBotPublisher
@@ -67,6 +70,16 @@ class GraphApprovalRequestService(BaseDomainService):
         self, approval: GraphApprovalRequest, detail: BaseGraphApprovalRequestModel | None = None
     ) -> dict[str, Any]:
         response = approval.api_response()
+        if approval.request_type == GraphApprovalOriginType.Editor:
+            run = self.repo.internal_bot_run.get_editor_run_by_approval(approval.id)
+            response["durable_run"] = run is not None
+            response["durable_run_status"] = run.status.value if run is not None else None
+            response["durable_run_task_id"] = run.client_task_id if run is not None else None
+            response["durable_run_kind"] = run.kind.value if run is not None else None
+        elif approval.request_type == GraphApprovalOriginType.Chat:
+            run = self.repo.internal_bot_run.get_board_chat_run_by_approval(approval.id)
+            response["durable_run"] = run is not None
+            response["durable_run_status"] = run.status.value if run is not None else None
         detail = detail or self.repo.graph_approval_request.get_detail(approval)
         if detail:
             detail_response = detail.api_response(is_graph_approval_request=True)
@@ -84,6 +97,108 @@ class GraphApprovalRequestService(BaseDomainService):
         self.expire_pending()
         project_id = InfraHelper.convert_id(project)
         return self.repo.graph_approval_request.count_pending_by_project(project_id)
+
+    def is_pending_chat_resume(
+        self, approval_uid: SnowflakeID, chat_session: ChatSession, chat_history: ChatHistory, thread_id: str
+    ) -> bool:
+        approval = self.repo.graph_approval_request.get_by_id_like(approval_uid)
+        if (
+            not approval
+            or approval.request_type != GraphApprovalOriginType.Chat
+            or approval.status != GraphApprovalStatus.Pending
+            or approval.thread_id != thread_id
+            or (approval.expires_at is not None and approval.expires_at <= SafeDateTime.now())
+        ):
+            return False
+
+        detail = self.repo.graph_approval_request.get_detail(approval)
+        return bool(
+            isinstance(detail, ChatGraphApprovalRequest)
+            and detail.chat_session_id == chat_session.id
+            and detail.chat_history_id == chat_history.id
+        )
+
+    def prepare_board_chat_interrupt(
+        self, run: InternalBotRun, interrupt: dict[str, Any]
+    ) -> GraphApprovalRequest | None:
+        value = interrupt.get("value", interrupt)
+        if not isinstance(value, dict) or value.get("type") != "approval_request":
+            return None
+
+        thread_id = run.graph_thread_id
+        session_id = run.graph_session_id
+        expected_scope_uid = run.scope_uid if run.scope_uid else run.project_id.to_short_code()
+        if (
+            not thread_id
+            or not session_id
+            or (run.scope_table != "project" and not run.scope_uid)
+            or value.get("origin_type") != GraphApprovalOriginType.Chat.value
+            or value.get("scope_table") != run.scope_table
+            or value.get("scope_uid") != expected_scope_uid
+            or value.get("thread_id") != thread_id
+            or value.get("session_id") != session_id
+            or not run.chat_session_id
+            or not run.ai_chat_history_id
+        ):
+            raise ValueError("Graph approval does not belong to the claimed chat run")
+
+        preview = value.get("preview")
+        request_payload = value.get("request_payload")
+        if not isinstance(preview, dict) or not isinstance(request_payload, dict):
+            raise ValueError("Graph approval payload is invalid")
+
+        return GraphApprovalRequest(
+            requested_by_user_id=run.user_id,
+            thread_id=thread_id,
+            run_id=run.client_task_id,
+            request_type=GraphApprovalOriginType.Chat,
+            action_type=str(value.get("action_type") or "api_call"),
+            permission=str(value.get("permission") or ""),
+            tool_name=self.__string_or_none(value.get("tool_name")),
+            api_name=self.__string_or_none(value.get("api_name")),
+            request_payload=request_payload,
+            preview_payload=preview,
+            status=GraphApprovalStatus.Pending,
+            expires_at=self.__parse_expires_at(value.get("expires_at")),
+        )
+
+    def prepare_editor_interrupt(self, run: InternalBotRun, interrupt: dict[str, Any]) -> GraphApprovalRequest:
+        value = interrupt.get("value", interrupt)
+        document_name = run.request_payload.get("document_name")
+        if (
+            run.kind not in (InternalBotRunKind.EditorChat, InternalBotRunKind.EditorCopilot)
+            or run.scope_table not in (Card.__tablename__, ProjectWiki.__tablename__)
+            or not run.scope_uid
+            or not run.graph_thread_id
+            or not run.graph_session_id
+            or not isinstance(document_name, str)
+            or not isinstance(value, dict)
+            or value.get("type") != "approval_request"
+            or value.get("origin_type") != GraphApprovalOriginType.Editor.value
+            or value.get("scope_table") != run.scope_table
+            or value.get("scope_uid") != run.scope_uid
+            or value.get("document_name") != document_name
+            or value.get("thread_id") != run.graph_thread_id
+            or value.get("session_id") != run.graph_session_id
+            or not isinstance(value.get("preview"), dict)
+            or not isinstance(value.get("request_payload"), dict)
+        ):
+            raise ValueError("Graph approval does not belong to the claimed editor run")
+
+        return GraphApprovalRequest(
+            requested_by_user_id=run.user_id,
+            thread_id=run.graph_thread_id,
+            run_id=str(value.get("run_id") or interrupt.get("id") or run.client_task_id),
+            request_type=GraphApprovalOriginType.Editor,
+            action_type=str(value.get("action_type") or "api_call"),
+            permission=str(value.get("permission") or ""),
+            tool_name=self.__string_or_none(value.get("tool_name")),
+            api_name=self.__string_or_none(value.get("api_name")),
+            request_payload=value["request_payload"],
+            preview_payload=value["preview"],
+            status=GraphApprovalStatus.Pending,
+            expires_at=self.__parse_expires_at(value.get("expires_at")),
+        )
 
     def create_from_interrupt(
         self,
@@ -151,7 +266,7 @@ class GraphApprovalRequestService(BaseDomainService):
         approval = self.repo.graph_approval_request.get_by_id_like(approval_uid)
         if project and approval and self.__get_project_id(approval) != InfraHelper.convert_id(project):
             return None
-        if not approval or approval.status != GraphApprovalStatus.Pending:
+        if not approval or approval.status != GraphApprovalStatus.Pending or self.__has_durable_run(approval):
             return None
         project_obj = project if isinstance(project, Project) else self.__get_project(approval)
         if self.__expire_if_needed(approval, project_obj):
@@ -183,7 +298,7 @@ class GraphApprovalRequestService(BaseDomainService):
         approval = self.repo.graph_approval_request.get_by_id_like(approval_uid)
         if project and approval and self.__get_project_id(approval) != InfraHelper.convert_id(project):
             return None
-        if not approval or approval.status != GraphApprovalStatus.Pending:
+        if not approval or approval.status != GraphApprovalStatus.Pending or self.__has_durable_run(approval):
             return None
         project_obj = project if isinstance(project, Project) else self.__get_project(approval)
         if self.__expire_if_needed(approval, project_obj):
@@ -214,7 +329,7 @@ class GraphApprovalRequestService(BaseDomainService):
         for approval in expired_approvals:
             project = self.__get_project(approval)
             self.__expire(approval, project)
-        return expired_approvals
+        return [approval for approval in expired_approvals if approval.status == GraphApprovalStatus.Expired]
 
     def cancel_pending_by_scope(
         self,
@@ -236,6 +351,29 @@ class GraphApprovalRequestService(BaseDomainService):
         for approval in approvals:
             self.__cancel(approval, project, reason)
         return approvals
+
+    def cancel_editor_run(self, run: InternalBotRun, project: Project, *, reason: str) -> InternalBotRun | None:
+        if run.status != InternalBotRunStatus.AwaitingApproval:
+            return None
+
+        interrupt = run.request_payload.get("graph_interrupt")
+        value = interrupt.get("value", interrupt) if isinstance(interrupt, dict) else None
+        approval_uid = value.get("approval_uid") if isinstance(value, dict) else None
+        if not isinstance(approval_uid, str) or not approval_uid:
+            return None
+
+        approval = self.repo.graph_approval_request.get_by_id_like(approval_uid)
+        if (
+            approval is None
+            or approval.request_type != GraphApprovalOriginType.Editor
+            or approval.requested_by_user_id != run.user_id
+            or approval.thread_id != run.graph_thread_id
+        ):
+            return None
+
+        self.__cancel(approval, project, reason)
+        cancelled = self.repo.internal_bot_run.get_by_id(run.id)
+        return cancelled if cancelled and cancelled.status == InternalBotRunStatus.Cancelled else None
 
     def cancel_pending_by_bot(self, bot: Bot, *, reason: str) -> list[GraphApprovalRequest]:
         approvals = [
@@ -447,6 +585,26 @@ class GraphApprovalRequestService(BaseDomainService):
         if approval.status != GraphApprovalStatus.Pending:
             return
 
+        if self.__has_durable_board_chat_run(approval):
+            resolved = self.repo.internal_bot_run.close_board_chat_approval(approval.id, status, status_message)
+            if resolved is not None:
+                approval.status = resolved.status
+                approval.resolved_at = resolved.resolved_at
+                if project:
+                    GraphApprovalPublisher.updated(project, self.get_api_response(resolved))
+                self.__acknowledge_graph(resolved, {})
+            return
+
+        if self.__has_durable_editor_run(approval):
+            resolved = self.repo.internal_bot_run.close_editor_approval(approval.id, status, status_message)
+            if resolved is not None:
+                approval.status = resolved.status
+                approval.resolved_at = resolved.resolved_at
+                if project:
+                    GraphApprovalPublisher.updated(project, self.get_api_response(resolved))
+                self.__acknowledge_graph(resolved, {})
+            return
+
         resume_result: dict[str, Any] | None = None
         try:
             resume_result = self.__resume_graph(approval, resume)
@@ -463,6 +621,21 @@ class GraphApprovalRequestService(BaseDomainService):
             GraphApprovalPublisher.updated(project, self.get_api_response(approval))
         if resume_result is not None:
             self.__acknowledge_graph(approval, resume_result)
+
+    def __has_durable_board_chat_run(self, approval: GraphApprovalRequest) -> bool:
+        return (
+            approval.request_type == GraphApprovalOriginType.Chat
+            and self.repo.internal_bot_run.get_board_chat_run_by_approval(approval.id) is not None
+        )
+
+    def __has_durable_editor_run(self, approval: GraphApprovalRequest) -> bool:
+        return (
+            approval.request_type == GraphApprovalOriginType.Editor
+            and self.repo.internal_bot_run.get_editor_run_by_approval(approval.id) is not None
+        )
+
+    def __has_durable_run(self, approval: GraphApprovalRequest) -> bool:
+        return self.__has_durable_board_chat_run(approval) or self.__has_durable_editor_run(approval)
 
     def __get_project(self, approval: GraphApprovalRequest) -> Project | None:
         project_id = self.__get_project_id(approval)

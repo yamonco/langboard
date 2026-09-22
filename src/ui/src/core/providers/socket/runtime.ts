@@ -177,6 +177,7 @@ export const createSocketRuntime = ({
             case ESocketStatus.WS_3000_UNAUTHORIZED:
                 return handleUnauthorizedClose();
             case ESocketStatus.WS_1006_ABNORMAL_CLOSURE:
+            case ESocketStatus.WS_1011_INTERNAL_ERROR:
             case ESocketStatus.WS_1012_SERVICE_RESTART:
                 return handleReconnectableClose();
             default:

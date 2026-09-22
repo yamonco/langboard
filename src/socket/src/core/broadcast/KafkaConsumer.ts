@@ -1,17 +1,23 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { BROADCAST_URLS, PROJECT_NAME } from "@/Constants";
+import { BROADCAST_MAX_MESSAGE_BYTES, BROADCAST_URLS, PROJECT_NAME } from "@/Constants";
 import BaseConsumer from "@/core/broadcast/BaseConsumer";
+import { decodeBrokerEnvelope } from "@/core/broadcast/BrokerEnvelope";
 import Cache from "@/core/caching/Cache";
 import Logger from "@/core/utils/Logger";
 import { Utils } from "@langboard/core/utils";
 import { Consumer, Kafka } from "kafkajs";
 
+const BROKER_ENVELOPE_SCHEMA_VERSION = "2";
+
 class KafkaConsumer extends BaseConsumer {
     #client: Kafka;
-    #consumer!: Consumer;
+    #consumer: Consumer | undefined;
+    #groupId: string;
+    #stopped = false;
 
-    constructor() {
+    constructor(groupId: string) {
         super();
+        this.#groupId = groupId;
 
         this.#client = new Kafka({
             clientId: `${PROJECT_NAME}-socket`,
@@ -27,19 +33,31 @@ class KafkaConsumer extends BaseConsumer {
     }
 
     public async start() {
-        this.#consumer = this.#client.consumer({
-            groupId: PROJECT_NAME,
-            allowAutoTopicCreation: true,
-        });
+        this.#stopped = false;
 
-        while (true) {
+        while (!this.#stopped) {
+            const consumer = this.#client.consumer({
+                groupId: this.#groupId,
+                allowAutoTopicCreation: true,
+                maxBytes: BROADCAST_MAX_MESSAGE_BYTES,
+            });
+            this.#consumer = consumer;
+
             try {
-                await this.#consumer.connect();
+                await consumer.connect();
+                if (this.#stopped) {
+                    await consumer.disconnect().catch(() => undefined);
+                    return;
+                }
 
                 const topics = this.getEmitterNames();
-                await this.#consumer.subscribe({ topics, fromBeginning: true });
+                await consumer.subscribe({ topics, fromBeginning: true });
+                if (this.#stopped) {
+                    await consumer.disconnect().catch(() => undefined);
+                    return;
+                }
 
-                await this.#consumer.run({
+                await consumer.run({
                     eachMessage: async ({ topic, message }) => {
                         if (!message.value) {
                             return;
@@ -47,19 +65,23 @@ class KafkaConsumer extends BaseConsumer {
 
                         try {
                             const decoder = new TextDecoder("utf-8");
-                            const model = Utils.Json.Parse(decoder.decode(message.value));
-                            if (!model) {
+                            const envelope = decodeBrokerEnvelope(
+                                Utils.Json.Parse(decoder.decode(message.value)),
+                                topic,
+                                BROKER_ENVELOPE_SCHEMA_VERSION
+                            );
+                            if (!envelope) {
                                 return;
                             }
 
-                            const cacheKey = model.cache_key;
-                            if (!cacheKey) {
-                                return;
-                            }
-
-                            const data = await Cache.get<Record<string, any>>(cacheKey);
-                            if (!data) {
-                                return;
+                            let data: unknown;
+                            if (envelope.type === "inline") {
+                                data = envelope.data;
+                            } else {
+                                data = await Cache.get<Record<string, any>>(envelope.cacheKey);
+                                if (!data) {
+                                    return;
+                                }
                             }
 
                             await this.emit(topic, data);
@@ -72,6 +94,13 @@ class KafkaConsumer extends BaseConsumer {
 
                 break;
             } catch (error) {
+                if (this.#consumer === consumer) {
+                    this.#consumer = undefined;
+                }
+                await consumer.disconnect().catch(() => undefined);
+                if (this.#stopped) {
+                    return;
+                }
                 Logger.red("Error starting consumer", error, "\n");
                 await new Promise((resolve) => setTimeout(resolve, 5000)); // Retry after 5 seconds
             }
@@ -79,7 +108,10 @@ class KafkaConsumer extends BaseConsumer {
     }
 
     public async stop() {
-        await this.#consumer?.disconnect();
+        this.#stopped = true;
+        const consumer = this.#consumer;
+        this.#consumer = undefined;
+        await consumer?.disconnect();
     }
 }
 

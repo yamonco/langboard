@@ -184,11 +184,9 @@ export const useOllamaPullingModelProgress = (name: string): number => {
 };
 
 export const updateProgressCallback =
-    ({ name, onSuccess, onError }: { name: string; onSuccess: () => void; onError: (message: string) => void }) =>
+    ({ onSuccess, onError }: { onSuccess: () => void; onError: (message: string) => void }) =>
     (data: IPullOllamaModelResponse) => {
-        if (name !== data.model) {
-            return;
-        }
+        const name = data.model;
 
         if (data.percent) {
             getOllamaModelStore().upsertPullingModel({ name, progress: data.percent, isTracking: true });

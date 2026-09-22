@@ -5,5 +5,6 @@ import "@/validators/BoardSettings";
 import "@/validators/BoardWiki";
 import "@/validators/BoardWikiPrivate";
 import "@/validators/Dashboard";
+import "@/validators/OllamaManager";
 import "@/validators/User";
 import "@/validators/UserPrivate";

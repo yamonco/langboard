@@ -1,6 +1,7 @@
 import SocketClient from "@/core/server/SocketClient";
 import { Utils } from "@langboard/core/utils";
 import { ESocketTopic } from "@langboard/core/enums";
+import Subscription from "@/core/server/Subscription";
 
 export type TEventContext = {
     client: SocketClient;
@@ -31,14 +32,30 @@ class _EventManager {
         return this;
     }
 
-    public async emit(topic: ESocketTopic, event: string, context: TEventContext): Promise<void> {
-        topic = Utils.String.convertSafeEnum(ESocketTopic, topic);
+    public async emit(topic: ESocketTopic | string, event: string, context: TEventContext): Promise<void> {
+        const socketTopic = Utils.String.convertSafeEnum(ESocketTopic, topic);
 
-        if (!this.#events.has(event) || !this.#events.get(event)![topic]) {
+        if (!this.#events.has(event) || !this.#events.get(event)![socketTopic]) {
             return;
         }
 
-        const callbacks = this.#events.get(event)![topic]!;
+        if (socketTopic !== ESocketTopic.None) {
+            if (!Utils.Type.isString(context.topicId) || !Subscription.isSubscribed(context.client, socketTopic, context.topicId)) {
+                return;
+            }
+            try {
+                if (!(await Subscription.validate(socketTopic, { client: context.client, topicId: context.topicId }))) {
+                    return;
+                }
+            } catch {
+                return;
+            }
+            if (!Subscription.isSubscribed(context.client, socketTopic, context.topicId)) {
+                return;
+            }
+        }
+
+        const callbacks = this.#events.get(event)![socketTopic]!;
         for (let i = 0; i < callbacks.length; ++i) {
             const callback = callbacks[i];
 

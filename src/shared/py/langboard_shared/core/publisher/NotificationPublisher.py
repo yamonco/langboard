@@ -11,6 +11,7 @@ class NotificationPublishModel(BaseModel):
     api_notification: dict[str, Any]
     target_user: User
     scope_models: list[tuple[str, int]] | None
+    web_handled_by_python: bool = False
 
     # email
     email_template_name: TEmailTemplateName | None

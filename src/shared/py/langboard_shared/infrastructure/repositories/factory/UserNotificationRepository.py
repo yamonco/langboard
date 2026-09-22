@@ -69,6 +69,38 @@ class UserNotificationRepository(BaseRepository[UserNotification]):
             notification = result.first()
         return notification
 
+    def get_pending_web_fanout(self, older_than: SafeDateTime, limit: int) -> list[UserNotification]:
+        query = (
+            SqlBuilder.select.table(UserNotification)
+            .where(
+                (UserNotification.column("web_fanout_pending") == True)  # noqa: E712
+                & (UserNotification.column("updated_at") <= older_than)
+            )
+            .order_by(UserNotification.column("updated_at"), UserNotification.column("id"))
+            .limit(limit)
+        )
+        with DbSession.use(readonly=False) as db:
+            return db.exec(query).all()
+
+    def defer_web_fanout(self, notification: UserNotification) -> None:
+        with DbSession.use(readonly=False) as db:
+            db.exec(
+                SqlBuilder.update.table(UserNotification)
+                .values({UserNotification.column("updated_at"): SafeDateTime.now()})
+                .where(
+                    (UserNotification.column("id") == notification.id)
+                    & (UserNotification.column("web_fanout_pending") == True)  # noqa: E712
+                )
+            )
+
+    def complete_web_fanout(self, notification: UserNotification) -> None:
+        with DbSession.use(readonly=False) as db:
+            db.exec(
+                SqlBuilder.update.table(UserNotification)
+                .values({UserNotification.column("web_fanout_pending"): False})
+                .where(UserNotification.column("id") == notification.id)
+            )
+
     def count_unread(self, user: TUserParam) -> int:
         user_id = InfraHelper.convert_id(user)
         with DbSession.use(readonly=True) as db:
@@ -79,12 +111,12 @@ class UserNotificationRepository(BaseRepository[UserNotification]):
             )
             return result.first() or 0
 
-    def read_all_by_user(self, user: TUserParam):
+    def read_all_by_user(self, user: TUserParam, read_at: SafeDateTime | None = None):
         user_id = InfraHelper.convert_id(user)
         with DbSession.use(readonly=False) as db:
             db.exec(
                 SqlBuilder.update.table(UserNotification)
-                .values({UserNotification.column("read_at"): SafeDateTime.now()})
+                .values({UserNotification.column("read_at"): read_at or SafeDateTime.now()})
                 .where(
                     (UserNotification.column("receiver_id") == user_id) & (UserNotification.column("read_at") == None)  # noqa
                 )

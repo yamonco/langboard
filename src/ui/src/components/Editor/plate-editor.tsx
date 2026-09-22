@@ -15,10 +15,7 @@ import { YjsPlugin } from "@platejs/yjs/react";
 import { PlateEditor as TPlateEditor } from "platejs/react";
 import { MarkdownPlugin } from "@platejs/markdown";
 import { useSocket } from "@/core/providers/SocketProvider";
-import { EEditorType } from "@langboard/core/constants";
-import { ESocketTopic } from "@langboard/core/enums";
 import { Utils } from "@langboard/core/utils";
-import type { TSocketScopedTopic } from "@/core/stores/socket/types";
 import { useTranslation } from "react-i18next";
 import SyncBlocker from "@/components/Collaborative/SyncBlocker";
 import Badge from "@/components/base/Badge";
@@ -32,22 +29,14 @@ import useRejectGraphApproval from "@/controllers/api/board/graphApprovals/useRe
 import useBoardGraphApprovalDeletedHandlers from "@/controllers/socket/board/graphApprovals/useBoardGraphApprovalDeletedHandlers";
 import useBoardGraphApprovalRequestedHandlers from "@/controllers/socket/board/graphApprovals/useBoardGraphApprovalRequestedHandlers";
 import useBoardGraphApprovalUpdatedHandlers from "@/controllers/socket/board/graphApprovals/useBoardGraphApprovalUpdatedHandlers";
+import useEditorApprovalResumeHandlers from "@/controllers/socket/board/graphApprovals/useEditorApprovalResumeHandlers";
+import useEditorAIRunStatusHandlers, { type IEditorAIRunStatusResult } from "@/controllers/socket/shared/useEditorAIRunStatusHandlers";
 import useSwitchSocketHandlers from "@/core/hooks/useSwitchSocketHandlers";
+import { EDITOR_AI_STATUS_MAX_POLLS, EDITOR_AI_STATUS_POLL_INTERVAL_MS, EInternalBotRunStatus } from "@/core/constants/InternalBotRun";
 import { GraphApprovalRequestModel } from "@/core/models";
 import { EGraphApprovalOriginType, EGraphApprovalStatus } from "@/core/models/GraphApprovalRequestModel";
 import { useGraphApprovalSummary, useGraphApprovalTitle } from "@/pages/BoardPage/components/board/GraphApprovalUtils";
 
-interface IEditorSyncRichPatchRequest {
-    document_name: string;
-    value: string;
-}
-
-interface IRichPatchSocketTarget {
-    topic: TSocketScopedTopic;
-    topicId: string;
-}
-
-const EDITOR_SYNC_RICH_PATCH_REQUEST_EVENT = "editor-sync:rich-draft-patch-request";
 const EMPTY_EDITOR_VALUE: Value = [{ type: "p", children: [{ text: "" }] }];
 const YJS_SELECTION_MISMATCH_ERROR = "Path doesn't match yText";
 
@@ -130,35 +119,13 @@ function EditorWrapper(editorProps: TPlateEditorProps) {
         onCollaborativeSyncChange: handleCollaborativeSyncChange,
     });
     const mounted = useMounted();
-    const socket = useSocket();
-    const { documentID, editorType, form } = useEditorData();
+    const { documentID, form } = useEditorData();
     const projectUID = Utils.Type.isString(form?.project_uid) ? form.project_uid : undefined;
     const isWaitingForCollaborativeReady = !readOnly && !!documentID && !isCollaborativeReady;
     const valueRef = useRef(value);
     const deserializedValueRef = useRef(deserializedValue);
     valueRef.current = value;
     deserializedValueRef.current = deserializedValue;
-    const richPatchSocketTarget = useMemo<IRichPatchSocketTarget | null>(() => {
-        if (!documentID) {
-            return null;
-        }
-
-        if (editorType === EEditorType.CardDescription && form?.card_uid) {
-            return {
-                topic: ESocketTopic.BoardCard,
-                topicId: form.card_uid,
-            };
-        }
-
-        if (editorType === EEditorType.WikiContent && form?.wiki_uid) {
-            return {
-                topic: ESocketTopic.BoardWikiPrivate,
-                topicId: form.wiki_uid,
-            };
-        }
-
-        return null;
-    }, [documentID, editorType, form]);
     const focusEditor = useCallback(() => {
         if (!focusOnReady || readOnly) {
             return;
@@ -287,38 +254,6 @@ function EditorWrapper(editorProps: TPlateEditorProps) {
     }, [documentID, readOnly]);
 
     useEffect(() => {
-        if (!mounted || readOnly || !documentID || !richPatchSocketTarget) {
-            return;
-        }
-
-        const callback = (data: IEditorSyncRichPatchRequest) => {
-            if (data.document_name !== documentID) {
-                return;
-            }
-
-            updateCollaborativeValue(data.value);
-        };
-
-        socket.on<IEditorSyncRichPatchRequest>({
-            topic: richPatchSocketTarget.topic,
-            topicId: richPatchSocketTarget.topicId,
-            event: EDITOR_SYNC_RICH_PATCH_REQUEST_EVENT,
-            eventKey: documentID,
-            callback,
-        });
-
-        return () => {
-            socket.off({
-                topic: richPatchSocketTarget.topic,
-                topicId: richPatchSocketTarget.topicId,
-                event: EDITOR_SYNC_RICH_PATCH_REQUEST_EVENT,
-                eventKey: documentID,
-                callback,
-            });
-        };
-    }, [documentID, mounted, readOnly, richPatchSocketTarget, socket, updateCollaborativeValue]);
-
-    useEffect(() => {
         if (!mounted || readOnly || !documentID) {
             return;
         }
@@ -329,6 +264,24 @@ function EditorWrapper(editorProps: TPlateEditorProps) {
         }
 
         setIsCollaborativeReady(false);
+        const cursorEditor = editor as TEditor & {
+            sendCursorPosition?: (range?: TEditor["selection"]) => void;
+        };
+        const originalSendCursorPosition = cursorEditor.sendCursorPosition;
+        if (originalSendCursorPosition) {
+            cursorEditor.sendCursorPosition = (range) => {
+                try {
+                    originalSendCursorPosition.call(cursorEditor, range);
+                } catch (error) {
+                    if (!isYjsSelectionMismatchError(error)) {
+                        throw error;
+                    }
+
+                    editor.selection = null;
+                    originalSendCursorPosition.call(cursorEditor, null);
+                }
+            };
+        }
         const originalOnChange = editor.onChange;
         if (!Utils.Type.isFunction<TEditorOnChange>(originalOnChange)) {
             return;
@@ -343,7 +296,13 @@ function EditorWrapper(editorProps: TPlateEditorProps) {
                 }
 
                 editor.selection = null;
-                originalOnChange();
+                try {
+                    originalOnChange();
+                } catch (retryError) {
+                    if (!isYjsSelectionMismatchError(retryError)) {
+                        throw retryError;
+                    }
+                }
             }
         };
 
@@ -400,6 +359,7 @@ function EditorWrapper(editorProps: TPlateEditorProps) {
         return () => {
             disposed = true;
             editor.onChange = originalOnChange;
+            cursorEditor.sendCursorPosition = originalSendCursorPosition;
             setIsCollaborativeReady(false);
             if (!initStarted) {
                 window.clearTimeout(initTimeoutID);
@@ -478,7 +438,7 @@ function EditorGraphApprovalBanner({ projectUID, documentID }: { projectUID?: st
     const socket = useSocket();
     const effectiveProjectUID = projectUID || "";
     const isEnabled = !!projectUID && !!documentID;
-    useGetGraphApprovals(
+    const { refetch: refetchGraphApprovals } = useGetGraphApprovals(
         {
             project_uid: effectiveProjectUID,
             status: EGraphApprovalStatus.Pending,
@@ -490,6 +450,17 @@ function EditorGraphApprovalBanner({ projectUID, documentID }: { projectUID?: st
             interceptToast: false,
         }
     );
+    useEffect(() => {
+        if (!isEnabled) {
+            return;
+        }
+        const eventKey = `editor-graph-approvals-open-${effectiveProjectUID}-${documentID}`;
+        const onOpen = () => {
+            void refetchGraphApprovals();
+        };
+        socket.on({ event: "open", eventKey, callback: onOpen });
+        return () => socket.off({ event: "open", eventKey, callback: onOpen });
+    }, [socket, effectiveProjectUID, documentID, isEnabled, refetchGraphApprovals]);
     const graphApprovalRequestedHandlers = useBoardGraphApprovalRequestedHandlers({ projectUID: effectiveProjectUID });
     const graphApprovalUpdatedHandlers = useBoardGraphApprovalUpdatedHandlers({ projectUID: effectiveProjectUID });
     const graphApprovalDeletedHandlers = useBoardGraphApprovalDeletedHandlers({ projectUID: effectiveProjectUID });
@@ -517,8 +488,10 @@ function EditorGraphApprovalBanner({ projectUID, documentID }: { projectUID?: st
 
     return (
         <EditorGraphApprovalBannerContent
+            key={approval.uid}
             approval={approval}
             effectiveProjectUID={effectiveProjectUID}
+            refetchGraphApprovals={refetchGraphApprovals}
             approveMutation={approveMutation}
             rejectMutation={rejectMutation}
         />
@@ -528,18 +501,184 @@ function EditorGraphApprovalBanner({ projectUID, documentID }: { projectUID?: st
 function EditorGraphApprovalBannerContent({
     approval,
     effectiveProjectUID,
+    refetchGraphApprovals,
     approveMutation,
     rejectMutation,
 }: {
     approval: GraphApprovalRequestModel.TModel;
     effectiveProjectUID: string;
+    refetchGraphApprovals: ReturnType<typeof useGetGraphApprovals>["refetch"];
     approveMutation: ReturnType<typeof useApproveGraphApproval>;
     rejectMutation: ReturnType<typeof useRejectGraphApproval>;
 }): React.JSX.Element {
     const [t] = useTranslation();
+    const socket = useSocket();
     const approvalUID = approval.useField("uid");
+    const durableRun = approval.useField("durable_run");
+    const durableRunStatus = approval.useField("durable_run_status");
+    const durableRunTaskID = approval.useField("durable_run_task_id");
+    const durableRunKind = approval.useField("durable_run_kind");
     const title = useGraphApprovalTitle(approval, t("bot.Editor approval requested"));
     const summary = useGraphApprovalSummary(approval);
+    const [resumePending, setResumePending] = useState(false);
+    const [resumeRecovering, setResumeRecovering] = useState(false);
+    const [resumeFailed, setResumeFailed] = useState(false);
+    const [refreshPending, setRefreshPending] = useState(false);
+    const refreshApprovalStatus = useCallback(async () => {
+        setRefreshPending(true);
+        try {
+            const result = await refetchGraphApprovals();
+            const refreshed = result.data?.approvals.find((item) => item.uid === approval.uid);
+            if (result.isSuccess && refreshed?.durable_run_status === EInternalBotRunStatus.AwaitingApproval) {
+                setResumeFailed(false);
+            }
+        } catch {
+            setResumeFailed(true);
+        } finally {
+            setRefreshPending(false);
+        }
+    }, [approval, refetchGraphApprovals]);
+    const onResumeResult = useCallback(
+        (result: { approval_uid: string; status: string }) => {
+            if (result.approval_uid !== approval.uid) {
+                return;
+            }
+            setResumePending(false);
+            setResumeRecovering(false);
+            if (result.status === "completed" || result.status === "awaiting_approval") {
+                setResumeFailed(false);
+                GraphApprovalRequestModel.Model.deleteModel(approval.uid);
+                void refetchGraphApprovals();
+            } else {
+                setResumeFailed(true);
+                void refreshApprovalStatus();
+            }
+        },
+        [approval, refetchGraphApprovals, refreshApprovalStatus]
+    );
+    const resumeHandlers = useEditorApprovalResumeHandlers({ approvalUID, callback: onResumeResult });
+    useEffect(() => resumeHandlers.on(), [resumeHandlers]);
+    const onRunStatus = useCallback(
+        (result: IEditorAIRunStatusResult) => {
+            if (result.task_id !== approval.durable_run_task_id) {
+                return;
+            }
+            if (result.status === EInternalBotRunStatus.Completed || result.status === EInternalBotRunStatus.AwaitingApproval) {
+                setResumePending(false);
+                setResumeRecovering(false);
+                setResumeFailed(false);
+                GraphApprovalRequestModel.Model.deleteModel(approval.uid);
+                void refetchGraphApprovals();
+                return;
+            }
+            if (result.status === "error" && result.error_code === "unavailable") {
+                return;
+            }
+            if (
+                result.status === EInternalBotRunStatus.Failed ||
+                result.status === EInternalBotRunStatus.Cancelled ||
+                result.status === EInternalBotRunStatus.Uncertain ||
+                result.status === "error"
+            ) {
+                setResumePending(false);
+                setResumeRecovering(false);
+                setResumeFailed(true);
+                void refreshApprovalStatus();
+            }
+        },
+        [approval, refetchGraphApprovals, refreshApprovalStatus]
+    );
+    const runStatusHandlers = useEditorAIRunStatusHandlers({
+        eventKey: `editor-approval-run-status-${approvalUID}`,
+        callback: onRunStatus,
+    });
+    useEffect(() => runStatusHandlers.on(), [runStatusHandlers]);
+    useEffect(() => {
+        if (!resumePending) {
+            return;
+        }
+        const eventKey = `editor-approval-resume-close-${approval.uid}`;
+        const onClose = () => {
+            setResumeRecovering(true);
+        };
+        socket.on({ event: "close", eventKey, callback: onClose });
+        return () => socket.off({ event: "close", eventKey, callback: onClose });
+    }, [approval, resumePending, socket]);
+    const shouldRecoverResume =
+        !resumeFailed &&
+        !!durableRunTaskID &&
+        !!durableRunKind &&
+        (resumeRecovering || (durableRun && durableRunStatus === EInternalBotRunStatus.Resuming));
+    useEffect(() => {
+        if (!shouldRecoverResume) {
+            return;
+        }
+        const taskID = approval.durable_run_task_id;
+        const kind = approval.durable_run_kind;
+        if (!taskID || !kind) {
+            return;
+        }
+
+        let polls = 0;
+        const requestStatus = () => {
+            if (polls >= EDITOR_AI_STATUS_MAX_POLLS) {
+                setResumePending(false);
+                setResumeRecovering(false);
+                setResumeFailed(true);
+                void refreshApprovalStatus();
+                return;
+            }
+            polls += 1;
+            runStatusHandlers.send({
+                task_id: taskID,
+                project_uid: effectiveProjectUID,
+                kind,
+            });
+        };
+        const eventKey = `editor-approval-run-status-open-${approval.uid}`;
+        socket.on({ event: "open", eventKey, callback: requestStatus });
+        requestStatus();
+        const timer = setInterval(requestStatus, EDITOR_AI_STATUS_POLL_INTERVAL_MS);
+        return () => {
+            clearInterval(timer);
+            socket.off({ event: "open", eventKey, callback: requestStatus });
+        };
+    }, [approval, effectiveProjectUID, refreshApprovalStatus, runStatusHandlers, shouldRecoverResume, socket]);
+    useEffect(() => {
+        if (!resumeFailed && (!durableRun || durableRunStatus === EInternalBotRunStatus.AwaitingApproval)) {
+            return;
+        }
+        const eventKey = `editor-approval-status-open-${approval.uid}`;
+        const onOpen = () => {
+            void refreshApprovalStatus();
+        };
+        socket.on({ event: "open", eventKey, callback: onOpen });
+        return () => socket.off({ event: "open", eventKey, callback: onOpen });
+    }, [approval, durableRun, durableRunStatus, refreshApprovalStatus, resumeFailed, socket]);
+    const resume = (approved: boolean) => {
+        setResumePending(true);
+        setResumeRecovering(false);
+        setResumeFailed(false);
+        const sent = resumeHandlers.send({
+            approval_uid: approval.uid,
+            project_uid: effectiveProjectUID,
+            resume: { approved, rejected: !approved },
+        });
+        if (!sent?.isConnected) {
+            setResumePending(false);
+            setResumeFailed(true);
+            void refreshApprovalStatus();
+        }
+    };
+    const mutationPending = approveMutation.isPending || rejectMutation.isPending;
+    const disabled =
+        mutationPending ||
+        resumePending ||
+        shouldRecoverResume ||
+        resumeFailed ||
+        refreshPending ||
+        (durableRun && durableRunStatus !== EInternalBotRunStatus.AwaitingApproval);
+    const canRefresh = durableRun && !shouldRecoverResume && (resumeFailed || durableRunStatus !== EInternalBotRunStatus.AwaitingApproval);
 
     return (
         <Flex
@@ -565,6 +704,28 @@ function EditorGraphApprovalBannerContent({
                             {summary}
                         </Box>
                     )}
+                    {(resumePending || shouldRecoverResume) && (
+                        <Box textSize="xs" className="mt-1 text-muted-foreground">
+                            {t("bot.Resuming...")}
+                        </Box>
+                    )}
+                    {resumeFailed && (
+                        <Box textSize="xs" className="mt-1 text-destructive">
+                            {t("bot.Approval could not be resumed")}
+                        </Box>
+                    )}
+                    {canRefresh && (
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="mt-2 h-7"
+                            disabled={refreshPending}
+                            onClick={() => void refreshApprovalStatus()}
+                        >
+                            {t("common.Refresh")}
+                        </Button>
+                    )}
                 </Box>
             </Flex>
             <Flex items="center" justify="end" gap="1.5">
@@ -573,8 +734,10 @@ function EditorGraphApprovalBannerContent({
                     variant="outline"
                     size="sm"
                     className="h-7 px-3"
-                    disabled={approveMutation.isPending || rejectMutation.isPending}
-                    onClick={() => rejectMutation.mutate({ project_uid: effectiveProjectUID, approval_uid: approvalUID })}
+                    disabled={disabled}
+                    onClick={() =>
+                        durableRun ? resume(false) : rejectMutation.mutate({ project_uid: effectiveProjectUID, approval_uid: approvalUID })
+                    }
                 >
                     {t("bot.Reject")}
                 </Button>
@@ -582,8 +745,10 @@ function EditorGraphApprovalBannerContent({
                     type="button"
                     size="sm"
                     className="h-7 px-3"
-                    disabled={approveMutation.isPending || rejectMutation.isPending}
-                    onClick={() => approveMutation.mutate({ project_uid: effectiveProjectUID, approval_uid: approvalUID })}
+                    disabled={disabled}
+                    onClick={() =>
+                        durableRun ? resume(true) : approveMutation.mutate({ project_uid: effectiveProjectUID, approval_uid: approvalUID })
+                    }
                 >
                     {t("bot.Approve")}
                 </Button>

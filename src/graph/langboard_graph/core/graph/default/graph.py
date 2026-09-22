@@ -9,7 +9,7 @@ from .nodes import collect_default_history_context, run_default_agent
 from .state import DefaultGraphState
 
 
-def build_default_graph(checkpointer: BaseCheckpointSaver | None = None):
+def build_default_graph(checkpointer: BaseCheckpointSaver[Any] | None = None):
     graph = StateGraph(DefaultGraphState)
     graph.add_node("history", collect_default_history_context)
     graph.add_node("agent", run_default_agent)
@@ -103,7 +103,7 @@ def _requires_checkpoint(tweaks: dict[str, Any] | None, resume: Any | None) -> b
 def _create_graph_run_result(result: dict[str, Any]) -> GraphRunResult:
     interrupts = _serialize_interrupts(result.get("__interrupt__") or [])
     return GraphRunResult(
-        message=result.get("response") or _get_interrupt_message(interrupts),
+        message=result.get("response") or "",
         interrupts=[GraphInterrupt(**item) for item in interrupts],
     )
 
@@ -118,13 +118,3 @@ def _serialize_interrupts(interrupts: list[Any] | tuple[Any, ...]) -> list[dict[
             }
         )
     return serialized_interrupts
-
-
-def _get_interrupt_message(interrupts: list[dict[str, Any]]) -> str:
-    if not interrupts:
-        return ""
-    value = interrupts[0].get("value")
-    if isinstance(value, dict):
-        message = value.get("message")
-        return message if isinstance(message, str) else "Graph interrupted."
-    return str(value)

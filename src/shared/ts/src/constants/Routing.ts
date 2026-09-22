@@ -22,6 +22,11 @@ const API = {
             EXISTS_EMAIL: "/auth/signup/exist/email",
             RESEND_LINK: "/auth/signup/resend",
         },
+        SOCKET: {
+            EDITOR_AI: {
+                STATUS: "/auth/socket/editor-ai/status",
+            },
+        },
     },
     ACCOUNT: {
         GET_SUBEMAILS: "/account/subemails",
@@ -42,6 +47,10 @@ const API = {
     BATCH: "/batch",
     NOTIFICATION: {
         GET_LIST: "/notifications",
+        READ: "/notifications/{notification_uid}/read",
+        READ_ALL: "/notifications/read-all",
+        DELETE: "/notifications/{notification_uid}",
+        DELETE_ALL: "/notifications",
         SETTINGS: {
             ALL: "/notification/settings/all",
             TYPE: "/notification/settings/type",
@@ -84,6 +93,7 @@ const API = {
         DECLINE_INVITATION: "/project/invite/decline",
         CHAT: {
             GET_SESSIONS: "/board/{uid}/chat/sessions",
+            GET_RUN: "/board/{uid}/chat/run/{task_id}",
             GET_MESSAGES: "/board/{uid}/chat/session/{session_uid}",
             UPDATE_SESSION: "/board/{uid}/chat/session/{session_uid}",
             DELETE_SESSION: "/board/{uid}/chat/session/{session_uid}",
@@ -280,6 +290,9 @@ const API = {
         OLLAMA: {
             HEALTH: "/settings/ollama/health",
             GET_LIST: "/settings/ollama/models",
+            COPY_MODEL: "/settings/ollama/models/copy",
+            DELETE_MODEL: "/settings/ollama/models",
+            PULL_MODEL: "/settings/ollama/models/pull",
             GET_DETAILS: "/settings/ollama/model/details",
             GET_RUNNING_LIST: "/settings/ollama/models/running",
         },

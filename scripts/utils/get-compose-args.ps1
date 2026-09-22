@@ -1,3 +1,12 @@
+param(
+    [string]$WithDocs = "false",
+    [string]$WithUiWatcher = "false",
+    [string]$WithOllamaCpu = "false",
+    [string]$WithOllamaGpu = "false",
+    [string]$WithOtel = "false",
+    [string]$WithDbBackup = "true"
+)
+
 # Get Docker Compose arguments based on environment variables
 # Usage: .\scripts\get-compose-args.ps1
 
@@ -11,6 +20,13 @@ if (Test-Path ".env") {
         }
     }
 }
+
+$env:WITH_DOCS = $WithDocs
+$env:WITH_UI_WATCHER = $WithUiWatcher
+$env:WITH_OLLAMA_CPU = $WithOllamaCpu
+$env:WITH_OLLAMA_GPU = $WithOllamaGpu
+$env:WITH_OTEL = $WithOtel
+$env:WITH_DB_BACKUP = $WithDbBackup
 
 # Function to validate PostgreSQL URL
 function Test-PostgresUrl {
@@ -50,7 +66,7 @@ if (-not [string]::IsNullOrEmpty($env:POSTGRES_EXTERNAL_MAIN_URL)) {
     }
 }
 
-$COMPOSE_PREFIX = ".\docker\docker-compose"
+$COMPOSE_PREFIX = "./docker/docker-compose"
 
 # Base compose args (include the main compose file)
 $COMPOSE_ARGS = "-f ${COMPOSE_PREFIX}.yaml -f ${COMPOSE_PREFIX}.kafka.yaml"
@@ -66,7 +82,14 @@ if ($withDbBackup -eq "true") {
     $COMPOSE_ARGS += " -f ${COMPOSE_PREFIX}.backup.yaml"
 }
 
-$COMPOSE_ARGS += " -f ${COMPOSE_PREFIX}.redis.yaml -f ${COMPOSE_PREFIX}.server.yaml --env-file .\.env"
+$COMPOSE_ARGS += " -f ${COMPOSE_PREFIX}.redis.yaml -f ${COMPOSE_PREFIX}.server.yaml --env-file ./.env"
+
+if ($env:SOCKET_OWNER -eq "phoenix") {
+    $COMPOSE_ARGS += " -f ${COMPOSE_PREFIX}.phoenix-owner.yaml --profile socket-phoenix"
+}
+elseif ($env:EDITOR_SYNC_OWNER -eq "phoenix") {
+    $COMPOSE_ARGS += " -f ${COMPOSE_PREFIX}.phoenix-editor-owner.yaml --profile socket-phoenix"
+}
 
 # Optional compose args
 $VAULT_COMPOSE_ARGS = "-f ${COMPOSE_PREFIX}.vault.yaml"
@@ -75,6 +98,7 @@ $UI_WATCHER_COMPOSE_ARGS = "-f ${COMPOSE_PREFIX}.ui-watcher.yaml"
 $OLLAMA_SHARED_COMPOSE_ARGS = "-f ${COMPOSE_PREFIX}.ollama.shared.yaml"
 $OLLAMA_CPU_COMPOSE_ARGS = "-f ${COMPOSE_PREFIX}.ollama.cpu.yaml ${OLLAMA_SHARED_COMPOSE_ARGS}"
 $OLLAMA_GPU_COMPOSE_ARGS = "-f ${COMPOSE_PREFIX}.ollama.gpu.yaml ${OLLAMA_SHARED_COMPOSE_ARGS}"
+$OTEL_COMPOSE_ARGS = "-f ${COMPOSE_PREFIX}.otel.yaml --profile socket-phoenix --profile socket-phoenix-otel"
 
 # Append optional compose args based on environment variables
 if ($env:WITH_DOCS -eq "true") {
@@ -93,6 +117,10 @@ if ($env:WITH_OLLAMA_GPU -eq "true") {
     $COMPOSE_ARGS += " ${OLLAMA_GPU_COMPOSE_ARGS}"
 }
 
+if ($env:WITH_OTEL -eq "true") {
+    $COMPOSE_ARGS += " ${OTEL_COMPOSE_ARGS}"
+}
+
 # Check if vault is needed based on KEY_PROVIDER_TYPE in .env file
 if (Test-Path ".env") {
     $envContent = Get-Content ".env" | Where-Object { $_ -match '^KEY_PROVIDER_TYPE=openbao-local' }
@@ -101,5 +129,5 @@ if (Test-Path ".env") {
     }
 }
 
-# Output the compose args
-Write-Output $COMPOSE_ARGS
+# Native commands require each Compose argument as a separate array item.
+Write-Output ($COMPOSE_ARGS -split ' ')

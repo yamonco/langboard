@@ -27,6 +27,7 @@ class UserNotification(BaseDbModel, table=True):
     message_vars: dict[str, Any] = Field(default={}, sa_type=JSON, api_field=ApiField())
     record_list: list[tuple[str, SnowflakeID]] = Field(default=[], sa_type=JSON)
     read_at: SafeDateTime | None = DateTimeField(default=None, nullable=True, api_field=ApiField())
+    web_fanout_pending: bool | None = Field(default=None, nullable=True, index=True)
 
     def notification_data(self) -> dict[str, Any]:
         return {}

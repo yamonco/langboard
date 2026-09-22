@@ -7,15 +7,18 @@ import { serializeMd, stripMarkdown } from "@platejs/markdown";
 import { Utils } from "@langboard/core/utils";
 import { EHttpStatus, ESocketTopic } from "@langboard/core/enums";
 import { GhostText } from "@/components/plate-ui/ghost-text";
-import { IUseChat } from "@/components/Editor/useChat";
+import { clearStoredEditorRun, IUseChat, storeEditorRun } from "@/components/Editor/useChat";
 import { MarkdownKit } from "@/components/Editor/plugins/markdown-kit";
-import { ISocketEvent } from "@/core/stores/socket/types";
+import { cancelEditorRun } from "@/controllers/socket/shared/EditorAIRunCancellation";
+import { EDITOR_AI_STATUS_MAX_POLLS, EDITOR_AI_STATUS_POLL_INTERVAL_MS } from "@/core/constants/InternalBotRun";
 
 export interface ICreateCopilotKit extends Omit<IUseChat, "events"> {
     events: {
         abort: string;
         send: string;
         receive: string;
+        status: string;
+        statusResult: string;
     };
 }
 
@@ -30,37 +33,160 @@ export const createCopilotKit = ({ socket, eventKey, events, commonEventData }: 
                             status: EHttpStatus.HTTP_400_BAD_REQUEST,
                         });
 
-                        if (!Utils.Type.isString(init?.body)) {
+                        if (!Utils.Type.isString(init?.body) || init.signal?.aborted) {
                             return badResponse;
                         }
 
                         const body = JSON.parse(init.body);
-                        const key = Utils.String.Token.generate(8);
+                        const key = Utils.String.Token.uuid();
                         const receiveEventWithKey = `${events.receive}:${key}`;
                         const copilotEventKey = `plate-copilot-${eventKey}-${key}`;
 
                         const waitResponse = new Promise((resolve) => {
-                            const receive = (data: { text: string }) => {
+                            let isSettled = false;
+                            let hasSentRequest = false;
+                            let hasConnectionLoss = false;
+                            let statusPolls = 0;
+                            let statusTimer: ReturnType<typeof setTimeout> | undefined;
+                            const statusEventKey = `${copilotEventKey}:status`;
+
+                            const clearStatusTimer = () => {
+                                if (statusTimer !== undefined) {
+                                    clearTimeout(statusTimer);
+                                    statusTimer = undefined;
+                                }
+                            };
+
+                            const cleanup = () => {
+                                clearStatusTimer();
+                                if (init.signal) {
+                                    init.signal.onabort = null;
+                                }
                                 socket.off({
                                     topic: ESocketTopic.None,
                                     event: receiveEventWithKey,
                                     eventKey: copilotEventKey,
-                                    callback: receive as ISocketEvent<unknown>,
+                                    callback: receive,
                                 });
+                                socket.off({
+                                    topic: ESocketTopic.None,
+                                    event: events.statusResult,
+                                    eventKey: statusEventKey,
+                                    callback: statusCallback,
+                                });
+                                socket.off({ event: "open", eventKey: statusEventKey, callback: onOpen });
+                                socket.off({ event: "close", eventKey: statusEventKey, callback: onClose });
+                            };
+
+                            const finish = (text: string, clearRun = true) => {
+                                if (isSettled) {
+                                    return;
+                                }
+
+                                isSettled = true;
+                                cleanup();
+                                if (clearRun) {
+                                    clearStoredEditorRun(eventKey, key);
+                                }
+                                resolve({ text });
+                            };
+
+                            const scheduleStatusCheck = () => {
+                                if (isSettled || !hasConnectionLoss || statusTimer !== undefined) {
+                                    return;
+                                }
+                                if (statusPolls >= EDITOR_AI_STATUS_MAX_POLLS) {
+                                    finish("0", false);
+                                    return;
+                                }
+
+                                statusTimer = setTimeout(() => {
+                                    statusTimer = undefined;
+                                    requestStatus();
+                                }, EDITOR_AI_STATUS_POLL_INTERVAL_MS);
+                            };
+
+                            const requestStatus = () => {
+                                if (isSettled || !hasConnectionLoss) {
+                                    return;
+                                }
+                                if (statusPolls >= EDITOR_AI_STATUS_MAX_POLLS) {
+                                    finish("0", false);
+                                    return;
+                                }
+
+                                statusPolls += 1;
+                                socket.send({
+                                    topic: ESocketTopic.None,
+                                    eventName: events.status,
+                                    data: {
+                                        task_id: key,
+                                        project_uid: commonEventData?.project_uid,
+                                        kind: "editor_copilot",
+                                    },
+                                });
+                                scheduleStatusCheck();
+                            };
+
+                            const receive = (data: { text: string }) => {
                                 if (init.signal) {
                                     init.signal.onabort = null;
                                 }
-                                resolve(data);
+                                finish(Utils.Type.isString(data?.text) ? data.text : "0");
+                            };
+
+                            const statusCallback = (data: Record<string, unknown>) => {
+                                if (isSettled || data?.task_id !== key) {
+                                    return;
+                                }
+
+                                const status = Utils.Type.isString(data.status) ? data.status : "";
+                                if (status === "error" && data.error_code === "unavailable") {
+                                    scheduleStatusCheck();
+                                    return;
+                                }
+                                if (status === "completed") {
+                                    finish(Utils.Type.isString(data.output_text) && data.output_text.length ? data.output_text : "0");
+                                    return;
+                                }
+                                if (["failed", "cancelled", "uncertain", "error"].includes(status)) {
+                                    finish("0");
+                                    return;
+                                }
+
+                                scheduleStatusCheck();
+                            };
+
+                            const onOpen = () => {
+                                if (hasConnectionLoss) {
+                                    clearStatusTimer();
+                                    requestStatus();
+                                }
+                            };
+
+                            const onClose = () => {
+                                if (hasSentRequest && !isSettled) {
+                                    hasConnectionLoss = true;
+                                    scheduleStatusCheck();
+                                }
                             };
 
                             if (init.signal) {
                                 init.signal.onabort = () => {
-                                    socket.send({
-                                        topic: ESocketTopic.None,
-                                        eventName: events.abort,
-                                        data: { task_id: key },
-                                    });
-                                    receive({ text: "0" });
+                                    if (Utils.Type.isString(commonEventData?.project_uid)) {
+                                        cancelEditorRun(
+                                            {
+                                                socket,
+                                                eventKey,
+                                                events,
+                                                projectUID: commonEventData.project_uid,
+                                                kind: "editor_copilot",
+                                                onConfirmed: (taskID) => clearStoredEditorRun(eventKey, taskID),
+                                            },
+                                            key
+                                        );
+                                    }
+                                    finish("0", false);
                                 };
                             }
 
@@ -71,7 +197,15 @@ export const createCopilotKit = ({ socket, eventKey, events, commonEventData }: 
                                     event: receiveEventWithKey,
                                     callback: receive,
                                 });
-                                socket.send({
+                                socket.on({
+                                    topic: ESocketTopic.None,
+                                    eventKey: statusEventKey,
+                                    event: events.statusResult,
+                                    callback: statusCallback,
+                                });
+                                socket.on({ event: "open", eventKey: statusEventKey, callback: onOpen });
+                                socket.on({ event: "close", eventKey: statusEventKey, callback: onClose });
+                                const sendResult = socket.send({
                                     topic: ESocketTopic.None,
                                     eventName: events.send,
                                     data: {
@@ -80,6 +214,12 @@ export const createCopilotKit = ({ socket, eventKey, events, commonEventData }: 
                                         task_id: key,
                                     },
                                 });
+                                if (!sendResult.isConnected) {
+                                    finish("0");
+                                } else {
+                                    hasSentRequest = true;
+                                    storeEditorRun(eventKey, key);
+                                }
                             }
                         });
 

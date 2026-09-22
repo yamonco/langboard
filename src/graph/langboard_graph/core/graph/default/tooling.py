@@ -87,8 +87,7 @@ async def create_langboard_api_tool_context(
 
     tools: list[StructuredTool] = []
     tool_context: dict[str, dict[str, Any]] = {}
-    for api_name in api_names:
-        schema = schemas.get(api_name)
+    for api_name, schema in schemas.items():
         if not isinstance(schema, dict):
             continue
         if _get_schema_policy_decision(schema, approval_policy) == "deny":
@@ -449,7 +448,7 @@ def _get_python_type(schema_type: str | None) -> type:
         "boolean": bool,
         "array": list,
         "object": dict,
-    }.get(schema_type or "", Any)
+    }.get(schema_type or "", object)
 
 
 async def _call_api_tool(
@@ -461,11 +460,18 @@ async def _call_api_tool(
     field_sources: dict[str, tuple[Literal["path", "query", "form"], str]],
     kwargs: dict[str, Any],
 ) -> str:
+    app_api_token = variables.get("app_api_token")
+    if isinstance(app_api_token, str) and app_api_token.strip():
+        headers = {**headers, AuthSecurity.API_TOKEN_HEADER: app_api_token}
+
     query, form = _split_tool_args(kwargs, field_sources)
     _normalize_editor_content_form(schema, form)
     _apply_runtime_path_params(schema, variables, query)
 
     if str(schema.get("path", "")).startswith("/api/comfort/"):
+        form_schema = schema.get("form")
+        shared_params = list(form_schema.get("properties", {})) if isinstance(form_schema, dict) else []
+        _apply_runtime_path_params({"path_params": shared_params}, variables, form)
         request_url = f"{base_url}/api/comfort/{api_name}"
         request_body = {"query": query or None, "form": form or None}
     else:

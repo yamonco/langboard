@@ -17,6 +17,9 @@ const useGetCardComments = (params: IGetCardCommentsForm, options?: TQueryOption
     const { query } = useQueryMutation();
 
     const getCardComments = async () => {
+        const existingCommentUIDs = new Set(
+            ProjectCardComment.Model.getModels((model) => model.card_uid === params.card_uid).map((model) => model.uid)
+        );
         const url = Utils.String.format(Routing.API.BOARD.CARD.COMMENT.GET_LIST, { uid: params.project_uid, card_uid: params.card_uid });
         const res = await api.get(url, {
             env: {
@@ -27,7 +30,9 @@ const useGetCardComments = (params: IGetCardCommentsForm, options?: TQueryOption
         const comments = ProjectCardComment.Model.fromArray(res.data.comments);
         const commentUIDs = new Set<string>(comments.map((comment) => comment.uid));
 
-        ProjectCardComment.Model.deleteModels((model) => model.card_uid === params.card_uid && !commentUIDs.has(model.uid));
+        ProjectCardComment.Model.deleteModels(
+            (model) => model.card_uid === params.card_uid && existingCommentUIDs.has(model.uid) && !commentUIDs.has(model.uid)
+        );
 
         return {
             comments,

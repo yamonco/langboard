@@ -3,7 +3,7 @@ import BotRunner from "@/core/ai/BotRunner";
 import EventManager, { TEventContext } from "@/core/server/EventManager";
 import SnowflakeID from "@/core/db/SnowflakeID";
 import { Utils } from "@langboard/core/utils";
-import { ESocketStatus, ESocketTopic, NONE_TOPIC_ID } from "@langboard/core/enums";
+import { EHttpStatus, ESocketStatus, ESocketTopic, NONE_TOPIC_ID } from "@langboard/core/enums";
 import InternalBot, { EInternalBotType } from "@/models/InternalBot";
 import ProjectAssignedInternalBot, { IProjectAssignedInternalBotSettings } from "@/models/ProjectAssignedInternalBot";
 import GraphApprovalRequest from "@/models/GraphApprovalRequest";
@@ -15,15 +15,97 @@ import {
 } from "@/models/GraphApprovalRequestTypes";
 import EditorGraphApprovalRequest from "@/models/EditorGraphApprovalRequest";
 import Subscription from "@/core/server/Subscription";
-import { SocketEvents } from "@langboard/core/constants";
+import { Routing, SocketEvents } from "@langboard/core/constants";
+import { api } from "@/core/helpers/Api";
+import { isAxiosError } from "axios";
+import { API_INTERNAL_URL, SOCKET_PHOENIX_INTERNAL_SECRET } from "@/Constants";
 
 interface IEditorEventRegistryParams {
     eventPrefix: string;
+    scopeField: "card_uid" | "wiki_uid";
     chatType: EInternalBotType;
     copilotType: EInternalBotType;
     getInternalBot: (botType: EInternalBotType, context: TEventContext) => Promise<[InternalBot, IProjectAssignedInternalBotSettings] | [null, null]>;
     createRestData?: (context: TEventContext) => Record<string, unknown>;
 }
+
+const authorizeEditorAi = async (context: TEventContext, scopeField: IEditorEventRegistryParams["scopeField"]): Promise<boolean> => {
+    const { project_uid, document_name } = context.data ?? {};
+    const scopeUID = context.data?.[scopeField];
+    if (!Utils.Type.isString(project_uid) || !Utils.Type.isString(document_name) || !Utils.Type.isString(scopeUID)) {
+        context.client.sendError(ESocketStatus.WS_4001_INVALID_DATA, "Invalid editor AI scope", false);
+        return false;
+    }
+
+    try {
+        await api.post(
+            `${API_INTERNAL_URL}/auth/socket/editor-ai`,
+            { project_uid, scope_uid: scopeUID, document_name },
+            { headers: { Authorization: `Bearer ${context.client.authorizationToken}` }, timeout: 5_000 }
+        );
+        return true;
+    } catch (error) {
+        const status = isAxiosError(error) ? error.response?.status : undefined;
+        const errorCode =
+            status === EHttpStatus.HTTP_401_UNAUTHORIZED
+                ? ESocketStatus.WS_3000_UNAUTHORIZED
+                : status === EHttpStatus.HTTP_403_FORBIDDEN
+                  ? ESocketStatus.WS_3003_FORBIDDEN
+                  : status === EHttpStatus.HTTP_400_BAD_REQUEST || status === EHttpStatus.HTTP_422_UNPROCESSABLE_CONTENT
+                    ? ESocketStatus.WS_4001_INVALID_DATA
+                    : ESocketStatus.WS_1011_INTERNAL_ERROR;
+        context.client.sendError(errorCode, "Editor AI authorization failed", false);
+        return false;
+    }
+};
+
+EventManager.on(ESocketTopic.None, SocketEvents.CLIENT.BOARD.EDITOR_AI.STATUS, async ({ client, data }) => {
+    const taskID = data?.task_id;
+    const projectUID = data?.project_uid;
+    const kind = data?.kind;
+    if (!Utils.Type.isString(taskID) || !Utils.Type.isString(projectUID) || !Utils.Type.isString(kind)) {
+        client.sendError(ESocketStatus.WS_4001_INVALID_DATA, "Invalid editor AI status request", false);
+        return;
+    }
+
+    try {
+        const response = await api.post(
+            `${API_INTERNAL_URL}${Routing.API.AUTH.SOCKET.EDITOR_AI.STATUS}`,
+            { project_uid: projectUID, task_id: taskID, kind },
+            {
+                headers: {
+                    Authorization: `Bearer ${client.authorizationToken}`,
+                    "X-Socket-Internal-Secret": SOCKET_PHOENIX_INTERNAL_SECRET,
+                },
+                timeout: 5_000,
+            }
+        );
+        client.send({
+            topic: ESocketTopic.None,
+            topic_id: NONE_TOPIC_ID,
+            event: SocketEvents.SERVER.BOARD.EDITOR_AI.STATUS_RESULT,
+            data: response.data,
+        });
+    } catch (error) {
+        const status = isAxiosError(error) ? error.response?.status : undefined;
+        const errorCode =
+            status === EHttpStatus.HTTP_401_UNAUTHORIZED
+                ? "unauthorized"
+                : status === EHttpStatus.HTTP_403_FORBIDDEN
+                  ? "forbidden"
+                  : status === EHttpStatus.HTTP_400_BAD_REQUEST || status === EHttpStatus.HTTP_422_UNPROCESSABLE_CONTENT
+                    ? "invalid_data"
+                    : status === EHttpStatus.HTTP_409_CONFLICT
+                      ? "conflict"
+                      : "unavailable";
+        client.send({
+            topic: ESocketTopic.None,
+            topic_id: NONE_TOPIC_ID,
+            event: SocketEvents.SERVER.BOARD.EDITOR_AI.STATUS_RESULT,
+            data: { task_id: taskID, status: "error", error_code: errorCode },
+        });
+    }
+});
 
 const getApprovalRequestValue = (interrupt: Record<string, any>): Record<string, any> | null => {
     if (interrupt.type === "approval_request") {
@@ -111,10 +193,17 @@ const createEditorGraphApproval = async ({
     return approval;
 };
 
-const registerEditorEvents = ({ eventPrefix, chatType, copilotType, getInternalBot, createRestData }: IEditorEventRegistryParams) => {
+const registerEditorEvents = ({ eventPrefix, scopeField, chatType, copilotType, getInternalBot, createRestData }: IEditorEventRegistryParams) => {
     EventManager.on(ESocketTopic.None, `${eventPrefix}:editor:chat:send`, async (context) => {
         const { task_id } = context.data ?? {};
         if (!context.data || !Utils.Type.isString(task_id)) {
+            return;
+        }
+        if (!(await authorizeEditorAi(context, scopeField))) {
+            context.client.stream(ESocketTopic.None, NONE_TOPIC_ID, `${eventPrefix}:editor:chat:stream`).end({
+                status: "failed",
+                message: "Editor AI authorization failed",
+            });
             return;
         }
 
@@ -223,6 +312,15 @@ const registerEditorEvents = ({ eventPrefix, chatType, copilotType, getInternalB
             context.client.sendError(ESocketStatus.WS_4001_INVALID_DATA, "Invalid task ID", false);
             return;
         }
+        if (!(await authorizeEditorAi(context, scopeField))) {
+            context.client.send({
+                topic: ESocketTopic.None,
+                topic_id: NONE_TOPIC_ID,
+                event: `${eventPrefix}:editor:copilot:receive:${task_id}`,
+                data: { text: "0" },
+            });
+            return;
+        }
 
         const [internalBot, internalBotSettings] = await getInternalBot(copilotType, context);
         if (!internalBot) {
@@ -310,12 +408,13 @@ const registerEditorEvents = ({ eventPrefix, chatType, copilotType, getInternalB
             return;
         }
 
-        await BotRunner.abort({ botType: chatType, taskID: task_id, client: context.client });
+        await BotRunner.abort({ botType: copilotType, taskID: task_id, client: context.client });
     });
 };
 
 interface IEditorType {
     type: string;
+    scopeField: IEditorEventRegistryParams["scopeField"];
     getInternalBot: IEditorEventRegistryParams["getInternalBot"];
     createRestData?: IEditorEventRegistryParams["createRestData"];
 }
@@ -323,6 +422,7 @@ interface IEditorType {
 const EDITOR_TYPES: IEditorType[] = [
     {
         type: "board:card",
+        scopeField: "card_uid",
         getInternalBot: async (botType, context) =>
             !Utils.Type.isString(context.data.project_uid)
                 ? [null, null]
@@ -336,6 +436,7 @@ const EDITOR_TYPES: IEditorType[] = [
     },
     {
         type: "board:wiki",
+        scopeField: "wiki_uid",
         getInternalBot: async (botType, context) =>
             !Utils.Type.isString(context.data.project_uid)
                 ? [null, null]

@@ -2,46 +2,16 @@ import Box from "@/components/base/Box";
 import Flex from "@/components/base/Flex";
 import Progress from "@/components/base/Progress";
 import Separator from "@/components/base/Separator";
-import Toast from "@/components/base/Toast";
 import Tooltip from "@/components/base/Tooltip";
-import useGetOllamaModelList from "@/controllers/api/settings/ollama/useGetOllamaModelList";
-import usePullOllamaModelHandlers from "@/controllers/socket/settings/ollama/usePullOllamaModelHandlers";
-import useSwitchSocketHandlers from "@/core/hooks/useSwitchSocketHandlers";
-import { useSocket } from "@/core/providers/SocketProvider";
-import { updateProgressCallback, useOllamaPullingModel, useOllamaPullingModelProgress } from "@/core/stores/OllamaModelStore";
-import { useEffect, useRef } from "react";
+import { useOllamaPullingModel, useOllamaPullingModelProgress } from "@/core/stores/OllamaModelStore";
 
 export interface IOllamaModelTrackerProps {
     name: string;
 }
 
 function OllamaModelTracker({ name }: IOllamaModelTrackerProps) {
-    const socket = useSocket();
     const progress = useOllamaPullingModelProgress(name);
     const model = useOllamaPullingModel(name);
-    const { mutateAsync: getOllamaModelListMutateAsync } = useGetOllamaModelList();
-    const handlers = usePullOllamaModelHandlers({
-        callback: updateProgressCallback({
-            name,
-            onSuccess: () => {
-                getOllamaModelListMutateAsync({});
-            },
-            onError: (message: string) => {
-                Toast.Add.error(message);
-            },
-        }),
-    });
-    const isSentRef = useRef(false);
-    useSwitchSocketHandlers({ socket, handlers });
-
-    useEffect(() => {
-        if (!model || isSentRef.current) {
-            return;
-        }
-
-        handlers.send({ model: name });
-        isSentRef.current = true;
-    }, []);
 
     if (!model) {
         return null;

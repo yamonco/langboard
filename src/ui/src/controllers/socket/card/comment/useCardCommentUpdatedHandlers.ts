@@ -5,7 +5,7 @@ import { IEditorContent } from "@/core/models/Base";
 import { ESocketTopic } from "@langboard/core/enums";
 
 export interface ICardCommentUpdatedRawResponse {
-    comment_uid: string;
+    uid: string;
     content: IEditorContent;
     updated_at: Date;
 }
@@ -25,7 +25,7 @@ const useCardCommentUpdatedHandlers = ({ callback, projectUID, cardUID }: IUseCa
             params: { uid: cardUID },
             callback,
             responseConverter: (data) => {
-                const comment = ProjectCardComment.Model.getModel(data.comment_uid);
+                const comment = ProjectCardComment.Model.getModel(data.uid);
                 if (comment) {
                     comment.content = data.content;
                     comment.updated_at = data.updated_at;

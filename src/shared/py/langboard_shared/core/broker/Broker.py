@@ -1,4 +1,5 @@
 from asyncio import run as run_async
+from collections.abc import Collection
 from json import dumps as json_dumps
 from json import loads as json_loads
 from os.path import dirname
@@ -67,7 +68,37 @@ class Broker:
     def is_in_memory(self) -> bool:
         return Env.CACHE_TYPE == "in-memory"
 
-    def on_worker_process_init(self, func: Callable) -> Callable:
+    def require_registered_tasks(
+        self, required_tasks: Collection[str], timeout: float = 5.0
+    ) -> dict[str, list[str]]:
+        registrations = self.celery.control.inspect(timeout=timeout).registered()
+        if not isinstance(registrations, dict) or not registrations:
+            raise RuntimeError("No Celery workers responded with task registrations")
+
+        normalized: dict[str, list[str]] = {}
+        for worker_name, task_names in registrations.items():
+            if (
+                not isinstance(worker_name, str)
+                or not isinstance(task_names, list)
+                or not all(isinstance(task_name, str) for task_name in task_names)
+            ):
+                raise RuntimeError("A Celery worker returned invalid task registration data")
+            normalized[worker_name] = task_names
+
+        required = set(required_tasks)
+        missing = {
+            worker_name: sorted(required.difference(task_names))
+            for worker_name, task_names in normalized.items()
+            if not required.issubset(task_names)
+        }
+        if missing:
+            details = "; ".join(
+                f"{worker_name}: {', '.join(task_names)}" for worker_name, task_names in sorted(missing.items())
+            )
+            raise RuntimeError(f"Celery workers are missing required tasks: {details}")
+        return normalized
+
+    def on_worker_process_init(self, func: Callable[..., Any]) -> Callable[..., Any]:
         worker_process_init.connect(func)
         return func
 
@@ -77,10 +108,10 @@ class Broker:
     ) -> _Task[_TParams, Any]: ...
     @overload
     def wrap_async_task_decorator(
-        self, param: dict
+        self, param: dict[str, Any]
     ) -> Callable[[Callable[Concatenate[_TParams], Coroutine[Any, Any, Any]]], _Task[_TParams, Any]]: ...
     def wrap_async_task_decorator(
-        self, param: Callable[Concatenate[_TParams], Coroutine[Any, Any, Any]] | dict
+        self, param: Callable[Concatenate[_TParams], Coroutine[Any, Any, Any]] | dict[str, Any]
     ) -> (
         _Task[_TParams, Any]
         | Callable[[Callable[Concatenate[_TParams], Coroutine[Any, Any, Any]]], _Task[_TParams, Any]]
@@ -122,10 +153,10 @@ class Broker:
     def wrap_sync_task_decorator(self, param: Callable[Concatenate[_TParams], Any]) -> _Task[_TParams, Any]: ...
     @overload
     def wrap_sync_task_decorator(
-        self, param: dict
+        self, param: dict[str, Any]
     ) -> Callable[[Callable[Concatenate[_TParams], Any]], _Task[_TParams, Any]]: ...
     def wrap_sync_task_decorator(
-        self, param: Callable[Concatenate[_TParams], Any] | dict
+        self, param: Callable[Concatenate[_TParams], Any] | dict[str, Any]
     ) -> _Task[_TParams, Any] | Callable[[Callable[Concatenate[_TParams], Any]], _Task[_TParams, Any]]:
         """Wrap sync celery task decorator.
 
@@ -176,7 +207,7 @@ class Broker:
         except Exception:
             self.celery.close()
 
-    def schema(self, group: str, schema: dict):
+    def schema(self, group: str, schema: dict[str, Any]):
         schema_file = Env.SCHEMA_DIR / f"{group}.json"
         if group not in self._schemas:
             if schema_file.exists():
@@ -224,6 +255,6 @@ class Broker:
         task_parameters = TaskParameters(*args, **kwargs)
         return task_parameters.pack()
 
-    def __unpack_task_parameters(self, func: Callable, *args: Any, **kwargs: Any):
+    def __unpack_task_parameters(self, func: Callable[..., Any], *args: Any, **kwargs: Any):
         task_parameters = TaskParameters(*args, **kwargs)
         return task_parameters.unpack(func)

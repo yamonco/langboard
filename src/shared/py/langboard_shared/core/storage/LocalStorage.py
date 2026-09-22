@@ -55,7 +55,7 @@ class LocalStorage(BaseStorage):
             return False
 
         try:
-            unlink(Env.LOCAL_STORAGE_DIR / file_model.filename)
+            unlink(Env.LOCAL_STORAGE_DIR / file_model.storage_name / file_model.filename)
             return True
         except Exception:
             return False

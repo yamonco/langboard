@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useMemo } from "react";
 import { AuthUser } from "@/core/models";
 import { Utils } from "@langboard/core/utils";
-import { EEditorCollaborationType, EEditorType, Routing } from "@langboard/core/constants";
+import { EEditorCollaborationType, EEditorType, Routing, SocketEvents } from "@langboard/core/constants";
 import type { TEditorType } from "@langboard/core/constants";
 import { TUserLikeModel } from "@/core/models/ModelRegistry";
 import { TInternalLinkableModel, TInternalLinkElement } from "@/components/Editor/plugins/customs/internal-link/InternalLinkPlugin";
@@ -112,11 +112,15 @@ const createEditorSocketEvents = (baseEvent: string) => ({
         abort: `${baseEvent}:editor:chat:abort`,
         send: `${baseEvent}:editor:chat:send`,
         stream: `${baseEvent}:editor:chat:stream`,
+        status: SocketEvents.CLIENT.BOARD.EDITOR_AI.STATUS,
+        statusResult: SocketEvents.SERVER.BOARD.EDITOR_AI.STATUS_RESULT,
     },
     copilotEvents: {
         abort: `${baseEvent}:editor:copilot:abort`,
         send: `${baseEvent}:editor:copilot:send`,
         receive: `${baseEvent}:editor:copilot:receive`,
+        status: SocketEvents.CLIENT.BOARD.EDITOR_AI.STATUS,
+        statusResult: SocketEvents.SERVER.BOARD.EDITOR_AI.STATUS_RESULT,
     },
 });
 

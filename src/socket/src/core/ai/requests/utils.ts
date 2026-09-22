@@ -69,7 +69,10 @@ export const getBotStatusMap = async (projectUID: string): Promise<Record<string
             throw new Error("Graph get bot status map failed");
         }
 
-        return response.data;
+        return {
+            project_column: response.data.status_map?.project_column ?? {},
+            card: response.data.status_map?.card ?? {},
+        };
     } catch (error) {
         if (isGraphConnectionRefusedError(error)) {
             return EMPTY_BOT_STATUS_MAP;

@@ -27,6 +27,18 @@
   "Tell graph what to do instead": "Tell graph what to do instead...",
   "Submitted instruction": "Submitted instruction",
   "Resuming...": "Resuming...",
+  "Run outcome unknown": "The action may have completed, but its result could not be confirmed. Check the affected data before starting another action.",
+  "runStatuses": {
+    "accepted": "Queued",
+    "streaming": "Running",
+    "awaiting_approval": "Awaiting approval",
+    "resuming": "Resuming...",
+    "completed": "Completed",
+    "failed": "Failed",
+    "cancelled": "Cancelled",
+    "uncertain": "Outcome unknown"
+  },
+  "Approval could not be resumed": "Approval could not be resumed. Check the run before trying again.",
   "Resolved by": "Resolved by {{user}}",
   "approvalStatuses": {
     "approved": "Approved",

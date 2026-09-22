@@ -13,7 +13,7 @@ import { Utils } from "@langboard/core/utils";
 import ChatTemplateListDialog from "@/pages/BoardPage/components/chat/ChatTemplateListDialog";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { MAX_FILE_SIZE_MB } from "@/constants";
+import { IS_PHOENIX_SOCKET_RUNTIME, MAX_FILE_SIZE_MB } from "@/constants";
 import useBoardChatSentHandlers from "@/controllers/socket/board/chat/useBoardChatSentHandlers";
 import useUpdateProjectChatSession from "@/controllers/api/board/chat/useUpdateProjectChatSession";
 import { ChatSessionModel } from "@/core/models";
@@ -59,6 +59,7 @@ function ChatInputDisplay() {
         lockedScope,
         agentPermissionLevel,
         chatTaskIdRef,
+        setChatTaskId,
     } = useBoardChat();
     const { chatAttachmentRef, chatInputRef, height, file, setFile, setHeight } = useChatInput();
     const [t] = useTranslation();
@@ -106,7 +107,9 @@ function ChatInputDisplay() {
 
         setIsSending(true);
 
+        const taskId = Utils.String.Token.uuid();
         let filePath: string | undefined = undefined;
+        let fileToken: string | undefined = undefined;
         const attachment = file ?? chatAttachmentRef.current?.files?.[0];
         if (attachment) {
             setIsUploading(true);
@@ -116,6 +119,7 @@ function ChatInputDisplay() {
             try {
                 result = await uploadProjectChatAttachmentMutateAsync({
                     project_uid: projectUID,
+                    task_id: taskId,
                     attachment,
                     abortController: abortControllerRef.current,
                 });
@@ -129,12 +133,24 @@ function ChatInputDisplay() {
             }
 
             setIsUploading(false);
-            filePath = result.file_path;
+            if (IS_PHOENIX_SOCKET_RUNTIME) {
+                fileToken = result.file_token;
+            } else {
+                filePath = result.file_path;
+            }
+
+            if (!filePath && !fileToken) {
+                Toast.Add.error(
+                    t("errors.Failed to upload attachment. File size may be too large (Max size is {size}MB).", { size: MAX_FILE_SIZE_MB })
+                );
+                setIsSending(false);
+                return;
+            }
         }
 
         const chatMessage = chatInputRef.current.value.trim();
 
-        if (!chatMessage.length && !filePath) {
+        if (!chatMessage.length && !filePath && !fileToken) {
             setIsSending(false);
             return;
         }
@@ -149,16 +165,16 @@ function ChatInputDisplay() {
 
         let tried = 0;
         let triedTimeout: NodeJS.Timeout | undefined;
+        setChatTaskId(taskId);
         const trySendChat = () => {
             if (tried >= 5) {
                 Toast.Add.error(t("errors.Server has been temporarily disabled. Please try again later."));
                 setIsSending(false);
+                setChatTaskId(null);
                 return true;
             }
 
             ++tried;
-
-            chatTaskIdRef.current = Utils.String.Token.uuid();
 
             const [scopeTable, scopeUID] = lockedScope || selectedScope || [undefined, undefined];
 
@@ -166,7 +182,8 @@ function ChatInputDisplay() {
                 sendChat({
                     message: chatMessage,
                     file_path: filePath,
-                    task_id: chatTaskIdRef.current,
+                    file_token: fileToken,
+                    task_id: taskId,
                     session_uid: currentSessionUID,
                     scope_table: scopeTable,
                     scope_uid: scopeUID,
@@ -202,6 +219,7 @@ function ChatInputDisplay() {
         agentPermissionLevel,
         file,
         setSelectedScope,
+        setChatTaskId,
     ]);
 
     useEffect(() => {

@@ -22,9 +22,12 @@ from .ChecklistRepository import ChecklistRepository
 from .GlobalCardRelationshipTypeRepository import GlobalCardRelationshipTypeRepository
 from .GraphApprovalRequestRepository import GraphApprovalRequestRepository
 from .InternalBotRepository import InternalBotRepository
+from .InternalBotRunRepository import InternalBotRunRepository
 from .McpToolGroupRepository import McpToolGroupRepository
 from .McpToolGroupUsageRepository import McpToolGroupUsageRepository
 from .MetadataRepository import MetadataRepository
+from .NotificationEmailDeliveryRepository import NotificationEmailDeliveryRepository
+from .OllamaModelPullRepository import OllamaModelPullRepository
 from .NotificationScheduleRuleRepository import NotificationScheduleRuleRepository
 from .ProjectAssignedInternalBotRepository import ProjectAssignedInternalBotRepository
 from .ProjectAssignedUserRepository import ProjectAssignedUserRepository
@@ -83,9 +86,12 @@ __all__ = [
     "GlobalCardRelationshipTypeRepository",
     "GraphApprovalRequestRepository",
     "InternalBotRepository",
+    "InternalBotRunRepository",
     "McpToolGroupRepository",
     "McpToolGroupUsageRepository",
     "MetadataRepository",
+    "NotificationEmailDeliveryRepository",
+    "OllamaModelPullRepository",
     "NotificationScheduleRuleRepository",
     "ProjectAssignedInternalBotRepository",
     "ProjectAssignedUserRepository",

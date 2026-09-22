@@ -1,0 +1,44 @@
+services:
+  socket-phoenix:
+    environment:
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://${PROJECT_NAME}_socket_phoenix_otel_collector:4318
+      OTEL_EXPORTER_OTLP_PROTOCOL: http_protobuf
+      OTEL_SERVICE_NAME: langboard-socket-phoenix
+    depends_on:
+      socket-phoenix-otel-collector:
+        condition: service_started
+    healthcheck:
+      test:
+        - CMD
+        - curl
+        - --fail
+        - --silent
+        - --show-error
+        - --max-time
+        - "2"
+        - http://127.0.0.1:5690/health/ready
+      interval: 5s
+      timeout: 3s
+      retries: 24
+      start_period: 30s
+
+  socket-phoenix-otel-collector:
+    profiles:
+      - socket-phoenix-otel
+    init: true
+    container_name: ${PROJECT_NAME}_socket_phoenix_otel_collector
+    image: otel/opentelemetry-collector-contrib:0.161.0@sha256:fd328de2552466ad78385e1b1289c3f2402b1c45f265b252aab1955b42845ac1
+    command:
+      - --config=/etc/otelcol-contrib/config.yaml
+    environment:
+      PROJECT_NAME: ${PROJECT_NAME}
+      SOCKET_PHOENIX_INTERNAL_SECRET: ${SOCKET_PHOENIX_INTERNAL_SECRET:-}
+    volumes:
+      - ./otel/socket-phoenix-collector.yaml:/etc/otelcol-contrib/config.yaml:ro
+    ports:
+      - "127.0.0.1:${SOCKET_PHOENIX_OTEL_METRICS_EXPOSE_PORT:-9464}:9464"
+      - "127.0.0.1:${SOCKET_PHOENIX_OTEL_INTERNAL_METRICS_EXPOSE_PORT:-8888}:8888"
+    networks:
+      - net
+    restart: unless-stopped

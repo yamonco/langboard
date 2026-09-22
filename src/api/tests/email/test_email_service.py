@@ -43,3 +43,15 @@ def test_send_template_preserves_smtp_contract(monkeypatch: pytest.MonkeyPatch) 
     assert message["Reply-To"] == "reply@example.test"
     assert sent["hostname"] == "smtp.example.test"
     assert sent["start_tls"] is True
+
+
+def test_strict_template_send_does_not_claim_development_smtp_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def fail(message: EmailMessage, **kwargs: Any) -> None:
+        raise OSError("SMTP unavailable")
+
+    monkeypatch.setattr(type(Env), "ENVIRONMENT", property(lambda self: "development"))
+    monkeypatch.setattr(EmailService, "_EmailService__get_template", lambda self, *args: ("Subject", "Body"))
+    monkeypatch.setattr("aiosmtplib.send", fail)
+    service = EmailService(lambda *_: None, lambda *_: None, None)  # type: ignore[arg-type]
+
+    assert service.send_template("en-US", "person@example.test", "assigned_to_card", {}, strict=True) is False

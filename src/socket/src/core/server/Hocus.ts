@@ -1,17 +1,20 @@
-import { Hocuspocus } from "@hocuspocus/server";
+import { Hocuspocus, type Document } from "@hocuspocus/server";
 import Auth from "@/core/security/Auth";
 import Cache from "@/core/caching/Cache";
 import EditorSyncStorage from "@/core/server/EditorSyncStorage";
 import ISocketClient from "@/core/server/ISocketClient";
 import Subscription from "@/core/server/Subscription";
 import User from "@/models/User";
-import { ESettingSocketTopicID, ESocketTopic } from "@langboard/core/enums";
+import { ESettingSocketTopicID, ESocketStatus, ESocketTopic } from "@langboard/core/enums";
 import { EEditorCollaborationType } from "@langboard/core/constants";
 import * as Y from "yjs";
 import Logger from "@/core/utils/Logger";
+import { EDITOR_SYNC_OWNER, EDITOR_SYNC_RICH_PATCH_TIMEOUT_MS, SOCKET_MAX_PAYLOAD_MB } from "@/Constants";
+import crypto from "crypto";
 
 const EDITOR_SYNC_ACTIVE_DOCUMENT_CACHE_TTL_SECONDS = 60 * 60;
 const EDITOR_SYNC_RECENT_ACTIVE_DOCUMENT_CACHE_TTL_SECONDS = 60;
+const EDITOR_SYNC_DRAIN_TIMEOUT_MS = 30_000;
 const EDITOR_SYNC_ACTIVE_DOCUMENT_CACHE_KEY_PREFIX = "editor-sync:active-document:";
 const EDITOR_SYNC_ACTIVE_DOCUMENT_SCOPE_CACHE_KEY_PREFIX = "editor-sync:active-document-scope:";
 
@@ -31,8 +34,109 @@ interface IActiveDocumentScopeCache {
     expires_at: number;
 }
 
+interface IRichPatchRequest {
+    claimed: bool;
+    id: string;
+    reject: (error: Error) => void;
+    resolve: () => void;
+    snapshotHash: Buffer;
+    timeout: NodeJS.Timeout;
+}
+
+interface IRichPatchResponse {
+    requestId: string;
+    update: Uint8Array;
+}
+
+const richPatchRequests = new Map<string, IRichPatchRequest>();
+
 const createPermissionDeniedError = (reason: string) => {
     return Object.assign(new Error(reason), { reason });
+};
+
+const hashDocument = (document: Y.Doc) => {
+    return crypto.createHash("sha256").update(Y.encodeStateAsUpdate(document)).digest();
+};
+
+const parseRichPatchResponse = (payload: string): IRichPatchResponse | null => {
+    let value: unknown;
+    try {
+        value = JSON.parse(payload);
+    } catch {
+        return null;
+    }
+    if (!value || typeof value !== "object") {
+        return null;
+    }
+
+    const response = value as Record<string, unknown>;
+    if (
+        response.type !== "rich_patch_prepared" ||
+        typeof response.request_id !== "string" ||
+        response.request_id.length !== 32 ||
+        typeof response.update !== "string"
+    ) {
+        return null;
+    }
+
+    const update = Buffer.from(response.update, "base64");
+    if (update.length === 0 || update.toString("base64") !== response.update) {
+        return null;
+    }
+
+    return { requestId: response.request_id, update };
+};
+
+const finishRichPatchRequest = (documentName: string, error?: Error) => {
+    const request = richPatchRequests.get(documentName);
+    if (!request) {
+        return;
+    }
+
+    richPatchRequests.delete(documentName);
+    clearTimeout(request.timeout);
+    if (error) {
+        request.reject(error);
+    } else {
+        request.resolve();
+    }
+};
+
+const applyRichPatchResponse = async (documentName: string, document: Document, response: IRichPatchResponse) => {
+    const request = richPatchRequests.get(documentName);
+    if (!request || request.id !== response.requestId || request.claimed) {
+        return;
+    }
+
+    request.claimed = true;
+    clearTimeout(request.timeout);
+    try {
+        await document.saveMutex.runExclusive(async () => {
+            const current = Y.encodeStateAsUpdate(document);
+            if (!hashDocument(document).equals(request.snapshotHash)) {
+                throw createPermissionDeniedError("conflict");
+            }
+
+            const candidate = new Y.Doc();
+            try {
+                Y.applyUpdate(candidate, current);
+                Y.applyUpdate(candidate, response.update);
+                await EditorSyncStorage.save(documentName, Y.encodeStateAsUpdate(candidate));
+
+                if (!hashDocument(document).equals(request.snapshotHash)) {
+                    await EditorSyncStorage.save(documentName, Y.encodeStateAsUpdate(document));
+                    throw createPermissionDeniedError("conflict");
+                }
+
+                Y.applyUpdate(document, response.update);
+            } finally {
+                candidate.destroy();
+            }
+        });
+        finishRichPatchRequest(documentName);
+    } catch (error) {
+        finishRichPatchRequest(documentName, error instanceof Error ? error : new Error("rich-patch-failed"));
+    }
 };
 
 const createActiveDocumentCacheKey = (documentName: string) => `${EDITOR_SYNC_ACTIVE_DOCUMENT_CACHE_KEY_PREFIX}${documentName}`;
@@ -280,6 +384,9 @@ const Hocus = new Hocuspocus({
         await setActiveDocument(documentName, 1);
     },
     async onAuthenticate({ context, documentName, requestParameters, token }) {
+        if (EDITOR_SYNC_OWNER !== "node") {
+            throw createPermissionDeniedError("editor-owner-inactive");
+        }
         const user = await getAuthenticatedUser({ context, requestParameters, token });
         if (!user) {
             throw createPermissionDeniedError("unauthorized");
@@ -296,6 +403,12 @@ const Hocus = new Hocuspocus({
         }
 
         Y.applyUpdate(document, state);
+    },
+    async onStateless({ documentName, document, payload }) {
+        const response = parseRichPatchResponse(payload);
+        if (response) {
+            await applyRichPatchResponse(documentName, document, response);
+        }
     },
     async onStoreDocument({ documentName, document }) {
         await EditorSyncStorage.save(documentName, Y.encodeStateAsUpdate(document));
@@ -320,6 +433,25 @@ const Hocus = new Hocuspocus({
         }
     },
 });
+
+export const drainEditorSyncDocuments = async () => {
+    const deadline = Date.now() + EDITOR_SYNC_DRAIN_TIMEOUT_MS;
+
+    while (Hocus.documents.size > 0 || Hocus.loadingDocuments.size > 0 || Hocus.unloadingDocuments.size > 0) {
+        Hocus.documents.forEach((document) => {
+            document.connections.forEach(({ connection }) => {
+                connection.close({ code: ESocketStatus.WS_1012_SERVICE_RESTART, reason: "Service Restart" });
+            });
+        });
+        if (Date.now() >= deadline) {
+            const loaded = Hocus.documents.size;
+            const loading = Hocus.loadingDocuments.size;
+            const unloading = Hocus.unloadingDocuments.size;
+            throw new Error(`Editor sync drain timed out with ${loaded} loaded, ${loading} loading, and ${unloading} unloading documents`);
+        }
+        await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+};
 
 export const getEditorSyncText = async (documentName: string, field: string, user: User) => {
     await validateDocumentAccess(documentName, user);
@@ -355,14 +487,43 @@ export const patchEditorSyncText = async (documentName: string, field: string, v
 export const requestEditorSyncRichPatch = async (documentName: string, value: string, user: User) => {
     await validateDocumentAccess(documentName, user);
 
-    const access = getDocumentAccess(documentName);
-    if (!access) {
-        throw createPermissionDeniedError("invalid-document");
+    if (richPatchRequests.has(documentName)) {
+        throw createPermissionDeniedError("busy");
     }
 
-    await Subscription.publish(access.topic, access.topicId, "editor-sync:rich-draft-patch-request", {
-        document_name: documentName,
+    const document = Hocus.documents.get(documentName);
+    if (!document || document.getConnections().length === 0) {
+        throw createPermissionDeniedError("inactive");
+    }
+
+    const id = crypto.randomBytes(24).toString("base64url");
+    const payload = JSON.stringify({
+        type: "rich_patch_prepare",
+        request_id: id,
+        snapshot: Buffer.from(Y.encodeStateAsUpdate(document)).toString("base64"),
         value,
+    });
+    if (Buffer.byteLength(payload) > SOCKET_MAX_PAYLOAD_MB * 1024 * 1024) {
+        throw createPermissionDeniedError("frame-too-large");
+    }
+
+    await new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+            finishRichPatchRequest(documentName, createPermissionDeniedError("timeout"));
+        }, EDITOR_SYNC_RICH_PATCH_TIMEOUT_MS);
+        richPatchRequests.set(documentName, {
+            claimed: false,
+            id,
+            reject,
+            resolve,
+            snapshotHash: hashDocument(document),
+            timeout,
+        });
+        try {
+            document.broadcastStateless(payload);
+        } catch (error) {
+            finishRichPatchRequest(documentName, error instanceof Error ? error : new Error("rich-patch-send-failed"));
+        }
     });
 };
 

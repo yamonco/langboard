@@ -38,6 +38,7 @@ class EditorChatBot extends BaseBot {
                 tweaks: { Prompt: { prompt: data.system } },
                 restData: data.rest_data,
                 sessionId: `${new SnowflakeID(data.user_id).toShortCode()}-${data.project_uid}`,
+                runId: options.taskID,
             },
             useStream: true,
         });

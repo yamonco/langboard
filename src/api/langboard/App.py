@@ -13,7 +13,7 @@ from langboard_shared.tasks.notifications import ProjectEmailNotificationTask
 from .Constants import APP_CONFIG_FILE
 from .Loader import ModuleLoader
 from .mcp_integration import McpServer
-from .middlewares import ApiAuthMiddleware, CollaborativeEditMiddleware, RoleMiddleware
+from .middlewares import ApiAuthMiddleware, ChatUploadConcurrencyMiddleware, CollaborativeEditMiddleware, RoleMiddleware
 
 
 class App:
@@ -49,6 +49,7 @@ class App:
         self.api.add_middleware(RoleMiddleware, routes=AppRouter.api.routes)
         self.api.add_middleware(ApiAuthMiddleware, routes=AppRouter.api.routes)
         self.api.add_middleware(CollaborativeEditMiddleware)
+        self.api.add_middleware(ChatUploadConcurrencyMiddleware)
         self.api.add_middleware(GZipMiddleware, minimum_size=1024, compresslevel=5)
         self.api.add_middleware(
             CORSMiddleware,

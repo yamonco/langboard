@@ -1,4 +1,5 @@
 const SERVER = {
+    SUBSCRIPTION_REVOKED: "subscription:revoked",
     DASHBOARD: {
         PROJECT: {
             ASSIGNED_USERS_UPDATED: "dashboard:project:assigned-users:updated:{uid}",
@@ -33,6 +34,7 @@ const SERVER = {
             IS_AVAILABLE: "board:chat:available",
             SESSION: "board:chat:session",
             SENT: "board:chat:sent",
+            SEND_FAILED: "board:chat:send:failed",
             STREAM: "board:chat:stream",
             TEMPLATE: {
                 CREATED: "board:chat:template:created:{uid}",
@@ -44,6 +46,10 @@ const SERVER = {
             REQUESTED: "board:graph:approval:requested",
             UPDATED: "board:graph:approval:updated",
             DELETED: "board:graph:approval:deleted",
+            RESUME_RESULT: "board:editor:approval:resume:result",
+        },
+        EDITOR_AI: {
+            STATUS_RESULT: "board:editor:ai:status:result",
         },
         LABEL: {
             CREATED: "board:label:created:{uid}",
@@ -142,6 +148,7 @@ const SERVER = {
     USER: {
         UPDATED: "user:updated",
         NOTIFIED: "user:notified",
+        NOTIFICATION_MUTATED: "user:notification:mutated",
         NOTIFICATION_DELETED: "user:notification:deleted",
         API_KEY_ROLES_UPDATED: "user:api-key-roles:updated:{uid}",
         SETTING_ROLES_UPDATED: "user:setting-roles:updated:{uid}",
@@ -226,6 +233,10 @@ const SERVER = {
 
 const CLIENT = {
     BOARD: {
+        EDITOR_APPROVAL_RESUME: "board:editor:approval:resume",
+        EDITOR_AI: {
+            STATUS: "board:editor:ai:status",
+        },
         CHAT: {
             IS_AVAILABLE: "board:chat:available",
             SEND: "board:chat:send",

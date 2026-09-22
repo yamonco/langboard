@@ -3,6 +3,7 @@ import type { ISocketMap } from "@/core/stores/socket/types";
 
 const createSocketMap = (): ISocketMap => ({
     subscriptions: {},
+    restorableTopics: {},
     defaultEvents: {},
     sendingQueue: [],
     subscribedCallbackQueue: {},
@@ -39,6 +40,7 @@ export const resetSocketConnectionState = () => {
     socketMap.sendingQueue.splice(0);
     delete socketMap.sendingQueueTimeout;
     socketMap.subscriptions = {};
+    socketMap.restorableTopics = {};
     socketMap.subscribedCallbackQueue = {};
     socketMap.unsubscribedCallbackQueue = {};
     socketMap.subscribedTopicNotifiers = {};

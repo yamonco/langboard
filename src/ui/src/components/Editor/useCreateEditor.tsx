@@ -10,6 +10,9 @@ import { MarkdownPlugin } from "@platejs/markdown";
 import { EditorKit } from "@/components/Editor/editor-kit";
 import { DndKit } from "@/components/Editor/plugins/dnd-kit";
 import { createYjsKit } from "@/components/Editor/plugins/yjs-kit";
+import { resumeEditorRunCancellations } from "@/controllers/socket/shared/EditorAIRunCancellation";
+import { clearStoredEditorRun } from "@/components/Editor/useChat";
+import { Utils } from "@langboard/core/utils";
 
 const EMPTY_PLUGINS: PlatePlugin[] = [];
 const EMPTY_EDITOR_VALUE: Value = [{ type: "p", children: [{ text: "" }] }];
@@ -35,6 +38,32 @@ export const useCreateEditor = (props: TUseCreateEditor) => {
     valueRef.current = value;
     deserializedValueRef.current = deserializedValue;
     formRef.current = form;
+
+    useEffect(() => {
+        if (readOnly || !socketEvents || !chatEventKey || !copilotEventKey || !Utils.Type.isString(form?.project_uid)) {
+            return;
+        }
+        const resumeChat = resumeEditorRunCancellations({
+            socket,
+            eventKey: chatEventKey,
+            events: socketEvents.chatEvents,
+            projectUID: form.project_uid,
+            kind: "editor_chat",
+            onConfirmed: (taskID) => clearStoredEditorRun(chatEventKey, taskID),
+        });
+        const resumeCopilot = resumeEditorRunCancellations({
+            socket,
+            eventKey: copilotEventKey,
+            events: socketEvents.copilotEvents,
+            projectUID: form.project_uid,
+            kind: "editor_copilot",
+            onConfirmed: (taskID) => clearStoredEditorRun(copilotEventKey, taskID),
+        });
+        return () => {
+            resumeChat();
+            resumeCopilot();
+        };
+    }, [readOnly, socket, socketEvents, chatEventKey, copilotEventKey, form]);
 
     const plugins = useMemo(() => {
         const pluginList = [...EditorKit, ...(customPlugins ?? EMPTY_PLUGINS)];

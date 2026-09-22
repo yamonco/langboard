@@ -130,6 +130,7 @@ export type TSocketTopicNotifierMap = Partial<Record<ESocketTopic, TSocketTopicN
 
 export interface ISocketMap {
     subscriptions: TSocketSubscriptionTopicMap;
+    restorableTopics: TSocketSubscribedTopicMap;
     defaultEvents: TSocketDefaultEventMap;
     sendingQueue: string[];
     sendingQueueTimeout?: NodeJS.Timeout;

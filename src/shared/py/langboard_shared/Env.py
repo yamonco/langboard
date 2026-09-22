@@ -99,6 +99,14 @@ class Env:
         return self.__get_from_cache("SOCKET_INTERNAL_URL", f"http://localhost:{self.SOCKET_PORT}").rstrip("/")
 
     @property
+    def SOCKET_EDITOR_INTERNAL_URL(self) -> str:
+        return self.__get_from_cache("SOCKET_EDITOR_INTERNAL_URL", self.SOCKET_INTERNAL_URL).rstrip("/")
+
+    @property
+    def SOCKET_PHOENIX_INTERNAL_SECRET(self) -> str:
+        return self.__get_from_cache("SOCKET_PHOENIX_INTERNAL_SECRET", "")
+
+    @property
     def API_URL(self) -> str:
         return (
             self.__get_from_cache("API_URL", f"http://localhost:{self.API_PORT}")
@@ -139,12 +147,24 @@ class Env:
         return int(self.__get_from_cache("AI_REQUEST_TIMEOUT", "120"))
 
     @property
+    def AI_STREAM_MAX_BUFFER_MB(self) -> int:
+        return int(self.__get_from_cache("AI_STREAM_MAX_BUFFER_MB", "4"))
+
+    @property
     def AI_REQUEST_TRIALS(self) -> int:
         return int(self.__get_from_cache("AI_REQUEST_TRIALS", "5"))
 
     @property
     def MAX_FILE_SIZE_MB(self) -> int:
         return int(self.__get_from_cache("MAX_FILE_SIZE_MB", "50"))
+
+    @property
+    def CHAT_UPLOAD_MAX_CONCURRENCY(self) -> int:
+        return int(self.__get_from_cache("CHAT_UPLOAD_MAX_CONCURRENCY", "2"))
+
+    @property
+    def EDITOR_SYNC_MAX_REQUEST_SIZE_MB(self) -> int:
+        return int(self.__get_from_cache("EDITOR_SYNC_MAX_REQUEST_SIZE_MB", "8"))
 
     @property
     def BATCH_MAX_RESPONSE_SIZE_MB(self) -> int:
@@ -240,6 +260,14 @@ class Env:
     def BROADCAST_URLS(self) -> list[str]:
         urls = self.__get_from_cache("BROADCAST_URLS", "")
         return urls.split(",") if urls else []
+
+    @property
+    def BROADCAST_MAX_MESSAGE_BYTES(self) -> int:
+        return int(self.__get_from_cache("BROADCAST_MAX_MESSAGE_BYTES", str(10 * 1024 * 1024)))
+
+    @property
+    def BROADCAST_PUBLISH_TIMEOUT_SECONDS(self) -> int:
+        return int(self.__get_from_cache("BROADCAST_PUBLISH_TIMEOUT_SECONDS", "30"))
 
     @property
     def CACHE_TYPE(self) -> Literal["in-memory", "redis"]:
@@ -400,6 +428,14 @@ class Env:
     @property
     def MAIL_SSL_TLS(self) -> bool:
         return self.__get_from_cache("MAIL_SSL_TLS", "false") == "true"
+
+    @property
+    def NOTIFICATION_EMAIL_OUTBOX_ENABLED(self) -> bool:
+        return self.__get_from_cache("NOTIFICATION_EMAIL_OUTBOX_ENABLED", "false") == "true"
+
+    @property
+    def NOTIFICATION_EMAIL_OUTBOX_RETENTION_DAYS(self) -> int:
+        return int(self.__get_from_cache("NOTIFICATION_EMAIL_OUTBOX_RETENTION_DAYS", "90"))
 
     @property
     def WORKER(self) -> str:

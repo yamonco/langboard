@@ -18,16 +18,14 @@ import UserAvatar from "@/components/UserAvatar";
 import UserAvatarDefaultList from "@/components/UserAvatarDefaultList";
 import { QUERY_NAMES } from "@/constants";
 import useGetNotificationList from "@/controllers/api/notification/useGetNotificationList";
-import useDeleteAllUserNotificationsHandlers from "@/controllers/socket/notification/useDeleteAllUserNotificationsHandlers";
-import useDeleteUserNotificationHandlers from "@/controllers/socket/notification/useDeleteUserNotificationHandlers";
-import useReadAllUserNotificationsHandlers from "@/controllers/socket/notification/useReadAllUserNotificationsHandlers";
-import useReadUserNotificationHandlers from "@/controllers/socket/notification/useReadUserNotificationHandlers";
+import useNotificationCommand from "@/controllers/api/notification/useNotificationCommand";
+import useUserNotificationMutatedHandlers from "@/controllers/socket/user/useUserNotificationMutatedHandlers";
 import useUserNotifiedHandlers from "@/controllers/socket/user/useUserNotifiedHandlers";
 import { usePageNavigateRef } from "@/core/hooks/usePageNavigate";
 import useSwitchSocketHandlers from "@/core/hooks/useSwitchSocketHandlers";
 import { AuthUser, User, UserNotification } from "@/core/models";
 import { TUserLikeModel } from "@/core/models/ModelRegistry";
-import { ENotificationType } from "@/core/models/types/notification.type";
+import { ENotificationMutationAction, ENotificationType } from "@/core/models/types/notification.type";
 import { useSocket } from "@/core/providers/SocketProvider";
 import { ROUTES } from "@/core/routing/constants";
 import { getUserSettingsStore, IUserSettings, NOTIFICATIONS_TIME_RANGE_OPTIONS, useUserSettings } from "@/core/stores/UserSettingsStore";
@@ -53,10 +51,9 @@ const HeaderUserNotification = memo(({ currentUser }: IHeaderUserNotificationPro
     const [unreadCount, setUnreadCount] = useState(0);
     const { mutateAsync } = useGetNotificationList();
     const timeRange = useUserSettings("notifications_time_range");
-    const { send: sendReadAllUserNotifications } = useReadAllUserNotificationsHandlers();
-    const { send: sendDeleteAllUserNotifications } = useDeleteAllUserNotificationsHandlers();
-    const notifiedHandlers = useMemo(
-        () =>
+    const { mutateAsync: mutateNotification, isPending: isMutatingNotification } = useNotificationCommand();
+    const notificationHandlers = useMemo(
+        () => [
             useUserNotifiedHandlers({
                 currentUser,
                 callback: () => {
@@ -68,23 +65,51 @@ const HeaderUserNotification = memo(({ currentUser }: IHeaderUserNotificationPro
                     Toast.Add.info(t("notification.You have a new notification."));
                 },
             }),
+            useUserNotificationMutatedHandlers({
+                currentUser,
+                callback: (mutation) => {
+                    setUnreadCount(mutation.unread_count);
+                    if (mutation.action === ENotificationMutationAction.DeleteAll) {
+                        setHasMore(false);
+                    }
+                    forceUpdate();
+                },
+            }),
+        ],
         [currentUser, isOpened]
     );
-    useSwitchSocketHandlers({ socket, handlers: notifiedHandlers });
-    const readAllNotifications = useCallback(() => {
-        sendReadAllUserNotifications({});
-        setUnreadCount(0);
+    useSwitchSocketHandlers({ socket, handlers: notificationHandlers });
+    const readAllNotifications = async () => {
+        let mutation;
+        try {
+            mutation = await mutateNotification({ action: "read_all" });
+        } catch {
+            return;
+        }
+        if (!mutation) {
+            return;
+        }
+        setUnreadCount(mutation.unread_count);
+        const readAt = mutation.read_at ? new Date(mutation.read_at) : new Date();
         for (let i = 0; i < unreadNotifications.length; ++i) {
             const notification = unreadNotifications[i];
-            notification.read_at = new Date();
+            notification.read_at = readAt;
         }
-    }, [unreadNotifications]);
-    const deleteAllNotifications = useCallback(() => {
-        sendDeleteAllUserNotifications({});
+    };
+    const deleteAllNotifications = async () => {
+        let mutation;
+        try {
+            mutation = await mutateNotification({ action: "delete_all" });
+        } catch {
+            return;
+        }
+        if (!mutation) {
+            return;
+        }
         UserNotification.Model.deleteModels(() => true);
         setHasMore(false);
-        setUnreadCount(0);
-    }, []);
+        setUnreadCount(mutation.unread_count);
+    };
     const updateTimeRange = (value: IUserSettings["notifications_time_range"]) => {
         getUserSettingsStore().updateSettingsByKey("notifications_time_range", value);
     };
@@ -177,6 +202,7 @@ const HeaderUserNotification = memo(({ currentUser }: IHeaderUserNotificationPro
                                 title={t("notification.Read all notifications")}
                                 titleAlign="end"
                                 titleSide="bottom"
+                                disabled={isMutatingNotification}
                                 onClick={readAllNotifications}
                             >
                                 <IconComponent icon="check-check" size="4" />
@@ -188,6 +214,7 @@ const HeaderUserNotification = memo(({ currentUser }: IHeaderUserNotificationPro
                             title={t("notification.Delete all notifications")}
                             titleAlign="end"
                             titleSide="bottom"
+                            disabled={isMutatingNotification}
                             onClick={deleteAllNotifications}
                         >
                             <IconComponent icon="trash-2" size="4" />
@@ -278,25 +305,38 @@ const HeaderUserNotificationItem = memo(({ notification, setUnreadCount, updater
     const [_, forceUpdate] = updater;
     const [t, i18n] = useTranslation();
     const navigate = usePageNavigateRef();
-    const { send: sendReadUserNotification } = useReadUserNotificationHandlers();
-    const { send: sendDeleteUserNotification } = useDeleteUserNotificationHandlers();
+    const { mutateAsync: mutateNotification, isPending: isMutatingNotification } = useNotificationCommand();
     const readAt = notification.useField("read_at");
-    const readNotification = (shouldUpdate: bool) => {
-        const wasUnread = !notification.read_at;
-        sendReadUserNotification({ uid: notification.uid });
-        notification.read_at = new Date();
-        if (wasUnread) {
-            setUnreadCount((prev) => Math.max(prev - 1, 0));
+    const readNotification = async (shouldUpdate: bool) => {
+        if (notification.read_at) {
+            return;
         }
+        let mutation;
+        try {
+            mutation = await mutateNotification({ action: "read", uid: notification.uid });
+        } catch {
+            return;
+        }
+        if (!mutation) {
+            return;
+        }
+        notification.read_at = mutation.read_at ? new Date(mutation.read_at) : new Date();
+        setUnreadCount(mutation.unread_count);
         if (shouldUpdate) {
             forceUpdate();
         }
     };
-    const deleteNotification = () => {
-        if (!notification.read_at) {
-            setUnreadCount((prev) => Math.max(prev - 1, 0));
+    const deleteNotification = async () => {
+        let mutation;
+        try {
+            mutation = await mutateNotification({ action: "delete", uid: notification.uid });
+        } catch {
+            return;
         }
-        sendDeleteUserNotification({ uid: notification.uid });
+        if (!mutation) {
+            return;
+        }
+        setUnreadCount(mutation.unread_count);
         UserNotification.Model.deleteModel(notification.uid);
     };
 
@@ -319,9 +359,12 @@ const HeaderUserNotificationItem = memo(({ notification, setUnreadCount, updater
         );
     };
 
-    const movePage = () => {
+    const movePage = async () => {
+        if (isMutatingNotification) {
+            return;
+        }
         const route = getRoute(notification);
-        readNotification(false);
+        await readNotification(false);
         navigate(route);
     };
     const messageVars = getNotificationMessageVars(notification);
@@ -364,6 +407,7 @@ const HeaderUserNotificationItem = memo(({ notification, setUnreadCount, updater
                                 title={t("notification.Read notification")}
                                 titleAlign="end"
                                 titleSide="bottom"
+                                disabled={isMutatingNotification}
                                 className="size-7"
                                 onClick={() => readNotification(true)}
                             >
@@ -376,6 +420,7 @@ const HeaderUserNotificationItem = memo(({ notification, setUnreadCount, updater
                             title={t("notification.Delete notification")}
                             titleAlign="end"
                             titleSide="bottom"
+                            disabled={isMutatingNotification}
                             className="size-7"
                             onClick={deleteNotification}
                         >

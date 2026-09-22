@@ -22,6 +22,7 @@ export type TNotificationPublishData = {
     api_notification: Record<string, any>;
     target_user: DeepPartial<User>;
     scope_models?: [string, number][];
+    web_handled_by_python?: bool;
 
     email_template_name?: string;
     email_formats?: Record<string, string>;

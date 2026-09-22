@@ -93,7 +93,7 @@ class AuthSecurity:
                 else:
                     route_path = route.path
                 path = openapi_schema["paths"][route_path]
-                for method in route.methods:
+                for method in route.methods or ():
                     path_method = path[method.lower()]
                     path_method["security"] = [{"BearerAuth": []}]
 
@@ -131,6 +131,18 @@ class AuthSecurity:
     @staticmethod
     def create_access_token(user_id: int) -> str:
         payload = AuthSecurity.__create_payload(user_id, timedelta(seconds=Env.JWT_AT_EXPIRATION))
+        return jwt_encode(payload=payload, key=Env.JWT_SECRET_KEY, algorithm=Env.JWT_ALGORITHM)
+
+    @staticmethod
+    def create_bot_one_time_token(
+        user_id: int, api_permission_level: Literal["read", "edit", "full_access"] = "read"
+    ) -> str:
+        if user_id <= 0 or api_permission_level not in ("read", "edit", "full_access"):
+            raise ValueError("Invalid bot token owner or permission level")
+
+        payload = AuthSecurity.__create_payload(user_id, timedelta(minutes=5))
+        payload["internal"] = "bot"
+        payload["api_permission_level"] = api_permission_level
         return jwt_encode(payload=payload, key=Env.JWT_SECRET_KEY, algorithm=Env.JWT_ALGORITHM)
 
     @staticmethod

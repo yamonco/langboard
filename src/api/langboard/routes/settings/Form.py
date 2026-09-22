@@ -159,7 +159,13 @@ class UpdateInternalBotForm(BaseFormModel):
 
 @form_model
 class OllamaModelForm(BaseFormModel):
-    model: str
+    model: str = Field(min_length=1, max_length=255)
+
+
+@form_model
+class CopyOllamaModelForm(BaseFormModel):
+    model: str = Field(min_length=1, max_length=255)
+    copy_to: str = Field(min_length=1, max_length=255)
 
 
 @form_model

@@ -1,5 +1,13 @@
-from fastapi import Depends, status
+from uuid import UUID
+from fastapi import Depends, File, Form, UploadFile, status
+from langboard_shared.ai.BoardChatAttachment import (
+    create_board_chat_attachment_token,
+    delete_board_chat_attachment_ticket,
+    schedule_board_chat_attachment_cleanup,
+)
+from langboard_shared.ai.LangflowFileClient import LangflowFileClient
 from langboard_shared.core.filter import AuthFilter
+from langboard_shared.core.logger import Logger
 from langboard_shared.core.routing import (
     ApiErrorCode,
     ApiException,
@@ -11,6 +19,7 @@ from langboard_shared.core.routing import (
     collaborative_text,
     create_editor_collaboration_document_id,
 )
+from langboard_shared.core.routing.Exception import MissingException
 from langboard_shared.core.schema import OpenApiSchema
 from langboard_shared.domain.models import (
     ChatHistory,
@@ -21,12 +30,88 @@ from langboard_shared.domain.models import (
     ProjectRole,
     User,
 )
+from langboard_shared.domain.models.BaseBotModel import BotPlatform, BotPlatformRunningType
+from langboard_shared.domain.models.InternalBot import InternalBotType
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.domain.services import DomainService
+from langboard_shared.Env import Env
 from langboard_shared.filter import RoleFilter
 from langboard_shared.publishers import ProjectPublisher
 from langboard_shared.security import Auth, RoleFinder
 from .forms import ChatHistoryPagination, CreateChatTemplate, UpdateChatTemplate, UpdateProjectChatSessionForm
+
+
+_logger = Logger.use("board-chat-attachment-api")
+
+
+@AppRouter.api.post(
+    "/board/{project_uid}/chat/upload",
+    tags=["Board.Chat"],
+    responses=OpenApiSchema().auth().forbidden().err(404, ApiErrorCode.NF2001).err(406, ApiErrorCode.OP1002).get(),
+)
+@RoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+@AuthFilter.add("user")
+def upload_project_chat_attachment(
+    project_uid: str,
+    task_id: UUID = Form(),
+    attachment: UploadFile = File(),
+    user: User = Auth.scope("user"),
+    service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    if not attachment:
+        raise MissingException("body", "attachment")
+    if Env.CACHE_TYPE != "redis":
+        raise ApiException.ServiceUnavailable_503()
+
+    project = service.project.get_by_id_like(project_uid)
+    if project is None:
+        raise ApiException.NotFound_404(ApiErrorCode.NF2001)
+    assignment = service.project.get_assigned_internal_bot_by_type(project, InternalBotType.ProjectChat)
+    if assignment is None:
+        raise ApiException.NotFound_404(ApiErrorCode.NF3004)
+    bot, bot_assignment = assignment
+    if (
+        bot_assignment.project_id != project.id
+        or bot.platform != BotPlatform.Langflow
+        or bot.platform_running_type != BotPlatformRunningType.Endpoint
+    ):
+        raise ApiException.NotAcceptable_406(ApiErrorCode.OP1002)
+    uploaded = None
+    ticket_token = None
+    try:
+        uploaded = LangflowFileClient.upload(
+            bot,
+            attachment.file,
+            attachment.filename or "",
+            attachment.content_type,
+            attachment.size,
+        )
+        ticket_token = create_board_chat_attachment_token(
+            {
+                "user_id": int(user.id),
+                "project_id": int(project.id),
+                "bot_id": int(bot.id),
+                "task_id": str(task_id),
+                "file_id": uploaded.file_id,
+                "path": uploaded.path,
+                "filename": attachment.filename or "",
+            }
+        )
+        schedule_board_chat_attachment_cleanup(ticket_token)
+    except Exception:
+        external_deleted = uploaded is None
+        if uploaded is not None:
+            external_deleted = LangflowFileClient.delete(bot, uploaded.file_id)
+        if ticket_token is not None and external_deleted:
+            delete_board_chat_attachment_ticket(ticket_token)
+        elif ticket_token is not None:
+            try:
+                schedule_board_chat_attachment_cleanup(ticket_token, 1)
+            except Exception:
+                _logger.exception("Could not schedule attachment cleanup after upload failure")
+        _logger.exception("Board chat attachment upload failed")
+        raise ApiException.NotAcceptable_406(ApiErrorCode.OP1002)
+    return JsonResponse(content={"file_token": ticket_token}, status_code=status.HTTP_201_CREATED)
 
 
 @AppRouter.api.get(
@@ -44,6 +129,40 @@ def get_project_chat_sessions(
     sessions = service.chat.get_api_session_list(user, ProjectChatSession, project_uid)
 
     return JsonResponse(content={"sessions": sessions})
+
+
+@AppRouter.api.get(
+    "/board/{project_uid}/chat/run/{task_id}",
+    tags=["Board.Chat"],
+    responses=OpenApiSchema().auth().forbidden().err(404, ApiErrorCode.NF2021).get(),
+)
+@RoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+@AuthFilter.add("user")
+def get_project_chat_run(
+    project_uid: str,
+    task_id: UUID,
+    user: User = Auth.scope("user"),
+    service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    project = service.project.get_by_id_like(project_uid)
+    if project is None:
+        raise ApiException.NotFound_404(ApiErrorCode.NF2021)
+    result = service.internal_bot_run.get_owned_board_chat_status(task_id, user.id, project.id)
+    if result is None:
+        raise ApiException.NotFound_404(ApiErrorCode.NF2021)
+
+    run, project_session, user_message, ai_message = result
+    session_uid = project_session.get_uid()
+    return JsonResponse(
+        content={
+            "task_id": run.client_task_id,
+            "status": run.status.value,
+            "session_uid": session_uid,
+            "user_message": {**user_message.api_response(), "chat_session_uid": session_uid},
+            "ai_message": {**ai_message.api_response(), "chat_session_uid": session_uid} if ai_message else None,
+            "ai_message_uid": run.ai_chat_history_id.to_short_code() if run.ai_chat_history_id else None,
+        }
+    )
 
 
 @AppRouter.api.get(

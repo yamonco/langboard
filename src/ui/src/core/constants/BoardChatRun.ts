@@ -1,0 +1,1 @@
+export const BOARD_CHAT_ACCEPTANCE_GRACE_MS = 30_000;

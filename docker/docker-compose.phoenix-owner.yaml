@@ -1,0 +1,36 @@
+services:
+  socket:
+    # Keep the Node runtime available only as an explicit rollback option.
+    profiles:
+      - socket-node-rollback
+
+  server:
+    environment:
+      SOCKET_EDITOR_HOST: ${PROJECT_NAME}_socket_phoenix
+      SOCKET_EDITOR_PORT: "5690"
+    depends_on: !override
+      ui:
+        condition: service_completed_successfully
+      api:
+        condition: service_healthy
+      socket-phoenix:
+        condition: service_healthy
+
+  socket-phoenix:
+    depends_on:
+      graph:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - curl
+        - --fail
+        - --silent
+        - --show-error
+        - --max-time
+        - "2"
+        - http://127.0.0.1:5690/health/ready
+      interval: 5s
+      timeout: 3s
+      retries: 24
+      start_period: 30s

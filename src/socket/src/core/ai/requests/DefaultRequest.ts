@@ -103,7 +103,7 @@ class DefaultRequest extends GraphRequest {
             let systemPrompt = "";
             if (requestModel.isTitle) {
                 systemPrompt = this.getTitlePrompt();
-            } else if (this.internalBotSettings) {
+            } else if (this.internalBotSettings && !this.internalBotSettings.use_default_prompt) {
                 systemPrompt = this.internalBotSettings.prompt;
             } else {
                 systemPrompt = configuredSystemPrompt;

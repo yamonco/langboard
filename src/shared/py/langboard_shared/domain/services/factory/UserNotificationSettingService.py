@@ -1,7 +1,6 @@
 from typing import Literal, cast, overload
 from ....core.db import BaseDbModel
 from ....core.domain import BaseDomainService
-from ....core.publisher import NotificationPublishModel
 from ....core.types.ParamTypes import TCardParam, TColumnParam, TProjectParam, TWikiParam
 from ....helpers import InfraHelper
 from ...models import Card, Project, ProjectColumn, ProjectWiki, User, UserNotificationUnsubscription
@@ -147,28 +146,26 @@ class UserNotificationSettingService(BaseDomainService):
 
         return notification_types
 
-    def has_unsubscription(self, model: NotificationPublishModel, channel: NotificationChannel) -> bool:
+    def has_unsubscription(
+        self,
+        user: User,
+        notification_type: NotificationType,
+        scope_models: list[tuple[str, int]] | None,
+        channel: NotificationChannel,
+    ) -> bool:
         query = (
-            self.repo.user_notification_setting.get_unsubscriptions_query_builder(model.target_user)
+            self.repo.user_notification_setting.get_unsubscriptions_query_builder(user)
             .where_channel(channel)
-            .where_notification_type(model.notification.notification_type)
+            .where_notification_type(notification_type)
         )
         unsubscription = query.where_scope(NotificationScope.All).first()
         if unsubscription:
             return True
 
-        if not model.scope_models:
+        if not scope_models:
             return False
 
-        table_ids_dict = InfraHelper.combine_table_with_ids(model.scope_models)
-        for table_name, record_id in model.scope_models:
-            if (
-                table_name not in table_ids_dict
-                or not table_ids_dict[table_name]
-                or record_id not in table_ids_dict[table_name]
-            ):
-                continue
-
+        for table_name, record_id in scope_models:
             unsubscription = query.where_scope(NotificationScope.Specific, (table_name, record_id)).first()
             if unsubscription:
                 return True

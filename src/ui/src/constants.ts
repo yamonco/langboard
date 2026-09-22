@@ -5,6 +5,8 @@ export const APP_SHORT_NAME = process.env.PROJECT_SHORT_NAME || APP_NAME;
 
 export const SOCKET_URL = process.env.SOCKET_URL || "http://localhost:5690";
 export const API_URL = process.env.API_URL || "http://localhost:5381";
+export const SOCKET_RUNTIME = process.env.SOCKET_RUNTIME === "phoenix" ? "phoenix" : "node";
+export const IS_PHOENIX_SOCKET_RUNTIME = SOCKET_RUNTIME === "phoenix";
 export const PUBLIC_UI_URL = process.env.PUBLIC_UI_URL || "http://localhost:5173";
 export const IS_OLLAMA_RUNNING = process.env.IS_OLLAMA_RUNNING === "true" || false;
 

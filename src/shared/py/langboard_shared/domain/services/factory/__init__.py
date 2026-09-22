@@ -15,10 +15,12 @@ from .DoclingMetadataService import DoclingMetadataService
 from .EmailService import EmailService
 from .GraphApprovalRequestService import GraphApprovalRequestService
 from .IdentityLinkService import IdentityLinkService
+from .InternalBotRunService import InternalBotRunService
 from .InternalBotService import InternalBotService
 from .McpToolGroupService import McpToolGroupService
 from .MetadataService import MetadataService
 from .NotificationService import NotificationService
+from .OllamaModelPullService import OllamaModelPullService
 from .OrchestrationTaskService import OrchestrationTaskService
 from .ProjectColumnService import ProjectColumnService
 from .ProjectEmailNotificationService import ProjectEmailNotificationService
@@ -52,10 +54,12 @@ __all__ = [
     "EmailService",
     "GraphApprovalRequestService",
     "IdentityLinkService",
+    "InternalBotRunService",
     "InternalBotService",
     "McpToolGroupService",
     "MetadataService",
     "NotificationService",
+    "OllamaModelPullService",
     "OrchestrationTaskService",
     "ProjectColumnService",
     "ProjectEmailNotificationService",

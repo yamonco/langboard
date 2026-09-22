@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Mapping
 from ..core.publisher import BaseSocketPublisher, SocketPublishModel
 from ..core.routing import SettingSocketTopicID, SocketTopic
 from ..core.types import SnowflakeID
@@ -31,6 +31,27 @@ class UserPublisher(BaseSocketPublisher):
         )
 
         UserPublisher.put_dispather({}, publish_model)
+
+    @staticmethod
+    def notified(user: User, notification: dict[str, Any]):
+        publish_model = SocketPublishModel(
+            topic=SocketTopic.UserPrivate,
+            topic_id=user.get_uid(),
+            event="user:notified",
+            data_keys=["notification"],
+        )
+        UserPublisher.put_dispather({"notification": notification}, publish_model)
+
+    @staticmethod
+    def notification_mutated(user: User, mutation: Mapping[str, Any]):
+        data = dict(mutation)
+        publish_model = SocketPublishModel(
+            topic=SocketTopic.UserPrivate,
+            topic_id=user.get_uid(),
+            event="user:notification:mutated",
+            data_keys=list(data),
+        )
+        UserPublisher.put_dispather(data, publish_model)
 
     @staticmethod
     def api_key_roles_updated(user_uid: str, roles: list[str]):

@@ -24,6 +24,7 @@ import BoardSettingsPage, { SkeletonBoardSettingsPage } from "@/pages/BoardPage/
 import { TBoardViewType, useBoardController } from "@/core/providers/BoardController";
 import useBoardAssignedUsersUpdatedHandlers from "@/controllers/socket/board/useBoardAssignedUsersUpdatedHandlers";
 import useProjectDeletedHandlers from "@/controllers/socket/shared/useProjectDeletedHandlers";
+import useProjectAccessRevokedHandlers from "@/controllers/socket/shared/useProjectAccessRevokedHandlers";
 import { usePageHeader } from "@/core/providers/PageHeaderProvider";
 import { SkeletonBoard } from "@/pages/BoardPage/components/board/Board";
 import useBoardAssignedInternalBotChangedHandlers from "@/controllers/socket/board/useBoardAssignedInternalBotChangedHandlers";
@@ -267,6 +268,17 @@ function BoardProxyDisplay({ pageRoute, isFetching, project }: IBoardProxyDispla
             }),
         [project]
     );
+    const projectAccessRevokedHandlers = useMemo(
+        () =>
+            useProjectAccessRevokedHandlers({
+                topic: ESocketTopic.Board,
+                projectUID: project.uid,
+                callback: () => {
+                    navigate(ROUTES.DASHBOARD.PROJECTS.ALL, { replace: true });
+                },
+            }),
+        [project]
+    );
     const boardAssignedInternalBotChangedHandlers = useMemo(
         () =>
             useBoardAssignedInternalBotChangedHandlers({
@@ -367,6 +379,7 @@ function BoardProxyDisplay({ pageRoute, isFetching, project }: IBoardProxyDispla
             isBoardChatAvailableHandlers,
             boardAssignedUsersUpdatedHandlers,
             projectDeletedHandlers,
+            projectAccessRevokedHandlers,
             boardAssignedInternalBotChangedHandlers,
             internalBotUpdatedHandlers,
             cardRelationshipsUpdatedHandlers,
@@ -385,6 +398,7 @@ function BoardProxyDisplay({ pageRoute, isFetching, project }: IBoardProxyDispla
             isBoardChatAvailableHandlers,
             boardAssignedUsersUpdatedHandlers,
             projectDeletedHandlers,
+            projectAccessRevokedHandlers,
             boardAssignedInternalBotChangedHandlers,
             internalBotUpdatedHandlers,
             cardRelationshipsUpdatedHandlers,

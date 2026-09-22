@@ -31,3 +31,5 @@ export enum ESettingSocketTopicID {
 
 export const GLOBAL_TOPIC_ID = "all" as const;
 export const NONE_TOPIC_ID = "none" as const;
+export const SOCKET_MAX_TOPIC_IDS = 64 as const;
+export const SOCKET_MAX_TOPIC_ID_BYTES = 128 as const;

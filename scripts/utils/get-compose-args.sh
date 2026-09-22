@@ -40,6 +40,12 @@ fi
 
 COMPOSE_ARGS+=" -f ${COMPOSE_PREFIX}.redis.yaml -f ${COMPOSE_PREFIX}.server.yaml --env-file ./.env"
 
+if [ "${SOCKET_OWNER:-node}" = "phoenix" ]; then
+    COMPOSE_ARGS+=" -f ${COMPOSE_PREFIX}.phoenix-owner.yaml --profile socket-phoenix"
+elif [ "${EDITOR_SYNC_OWNER:-node}" = "phoenix" ]; then
+    COMPOSE_ARGS+=" -f ${COMPOSE_PREFIX}.phoenix-editor-owner.yaml --profile socket-phoenix"
+fi
+
 # Optional compose args
 VAULT_COMPOSE_ARGS="-f ${COMPOSE_PREFIX}.vault.yaml"
 DOCS_COMPOSE_ARGS="-f ${COMPOSE_PREFIX}.docs.yaml"
@@ -47,6 +53,7 @@ UI_WATCHER_COMPOSE_ARGS="-f ${COMPOSE_PREFIX}.ui-watcher.yaml"
 OLLAMA_SHARED_COMPOSE_ARGS="-f ${COMPOSE_PREFIX}.ollama.shared.yaml"
 OLLAMA_CPU_COMPOSE_ARGS="-f ${COMPOSE_PREFIX}.ollama.cpu.yaml ${OLLAMA_SHARED_COMPOSE_ARGS}"
 OLLAMA_GPU_COMPOSE_ARGS="-f ${COMPOSE_PREFIX}.ollama.gpu.yaml ${OLLAMA_SHARED_COMPOSE_ARGS}"
+OTEL_COMPOSE_ARGS="-f ${COMPOSE_PREFIX}.otel.yaml --profile socket-phoenix --profile socket-phoenix-otel"
 
 # Append optional compose args based on environment variables
 if [ "${WITH_DOCS}" = "true" ]; then
@@ -63,6 +70,10 @@ fi
 
 if [ "${WITH_OLLAMA_GPU}" = "true" ]; then
     COMPOSE_ARGS+=" ${OLLAMA_GPU_COMPOSE_ARGS}"
+fi
+
+if [ "${WITH_OTEL}" = "true" ]; then
+    COMPOSE_ARGS+=" ${OTEL_COMPOSE_ARGS}"
 fi
 
 # Check if vault is needed based on KEY_PROVIDER_TYPE in .env file

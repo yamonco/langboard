@@ -1,24 +1,40 @@
+from collections.abc import Mapping
 from enum import Enum
 from json import dumps as json_dumps
 from json import loads as json_loads
 from string import Formatter
-from typing import cast
+from typing import TypedDict, cast
 from urllib.parse import parse_qsl
 import requests
 from fastapi import status
+from langboard_shared.core.logger import Logger
 from langboard_shared.core.routing import AppRouter, JsonResponse
 from langboard_shared.core.routing.ApiSchemaHelper import ApiSchemaMap
 from langboard_shared.core.security import AuthSecurity
 from langboard_shared.core.utils.Converter import json_default
+from langboard_shared.domain.models import User
+from langboard_shared.domain.services import DomainService
 from langboard_shared.Env import Env
 from langboard_shared.helpers.AgentApiPermissionHelper import (
     create_permission_denied_response,
     get_agent_allowed_permissions,
     has_agent_api_token,
 )
+from langboard_shared.security import Auth
+from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import Headers
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
+from ..routes.auth.SocketAuthorization import authorized_editor_document_subscription
 from ..routes.batcher.BatchForm import BatchFormRequestSchema
+from ..routes.editor.EditorSyncPayload import rich_patch_request_fits_limit
+
+
+_logger = Logger.use("editor-sync")
+
+
+class _BatchResponse(TypedDict):
+    status: int
+    body: dict[str, object]
 
 
 class CollaborativeEditMiddleware:
@@ -90,7 +106,9 @@ class CollaborativeEditMiddleware:
             form=self._parse_json_body(body),
         )
 
-        guard_response = self._get_collaborative_edit_guard_response(headers, request_schema, api_schema)
+        guard_response = await run_in_threadpool(
+            self._get_collaborative_edit_guard_response, headers, request_schema, api_schema
+        )
         if guard_response is not None:
             response = JsonResponse(
                 content=guard_response.get("body", {}),
@@ -122,7 +140,7 @@ class CollaborativeEditMiddleware:
         await self.app(scope, self._replay_body_messages(body_messages), capture_send)
 
         if response_status_code is not None and status.HTTP_200_OK <= response_status_code < 300:
-            self._clear_inactive_collaborative_documents(headers, request_schema, api_schema)
+            await run_in_threadpool(self._clear_inactive_collaborative_documents, headers, request_schema, api_schema)
 
     @staticmethod
     def _get_api_schema_by_path(method: str, request_path: str) -> tuple[ApiSchemaMap | None, dict[str, str]]:
@@ -142,10 +160,15 @@ class CollaborativeEditMiddleware:
 
     def _get_collaborative_edit_guard_response(
         self, headers: Headers, request_schema: BatchFormRequestSchema, api_schema: ApiSchemaMap
-    ) -> dict | None:
+    ) -> _BatchResponse | None:
         targets = self._get_collaborative_edit_targets(request_schema, api_schema)
         document_names = [target["document_name"] for target in targets]
         active_document_names = self._get_active_collaborative_document_names(headers, document_names)
+        if active_document_names is None:
+            return self._batch_response(
+                {"message": "Unable to verify active collaborative documents."},
+                status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
         if not active_document_names:
             return None
 
@@ -235,7 +258,7 @@ class CollaborativeEditMiddleware:
         return targets
 
     @staticmethod
-    def _format_collaborative_document_names(document_name: str, request_params: dict) -> list[str]:
+    def _format_collaborative_document_names(document_name: str, request_params: dict[str, object]) -> list[str]:
         field_names = [
             field_name
             for _, field_name, _, _ in Formatter().parse(document_name)
@@ -253,8 +276,12 @@ class CollaborativeEditMiddleware:
             return []
 
         list_field_name = list_field_names[0]
+        list_values = request_params[list_field_name]
+        if not isinstance(list_values, list):
+            return []
+
         document_names: list[str] = []
-        for value in request_params[list_field_name]:
+        for value in list_values:
             if not isinstance(value, (str, int, float)):
                 continue
             next_params = {**request_params, list_field_name: value}
@@ -287,7 +314,11 @@ class CollaborativeEditMiddleware:
         if not document_names:
             return
 
-        active_document_names = set(self._get_active_collaborative_document_names(headers, document_names))
+        active_document_names_result = self._get_active_collaborative_document_names(headers, document_names)
+        if active_document_names_result is None:
+            return
+
+        active_document_names = set(active_document_names_result)
         inactive_document_names = [
             document_name for document_name in document_names if document_name not in active_document_names
         ]
@@ -300,7 +331,7 @@ class CollaborativeEditMiddleware:
 
         try:
             requests.post(
-                f"{Env.SOCKET_INTERNAL_URL}/editor-sync/clear",
+                f"{Env.SOCKET_EDITOR_INTERNAL_URL}/editor-sync/clear",
                 json={"document_names": inactive_document_names},
                 headers=request_headers,
                 timeout=10,
@@ -309,35 +340,38 @@ class CollaborativeEditMiddleware:
             return
 
     @staticmethod
-    def _get_active_collaborative_document_names(headers: Headers, document_names: list[str]) -> list[str]:
+    def _get_active_collaborative_document_names(headers: Headers, document_names: list[str]) -> list[str] | None:
         if not document_names:
             return []
 
         request_headers = CollaborativeEditMiddleware._get_socket_request_headers(headers)
         if not request_headers:
-            return []
+            return None
 
         try:
             response = requests.post(
-                f"{Env.SOCKET_INTERNAL_URL}/editor-sync/active",
+                f"{Env.SOCKET_EDITOR_INTERNAL_URL}/editor-sync/active",
                 json={"document_names": document_names},
                 headers=request_headers,
                 timeout=10,
             )
         except requests.RequestException:
-            return []
+            return None
 
         if not (status.HTTP_200_OK <= response.status_code < 300):
-            return []
+            return None
 
         try:
             content = response.json()
         except ValueError:
-            return []
+            return None
+
+        if not isinstance(content, dict):
+            return None
 
         active_document_names = content.get("active_document_names")
         if not isinstance(active_document_names, list):
-            return []
+            return None
 
         document_name_set = set(document_names)
         return [
@@ -410,31 +444,68 @@ class CollaborativeEditMiddleware:
     @staticmethod
     def _patch_collaborative_documents(
         headers: Headers, text_patch_payloads: list[dict[str, str]], rich_patch_payloads: list[dict[str, str]]
-    ) -> dict | None:
+    ) -> _BatchResponse | None:
         request_headers = CollaborativeEditMiddleware._get_socket_request_headers(headers)
         if not request_headers:
             return CollaborativeEditMiddleware._batch_response(
                 {"message": "Missing authorization for editor sync patch."}, status.HTTP_401_UNAUTHORIZED
             )
 
-        for path, patch_payloads in (
-            ("/editor-sync/text/patch", text_patch_payloads),
-            ("/editor-sync/rich/patch-request", rich_patch_payloads),
-        ):
-            for patch_payload in patch_payloads:
-                patch_response = CollaborativeEditMiddleware._patch_collaborative_document(
-                    path, patch_payload, request_headers
+        for patch_payload in rich_patch_payloads:
+            if not rich_patch_request_fits_limit(patch_payload["document_name"], patch_payload["value"]):
+                return CollaborativeEditMiddleware._batch_response(
+                    {"message": "Editor sync request exceeded the size limit."},
+                    status.HTTP_413_CONTENT_TOO_LARGE,
                 )
-                if patch_response is not None:
-                    return patch_response
+
+        if rich_patch_payloads:
+            user = Auth.validate_user_by_api_token(headers)
+            if not isinstance(user, User) or user.deleted_at is not None or user.activated_at is None:
+                return CollaborativeEditMiddleware._batch_response(
+                    {"message": "Missing authorization for editor sync patch."}, status.HTTP_401_UNAUTHORIZED
+                )
+
+            service = DomainService()
+            try:
+                for patch_payload in rich_patch_payloads:
+                    subscription = authorized_editor_document_subscription(
+                        service, user, patch_payload["document_name"]
+                    )
+                    if subscription is None:
+                        return CollaborativeEditMiddleware._batch_response(
+                            {"message": "Permission denied for editor sync patch."}, status.HTTP_403_FORBIDDEN
+                        )
+            except Exception:
+                _logger.exception("Editor sync permission check failed.")
+                return CollaborativeEditMiddleware._batch_response(
+                    {"message": "Unable to authorize editor sync patch."}, status.HTTP_503_SERVICE_UNAVAILABLE
+                )
+            finally:
+                service.close()
+
+        for patch_payload in text_patch_payloads:
+            patch_response = CollaborativeEditMiddleware._patch_collaborative_document(
+                "/editor-sync/text/patch", patch_payload, request_headers
+            )
+            if patch_response is not None:
+                return patch_response
+
+        for patch_payload in rich_patch_payloads:
+            patch_response = CollaborativeEditMiddleware._patch_collaborative_document(
+                "/editor-sync/rich/patch-request", patch_payload, request_headers
+            )
+            if patch_response is not None:
+                return patch_response
 
         return None
 
     @staticmethod
-    def _patch_collaborative_document(path: str, patch_payload: dict[str, str], headers: dict[str, str]) -> dict | None:
+    def _patch_collaborative_document(
+        path: str, patch_payload: dict[str, str], headers: dict[str, str]
+    ) -> _BatchResponse | None:
         try:
             response = requests.post(
-                f"{Env.SOCKET_INTERNAL_URL}{path}",
+                f"{Env.SOCKET_EDITOR_INTERNAL_URL}{path}",
                 json=patch_payload,
                 headers=headers,
                 timeout=10,
@@ -474,8 +545,8 @@ class CollaborativeEditMiddleware:
         return request_headers
 
     @staticmethod
-    def _batch_response(content: dict, status_code: int = status.HTTP_200_OK) -> dict:
-        return {"status": status_code, "body": content}
+    def _batch_response(content: Mapping[str, object], status_code: int = status.HTTP_200_OK) -> _BatchResponse:
+        return {"status": status_code, "body": dict(content)}
 
     @staticmethod
     def _match_api_path(api_path: str, request_path: str) -> dict[str, str] | None:
@@ -495,7 +566,7 @@ class CollaborativeEditMiddleware:
         return path_params
 
     @staticmethod
-    def _parse_json_body(body: bytes) -> dict | None:
+    def _parse_json_body(body: bytes) -> dict[str, object] | None:
         if not body:
             return None
 

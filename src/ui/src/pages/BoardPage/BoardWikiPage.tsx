@@ -17,7 +17,7 @@ export function SkeletonBoardWikiPage(): React.JSX.Element {
 const BoardWikiPage = memo(({ project, currentUser }: IBoardRelatedPageProps) => {
     const socket = useSocket();
     const navigate = usePageNavigateRef();
-    const { data, isFetching, error } = useGetWikis({ project_uid: project.uid });
+    const { data, error } = useGetWikis({ project_uid: project.uid });
 
     useEffect(() => {
         if (!error) {
@@ -37,7 +37,7 @@ const BoardWikiPage = memo(({ project, currentUser }: IBoardRelatedPageProps) =>
     }, [error]);
 
     useEffect(() => {
-        if (!data || isFetching) {
+        if (!data) {
             return;
         }
 
@@ -54,14 +54,14 @@ const BoardWikiPage = memo(({ project, currentUser }: IBoardRelatedPageProps) =>
                 data.wikis.map((wiki) => wiki.uid)
             );
         };
-    }, [data, isFetching, project]);
+    }, [data, project]);
 
     return (
         <>
-            {!data || isFetching ? (
+            {!data ? (
                 <SkeletonWikiList />
             ) : (
-                <BoardWikiProvider project={project} projectMembers={data.project_members} currentUser={currentUser}>
+                <BoardWikiProvider key={project.uid} project={project} projectMembers={data.project_members} currentUser={currentUser}>
                     <BoardWikiUnsavedProvider>
                         <WikiList />
                     </BoardWikiUnsavedProvider>

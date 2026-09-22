@@ -1,6 +1,9 @@
 **/node_modules
 **/dist
 **/.rollup.cache
+**/_build
+**/deps
+**/erl_crash.dump
 
 **/.venv
 .ruff_cache

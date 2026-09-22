@@ -49,10 +49,14 @@ export const CHAT_UPLOAD_MAX_CONCURRENCY = parseInt(getEnv<string>({ key: "CHAT_
 export const AI_STREAM_MAX_BUFFER_MB = parseInt(getEnv<string>({ key: "AI_STREAM_MAX_BUFFER_MB", defaultValue: "4" }));
 export const EDITOR_SYNC_MAX_REQUEST_SIZE_MB = parseInt(getEnv<string>({ key: "EDITOR_SYNC_MAX_REQUEST_SIZE_MB", defaultValue: "8" }));
 export const EDITOR_SYNC_MAX_CONCURRENCY = parseInt(getEnv<string>({ key: "EDITOR_SYNC_MAX_CONCURRENCY", defaultValue: "8" }));
+export const EDITOR_SYNC_RICH_PATCH_TIMEOUT_MS = parseInt(getEnv<string>({ key: "SOCKET_EDITOR_SYNC_RICH_PATCH_TIMEOUT_MS", defaultValue: "8000" }));
+export const SOCKET_OWNER = getEnv({ key: "SOCKET_OWNER", defaultValue: "node", availableValues: ["node", "phoenix"] });
+export const EDITOR_SYNC_OWNER = getEnv({ key: "EDITOR_SYNC_OWNER", defaultValue: "node", availableValues: ["node", "phoenix"] });
 export const SOCKET_MAX_BUFFER_MB = parseInt(getEnv<string>({ key: "SOCKET_MAX_BUFFER_MB", defaultValue: "8" }));
 export const SOCKET_MAX_PAYLOAD_MB = parseInt(getEnv<string>({ key: "SOCKET_MAX_PAYLOAD_MB", defaultValue: "8" }));
 export const SOCKET_MAX_IN_FLIGHT_MB = parseInt(getEnv<string>({ key: "SOCKET_MAX_IN_FLIGHT_MB", defaultValue: "128" }));
 export const SOCKET_MAX_IN_FLIGHT_MESSAGES = parseInt(getEnv<string>({ key: "SOCKET_MAX_IN_FLIGHT_MESSAGES", defaultValue: "32" }));
+export const SOCKET_PHOENIX_INTERNAL_SECRET = getEnv<string>({ key: "SOCKET_PHOENIX_INTERNAL_SECRET", defaultValue: "" });
 
 export const BASE_DIR = path.dirname(fileURLToPath(import.meta.url));
 export const ROOT_DIR = path.join(BASE_DIR, "..", "..", "..");
@@ -65,6 +69,15 @@ export const UI_PORT = parseInt(getEnv<string>({ key: "UI_PORT", defaultValue: "
 
 export const BROADCAST_TYPE = getEnv({ key: "BROADCAST_TYPE", defaultValue: "in-memory", availableValues: ["in-memory", "kafka"] });
 export const BROADCAST_URLS = getEnv<string>({ key: "BROADCAST_URLS", defaultValue: "" }).split(",");
+export const BROADCAST_MAX_MESSAGE_BYTES = parseInt(getEnv<string>({ key: "BROADCAST_MAX_MESSAGE_BYTES", defaultValue: "10485760" }));
+export const BROADCAST_NODE_FANOUT_CONSUMER_GROUP = getEnv<string>({
+    key: "BROADCAST_NODE_FANOUT_CONSUMER_GROUP",
+    defaultValue: `${PROJECT_NAME}-socket-node-fanout`,
+});
+export const BROADCAST_NODE_SIDE_EFFECT_CONSUMER_GROUP = getEnv<string>({
+    key: "BROADCAST_NODE_SIDE_EFFECT_CONSUMER_GROUP",
+    defaultValue: `${PROJECT_NAME}-notification-node-owner`,
+});
 
 export const CACHE_TYPE = getEnv({ key: "CACHE_TYPE", defaultValue: "in-memory", availableValues: ["in-memory", "redis"] });
 export const CACHE_URL = getEnv<string>({ key: "CACHE_URL" });

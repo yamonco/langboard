@@ -9,6 +9,7 @@
     "build": "tsc && vite build",
     "lint": "eslint . -c eslint.config.js --ignore-pattern node_modules/ --ignore-pattern dist/ --report-unused-disable-directives --max-warnings 0",
     "test:card-hierarchy": "node --experimental-strip-types src/pages/BoardPage/components/board/BoardColumnCardHierarchy.test.ts",
+    "test:board-chat-store": "node --experimental-strip-types src/core/stores/BoardChatStore.test.ts",
     "preview": "vite preview",
     "format": "prettier --write \"{tests,src}/**/*.{js,jsx,ts,tsx,json,md}\" --ignore-path .prettierignore",
     "check-format": "prettier --check \"{tests,src}/**/*.{js,jsx,ts,tsx,json,md}\" --ignore-path .prettierignore"
@@ -78,6 +79,7 @@
     "@radix-ui/react-tabs": "^1.1.13",
     "@radix-ui/react-toolbar": "^1.1.11",
     "@radix-ui/react-tooltip": "^1.2.8",
+    "@slate-yjs/core": "^1.0.2",
     "@slate-yjs/react": "^1.1.0",
     "@tanstack/react-query": "^5.90.21",
     "@tanstack/react-virtual": "^3.13.19",

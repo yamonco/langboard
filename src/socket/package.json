@@ -12,7 +12,7 @@
     "prettier": "prettier --write .",
     "start": "node dist/index.js",
     "format": "prettier --write \"{tests,src}/**/*.{js,jsx,ts,tsx,json,md}\" --ignore-path .prettierignore",
-    "test": "echo \"No tests specified\" && exit 0"
+    "test": "node scripts/check-runtime-registration.mjs"
   },
   "dependencies": {
     "@hocuspocus/server": "^3.4.4",

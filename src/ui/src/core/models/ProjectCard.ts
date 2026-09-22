@@ -16,6 +16,7 @@ import useCardChecklistTitleChangedHandlers from "@/controllers/socket/card/chec
 import useCardCommentAddedHandlers from "@/controllers/socket/card/comment/useCardCommentAddedHandlers";
 import useCardCommentDeletedHandlers from "@/controllers/socket/card/comment/useCardCommentDeletedHandlers";
 import useCardCommentReactedHandlers from "@/controllers/socket/card/comment/useCardCommentReactedHandlers";
+import useCardCommentUpdatedHandlers from "@/controllers/socket/card/comment/useCardCommentUpdatedHandlers";
 import useMetadataDeletedHandlers from "@/controllers/socket/metadata/useMetadataDeletedHandlers";
 import useMetadataUpdatedHandlers from "@/controllers/socket/metadata/useMetadataUpdatedHandlers";
 import { BaseModel, IBaseModel, IEditorContent } from "@/core/models/Base";
@@ -69,6 +70,7 @@ class ProjectCard extends BaseModel<IStore> {
             [
                 useCardDetailsChangedHandlers,
                 useCardCommentAddedHandlers,
+                useCardCommentUpdatedHandlers,
                 useCardCommentDeletedHandlers,
                 useCardCommentReactedHandlers,
                 useCardProjectUsersUpdatedHandlers,

@@ -7,6 +7,7 @@ import Popover from "@/components/base/Popover";
 import SubmitButton from "@/components/base/SubmitButton";
 import Tooltip from "@/components/base/Tooltip";
 import useGetOllamaModelList from "@/controllers/api/settings/ollama/useGetOllamaModelList";
+import useOllamaModelCommand from "@/controllers/api/settings/ollama/useOllamaModelCommand";
 import useCopyOllamaModelHandlers from "@/controllers/socket/settings/ollama/useCopyOllamaModelHandlers";
 import useDeleteOllamaModelHandlers from "@/controllers/socket/settings/ollama/useDeleteOllamaModelHandlers";
 import useSwitchSocketHandlers from "@/core/hooks/useSwitchSocketHandlers";
@@ -79,9 +80,10 @@ function OllamaModelListItemCopyButton({ name }: { name: string }) {
     const [t] = useTranslation();
     const inputRef = useRef<HTMLInputElement>(null);
     const [isOpened, setIsOpened] = useState(false);
-    const { send: sendCopyOllamaModel } = useCopyOllamaModelHandlers({});
+    const { mutateAsync: command } = useOllamaModelCommand();
+    const { mutateAsync: getOllamaModelList } = useGetOllamaModelList();
     const [isValidating, setIsValidating] = useState(false);
-    const save = () => {
+    const save = async () => {
         if (isValidating || !inputRef.current) {
             return;
         }
@@ -95,10 +97,15 @@ function OllamaModelListItemCopyButton({ name }: { name: string }) {
             return;
         }
 
-        sendCopyOllamaModel({
-            model: name,
-            copy_to: value,
-        });
+        try {
+            await command({ action: "copy", model: name, copy_to: value });
+            setIsOpened(false);
+        } catch {
+            return;
+        } finally {
+            setIsValidating(false);
+            void getOllamaModelList({}).catch(() => undefined);
+        }
     };
 
     return (
@@ -111,7 +118,7 @@ function OllamaModelListItemCopyButton({ name }: { name: string }) {
             <Popover.Content>
                 <Flex direction="col" gap="3">
                     <Floating.LabelInput label={t("settings.Model name")} autoFocus autoComplete="off" disabled={false} ref={inputRef} />
-                    <SubmitButton type="button" isValidating={false} onClick={save}>
+                    <SubmitButton type="button" isValidating={isValidating} onClick={save}>
                         {t("common.Copy")}
                     </SubmitButton>
                 </Flex>
@@ -124,9 +131,10 @@ function OllamaModelListItemDeleteButton({ name }: { name: string }) {
     const [t] = useTranslation();
     const inputRef = useRef<HTMLInputElement>(null);
     const [isOpened, setIsOpened] = useState(false);
-    const { send: sendDeleteOllamaModel } = useDeleteOllamaModelHandlers({});
+    const { mutateAsync: command } = useOllamaModelCommand();
+    const { mutateAsync: getOllamaModelList } = useGetOllamaModelList();
     const [isValidating, setIsValidating] = useState(false);
-    const deleteModel = () => {
+    const deleteModel = async () => {
         if (isValidating || !inputRef.current) {
             return;
         }
@@ -140,9 +148,15 @@ function OllamaModelListItemDeleteButton({ name }: { name: string }) {
             return;
         }
 
-        sendDeleteOllamaModel({
-            model: name,
-        });
+        try {
+            await command({ action: "delete", model: name });
+            setIsOpened(false);
+        } catch {
+            return;
+        } finally {
+            setIsValidating(false);
+            void getOllamaModelList({}).catch(() => undefined);
+        }
     };
 
     return (

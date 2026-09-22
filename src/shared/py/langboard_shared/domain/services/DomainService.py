@@ -6,6 +6,14 @@ from . import factory
 
 
 class DomainService(Factory):
+    @property
+    def internal_bot_run(self):
+        return self._create_or_get_product(factory.InternalBotRunService)
+
+    @property
+    def ollama_model_pull(self):
+        return self._create_or_get_product(factory.OllamaModelPullService)
+
     def __init__(self):
         super().__init__()
         self.__repo: Repository | None = None

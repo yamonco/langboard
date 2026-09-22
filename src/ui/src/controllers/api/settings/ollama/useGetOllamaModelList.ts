@@ -9,7 +9,6 @@ const useGetOllamaModelList = (options?: TMutationOptions) => {
     const getOllamaModelList = async () => {
         const res = await api.get<{
             models: TBaseOllamaModel[];
-            pulling_models: Record<string, number>;
         }>(Routing.API.SETTINGS.OLLAMA.GET_LIST, {
             env: {
                 interceptToast: options?.interceptToast,
@@ -21,8 +20,6 @@ const useGetOllamaModelList = (options?: TMutationOptions) => {
         }
 
         getOllamaModelStore().replaceModels(res.data.models);
-        getOllamaModelStore().replacePullingModels(Object.keys(res.data.pulling_models));
-
         return res.data;
     };
 

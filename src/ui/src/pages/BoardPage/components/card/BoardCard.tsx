@@ -66,7 +66,7 @@ const BoardCard = memo(
         onEditModeStateChange,
     }: IBoardCardProps): React.JSX.Element => {
         const { setPageAliasRef } = usePageHeader();
-        const { data: cardData, isFetching, error } = useGetCardDetails({ project_uid: projectUID, card_uid: cardUID });
+        const { data: cardData, error } = useGetCardDetails({ project_uid: projectUID, card_uid: cardUID });
         const [t] = useTranslation();
         const socket = useSocket();
         const navigate = usePageNavigateRef();
@@ -98,7 +98,7 @@ const BoardCard = memo(
 
         useEffect(() => {
             setPageAliasRef.current(cardData?.card?.title || "");
-            if (!cardData || isFetching) {
+            if (!cardData) {
                 return;
             }
 
@@ -109,11 +109,11 @@ const BoardCard = memo(
             return () => {
                 socket.unsubscribe(ESocketTopic.BoardCard, [cardUID]);
             };
-        }, [cardData, cardUID, isFetching]);
+        }, [cardData, cardUID]);
 
         return (
             <>
-                {!cardData || isFetching ? (
+                {!cardData ? (
                     <SkeletonBoardCard />
                 ) : (
                     <BoardCardProvider key={cardUID} projectUID={projectUID} card={cardData.card} currentUser={currentUser} viewportRef={viewportRef}>
@@ -529,7 +529,7 @@ function BoardCardFloatingNav({ isExpanded }: { isExpanded: bool }): React.JSX.E
                 className={cn("z-[110]", !isExpanded && "mx-auto max-w-[100vw] sm:max-w-[90vw] lg:max-w-[1120px]")}
                 contentClassName="bg-background"
                 itemClassName="h-10 px-3"
-                labelClassName="hidden md:inline"
+                labelClassName="sr-only md:not-sr-only md:inline"
                 items={[
                     {
                         key: "chat",

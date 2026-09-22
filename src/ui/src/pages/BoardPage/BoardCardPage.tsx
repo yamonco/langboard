@@ -158,7 +158,6 @@ const BoardCardPageComponent = ({
                             onInteractOutside={(event) => {
                                 if (isCardEditingRef.current) {
                                     event.preventDefault();
-                                    handleCloseRequest();
                                     return;
                                 }
 

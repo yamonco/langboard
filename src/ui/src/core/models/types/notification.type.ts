@@ -20,6 +20,20 @@ export enum ENotificationChannel {
     IoT = "iot",
 }
 
+export enum ENotificationMutationAction {
+    Read = "read",
+    ReadAll = "read_all",
+    Delete = "delete",
+    DeleteAll = "delete_all",
+}
+
+export interface INotificationMutation {
+    action: ENotificationMutationAction;
+    unread_count: number;
+    notification_uid?: string;
+    read_at?: string;
+}
+
 export type TNotificationType = Exclude<ENotificationType, ENotificationType.ProjectInvited>;
 
 export type TNotificationSpecificType = "project" | "column" | "wiki" | "card";

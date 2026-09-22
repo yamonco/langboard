@@ -49,6 +49,7 @@ const BoardComment = memo(({ comment, deletedComment }: IBoardCommentProps): Rea
     const mentionables = useMemo(() => [...projectMembers, ...bots], [projectMembers, bots]);
     const cards = ProjectCard.Model.useModels((model) => model.uid !== card.uid && model.project_uid === projectUID, [projectUID, card]);
     const content = comment.useField("content");
+    const updatedAt = comment.useField("updated_at");
     const commentUser = comment.useForeignFieldOne("user");
     const commentBot = comment.useForeignFieldOne("bot");
     const commentAuthor = commentUser || commentBot;
@@ -79,7 +80,7 @@ const BoardComment = memo(({ comment, deletedComment }: IBoardCommentProps): Rea
                         )}
                     >
                         <PlateEditor
-                            key={`board-comment-editor-${comment.uid}-${isCurrentEditor ? "edit" : "view"}`}
+                            key={`board-comment-editor-${comment.uid}-${isCurrentEditor ? "edit" : updatedAt.getTime()}`}
                             value={editorValue}
                             currentUser={currentUser}
                             mentionables={mentionables}

@@ -1,9 +1,37 @@
 from .Recovery import ResetPasswordForm, SendResetLinkForm, ValidateTokenForm
 from .SignIn import AuthEmailForm, AuthEmailResponse, SignInForm
 from .SignUp import ActivateUserForm, CheckEmailForm, ResendLinkForm, SignUpForm
+from .Socket import (
+    SocketBoardChatCancelForm,
+    SocketBoardChatFinishForm,
+    SocketBoardChatLeaseForm,
+    SocketBoardChatPauseForm,
+    SocketBoardChatResumeClaimForm,
+    SocketBoardChatResumeResultForm,
+    SocketBoardChatRunForm,
+    SocketBoardChatStartForm,
+    SocketChatResumeAuthorizationForm,
+    SocketEditorAiAuthorizationForm,
+    SocketEditorCancelForm,
+    SocketEditorDocumentAuthorizationForm,
+    SocketEditorDocumentsAuthorizationForm,
+    SocketEditorResumeClaimForm,
+    SocketEditorRunForm,
+    SocketEditorStatusForm,
+    SocketSubscriptionAuthorizationForm,
+    SocketSubscriptionAuthorizationItem,
+)
 
 
 __all__ = [
+    "SocketBoardChatRunForm",
+    "SocketBoardChatCancelForm",
+    "SocketBoardChatFinishForm",
+    "SocketBoardChatLeaseForm",
+    "SocketBoardChatPauseForm",
+    "SocketBoardChatResumeClaimForm",
+    "SocketBoardChatResumeResultForm",
+    "SocketBoardChatStartForm",
     "ActivateUserForm",
     "AuthEmailForm",
     "AuthEmailResponse",
@@ -12,6 +40,16 @@ __all__ = [
     "SendResetLinkForm",
     "SignInForm",
     "SignUpForm",
+    "SocketChatResumeAuthorizationForm",
+    "SocketEditorAiAuthorizationForm",
+    "SocketEditorCancelForm",
+    "SocketEditorDocumentAuthorizationForm",
+    "SocketEditorDocumentsAuthorizationForm",
+    "SocketEditorRunForm",
+    "SocketEditorResumeClaimForm",
+    "SocketEditorStatusForm",
+    "SocketSubscriptionAuthorizationForm",
+    "SocketSubscriptionAuthorizationItem",
     "ResendLinkForm",
     "ValidateTokenForm",
 ]

@@ -3,7 +3,6 @@ import useUserDeactivatedHandlers from "@/controllers/socket/user/useUserDeactiv
 import useUserDeletedHandlers from "@/controllers/socket/user/useUserDeletedHandlers";
 import useUserMcpRolesUpdatedHandlers from "@/controllers/socket/user/useUserMcpRolesUpdatedHandlers";
 import useUserNotificationDeletedHandlers from "@/controllers/socket/user/useUserNotificationDeletedHandlers";
-import useUserNotifiedHandlers from "@/controllers/socket/user/useUserNotifiedHandlers";
 import useUserProjectRolesUpdatedHandlers from "@/controllers/socket/user/useUserProjectRolesUpdatedHandlers";
 import useUserSettingRolesUpdatedHandlers from "@/controllers/socket/user/useUserSettingRolesUpdatedHandlers";
 import { ENotificationChannel, ENotificationScope, TNotificationType } from "@/core/models/types/notification.type";
@@ -51,7 +50,6 @@ class AuthUser extends User.Model<Interface> {
 
         this.subscribeSocketEvents(
             [
-                useUserNotifiedHandlers,
                 useUserNotificationDeletedHandlers,
                 useUserApiKeyRolesUpdatedHandlers,
                 useUserSettingRolesUpdatedHandlers,

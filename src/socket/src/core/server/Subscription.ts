@@ -2,6 +2,8 @@ import ISocketClient from "@/core/server/ISocketClient";
 import { Utils } from "@langboard/core/utils";
 import { ESocketTopic } from "@langboard/core/enums";
 
+const SOCKET_TOPICS = new Set<string>(Object.values(ESocketTopic));
+
 export interface IValidatorContext {
     client: ISocketClient;
     topicId: string;
@@ -33,6 +35,10 @@ class _Subscription {
         return await validator(context);
     }
 
+    public isSubscribed(client: ISocketClient, topic: ESocketTopic, topicId: string): boolean {
+        return this.#subscriptions.get(topic)?.get(topicId)?.has(client) ?? false;
+    }
+
     public async publish(topic: ESocketTopic | string, topicId: string, event: string, data: Record<string, unknown>) {
         topic = Utils.String.convertSafeEnum(ESocketTopic, topic);
 
@@ -62,6 +68,15 @@ class _Subscription {
 
     public async subscribe(ws: ISocketClient, topic: ESocketTopic | string, topicIds: string | string[]) {
         topic = Utils.String.convertSafeEnum(ESocketTopic, topic);
+
+        if (!SOCKET_TOPICS.has(topic)) {
+            ws.send({
+                event: "subscribed",
+                topic,
+                topic_id: [],
+            });
+            return;
+        }
 
         if (!this.#subscriptions.has(topic)) {
             this.#subscriptions.set(topic, new Map());
@@ -102,17 +117,15 @@ class _Subscription {
         topic = Utils.String.convertSafeEnum(ESocketTopic, topic);
 
         const subscriptions = this.#subscriptions.get(topic);
-        if (!subscriptions) {
-            return;
-        }
-
         topicIds = Utils.Type.isArray(topicIds) ? topicIds : [topicIds];
-        for (let i = 0; i < topicIds.length; ++i) {
-            this.#deleteSubscriber(subscriptions, topicIds[i], ws);
-        }
+        if (subscriptions) {
+            for (let i = 0; i < topicIds.length; ++i) {
+                this.#deleteSubscriber(subscriptions, topicIds[i], ws);
+            }
 
-        if (!subscriptions.size) {
-            this.#subscriptions.delete(topic);
+            if (!subscriptions.size) {
+                this.#subscriptions.delete(topic);
+            }
         }
 
         ws.send({

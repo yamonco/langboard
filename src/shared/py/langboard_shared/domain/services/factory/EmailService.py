@@ -23,9 +23,22 @@ class EmailService(BaseDomainService):
         formats: dict[str, str],
         *,
         reply_to: str | None = None,
+        strict: bool = False,
     ) -> bool:
         """Render and send one localized template through the configured SMTP transport."""
 
+        message = self.prepare_template_message(lang, to, template_name, formats, reply_to=reply_to)
+        return self.send_message(message, strict=strict)
+
+    def prepare_template_message(
+        self,
+        lang: str,
+        to: str,
+        template_name: TEmailTemplateName,
+        formats: dict[str, str],
+        *,
+        reply_to: str | None = None,
+    ) -> EmailMessage:
         subject, template = self.__get_template(
             lang,
             template_name,
@@ -43,7 +56,9 @@ class EmailService(BaseDomainService):
         if reply_to:
             message["Reply-To"] = reply_to
         message.set_content(template, subtype="html")
+        return message
 
+    def send_message(self, message: EmailMessage, *, strict: bool = False) -> bool:
         try:
             asyncio.run(
                 aiosmtplib.send(
@@ -58,7 +73,7 @@ class EmailService(BaseDomainService):
                 )
             )
         except Exception:
-            if Env.ENVIRONMENT == "development":
+            if Env.ENVIRONMENT == "development" and not strict:
                 return True
             return False
 

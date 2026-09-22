@@ -90,7 +90,13 @@ def create_api_comfort_tool_schema(
                 f"Base APIs: {', '.join(comfort_tool['api_names'])}",
             ]
         ),
-        "form": None,
+        "form": {
+            "type": "object",
+            "properties": {
+                path_param: {"type": "string", "description": f"Shared parameter: {path_param}"}
+                for path_param in path_params
+            },
+        },
         "query": None,
         "file_field": None,
         "request_schema_source": request_schema_source,

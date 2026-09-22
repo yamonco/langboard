@@ -8,6 +8,7 @@ import Toast from "@/components/base/Toast";
 import Input from "@/components/base/Input";
 import { IGraphInterruptContent } from "@/core/models/Base";
 import { EGraphApprovalStatus } from "@/core/models/GraphApprovalRequestModel";
+import { EInternalBotRunStatus } from "@/core/constants/InternalBotRun";
 import { cn } from "@/core/utils/ComponentUtils";
 import { SocketEvents } from "@langboard/core/constants";
 import { ESocketTopic } from "@langboard/core/enums";
@@ -116,6 +117,7 @@ function ChatGraphInterruptApprovalActions({ approval, approvalUID, ...props }: 
     const status = approval.useField("status");
     const resolvedByUserUID = approval.useField("resolved_by_user_uid");
     const rejectionReason = approval.useField("rejection_reason");
+    const durableRunStatus = approval.useField("durable_run_status");
 
     useEffect(() => {
         if (!approvalUID || !status || status === EGraphApprovalStatus.Pending) {
@@ -132,6 +134,7 @@ function ChatGraphInterruptApprovalActions({ approval, approvalUID, ...props }: 
             status={status}
             resolvedByUserUID={resolvedByUserUID}
             rejectionReason={rejectionReason}
+            durableRunStatus={durableRunStatus}
         />
     );
 }
@@ -145,6 +148,7 @@ interface IChatGraphInterruptActionsContentProps {
     status?: EGraphApprovalStatus;
     resolvedByUserUID?: string;
     rejectionReason?: string;
+    durableRunStatus?: EInternalBotRunStatus | null;
     submittedInstruction?: string;
     resumeError?: string | null;
     interrupt: IGraphInterruptContent;
@@ -159,6 +163,7 @@ function ChatGraphInterruptActionsContent({
     status,
     resolvedByUserUID,
     rejectionReason,
+    durableRunStatus,
     submittedInstruction,
     resumeError,
     interrupt,
@@ -168,10 +173,18 @@ function ChatGraphInterruptActionsContent({
     const [resumingAction, setResumingAction] = useState<TGraphResumeAction>();
     const [instruction, setInstruction] = useState("");
     const isResuming = !!resumingAction;
+    const durableRunBlocked =
+        durableRunStatus !== undefined && durableRunStatus !== null && durableRunStatus !== EInternalBotRunStatus.AwaitingApproval;
 
     useEffect(() => {
         setResumingAction(undefined);
-    }, [interrupt, resumeError]);
+    }, [interrupt]);
+
+    useEffect(() => {
+        if (resumeError) {
+            setResumingAction(undefined);
+        }
+    }, [resumeError]);
 
     if (!threadID) {
         return null;
@@ -199,7 +212,27 @@ function ChatGraphInterruptActionsContent({
         );
     }
 
+    if (durableRunBlocked) {
+        return (
+            <div
+                className={cn(
+                    "w-full min-w-[12rem] max-w-full rounded-xl border p-3 text-xs shadow-sm",
+                    "border-amber-300 bg-amber-50 text-amber-950 dark:border-amber-400/30 dark:bg-amber-500/10 dark:text-amber-50"
+                )}
+            >
+                <div className="font-semibold">{t("bot.Human input required")}</div>
+                {message && <div className="mt-1 opacity-80">{message}</div>}
+                <div className="mt-2 opacity-80">{t(`bot.runStatuses.${durableRunStatus}`)}</div>
+                {durableRunStatus === EInternalBotRunStatus.Uncertain && <div className="mt-2 opacity-80">{t("bot.Run outcome unknown")}</div>}
+            </div>
+        );
+    }
+
     const resume = (action: TGraphResumeAction, payload: Record<string, unknown>) => {
+        const chatMessage = ChatMessageModel.Model.getModel(chatMessageUID);
+        if (chatMessage?.message?.graph_resume_error) {
+            chatMessage.message = { ...chatMessage.message, graph_resume_error: null };
+        }
         setResumingAction(action);
         const result = socket.send({
             topic: ESocketTopic.Board,

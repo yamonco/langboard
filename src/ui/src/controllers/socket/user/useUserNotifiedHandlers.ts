@@ -12,16 +12,21 @@ export interface IUseUserNotifiedHandlersProps extends IBaseUseSocketHandlersPro
 }
 
 const useUserNotifiedHandlers = ({ callback, currentUser }: IUseUserNotifiedHandlersProps) => {
-    return useSocketHandler<{}, IUserNotifiedRawResponse>({
+    return useSocketHandler<{ isNew: bool }, IUserNotifiedRawResponse>({
         topic: ESocketTopic.UserPrivate,
         topicId: currentUser.uid,
         eventKey: `user-notified-${currentUser.uid}`,
         onProps: {
             name: SocketEvents.SERVER.USER.NOTIFIED,
-            callback,
+            callback: ({ isNew }) => {
+                if (isNew) {
+                    callback?.({});
+                }
+            },
             responseConverter: (data) => {
+                const isNew = !UserNotification.Model.getModel(data.notification.uid);
                 UserNotification.Model.fromOne(data.notification, true);
-                return {};
+                return { isNew };
             },
         },
     });

@@ -36,9 +36,11 @@ import useDashboardProjectColumnDeletedHandlers from "@/controllers/socket/dashb
 import useDashboardProjectColumnNameChangedHandlers from "@/controllers/socket/dashboard/project/useDashboardProjectColumnNameChangedHandlers";
 import useDashboardProjectColumnOrderChangedHandlers from "@/controllers/socket/dashboard/project/useDashboardProjectColumnOrderChangedHandlers";
 import useProjectDeletedHandlers from "@/controllers/socket/shared/useProjectDeletedHandlers";
+import useProjectAccessRevokedHandlers from "@/controllers/socket/shared/useProjectAccessRevokedHandlers";
 import { IBaseModel, BaseModel } from "@/core/models/Base";
 import { registerModel } from "@/core/models/ModelRegistry";
 import { Utils } from "@langboard/core/utils";
+import { ESocketTopic } from "@langboard/core/enums";
 import { ProjectRole } from "@/core/models/roles";
 
 export const TYPES = ["SI", "SW", "Other"];
@@ -124,6 +126,8 @@ class Project extends BaseModel<IStore> {
                 useDashboardCheckitemCheckedChangedHandlers,
                 useDashboardCheckitemDeletedHandlers,
                 useProjectDeletedHandlers,
+                ({ projectUID }) => useProjectAccessRevokedHandlers({ topic: ESocketTopic.Board, projectUID }),
+                ({ projectUID }) => useProjectAccessRevokedHandlers({ topic: ESocketTopic.Dashboard, projectUID }),
                 useBoardBotStatusChangedHandlers,
                 useBoardAssignedInternalBotSettingsChangedHandlers,
             ],

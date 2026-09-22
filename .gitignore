@@ -15,6 +15,7 @@ downloads/
 eggs/
 .eggs/
 lib/
+!/src/socket_phoenix/lib/
 lib64/
 parts/
 sdist/

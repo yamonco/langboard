@@ -1,0 +1,34 @@
+services:
+  server:
+    environment:
+      SOCKET_EDITOR_HOST: ${PROJECT_NAME}_socket_phoenix
+      SOCKET_EDITOR_PORT: "5690"
+    depends_on:
+      socket-phoenix:
+        condition: service_healthy
+
+  socket-phoenix:
+    environment:
+      SOCKET_PHOENIX_KAFKA_ENABLED: "false"
+      SOCKET_PHOENIX_LEGACY_REDIS_ENABLED: "false"
+      SOCKET_PHOENIX_BOARD_CHAT_RESUME_ENABLED: "false"
+      SOCKET_PHOENIX_BOARD_CHAT_SEND_ENABLED: "false"
+      SOCKET_PHOENIX_BOARD_CHAT_RECOVERY_ENABLED: "false"
+      SOCKET_PHOENIX_EDITOR_AI_ENABLED: "false"
+    depends_on: !override
+      api:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - curl
+        - --fail
+        - --silent
+        - --show-error
+        - --max-time
+        - "2"
+        - http://127.0.0.1:5690/health/ready
+      interval: 5s
+      timeout: 3s
+      retries: 24
+      start_period: 30s

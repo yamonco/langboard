@@ -4,7 +4,7 @@ import { WebSocketServer } from "ws";
 import Logger from "@/core/utils/Logger";
 import Routes from "@/core/server/Routes";
 import SocketManager from "@/core/server/SocketManager";
-import Hocus from "@/core/server/Hocus";
+import { drainEditorSyncDocuments } from "@/core/server/Hocus";
 import { ESocketStatus } from "@langboard/core/enums";
 
 class _Server {
@@ -34,13 +34,22 @@ class _Server {
     }
 
     public async destroy(): Promise<void> {
+        let editorDrainError: unknown;
+        const httpServer = this.#httpServer;
+        const closeHttpServer = httpServer.listening ? new Promise<void>((resolve) => httpServer.close(() => resolve())) : Promise.resolve();
+        this.#httpServer = null!;
+
         if (this.#socketManager) {
             await this.#socketManager.destroy();
             this.#socketManager = null!;
         }
         if (this.#webSocketServer) {
             const server = this.#webSocketServer;
-            Hocus.closeConnections();
+            try {
+                await drainEditorSyncDocuments();
+            } catch (error) {
+                editorDrainError = error;
+            }
             server.clients.forEach((client) => client.close(ESocketStatus.WS_1012_SERVICE_RESTART));
             await new Promise<void>((resolve) => {
                 const closeTimeout = setTimeout(() => {
@@ -54,10 +63,10 @@ class _Server {
             });
             this.#webSocketServer = null!;
         }
-        if (this.#httpServer) {
-            const server = this.#httpServer;
-            await new Promise<void>((resolve) => server.close(() => resolve()));
-            this.#httpServer = null!;
+        await closeHttpServer;
+
+        if (editorDrainError) {
+            throw editorDrainError;
         }
     }
 

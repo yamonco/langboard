@@ -10,6 +10,9 @@ services:
       - "${DOCS_EXPOSE_PORT}:8030"
     env_file:
       - ./envs/.nginx.env
+    environment:
+      SOCKET_EDITOR_HOST: ${PROJECT_NAME}_socket
+      SOCKET_EDITOR_PORT: ${SOCKET_PORT}
     volumes:
       - ./server/conf.template:/etc/nginx/templates/default.conf.template
       - ./server/nginx.conf:/etc/nginx/nginx.conf
@@ -56,6 +59,7 @@ services:
       - ./envs/.api.env
     environment:
       WORKER: main
+      SOCKET_PHOENIX_INTERNAL_SECRET: ${SOCKET_PHOENIX_INTERNAL_SECRET:-}
     working_dir: /app
     command: uv run --no-sync ${PROJECT_NAME} run --workers ${API_WORKERS_COUNT:-1}
     stop_grace_period: 16m
@@ -72,6 +76,9 @@ services:
       - ../local:/app/local
       - ../scripts/run_bot_cron.sh:/app/scripts/run_bot_cron.sh:x
       - ../scripts/run_notification_cron.sh:/app/scripts/run_notification_cron.sh:x
+      - ../scripts/run_notification_recovery.sh:/app/scripts/run_notification_recovery.sh:x
+      - ../scripts/run_ollama_pull_recovery.sh:/app/scripts/run_ollama_pull_recovery.sh:x
+      - ../scripts/run_internal_bot_run_recovery.sh:/app/scripts/run_internal_bot_run_recovery.sh:x
       - ./volumes/.vault-credentials:/app/.vault-credentials:ro
     depends_on:
       db-bouncer:
@@ -120,6 +127,8 @@ services:
       dockerfile: socket/Dockerfile
     env_file:
       - ./envs/.socket.env
+    environment:
+      SOCKET_PHOENIX_INTERNAL_SECRET: ${SOCKET_PHOENIX_INTERNAL_SECRET:-}
     working_dir: /app
     stop_grace_period: 16m
     volumes:
@@ -129,6 +138,7 @@ services:
       - ../src/shared/ts:/shared/ts
       - ../src/resources:/app/resources
       - ../.env:/app/.env
+      - ./volumes/socket_editor_sync:/local/editor-sync
       - ./volumes/.vault-credentials:/app/.vault-credentials:ro
     depends_on:
       db-bouncer:
@@ -158,6 +168,60 @@ services:
     networks:
       - net
     restart: always
+
+  socket-phoenix:
+    profiles:
+      - socket-phoenix
+    init: true
+    container_name: ${PROJECT_NAME}_socket_phoenix
+    image: ${PROJECT_NAME}-socket-phoenix:dev
+    build:
+      context: ../src
+      dockerfile: socket_phoenix/Dockerfile
+      args:
+        PROJECT_NAME: ${PROJECT_NAME}
+    stop_grace_period: 30s
+    ports:
+      - "127.0.0.1:${SOCKET_PHOENIX_EXPOSE_PORT:-5691}:5690"
+    environment:
+      SECRET_KEY_BASE: ${SOCKET_PHOENIX_SECRET_KEY_BASE:-}
+      SOCKET_PHOENIX_INTERNAL_SECRET: ${SOCKET_PHOENIX_INTERNAL_SECRET:-}
+      API_INTERNAL_URL: http://${PROJECT_NAME}_api:5381
+      DEFAULT_GRAPH_URL: http://${PROJECT_NAME}_graph:${GRAPH_PORT}
+      CACHE_URL: redis://:${REDIS_PASSWORD}@${PROJECT_NAME}_redis:6379/0
+      BROADCAST_URLS: ${PROJECT_NAME}_kafka0:9092,${PROJECT_NAME}_kafka1:9092,${PROJECT_NAME}_kafka2:9092
+      BROADCAST_PHOENIX_FANOUT_CONSUMER_GROUP: ${BROADCAST_PHOENIX_FANOUT_CONSUMER_GROUP:-}
+      BROADCAST_MAX_MESSAGE_BYTES: ${BROADCAST_MAX_MESSAGE_BYTES:-10485760}
+      BROADCAST_PHOENIX_DEAD_LETTER_TOPIC: ${BROADCAST_PHOENIX_DEAD_LETTER_TOPIC:-}
+      SOCKET_PHOENIX_KAFKA_ENABLED: "true"
+      SOCKET_PHOENIX_LEGACY_REDIS_ENABLED: "true"
+      SOCKET_PHOENIX_KAFKA_LAG_POLL_INTERVAL_MS: ${SOCKET_PHOENIX_KAFKA_LAG_POLL_INTERVAL_MS:-1000}
+      SOCKET_PHOENIX_EDITOR_SYNC_ENABLED: ${SOCKET_PHOENIX_EDITOR_SYNC_ENABLED:-false}
+      SOCKET_PHOENIX_EDITOR_AI_ENABLED: ${SOCKET_PHOENIX_EDITOR_AI_ENABLED:-false}
+      SOCKET_PHOENIX_EDITOR_SYNC_EXPECTED_NODES: ${SOCKET_PHOENIX_EDITOR_SYNC_EXPECTED_NODES:-}
+      SOCKET_PHOENIX_EDITOR_SYNC_STORAGE_DIR: /local/editor-sync
+      SOCKET_EDITOR_SYNC_RICH_PATCH_TIMEOUT_MS: ${SOCKET_EDITOR_SYNC_RICH_PATCH_TIMEOUT_MS:-8000}
+      SOCKET_PHOENIX_BOARD_CHAT_RESUME_ENABLED: ${SOCKET_PHOENIX_BOARD_CHAT_RESUME_ENABLED:-false}
+      SOCKET_PHOENIX_BOARD_CHAT_SEND_ENABLED: ${SOCKET_PHOENIX_BOARD_CHAT_SEND_ENABLED:-false}
+      SOCKET_PHOENIX_BOARD_CHAT_RECOVERY_ENABLED: ${SOCKET_PHOENIX_BOARD_CHAT_RECOVERY_ENABLED:-false}
+      SOCKET_PHOENIX_BOARD_CHAT_RECOVERY_INTERVAL_MS: ${SOCKET_PHOENIX_BOARD_CHAT_RECOVERY_INTERVAL_MS:-5000}
+      SOCKET_PHOENIX_CLUSTER_MINIMUM_SIZE: "1"
+    volumes:
+      - ./volumes/socket_editor_sync:/local/editor-sync
+    depends_on:
+      api:
+        condition: service_healthy
+      kafka0:
+        condition: service_healthy
+      kafka1:
+        condition: service_healthy
+      kafka2:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - net
+    restart: unless-stopped
 
   graph:
     init: true

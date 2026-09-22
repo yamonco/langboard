@@ -110,6 +110,14 @@ class ProjectService(BaseDomainService):
             internal_bot_settings[internal_bot.bot_type.value] = assigned_bot.api_response()
         return internal_bots, internal_bot_settings
 
+    def get_assigned_internal_bot_by_type(
+        self, project: TProjectParam | None, bot_type: InternalBotType
+    ) -> tuple[InternalBot, ProjectAssignedInternalBot] | None:
+        project = InfraHelper.get_by_id_like(Project, project)
+        if not project:
+            return None
+        return self.repo.project_assigned_internal_bot.find_with_internal_bot_by_project_and_type(project, bot_type)
+
     def __ensure_default_internal_bots(self, project: Project) -> None:
         assigned_internal_bots = self.repo.project_assigned_internal_bot.get_all_by_project(project)
         assigned_bot_types = {internal_bot.bot_type for internal_bot, _ in assigned_internal_bots}

@@ -55,7 +55,7 @@ class UserNotificationSettingRepository(BaseRepository[UserNotificationUnsubscri
                         tablename = model.__tablename__
                         record_id = model.id
 
-                    query = self.__query.where(
+                    query = query.where(
                         (UserNotificationUnsubscription.column("specific_table") == tablename)
                         & (UserNotificationUnsubscription.column("specific_id") == record_id)
                     )

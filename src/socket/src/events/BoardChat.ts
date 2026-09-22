@@ -1,10 +1,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import BotRunner from "@/core/ai/BotRunner";
 import { api } from "@/core/helpers/Api";
+import { isAxiosError } from "axios";
 import SnowflakeID from "@/core/db/SnowflakeID";
 import EventManager from "@/core/server/EventManager";
 import { Utils } from "@langboard/core/utils";
-import { ESocketStatus, ESocketTopic } from "@langboard/core/enums";
+import { EHttpStatus, ESocketStatus, ESocketTopic } from "@langboard/core/enums";
 import ChatHistory from "@/models/ChatHistory";
 import { EInternalBotType } from "@/models/InternalBot";
 import ProjectAssignedInternalBot from "@/models/ProjectAssignedInternalBot";
@@ -26,6 +27,66 @@ import {
 import ChatGraphApprovalRequest from "@/models/ChatGraphApprovalRequest";
 import Subscription from "@/core/server/Subscription";
 import Logger from "@/core/utils/Logger";
+import SocketClient from "@/core/server/SocketClient";
+
+const CHAT_SESSION_AUTH_TIMEOUT_MS = 5_000;
+
+interface IChatResumeAuthorization {
+    message_uid: string;
+    thread_id: string;
+    session_id?: string;
+    approval_uid?: string;
+}
+
+const authorizeChatSession = async (
+    client: SocketClient,
+    projectUID: string,
+    sessionUID: string,
+    resume?: IChatResumeAuthorization
+): Promise<boolean> => {
+    try {
+        const url = `${API_INTERNAL_URL}/auth/socket/board/${encodeURIComponent(projectUID)}/chat/session/${encodeURIComponent(sessionUID)}`;
+        const options = {
+            headers: { Authorization: `Bearer ${client.authorizationToken}` },
+            timeout: CHAT_SESSION_AUTH_TIMEOUT_MS,
+        };
+        if (resume) {
+            await api.post(`${url}/resume`, resume, options);
+        } else {
+            await api.get(url, options);
+        }
+        return true;
+    } catch (error) {
+        const status = isAxiosError(error) ? error.response?.status : undefined;
+        let errorCode: ESocketStatus;
+        let message: string;
+        if (status === EHttpStatus.HTTP_401_UNAUTHORIZED) {
+            errorCode = ESocketStatus.WS_3000_UNAUTHORIZED;
+            message = "Chat session authorization expired";
+        } else if (status === EHttpStatus.HTTP_403_FORBIDDEN) {
+            errorCode = ESocketStatus.WS_3003_FORBIDDEN;
+            message = "Chat session access denied";
+        } else if (
+            status === EHttpStatus.HTTP_400_BAD_REQUEST ||
+            status === EHttpStatus.HTTP_404_NOT_FOUND ||
+            status === EHttpStatus.HTTP_422_UNPROCESSABLE_CONTENT
+        ) {
+            errorCode = ESocketStatus.WS_4001_INVALID_DATA;
+            message = "Invalid chat session";
+        } else {
+            errorCode = ESocketStatus.WS_1011_INTERNAL_ERROR;
+            message = "Chat session authorization unavailable";
+        }
+        client.sendError(errorCode, message, false);
+        if (resume) {
+            client.stream(ESocketTopic.Board, projectUID, SocketEvents.SERVER.BOARD.CHAT.STREAM).buffer({
+                uid: resume.message_uid,
+                resume_error_code: errorCode,
+            });
+        }
+        return false;
+    }
+};
 
 const parseEditorSyncDocumentName = (documentName: string) => {
     const [type, entityUID, section, ...extraParts] = documentName.split(":");
@@ -280,6 +341,13 @@ EventManager.on(ESocketTopic.Board, SocketEvents.CLIENT.BOARD.CHAT.SEND, async (
         client.sendError(ESocketStatus.WS_4001_INVALID_DATA, "Invalid message data", false);
         return;
     }
+    if (session_uid !== undefined && session_uid !== null && !Utils.Type.isString(session_uid)) {
+        client.sendError(ESocketStatus.WS_4001_INVALID_DATA, "Invalid chat session", false);
+        return;
+    }
+    if (session_uid && !(await authorizeChatSession(client, topicId, session_uid))) {
+        return;
+    }
 
     const internalBotResult = await ProjectAssignedInternalBot.getInternalBotByProjectUID(EInternalBotType.ProjectChat, topicId);
     if (!internalBotResult) {
@@ -517,10 +585,11 @@ EventManager.on(ESocketTopic.Board, SocketEvents.CLIENT.BOARD.CHAT.SEND, async (
             isReceived = true;
             let nextInterrupt = interrupt;
             const approvalRequest = getApprovalRequestValue(interrupt);
+            let approval: GraphApprovalRequest | null = null;
             if (approvalRequest) {
                 const projectID = SnowflakeID.fromShortCode(topicId).toString();
                 const scopeTable = toApprovalScopeTable(approvalRequest.scope_table);
-                const approval = await GraphApprovalRequest.create({
+                approval = await GraphApprovalRequest.create({
                     requested_by_user_id: client.user.id,
                     resolved_by_user_id: null,
                     thread_id: String(approvalRequest.thread_id || ""),
@@ -555,11 +624,14 @@ EventManager.on(ESocketTopic.Board, SocketEvents.CLIENT.BOARD.CHAT.SEND, async (
                     status: approval.status,
                 };
                 nextInterrupt = interrupt.value ? { ...interrupt, value } : value;
+            }
+            newContent.graph_interrupt = nextInterrupt;
+            await saveMessage();
+            if (approval) {
                 await Subscription.publish(ESocketTopic.BoardSettings, topicId, SocketEvents.SERVER.BOARD.GRAPH_APPROVAL.REQUESTED, {
                     approval: approval.apiResponse,
                 });
             }
-            newContent.graph_interrupt = nextInterrupt;
             stream.buffer({ uid: aiMessageUID, interrupt: nextInterrupt });
         })
         .onError(async (error) => {
@@ -584,7 +656,14 @@ EventManager.on(ESocketTopic.Board, SocketEvents.CLIENT.BOARD.CHAT.SEND, async (
 
 EventManager.on(ESocketTopic.Board, SocketEvents.CLIENT.BOARD.CHAT.RESUME, async ({ client, topicId, data }) => {
     const { message_uid, thread_id, session_id, approval_uid } = data ?? {};
-    if (!Utils.Type.isString(message_uid) || !Utils.Type.isString(thread_id) || !data || !("resume" in data)) {
+    if (
+        !Utils.Type.isString(message_uid) ||
+        !Utils.Type.isString(thread_id) ||
+        (session_id != null && !Utils.Type.isString(session_id)) ||
+        (approval_uid != null && !Utils.Type.isString(approval_uid)) ||
+        !data ||
+        !("resume" in data)
+    ) {
         client.sendError(ESocketStatus.WS_4001_INVALID_DATA, "Invalid graph resume data", false);
         return;
     }
@@ -612,6 +691,16 @@ EventManager.on(ESocketTopic.Board, SocketEvents.CLIENT.BOARD.CHAT.RESUME, async
     });
     if (!projectChatSession) {
         client.sendError(ESocketStatus.WS_4001_INVALID_DATA, "Invalid graph resume session", false);
+        return;
+    }
+    if (
+        !(await authorizeChatSession(client, topicId, projectChatSession.uid, {
+            message_uid,
+            thread_id,
+            session_id: session_id ?? undefined,
+            approval_uid: approval_uid ?? undefined,
+        }))
+    ) {
         return;
     }
 

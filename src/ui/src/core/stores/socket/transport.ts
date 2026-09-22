@@ -9,7 +9,7 @@ import {
     resetSocketConnectionState,
     setSocket,
 } from "@/core/stores/socket/state";
-import { queueSubscribedCallback, queueUnsubscribedCallback } from "@/core/stores/socket/registry";
+import { addRestorableTopicId, queueSubscribedCallback, queueUnsubscribedCallback, removeRestorableTopicIds } from "@/core/stores/socket/registry";
 import type { ISocketCreateSocketProps, ISocketStore } from "@/core/stores/socket/types";
 
 const clearSocketHandlers = (socket: WebSocket) => {
@@ -52,16 +52,16 @@ const sendTopicMessage = (
     );
 };
 
-const restoreTopicSubscriptions = (subscribe: ISocketStore["subscribe"], subscriptions: ReturnType<typeof getSocketMap>["subscriptions"]) => {
-    const subscriptionEntries = Object.entries(subscriptions);
-    for (let i = 0; i < subscriptionEntries.length; ++i) {
-        const [topic, topicMap] = subscriptionEntries[i];
+const restoreTopicSubscriptions = (subscribe: ISocketStore["subscribe"], restorableTopics: ReturnType<typeof getSocketMap>["restorableTopics"]) => {
+    const topicEntries = Object.entries(restorableTopics);
+    for (let i = 0; i < topicEntries.length; ++i) {
+        const [topic, topicIds] = topicEntries[i];
 
-        if (!topicMap || isSocketTopicWithoutId(topic as ESocketTopic)) {
+        if (!topicIds?.length || isSocketTopicWithoutId(topic as ESocketTopic)) {
             continue;
         }
 
-        subscribe(topic as Exclude<ESocketTopic, ESocketTopic.None | ESocketTopic.Global>, Object.keys(topicMap));
+        subscribe(topic as Exclude<ESocketTopic, ESocketTopic.None | ESocketTopic.Global>, topicIds);
     }
 };
 
@@ -86,6 +86,13 @@ const notifyDisconnectedTopicNotifiers = () => {
             }
         }
     }
+};
+
+const markSocketConnectionDisconnected = () => {
+    const socketMap = getSocketMap();
+
+    notifyDisconnectedTopicNotifiers();
+    socketMap.subscribedTopics = {};
 };
 
 const handleSubscriptionResponse = (
@@ -156,10 +163,10 @@ export const createSocketConnection = <TResponse>({
 
     const nextSocket = new WebSocket(createAuthorizedWebSocketUrl(accessToken));
     setSocket(nextSocket);
-    restoreTopicSubscriptions(subscribe, getSocketMap().subscriptions);
 
     nextSocket.onopen = async (event) => {
         await onOpen(event);
+        restoreTopicSubscriptions(subscribe, getSocketMap().restorableTopics);
     };
 
     nextSocket.onmessage = async (event) => {
@@ -180,6 +187,7 @@ export const createSocketConnection = <TResponse>({
     };
 
     nextSocket.onclose = async (event) => {
+        markSocketConnectionDisconnected();
         await onClose(event);
     };
 
@@ -221,6 +229,7 @@ export const sendSocketMessage = (json: string) => {
         return true;
     }
 
+    flushSocketQueue();
     currentSocket.send(json);
     return true;
 };
@@ -228,7 +237,7 @@ export const sendSocketMessage = (json: string) => {
 export const closeSocketConnection = () => {
     const currentSocket = getSocket();
 
-    notifyDisconnectedTopicNotifiers();
+    markSocketConnectionDisconnected();
     clearSocketQueueTimeout();
     resetSocketConnectionState();
 
@@ -253,6 +262,10 @@ export const subscribeToTopics = (
         return;
     }
 
+    for (let i = 0; i < topicIds.length; ++i) {
+        addRestorableTopicId(topic, topicIds[i]);
+    }
+
     queueSubscribedCallback(topic, topicIds, callback);
     sendTopicMessage(send, "subscribe", topic, topicIds);
 };
@@ -264,16 +277,19 @@ export const unsubscribeFromTopics = (
     callback?: () => void
 ) => {
     const socketMap = getSocketMap();
+    const topicSubscriptions = socketMap.subscriptions[topic];
 
-    if (!getSocket() || !socketMap.subscriptions[topic]) {
+    removeRestorableTopicIds(topic, topicIds);
+
+    if (!isSocketOpenOrConnecting()) {
         return;
     }
 
     for (let i = 0; i < topicIds.length; ++i) {
         const topicId = topicIds[i];
 
-        if (socketMap.subscriptions[topic][topicId]) {
-            delete socketMap.subscriptions[topic][topicId];
+        if (topicSubscriptions?.[topicId]) {
+            delete topicSubscriptions[topicId];
         }
     }
 

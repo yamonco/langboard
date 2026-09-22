@@ -6,14 +6,33 @@ from types import SimpleNamespace
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pytest import MonkeyPatch
+from starlette.middleware import Middleware
 
 
 os.environ.setdefault("PROJECT_NAME", "langboard")
 
 from langboard.App import App  # noqa: E402
 from langboard.Loader import ModuleLoader  # noqa: E402
-from langboard.middlewares import ApiAuthMiddleware, RoleMiddleware  # noqa: E402
+from langboard.middlewares import ApiAuthMiddleware, ChatUploadConcurrencyMiddleware, RoleMiddleware  # noqa: E402
 from langboard_shared.core.routing import AppRouter  # noqa: E402
+from langboard_shared.FastAPIAppConfig import FastAPIAppConfigModel  # noqa: E402
+
+
+def _create_test_app() -> App:
+    app = App.__new__(App)
+    app.api = FastAPI()
+    app.config = FastAPIAppConfigModel(
+        host="localhost",
+        port=5381,
+        lifespan="auto",
+        workers=1,
+        is_restarting=True,
+    )
+    return app
+
+
+def _find_middleware(app: App, middleware_class: object) -> Middleware:
+    return next(middleware for middleware in app.api.user_middleware if middleware.cls is middleware_class)
 
 
 def test_activity_tasks_import_without_cycle() -> None:
@@ -61,19 +80,27 @@ def test_authorization_middlewares_use_original_api_routes(monkeypatch: MonkeyPa
     monkeypatch.setenv("PROJECT_NAME", "langboard")
 
     monkeypatch.setattr(ModuleLoader, "load", lambda *args, **kwargs: {})
-    app = App.__new__(App)
-    app.api = FastAPI()
-    app.config = SimpleNamespace(is_restarting=True)
+    app = _create_test_app()
 
     app._init_api_middlewares()
 
-    authorization_middlewares = {
-        middleware.cls: middleware
-        for middleware in app.api.user_middleware
-        if middleware.cls in {ApiAuthMiddleware, RoleMiddleware}
-    }
-    assert authorization_middlewares[ApiAuthMiddleware].kwargs["routes"] is AppRouter.api.routes
-    assert authorization_middlewares[RoleMiddleware].kwargs["routes"] is AppRouter.api.routes
+    assert _find_middleware(app, ApiAuthMiddleware).kwargs["routes"] is AppRouter.api.routes
+    assert _find_middleware(app, RoleMiddleware).kwargs["routes"] is AppRouter.api.routes
+
+
+def test_cors_wraps_chat_upload_concurrency_rejections(monkeypatch: MonkeyPatch) -> None:
+    monkeypatch.setattr(ModuleLoader, "load", lambda *args, **kwargs: {})
+    app = _create_test_app()
+
+    app._init_api_middlewares()
+
+    cors_index = next(index for index, middleware in enumerate(app.api.user_middleware) if middleware.cls is CORSMiddleware)
+    upload_index = next(
+        index
+        for index, middleware in enumerate(app.api.user_middleware)
+        if middleware.cls is ChatUploadConcurrencyMiddleware
+    )
+    assert cors_index < upload_index
 
 
 def test_production_cors_uses_configured_mcp_origins(monkeypatch: MonkeyPatch) -> None:
@@ -89,13 +116,11 @@ def test_production_cors_uses_configured_mcp_origins(monkeypatch: MonkeyPatch) -
             PUBLIC_UI_URL="https://board.example.test",
         ),
     )
-    app = App.__new__(App)
-    app.api = FastAPI()
-    app.config = SimpleNamespace(is_restarting=True)
+    app = _create_test_app()
 
     app._init_api_middlewares()
 
-    cors = next(middleware for middleware in app.api.user_middleware if middleware.cls is CORSMiddleware)
+    cors = _find_middleware(app, CORSMiddleware)
     assert cors.kwargs["allow_origins"] == [
         "https://board.example.test",
         "http://localhost:6274",
@@ -115,14 +140,12 @@ def test_development_cors_accepts_local_clients_on_any_port(monkeypatch: MonkeyP
             PUBLIC_UI_URL="http://localhost:5173",
         ),
     )
-    app = App.__new__(App)
-    app.api = FastAPI()
-    app.config = SimpleNamespace(is_restarting=True)
+    app = _create_test_app()
 
     app._init_api_middlewares()
 
-    cors = next(middleware for middleware in app.api.user_middleware if middleware.cls is CORSMiddleware)
+    cors = _find_middleware(app, CORSMiddleware)
     origin_regex = cors.kwargs["allow_origin_regex"]
-    assert origin_regex is not None
+    assert isinstance(origin_regex, str)
     assert re.fullmatch(origin_regex, "http://localhost:49152")
     assert not re.fullmatch(origin_regex, "https://example.test")

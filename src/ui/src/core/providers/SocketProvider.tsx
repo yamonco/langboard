@@ -219,7 +219,7 @@ const sharedSocketHandlers = createSharedSocketHandlers();
 
 export const SocketProvider = ({ children }: ISocketProviderProps): React.ReactNode => {
     const { currentUser } = useAuth();
-    const { createSocket, getStore, close } = useSocketStore.getState();
+    const { createSocket, getStore, close, subscribe } = useSocketStore.getState();
     const currentUserRef = useRef(currentUser);
     currentUserRef.current = currentUser;
     const connectRef = useRef<() => void>(() => {});
@@ -256,7 +256,8 @@ export const SocketProvider = ({ children }: ISocketProviderProps): React.ReactN
         }
 
         connectRef.current();
-    }, [close, currentUser]);
+        subscribe(ESocketTopic.UserPrivate, [currentUser.uid]);
+    }, [close, currentUser, subscribe]);
 
     if (!currentUser) {
         return children;

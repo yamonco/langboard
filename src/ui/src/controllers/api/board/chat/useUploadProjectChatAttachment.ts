@@ -1,4 +1,4 @@
-import { SOCKET_URL } from "@/constants";
+import { API_URL, IS_PHOENIX_SOCKET_RUNTIME, SOCKET_URL } from "@/constants";
 import { Routing } from "@langboard/core/constants";
 import { api } from "@/core/helpers/Api";
 import { TMutationOptions, useQueryMutation } from "@/core/helpers/QueryMutation";
@@ -7,13 +7,15 @@ import { AxiosProgressEvent } from "axios";
 
 export interface IUploadProjectChatAttachmentForm {
     project_uid: string;
+    task_id: string;
     attachment: File;
     onUploadProgress?: (progressEvent: AxiosProgressEvent) => void;
     abortController?: AbortController;
 }
 
 export interface IUploadProjectChatAttachmentResponse {
-    file_path: string;
+    file_path?: string;
+    file_token?: string;
 }
 
 const useUploadProjectChatAttachment = (options?: TMutationOptions<IUploadProjectChatAttachmentForm, IUploadProjectChatAttachmentResponse>) => {
@@ -25,8 +27,11 @@ const useUploadProjectChatAttachment = (options?: TMutationOptions<IUploadProjec
         });
         const formData = new FormData();
         formData.append("attachment", params.attachment);
+        if (IS_PHOENIX_SOCKET_RUNTIME) {
+            formData.append("task_id", params.task_id);
+        }
         const res = await api.post(url, formData, {
-            baseURL: SOCKET_URL,
+            baseURL: IS_PHOENIX_SOCKET_RUNTIME ? API_URL : SOCKET_URL,
             withCredentials: true,
             onUploadProgress: params.onUploadProgress,
             signal: params.abortController?.signal,

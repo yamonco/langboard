@@ -8,13 +8,13 @@ const EXIT_SIGNALS: NodeJS.Signals[] = ["SIGINT", "SIGTERM", "SIGHUP", "SIGBREAK
 
 let isShuttingDown = false;
 
-const runShutdownStep = async (name: string, stop: () => Promise<void>, timeoutMs?: number): Promise<void> => {
+const runShutdownStep = async (name: string, stop: () => Promise<void>, timeoutMs?: number): Promise<boolean> => {
     let timeout: NodeJS.Timeout | undefined;
     try {
         const operation = stop();
         if (!timeoutMs) {
             await operation;
-            return;
+            return true;
         }
 
         await Promise.race([
@@ -24,8 +24,10 @@ const runShutdownStep = async (name: string, stop: () => Promise<void>, timeoutM
                 timeout.unref();
             }),
         ]);
+        return true;
     } catch (error) {
         Logger.red(`Shutdown step failed: ${error}\n`);
+        return false;
     } finally {
         if (timeout) {
             clearTimeout(timeout);
@@ -39,11 +41,13 @@ const shutdown = async (exitCode: number): Promise<void> => {
     }
     isShuttingDown = true;
 
-    await runShutdownStep("server", () => Server.destroy());
-    await runShutdownStep("consumer", () => Consumer.stop(), 10000);
-    await runShutdownStep("cache", () => Cache.stop(), 10000);
-    await runShutdownStep("database", () => DB.destroy(), 10000);
-    process.exit(exitCode);
+    const results = [
+        await runShutdownStep("server", () => Server.destroy()),
+        await runShutdownStep("consumer", () => Consumer.stop(), 10000),
+        await runShutdownStep("cache", () => Cache.stop(), 10000),
+        await runShutdownStep("database", () => (DB.isInitialized ? DB.destroy() : Promise.resolve()), 10000),
+    ];
+    process.exit(results.every(Boolean) ? exitCode : 1);
 };
 
 for (let i = 0; i < EXIT_SIGNALS.length; ++i) {

@@ -1,6 +1,7 @@
 import { BaseModel, IBaseModel } from "@/core/models/Base";
 import { registerModel } from "@/core/models/ModelRegistry";
 import { Utils } from "@langboard/core/utils";
+import { EInternalBotRunKind, EInternalBotRunStatus } from "@/core/constants/InternalBotRun";
 
 export enum EGraphApprovalOriginType {
     Chat = "chat",
@@ -41,6 +42,10 @@ export interface Interface extends IBaseModel {
     scope_table: EGraphApprovalScopeTable;
     scope_uid?: string;
     document_name?: string;
+    durable_run?: boolean;
+    durable_run_status?: EInternalBotRunStatus | null;
+    durable_run_task_id?: string | null;
+    durable_run_kind?: EInternalBotRunKind | null;
     action_type: string;
     permission: string;
     tool_name?: string;
@@ -61,6 +66,12 @@ class GraphApprovalRequestModel extends BaseModel<Interface> {
         model.origin_type = Utils.String.convertSafeEnum(EGraphApprovalOriginType, model.origin_type);
         model.scope_table = Utils.String.convertSafeEnum(EGraphApprovalScopeTable, model.scope_table);
         model.status = Utils.String.convertSafeEnum(EGraphApprovalStatus, model.status);
+        if (model.durable_run_status) {
+            model.durable_run_status = Utils.String.convertSafeEnum(EInternalBotRunStatus, model.durable_run_status);
+        }
+        if (model.durable_run_kind) {
+            model.durable_run_kind = Utils.String.convertSafeEnum(EInternalBotRunKind, model.durable_run_kind);
+        }
         if (Utils.Type.isString(model.resolved_at)) {
             model.resolved_at = new Date(model.resolved_at);
         }
@@ -90,6 +101,18 @@ class GraphApprovalRequestModel extends BaseModel<Interface> {
     }
     public get document_name() {
         return this.getValue("document_name");
+    }
+    public get durable_run() {
+        return this.getValue("durable_run");
+    }
+    public get durable_run_status() {
+        return this.getValue("durable_run_status");
+    }
+    public get durable_run_task_id() {
+        return this.getValue("durable_run_task_id");
+    }
+    public get durable_run_kind() {
+        return this.getValue("durable_run_kind");
     }
     public get action_type() {
         return this.getValue("action_type");

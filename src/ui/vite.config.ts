@@ -46,6 +46,12 @@ export default defineConfig(({ mode }) => {
     const UI_SERVER = `http://localhost:${PORT}`;
     const API_SERVER = `http://localhost:${process.env.API_PORT}`;
     const SOCKET_SERVER = `http://localhost:${process.env.SOCKET_PORT}`;
+    const socketOwner = process.env.SOCKET_OWNER || "node";
+    const socketRuntime = process.env.SOCKET_RUNTIME || socketOwner;
+
+    if (!["node", "phoenix"].includes(socketOwner) || socketRuntime !== socketOwner) {
+        throw new Error("SOCKET_RUNTIME must match SOCKET_OWNER and both must be node or phoenix.");
+    }
 
     let watchOptions = null;
     if (process.argv.includes("--watch") || process.argv.includes("-w")) {
@@ -68,6 +74,7 @@ export default defineConfig(({ mode }) => {
             "process.env.API_URL": JSON.stringify(isLocal ? API_SERVER : process.env.API_URL),
             "process.env.PUBLIC_UI_URL": JSON.stringify(isLocal ? UI_SERVER : process.env.PUBLIC_UI_URL),
             "process.env.SOCKET_URL": JSON.stringify(isLocal ? SOCKET_SERVER : process.env.SOCKET_URL),
+            "process.env.SOCKET_RUNTIME": JSON.stringify(socketRuntime),
             "process.env.IS_OLLAMA_RUNNING": JSON.stringify(process.env.IS_OLLAMA_RUNNING || (process.env.OLLAMA_API_URL ? "true" : "false")),
             "process.env.MAX_FILE_SIZE_MB": JSON.stringify(process.env.MAX_FILE_SIZE_MB || 50),
         },

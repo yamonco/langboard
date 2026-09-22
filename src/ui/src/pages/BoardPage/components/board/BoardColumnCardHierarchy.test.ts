@@ -24,8 +24,8 @@ test("groups visible descendants directly after their parent", () => {
 });
 
 test("keeps a same-column relationship badge when filters hide the related card", () => {
-    const source = { ...card("parent", 0), project_column_uid: "column" };
-    const related = { ...card("child", 1), project_column_uid: "column" };
+    const source = Object.assign(card("parent", 0), { project_column_uid: "column" });
+    const related = Object.assign(card("child", 1), { project_column_uid: "column" });
 
     assert.equal(isRelationshipRenderedInHierarchy(source, related, true), true);
     assert.equal(isRelationshipRenderedInHierarchy(source, related, false), false);

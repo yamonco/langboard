@@ -37,17 +37,16 @@ const useGetGraphApprovals = (form: IGetGraphApprovalsForm, options?: TQueryOpti
         });
 
         const approvals = GraphApprovalRequestModel.Model.fromArray(res.data.approvals, true);
-        if (
-            form.status === EGraphApprovalStatus.Pending &&
-            !form.origin_type &&
-            !form.scope_table &&
-            !form.scope_uid &&
-            !(form.limit && approvals.length >= form.limit)
-        ) {
+        if (form.status === EGraphApprovalStatus.Pending && !(form.limit && approvals.length >= form.limit)) {
             const approvalUIDs = new Set(approvals.map((approval) => approval.uid));
             GraphApprovalRequestModel.Model.deleteModels(
                 (approval) =>
-                    approval.project_uid === form.project_uid && approval.status === EGraphApprovalStatus.Pending && !approvalUIDs.has(approval.uid)
+                    approval.project_uid === form.project_uid &&
+                    approval.status === EGraphApprovalStatus.Pending &&
+                    (!form.origin_type || approval.origin_type === form.origin_type) &&
+                    (!form.scope_table || approval.scope_table === form.scope_table) &&
+                    (!form.scope_uid || approval.scope_uid === form.scope_uid) &&
+                    !approvalUIDs.has(approval.uid)
             );
         }
 

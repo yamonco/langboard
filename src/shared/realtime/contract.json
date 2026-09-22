@@ -1,0 +1,277 @@
+{
+  "version": 1,
+  "internal_api": {
+    "capabilities_path": "/auth/socket/capabilities",
+    "contract_version": 1
+  },
+  "topics": {
+    "dashboard": "dashboard",
+    "board": "board",
+    "board_card": "board_card",
+    "board_wiki": "board_wiki",
+    "board_wiki_private": "board_wiki_private",
+    "board_settings": "board_settings",
+    "user": "user",
+    "user_private": "user_private",
+    "app_settings": "app_settings",
+    "ollama_manager": "ollama_manager",
+    "global": "global",
+    "none": "none"
+  },
+  "topic_ids": {
+    "global": "all",
+    "none": "none"
+  },
+  "identifiers": {
+    "short_uid_length": 11
+  },
+  "protocol_limits": {
+    "max_topic_ids": 64,
+    "max_topic_id_bytes": 128
+  },
+  "setting_topic_ids": {
+    "api_key": "api_key",
+    "user": "user",
+    "bot": "bot",
+    "internal_bot": "internal_bot",
+    "global_relationship": "global_relationship",
+    "webhook": "webhook",
+    "notification_schedule": "notification_schedule",
+    "ollama": "ollama",
+    "api_comfort_tool": "api_comfort_tool",
+    "mcp_tool_group": "mcp_tool_group"
+  },
+  "events": {
+    "subscribe": "subscribe",
+    "unsubscribe": "unsubscribe",
+    "subscribed": "subscribed",
+    "unsubscribed": "unsubscribed",
+    "subscription_revoked": "subscription:revoked",
+    "board_bot_status_map": "board:bot:status:map",
+    "board_chat_available": "board:chat:available",
+    "board_chat_send": "board:chat:send",
+    "board_chat_session": "board:chat:session",
+    "board_chat_sent": "board:chat:sent",
+    "board_chat_send_failed": "board:chat:send:failed",
+    "board_chat_cancel": "board:chat:cancel",
+    "task_aborted": "task:aborted",
+    "board_chat_resume": "board:chat:resume",
+    "board_chat_stream": "board:chat:stream",
+    "editor_card_chat_send": "board:card:editor:chat:send",
+    "editor_approval_resume": "board:editor:approval:resume",
+    "editor_approval_resume_result": "board:editor:approval:resume:result",
+    "editor_card_chat_abort": "board:card:editor:chat:abort",
+    "editor_card_chat_stream": "board:card:editor:chat:stream",
+    "editor_card_copilot_send": "board:card:editor:copilot:send",
+    "editor_card_copilot_abort": "board:card:editor:copilot:abort",
+    "editor_card_copilot_receive": "board:card:editor:copilot:receive",
+    "editor_ai_status": "board:editor:ai:status",
+    "editor_ai_status_result": "board:editor:ai:status:result",
+    "editor_wiki_chat_send": "board:wiki:editor:chat:send",
+    "editor_wiki_chat_abort": "board:wiki:editor:chat:abort",
+    "editor_wiki_chat_stream": "board:wiki:editor:chat:stream",
+    "editor_wiki_copilot_send": "board:wiki:editor:copilot:send",
+    "editor_wiki_copilot_abort": "board:wiki:editor:copilot:abort",
+    "editor_wiki_copilot_receive": "board:wiki:editor:copilot:receive",
+    "notification_read": "user:notification:read",
+    "notification_read_all": "user:notification:read-all",
+    "notification_delete": "user:notification:delete",
+    "notification_delete_all": "user:notification:delete-all",
+    "ollama_copy_model": "settings:ollama:model:copy",
+    "ollama_delete_model": "settings:ollama:model:delete",
+    "ollama_pull_model": "settings:ollama:model:pull",
+    "error": "error"
+  },
+  "close_codes": {
+    "normal": 1000,
+    "going_away": 1001,
+    "protocol_error": 1002,
+    "unsupported_data": 1003,
+    "no_status_received": 1005,
+    "abnormal_closure": 1006,
+    "invalid_frame_payload_data": 1007,
+    "policy_violation": 1008,
+    "message_too_big": 1009,
+    "mandatory_extension": 1010,
+    "internal_error": 1011,
+    "service_restart": 1012,
+    "try_again_later": 1013,
+    "bad_gateway": 1014,
+    "tls_handshake": 1015,
+    "unauthorized": 3000,
+    "expired_token": 3001,
+    "forbidden": 3003,
+    "timeout": 3008,
+    "invalid_connection": 4000,
+    "invalid_data": 4001
+  },
+  "broker_envelope": {
+    "current_schema_version": "2",
+    "legacy_cache_key_field": "cache_key",
+    "legacy_cache_key_prefix": "broadcast-",
+    "legacy_cache_key_max_length": 160,
+    "required_fields": [
+      "schema_version",
+      "event_id",
+      "event",
+      "occurred_at",
+      "data"
+    ]
+  },
+  "dead_letter": {
+    "schema_version": "1",
+    "fanout_topic": "socket_publish_dead_letter"
+  },
+  "runtime": {
+    "validated_topics": [
+      "app_settings",
+      "board",
+      "board_card",
+      "board_settings",
+      "board_wiki",
+      "board_wiki_private",
+      "dashboard",
+      "ollama_manager",
+      "user",
+      "user_private"
+    ],
+    "client_commands": [
+      {
+        "topic": "board",
+        "event": "board:bot:status:map"
+      },
+      {
+        "topic": "board",
+        "event": "board:chat:available"
+      },
+      {
+        "topic": "board",
+        "event": "board:chat:cancel"
+      },
+      {
+        "topic": "board",
+        "event": "board:chat:resume"
+      },
+      {
+        "topic": "board",
+        "event": "board:chat:send"
+      },
+      {
+        "topic": "none",
+        "event": "board:editor:ai:status"
+      },
+      {
+        "topic": "none",
+        "event": "board:card:editor:chat:abort"
+      },
+      {
+        "topic": "none",
+        "event": "board:card:editor:chat:send"
+      },
+      {
+        "topic": "none",
+        "event": "board:card:editor:copilot:abort"
+      },
+      {
+        "topic": "none",
+        "event": "board:card:editor:copilot:send"
+      },
+      {
+        "topic": "none",
+        "event": "board:wiki:editor:chat:abort"
+      },
+      {
+        "topic": "none",
+        "event": "board:wiki:editor:chat:send"
+      },
+      {
+        "topic": "none",
+        "event": "board:wiki:editor:copilot:abort"
+      },
+      {
+        "topic": "none",
+        "event": "board:wiki:editor:copilot:send"
+      },
+      {
+        "topic": "none",
+        "event": "user:notification:delete"
+      },
+      {
+        "topic": "none",
+        "event": "user:notification:delete-all"
+      },
+      {
+        "topic": "none",
+        "event": "user:notification:read"
+      },
+      {
+        "topic": "none",
+        "event": "user:notification:read-all"
+      },
+      {
+        "topic": "ollama_manager",
+        "event": "settings:ollama:model:copy"
+      },
+      {
+        "topic": "ollama_manager",
+        "event": "settings:ollama:model:delete"
+      },
+      {
+        "topic": "ollama_manager",
+        "event": "settings:ollama:model:pull"
+      }
+    ],
+    "http_routes": [
+      {
+        "method": "GET",
+        "path": "/health"
+      },
+      {
+        "method": "POST",
+        "path": "/board/{uid}/chat/upload"
+      },
+      {
+        "method": "POST",
+        "path": "/editor-sync/active"
+      },
+      {
+        "method": "POST",
+        "path": "/editor-sync/clear"
+      },
+      {
+        "method": "POST",
+        "path": "/editor-sync/rich/patch-request"
+      },
+      {
+        "method": "POST",
+        "path": "/editor-sync/text"
+      },
+      {
+        "method": "POST",
+        "path": "/editor-sync/text/patch"
+      }
+    ],
+    "broker_consumers": [
+      {
+        "event": "notification_publish",
+        "purpose": "side_effect"
+      },
+      {
+        "event": "socket_publish",
+        "purpose": "fanout"
+      }
+    ],
+    "editor_sync": {
+      "websocket_path": "/editor-sync",
+      "lifecycle_hooks": [
+        "beforeUnloadDocument",
+        "connected",
+        "onAuthenticate",
+        "onDisconnect",
+        "onLoadDocument",
+        "onStateless",
+        "onStoreDocument"
+      ]
+    }
+  }
+}
