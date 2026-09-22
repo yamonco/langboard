@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createSlateEditor, NodeApi } from "platejs";
+import { createSlateEditor, NodeApi, type Value } from "platejs";
 import { MarkdownPlugin, remarkMdx } from "@platejs/markdown";
 import { BaseTablePlugin } from "@platejs/table";
 import remarkGfm from "remark-gfm";
@@ -25,7 +25,7 @@ test("all break spellings survive table deserialize, save and reload", () => {
         const source = `| Kind | Scope |\n|---|---|\n| Action | First${tag}Second |`;
         const value = deserialize(false)(editor, source);
         assert.equal(NodeApi.string(value[0]), "KindScopeActionFirst\nSecond");
-        editor.tf.setValue(value);
+        editor.tf.setValue(value as Value);
         const saved = editor.api.markdown.serialize();
         assert.equal(NodeApi.string(deserialize(false)(editor, saved)[0]), "KindScopeActionFirst\nSecond");
     }
