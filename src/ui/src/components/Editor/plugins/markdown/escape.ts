@@ -1,7 +1,9 @@
-import { SlateEditor } from "platejs";
-import { deserializeInlineMd, deserializeMd, DeserializeMdOptions } from "@platejs/markdown";
-import { preserveListNumbers } from "./list-number";
-import { escapeAngleOpenings } from "@/components/Editor/plugins/markdown/escape-angles";
+import type { SlateEditor } from "platejs";
+import { deserializeInlineMd, deserializeMd } from "@platejs/markdown";
+import type { DeserializeMdOptions } from "@platejs/markdown";
+import { preserveListNumbers } from "./list-number.ts";
+import { escapeAngleOpenings } from "./escape-angles.ts";
+import { normalizeBreakTags } from "./normalize-break-tags.ts";
 
 const escapeNonHtmlAngles = (str: string): string => {
     const htmlTagRegex = /^<\/?[a-zA-Z][\w:-]*(\s+[a-zA-Z_:][\w:.-]*(\s*=\s*(".*?"|'.*?'|[^'"<>\s]+))?)*\s*\/?>/;
@@ -205,13 +207,11 @@ export const deserialize = (isInline: bool) => (editor: SlateEditor, text: strin
         return lines.join("\n");
     };
 
-    const segments = splitProtectedBlocks(text);
+    const segments = splitProtectedBlocks(normalizeBreakTags(text));
     const processed = segments.map(({ isProtected, content }) => (isProtected ? content : escapeNonMathContent(content))).join("");
 
     const deserializeInput = (input: string) =>
-        isInline
-            ? deserializeInlineMd(editor, input, options)
-            : preserveListNumbers(editor, input, deserializeMd(editor, input, options), options);
+        isInline ? deserializeInlineMd(editor, input, options) : preserveListNumbers(editor, input, deserializeMd(editor, input, options), options);
 
     try {
         return deserializeInput(processed);
