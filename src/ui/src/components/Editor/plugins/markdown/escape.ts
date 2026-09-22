@@ -222,7 +222,7 @@ export const deserialize = (isInline: bool) => (editor: SlateEditor, text: strin
         try {
             return deserializeInput(escaped);
         } catch {
-            return [{ text }];
+            return isInline ? [{ text }] : [{ type: "p", children: [{ text }] }];
         }
     }
 };

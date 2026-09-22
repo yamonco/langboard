@@ -26,6 +26,7 @@ import { Utils } from "@langboard/core/utils";
 import { memo, useCallback, useEffect, useReducer, useRef, useState } from "react";
 import {
     RELATIONSHIP_HOLD_CIRCUMFERENCE,
+    RELATIONSHIP_HOLD_OPEN_MS,
     RELATIONSHIP_HOLD_RADIUS,
     relationshipHoldProgress,
     relationshipHoldStrokeOffset,

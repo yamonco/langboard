@@ -7,6 +7,15 @@ import remarkGfm from "remark-gfm";
 import { deserialize } from "./escape.ts";
 import { normalizeBreakTags } from "./normalize-break-tags.ts";
 
+test("invalid MDX falls back to a renderable block, not a root text leaf", () => {
+    const editor = createSlateEditor({
+        plugins: [MarkdownPlugin.configure({ options: { remarkPlugins: [remarkGfm, remarkMdx] } })],
+    });
+    const source = "A log containing an unmatched {expression";
+    assert.deepEqual(deserialize(false)(editor, source), [{ type: "p", children: [{ text: source }] }]);
+    assert.deepEqual(deserialize(true)(editor, source), [{ text: source }]);
+});
+
 test("normalizes HTML break tags before markdown deserialization", () => {
     assert.equal(normalizeBreakTags("one<br>two<BR >three"), "one<br />two<br />three");
     assert.equal(normalizeBreakTags("one<br/>two<br />three"), "one<br />two<br />three");

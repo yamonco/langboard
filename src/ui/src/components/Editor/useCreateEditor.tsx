@@ -88,7 +88,7 @@ export const useCreateEditor = (props: TUseCreateEditor) => {
             }
 
             if (valueRef.current) {
-                return normalizeEditorValue(editor.getApi(MarkdownPlugin).markdown.deserialize(valueRef.current.content));
+                return normalizeEditorValue(editor.getApi(MarkdownPlugin).markdown.deserialize(valueRef.current.content ?? ""));
             } else {
                 return EMPTY_EDITOR_VALUE;
             }
