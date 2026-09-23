@@ -7,7 +7,7 @@ from langboard_shared.core.schema import OpenApiSchema
 from langboard_shared.domain.models import Bot, User
 from langboard_shared.domain.models.bases import BotTriggerCondition
 from langboard_shared.Env import Env
-from langboard_shared.tasks.webhooks.utils import WEBHOOK_EVENT_NAMES
+from langboard_shared.tasks.webhooks.utils import WEBHOOK_EVENT_NAMES, WORK_EXECUTION_EVENTS
 
 
 _SAFE_EVENT_SCHEMA_IDENTIFIERS = frozenset(
@@ -62,6 +62,19 @@ _DETERMINISTIC_EVENT_SCHEMAS: dict[str, dict[str, Any]] = {
         "priority": "string",
     },
 }
+_EXECUTION_EVENT_SCHEMA = {
+    "project_uid": "string",
+    "card_uid": "string",
+    "execution_generation": "integer",
+    "semantic_state": "string",
+    "title": "string",
+    "labels": "string[]",
+    "assignees": "string[]",
+    "direct_blocker_uids": "string[]",
+    "card_url": "string",
+    "source_revision": "string",
+}
+_DETERMINISTIC_EVENT_SCHEMAS.update({name: _EXECUTION_EVENT_SCHEMA for name in WORK_EXECUTION_EVENTS})
 
 
 @AppRouter.api.get("/schema/webhook", response_class=HTMLResponse)
@@ -101,6 +114,20 @@ def webhook_openapi() -> JsonResponse:
             },
             "required": ["schema_version", "event_id", "occurred_at", "event", "data"],
         }
+        if schema_name in WORK_EXECUTION_EVENTS:
+            schemas[schema_name]["properties"].update(
+                {
+                    "specversion": {"type": "string", "enum": ["1.0"]},
+                    "id": {"type": "string", "format": "uuid"},
+                    "source": {"type": "string"},
+                    "subject": {"type": "string"},
+                    "type": {"type": "string", "enum": [schema_name]},
+                    "time": {"type": "string", "format": "date-time"},
+                }
+            )
+            schemas[schema_name]["required"].extend(
+                ["specversion", "id", "source", "subject", "type", "time"]
+            )
 
     return JsonResponse(
         content={
@@ -169,16 +196,22 @@ def _make_property(properties: dict[str, Any]):
         if "?" not in property_name and "?" not in property_value:
             required.append(output_name)
 
+        value_type = property_value.replace("?", "")
         schema[output_name] = {
-            "type": property_value.replace("?", ""),
+            "type": "array" if value_type.endswith("[]") else value_type,
             "title": output_name.replace("_", " ").capitalize(),
         }
+        if value_type.endswith("[]"):
+            schema[output_name]["items"] = {"type": value_type[:-2]}
 
     return schema, required
 
 
 def _minimal_event_schema(schema: dict[str, Any], *, event: str | None = None) -> dict[str, Any]:
     """Expose only routing identifiers and non-PII actor identity."""
+
+    if event in WORK_EXECUTION_EVENTS:
+        return schema
 
     result = {
         key: value

@@ -14,7 +14,15 @@ from ...domain.models import WebhookSetting
 from ...helpers import InfraHelper
 from ...infrastructure.repositories import Repository
 from ...publishers import AppSettingPublisher
-from .utils import WORK_EVENT_NAME, WebhookModel, WorkEventData, ensure_public_webhook_url
+from .utils import (
+    WORK_EVENT_NAME,
+    WORK_EXECUTION_EVENTS,
+    ExecutionEventData,
+    WebhookModel,
+    WorkEventData,
+    cloudevents_fields,
+    ensure_public_webhook_url,
+)
 
 
 WEBHOOK_TIMEOUT = Timeout(5.0, connect=2.0)
@@ -163,6 +171,15 @@ def signed_request(
         "event": model.event,
         "data": minimal_event_data(model.data, event=model.event),
     }
+    if model.event in WORK_EXECUTION_EVENTS:
+        payload.update(
+            cloudevents_fields(
+                model.event,
+                model.event_id,
+                model.occurred_at,
+                ExecutionEventData.model_validate(model.data),
+            )
+        )
     body = json_dumps(
         payload,
         ensure_ascii=False,
@@ -191,6 +208,8 @@ def minimal_event_data(data: dict[str, Any], *, event: str | None = None) -> dic
 
     if event == WORK_EVENT_NAME:
         return WorkEventData.model_validate(data).model_dump()
+    if event in WORK_EXECUTION_EVENTS:
+        return ExecutionEventData.model_validate(data).model_dump()
 
     result = {
         key: convert_python_data(value, recursive=True)
@@ -247,6 +266,6 @@ def _get_webhook_setting(webhook_uid: str) -> WebhookSetting | None:
 
 def _accepts_event(setting: WebhookSetting, event: str) -> bool:
     events = setting.events
-    if event == WORK_EVENT_NAME:
+    if event == WORK_EVENT_NAME or event in WORK_EXECUTION_EVENTS:
         return events is not None and event in events
     return events is None or event in events
