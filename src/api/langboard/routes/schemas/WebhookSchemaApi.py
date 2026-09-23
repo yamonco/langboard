@@ -63,10 +63,7 @@ _DETERMINISTIC_EVENT_SCHEMAS: dict[str, dict[str, Any]] = {
     },
 }
 _EXECUTION_EVENT_SCHEMA = {
-    "project_uid": "string",
-    "card_uid": "string",
     "execution_generation": "integer",
-    "semantic_state": "string",
     "title": "string",
     "labels": "string[]",
     "assignees": "string[]",
@@ -102,6 +99,23 @@ def webhook_openapi() -> JsonResponse:
 
     for schema_name in schemas:
         schema = _minimal_event_schema(schemas[schema_name], event=schema_name)
+        if schema_name in WORK_EXECUTION_EVENTS:
+            schemas[schema_name] = {
+                "title": schema_name,
+                "type": "object",
+                "properties": {
+                    "specversion": {"type": "string", "enum": ["1.0"]},
+                    "id": {"type": "string", "format": "uuid"},
+                    "source": {"type": "string", "pattern": "^/projects/[^/]+$"},
+                    "subject": {"type": "string", "pattern": "^cards/[^/]+$"},
+                    "type": {"type": "string", "enum": [schema_name]},
+                    "time": {"type": "string", "format": "date-time"},
+                    "data": _make_object_property("data", schema),
+                },
+                "required": ["specversion", "id", "source", "subject", "type", "time", "data"],
+                "additionalProperties": False,
+            }
+            continue
         schemas[schema_name] = {
             "title": schema_name.replace("_", " ").capitalize(),
             "type": "object",
@@ -114,20 +128,6 @@ def webhook_openapi() -> JsonResponse:
             },
             "required": ["schema_version", "event_id", "occurred_at", "event", "data"],
         }
-        if schema_name in WORK_EXECUTION_EVENTS:
-            schemas[schema_name]["properties"].update(
-                {
-                    "specversion": {"type": "string", "enum": ["1.0"]},
-                    "id": {"type": "string", "format": "uuid"},
-                    "source": {"type": "string"},
-                    "subject": {"type": "string"},
-                    "type": {"type": "string", "enum": [schema_name]},
-                    "time": {"type": "string", "format": "date-time"},
-                }
-            )
-            schemas[schema_name]["required"].extend(
-                ["specversion", "id", "source", "subject", "type", "time"]
-            )
 
     return JsonResponse(
         content={
@@ -140,6 +140,13 @@ def webhook_openapi() -> JsonResponse:
             "x-langboard-webhook-signature": {
                 "algorithm": "HMAC-SHA256",
                 "signed_content": "<X-Langboard-Webhook-Timestamp>.<raw request body>",
+                "signature_format": "v1=<lowercase hex HMAC-SHA256>",
+                "freshness_timestamp_header": "X-Langboard-Webhook-Timestamp",
+                "example": {
+                    "timestamp": "1786003200",
+                    "signed_content": "1786003200.{\"specversion\":\"1.0\",...}",
+                    "note": "Sign the exact delivered bytes; CloudEvent time is business time, not freshness time.",
+                },
                 "headers": [
                     "X-Langboard-Webhook-Id",
                     "X-Langboard-Webhook-Timestamp",
