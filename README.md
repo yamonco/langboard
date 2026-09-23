@@ -101,6 +101,10 @@ Langboard's mission is to enable enterprises to harness AI efficiency without sa
 - Delivery uses bounded timeouts and retries. Consumers must therefore support
   at-least-once delivery.
 - The live event schemas and signing headers are documented at `/schema/webhook`.
+- Opt-in execution events use a CloudEvents 1.0 structured body. Their `source` and
+  `subject` carry project and card identity; `data` contains execution metadata.
+  The CloudEvent `time` records the work transition. Verify freshness using
+  `X-Langboard-Webhook-Timestamp`, including when retrying an older event.
 
 ---
 

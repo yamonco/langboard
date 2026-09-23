@@ -164,22 +164,21 @@ def signed_request(
 ) -> tuple[bytes, dict[str, str]]:
     """Serialize one canonical payload and add optional HMAC headers."""
 
-    payload = {
-        "schema_version": model.schema_version,
-        "event_id": model.event_id,
-        "occurred_at": model.occurred_at,
-        "event": model.event,
-        "data": minimal_event_data(model.data, event=model.event),
-    }
     if model.event in WORK_EXECUTION_EVENTS:
-        payload.update(
-            cloudevents_fields(
-                model.event,
-                model.event_id,
-                model.occurred_at,
-                ExecutionEventData.model_validate(model.data),
-            )
+        payload = cloudevents_fields(
+            model.event,
+            model.event_id,
+            model.occurred_at,
+            ExecutionEventData.model_validate(model.data),
         )
+    else:
+        payload = {
+            "schema_version": model.schema_version,
+            "event_id": model.event_id,
+            "occurred_at": model.occurred_at,
+            "event": model.event,
+            "data": minimal_event_data(model.data, event=model.event),
+        }
     body = json_dumps(
         payload,
         ensure_ascii=False,
