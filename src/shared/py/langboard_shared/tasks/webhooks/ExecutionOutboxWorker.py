@@ -1,14 +1,10 @@
-"""Wake on PostgreSQL NOTIFY and forward committed work.ready rows to Celery."""
+"""Drain committed work.ready rows into the existing Celery delivery path."""
 
 import argparse
-import logging
 from datetime import timezone
-from time import sleep
 from uuid import UUID
-import psycopg
 from sqlalchemy import column, func, select, table, update
 from ...core.db import DbSession
-from ...core.db.DbEngine import DbEngine
 from ...core.types import SnowflakeID
 from ...domain.models import Card
 from ...helpers import InfraHelper
@@ -17,7 +13,6 @@ from .utils import WebhookModel
 from .WebhookTask import webhook_task
 
 
-logger = logging.getLogger(__name__)
 OUTBOX = table(
     "execution_outbox",
     column("id"),
@@ -114,13 +109,10 @@ def reconcile(project_uid: str) -> int:
         db.exec(
             update(OUTBOX)
             .where(
-                (OUTBOX.c.project_id == project_id)
-                & (OUTBOX.c.state == "blocked")
-                & OUTBOX.c.payload_json.is_not(None)
+                (OUTBOX.c.project_id == project_id) & (OUTBOX.c.state == "blocked") & OUTBOX.c.payload_json.is_not(None)
             )
             .values(state="pending", last_error=None, processed_at=None)
         )
-        db.exec(select(func.pg_notify("langboard_execution_outbox", "reconcile")))
     return len(card_ids)
 
 
@@ -136,29 +128,12 @@ def diagnose(project_uid: str) -> list[tuple[str, str | None, int]]:
         ).all()
 
 
-def listen_forever() -> None:
-    # LISTEN is established before startup recovery, so no commit can be missed.
-    dsn = DbEngine.get_main_engine().url.render_as_string(hide_password=False).replace("+psycopg", "")
-    with psycopg.connect(dsn, autocommit=True) as connection:
-        connection.execute("LISTEN langboard_execution_outbox")
-        while True:
-            try:
-                drain_pending()
-            except Exception as error:
-                logger.exception("Outbox drain failed: %s", type(error).__name__)
-                sleep(5)
-            for _ in connection.notifies(timeout=30):
-                break
-
-
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("command", choices=["listen", "drain", "reconcile", "diagnose"])
+    parser.add_argument("command", choices=["drain", "reconcile", "diagnose"])
     parser.add_argument("project_uid", nargs="?")
     args = parser.parse_args()
-    if args.command == "listen":
-        listen_forever()
-    elif args.command == "drain":
+    if args.command == "drain":
         print(f"processed={drain_pending()}")
     elif args.command == "diagnose":
         if not args.project_uid:
