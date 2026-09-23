@@ -112,6 +112,13 @@ services:
       disable: true
     stop_grace_period: 16m
 
+  executionoutbox:
+    <<: *api
+    container_name: ${PROJECT_NAME}_executionoutbox
+    command: uv run --no-sync python -m langboard_shared.tasks.webhooks.ExecutionOutboxWorker listen
+    healthcheck:
+      disable: true
+
   socket:
     init: true
     container_name: ${PROJECT_NAME}_socket
