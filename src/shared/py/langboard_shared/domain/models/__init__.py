@@ -54,6 +54,7 @@ from .ProjectColumnBotLog import ProjectColumnBotLog
 from .ProjectColumnBotSchedule import ProjectColumnBotSchedule
 from .ProjectColumnBotScope import ProjectColumnBotScope
 from .ProjectEmailNotificationPolicy import ProjectEmailNotificationPolicy, ProjectEmailNotificationRecipient
+from .ProjectExecutionBinding import ProjectExecutionBinding
 from .ProjectInvitation import ProjectInvitation
 from .ProjectLabel import ProjectLabel
 from .ProjectRole import ProjectRole
@@ -129,6 +130,7 @@ __all__ = [
     "Project",
     "ProjectActivity",
     "ProjectEmailNotificationPolicy",
+    "ProjectExecutionBinding",
     "ProjectEmailNotificationRecipient",
     "ProjectAssignedInternalBot",
     "ProjectAssignedUser",
