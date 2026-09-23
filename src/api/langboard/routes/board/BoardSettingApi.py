@@ -37,6 +37,7 @@ from langboard_shared.domain.services import DomainService
 from langboard_shared.filter import RoleFilter
 from langboard_shared.helpers import InfraHelper
 from langboard_shared.security import Auth, RoleFinder
+from langboard_shared.tasks.webhooks.ExecutionBindingPolicy import binding_invalid_reasons
 from langboard_shared.tasks.webhooks.utils import WORK_EXECUTION_EVENTS
 from .forms import (
     ChangeInternalBotForm,
@@ -88,6 +89,8 @@ def _validate_execution_binding(project: Project, form: UpdateProjectExecutionBi
     webhook = InfraHelper.get_by_id_like(WebhookSetting, form.webhook_uid)
     if webhook is None or not set(form.events) <= set(webhook.events or []):
         raise ValueError("Webhook must explicitly allow every execution event")
+    if not webhook.secret_id:
+        raise ValueError("Execution webhook needs a signing secret")
     if not set(form.events) <= WORK_EXECUTION_EVENTS:
         raise ValueError("Unknown execution event")
 
@@ -101,7 +104,14 @@ def _validate_execution_binding(project: Project, form: UpdateProjectExecutionBi
 @AuthFilter.add("user")
 def get_project_execution_binding(project_uid: str) -> JsonResponse:
     binding = _execution_binding(project_uid)
-    return JsonResponse(content={"binding": binding.api_response() if binding else None})
+    reasons = binding_invalid_reasons(binding, "io.langboard.work.ready.v1") if binding else []
+    return JsonResponse(content={
+        "binding": binding.api_response() if binding else None,
+        "binding_status": {
+            "state": "binding_invalid" if reasons else "valid" if binding else "unconfigured",
+            "reasons": reasons,
+        },
+    })
 
 
 @AppRouter.api.put(
