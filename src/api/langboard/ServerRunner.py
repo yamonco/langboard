@@ -7,10 +7,11 @@ def run():
     from langboard_shared.ai import BotScheduleHelper
 
     cron = BotScheduleHelper.utils.get_cron()
+    BotScheduleHelper.utils.remove_job(cron, "execution-outbox-recovery")
     BotScheduleHelper.utils.create_job(
         cron,
         "* * * * *",
-        "/app/.venv/bin/python -m langboard_shared.tasks.webhooks.ExecutionOutboxWorker drain",
+        "/app/scripts/run_execution_outbox_cron.sh",
         "execution-outbox-recovery",
     )
     BotScheduleHelper.utils.save_cron(cron)
