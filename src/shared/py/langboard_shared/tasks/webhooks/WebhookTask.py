@@ -14,6 +14,7 @@ from ...domain.models import WebhookSetting
 from ...helpers import InfraHelper
 from ...infrastructure.repositories import Repository
 from ...publishers import AppSettingPublisher
+from .ExecutionBindingPolicy import binding_for_project, binding_invalid_reasons
 from .utils import (
     WORK_EVENT_NAME,
     WORK_EXECUTION_EVENTS,
@@ -92,6 +93,16 @@ async def webhook_delivery_task(model: WebhookModel, webhook_uid: str) -> None:
 async def run_webhook(model: WebhookModel) -> None:
     """Schedule one delivery task for each endpoint that accepts the event."""
 
+    if model.event in WORK_EXECUTION_EVENTS:
+        data = ExecutionEventData.model_validate(model.data)
+        binding = binding_for_project(data.project_uid)
+        reasons = binding_invalid_reasons(binding, model.event)
+        if reasons:
+            Broker.logger.error("Execution binding invalid: project=%s reasons=%s", data.project_uid, reasons)
+            return
+        webhook_delivery_task(model, binding.webhook_uid)
+        return
+
     after_id: SnowflakeID | None = None
     while True:
         settings = _get_webhook_settings() if after_id is None else _get_webhook_settings(after_id)
@@ -119,6 +130,17 @@ async def deliver_webhook(model: WebhookModel, webhook_uid: str) -> None:
     setting = _get_webhook_setting(webhook_uid)
     if not setting or not _accepts_event(setting, model.event):
         return
+    if model.event in WORK_EXECUTION_EVENTS:
+        data = ExecutionEventData.model_validate(model.data)
+        binding = binding_for_project(data.project_uid)
+        reasons = binding_invalid_reasons(binding, model.event)
+        if reasons or binding.webhook_uid != webhook_uid:
+            Broker.logger.error(
+                "Execution binding invalid at delivery: project=%s reasons=%s",
+                data.project_uid,
+                reasons or ["webhook_mismatch"],
+            )
+            return
 
     try:
         secret = KeyVault.get_key(setting.secret_id) if setting.secret_id else None
