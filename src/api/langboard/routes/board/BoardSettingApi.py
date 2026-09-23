@@ -142,8 +142,19 @@ def update_project_execution_binding(
             db.insert(binding)
         binding.is_enabled = form.is_enabled
         binding.column_semantics = dict(form.column_semantics)
+        binding.column_semantic_ids = {
+            str(InfraHelper.get_by_id_like(ProjectColumn, uid).id): state
+            for uid, state in form.column_semantics.items()
+        } if form.is_enabled else {}
         binding.prerequisite_relationship_type_uid = form.prerequisite_relationship_type_uid
+        binding.prerequisite_relationship_type_id = (
+            InfraHelper.get_by_id_like(GlobalCardRelationshipType, form.prerequisite_relationship_type_uid).id
+            if form.is_enabled and form.prerequisite_relationship_type_uid else None
+        )
         binding.webhook_uid = form.webhook_uid
+        binding.webhook_id = (
+            InfraHelper.get_by_id_like(WebhookSetting, form.webhook_uid).id if form.is_enabled and form.webhook_uid else None
+        )
         binding.events = list(form.events)
         db.update(binding)
     return JsonResponse(content={"binding": binding.api_response()})

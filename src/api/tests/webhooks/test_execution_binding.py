@@ -56,24 +56,27 @@ def test_live_binding_rechecks_webhook_and_signing_secret(monkeypatch: pytest.Mo
         is_enabled=True,
         events=[event],
         webhook_uid="hook",
+        webhook_id=7,
         column_semantics={"ready": "ready", "done": "terminal"},
+        column_semantic_ids={"2": "ready", "3": "terminal"},
         prerequisite_relationship_type_uid="prerequisite",
+        prerequisite_relationship_type_id=8,
     )
     records = {
         (Project, 1): SimpleNamespace(id=1),
-        (ProjectColumn, "ready"): SimpleNamespace(project_id=1, is_archive=False, deleted_at=None),
-        (ProjectColumn, "done"): SimpleNamespace(project_id=1, is_archive=False, deleted_at=None),
-        (GlobalCardRelationshipType, "prerequisite"): object(),
-        (WebhookSetting, "hook"): SimpleNamespace(events=[event], secret_id="key"),
+        (ProjectColumn, "ready"): SimpleNamespace(id=2, project_id=1, is_archive=False, deleted_at=None),
+        (ProjectColumn, "done"): SimpleNamespace(id=3, project_id=1, is_archive=False, deleted_at=None),
+        (GlobalCardRelationshipType, "prerequisite"): SimpleNamespace(id=8),
+        (WebhookSetting, "hook"): SimpleNamespace(id=7, events=[event], secret_id="key"),
     }
     monkeypatch.setattr(ExecutionBindingPolicy.InfraHelper, "get_by_id_like", lambda model, uid: records.get((model, uid)))
     monkeypatch.setattr(ExecutionBindingPolicy.KeyVault, "get_key", lambda key: "secret")
     assert ExecutionBindingPolicy.binding_invalid_reasons(binding, event) == []
     records.pop((WebhookSetting, "hook"))
     assert "webhook_missing" in ExecutionBindingPolicy.binding_invalid_reasons(binding, event)
-    records[(WebhookSetting, "hook")] = SimpleNamespace(events=[], secret_id="key")
+    records[(WebhookSetting, "hook")] = SimpleNamespace(id=7, events=[], secret_id="key")
     assert "event_not_allowed" in ExecutionBindingPolicy.binding_invalid_reasons(binding, event)
-    records[(WebhookSetting, "hook")] = SimpleNamespace(events=[event], secret_id=None)
+    records[(WebhookSetting, "hook")] = SimpleNamespace(id=7, events=[event], secret_id=None)
     assert "signing_secret_missing" in ExecutionBindingPolicy.binding_invalid_reasons(binding, event)
 
 

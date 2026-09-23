@@ -1,4 +1,5 @@
 from contextlib import contextmanager
+from contextvars import ContextVar
 from enum import Enum
 from time import sleep
 from typing import Any, ClassVar, Dict, Generic, Iterable, Mapping, Optional, Sequence, TypeVar, Union, cast, overload
@@ -101,9 +102,29 @@ class DbSession:
         self.__session = session
         self.__readonly = readonly
 
+    _atomic_session: ClassVar[ContextVar["DbSession | None"]] = ContextVar("atomic_db_session", default=None)
+
+    @staticmethod
+    @contextmanager
+    def atomic():
+        """Share one write transaction across nested repository operations."""
+        if DbSession._atomic_session.get() is not None:
+            yield DbSession._atomic_session.get()
+            return
+        with DbSession.use(readonly=False) as db:
+            token = DbSession._atomic_session.set(db)
+            try:
+                yield db
+            finally:
+                DbSession._atomic_session.reset(token)
+
     @staticmethod
     @contextmanager
     def use(readonly: bool):
+        active = DbSession._atomic_session.get()
+        if active is not None:
+            yield active
+            return
         session = None
         db = None
         try:
@@ -366,6 +387,8 @@ class DbSession:
                     return self.__fetch_select_records(statement, self.__session, args, self.__readonly)
                 return self.__exec_select_with_new_session(statement, args, self.__readonly)
             except (SQLAlchemyError, IndexError, ValidationError) as e:
+                if DbSession._atomic_session.get() is not None:
+                    raise
                 last_error = e
                 if attempt < retry_attempts - 1:
                     _logger.warning(

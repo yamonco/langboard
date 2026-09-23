@@ -799,40 +799,41 @@ class CardService(BaseDomainService):
         if column.is_archive:
             return None
 
-        card = Card(
-            created_by_user_id=user_or_bot.id if isinstance(user_or_bot, User) else None,
-            created_by_bot_id=user_or_bot.id if isinstance(user_or_bot, Bot) else None,
-            project_id=project.id,
-            project_column_id=column.id,
-            title=title,
-            description=description or EditorContentModel(),
-            order=self.repo.card.get_next_order(column, {"project_id": project.id}),
-        )
-        card.last_change_seq = self.next_change_seq()
-        card.last_change_target_type = self.UNREAD_TARGET_CARD
-        card.last_change_at = SafeDateTime.now()
-        self.repo.card.insert(card)
+        with DbSession.atomic():
+            card = Card(
+                created_by_user_id=user_or_bot.id if isinstance(user_or_bot, User) else None,
+                created_by_bot_id=user_or_bot.id if isinstance(user_or_bot, Bot) else None,
+                project_id=project.id,
+                project_column_id=column.id,
+                title=title,
+                description=description or EditorContentModel(),
+                order=self.repo.card.get_next_order(column, {"project_id": project.id}),
+            )
+            card.last_change_seq = self.next_change_seq()
+            card.last_change_target_type = self.UNREAD_TARGET_CARD
+            card.last_change_at = SafeDateTime.now()
+            self.repo.card.insert(card)
 
-        users: list[User] = []
-        if assign_user_uids:
-            raw_users = self.repo.project_assigned_user.get_all_by_project(project, where_users_in=assign_user_uids)
-            for assign_user, project_assigned_user in raw_users:
-                card_assigned_user = CardAssignedUser(
-                    project_assigned_id=project_assigned_user.id,
-                    card_id=card.id,
-                    user_id=assign_user.id,
-                )
-                users.append(assign_user)
-                self.repo.card_assigned_user.insert(card_assigned_user)
+            users: list[User] = []
+            if assign_user_uids:
+                raw_users = self.repo.project_assigned_user.get_all_by_project(project, where_users_in=assign_user_uids)
+                for assign_user, project_assigned_user in raw_users:
+                    card_assigned_user = CardAssignedUser(
+                        project_assigned_id=project_assigned_user.id,
+                        card_id=card.id,
+                        user_id=assign_user.id,
+                    )
+                    users.append(assign_user)
+                    self.repo.card_assigned_user.insert(card_assigned_user)
 
-        is_check_card = not card.description.content.strip()
-        if is_check_card:
-            self.ensure_completion_checklist(card)
+            is_check_card = not card.description.content.strip()
+            if is_check_card:
+                self.ensure_completion_checklist(card)
 
-        api_card = card.board_api_response(
-            0, [user.get_uid() for user in users], [], [], completed=False, is_check_card=is_check_card
-        )
-        model = {"card": api_card}
+            api_card = card.board_api_response(
+                0, [user.get_uid() for user in users], [], [], completed=False, is_check_card=is_check_card
+            )
+            model = {"card": api_card}
 
         CardPublisher.created(project, column, model)
         CardActivityTask.card_created(user_or_bot, project, card)
@@ -1212,19 +1213,20 @@ class CardService(BaseDomainService):
             else:
                 card.archived_at = None
 
-        old_order = card.order
-        card.order = order
-        self.repo.card.update_row_order(card, old_column, old_order, order, new_column)
-        self.repo.card.update(card)
+        with DbSession.atomic():
+            old_order = card.order
+            card.order = order
+            self.repo.card.update_row_order(card, old_column, old_order, order, new_column)
+            self.repo.card.update(card)
+
+            if new_column is not None:
+                card.last_change_seq = self.next_change_seq()
+                card.last_change_target_type = self.UNREAD_TARGET_CARD
+                card.last_change_target_id = None
+                card.last_change_at = SafeDateTime.now()
+                self.repo.card.update(card)
 
         CardPublisher.order_changed(project, card, old_column, cast(ProjectColumn, new_column))
-
-        if new_column is not None:
-            card.last_change_seq = self.next_change_seq()
-            card.last_change_target_type = self.UNREAD_TARGET_CARD
-            card.last_change_target_id = None
-            card.last_change_at = SafeDateTime.now()
-            self.repo.card.update(card)
 
         if new_column and not card.is_linked_resource:
             CardBotTask.enqueue_card_moved_webhook(

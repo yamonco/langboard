@@ -1,0 +1,78 @@
+import os
+from contextlib import contextmanager
+from datetime import datetime, timezone
+from types import SimpleNamespace
+from uuid import UUID
+import pytest
+from sqlalchemy import create_engine, text
+
+
+os.environ.setdefault("PROJECT_NAME", "langboard")
+
+from langboard_shared.core.db import DbSession  # noqa: E402
+from langboard_shared.core.db.DbEngine import DbEngine  # noqa: E402
+from langboard_shared.tasks.webhooks import ExecutionOutboxWorker as worker  # noqa: E402
+
+
+def test_nested_writes_commit_and_rollback_as_one_transaction(monkeypatch: pytest.MonkeyPatch) -> None:
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE atomic_test (value integer)"))
+    monkeypatch.setattr(DbEngine, "get_main_engine", lambda: engine)
+    with DbSession.atomic() as outer:
+        with DbSession.use(readonly=False) as nested:
+            assert nested is outer
+            nested.exec(text("INSERT INTO atomic_test VALUES (1)"))
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT value FROM atomic_test")).scalar() == 1
+    with pytest.raises(ValueError):
+        with DbSession.atomic():
+            with DbSession.use(readonly=False) as nested:
+                nested.exec(text("INSERT INTO atomic_test VALUES (2)"))
+            raise ValueError("rollback")
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT count(*) FROM atomic_test")).scalar() == 1
+
+
+def test_committed_outbox_row_is_published_once_per_claim(monkeypatch: pytest.MonkeyPatch) -> None:
+    event_id = UUID("11111111-1111-4111-8111-111111111111")
+    occurred_at = datetime(2026, 9, 24, tzinfo=timezone.utc)
+    responses = [
+        (event_id, 1, 2, 3, occurred_at),
+        SimpleNamespace(id=2, project_id=1),
+        (True, 3),
+    ]
+
+    class FakeDb:
+        def exec(self, statement):
+            return SimpleNamespace(first=lambda: responses.pop(0))
+
+    @contextmanager
+    def fake_atomic():
+        yield FakeDb()
+
+    queued = []
+    states = []
+    monkeypatch.setattr(worker.DbSession, "atomic", fake_atomic)
+    monkeypatch.setattr(worker, "binding_for_project", lambda uid: object())
+    monkeypatch.setattr(worker, "binding_invalid_reasons", lambda binding, event: [])
+    monkeypatch.setattr(
+        worker,
+        "_snapshot",
+        lambda db, card, generation: {
+            "project_uid": "p",
+            "card_uid": "c",
+            "execution_generation": generation,
+            "title": "Task",
+            "card_url": "/board/p/c",
+            "source_revision": "r",
+        },
+    )
+    monkeypatch.setattr(worker, "webhook_task", lambda model: queued.append(model))
+    monkeypatch.setattr(worker, "_mark", lambda db, uid, state, error=None: states.append(state))
+
+    assert worker.drain_one()
+    assert len(queued) == 1
+    assert queued[0].event_id == str(event_id)
+    assert queued[0].data["execution_generation"] == 3
+    assert states == ["scheduled"]

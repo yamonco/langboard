@@ -42,10 +42,14 @@ def binding_invalid_reasons(binding: ProjectExecutionBinding | None, event: str)
         return ["project_missing"]
     if event not in (binding.events or []):
         reasons.append("event_not_bound")
+    if not binding.column_semantic_ids or not binding.prerequisite_relationship_type_id or not binding.webhook_id:
+        reasons.append("internal_binding_incomplete")
     webhook = _lookup(WebhookSetting, binding.webhook_uid) if binding.webhook_uid else None
     if webhook is None:
         reasons.append("webhook_missing")
     else:
+        if webhook.id != binding.webhook_id:
+            reasons.append("internal_binding_mismatch")
         if getattr(webhook, "is_enabled", True) is False:
             reasons.append("webhook_disabled")
         if event not in (webhook.events or []):
@@ -66,6 +70,9 @@ def binding_invalid_reasons(binding: ProjectExecutionBinding | None, event: str)
         if column is None or column.project_id != project.id or column.is_archive or column.deleted_at:
             reasons.append("column_invalid")
             break
+        if binding.column_semantic_ids.get(str(column.id)) != semantics[column_uid]:
+            reasons.append("internal_binding_mismatch")
+            break
     relation = (
         _lookup(GlobalCardRelationshipType, binding.prerequisite_relationship_type_uid)
         if binding.prerequisite_relationship_type_uid
@@ -73,4 +80,6 @@ def binding_invalid_reasons(binding: ProjectExecutionBinding | None, event: str)
     )
     if relation is None:
         reasons.append("relationship_type_invalid")
+    elif relation.id != binding.prerequisite_relationship_type_id:
+        reasons.append("internal_binding_mismatch")
     return reasons
