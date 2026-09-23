@@ -72,6 +72,8 @@ def test_work_event_schema_describes_cloudevents_and_array_payload() -> None:
     assert parsed["properties"]["specversion"]["enum"] == ["1.0"]
     assert parsed["properties"]["data"]["properties"]["labels"]["type"] == "array"
     assert parsed["properties"]["data"]["properties"]["execution_generation"]["type"] == "integer"
+    assert parsed["properties"]["data"]["properties"]["source_revision"]["format"] == "date-time"
+    assert "Card.updated_at" in parsed["properties"]["data"]["properties"]["source_revision"]["description"]
     assert set(parsed["properties"]) == {"specversion", "id", "source", "subject", "type", "time", "data"}
     assert "project_uid" not in parsed["properties"]["data"]["properties"]
 
