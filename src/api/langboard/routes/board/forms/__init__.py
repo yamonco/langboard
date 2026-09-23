@@ -1,9 +1,9 @@
 from .Attachment import ChangeAttachmentNameForm
 from .Card import (
     CardifySelectionForm,
-    CopySelectionToWikiForm,
     ChangeCardDetailsForm,
     ConvertCheckboxesForm,
+    CopySelectionToWikiForm,
     CreateCardForm,
     PatchCardGraphForm,
     SetCardCompletedForm,
@@ -32,6 +32,7 @@ from .Project import (
     UpdateProjectChatSessionForm,
     UpdateProjectDetailsForm,
     UpdateProjectEmailNotificationPolicyForm,
+    UpdateProjectExecutionBindingForm,
     UpdateRolesForm,
 )
 from .ProjectLabel import CreateProjectLabelForm, UpdateProjectLabelDetailsForm
@@ -61,6 +62,7 @@ __all__ = [
     "InviteProjectMemberForm",
     "UpdateProjectDetailsForm",
     "UpdateProjectEmailNotificationPolicyForm",
+    "UpdateProjectExecutionBindingForm",
     "UpdateRolesForm",
     "CreateProjectLabelForm",
     "UpdateProjectLabelDetailsForm",
