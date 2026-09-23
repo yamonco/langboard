@@ -15,20 +15,30 @@ defmodule LangboardSocket.KafkaOffsetClient do
          {:ok, partitions} <- metadata_partitions(metadata, topic),
          {:ok, responses} <- :brod.fetch_committed_offsets(hosts, connection_config, group_id),
          {:ok, committed} <- committed_offsets(responses, topic, partitions),
-         {:ok, latest} <- latest_offsets(hosts, connection_config, topic, partitions) do
-      {:ok, total_lag(partitions, committed, latest)}
+         {:ok, earliest} <- source_offsets(hosts, connection_config, topic, partitions, :earliest),
+         {:ok, latest} <- source_offsets(hosts, connection_config, topic, partitions, :latest),
+         {:ok, lag} <- total_lag(partitions, committed, earliest, latest) do
+      {:ok, lag}
     else
       _error -> {:error, :unavailable}
     end
   end
 
   @doc false
-  def total_lag(partitions, committed, latest) do
-    partitions
-    |> Enum.map(fn partition ->
-      max(Map.fetch!(latest, partition) - Map.fetch!(committed, partition), 0)
-    end)
-    |> Enum.sum()
+  def total_lag(partitions, committed, earliest, latest) do
+    if Enum.all?(partitions, fn partition ->
+         Map.fetch!(earliest, partition) <= Map.fetch!(committed, partition) and
+           Map.fetch!(committed, partition) <= Map.fetch!(latest, partition)
+       end) do
+      {:ok,
+       Enum.sum(
+         Enum.map(partitions, fn partition ->
+           Map.fetch!(latest, partition) - Map.fetch!(committed, partition)
+         end)
+       )}
+    else
+      {:error, :offset_out_of_range}
+    end
   end
 
   defp parse_hosts(hosts), do: BroadwayKafka.ProducerOptions.validate_hosts(hosts)
@@ -61,14 +71,14 @@ defmodule LangboardSocket.KafkaOffsetClient do
     end
   end
 
-  defp latest_offsets(hosts, connection_config, topic, partitions) do
+  defp source_offsets(hosts, connection_config, topic, partitions, position) do
     Enum.reduce_while(partitions, {:ok, %{}}, fn partition, {:ok, offsets} ->
-      case :brod.resolve_offset(hosts, topic, partition, :latest, connection_config) do
+      case :brod.resolve_offset(hosts, topic, partition, position, connection_config) do
         {:ok, offset} when is_integer(offset) and offset >= 0 ->
           {:cont, {:ok, Map.put(offsets, partition, offset)}}
 
         _error ->
-          {:halt, {:error, :latest_offset_unavailable}}
+          {:halt, {:error, :source_offset_unavailable}}
       end
     end)
   end

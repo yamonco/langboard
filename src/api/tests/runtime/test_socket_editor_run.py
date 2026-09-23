@@ -475,6 +475,13 @@ def test_editor_resume_result_publishes_only_newly_persisted_approvals(monkeypat
     updated.assert_not_called()
     requested_publish.assert_not_called()
 
+    service.internal_bot_run.complete_editor_resume.return_value = None
+    with pytest.raises(ApiException.Conflict_409):
+        SocketAuthApi.complete_socket_editor_resume(make_request(bearer=None), run.get_uid(), form, service)
+    updated.assert_not_called()
+    requested_publish.assert_not_called()
+
+    service.internal_bot_run.complete_editor_resume.return_value = (run, resolved, requested, True)
     response = SocketAuthApi.complete_socket_editor_resume(make_request(bearer=None), run.get_uid(), form, service)
     assert orjson.loads(response.body)["status"] == "resuming"
     updated.assert_called_once_with(service.project.get_by_id_like.return_value, {"uid": "resolved"})

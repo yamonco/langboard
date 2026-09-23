@@ -881,13 +881,19 @@ async function runApproval(owner, peer, ownerEditor, credentials) {
       );
       await owner.reload({ waitUntil: "domcontentloaded" });
       await owner
-        .getByText("Human input required", { exact: true })
+        .getByText("Outcome unknown", { exact: true })
+        .waitFor({ timeout: 30000 });
+      await owner
+        .getByText(
+          "The action may have completed, but its result could not be confirmed. Check the affected data before starting another action.",
+          { exact: true },
+        )
         .waitFor({ timeout: 30000 });
       assert.equal(
         await owner
           .getByRole("button", { name: "Approve", exact: true })
-          .isDisabled(),
-        true,
+          .count(),
+        0,
       );
       const graphLogs = await exec("docker", ["logs", graphContainer], {
         timeout: 15000,
@@ -918,28 +924,23 @@ async function runApproval(owner, peer, ownerEditor, credentials) {
     failoverStage === "socket-reconnect"
       ? await (async () => {
           await owner.waitForFunction(
-            (id) =>
+            ({ id, approval }) =>
               window.__editorAIFrames.some(
                 (frame) =>
                   frame.direction === "in" &&
-                  frame.event === "board:editor:ai:status:result" &&
-                  frame.data.task_id === id &&
-                  frame.data.status === "completed",
+                  ((frame.event === "board:editor:ai:status:result" &&
+                    frame.data.task_id === id &&
+                    frame.data.status === "completed") ||
+                    (frame.event === "board:graph:approval:updated" &&
+                      frame.data.approval?.uid === approval &&
+                      frame.data.approval.status === "approved")),
               ),
-            taskID,
+            { id: taskID, approval: approvalUID },
             { timeout: 120000 },
           );
-          return owner.evaluate(
-            (id) =>
-              window.__editorAIFrames.findLast(
-                (frame) =>
-                  frame.direction === "in" &&
-                  frame.event === "board:editor:ai:status:result" &&
-                  frame.data.task_id === id &&
-                  frame.data.status === "completed",
-              ).data,
-            taskID,
-          );
+          // The persisted approval event can unmount the banner before its next status poll.
+          await waitForRunStatus(taskID, "InternalBotRunStatus.Completed");
+          return { status: "completed" };
         })()
       : await (async () => {
           await owner.waitForFunction(

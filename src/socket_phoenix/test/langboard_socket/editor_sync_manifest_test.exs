@@ -143,6 +143,30 @@ defmodule LangboardSocket.EditorSyncManifestTest do
              manifest["opaque_documents"]
   end
 
+  test "rejects documents larger than the Phoenix persistence limit", context do
+    name = "card:fixture:oversized"
+    source_path = EditorSyncStorage.path(name, context.source)
+    destination_path = EditorSyncStorage.path(name, context.destination)
+    max_bytes = Application.fetch_env!(:langboard_socket, :editor_sync_max_document_bytes)
+    assert :ok = File.write(source_path, :binary.copy(<<0>>, max_bytes + 1))
+
+    assert {:ok, manifest} =
+             EditorSyncManifest.audit(context.source, context.destination, [name])
+
+    refute manifest["verified"]
+    assert [%{"restore_status" => "oversized_source"}] = manifest["documents"]
+
+    valid = Yex.encode_state_as_update!(Yex.Doc.new())
+    assert :ok = File.write(source_path, valid)
+    assert :ok = File.write(destination_path, :binary.copy(<<0>>, max_bytes + 1))
+
+    assert {:ok, manifest} =
+             EditorSyncManifest.audit(context.source, context.destination, [name])
+
+    refute manifest["verified"]
+    assert [%{"restore_status" => "oversized_destination"}] = manifest["documents"]
+  end
+
   test "rejects incomplete input rather than reporting a clean migration", context do
     missing = Path.join(Path.dirname(context.source), "missing")
 

@@ -8,7 +8,8 @@ from langboard.commands.ValidatePhoenixCutoverEvidenceCommand import EvidenceVal
 
 
 CHECKSUM = "a" * 64
-FILE_NAME = f"{'b' * 64}.ydoc"
+DOCUMENT_NAME = "card:known:description"
+FILE_NAME = f"{hashlib.sha256(DOCUMENT_NAME.encode('utf-8')).hexdigest()}.ydoc"
 RUNTIME_IMAGE = f"sha256:{CHECKSUM}"
 
 
@@ -26,7 +27,7 @@ def _manifest() -> dict[str, Any]:
         "verified": True,
         "documents": [
             {
-                "document_name": "card:known:description",
+                "document_name": DOCUMENT_NAME,
                 "file_name": FILE_NAME,
                 "source_checksum": CHECKSUM,
                 "destination_checksum": CHECKSUM,
@@ -162,6 +163,33 @@ def test_accepts_verified_restore_and_24_hour_otel_soak(tmp_path: Path) -> None:
     assert result == (1, 24 * 60 * 60)
 
 
+def test_rejects_a_single_connection_spike_during_the_soak(tmp_path: Path) -> None:
+    soak, samples = _soak()
+    for sample in samples[1:-1]:
+        sample["sockets"] = 0
+
+    with pytest.raises(EvidenceValidationError):
+        validate(
+            _write_json(tmp_path / "manifest.json", _manifest()),
+            _write_soak(tmp_path, soak, samples),
+            RUNTIME_IMAGE,
+        )
+
+
+def test_rejects_collector_counters_without_soak_delivery(tmp_path: Path) -> None:
+    soak, samples = _soak()
+    for sample in samples:
+        sample["accepted_spans"] = 100
+        sample["accepted_metric_points"] = 100
+
+    with pytest.raises(EvidenceValidationError):
+        validate(
+            _write_json(tmp_path / "manifest.json", _manifest()),
+            _write_soak(tmp_path, soak, samples),
+            RUNTIME_IMAGE,
+        )
+
+
 @pytest.mark.parametrize(
     ("field", "value"),
     (
@@ -176,6 +204,20 @@ def test_rejects_incomplete_editor_restore(tmp_path: Path, field: str, value: ob
     soak, samples = _soak()
 
     with pytest.raises(EvidenceValidationError):
+        validate(
+            _write_json(tmp_path / "manifest.json", manifest),
+            _write_soak(tmp_path, soak, samples),
+            RUNTIME_IMAGE,
+        )
+
+
+@pytest.mark.parametrize("document_name", ["", "card:other:description", "a" * 513])
+def test_rejects_editor_restore_with_invalid_document_mapping(tmp_path: Path, document_name: str) -> None:
+    manifest = _manifest()
+    manifest["documents"][0]["document_name"] = document_name
+    soak, samples = _soak()
+
+    with pytest.raises(EvidenceValidationError, match="document_name|file name"):
         validate(
             _write_json(tmp_path / "manifest.json", manifest),
             _write_soak(tmp_path, soak, samples),

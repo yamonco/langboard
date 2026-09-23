@@ -57,7 +57,7 @@ defmodule LangboardSocket.KafkaLagMonitor do
 
       _error ->
         emit_measurement(0, false)
-        {{:error, :unavailable}, state}
+        {{:error, :unavailable}, %{state | ready?: false}}
     end
   end
 

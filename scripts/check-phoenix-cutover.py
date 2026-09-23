@@ -12,20 +12,6 @@ from langboard_shared.Env import Env
 from langboard_shared.tasks.notifications.ProjectEmailNotificationQueue import PROJECT_EMAIL_FANOUT_TASK
 
 
-CONSUMER_GROUPS = (
-    (
-        "Node fanout",
-        "BROADCAST_NODE_FANOUT_CONSUMER_GROUP",
-        "socket_publish",
-        "socket-node-fanout",
-    ),
-    (
-        "Node notification side effect",
-        "BROADCAST_NODE_SIDE_EFFECT_CONSUMER_GROUP",
-        "notification_publish",
-        "notification-node-owner",
-    ),
-)
 REQUIRED_CELERY_TASKS = (
     LANGFLOW_BOARD_CHAT_ATTACHMENT_CLEANUP_TASK,
     LANGFLOW_BOARD_CHAT_ATTACHMENT_RECONCILIATION_TASK,
@@ -39,6 +25,20 @@ def check_required_celery_tasks() -> None:
     print(f"Required Celery tasks are registered on {len(workers)} worker(s)")
 
 
+def check_consumer_group_stopped(
+    admin: KafkaAdminClient,
+    label: str,
+    environment_key: str,
+    default_suffix: str,
+) -> str:
+    group_id = os.getenv(environment_key) or f"{Env.PROJECT_NAME}-{default_suffix}"
+    description = admin.describe_consumer_groups([group_id])[0]
+    if description.state not in {"Dead", "Empty"}:
+        raise RuntimeError(f"{label} consumer group is still active: {group_id} ({description.state})")
+    print(f"{label} consumer group is stopped: {group_id}")
+    return group_id
+
+
 def check_consumer_group_drained(
     admin: KafkaAdminClient,
     consumer: KafkaConsumer,
@@ -47,10 +47,7 @@ def check_consumer_group_drained(
     topic: str,
     default_suffix: str,
 ) -> None:
-    group_id = os.getenv(environment_key) or f"{Env.PROJECT_NAME}-{default_suffix}"
-    description = admin.describe_consumer_groups([group_id])[0]
-    if description.state not in {"Dead", "Empty"}:
-        raise RuntimeError(f"{label} consumer group is still active: {group_id} ({description.state})")
+    group_id = check_consumer_group_stopped(admin, label, environment_key, default_suffix)
 
     partitions = consumer.partitions_for_topic(topic)
     if not partitions:
@@ -82,8 +79,15 @@ def check_legacy_consumer_groups() -> None:
     admin = KafkaAdminClient(bootstrap_servers=Env.BROADCAST_URLS)
     consumer = KafkaConsumer(bootstrap_servers=Env.BROADCAST_URLS)
     try:
-        for group in CONSUMER_GROUPS:
-            check_consumer_group_drained(admin, consumer, *group)
+        check_consumer_group_stopped(admin, "Node fanout", "BROADCAST_NODE_FANOUT_CONSUMER_GROUP", "socket-node-fanout")
+        check_consumer_group_drained(
+            admin,
+            consumer,
+            "Node notification side effect",
+            "BROADCAST_NODE_SIDE_EFFECT_CONSUMER_GROUP",
+            "notification_publish",
+            "notification-node-owner",
+        )
     finally:
         consumer.close()
         admin.close()

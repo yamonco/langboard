@@ -1,4 +1,4 @@
-.PHONY: help init format lint start_docker stop_docker rebuild_docker update_docker clean_docker_images clean_docker_build_cache bootstrap_socket_phoenix_group validate_socket_phoenix_cutover_evidence check_socket_phoenix_cutover check_socket_phoenix_otel record_socket_phoenix_otel_soak prepare_socket_phoenix_otel prepare_socket_phoenix_owner start_socket_phoenix_canary stop_socket_phoenix_canary test_broadcast_kafka test_socket_phoenix_kafka test_socket_phoenix_dlq_recovery test_socket_phoenix_cluster test_socket_phoenix_browser_cluster test_socket_phoenix_browser_attachment test_socket_phoenix_browser_attachment_process_loss test_socket_phoenix_browser_reconnect_stability test_socket_phoenix_editor_ai_browser test_socket_phoenix_editor_ai_approve_browser test_socket_phoenix_editor_ai_reject_browser test_socket_phoenix_editor_ai_copilot_browser test_socket_phoenix_editor_ai_revocation_browser test_socket_phoenix_editor_ai_cancel_browser test_socket_phoenix_editor_ai_socket_reconnect_browser test_socket_phoenix_editor_ai_worker_loss_browser test_socket_phoenix_editor_ai_node_loss_browser test_socket_phoenix_editor_sync_reconnect_browser test_socket_phoenix_editor_cluster test_socket_protocol_parity
+.PHONY: help init format lint start_docker stop_docker rebuild_docker update_docker clean_docker_images clean_docker_build_cache bootstrap_socket_phoenix_group require_socket_phoenix_group validate_socket_phoenix_cutover_evidence check_socket_phoenix_cutover check_socket_phoenix_otel record_socket_phoenix_otel_soak prepare_socket_phoenix_otel prepare_socket_phoenix_owner start_socket_phoenix_canary stop_socket_phoenix_canary test_broadcast_kafka test_socket_phoenix_kafka test_socket_phoenix_dlq_recovery test_socket_phoenix_cluster test_socket_phoenix_browser_cluster test_socket_phoenix_browser_attachment test_socket_phoenix_browser_attachment_process_loss test_socket_phoenix_browser_reconnect_stability test_socket_phoenix_editor_ai_browser test_socket_phoenix_editor_ai_approve_browser test_socket_phoenix_editor_ai_reject_browser test_socket_phoenix_editor_ai_copilot_browser test_socket_phoenix_editor_ai_revocation_browser test_socket_phoenix_editor_ai_cancel_browser test_socket_phoenix_editor_ai_socket_reconnect_browser test_socket_phoenix_editor_ai_worker_loss_browser test_socket_phoenix_editor_ai_node_loss_browser test_socket_phoenix_editor_sync_reconnect_browser test_socket_phoenix_editor_cluster test_socket_protocol_parity
 
 # Function to get compose args from script
 ifeq ($(ComSpec),)
@@ -170,6 +170,9 @@ dev_socket_phoenix: ## run the Phoenix socket migration runtime on port 5691
 
 test_socket_phoenix: ## verify the isolated Phoenix migration runtime and shared contract
 	uv run python scripts/test-phoenix-config.py "$(SHELL)"
+	uv run pytest -q scripts/test_phoenix_cutover.py
+	uv run ruff check scripts/test_phoenix_cutover.py
+	uv run ruff format --check scripts/bootstrap-phoenix-kafka-group.py scripts/check-phoenix-cutover.py scripts/test_phoenix_cutover.py
 	$(SHELL) -n scripts/test-phoenix-browser-cluster.sh
 	node --check scripts/test-phoenix-browser-ui.cjs
 	node --check scripts/test-phoenix-editor-ai-ui.cjs
@@ -245,6 +248,19 @@ bootstrap_socket_phoenix_group: ## initialize a new fanout group before starting
 		sh -lc 'cd /app && uv run --no-sync python -' \
 		< scripts/bootstrap-phoenix-kafka-group.py
 
+require_socket_phoenix_group: ## require retained fanout offsets before Phoenix ownership (GROUP_ID required)
+	@if [ -z "$(GROUP_ID)" ]; then \
+		echo "$(RED)GROUP_ID is required.$(NC)"; \
+		exit 1; \
+	fi
+	@project_name=$$(sed -n 's/^PROJECT_NAME=//p' .env | tail -n 1); \
+		docker exec \
+		--env PHOENIX_FANOUT_GROUP_ID="$(GROUP_ID)" \
+		--env PHOENIX_FANOUT_REQUIRE_EXISTING=1 \
+		-i "$${project_name}_api" \
+		sh -lc 'cd /app && uv run --no-sync python -' \
+		< scripts/bootstrap-phoenix-kafka-group.py
+
 validate_socket_phoenix_cutover_evidence: ## verify restore, soak, and deployment image evidence
 	@project_name=$$(sed -n 's/^PROJECT_NAME=//p' .env | tail -n 1); \
 	if [ -z "$$project_name" ]; then \
@@ -311,7 +327,7 @@ prepare_socket_phoenix_otel: ## pull, verify, and tag the pinned OTel Collector 
 		exit 1; \
 	fi
 
-prepare_socket_phoenix_owner: ## validate and initialize Phoenix ownership before starting Docker
+prepare_socket_phoenix_owner: ## validate existing Phoenix ownership state before starting Docker
 	@owner="$${SOCKET_OWNER:-$$(sed -n 's/^SOCKET_OWNER=//p' .env | tail -n 1)}"; \
 	if [ "$$owner" != "phoenix" ]; then \
 		exit 0; \
@@ -327,7 +343,7 @@ prepare_socket_phoenix_owner: ## validate and initialize Phoenix ownership befor
 		exit 1; \
 	fi; \
 	$(MAKE) validate_socket_phoenix_cutover_evidence || exit $$?; \
-	$(MAKE) bootstrap_socket_phoenix_group GROUP_ID="$$group_id" || exit $$?; \
+	$(MAKE) require_socket_phoenix_group GROUP_ID="$$group_id" || exit $$?; \
 	$(MAKE) check_socket_phoenix_cutover
 
 start_socket_phoenix_canary: ## start isolated Phoenix fanout on localhost after offset bootstrap

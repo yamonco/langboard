@@ -104,10 +104,16 @@ the internal API capability endpoint from the shared realtime contract and opens
 the API reports the exact supported contract version. A missing route, invalid secret,
 malformed response, or mismatched version keeps `/health/ready` closed, so an incompatible
 API and Phoenix pair cannot accept new socket traffic during a rolling deployment.
-Owner preparation then initializes the new Phoenix Kafka group before checking that the
-legacy Node groups are stopped and drained. Phoenix readiness remains closed until the new
-group reaches zero lag once, so events published during the handoff are processed before
-client ingress opens instead of being skipped or replayed to connected clients.
+Owner preparation requires an existing Phoenix Kafka group with retained offsets for every
+source partition. It does not initialize a new group at the current end of the topic.
+The legacy Node fanout group must be stopped; the Node notification side-effect group must
+be stopped and drained. A running Node owner still holds both groups, so the ordinary
+`start_docker` target cannot itself perform a live Node-to-Phoenix ownership transition.
+Do not stop Node while ingress still points to it or claim a zero-downtime cutover from
+this preflight alone. A separately rehearsed route switch and accepted-work drain are
+required before changing the complete owner. Phoenix readiness stays closed until its
+group reaches zero lag, and closes again if Kafka offset inspection becomes unavailable
+or the committed offset leaves the retained source range.
 
 The Phoenix CI workflow also runs the TypeScript realtime contract, Yjs/Yex
 interoperability, and distributed editor recovery probes under `MIX_ENV=test`.

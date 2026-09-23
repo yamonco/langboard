@@ -60,8 +60,13 @@ def _validate_document(record: object, *, named: bool) -> str:
     file_name = record.get("file_name")
     if not isinstance(file_name, str) or SHA256_FILE_PATTERN.fullmatch(file_name) is None:
         raise EvidenceValidationError("Editor manifest contains an invalid document file name")
-    if named and not isinstance(record.get("document_name"), str):
-        raise EvidenceValidationError(f"Named editor document is missing document_name: {file_name}")
+    if named:
+        document_name = record.get("document_name")
+        if not isinstance(document_name, str) or not document_name or len(document_name.encode("utf-8")) > 512:
+            raise EvidenceValidationError(f"Named editor document has an invalid document_name: {file_name}")
+        expected_file_name = f"{hashlib.sha256(document_name.encode('utf-8')).hexdigest()}.ydoc"
+        if file_name != expected_file_name:
+            raise EvidenceValidationError(f"Named editor document does not match its file name: {file_name}")
     if record.get("restore_status") != "verified":
         raise EvidenceValidationError(f"Editor document is not verified: {file_name}")
     source_checksum = record.get("source_checksum")
@@ -378,15 +383,19 @@ def validate_otel_soak(report: dict[str, Any], report_path: Path, expected_runti
         or minimum_authorization_requests < 1
     ):
         raise EvidenceValidationError("OTel soak required activity profile is invalid")
-    representative_load = expected_observations["sockets_max"] >= target_sockets
+    representative_load = all(_sample_number(sample, "sockets") >= target_sockets for sample in samples)
     representative_load = representative_load and authorization_requests >= minimum_authorization_requests
     representative_load = representative_load and all(worker_maxima[kind] >= 1 for kind in required_workers)
     representative_load = representative_load and all(task_maxima[kind] >= 1 for kind in required_tasks)
     _assert_reported_number(load_profile, "observed_peak_sockets", expected_observations["sockets_max"])
 
     telemetry_healthy = all(_sample_number(sample, "scrape_up") == 1 for sample in samples)
-    telemetry_healthy = telemetry_healthy and expected_observations["accepted_spans_end"] >= 1
-    telemetry_healthy = telemetry_healthy and expected_observations["accepted_metric_points_end"] >= 1
+    telemetry_healthy = telemetry_healthy and _sample_number(samples[-1], "accepted_spans") > _sample_number(
+        samples[0], "accepted_spans"
+    )
+    telemetry_healthy = telemetry_healthy and _sample_number(samples[-1], "accepted_metric_points") > _sample_number(
+        samples[0], "accepted_metric_points"
+    )
     telemetry_healthy = telemetry_healthy and all(
         _sample_number(sample, field) == 0
         for sample in samples

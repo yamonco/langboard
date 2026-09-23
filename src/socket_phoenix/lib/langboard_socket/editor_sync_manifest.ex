@@ -102,7 +102,28 @@ defmodule LangboardSocket.EditorSyncManifest do
     do: is_binary(name) and name != "" and byte_size(name) <= 512 and String.valid?(name)
 
   defp inspect_document(path) do
+    max_bytes = Application.fetch_env!(:langboard_socket, :editor_sync_max_document_bytes)
+
+    case File.stat(path) do
+      {:ok, %{size: size}} when size > max_bytes ->
+        {:error, :oversized}
+
+      {:ok, _stat} ->
+        read_document(path, max_bytes)
+
+      {:error, :enoent} ->
+        {:error, :missing}
+
+      {:error, _reason} ->
+        {:error, :unreadable}
+    end
+  end
+
+  defp read_document(path, max_bytes) do
     case File.read(path) do
+      {:ok, bytes} when byte_size(bytes) > max_bytes ->
+        {:error, :oversized}
+
       {:ok, bytes} ->
         checksum = :crypto.hash(:sha256, bytes) |> Base.encode16(case: :lower)
 
@@ -114,9 +135,6 @@ defmodule LangboardSocket.EditorSyncManifest do
           end
 
         {:ok, byte_size(bytes), checksum, valid}
-
-      {:error, :enoent} ->
-        {:error, :missing}
 
       {:error, _reason} ->
         {:error, :unreadable}
@@ -131,9 +149,11 @@ defmodule LangboardSocket.EditorSyncManifest do
 
   defp restore_status({:error, :missing}, _destination), do: "missing_source"
   defp restore_status({:error, :unreadable}, _destination), do: "unreadable_source"
+  defp restore_status({:error, :oversized}, _destination), do: "oversized_source"
   defp restore_status({:ok, _size, _checksum, false}, _destination), do: "invalid_source"
   defp restore_status(_source, {:error, :missing}), do: "missing_destination"
   defp restore_status(_source, {:error, :unreadable}), do: "unreadable_destination"
+  defp restore_status(_source, {:error, :oversized}), do: "oversized_destination"
   defp restore_status(_source, {:ok, _size, _checksum, false}), do: "invalid_destination"
 
   defp restore_status(

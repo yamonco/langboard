@@ -40,6 +40,7 @@ proxy_log="local/socket-migration/phoenix-browser-proxy-${run_id}.log"
 probe_log="local/socket-migration/phoenix-browser-${run_id}.log"
 runtime_dir="${workspace_root}/local/socket-migration/browser-runtime-${run_id}"
 generated_ui_build=false
+keep_artifacts="${PHOENIX_BROWSER_KEEP_ARTIFACTS:-false}"
 configured_ui_build="${PHOENIX_BROWSER_UI_BUILD:-${BOARD_CHAT_UI_BUILD:-}}"
 if [ -n "$configured_ui_build" ]; then
     ui_build=$(uv run python -c 'import os, sys; print(os.path.abspath(sys.argv[1]))' "$configured_ui_build")
@@ -159,16 +160,20 @@ cleanup() {
     docker exec "${project_name}_api" rm -f \
         "$fixture_container_path" "$inspect_container_path" "$cutover_check_container_path" \
         >/dev/null 2>&1 || true
-    rm -f "$mode_file" "$signal_file" "$signal_file.ready" "$signal_file.disconnected" "$signal_file.recovered" \
-        "${signal_file}.ready."* "${signal_file}.disconnected."* "${signal_file}.recovered."* \
-        "$proxy_log" "$probe_log"
-    case "$runtime_dir" in
-        "${workspace_root}/local/socket-migration/browser-runtime-"*) rm -rf -- "$runtime_dir" ;;
-    esac
-    if [ "$generated_ui_build" = true ]; then
-        case "$ui_build" in
-            "${workspace_root}/local/socket-migration/ui-build-browser-"*) rm -rf -- "$ui_build" ;;
+    if [ "$keep_artifacts" != "true" ]; then
+        rm -f "$mode_file" "$signal_file" "$signal_file.ready" "$signal_file.disconnected" "$signal_file.recovered" \
+            "${signal_file}.ready."* "${signal_file}.disconnected."* "${signal_file}.recovered."* \
+            "$proxy_log" "$probe_log"
+        case "$runtime_dir" in
+            "${workspace_root}/local/socket-migration/browser-runtime-"*) rm -rf -- "$runtime_dir" ;;
         esac
+        if [ "$generated_ui_build" = true ]; then
+            case "$ui_build" in
+                "${workspace_root}/local/socket-migration/ui-build-browser-"*) rm -rf -- "$ui_build" ;;
+            esac
+        fi
+    else
+        echo "Browser probe artifacts preserved: $probe_log" >&2
     fi
 }
 
@@ -398,7 +403,11 @@ start_proxy() {
         > "$proxy_log" 2>&1 &
     proxy_pid=$!
     sleep 1
-    kill -0 "$proxy_pid" >/dev/null 2>&1
+    if ! kill -0 "$proxy_pid" >/dev/null 2>&1; then
+        echo "Browser failover proxy failed to start:" >&2
+        cat "$proxy_log" >&2
+        return 1
+    fi
 }
 
 start_proxy || exit 1

@@ -679,6 +679,7 @@ function EditorGraphApprovalBannerContent({
         refreshPending ||
         (durableRun && durableRunStatus !== EInternalBotRunStatus.AwaitingApproval);
     const canRefresh = durableRun && !shouldRecoverResume && (resumeFailed || durableRunStatus !== EInternalBotRunStatus.AwaitingApproval);
+    const outcomeUnknown = durableRun && durableRunStatus === EInternalBotRunStatus.Uncertain;
 
     return (
         <Flex
@@ -693,15 +694,22 @@ function EditorGraphApprovalBannerContent({
                 <Box className="min-w-0 flex-1">
                     <Flex items="center" gap="1.5" wrap={true}>
                         <Box textSize="sm" weight="semibold" className="break-words">
-                            {title}
+                            {outcomeUnknown ? t("bot.runStatuses.uncertain") : title}
                         </Box>
-                        <Badge variant="secondary" className="px-2 py-0 text-[11px]">
-                            {t("bot.Human input required")}
-                        </Badge>
+                        {!outcomeUnknown && (
+                            <Badge variant="secondary" className="px-2 py-0 text-[11px]">
+                                {t("bot.Human input required")}
+                            </Badge>
+                        )}
                     </Flex>
-                    {summary && (
+                    {summary && !outcomeUnknown && (
                         <Box textSize="xs" className="mt-1 line-clamp-3 break-words text-muted-foreground">
                             {summary}
+                        </Box>
+                    )}
+                    {outcomeUnknown && (
+                        <Box textSize="xs" className="mt-1 break-words text-muted-foreground">
+                            {t("bot.Run outcome unknown")}
                         </Box>
                     )}
                     {(resumePending || shouldRecoverResume) && (
@@ -728,31 +736,33 @@ function EditorGraphApprovalBannerContent({
                     )}
                 </Box>
             </Flex>
-            <Flex items="center" justify="end" gap="1.5">
-                <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-7 px-3"
-                    disabled={disabled}
-                    onClick={() =>
-                        durableRun ? resume(false) : rejectMutation.mutate({ project_uid: effectiveProjectUID, approval_uid: approvalUID })
-                    }
-                >
-                    {t("bot.Reject")}
-                </Button>
-                <Button
-                    type="button"
-                    size="sm"
-                    className="h-7 px-3"
-                    disabled={disabled}
-                    onClick={() =>
-                        durableRun ? resume(true) : approveMutation.mutate({ project_uid: effectiveProjectUID, approval_uid: approvalUID })
-                    }
-                >
-                    {t("bot.Approve")}
-                </Button>
-            </Flex>
+            {!outcomeUnknown && (
+                <Flex items="center" justify="end" gap="1.5">
+                    <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 px-3"
+                        disabled={disabled}
+                        onClick={() =>
+                            durableRun ? resume(false) : rejectMutation.mutate({ project_uid: effectiveProjectUID, approval_uid: approvalUID })
+                        }
+                    >
+                        {t("bot.Reject")}
+                    </Button>
+                    <Button
+                        type="button"
+                        size="sm"
+                        className="h-7 px-3"
+                        disabled={disabled}
+                        onClick={() =>
+                            durableRun ? resume(true) : approveMutation.mutate({ project_uid: effectiveProjectUID, approval_uid: approvalUID })
+                        }
+                    >
+                        {t("bot.Approve")}
+                    </Button>
+                </Flex>
+            )}
         </Flex>
     );
 }

@@ -86,6 +86,30 @@ def test_evaluates_samples_from_observed_metrics() -> None:
     assert result["rollback_triggers"] == []
 
 
+def test_rejects_a_single_connection_spike_as_representative_load() -> None:
+    samples = _samples()
+    samples[0]["sockets"] = 0
+    samples[-1]["sockets"] = 0
+
+    result = evaluate_samples(samples, _configuration())
+
+    assert result["observations"]["sockets_max"] == 2
+    assert result["representative_load"] is False
+    assert result["rollback_triggers"] == ["representative_load"]
+
+
+def test_rejects_collector_counters_without_soak_delivery() -> None:
+    samples = _samples()
+    for sample in samples:
+        sample["accepted_spans"] = 100
+        sample["accepted_metric_points"] = 100
+
+    result = evaluate_samples(samples, _configuration())
+
+    assert result["telemetry_healthy"] is False
+    assert result["rollback_triggers"] == ["telemetry_delivery"]
+
+
 def test_detects_runtime_restart_and_resource_growth() -> None:
     samples = _samples()
     samples[-1]["runtime_uptime_seconds"] = 1

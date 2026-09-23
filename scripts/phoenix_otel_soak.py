@@ -415,7 +415,7 @@ def evaluate_samples(samples: list[SoakSample], configuration: SoakConfiguration
     )
 
     load_profile = configuration.load_profile
-    representative_load = observations["sockets_max"] >= load_profile["target_sockets"]
+    representative_load = all(sample["sockets"] >= load_profile["target_sockets"] for sample in samples)
     representative_load = (
         representative_load and authorization_requests >= load_profile["minimum_editor_authorization_requests"]
     )
@@ -426,8 +426,10 @@ def evaluate_samples(samples: list[SoakSample], configuration: SoakConfiguration
         task_maxima[kind] >= 1 for kind in load_profile["required_task_activity"]
     )
     telemetry_healthy = all(sample["scrape_up"] == 1 for sample in samples)
-    telemetry_healthy = telemetry_healthy and observations["accepted_spans_end"] >= 1
-    telemetry_healthy = telemetry_healthy and observations["accepted_metric_points_end"] >= 1
+    telemetry_healthy = telemetry_healthy and samples[-1]["accepted_spans"] > samples[0]["accepted_spans"]
+    telemetry_healthy = (
+        telemetry_healthy and samples[-1]["accepted_metric_points"] > samples[0]["accepted_metric_points"]
+    )
     telemetry_healthy = telemetry_healthy and all(
         sample[field] == 0
         for sample in samples
