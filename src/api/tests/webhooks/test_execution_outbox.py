@@ -38,9 +38,11 @@ def test_committed_outbox_row_is_published_once_per_claim(monkeypatch: pytest.Mo
     event_id = UUID("11111111-1111-4111-8111-111111111111")
     occurred_at = datetime(2026, 9, 24, tzinfo=timezone.utc)
     responses = [
-        (event_id, 1, 2, 3, occurred_at),
-        SimpleNamespace(id=2, project_id=1),
-        (True, 3),
+        (
+            event_id, 1, 2, 3, occurred_at, "io.langboard.work.ready.v1",
+            {"title": "Task", "labels": ["backend"], "assignee_ids": [],
+             "direct_blocker_uids": [], "source_revision": "2026-09-24T00:00:00+00:00"},
+        ),
     ]
 
     class FakeDb:
@@ -56,18 +58,6 @@ def test_committed_outbox_row_is_published_once_per_claim(monkeypatch: pytest.Mo
     monkeypatch.setattr(worker.DbSession, "atomic", fake_atomic)
     monkeypatch.setattr(worker, "binding_for_project", lambda uid: object())
     monkeypatch.setattr(worker, "binding_invalid_reasons", lambda binding, event: [])
-    monkeypatch.setattr(
-        worker,
-        "_snapshot",
-        lambda db, card, generation: {
-            "project_uid": "p",
-            "card_uid": "c",
-            "execution_generation": generation,
-            "title": "Task",
-            "card_url": "/board/p/c",
-            "source_revision": "r",
-        },
-    )
     monkeypatch.setattr(worker, "webhook_task", lambda model: queued.append(model))
     monkeypatch.setattr(worker, "_mark", lambda db, uid, state, error=None: states.append(state))
 
@@ -75,4 +65,6 @@ def test_committed_outbox_row_is_published_once_per_claim(monkeypatch: pytest.Mo
     assert len(queued) == 1
     assert queued[0].event_id == str(event_id)
     assert queued[0].data["execution_generation"] == 3
+    assert queued[0].data["title"] == "Task"
+    assert queued[0].data["labels"] == ["backend"]
     assert states == ["scheduled"]

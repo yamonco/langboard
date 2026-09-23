@@ -15,10 +15,15 @@ the board and FractalOps project mapping before enabling it.
    `io.langboard.work.ready.v1`. Configure the board's ready and terminal
    columns and prerequisite relationship type, then enable its binding.
 4. Move a controlled card from non-ready to ready. Verify one committed
-   `execution_outbox` row, one native webhook delivery, and one FractalOps
+   `execution_outbox` row with a frozen payload snapshot, one native webhook delivery, and one FractalOps
    Studio Run with key `langboard:{project}:{card}:{generation}`. Retry the
    delivery and verify the same run is acknowledged as duplicate. Move the
    card out and back to ready to verify a new generation.
+   `data.source_revision` is the ready transition's `Card.updated_at` and
+   must match the point-read `core.updated_at`; `description.revision` is a
+   separate content projection hash. The frozen event uses a relative
+   `card_url` path so retries preserve the same bytes across UI host changes;
+   consumers resolve it against their bound board origin.
 5. Only after the live path passes should the FractalOps poller be removed.
    Check for zero idle polling and no duplicate runs before declaring cutover.
 

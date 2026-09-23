@@ -100,6 +100,12 @@ def webhook_openapi() -> JsonResponse:
     for schema_name in schemas:
         schema = _minimal_event_schema(schemas[schema_name], event=schema_name)
         if schema_name in WORK_EXECUTION_EVENTS:
+            data_schema = _make_object_property("data", schema)
+            data_schema["properties"]["source_revision"] = {
+                "type": "string",
+                "format": "date-time",
+                "description": "Card.updated_at at the ready transition; compare with point-read core.updated_at, not description.revision.",
+            }
             schemas[schema_name] = {
                 "title": schema_name,
                 "type": "object",
@@ -110,7 +116,7 @@ def webhook_openapi() -> JsonResponse:
                     "subject": {"type": "string", "pattern": "^cards/[^/]+$"},
                     "type": {"type": "string", "enum": [schema_name]},
                     "time": {"type": "string", "format": "date-time"},
-                    "data": _make_object_property("data", schema),
+                    "data": data_schema,
                 },
                 "required": ["specversion", "id", "source", "subject", "type", "time", "data"],
                 "additionalProperties": False,
