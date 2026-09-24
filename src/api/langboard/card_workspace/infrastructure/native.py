@@ -466,26 +466,6 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
             raise RuntimeError("Validated card description replacement failed")
         return description
 
-    def add_card_comment(self, project_uid: str, card_uid: str, content: str) -> dict[str, Any]:
-        comment = self._service.card_comment.create(
-            self._actor, project_uid, card_uid, EditorContentModel(content=content)
-        )
-        if comment is None:
-            raise ValueError("Card not found in project")
-        return comment.api_response()
-
-    def update_card_comment(self, project_uid: str, card_uid: str, comment_uid: str, content: str) -> dict[str, Any]:
-        comment = self._service.card_comment.update(
-            self._actor, project_uid, card_uid, comment_uid, EditorContentModel(content=content)
-        )
-        if comment is None:
-            raise PermissionError("Comment not found or not owned by current actor")
-        return comment.api_response()
-
-    def delete_card_comment(self, project_uid: str, card_uid: str, comment_uid: str) -> None:
-        if not self._service.card_comment.delete(self._actor, project_uid, card_uid, comment_uid):
-            raise PermissionError("Comment not found or not owned by current actor")
-
     def create_card_checklist(self, project_uid: str, card_uid: str, title: str) -> dict[str, Any]:
         checklist = self._service.checklist.create(self._actor, project_uid, card_uid, title)
         if checklist is None:

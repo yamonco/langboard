@@ -31,7 +31,6 @@ from ..projections import (
     public_card_summary,
     public_checkitem,
     public_checklist,
-    public_comment,
     public_label,
     public_metadata,
     public_relationship,
@@ -206,37 +205,6 @@ def move_card_content_block(
         raise ValueError("pass either after_block_uid or order, not both")
     port.move_card_content_block(project_uid, card_uid, block_uid, after_block_uid, order)
     return {"moved": True}
-
-
-def add_card_comment(port: CardWorkspaceCommandPort, project_uid: str, card_uid: str, content: str) -> dict[str, Any]:
-    """Create and return a sanitized card comment."""
-
-    return {"comment": public_comment(port.add_card_comment(project_uid, card_uid, _required_text(content, "Comment")))}
-
-
-def update_card_comment(
-    port: CardWorkspaceCommandPort,
-    project_uid: str,
-    card_uid: str,
-    comment_uid: str,
-    content: str,
-) -> dict[str, Any]:
-    """Update and return a sanitized owned card comment."""
-
-    return {
-        "comment": public_comment(
-            port.update_card_comment(project_uid, card_uid, comment_uid, _required_text(content, "Comment"))
-        )
-    }
-
-
-def delete_card_comment(
-    port: CardWorkspaceCommandPort, project_uid: str, card_uid: str, comment_uid: str
-) -> dict[str, bool]:
-    """Delete one owned card comment."""
-
-    port.delete_card_comment(project_uid, card_uid, comment_uid)
-    return {"deleted": True}
 
 
 def create_card_checklist(
