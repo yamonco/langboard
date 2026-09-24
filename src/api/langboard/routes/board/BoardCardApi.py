@@ -213,7 +213,7 @@ def get_card_context(
     fence = current_execution(card.id)
     if fence is None or payload.get("card") is None:
         raise ApiException.NotFound_404(ApiErrorCode.NF2003)
-    revision, is_ready, generation = fence
+    revision, is_ready, generation = fence.revision, fence.is_ready, fence.generation
     core_revision = payload["card"]["core"].get("updated_at")
     try:
         same_revision = datetime.fromisoformat(core_revision.replace("Z", "+00:00")) == revision

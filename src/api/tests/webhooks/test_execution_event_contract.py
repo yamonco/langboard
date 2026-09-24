@@ -74,6 +74,12 @@ def test_work_event_schema_describes_cloudevents_and_array_payload() -> None:
     assert parsed["properties"]["data"]["properties"]["execution_generation"]["type"] == "integer"
     assert parsed["properties"]["data"]["properties"]["source_revision"]["format"] == "date-time"
     assert "Card.updated_at" in parsed["properties"]["data"]["properties"]["source_revision"]["description"]
+    # The published contract must document truth ownership: the revision is
+    # provenance and the hard fence is generation plus point-read readiness.
+    assert "provenance" in parsed["properties"]["data"]["properties"]["source_revision"]["description"]
+    assert (
+        "execution_generation" in parsed["properties"]["data"]["properties"]["source_revision"]["description"]
+    )
     assert set(parsed["properties"]) == {"specversion", "id", "source", "subject", "type", "time", "data"}
     assert "project_uid" not in parsed["properties"]["data"]["properties"]
     assert "direct_blocker_uids" not in parsed["properties"]["data"]["properties"]

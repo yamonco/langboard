@@ -142,14 +142,24 @@ async def deliver_webhook(
         from .ExecutionReadinessUow import current_execution
 
         current = current_execution(InfraHelper.convert_id(data.card_uid))
-        if (
-            current is None
-            or not current[1]
-            or current[2] != data.execution_generation
-            or current[0].isoformat() != data.source_revision
-        ):
+        # Same fence as the outbox drain: READY-preserving content edits keep
+        # the execution alive, so only lost readiness or a newer generation
+        # supersedes a delivery. Content is refreshed from this point-read so
+        # the signed payload never mixes commit-time and delivery-time views.
+        if current is None or not current.is_ready or current.generation != data.execution_generation:
             Broker.logger.info("Execution delivery superseded: event=%s", model.event_id)
             return
+        model = model.model_copy(
+            update={
+                "data": {
+                    **model.data,
+                    "title": current.title,
+                    "labels": current.labels,
+                    "assignees": [SnowflakeID(uid).to_short_code() for uid in current.assignee_ids],
+                    "source_revision": current.revision.isoformat(),
+                }
+            }
+        )
         binding = binding_for_project(data.project_uid)
         reasons = binding_invalid_reasons(binding, model.event)
         if (

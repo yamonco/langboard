@@ -3,7 +3,7 @@
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from json import dumps
-from typing import Iterator
+from typing import Iterator, NamedTuple
 from uuid import uuid4
 from sqlalchemy import select, text
 from ...core.db import DbSession
@@ -42,17 +42,53 @@ _READY_EXPRESSION = """
 _READY = select(text(_READY_EXPRESSION))
 
 
+class CurrentExecution(NamedTuple):
+    """One point-read projection of a card's execution state and content.
+
+    The event payload is only a "this generation is executable" signal, so the
+    delivery fence is `is_ready and generation`. Mutable content (title,
+    labels, assignees) is re-read here at delivery time instead of being
+    replayed from the commit-time snapshot; `revision` is provenance.
+    """
+
+    revision: datetime
+    is_ready: bool
+    generation: int
+    title: str | None
+    labels: list[str]
+    assignee_ids: list[int]
+
+
+_LABELS_EXPRESSION = """
+    COALESCE((
+        SELECT jsonb_agg(label.name ORDER BY label.name)
+        FROM card_assigned_project_label assigned
+        JOIN project_label label ON label.id = assigned.project_label_id
+        WHERE assigned.card_id = c.id
+    ), '[]'::jsonb)
+"""
+_ASSIGNEES_EXPRESSION = """
+    COALESCE((
+        SELECT jsonb_agg(assigned.user_id ORDER BY assigned.user_id)
+        FROM card_assigned_user assigned WHERE assigned.card_id = c.id
+    ), '[]'::jsonb)
+"""
+
+
 def _scalar(db: DbSession, statement, **params):
     row = db.exec(statement, params=params).first()
     return row[0] if isinstance(row, tuple) else row
 
 
-def current_execution(card_id: int, db: DbSession | None = None) -> tuple[datetime, bool, int] | None:
-    """Read card revision and execution fence from one database statement."""
+def current_execution(card_id: int, db: DbSession | None = None) -> CurrentExecution | None:
+    """Read execution fence and current content from one database statement."""
     def read(session: DbSession):
         return session.exec(
             select(
                 text("c.updated_at"),
+                text("c.title"),
+                text(_LABELS_EXPRESSION),
+                text(_ASSIGNEES_EXPRESSION),
                 text(_READY_EXPRESSION),
                 text("COALESCE(g.execution_generation, 0)"),
             )
@@ -69,8 +105,15 @@ def current_execution(card_id: int, db: DbSession | None = None) -> tuple[dateti
         row = read(db)
     if row is None:
         return None
-    revision, ready, generation = row
-    return revision, bool(ready), int(generation)
+    revision, title, labels, assignee_ids, ready, generation = row
+    return CurrentExecution(
+        revision=revision,
+        is_ready=bool(ready),
+        generation=int(generation),
+        title=title,
+        labels=[str(name) for name in labels],
+        assignee_ids=[int(user_id) for user_id in assignee_ids],
+    )
 
 
 class ExecutionReadinessUow:
