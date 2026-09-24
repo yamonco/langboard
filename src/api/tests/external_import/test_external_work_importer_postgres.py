@@ -1,6 +1,7 @@
 """Real PostgreSQL contract for native card creation through external import."""
 
 import os
+from collections import Counter
 from datetime import datetime, timezone
 from hashlib import sha256
 from pathlib import Path
@@ -14,6 +15,7 @@ os.environ.setdefault("PROJECT_NAME", "langboard")
 
 from langboard.external_import import ExternalWorkBundle  # noqa: E402
 from langboard.external_import.importer import ExternalWorkImporter  # noqa: E402
+from langboard_shared import publishers  # noqa: E402
 from langboard_shared.core.db.DbEngine import DbEngine  # noqa: E402
 from langboard_shared.core.db.Models import BaseDbModel  # noqa: E402
 from langboard_shared.core.storage import Storage, StorageName  # noqa: E402
@@ -39,8 +41,7 @@ from langboard_shared.domain.models import (  # noqa: E402
 from langboard_shared.domain.models.UserIdentityLink import IdentityProvider  # noqa: E402
 from langboard_shared.Env import Env  # noqa: E402
 from langboard_shared.helpers import ensure_models_imported  # noqa: E402
-from langboard_shared.publishers import CardAttachmentPublisher  # noqa: E402
-from langboard_shared.tasks.activities import CardAttachmentActivityTask  # noqa: E402
+from langboard_shared.tasks import activities  # noqa: E402
 from langboard_shared.tasks.bots import CardAttachmentBotTask  # noqa: E402
 
 
@@ -162,18 +163,31 @@ def test_imported_card_shares_native_creation_invariants(
                 "sha256": sha256(attachment_bytes).hexdigest(), "size": len(attachment_bytes),
             }],
         })
-        effects: list[str] = []
-        monkeypatch.setattr(CardAttachmentPublisher, "uploaded", lambda *_args: effects.append("published"))
-        monkeypatch.setattr(
-            CardAttachmentActivityTask, "card_attachment_uploaded", lambda *_args: effects.append("activity")
+        effects: Counter[tuple[str, str]] = Counter()
+        effect_methods = (
+            ("column", "ProjectColumnPublisher", "created", "ProjectColumnActivityTask", "project_column_created"),
+            ("label", "ProjectLabelPublisher", "created", "ProjectLabelActivityTask", "project_label_created"),
+            ("card", "CardPublisher", "created", "CardActivityTask", "card_created"),
+            ("checklist", "ChecklistPublisher", "created", "CardChecklistActivityTask", "card_checklist_created"),
+            ("checkitem", "CheckitemPublisher", "created", "CardCheckitemActivityTask", "card_checkitem_created"),
+            ("relationship", "CardRelationshipPublisher", "updated", "CardRelationshipActivityTask", "card_relationship_updated"),
+            ("comment", "CardCommentPublisher", "created", "CardCommentActivityTask", "card_comment_added"),
+            ("attachment", "CardAttachmentPublisher", "uploaded", "CardAttachmentActivityTask", "card_attachment_uploaded"),
         )
+        for kind, publisher_name, publisher_method, activity_name, activity_method in effect_methods:
+            monkeypatch.setattr(
+                getattr(publishers, publisher_name), publisher_method,
+                lambda *_args, kind=kind: effects.update([("publisher", kind)]),
+            )
+            monkeypatch.setattr(
+                getattr(activities, activity_name), activity_method,
+                lambda *_args, kind=kind: effects.update([("activity", kind)]),
+            )
         monkeypatch.setattr(
             CardAttachmentBotTask, "card_attachment_uploaded",
             lambda *_args: pytest.fail("historical attachment dispatched a live bot"),
         )
         importer = ExternalWorkImporter(attachments_root)
-        native_dispatch = importer._effect_dispatcher
-        importer._effect_dispatcher = lambda kind, *args: native_dispatch(kind, *args) if kind == "attachment" else None
         first = importer.import_bundle(
             bundle, project_uid=project_id.to_short_code(), actor_uid=actor_id.to_short_code()
         )
@@ -186,7 +200,9 @@ def test_imported_card_shares_native_creation_invariants(
         }
         assert first.created == expected
         assert second.unchanged == expected
-        assert effects == ["published", "activity"]
+        assert effects == Counter({
+            (effect, kind): count for kind, count in expected.items() for effect in ("publisher", "activity")
+        })
         with engine.connect() as connection:
             checkpoints = connection.execute(
                 select(ExternalImportRecord.effects_attempts, ExternalImportRecord.effects_dispatched_at)
