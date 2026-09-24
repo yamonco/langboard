@@ -267,54 +267,6 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
             return None
         return self._service.card_content_block.api_blocks_by_card(card)
 
-    def create_card_content_block(
-        self,
-        project_uid: str,
-        card_uid: str,
-        block_type: str,
-        payload: dict[str, Any],
-        order: int | None,
-        after_block_uid: str | None,
-    ) -> dict[str, Any] | None:
-        block = self._service.card_content_block.create(
-            self._actor, project_uid, card_uid, block_type, payload, order, after_block_uid
-        )
-        if block is None:
-            raise ValueError("Card not found in project")
-        return _public_content_block(block)
-
-    def update_card_content_block(
-        self,
-        project_uid: str,
-        card_uid: str,
-        block_uid: str,
-        expected_revision: int,
-        payload: dict[str, Any],
-    ) -> dict[str, Any] | None:
-        block = self._service.card_content_block.update(
-            self._actor, project_uid, card_uid, block_uid, expected_revision, payload
-        )
-        if block is None:
-            raise PermissionError("Block not found in card")
-        return _public_content_block(block)
-
-    def delete_card_content_block(self, project_uid: str, card_uid: str, block_uid: str) -> None:
-        if not self._service.card_content_block.delete(self._actor, project_uid, card_uid, block_uid):
-            raise PermissionError("Block not found in card")
-
-    def move_card_content_block(
-        self,
-        project_uid: str,
-        card_uid: str,
-        block_uid: str,
-        after_block_uid: str | None,
-        order: int | None,
-    ) -> None:
-        if not self._service.card_content_block.move(
-            self._actor, project_uid, card_uid, block_uid, after_block_uid, order
-        ):
-            raise PermissionError("Block not found in card")
-
     def get_public_card_metadata(self, project_uid: str, card_uid: str) -> dict[str, str] | None:
         card = self._ensure_card(project_uid, card_uid, required=False)
         if card is None:
@@ -891,14 +843,3 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
         if len(items) > MAX_NATIVE_SECTION_SOURCE:
             raise ValueError(f"{label} exceeds the safe {MAX_NATIVE_SECTION_SOURCE}-item MCP source bound")
         return items
-
-
-def _public_content_block(block) -> dict[str, Any]:
-    return {
-        "block_uid": block.get_uid(),
-        "type": block.block_type,
-        "order": block.order,
-        "revision": block.revision,
-        "payload": block.payload,
-        "updated_at": block.updated_at.isoformat() if block.updated_at else None,
-    }

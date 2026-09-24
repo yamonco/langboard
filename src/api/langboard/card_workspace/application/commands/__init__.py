@@ -145,66 +145,6 @@ def replace_card_description(
         "description_revision": projection_revision(content),
         "description_chars": len(content),
     }
-def create_card_content_block(
-    port: CardWorkspaceCommandPort,
-    project_uid: str,
-    card_uid: str,
-    block_type: str,
-    payload: dict[str, Any],
-    order: int | None = None,
-    after_block_uid: str | None = None,
-) -> dict[str, Any]:
-    """Create one typed content block (code/diagram/rich_text)."""
-
-    if block_type not in ("rich_text", "code", "diagram"):
-        raise ValueError("block_type must be rich_text, code or diagram")
-    block = port.create_card_content_block(project_uid, card_uid, block_type, payload, order, after_block_uid)
-    if block is None:
-        raise ValueError("Card not found in project")
-    return {"content_block": block}
-
-
-def update_card_content_block(
-    port: CardWorkspaceCommandPort,
-    project_uid: str,
-    card_uid: str,
-    block_uid: str,
-    expected_revision: int,
-    payload: dict[str, Any],
-) -> dict[str, Any]:
-    """Partially update a content block under optimistic locking."""
-
-    if expected_revision < 1:
-        raise ValueError("expected_revision must be positive")
-    block = port.update_card_content_block(project_uid, card_uid, block_uid, expected_revision, payload)
-    if block is None:
-        raise PermissionError("Block not found in card")
-    return {"content_block": block}
-
-
-def delete_card_content_block(
-    port: CardWorkspaceCommandPort, project_uid: str, card_uid: str, block_uid: str
-) -> dict[str, bool]:
-    """Delete one content block."""
-
-    port.delete_card_content_block(project_uid, card_uid, block_uid)
-    return {"deleted": True}
-
-
-def move_card_content_block(
-    port: CardWorkspaceCommandPort,
-    project_uid: str,
-    card_uid: str,
-    block_uid: str,
-    after_block_uid: str | None = None,
-    order: int | None = None,
-) -> dict[str, bool]:
-    """Reposition one content block (anchor or explicit order)."""
-
-    if after_block_uid is not None and order is not None:
-        raise ValueError("pass either after_block_uid or order, not both")
-    port.move_card_content_block(project_uid, card_uid, block_uid, after_block_uid, order)
-    return {"moved": True}
 
 
 def create_card_checklist(

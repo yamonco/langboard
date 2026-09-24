@@ -5,14 +5,11 @@ from .commands import (
     cardify_card_checkitem,
     create_card_checkitem,
     create_card_checklist,
-    create_card_content_block,
     create_card_in_leftmost_column,
     delete_card_attachment,
     delete_card_checkitem,
     delete_card_checklist,
-    delete_card_content_block,
     delete_public_card_metadata,
-    move_card_content_block,
     patch_card_description,
     provision_project,
     reconcile_card_checklist_projection,
@@ -23,7 +20,6 @@ from .commands import (
     update_card_attachment,
     update_card_checkitem,
     update_card_checklist,
-    update_card_content_block,
 )
 from .dtos import CardBundleResponse, ProjectCardListResponse, ProjectIdentityResponse
 from .queries import (
@@ -41,10 +37,6 @@ __all__ = [
     "ProjectIdentityResponse",
     "apply_card_graph_patch",
     "cardify_card_checkitem",
-    "create_card_content_block",
-    "delete_card_content_block",
-    "move_card_content_block",
-    "update_card_content_block",
     "create_card_checkitem",
     "create_card_checklist",
     "create_card_in_leftmost_column",
