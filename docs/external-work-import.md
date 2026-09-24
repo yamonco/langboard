@@ -13,7 +13,12 @@ columns, cards, labels, checklists, relationships, comments, and attachments.
   imported source record is a conflict instead of an implicit overwrite.
 - Relationship cycles, ambiguous existing column or label names, unsafe attachment paths,
   and attachment hash or size mismatches fail closed.
-- Database records commit as one unit. Uploaded files are removed if that transaction fails.
+- New records commit in dependency order in groups of at most 25. Each group's native
+  targets and lineage commit together; earlier groups remain committed if a later group fails.
+- Publisher and activity effects run after each group commits and are checkpointed per record.
+  Replaying the same bundle resumes records or effects left incomplete by a failure.
+- Staged files from a rolled-back group are removed after confirming that no matching
+  lineage was committed by another importer. If that check is unavailable, the file is retained.
 - Unknown fields are rejected, so source automation state, bot comments, and approval state
   cannot leak into the Langboard domain accidentally.
 
