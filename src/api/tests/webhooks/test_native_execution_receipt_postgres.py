@@ -24,24 +24,27 @@ def test_native_receipt_is_idempotent_and_never_writes_user_description(monkeypa
     with engine.begin() as connection:
         connection.execute(text("DROP TABLE IF EXISTS execution_checklist_projection"))
         connection.execute(text("DROP TABLE IF EXISTS execution_receipt"))
+        connection.execute(text("DROP TABLE IF EXISTS execution_outbox"))
+        connection.execute(text("DROP TABLE IF EXISTS card_execution_generation"))
         connection.execute(text("CREATE TABLE card (id bigint PRIMARY KEY, description text NOT NULL, project_column_id bigint NOT NULL, \"order\" integer NOT NULL, updated_at timestamptz NOT NULL, deleted_at timestamptz)"))
         connection.execute(text("INSERT INTO card VALUES (100, 'user-authored markdown', 1, 0, now(), NULL)"))
         connection.execute(text("CREATE TABLE project_column (id bigint PRIMARY KEY, project_id bigint NOT NULL, deleted_at timestamptz, is_archive boolean NOT NULL)"))
         connection.execute(text("INSERT INTO project_column VALUES (1, 10, NULL, false), (2, 10, NULL, false)"))
-        connection.execute(text("CREATE TABLE project_execution_binding (project_id bigint PRIMARY KEY, is_enabled boolean NOT NULL, column_semantic_ids jsonb NOT NULL)"))
-        connection.execute(text("INSERT INTO project_execution_binding VALUES (10, true, '{\"1\":\"ready\",\"2\":\"review\"}'::jsonb)"))
+        # Baseline binding shape as the public main history leaves it; the
+        # install migration adds the semantic id columns on top.
+        connection.execute(text("CREATE TABLE project_execution_binding (project_id bigint PRIMARY KEY, is_enabled boolean NOT NULL)"))
         module = __import__(
-            "langboard.migrations.versions.20260924190000-d4f92c7b180a",
+            "langboard.migrations.versions.20260924220000-7ad15b1d0b70",
             fromlist=["upgrade"],
         )
         monkeypatch.setattr(module, "op", Operations(MigrationContext.configure(connection)))
         module.upgrade()
-        projection_module = __import__(
-            "langboard.migrations.versions.20260924200000-a24ec4b7d19f",
-            fromlist=["upgrade"],
+        connection.execute(
+            text(
+                "INSERT INTO project_execution_binding (project_id, is_enabled, column_semantic_ids) "
+                "VALUES (10, true, '{\"1\":\"ready\",\"2\":\"review\"}'::jsonb)"
+            )
         )
-        monkeypatch.setattr(projection_module, "op", Operations(MigrationContext.configure(connection)))
-        projection_module.upgrade()
     monkeypatch.setattr(DbEngine, "get_main_engine", lambda: engine)
     monkeypatch.setattr(
         receipt_api.InfraHelper,
@@ -98,6 +101,8 @@ def test_native_receipt_is_idempotent_and_never_writes_user_description(monkeypa
         with engine.begin() as connection:
             connection.execute(text("DROP TABLE IF EXISTS execution_checklist_projection"))
             connection.execute(text("DROP TABLE IF EXISTS execution_receipt"))
+            connection.execute(text("DROP TABLE IF EXISTS execution_outbox"))
+            connection.execute(text("DROP TABLE IF EXISTS card_execution_generation"))
             connection.execute(text("DROP TABLE IF EXISTS project_execution_binding"))
             connection.execute(text("DROP TABLE IF EXISTS project_column"))
             connection.execute(text("DROP TABLE IF EXISTS card"))
