@@ -387,6 +387,46 @@ def test_card_mcp_creation_selects_server_side_leftmost_active_column() -> None:
     assert len(created) == 2
 
 
+def test_card_mcp_people_and_labels_validate_before_mutation(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A bad member or label cannot partially update the card."""
+
+    project = SimpleNamespace(id=1)
+    card = SimpleNamespace(id=2, project_id=1, is_linked_resource=False)
+    monkeypatch.setattr(CardMcp, "_require_task_card", lambda *_args: (project, card))
+    mutations: list[tuple[str, list[str]]] = []
+    actor = object()
+    service = SimpleNamespace(
+        project=SimpleNamespace(
+            get_api_assigned_user_list=lambda _project, where_user_in: [{"uid": "member"}],
+        ),
+        project_label=SimpleNamespace(
+            get_api_list_by_project=lambda _project, where_in: [{"uid": "label"}],
+            get_api_list_by_card=lambda _card: [{"uid": "label", "name": "Urgent", "secret": "hidden"}],
+        ),
+        card=SimpleNamespace(
+            update_assigned_users=lambda _actor, _project, _card, uids: (
+                mutations.append(("members", uids)),
+                [SimpleNamespace(get_uid=lambda: "member")],
+            )[1],
+            update_labels=lambda _actor, _project, _card, uids: mutations.append(("labels", uids)) or True,
+        ),
+    )
+
+    for people, labels, error in (
+        (["member", "member"], ["label"], "duplicates"),
+        (["member"], ["missing"], "Unknown label"),
+        (["missing"], ["label"], "Unknown project member"),
+        (["member"], [" "], "label_uids is required"),
+    ):
+        with pytest.raises(ValueError, match=error):
+            CardMcp.set_card_people_and_labels("project", "card", actor, service, people, labels)
+    assert mutations == []
+
+    result = CardMcp.set_card_people_and_labels("project", "card", actor, service, [" member "], [" label "])
+    assert result == {"member_uids": ["member"], "labels": [{"uid": "label", "name": "Urgent"}]}
+    assert mutations == [("members", ["member"]), ("labels", ["label"])]
+
+
 def test_native_description_patch_compares_before_updating() -> None:
     """The adapter passes only the locally patched rich-text value to the native service."""
 

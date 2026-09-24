@@ -329,34 +329,6 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
             raise RuntimeError("Validated card description replacement failed")
         return description
 
-    def replace_card_people_and_labels(
-        self,
-        project_uid: str,
-        card_uid: str,
-        assign_user_uids: list[str] | None,
-        label_uids: list[str] | None,
-    ) -> dict[str, Any]:
-        project, card = self._ensure_project_card(project_uid, card_uid)
-        if assign_user_uids is not None:
-            self._require_members(project, assign_user_uids)
-        if label_uids is not None:
-            available = {
-                label["uid"]
-                for label in self._service.project_label.get_api_list_by_project(project, where_in=label_uids)
-            }
-            self._require_known("label", label_uids, available)
-        response: dict[str, Any] = {}
-        if assign_user_uids is not None:
-            users = self._service.card.update_assigned_users(self._actor, project, card, assign_user_uids)
-            if users is None:
-                raise RuntimeError("Validated member replacement failed")
-            response["member_uids"] = [user.get_uid() for user in users]
-        if label_uids is not None:
-            if not self._service.card.update_labels(self._actor, project, card, label_uids):
-                raise RuntimeError("Validated label replacement failed")
-            response["labels"] = self._service.project_label.get_api_list_by_card(card)
-        return response
-
     def replace_card_relationships(
         self,
         project_uid: str,
@@ -570,19 +542,6 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
         if item is None or checklist is None or checklist.card_id != card.id:
             raise ValueError("Checkitem not found in card")
         return item
-
-    def _require_members(self, project: Any, requested: list[str]) -> None:
-        available = {
-            member["uid"]
-            for member in self._service.project.get_api_assigned_user_list(project, where_user_in=requested)
-        }
-        self._require_known("project member", requested, available)
-
-    @staticmethod
-    def _require_known(label: str, requested: list[str], available: set[str]) -> None:
-        unknown = [uid for uid in requested if uid not in available]
-        if unknown:
-            raise ValueError(f"Unknown {label}: {unknown[0]}")
 
     @staticmethod
     def _bounded_source(items: list[Any], label: str) -> list[Any]:

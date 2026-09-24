@@ -97,15 +97,6 @@ class CardWorkspaceCommandPort(Protocol):
     ) -> str:
         """Atomically replace one revision-bound description, including an empty body."""
 
-    def replace_card_people_and_labels(
-        self,
-        project_uid: str,
-        card_uid: str,
-        assign_user_uids: list[str] | None,
-        label_uids: list[str] | None,
-    ) -> dict[str, Any]:
-        """Validate complete replacement sets before mutating."""
-
     def replace_card_relationships(
         self,
         project_uid: str,

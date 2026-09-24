@@ -25,7 +25,6 @@ from ...domain import (
 from ..ports import CardWorkspaceCommandPort
 from ..projections import (
     public_checklist,
-    public_label,
     public_relationship,
 )
 
@@ -104,25 +103,6 @@ def replace_card_description(
     }
 
 
-def set_card_people_and_labels(
-    port: CardWorkspaceCommandPort,
-    project_uid: str,
-    card_uid: str,
-    assign_user_uids: list[str] | None,
-    label_uids: list[str] | None,
-) -> dict[str, Any]:
-    """Replace people and labels after validating the complete request shape."""
-
-    if assign_user_uids is None and label_uids is None:
-        raise ValueError("At least one member or label field is required")
-    people = _unique_uids(assign_user_uids, "assign_user_uids") if assign_user_uids is not None else None
-    labels = _unique_uids(label_uids, "label_uids") if label_uids is not None else None
-    result = port.replace_card_people_and_labels(project_uid, card_uid, people, labels)
-    if "labels" in result:
-        result["labels"] = [public_label(item) for item in result["labels"]]
-    return result
-
-
 def set_card_relationships(
     port: CardWorkspaceCommandPort,
     project_uid: str,
@@ -197,10 +177,3 @@ def _optional_bool(value: bool | None, label: str, required: bool = False) -> No
         raise ValueError(f"{label} must be a boolean")
     if value is not None and not isinstance(value, bool):
         raise ValueError(f"{label} must be a boolean")
-
-
-def _unique_uids(values: list[str] | None, label: str) -> list[str]:
-    normalized = [_required_text(value, label) for value in values or []]
-    if len(normalized) != len(set(normalized)):
-        raise ValueError(f"{label} contains duplicates")
-    return normalized
