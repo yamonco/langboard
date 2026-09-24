@@ -9,7 +9,7 @@ import ShineBorder from "@/components/base/ShineBorder";
 import Skeleton from "@/components/base/Skeleton";
 import Toast from "@/components/base/Toast";
 import useChangeCardDetails from "@/controllers/api/card/useChangeCardDetails";
-import useGetCardDetails from "@/controllers/api/card/useGetCardDetails";
+import useGetCardDetails, { IGetCardDetailsResponse } from "@/controllers/api/card/useGetCardDetails";
 import useUnreadChangeNavigation from "@/pages/BoardPage/components/card/useUnreadChangeNavigation";
 
 import useReplaceCardContentBlocks from "@/controllers/api/board/useReplaceCardContentBlocks";
@@ -144,6 +144,7 @@ const BoardCard = memo(
                 ) : (
                     <BoardCardProvider key={cardUID} projectUID={projectUID} card={cardData.card} currentUser={currentUser} viewportRef={viewportRef}>
                         <BoardCardResult
+                            executionReceipts={cardData.execution_receipts}
                             isExpanded={isExpanded}
                             setIsExpanded={setIsExpanded}
                             onClose={onClose}
@@ -228,6 +229,7 @@ export function SkeletonBoardCard(): React.JSX.Element {
 }
 
 interface IBoardCardResultProps {
+    executionReceipts?: IGetCardDetailsResponse["execution_receipts"];
     isExpanded: bool;
     setIsExpanded?: React.Dispatch<React.SetStateAction<bool>>;
     onClose?: () => void;
@@ -244,7 +246,7 @@ function BoardCardResult(props: IBoardCardResultProps): React.JSX.Element {
     return <BoardTaskCardResult {...props} />;
 }
 
-function BoardTaskCardResult({ isExpanded, setIsExpanded, onClose, onEditModeStateChange }: IBoardCardResultProps): React.JSX.Element {
+function BoardTaskCardResult({ isExpanded, setIsExpanded, onClose, onEditModeStateChange, executionReceipts = [] }: IBoardCardResultProps): React.JSX.Element {
     const { card, isCardEditing, leaveCardEditMode } = useBoardCard();
     const { isActionPanelOpen } = useBoardCardPanel();
     const { boardChat } = useBoardController();
@@ -377,6 +379,30 @@ function BoardTaskCardResult({ isExpanded, setIsExpanded, onClose, onEditModeSta
                                                         scrollParentRef={contentViewportRef}
                                                     />
                                                 </BoardCardSection>
+                                                {executionReceipts.length > 0 && (
+                                                    <BoardCardSection title="실행 기록">
+                                                        <div className="space-y-3">
+                                                            {executionReceipts.map(({ generation, receipt }) => (
+                                                                <div key={generation} className="rounded-md border p-3 text-sm">
+                                                                    <div className="font-medium">#{generation} · {receipt.status}</div>
+                                                                    <p className="mt-1 whitespace-pre-wrap">{receipt.summary}</p>
+                                                                    {receipt.artifacts.map((artifact) => (
+                                                                        <a key={artifact.url} href={artifact.url} target="_blank" rel="noopener noreferrer" className="mt-1 block break-all underline">
+                                                                            {artifact.type}: {artifact.url}
+                                                                        </a>
+                                                                    ))}
+                                                                    {receipt.checklist_evidence.length > 0 && (
+                                                                        <ul className="mt-2 list-disc pl-5">
+                                                                            {receipt.checklist_evidence.map((evidence) => (
+                                                                                <li key={evidence.item_uid}>{evidence.item_uid}: {evidence.kind}{evidence.refs.length > 0 && ` · ${evidence.refs.join(", ")}`}</li>
+                                                                            ))}
+                                                                        </ul>
+                                                                    )}
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </BoardCardSection>
+                                                )}
                                                 {checklists.length > 0 && (
                                                     <BoardCardSection title="card.Checklists">
                                                         <BoardCardChecklistGroup key={`board-card-checklist-${card.uid}`} />

@@ -45,6 +45,7 @@ from langboard_shared.tasks.webhooks.ExecutionReadinessUow import current_execut
 from ...card_workspace.application import apply_card_graph_patch, get_card_bundle
 from ...card_workspace.domain import CardBundleInclude, CardGraphEdge, CardGraphNewCard, CommentPage, SectionPage
 from ...card_workspace.infrastructure import NativeCardWorkspaceAdapter
+from .ExecutionReceiptApi import receipt_history
 from .forms import (
     AssignUsersForm,
     CardifySelectionForm,
@@ -168,6 +169,7 @@ def get_card_details(
             "project_columns": project_columns,
             "project_labels": project_labels,
             "bot_scopes": bot_scopes,
+            "execution_receipts": receipt_history(card.id),
         }
     )
 
@@ -218,8 +220,9 @@ def get_card_context(
     except (AttributeError, ValueError):
         same_revision = False
     if not same_revision:
-        raise ApiException.Conflict_409(ApiErrorCode.EX2001)
+        raise ApiException.Conflict_409()
     payload["card"]["execution"] = {"is_ready": is_ready, "generation": generation}
+    payload["card"]["execution_receipts"] = receipt_history(card.id)
     return JsonResponse(content={"scope_context": payload})
 
 

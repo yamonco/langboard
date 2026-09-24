@@ -26,6 +26,16 @@ export interface IGetCardDetailsResponse {
     project_columns: ProjectColumn.TModel[];
     project_labels: ProjectLabel.TModel[];
     bot_scopes: ProjectCardBotScope.TModel[];
+    execution_receipts: {
+        generation: number;
+        created_at: string;
+        receipt: {
+            status: string;
+            summary: string;
+            artifacts: { type: string; url: string }[];
+            checklist_evidence: { item_uid: string; kind: string; refs: string[] }[];
+        };
+    }[];
 }
 
 const useGetCardDetails = (params: IGetCardDetailsForm, options?: TQueryOptions<unknown, IGetCardDetailsResponse>) => {
@@ -57,6 +67,7 @@ const useGetCardDetails = (params: IGetCardDetailsForm, options?: TQueryOptions<
             project_columns: ProjectColumn.Model.fromArray(res.data.project_columns, true),
             project_labels: ProjectLabel.Model.fromArray(res.data.project_labels, true),
             bot_scopes: ProjectCardBotScope.Model.fromArray(res.data.bot_scopes, true),
+            execution_receipts: res.data.execution_receipts ?? [],
         };
     };
 
