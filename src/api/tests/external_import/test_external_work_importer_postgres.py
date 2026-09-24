@@ -48,7 +48,10 @@ DATABASE_URL = os.getenv("LANGBOARD_OUTBOX_TEST_DATABASE_URL")
 
 
 @pytest.mark.skipif(not DATABASE_URL, reason="dedicated PostgreSQL proof URL not set")
-def test_imported_card_shares_native_creation_invariants(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+@pytest.mark.parametrize("extra_card_count", [0, 98])
+def test_imported_card_shares_native_creation_invariants(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, extra_card_count: int
+) -> None:
     ensure_models_imported()
     monkeypatch.setattr(type(Env), "SCIM_ISSUER", property(lambda _self: "test-issuer"))
     monkeypatch.setattr(type(Env), "LOCAL_STORAGE_DIR", property(lambda _self: tmp_path / "storage"))
@@ -122,6 +125,12 @@ def test_imported_card_shares_native_creation_invariants(monkeypatch: pytest.Mon
                     "description": "", "order": 9, "label_source_ids": ["label-1"],
                 },
                 {"source_id": "card-2", "column_source_id": "column-1", "title": "Dependent work", "order": 10},
+            ] + [
+                {
+                    "source_id": f"card-extra-{index}", "column_source_id": "column-1",
+                    "title": f"Extra work {index}", "order": 10 + index,
+                }
+                for index in range(1, extra_card_count + 1)
             ],
             "checklists": [
                 {"source_id": "checklist-1", "card_source_id": "card-1", "title": "Imported checks", "order": 3},
@@ -172,7 +181,7 @@ def test_imported_card_shares_native_creation_invariants(monkeypatch: pytest.Mon
             bundle, project_uid=project_id.to_short_code(), actor_uid=actor_id.to_short_code()
         )
         expected = {
-            "column": 2, "label": 2, "card": 2, "checklist": 2, "checkitem": 2,
+            "column": 2, "label": 2, "card": 2 + extra_card_count, "checklist": 2, "checkitem": 2,
             "relationship": 1, "comment": 1, "attachment": 1,
         }
         assert first.created == expected
@@ -226,7 +235,7 @@ def test_imported_card_shares_native_creation_invariants(monkeypatch: pytest.Mon
             assert attachment["created_at"] == comment_time
             assert attachment["filename"] == "note.txt"
             assert Storage.get_file(attachment["file"]) == attachment_bytes
-            assert len(connection.execute(select(ExternalImportRecord.__table__)).all()) == 13
+            assert len(connection.execute(select(ExternalImportRecord.__table__)).all()) == 13 + extra_card_count
     finally:
         engine.dispose()
         with admin.begin() as connection:
