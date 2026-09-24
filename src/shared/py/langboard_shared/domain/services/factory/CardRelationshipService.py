@@ -1,5 +1,6 @@
 from typing import Any
-from ....core.db import EditorContentModel
+from sqlalchemy import select
+from ....core.db import DbSession, EditorContentModel
 from ....core.domain import BaseDomainService
 from ....core.types import SnowflakeID
 from ....core.types.ParamTypes import TCardParam, TProjectParam, TUserOrBot
@@ -124,8 +125,13 @@ class CardRelationshipService(BaseDomainService):
             self._mark_card_changed_for_unread(card, "relationship")
 
         self.dispatch_updated(
-            user_or_bot, project, card, old_relationship_ids, list(new_relationships_dict.keys()),
-            is_parent, relationships=new_relationships,
+            user_or_bot,
+            project,
+            card,
+            old_relationship_ids,
+            list(new_relationships_dict.keys()),
+            is_parent,
+            relationships=new_relationships,
         )
 
         return new_relationships
@@ -170,91 +176,101 @@ class CardRelationshipService(BaseDomainService):
         project, anchor_card = params
         if anchor_card.project_id != project.id:
             return None
-        column = InfraHelper.get_by_id_like(ProjectColumn, anchor_card.project_column_id)
-        if not column or column.project_id != project.id or column.is_archive:
-            raise ValueError("Anchor card must be in an active project column")
+        # Serialize validation and persistence against the project's current graph.
+        # Nested repository and readiness calls share this transaction.
+        with DbSession.atomic() as db:
+            project_row = db.exec(
+                select(Project.column("id")).where(Project.column("id") == project.id).with_for_update()
+            ).first()
+            if project_row is None:
+                return None
+            column = InfraHelper.get_by_id_like(ProjectColumn, anchor_card.project_column_id)
+            if not column or column.project_id != project.id or column.is_archive:
+                raise ValueError("Anchor card must be in an active project column")
 
-        new_refs = {client_ref for client_ref, _, _ in new_cards}
-        referenced = {ref for edge in add_edges for ref in edge[:2]}
-        unknown_new_refs = sorted(ref for ref in referenced if ref.startswith("new:") and ref not in new_refs)
-        if unknown_new_refs:
-            raise ValueError(f"Unknown new card reference: {unknown_new_refs[0]}")
+            new_refs = {client_ref for client_ref, _, _ in new_cards}
+            referenced = {ref for edge in add_edges for ref in edge[:2]}
+            unknown_new_refs = sorted(ref for ref in referenced if ref.startswith("new:") and ref not in new_refs)
+            if unknown_new_refs:
+                raise ValueError(f"Unknown new card reference: {unknown_new_refs[0]}")
 
-        existing_refs = {ref for ref in referenced if not ref.startswith("new:")}
-        existing_refs.add(anchor_card.get_uid())
-        existing_cards: dict[str, Card] = {}
-        for card_uid in existing_refs:
-            card = InfraHelper.get_by_id_like(Card, card_uid)
-            if not card or card.project_id != project.id:
-                raise ValueError(f"Unknown project card: {card_uid}")
-            existing_cards[card_uid] = card
+            existing_refs = {ref for ref in referenced if not ref.startswith("new:")}
+            existing_refs.add(anchor_card.get_uid())
+            existing_cards: dict[str, Card] = {}
+            for card_uid in existing_refs:
+                card = InfraHelper.get_by_id_like(Card, card_uid)
+                if not card or card.project_id != project.id:
+                    raise ValueError(f"Unknown project card: {card_uid}")
+                existing_cards[card_uid] = card
 
-        graph_snapshot = self.repo.card_relationship.get_graph_snapshot(project)
-        relationship_by_uid = {
-            SnowflakeID(relationship_id).to_short_code(): (relationship_id, parent_id, child_id)
-            for relationship_id, parent_id, child_id in graph_snapshot
-        }
-        remove_relationships: list[tuple[int, int, int]] = []
-        for relationship_uid in remove_relationship_uids:
-            relationship = relationship_by_uid.get(relationship_uid)
-            if not relationship:
-                raise ValueError(f"Unknown project relationship: {relationship_uid}")
-            remove_relationships.append(relationship)
+            graph_snapshot = self.repo.card_relationship.get_graph_snapshot(project)
+            relationship_by_uid = {
+                SnowflakeID(relationship_id).to_short_code(): (relationship_id, parent_id, child_id)
+                for relationship_id, parent_id, child_id in graph_snapshot
+            }
+            remove_relationships: list[tuple[int, int, int]] = []
+            for relationship_uid in remove_relationship_uids:
+                relationship = relationship_by_uid.get(relationship_uid)
+                if not relationship:
+                    raise ValueError(f"Unknown project relationship: {relationship_uid}")
+                remove_relationships.append(relationship)
 
-        relationship_type_ids = {
-            SnowflakeID.from_short_code(relationship_type_uid) for _, _, relationship_type_uid in add_edges
-        }
-        relationship_types = self.repo.card_relationship.get_global_relationship_types_map(list(relationship_type_ids))
-        if len(relationship_types) != len(relationship_type_ids):
-            raise ValueError("Unknown relationship type")
-
-        removed_ids = {relationship_id for relationship_id, _, _ in remove_relationships}
-        current_edges = {
-            (parent_id, child_id)
-            for relationship_id, parent_id, child_id in graph_snapshot
-            if relationship_id not in removed_ids
-        }
-        ref_ids = {uid: card.id for uid, card in existing_cards.items()}
-        symbolic_edges: set[tuple[str | int, str | int]] = set(current_edges)
-        for parent_ref, child_ref, _ in add_edges:
-            parent: str | int = parent_ref if parent_ref in new_refs else ref_ids[parent_ref]
-            child: str | int = child_ref if child_ref in new_refs else ref_ids[child_ref]
-            if (parent, child) in symbolic_edges:
-                raise ValueError("Relationship already exists")
-            if self._edge_would_create_cycle(symbolic_edges, parent, child):
-                raise ValueError("Graph patch would create a relationship cycle")
-            symbolic_edges.add((parent, child))
-
-        anchor_id = anchor_card.id
-        if new_refs and not self._all_connected(symbolic_edges, anchor_id, new_refs):
-            raise ValueError("Every new card must connect to the anchor card")
-
-        next_order = self.repo.card.get_next_order(column, {"project_id": project.id}) if new_cards else 0
-        cards_to_create = {
-            client_ref: Card(
-                project_id=project.id,
-                project_column_id=column.id,
-                title=title,
-                description=EditorContentModel(content=description or ""),
-                order=next_order + index,
+            relationship_type_ids = {
+                SnowflakeID.from_short_code(relationship_type_uid) for _, _, relationship_type_uid in add_edges
+            }
+            relationship_types = self.repo.card_relationship.get_global_relationship_types_map(
+                list(relationship_type_ids)
             )
-            for index, (client_ref, title, description) in enumerate(new_cards)
-        }
-        converted_edges = [
-            (parent_ref, child_ref, SnowflakeID.from_short_code(relationship_type_uid))
-            for parent_ref, child_ref, relationship_type_uid in add_edges
-        ]
-        with execution_readiness_uow() as execution:
-            execution.watch([child_id for _, _, child_id in remove_relationships])
-            execution.watch(ref_ids[child_ref] for _, child_ref, _ in add_edges if child_ref not in new_refs)
-            created_relationships = self.repo.card_relationship.apply_graph_patch(
-                cards_to_create,
-                {uid: card.id for uid, card in existing_cards.items()},
-                converted_edges,
-                list(removed_ids),
-            )
-            for new_card in cards_to_create.values():
-                execution.watch_new(new_card.id)
+            if len(relationship_types) != len(relationship_type_ids):
+                raise ValueError("Unknown relationship type")
+
+            removed_ids = {relationship_id for relationship_id, _, _ in remove_relationships}
+            current_edges = {
+                (parent_id, child_id)
+                for relationship_id, parent_id, child_id in graph_snapshot
+                if relationship_id not in removed_ids
+            }
+            ref_ids = {uid: card.id for uid, card in existing_cards.items()}
+            symbolic_edges: set[tuple[str | int, str | int]] = set(current_edges)
+            for parent_ref, child_ref, _ in add_edges:
+                parent: str | int = parent_ref if parent_ref in new_refs else ref_ids[parent_ref]
+                child: str | int = child_ref if child_ref in new_refs else ref_ids[child_ref]
+                if (parent, child) in symbolic_edges:
+                    raise ValueError("Relationship already exists")
+                if self._edge_would_create_cycle(symbolic_edges, parent, child):
+                    raise ValueError("Graph patch would create a relationship cycle")
+                symbolic_edges.add((parent, child))
+
+            anchor_id = anchor_card.id
+            if new_refs and not self._all_connected(symbolic_edges, anchor_id, new_refs):
+                raise ValueError("Every new card must connect to the anchor card")
+
+            next_order = self.repo.card.get_next_order(column, {"project_id": project.id}) if new_cards else 0
+            cards_to_create = {
+                client_ref: Card(
+                    project_id=project.id,
+                    project_column_id=column.id,
+                    title=title,
+                    description=EditorContentModel(content=description or ""),
+                    order=next_order + index,
+                )
+                for index, (client_ref, title, description) in enumerate(new_cards)
+            }
+            converted_edges = [
+                (parent_ref, child_ref, SnowflakeID.from_short_code(relationship_type_uid))
+                for parent_ref, child_ref, relationship_type_uid in add_edges
+            ]
+            with execution_readiness_uow() as execution:
+                execution.watch([child_id for _, _, child_id in remove_relationships])
+                execution.watch(ref_ids[child_ref] for _, child_ref, _ in add_edges if child_ref not in new_refs)
+                created_relationships = self.repo.card_relationship.apply_graph_patch(
+                    cards_to_create,
+                    {uid: card.id for uid, card in existing_cards.items()},
+                    converted_edges,
+                    list(removed_ids),
+                )
+                for new_card in cards_to_create.values():
+                    execution.watch_new(new_card.id)
 
         created_cards = []
         for card in cards_to_create.values():
