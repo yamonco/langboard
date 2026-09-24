@@ -26,7 +26,6 @@ from ..card_workspace.application import (
 from ..card_workspace.application import apply_card_graph_patch as apply_graph_patch
 from ..card_workspace.application import cardify_card_checkitem as cardify_checkitem
 from ..card_workspace.application import create_card_in_leftmost_column as create_leftmost
-from ..card_workspace.application import delete_card_attachment as delete_attachment
 from ..card_workspace.application import get_card_bundle as query_card_bundle
 from ..card_workspace.application import get_project_identity as query_project_identity
 from ..card_workspace.application import get_public_card_metadata as query_public_metadata
@@ -38,10 +37,10 @@ from ..card_workspace.application import reconcile_card_checklist_projection as 
 from ..card_workspace.application import replace_card_description as replace_description
 from ..card_workspace.application import set_card_people_and_labels as replace_people_and_labels
 from ..card_workspace.application import set_card_relationships as replace_relationships
-from ..card_workspace.application import update_card_attachment as update_attachment
 from ..card_workspace.application.dtos import BoundedItemsDto
 from ..card_workspace.application.projections import (
     bounded_items,
+    public_attachment,
     public_checkitem,
     public_checklist,
     public_comment,
@@ -923,7 +922,29 @@ def update_card_attachment(
 ) -> dict[str, Any]:
     """Update native attachment metadata after full field validation."""
 
-    return update_attachment(_adapter(user, service), project_uid, card_uid, attachment_uid, name, order)
+    if name is None and order is None:
+        raise ValueError("At least one attachment field is required")
+    if name is not None and (not isinstance(name, str) or not name.strip()):
+        raise ValueError("Attachment name is required")
+    if order is not None and (isinstance(order, bool) or order < 0):
+        raise ValueError("Attachment order must be a non-negative integer")
+    params = _get_card_in_project(project_uid, card_uid)
+    if not params:
+        raise ValueError("Card not found in project")
+    project, card = params
+    attachment = service.card_attachment.get_by_id_like(attachment_uid)
+    if attachment is None or attachment.card_id != card.id:
+        raise ValueError("Attachment not found in card")
+    if name is not None and not service.card_attachment.change_name(user, project, card, attachment, name.strip()):
+        raise ValueError("Attachment not found in card")
+    if order is not None and not service.card_attachment.change_order(project, card, attachment, order):
+        raise ValueError("Attachment not found in card")
+    attachments = service.card_attachment.get_api_list_by_card(card_uid, limit=26)
+    return {
+        "attachments": bounded_items(
+            [public_attachment(item) for item in attachments], CardBundleSection.Attachments, 25
+        )
+    }
 
 
 @McpTool.add("user", description="Delete a card attachment without exposing file bytes.")
@@ -937,7 +958,16 @@ def delete_card_attachment(
 ) -> dict[str, bool]:
     """Delete a native card attachment after ancestry validation."""
 
-    return delete_attachment(_adapter(user, service), project_uid, card_uid, attachment_uid)
+    params = _get_card_in_project(project_uid, card_uid)
+    if not params:
+        raise ValueError("Card not found in project")
+    project, card = params
+    attachment = service.card_attachment.get_by_id_like(attachment_uid)
+    if attachment is None or attachment.card_id != card.id:
+        raise ValueError("Attachment not found in card")
+    if not service.card_attachment.delete(user, project, card, attachment):
+        raise ValueError("Attachment not found in card")
+    return {"deleted": True}
 
 
 @McpTool.add(description="List bounded public card metadata; reserved and secret-like keys are hidden.")

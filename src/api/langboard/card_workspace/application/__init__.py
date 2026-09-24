@@ -4,14 +4,12 @@ from .commands import (
     apply_card_graph_patch,
     cardify_card_checkitem,
     create_card_in_leftmost_column,
-    delete_card_attachment,
     patch_card_description,
     provision_project,
     reconcile_card_checklist_projection,
     replace_card_description,
     set_card_people_and_labels,
     set_card_relationships,
-    update_card_attachment,
 )
 from .dtos import CardBundleResponse, ProjectCardListResponse, ProjectIdentityResponse
 from .queries import (
@@ -31,7 +29,6 @@ __all__ = [
     "cardify_card_checkitem",
     "create_card_in_leftmost_column",
     "provision_project",
-    "delete_card_attachment",
     "get_card_bundle",
     "get_project_identity",
     "get_public_card_metadata",
@@ -42,5 +39,4 @@ __all__ = [
     "reconcile_card_checklist_projection",
     "set_card_people_and_labels",
     "set_card_relationships",
-    "update_card_attachment",
 ]

@@ -511,34 +511,6 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
             raise RuntimeError("Validated relationship replacement failed")
         return result
 
-    def update_card_attachment(
-        self,
-        project_uid: str,
-        card_uid: str,
-        attachment_uid: str,
-        name: str | None,
-        order: int | None,
-    ) -> list[dict[str, Any]]:
-        if not isinstance(self._actor, User):
-            raise PermissionError("Only users can update attachments")
-        attachment = self._ensure_attachment(project_uid, card_uid, attachment_uid)
-        if name is not None and not self._service.card_attachment.change_name(
-            self._actor, project_uid, card_uid, attachment, name
-        ):
-            raise ValueError("Attachment not found in card")
-        if order is not None and not self._service.card_attachment.change_order(
-            project_uid, card_uid, attachment, order
-        ):
-            raise ValueError("Attachment not found in card")
-        return self._service.card_attachment.get_api_list_by_card(card_uid, limit=26)
-
-    def delete_card_attachment(self, project_uid: str, card_uid: str, attachment_uid: str) -> None:
-        if not isinstance(self._actor, User):
-            raise PermissionError("Only users can delete attachments")
-        attachment = self._ensure_attachment(project_uid, card_uid, attachment_uid)
-        if not self._service.card_attachment.delete(self._actor, project_uid, card_uid, attachment):
-            raise ValueError("Attachment not found in card")
-
     def reconcile_card_checklist_projection(
         self,
         project_uid: str,
@@ -719,13 +691,6 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
         if item is None or checklist is None or checklist.card_id != card.id:
             raise ValueError("Checkitem not found in card")
         return item
-
-    def _ensure_attachment(self, project_uid: str, card_uid: str, attachment_uid: str) -> Any:
-        _, card = self._ensure_project_card(project_uid, card_uid)
-        attachment = self._service.card_attachment.get_by_id_like(attachment_uid)
-        if attachment is None or attachment.card_id != card.id:
-            raise ValueError("Attachment not found in card")
-        return attachment
 
     def _require_members(self, project: Any, requested: list[str]) -> None:
         available = {
