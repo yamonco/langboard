@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any, Literal, Sequence, cast, overload
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
@@ -795,6 +795,7 @@ class CardService(BaseDomainService):
         *,
         dispatch_effects: bool = True,
         order_override: int | None = None,
+        deadline_at: datetime | None = None,
     ) -> tuple[Card, dict[str, Any]] | None:
         params = InfraHelper.get_records_with_foreign_by_params((Project, project), (ProjectColumn, column))
         if not params:
@@ -811,6 +812,7 @@ class CardService(BaseDomainService):
                 project_column_id=column.id,
                 title=title,
                 description=description or EditorContentModel(),
+                deadline_at=deadline_at,
                 order=order_override if order_override is not None else self.repo.card.get_next_order(
                     column, {"project_id": project.id}
                 ),

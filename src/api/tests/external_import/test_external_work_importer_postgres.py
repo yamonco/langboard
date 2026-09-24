@@ -16,6 +16,7 @@ os.environ.setdefault("PROJECT_NAME", "langboard")
 from langboard.external_import import ExternalWorkBundle  # noqa: E402
 from langboard.external_import.importer import ExternalWorkImporter  # noqa: E402
 from langboard_shared import publishers  # noqa: E402
+from langboard_shared.core.db import DbSession, EditorContentModel, SqlBuilder  # noqa: E402
 from langboard_shared.core.db.DbEngine import DbEngine  # noqa: E402
 from langboard_shared.core.db.Models import BaseDbModel  # noqa: E402
 from langboard_shared.core.storage import Storage, StorageName  # noqa: E402
@@ -39,6 +40,7 @@ from langboard_shared.domain.models import (  # noqa: E402
     UserIdentityLink,
 )
 from langboard_shared.domain.models.UserIdentityLink import IdentityProvider  # noqa: E402
+from langboard_shared.domain.services import DomainService  # noqa: E402
 from langboard_shared.Env import Env  # noqa: E402
 from langboard_shared.helpers import ensure_models_imported  # noqa: E402
 from langboard_shared.tasks import activities  # noqa: E402
@@ -109,6 +111,7 @@ def test_imported_card_shares_native_creation_invariants(
                 "external_id": "scim-actor", "issuer": "test-issuer",
             })
         comment_time = datetime(2020, 1, 2, 3, 4, tzinfo=timezone.utc)
+        deadline_time = datetime(2030, 1, 2, 3, 4, tzinfo=timezone.utc)
         bundle = ExternalWorkBundle.model_validate({
             "schema_version": "1",
             "source": {"namespace": "tracker", "container_id": "project-1", "batch_id": "batch-1"},
@@ -124,6 +127,7 @@ def test_imported_card_shares_native_creation_invariants(
                 {
                     "source_id": "card-1", "column_source_id": "column-1", "title": "Imported work",
                     "description": "", "order": 9, "label_source_ids": ["label-1"],
+                    "deadline_at": deadline_time.isoformat(),
                 },
                 {"source_id": "card-2", "column_source_id": "column-1", "title": "Dependent work", "order": 10},
             ] + [
@@ -212,6 +216,7 @@ def test_imported_card_shares_native_creation_invariants(
             card = connection.execute(select(Card.__table__).where(Card.title == "Imported work")).mappings().one()
             dependent = connection.execute(select(Card.__table__).where(Card.title == "Dependent work")).mappings().one()
             assert card["created_by_user_id"] == actor_id
+            assert card["deadline_at"] == deadline_time
             assert card["last_change_seq"] > 0
             assert card["last_change_target_type"] == "attachment"
             assert card["order"] == 9
@@ -295,6 +300,39 @@ def test_imported_card_shares_native_creation_invariants(
             assert resumed.created == {"attachment": 2}
             with engine.connect() as connection:
                 assert len(connection.execute(select(CardAttachment.__table__)).all()) == 3
+        domain = DomainService()
+        with DbSession.atomic() as db:
+            native_actor = db.exec(SqlBuilder.select.table(User).where(User.id == actor_id)).first()
+            native_project = db.exec(SqlBuilder.select.table(Project).where(Project.id == project_id)).first()
+            native_column = db.exec(
+                SqlBuilder.select.table(ProjectColumn).where(ProjectColumn.name == "Backlog")
+            ).first()
+            assert native_actor and native_project and native_column
+            created = domain.card.create(
+                native_actor, native_project, native_column, "Native parity",
+                EditorContentModel(content="Native parity"), [],
+                dispatch_effects=False, deadline_at=deadline_time,
+            )
+            assert created is not None
+            native_card, _ = created
+            native_checklist = domain.checklist.create(
+                native_actor, native_project, native_card, "Native checks", dispatch_effects=False
+            )
+            assert native_checklist is not None
+            native_item = domain.checkitem.create(
+                native_actor, native_project, native_card, native_checklist, "Native checked",
+                dispatch_effects=False, initially_checked=True,
+            )
+            assert native_item is not None and native_item.is_checked
+        with engine.connect() as connection:
+            native = connection.execute(select(Card.__table__).where(Card.title == "Native parity")).mappings().one()
+            assert native["created_by_user_id"] == card["created_by_user_id"] == actor_id
+            assert native["deadline_at"] == card["deadline_at"] == deadline_time
+            assert native["last_change_seq"] > 0 and card["last_change_seq"] > 0
+        assert native_checklist.is_system is False
+        assert effects == Counter({
+            (effect, kind): count for kind, count in expected.items() for effect in ("publisher", "activity")
+        })
     finally:
         engine.dispose()
         with admin.begin() as connection:
