@@ -48,6 +48,7 @@ class ProjectLabelService(BaseDomainService):
         description: str,
         *,
         dispatch_effects: bool = True,
+        order_override: int | None = None,
     ) -> tuple[ProjectLabel, dict[str, Any]] | None:
         project = InfraHelper.get_by_id_like(Project, project)
         if not project:
@@ -58,7 +59,7 @@ class ProjectLabelService(BaseDomainService):
             name=name,
             color=color,
             description=description,
-            order=self.repo.project_label.get_next_order(project),
+            order=order_override if order_override is not None else self.repo.project_label.get_next_order(project),
         )
         self.repo.project_label.insert(label)
 

@@ -100,6 +100,7 @@ class ChecklistService(BaseDomainService):
         title: str,
         *,
         dispatch_effects: bool = True,
+        order_override: int | None = None,
     ) -> Checklist | None:
         params = InfraHelper.get_records_with_foreign_by_params((Project, project), (Card, card))
         if not params:
@@ -108,7 +109,11 @@ class ChecklistService(BaseDomainService):
         if card.is_linked_resource:
             return None
 
-        checklist = Checklist(card_id=card.id, title=title, order=self.repo.checklist.get_next_order(card))
+        checklist = Checklist(
+            card_id=card.id,
+            title=title,
+            order=order_override if order_override is not None else self.repo.checklist.get_next_order(card),
+        )
         self.repo.checklist.insert(checklist)
 
         card_service = self._get_service_by_name("card")

@@ -99,6 +99,7 @@ class CheckitemService(BaseDomainService):
         title: str,
         *,
         dispatch_effects: bool = True,
+        order_override: int | None = None,
     ) -> Checkitem | None:
         params = InfraHelper.get_records_with_foreign_by_params(
             (Project, project), (Card, card), (Checklist, checklist)
@@ -108,7 +109,9 @@ class CheckitemService(BaseDomainService):
         project, card, checklist = params
 
         checkitem = Checkitem(
-            checklist_id=checklist.id, title=title, order=self.repo.checkitem.get_next_order(checklist)
+            checklist_id=checklist.id,
+            title=title,
+            order=order_override if order_override is not None else self.repo.checkitem.get_next_order(checklist),
         )
         self.repo.checkitem.insert(checkitem)
 
