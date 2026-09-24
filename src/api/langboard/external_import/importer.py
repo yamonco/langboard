@@ -469,16 +469,27 @@ class ExternalWorkImporter:
                     raise ExternalImportError("card label assignment failed")
             return target
         elif isinstance(record, ExternalChecklist):
-            target = Checklist(
-                card_id=targets[("card", record.card_source_id)].id, title=record.title, order=record.order
+            card = targets[("card", record.card_source_id)]
+            target = self._domain.checklist.create(
+                actor, project, card, record.title, dispatch_effects=False
             )
+            if target is None:
+                raise ExternalImportError("checklist creation failed")
+            target.order = record.order
+            db.update(target)
+            return target
         elif isinstance(record, ExternalCheckitem):
-            target = Checkitem(
-                checklist_id=targets[("checklist", record.checklist_source_id)].id,
-                title=record.title,
-                order=record.order,
-                is_checked=record.is_checked,
+            checklist = targets[("checklist", record.checklist_source_id)]
+            card = self._card_for_checklist(checklist)
+            target = self._domain.checkitem.create(
+                actor, project, card, checklist, record.title, dispatch_effects=False
             )
+            if target is None:
+                raise ExternalImportError("checkitem creation failed")
+            target.order = record.order
+            target.is_checked = record.is_checked
+            db.update(target)
+            return target
         elif isinstance(record, ExternalRelationship):
             relationship_type = self._require_uid(
                 db, GlobalCardRelationshipType, record.relationship_type_uid, "relationship type"
