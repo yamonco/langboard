@@ -2,6 +2,8 @@
 
 import os
 from datetime import datetime, timezone
+from hashlib import sha256
+from pathlib import Path
 from uuid import uuid4
 import pytest
 from pydantic import SecretStr
@@ -14,10 +16,13 @@ from langboard.external_import import ExternalWorkBundle  # noqa: E402
 from langboard.external_import.importer import ExternalWorkImporter  # noqa: E402
 from langboard_shared.core.db.DbEngine import DbEngine  # noqa: E402
 from langboard_shared.core.db.Models import BaseDbModel  # noqa: E402
+from langboard_shared.core.storage import Storage  # noqa: E402
+from langboard_shared.core.storage.LocalStorage import LocalStorage  # noqa: E402
 from langboard_shared.core.types import SnowflakeID  # noqa: E402
 from langboard_shared.domain.models import (  # noqa: E402
     Card,
     CardAssignedProjectLabel,
+    CardAttachment,
     CardComment,
     CardRelationship,
     Checkitem,
@@ -32,15 +37,24 @@ from langboard_shared.domain.models import (  # noqa: E402
 from langboard_shared.domain.models.UserIdentityLink import IdentityProvider  # noqa: E402
 from langboard_shared.Env import Env  # noqa: E402
 from langboard_shared.helpers import ensure_models_imported  # noqa: E402
+from langboard_shared.publishers import CardAttachmentPublisher  # noqa: E402
+from langboard_shared.tasks.activities import CardAttachmentActivityTask  # noqa: E402
+from langboard_shared.tasks.bots import CardAttachmentBotTask  # noqa: E402
 
 
 DATABASE_URL = os.getenv("LANGBOARD_OUTBOX_TEST_DATABASE_URL")
 
 
 @pytest.mark.skipif(not DATABASE_URL, reason="dedicated PostgreSQL proof URL not set")
-def test_imported_card_shares_native_creation_invariants(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_imported_card_shares_native_creation_invariants(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     ensure_models_imported()
     monkeypatch.setattr(type(Env), "SCIM_ISSUER", property(lambda _self: "test-issuer"))
+    monkeypatch.setattr(type(Env), "LOCAL_STORAGE_DIR", property(lambda _self: tmp_path / "storage"))
+    monkeypatch.setattr(Storage, "_storages", {"local": LocalStorage()})
+    attachments_root = tmp_path / "bundle"
+    attachments_root.mkdir()
+    attachment_bytes = b"historical attachment\n"
+    (attachments_root / "note.txt").write_bytes(attachment_bytes)
     schema = f"external_import_{uuid4().hex}"
     admin = create_engine(DATABASE_URL)
     with admin.begin() as connection:
@@ -51,7 +65,7 @@ def test_imported_card_shares_native_creation_invariants(monkeypatch: pytest.Mon
     try:
         needed = {
             "user", "user_identity_link", "project", "project_column", "project_label", "project_assigned_user",
-            "card", "card_assigned_user", "card_assigned_project_label", "card_comment", "checklist",
+            "card", "card_assigned_user", "card_assigned_project_label", "card_attachment", "card_comment", "checklist",
             "checkitem", "external_import_record", "project_execution_binding",
             "webhook_setting", "card_relationship",
         }
@@ -117,8 +131,25 @@ def test_imported_card_shares_native_creation_invariants(monkeypatch: pytest.Mon
                 "author_scim_external_id": "scim-actor", "created_at": comment_time.isoformat(),
                 "content": "Historical discussion",
             }],
+            "attachments": [{
+                "source_id": "attachment-1", "card_source_id": "card-1",
+                "author_scim_external_id": "scim-actor", "created_at": comment_time.isoformat(),
+                "relative_path": "note.txt", "original_filename": "note.txt",
+                "sha256": sha256(attachment_bytes).hexdigest(), "size": len(attachment_bytes),
+            }],
         })
-        importer = ExternalWorkImporter(effect_dispatcher=lambda *_args: None)
+        effects: list[str] = []
+        monkeypatch.setattr(CardAttachmentPublisher, "uploaded", lambda *_args: effects.append("published"))
+        monkeypatch.setattr(
+            CardAttachmentActivityTask, "card_attachment_uploaded", lambda *_args: effects.append("activity")
+        )
+        monkeypatch.setattr(
+            CardAttachmentBotTask, "card_attachment_uploaded",
+            lambda *_args: pytest.fail("historical attachment dispatched a live bot"),
+        )
+        importer = ExternalWorkImporter(attachments_root)
+        native_dispatch = importer._dispatch_native_effects
+        importer._effect_dispatcher = lambda kind, *args: native_dispatch(kind, *args) if kind == "attachment" else None
         first = importer.import_bundle(
             bundle, project_uid=project_id.to_short_code(), actor_uid=actor_id.to_short_code()
         )
@@ -127,16 +158,17 @@ def test_imported_card_shares_native_creation_invariants(monkeypatch: pytest.Mon
         )
         expected = {
             "column": 1, "label": 1, "card": 2, "checklist": 1, "checkitem": 1,
-            "relationship": 1, "comment": 1,
+            "relationship": 1, "comment": 1, "attachment": 1,
         }
         assert first.created == expected
         assert second.unchanged == expected
+        assert effects == ["published", "activity"]
         with engine.connect() as connection:
             card = connection.execute(select(Card.__table__).where(Card.title == "Imported work")).mappings().one()
             dependent = connection.execute(select(Card.__table__).where(Card.title == "Dependent work")).mappings().one()
             assert card["created_by_user_id"] == actor_id
             assert card["last_change_seq"] > 0
-            assert card["last_change_target_type"] == "comment"
+            assert card["last_change_target_type"] == "attachment"
             assert card["order"] == 9
             assert dependent["order"] == 10
             assert connection.execute(select(CardAssignedProjectLabel.__table__)).one() is not None
@@ -162,7 +194,13 @@ def test_imported_card_shares_native_creation_invariants(monkeypatch: pytest.Mon
             assert comment["user_id"] == actor_id
             assert comment["created_at"] == comment_time
             assert comment["content"].content == "Historical discussion"
-            assert len(connection.execute(select(ExternalImportRecord.__table__)).all()) == 8
+            attachment = connection.execute(select(CardAttachment.__table__)).mappings().one()
+            assert attachment["card_id"] == card["id"]
+            assert attachment["user_id"] == actor_id
+            assert attachment["created_at"] == comment_time
+            assert attachment["filename"] == "note.txt"
+            assert Storage.get_file(attachment["file"]) == attachment_bytes
+            assert len(connection.execute(select(ExternalImportRecord.__table__)).all()) == 9
     finally:
         engine.dispose()
         with admin.begin() as connection:
