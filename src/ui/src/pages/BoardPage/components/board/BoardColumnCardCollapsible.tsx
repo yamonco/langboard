@@ -36,6 +36,7 @@ import { Utils } from "@langboard/core/utils";
 import BoardCardMove from "@/pages/BoardPage/components/board/BoardCardMove";
 import { getBoardCardWidgetVisibility } from "@/pages/BoardPage/components/board/BoardCardWidgetVisibility";
 import useSetCardCompleted from "@/controllers/api/board/useSetCardCompleted";
+import { captureCardOrigin } from "@/pages/BoardPage/components/board/CardAnimation";
 
 export interface IBoardColumnCardCollapsibleProps {
     isDragging: bool;
@@ -58,13 +59,17 @@ function BoardColumnWikiCard({ isDragging }: IBoardColumnCardCollapsibleProps) {
     const [t] = useTranslation();
     const { model: card } = ModelRegistry.ProjectCard.useContext<IBoardColumnCardContextParams>();
     const resource = card.useField("linked_resource");
-    const openCard = useCallback(() => {
-        if (selectCardViewType || isDragging) {
-            return;
-        }
+    const openCard = useCallback(
+        (event: React.MouseEvent<HTMLDivElement>) => {
+            if (selectCardViewType || isDragging) {
+                return;
+            }
 
-        navigateWithFilters(ROUTES.BOARD.CARD(project.uid, card.uid));
-    }, [card.uid, isDragging, navigateWithFilters, project.uid, selectCardViewType]);
+            captureCardOrigin(project.uid, card.uid, event.currentTarget.getBoundingClientRect());
+            navigateWithFilters(ROUTES.BOARD.CARD(project.uid, card.uid));
+        },
+        [card.uid, isDragging, navigateWithFilters, project.uid, selectCardViewType]
+    );
 
     if (!resource) {
         return null;
@@ -162,6 +167,7 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
                 return;
             }
 
+            captureCardOrigin(project.uid, card.uid, e.currentTarget.getBoundingClientRect());
             navigateWithFilters(ROUTES.BOARD.CARD(project.uid, card.uid));
         },
         [card, isDragging, isDisabledCard, navigateWithFilters, project, selectCardViewType]
@@ -383,11 +389,16 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
                                         title={t("card.Created by {{name}}", {
                                             name: creator.name,
                                         })}
-                                        className="mr-0 inline-flex max-w-0 overflow-hidden opacity-0 transition-all duration-200 ease-out group-hover/card:mr-2 group-hover/card:max-w-8 group-hover/card:opacity-100"
+                                        className={cn(
+                                            "mr-0 inline-flex max-w-0 overflow-hidden opacity-0 transition-all duration-200 ease-out",
+                                            "group-hover/card:mr-2 group-hover/card:max-w-8 group-hover/card:opacity-100"
+                                        )}
                                         {...attributes}
                                     >
                                         <Avatar.Root size="xs">
-                                            {creator.avatar && <Avatar.Image src={Utils.String.convertServerFileURL(creator.avatar)} alt={creator.name} />}
+                                            {creator.avatar && (
+                                                <Avatar.Image src={Utils.String.convertServerFileURL(creator.avatar)} alt={creator.name} />
+                                            )}
                                             <Avatar.Fallback className="text-[10px] font-medium">
                                                 {Utils.String.getInitials(creator.name, "")}
                                             </Avatar.Fallback>
@@ -434,11 +445,16 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
                                             title={t("card.Created by {{name}}", {
                                                 name: creator.name,
                                             })}
-                                            className="mr-0 inline-flex max-w-0 overflow-hidden opacity-0 transition-all duration-200 ease-out group-hover/card:mr-2 group-hover/card:max-w-8 group-hover/card:opacity-100"
+                                            className={cn(
+                                                "mr-0 inline-flex max-w-0 overflow-hidden opacity-0 transition-all duration-200 ease-out",
+                                                "group-hover/card:mr-2 group-hover/card:max-w-8 group-hover/card:opacity-100"
+                                            )}
                                             {...attributes}
                                         >
                                             <Avatar.Root size="xs">
-                                                {creator.avatar && <Avatar.Image src={Utils.String.convertServerFileURL(creator.avatar)} alt={creator.name} />}
+                                                {creator.avatar && (
+                                                    <Avatar.Image src={Utils.String.convertServerFileURL(creator.avatar)} alt={creator.name} />
+                                                )}
                                                 <Avatar.Fallback className="text-[10px] font-medium">
                                                     {Utils.String.getInitials(creator.name, "")}
                                                 </Avatar.Fallback>

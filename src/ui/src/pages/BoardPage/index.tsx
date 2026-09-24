@@ -637,6 +637,7 @@ function BoardProxyDisplay({ pageRoute, isFetching, project }: IBoardProxyDispla
                             </Box>
                             {isCardPage && (
                                 <BoardCardPage
+                                    key={pageRoute}
                                     projectUID={project.uid}
                                     cardUID={pageRoute}
                                     embedded

@@ -184,19 +184,19 @@
     }
 }
 
-[data-radix-dialog-content][data-state="open"] {
+[data-card-viewer][data-card-viewer-ready="true"][data-state="open"]:not([data-card-viewer-closing="true"]) {
     animation: card-viewer-open 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
     will-change: transform, opacity;
 }
 
-[data-radix-dialog-content][data-state="closed"] {
+[data-card-viewer][data-card-viewer-closing="true"] {
     animation: card-viewer-close 180ms cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
     will-change: transform, opacity;
 }
 
 @media (prefers-reduced-motion: reduce) {
-    [data-radix-dialog-content][data-state="open"],
-    [data-radix-dialog-content][data-state="closed"] {
+    [data-card-viewer][data-state="open"],
+    [data-card-viewer][data-card-viewer-closing="true"] {
         animation: none;
         opacity: 1;
         transform: none;
