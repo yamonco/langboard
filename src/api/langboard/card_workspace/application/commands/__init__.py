@@ -13,7 +13,6 @@ from ...domain import (
     ExactTextReplacement,
     projection_revision,
     require_projection_key,
-    require_public_metadata_key,
 )
 from ...domain import (
     MAX_METADATA_VALUE_CHARS as MAX_METADATA_VALUE_CHARS,
@@ -31,7 +30,6 @@ from ..projections import (
     public_card_summary,
     public_checklist,
     public_label,
-    public_metadata,
     public_relationship,
 )
 
@@ -282,40 +280,6 @@ def delete_card_attachment(
     """Delete one attachment without returning file or actor details."""
 
     port.delete_card_attachment(project_uid, card_uid, attachment_uid)
-    return {"deleted": True}
-
-
-def save_public_card_metadata(
-    port: CardWorkspaceCommandPort,
-    project_uid: str,
-    card_uid: str,
-    key: str,
-    value: str,
-    old_key: str | None = None,
-) -> dict[str, Any]:
-    """Save public metadata while refusing reserved or secret-like keys."""
-
-    normalized_key = require_public_metadata_key(key)
-    normalized_old_key = require_public_metadata_key(old_key) if old_key is not None else None
-    metadata = port.save_public_card_metadata(project_uid, card_uid, normalized_key, value, normalized_old_key)
-    entries = public_metadata(metadata)
-    return next(entry for entry in entries if entry["key"] == normalized_key)
-
-
-def delete_public_card_metadata(
-    port: CardWorkspaceCommandPort,
-    project_uid: str,
-    card_uid: str,
-    keys: list[str],
-) -> dict[str, bool]:
-    """Delete public metadata keys only."""
-
-    if not keys:
-        raise ValueError("At least one metadata key is required")
-    normalized = [require_public_metadata_key(key) for key in keys]
-    if len(normalized) != len(set(normalized)):
-        raise ValueError("Duplicate metadata key")
-    port.delete_public_card_metadata(project_uid, card_uid, normalized)
     return {"deleted": True}
 
 

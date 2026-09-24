@@ -188,19 +188,6 @@ class CardWorkspaceCommandPort(Protocol):
     def delete_card_attachment(self, project_uid: str, card_uid: str, attachment_uid: str) -> None:
         """Delete a card attachment."""
 
-    def save_public_card_metadata(
-        self,
-        project_uid: str,
-        card_uid: str,
-        key: str,
-        value: str,
-        old_key: str | None,
-    ) -> dict[str, str]:
-        """Save one public metadata entry."""
-
-    def delete_public_card_metadata(self, project_uid: str, card_uid: str, keys: list[str]) -> None:
-        """Delete public metadata entries."""
-
     def reconcile_card_checklist_projection(
         self,
         project_uid: str,

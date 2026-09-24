@@ -10,7 +10,7 @@ from langboard_shared.core.exceptions.CardDeleteForbidden import CardDeleteForbi
 from langboard_shared.core.storage import Storage, StorageName
 from langboard_shared.core.types import SafeDateTime
 from langboard_shared.core.utils.Converter import convert_python_data
-from langboard_shared.domain.models import Bot, Card, Project, ProjectRole, User
+from langboard_shared.domain.models import Bot, Card, CardMetadata, Project, ProjectRole, User
 from langboard_shared.domain.models.bases import ALL_GRANTED
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.domain.services.DomainService import DomainService
@@ -27,7 +27,6 @@ from ..card_workspace.application import apply_card_graph_patch as apply_graph_p
 from ..card_workspace.application import cardify_card_checkitem as cardify_checkitem
 from ..card_workspace.application import create_card_in_leftmost_column as create_leftmost
 from ..card_workspace.application import delete_card_attachment as delete_attachment
-from ..card_workspace.application import delete_public_card_metadata as delete_public_metadata
 from ..card_workspace.application import get_card_bundle as query_card_bundle
 from ..card_workspace.application import get_project_identity as query_project_identity
 from ..card_workspace.application import get_public_card_metadata as query_public_metadata
@@ -37,14 +36,13 @@ from ..card_workspace.application import patch_card_description as replace_descr
 from ..card_workspace.application import provision_project as provision
 from ..card_workspace.application import reconcile_card_checklist_projection as reconcile_checklist
 from ..card_workspace.application import replace_card_description as replace_description
-from ..card_workspace.application import save_public_card_metadata as save_public_metadata
 from ..card_workspace.application import set_card_people_and_labels as replace_people_and_labels
 from ..card_workspace.application import set_card_relationships as replace_relationships
 from ..card_workspace.application import update_card_attachment as update_attachment
 from ..card_workspace.application import update_card_checkitem as update_checkitem
 from ..card_workspace.application import update_card_checklist as update_checklist
 from ..card_workspace.application.dtos import BoundedItemsDto
-from ..card_workspace.application.projections import public_checkitem, public_checklist, public_comment
+from ..card_workspace.application.projections import public_checkitem, public_checklist, public_comment, public_metadata
 from ..card_workspace.domain import (
     CardBundleInclude,
     CardGraphEdge,
@@ -54,6 +52,7 @@ from ..card_workspace.domain import (
     DescriptionPatchConflict,
     ExactTextReplacement,
     SectionPage,
+    require_public_metadata_key,
 )
 from ..card_workspace.infrastructure import NativeCardWorkspaceAdapter
 from ..mcp_integration import McpRoleFilter, McpTool
@@ -945,7 +944,13 @@ def save_public_card_metadata(
 ) -> dict[str, Any]:
     """Create, update, or rename public metadata."""
 
-    return save_public_metadata(_adapter(user_or_bot, service), project_uid, card_uid, key, value, old_key)
+    normalized_key = require_public_metadata_key(key)
+    normalized_old_key = require_public_metadata_key(old_key) if old_key is not None else None
+    _, card = _require_task_card(project_uid, card_uid)
+    metadata = service.metadata.save(CardMetadata, card, normalized_key, value, normalized_old_key)
+    if metadata is None:
+        raise RuntimeError("Failed to save metadata")
+    return public_metadata({normalized_key: metadata.value})[0]
 
 
 @McpTool.add(description="Delete public card metadata keys; reserved keys are rejected.")
@@ -959,7 +964,15 @@ def delete_public_card_metadata(
 ) -> dict[str, bool]:
     """Delete one or more explicitly public metadata entries."""
 
-    return delete_public_metadata(_adapter(user_or_bot, service), project_uid, card_uid, keys)
+    if not keys:
+        raise ValueError("At least one metadata key is required")
+    normalized = [require_public_metadata_key(key) for key in keys]
+    if len(normalized) != len(set(normalized)):
+        raise ValueError("Duplicate metadata key")
+    _, card = _require_task_card(project_uid, card_uid)
+    if not service.metadata.delete(CardMetadata, card, normalized):
+        raise ValueError("Metadata not found")
+    return {"deleted": True}
 
 
 @McpTool.add(

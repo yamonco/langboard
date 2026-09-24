@@ -136,6 +136,9 @@ class FakeQueryPort:
     def get_public_card_metadata(self, project_uid: str, card_uid: str) -> dict[str, str] | None:
         return self.source.metadata
 
+    def get_card_content_blocks(self, project_uid: str, card_uid: str) -> list[dict[str, object]]:
+        return []
+
 
 def test_initial_card_bundle_is_bounded_and_privacy_preserving() -> None:
     """The initial aggregate exposes assigned facts only and emits independent cursors."""

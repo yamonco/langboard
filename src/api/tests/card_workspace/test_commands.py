@@ -4,7 +4,6 @@ from langboard.card_workspace.application.commands import (
     apply_card_graph_patch,
     cardify_card_checkitem,
     create_card_in_leftmost_column,
-    delete_public_card_metadata,
     patch_card_description,
     provision_project,
     replace_card_description,
@@ -105,9 +104,6 @@ class FakeCommandPort:
             }
         ]
 
-    def delete_public_card_metadata(self, project_uid: str, card_uid: str, keys: list[str]) -> None:
-        self.calls.append(("delete_public_card_metadata", (project_uid, card_uid, keys)))
-
 
 def test_create_commands_normalize_before_calling_port() -> None:
     """The application owns input normalization while the adapter owns native mechanics."""
@@ -183,10 +179,6 @@ def test_description_replacement_supports_initialization_and_clearing_without_ec
         (
             lambda port: set_card_people_and_labels(port, "p", "c", ["u1", "u1"], None),
             "duplicates",
-        ),
-        (
-            lambda port: delete_public_card_metadata(port, "p", "c", ["api_token"]),
-            "reserved or secret-like",
         ),
     ],
 )

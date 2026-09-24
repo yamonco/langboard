@@ -583,29 +583,6 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
         if not self._service.card_attachment.delete(self._actor, project_uid, card_uid, attachment):
             raise ValueError("Attachment not found in card")
 
-    def save_public_card_metadata(
-        self,
-        project_uid: str,
-        card_uid: str,
-        key: str,
-        value: str,
-        old_key: str | None,
-    ) -> dict[str, str]:
-        key = require_public_metadata_key(key)
-        if old_key is not None:
-            old_key = require_public_metadata_key(old_key)
-        card = self._ensure_card(project_uid, card_uid)
-        metadata = self._service.metadata.save(CardMetadata, card, key, value, old_key)
-        if metadata is None:
-            raise RuntimeError("Failed to save metadata")
-        return self.get_public_card_metadata(project_uid, card_uid) or {}
-
-    def delete_public_card_metadata(self, project_uid: str, card_uid: str, keys: list[str]) -> None:
-        normalized = [require_public_metadata_key(key) for key in keys]
-        card = self._ensure_card(project_uid, card_uid)
-        if not self._service.metadata.delete(CardMetadata, card, normalized):
-            raise ValueError("Metadata not found")
-
     def reconcile_card_checklist_projection(
         self,
         project_uid: str,

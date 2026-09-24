@@ -96,6 +96,36 @@ def test_comment_tools_use_native_owner_without_workspace_adapter(monkeypatch: p
         CardMcp.delete_card_comment("project", "card", "comment", None, missing)
 
 
+def test_public_metadata_mutations_use_native_owner_and_bounded_response(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[str, Any]] = []
+    card = object()
+    monkeypatch.setattr(CardMcp, "_require_task_card", lambda *_: (object(), card))
+    monkeypatch.setattr(CardMcp, "_adapter", lambda *args: pytest.fail("workspace adapter used"))
+    service = SimpleNamespace(
+        metadata=SimpleNamespace(
+            save=lambda model, target, key, value, old_key: (
+                calls.append(("save", (target, key, value, old_key))) or SimpleNamespace(value=value)
+            ),
+            delete=lambda model, target, keys: (calls.append(("delete", (target, keys))) or True),
+        )
+    )
+
+    saved = CardMcp.save_public_card_metadata("project", "card", " note ", "x" * 4001, None, service)
+    assert saved == {"key": "note", "value": "x" * 4000, "total_chars": 4001, "truncated": True}
+    assert CardMcp.delete_public_card_metadata("project", "card", [" note "], None, service) == {"deleted": True}
+    assert calls == [
+        ("save", (card, "note", "x" * 4001, None)),
+        ("delete", (card, ["note"])),
+    ]
+
+    for keys in (["api_token"], ["note", " note "]):
+        with pytest.raises(ValueError):
+            CardMcp.delete_public_card_metadata("project", "card", keys, None, service)
+    with pytest.raises(ValueError, match="reserved or secret-like"):
+        CardMcp.save_public_card_metadata("project", "card", "api_token", "secret", None, service)
+    assert len(calls) == 2
+
+
 def test_checklist_create_delete_tools_use_native_owner(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[tuple[str, str]] = []
     checklist = SimpleNamespace(api_response=lambda: {"uid": "list", "title": "Tasks", "private": "hidden"})
