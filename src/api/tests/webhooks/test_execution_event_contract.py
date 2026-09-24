@@ -25,7 +25,6 @@ def test_ready_event_has_stable_cloudevents_mapping_and_signed_body() -> None:
             "title": "Build feature",
             "labels": ["backend"],
             "assignees": [],
-            "direct_blocker_uids": [],
             "card_url": "https://example.com/board/project-1/card-1",
             "source_revision": "revision-2",
         },
@@ -43,9 +42,10 @@ def test_ready_event_has_stable_cloudevents_mapping_and_signed_body() -> None:
     assert "card_uid" not in payload["data"]
     assert "semantic_state" not in payload["data"]
     assert headers["X-Langboard-Webhook-Timestamp"] == "123"
-    assert headers["X-Langboard-Webhook-Signature"] == "v1=" + hmac.new(
-        b"secret", b"123." + body, hashlib.sha256
-    ).hexdigest()
+    assert (
+        headers["X-Langboard-Webhook-Signature"]
+        == "v1=" + hmac.new(b"secret", b"123." + body, hashlib.sha256).hexdigest()
+    )
 
 
 def test_work_event_rejects_unexpected_private_fields() -> None:
@@ -76,6 +76,8 @@ def test_work_event_schema_describes_cloudevents_and_array_payload() -> None:
     assert "Card.updated_at" in parsed["properties"]["data"]["properties"]["source_revision"]["description"]
     assert set(parsed["properties"]) == {"specversion", "id", "source", "subject", "type", "time", "data"}
     assert "project_uid" not in parsed["properties"]["data"]["properties"]
+    assert "direct_blocker_uids" not in parsed["properties"]["data"]["properties"]
+    assert "io.langboard.work.blocked.v1" not in json.loads(schema)["components"]["schemas"]
 
 
 def test_execution_events_require_explicit_webhook_opt_in() -> None:

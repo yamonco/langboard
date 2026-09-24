@@ -67,7 +67,6 @@ _EXECUTION_EVENT_SCHEMA = {
     "title": "string",
     "labels": "string[]",
     "assignees": "string[]",
-    "direct_blocker_uids": "string[]",
     "card_url": "string",
     "source_revision": "string",
 }

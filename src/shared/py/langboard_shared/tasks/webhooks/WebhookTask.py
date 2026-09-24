@@ -84,23 +84,22 @@ async def webhook_task(model: WebhookModel) -> None:
 
 
 @Broker.wrap_async_task_decorator(WEBHOOK_DELIVERY_RETRY_OPTIONS)
-async def webhook_delivery_task(model: WebhookModel, webhook_uid: str) -> None:
+async def webhook_delivery_task(
+    model: WebhookModel,
+    webhook_uid: str,
+    binding_id: str | None = None,
+    binding_revision: str | None = None,
+) -> None:
     """Deliver one event to one endpoint with an independent retry budget."""
 
-    await deliver_webhook(model, webhook_uid)
+    await deliver_webhook(model, webhook_uid, binding_id, binding_revision)
 
 
 async def run_webhook(model: WebhookModel) -> None:
     """Schedule one delivery task for each endpoint that accepts the event."""
 
     if model.event in WORK_EXECUTION_EVENTS:
-        data = ExecutionEventData.model_validate(model.data)
-        binding = binding_for_project(data.project_uid)
-        reasons = binding_invalid_reasons(binding, model.event)
-        if reasons:
-            Broker.logger.error("Execution binding invalid: project=%s reasons=%s", data.project_uid, reasons)
-            return
-        webhook_delivery_task(model, binding.webhook_uid)
+        Broker.logger.error("Execution event requires frozen outbox destination: event=%s", model.event_id)
         return
 
     after_id: SnowflakeID | None = None
@@ -124,21 +123,45 @@ async def run_webhook(model: WebhookModel) -> None:
         after_id = settings[-1].id
 
 
-async def deliver_webhook(model: WebhookModel, webhook_uid: str) -> None:
+async def deliver_webhook(
+    model: WebhookModel,
+    webhook_uid: str,
+    binding_id: str | None = None,
+    binding_revision: str | None = None,
+) -> None:
     """POST one event to one current endpoint with bounded I/O."""
 
     setting = _get_webhook_setting(webhook_uid)
     if not setting or not _accepts_event(setting, model.event):
         return
     if model.event in WORK_EXECUTION_EVENTS:
+        if not binding_id or not binding_revision:
+            Broker.logger.error("Execution delivery has no frozen binding: event=%s", model.event_id)
+            return
         data = ExecutionEventData.model_validate(model.data)
+        from .ExecutionReadinessUow import current_execution
+
+        current = current_execution(InfraHelper.convert_id(data.card_uid))
+        if (
+            current is None
+            or not current[1]
+            or current[2] != data.execution_generation
+            or current[0].isoformat() != data.source_revision
+        ):
+            Broker.logger.info("Execution delivery superseded: event=%s", model.event_id)
+            return
         binding = binding_for_project(data.project_uid)
         reasons = binding_invalid_reasons(binding, model.event)
-        if reasons or binding.webhook_uid != webhook_uid:
+        if (
+            reasons
+            or str(binding.id) != binding_id
+            or binding.updated_at.isoformat() != binding_revision
+            or binding.webhook_uid != webhook_uid
+        ):
             Broker.logger.error(
                 "Execution binding invalid at delivery: project=%s reasons=%s",
                 data.project_uid,
-                reasons or ["webhook_mismatch"],
+                reasons or ["stale_binding"],
             )
             return
 

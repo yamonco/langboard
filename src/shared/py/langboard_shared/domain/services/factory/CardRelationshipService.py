@@ -1,5 +1,5 @@
 from typing import Any
-from ....core.db import DbSession, EditorContentModel
+from ....core.db import EditorContentModel
 from ....core.domain import BaseDomainService
 from ....core.types import SnowflakeID
 from ....core.types.ParamTypes import TCardParam, TProjectParam, TUserOrBot
@@ -7,6 +7,7 @@ from ....helpers import InfraHelper
 from ....publishers import CardPublisher, CardRelationshipPublisher
 from ....tasks.activities import CardActivityTask, CardRelationshipActivityTask
 from ....tasks.bots import CardBotTask
+from ....tasks.webhooks.ExecutionReadinessUow import execution_readiness_uow
 from ...models import Card, CardRelationship, Project, ProjectColumn
 
 
@@ -68,8 +69,17 @@ class CardRelationshipService(BaseDomainService):
         )
         opposite_relationship_ids = [related_card.id for _, _, related_card in opposite_relationships]
 
-        with DbSession.atomic():
-            self.repo.card_relationship.delete_all_by_card_and_relation(card, relation="parent" if is_parent else "child")
+        with execution_readiness_uow() as execution:
+            if is_parent:
+                execution.watch([card.id])
+            else:
+                execution.watch(
+                    [related_card.id for _, _, related_card in old_relationships]
+                    + [SnowflakeID.from_short_code(uid) for uid, _ in relationships]
+                )
+            self.repo.card_relationship.delete_all_by_card_and_relation(
+                card, relation="parent" if is_parent else "child"
+            )
 
             converted_related_card_ids: set[SnowflakeID] = set()
             relationship_type_ids: set[SnowflakeID] = set()
@@ -85,7 +95,9 @@ class CardRelationshipService(BaseDomainService):
                 project, list(converted_related_card_ids)
             )
 
-            relationship_types = self.repo.card_relationship.get_global_relationship_types_map(list(relationship_type_ids))
+            relationship_types = self.repo.card_relationship.get_global_relationship_types_map(
+                list(relationship_type_ids)
+            )
 
             new_relationships_dict: dict[SnowflakeID, bool] = {}
             for related_card_id, relationship_type_id in converted_relationships:
@@ -215,12 +227,17 @@ class CardRelationshipService(BaseDomainService):
             (parent_ref, child_ref, SnowflakeID.from_short_code(relationship_type_uid))
             for parent_ref, child_ref, relationship_type_uid in add_edges
         ]
-        created_relationships = self.repo.card_relationship.apply_graph_patch(
-            cards_to_create,
-            {uid: card.id for uid, card in existing_cards.items()},
-            converted_edges,
-            list(removed_ids),
-        )
+        with execution_readiness_uow() as execution:
+            execution.watch([child_id for _, _, child_id in remove_relationships])
+            execution.watch(ref_ids[child_ref] for _, child_ref, _ in add_edges if child_ref not in new_refs)
+            created_relationships = self.repo.card_relationship.apply_graph_patch(
+                cards_to_create,
+                {uid: card.id for uid, card in existing_cards.items()},
+                converted_edges,
+                list(removed_ids),
+            )
+            for new_card in cards_to_create.values():
+                execution.watch_new(new_card.id)
 
         created_cards = []
         for card in cards_to_create.values():

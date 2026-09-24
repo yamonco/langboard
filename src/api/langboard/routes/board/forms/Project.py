@@ -67,14 +67,7 @@ class UpdateProjectExecutionBindingForm(BaseFormModel):
     )
     prerequisite_relationship_type_uid: str | None = None
     webhook_uid: str | None = None
-    events: list[
-        Literal[
-            "io.langboard.work.ready.v1",
-            "io.langboard.work.blocked.v1",
-            "io.langboard.work.cancelled.v1",
-            "io.langboard.work.review-requested.v1",
-        ]
-    ] = Field(default_factory=list, max_length=4)
+    events: list[Literal["io.langboard.work.ready.v1"]] = Field(default_factory=list, max_length=1)
 
 
 @form_model

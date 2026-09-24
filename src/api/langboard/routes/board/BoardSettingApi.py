@@ -38,6 +38,7 @@ from langboard_shared.filter import RoleFilter
 from langboard_shared.helpers import InfraHelper
 from langboard_shared.security import Auth, RoleFinder
 from langboard_shared.tasks.webhooks.ExecutionBindingPolicy import binding_invalid_reasons
+from langboard_shared.tasks.webhooks.ExecutionReadinessUow import execution_readiness_uow
 from langboard_shared.tasks.webhooks.utils import WORK_EXECUTION_EVENTS
 from .forms import (
     ChangeInternalBotForm,
@@ -81,9 +82,7 @@ def _validate_execution_binding(project: Project, form: UpdateProjectExecutionBi
         column = InfraHelper.get_by_id_like(ProjectColumn, column_uid)
         if column is None or column.project_id != project.id or column.is_archive:
             raise ValueError("Execution column must belong to this active board")
-    relation_type = InfraHelper.get_by_id_like(
-        GlobalCardRelationshipType, form.prerequisite_relationship_type_uid
-    )
+    relation_type = InfraHelper.get_by_id_like(GlobalCardRelationshipType, form.prerequisite_relationship_type_uid)
     if relation_type is None:
         raise ValueError("Unknown prerequisite relationship type")
     webhook = InfraHelper.get_by_id_like(WebhookSetting, form.webhook_uid)
@@ -105,13 +104,15 @@ def _validate_execution_binding(project: Project, form: UpdateProjectExecutionBi
 def get_project_execution_binding(project_uid: str) -> JsonResponse:
     binding = _execution_binding(project_uid)
     reasons = binding_invalid_reasons(binding, "io.langboard.work.ready.v1") if binding else []
-    return JsonResponse(content={
-        "binding": binding.api_response() if binding else None,
-        "binding_status": {
-            "state": "binding_invalid" if reasons else "valid" if binding else "unconfigured",
-            "reasons": reasons,
-        },
-    })
+    return JsonResponse(
+        content={
+            "binding": binding.api_response() if binding else None,
+            "binding_status": {
+                "state": "binding_invalid" if reasons else "valid" if binding else "unconfigured",
+                "reasons": reasons,
+            },
+        }
+    )
 
 
 @AppRouter.api.put(
@@ -121,9 +122,7 @@ def get_project_execution_binding(project_uid: str) -> JsonResponse:
 )
 @RoleFilter.add(ProjectRole, [ProjectRoleAction.Update], RoleFinder.project)
 @AuthFilter.add("user")
-def update_project_execution_binding(
-    project_uid: str, form: UpdateProjectExecutionBindingForm
-) -> JsonResponse:
+def update_project_execution_binding(project_uid: str, form: UpdateProjectExecutionBindingForm) -> JsonResponse:
     project = InfraHelper.get_by_id_like(Project, project_uid)
     if project is None:
         raise ApiException.NotFound_404(ApiErrorCode.NF2001)
@@ -131,7 +130,9 @@ def update_project_execution_binding(
         _validate_execution_binding(project, form)
     except ValueError as exc:
         raise ApiException.BadRequest_400(ApiErrorCode.VA0000) from exc
-    with DbSession.use(readonly=False) as db:
+    with execution_readiness_uow() as execution:
+        execution.watch_project(project.id)
+        db = execution.db
         binding = db.exec(
             SqlBuilder.select.table(ProjectExecutionBinding)
             .where(ProjectExecutionBinding.column("project_id") == project.id)
@@ -142,18 +143,25 @@ def update_project_execution_binding(
             db.insert(binding)
         binding.is_enabled = form.is_enabled
         binding.column_semantics = dict(form.column_semantics)
-        binding.column_semantic_ids = {
-            str(InfraHelper.get_by_id_like(ProjectColumn, uid).id): state
-            for uid, state in form.column_semantics.items()
-        } if form.is_enabled else {}
+        binding.column_semantic_ids = (
+            {
+                str(InfraHelper.get_by_id_like(ProjectColumn, uid).id): state
+                for uid, state in form.column_semantics.items()
+            }
+            if form.is_enabled
+            else {}
+        )
         binding.prerequisite_relationship_type_uid = form.prerequisite_relationship_type_uid
         binding.prerequisite_relationship_type_id = (
             InfraHelper.get_by_id_like(GlobalCardRelationshipType, form.prerequisite_relationship_type_uid).id
-            if form.is_enabled and form.prerequisite_relationship_type_uid else None
+            if form.is_enabled and form.prerequisite_relationship_type_uid
+            else None
         )
         binding.webhook_uid = form.webhook_uid
         binding.webhook_id = (
-            InfraHelper.get_by_id_like(WebhookSetting, form.webhook_uid).id if form.is_enabled and form.webhook_uid else None
+            InfraHelper.get_by_id_like(WebhookSetting, form.webhook_uid).id
+            if form.is_enabled and form.webhook_uid
+            else None
         )
         binding.events = list(form.events)
         db.update(binding)

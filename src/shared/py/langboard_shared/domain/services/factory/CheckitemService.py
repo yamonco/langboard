@@ -7,6 +7,7 @@ from ....helpers import InfraHelper
 from ....publishers import CheckitemPublisher
 from ....tasks.activities import CardCheckitemActivityTask
 from ....tasks.bots import CardBotTask, CardCheckitemBotTask
+from ....tasks.webhooks.ExecutionReadinessUow import execution_readiness_uow
 from ...models import Card, Checkitem, CheckitemTimerRecord, Checklist, Project, ProjectColumn, User
 from ...models.Checkitem import CheckitemStatus
 
@@ -334,13 +335,15 @@ class CheckitemService(BaseDomainService):
             title=checkitem.title,
             order=self.repo.card.get_next_order(target_column, where_clauses={"project_id": card.project_id}),
         )
-        self.repo.card.insert(new_card)
+        with execution_readiness_uow() as execution:
+            self.repo.card.insert(new_card)
+            execution.watch_new(new_card.id)
 
-        checkitem.cardified_id = new_card.id
-        self.repo.checkitem.update(checkitem)
+            checkitem.cardified_id = new_card.id
+            self.repo.checkitem.update(checkitem)
 
-        card_service = self._get_service_by_name("card")
-        card_service.ensure_completion_checklist(new_card)
+            card_service = self._get_service_by_name("card")
+            card_service.ensure_completion_checklist(new_card)
         api_card = new_card.board_api_response(0, [], [], [], completed=False, is_check_card=True)
         CheckitemPublisher.cardified(card, checkitem, target_column, api_card)
         CardCheckitemActivityTask.card_checkitem_cardified(user_or_bot, project, card, checkitem)
