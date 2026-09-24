@@ -227,11 +227,10 @@ class ExternalWorkImporter:
 
         try:
             with DbSession.use(readonly=True) as db:
-                project = ExternalWorkImporter._require_uid(db, Project, project_uid, "project")
                 lineage = db.exec(
                     SqlBuilder.select.table(ExternalImportRecord)
                     .where(
-                        (ExternalImportRecord.project_id == project.id)
+                        (ExternalImportRecord.project_id == SnowflakeID.from_short_code(project_uid))
                         & (ExternalImportRecord.source_namespace == bundle.source.namespace)
                         & (ExternalImportRecord.source_container_id == bundle.source.container_id)
                         & (ExternalImportRecord.record_type == kind)
@@ -467,7 +466,9 @@ class ExternalWorkImporter:
             return target
         elif isinstance(record, ExternalCheckitem):
             checklist = targets[("checklist", record.checklist_source_id)]
-            card = self._card_for_checklist(checklist)
+            card = self._domain.card.get_by_id_like(checklist.card_id)
+            if card is None:
+                raise ExternalImportError("checklist card disappeared before checkitem creation")
             target = self._domain.checkitem.create(
                 actor, project, card, checklist, record.title,
                 dispatch_effects=False, order_override=record.order,
@@ -570,11 +571,3 @@ class ExternalWorkImporter:
             )
             if updated != 1:
                 raise ExternalImportError("import lineage disappeared before side-effect checkpoint")
-
-    @staticmethod
-    def _card_for_checklist(checklist: Checklist) -> Card:
-        with DbSession.use(readonly=True) as db:
-            card = db.exec(SqlBuilder.select.table(Card).where(Card.id == checklist.card_id).limit(1)).first()
-        if card is None:
-            raise ExternalImportError("checklist card disappeared before side-effect dispatch")
-        return card
