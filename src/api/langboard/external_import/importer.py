@@ -508,13 +508,26 @@ class ExternalWorkImporter:
             )
         elif isinstance(record, ExternalComment):
             user, _ = principals[record.author_scim_external_id]
-            target = CardComment(
-                card_id=targets[("card", record.card_source_id)].id,
-                user_id=user.id,
-                content=EditorContentModel(content=record.content),
-                created_at=record.created_at,
-                updated_at=record.created_at,
+            target = self._domain.card_comment.create(
+                user,
+                project,
+                targets[("card", record.card_source_id)],
+                EditorContentModel(content=record.content),
+                dispatch_effects=False,
             )
+            if target is None:
+                raise ExternalImportError("comment creation failed")
+            db.exec(
+                SqlBuilder.update.table(CardComment)
+                .where(CardComment.column("id") == target.id)
+                .values({
+                    CardComment.column("created_at"): record.created_at,
+                    CardComment.column("updated_at"): record.created_at,
+                })
+            )
+            target.created_at = record.created_at
+            target.updated_at = record.created_at
+            return target
         elif isinstance(record, ExternalAttachment):
             user, _ = principals[record.author_scim_external_id]
             if staged_file is None:

@@ -1,6 +1,7 @@
 """Real PostgreSQL contract for native card creation through external import."""
 
 import os
+from datetime import datetime, timezone
 from uuid import uuid4
 import pytest
 from pydantic import SecretStr
@@ -17,14 +18,19 @@ from langboard_shared.core.types import SnowflakeID  # noqa: E402
 from langboard_shared.domain.models import (  # noqa: E402
     Card,
     CardAssignedProjectLabel,
+    CardComment,
     CardRelationship,
     Checkitem,
     Checklist,
     ExternalImportRecord,
     GlobalCardRelationshipType,
     Project,
+    ProjectAssignedUser,
     User,
+    UserIdentityLink,
 )
+from langboard_shared.domain.models.UserIdentityLink import IdentityProvider  # noqa: E402
+from langboard_shared.Env import Env  # noqa: E402
 from langboard_shared.helpers import ensure_models_imported  # noqa: E402
 
 
@@ -34,6 +40,7 @@ DATABASE_URL = os.getenv("LANGBOARD_OUTBOX_TEST_DATABASE_URL")
 @pytest.mark.skipif(not DATABASE_URL, reason="dedicated PostgreSQL proof URL not set")
 def test_imported_card_shares_native_creation_invariants(monkeypatch: pytest.MonkeyPatch) -> None:
     ensure_models_imported()
+    monkeypatch.setattr(type(Env), "SCIM_ISSUER", property(lambda _self: "test-issuer"))
     schema = f"external_import_{uuid4().hex}"
     admin = create_engine(DATABASE_URL)
     with admin.begin() as connection:
@@ -43,8 +50,8 @@ def test_imported_card_shares_native_creation_invariants(monkeypatch: pytest.Mon
     monkeypatch.setattr(DbEngine, "get_readonly_engine", lambda: engine)
     try:
         needed = {
-            "user", "project", "project_column", "project_label", "project_assigned_user",
-            "card", "card_assigned_user", "card_assigned_project_label", "checklist",
+            "user", "user_identity_link", "project", "project_column", "project_label", "project_assigned_user",
+            "card", "card_assigned_user", "card_assigned_project_label", "card_comment", "checklist",
             "checkitem", "external_import_record", "project_execution_binding",
             "webhook_setting", "card_relationship",
         }
@@ -74,6 +81,14 @@ def test_imported_card_shares_native_creation_invariants(monkeypatch: pytest.Mon
             connection.execute(GlobalCardRelationshipType.__table__.insert(), {
                 "id": relationship_type_id, "parent_name": "blocks", "child_name": "blocked by", "description": "",
             })
+            connection.execute(ProjectAssignedUser.__table__.insert(), {
+                "id": SnowflakeID(4001), "project_id": project_id, "user_id": actor_id, "starred": False,
+            })
+            connection.execute(UserIdentityLink.__table__.insert(), {
+                "id": SnowflakeID(5001), "user_id": actor_id, "provider": IdentityProvider.Scim,
+                "external_id": "scim-actor", "issuer": "test-issuer",
+            })
+        comment_time = datetime(2020, 1, 2, 3, 4, tzinfo=timezone.utc)
         bundle = ExternalWorkBundle.model_validate({
             "schema_version": "1",
             "source": {"namespace": "tracker", "container_id": "project-1", "batch_id": "batch-1"},
@@ -97,6 +112,11 @@ def test_imported_card_shares_native_creation_invariants(monkeypatch: pytest.Mon
                 "source_id": "edge-1", "parent_card_source_id": "card-1", "child_card_source_id": "card-2",
                 "relationship_type_uid": relationship_type_id.to_short_code(),
             }],
+            "comments": [{
+                "source_id": "comment-1", "card_source_id": "card-1",
+                "author_scim_external_id": "scim-actor", "created_at": comment_time.isoformat(),
+                "content": "Historical discussion",
+            }],
         })
         importer = ExternalWorkImporter(effect_dispatcher=lambda *_args: None)
         first = importer.import_bundle(
@@ -105,7 +125,10 @@ def test_imported_card_shares_native_creation_invariants(monkeypatch: pytest.Mon
         second = importer.import_bundle(
             bundle, project_uid=project_id.to_short_code(), actor_uid=actor_id.to_short_code()
         )
-        expected = {"column": 1, "label": 1, "card": 2, "checklist": 1, "checkitem": 1, "relationship": 1}
+        expected = {
+            "column": 1, "label": 1, "card": 2, "checklist": 1, "checkitem": 1,
+            "relationship": 1, "comment": 1,
+        }
         assert first.created == expected
         assert second.unchanged == expected
         with engine.connect() as connection:
@@ -113,7 +136,7 @@ def test_imported_card_shares_native_creation_invariants(monkeypatch: pytest.Mon
             dependent = connection.execute(select(Card.__table__).where(Card.title == "Dependent work")).mappings().one()
             assert card["created_by_user_id"] == actor_id
             assert card["last_change_seq"] > 0
-            assert card["last_change_target_type"] == "checkitem"
+            assert card["last_change_target_type"] == "comment"
             assert card["order"] == 9
             assert dependent["order"] == 10
             assert connection.execute(select(CardAssignedProjectLabel.__table__)).one() is not None
@@ -134,7 +157,12 @@ def test_imported_card_shares_native_creation_invariants(monkeypatch: pytest.Mon
             assert (edge["card_id_parent"], edge["card_id_child"], edge["relationship_type_id"]) == (
                 card["id"], dependent["id"], relationship_type_id
             )
-            assert len(connection.execute(select(ExternalImportRecord.__table__)).all()) == 7
+            comment = connection.execute(select(CardComment.__table__)).mappings().one()
+            assert comment["card_id"] == card["id"]
+            assert comment["user_id"] == actor_id
+            assert comment["created_at"] == comment_time
+            assert comment["content"].content == "Historical discussion"
+            assert len(connection.execute(select(ExternalImportRecord.__table__)).all()) == 8
     finally:
         engine.dispose()
         with admin.begin() as connection:
