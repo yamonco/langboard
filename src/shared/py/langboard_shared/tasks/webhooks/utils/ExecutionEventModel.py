@@ -3,14 +3,7 @@
 from pydantic import BaseModel, ConfigDict, Field
 
 
-WORK_EXECUTION_EVENTS = frozenset(
-    {
-        "io.langboard.work.ready.v1",
-        "io.langboard.work.blocked.v1",
-        "io.langboard.work.cancelled.v1",
-        "io.langboard.work.review-requested.v1",
-    }
-)
+WORK_EXECUTION_EVENTS = frozenset({"io.langboard.work.ready.v1"})
 
 
 class ExecutionEventData(BaseModel):
@@ -22,7 +15,6 @@ class ExecutionEventData(BaseModel):
     title: str
     labels: list[str] = Field(default_factory=list)
     assignees: list[str] = Field(default_factory=list)
-    direct_blocker_uids: list[str] = Field(default_factory=list)
     card_url: str = Field(min_length=1)
     source_revision: str = Field(min_length=1)
 

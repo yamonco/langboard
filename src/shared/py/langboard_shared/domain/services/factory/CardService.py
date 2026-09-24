@@ -23,6 +23,7 @@ from ....helpers import InfraHelper
 from ....publishers import CardPublisher
 from ....tasks.activities import CardActivityTask
 from ....tasks.bots import CardBotTask
+from ....tasks.webhooks.ExecutionReadinessUow import execution_readiness_uow
 from ...models import (
     Bot,
     Card,
@@ -799,7 +800,7 @@ class CardService(BaseDomainService):
         if column.is_archive:
             return None
 
-        with DbSession.atomic():
+        with execution_readiness_uow() as execution:
             card = Card(
                 created_by_user_id=user_or_bot.id if isinstance(user_or_bot, User) else None,
                 created_by_bot_id=user_or_bot.id if isinstance(user_or_bot, Bot) else None,
@@ -813,6 +814,7 @@ class CardService(BaseDomainService):
             card.last_change_target_type = self.UNREAD_TARGET_CARD
             card.last_change_at = SafeDateTime.now()
             self.repo.card.insert(card)
+            execution.watch_new(card.id)
 
             users: list[User] = []
             if assign_user_uids:
@@ -885,28 +887,30 @@ class CardService(BaseDomainService):
                 {"project_id": project.id},
             ),
         )
-        self.repo.card.insert(child)
+        with execution_readiness_uow() as execution:
+            self.repo.card.insert(child)
+            execution.watch_new(child.id)
 
-        # Link parent → child with the first global relationship type
-        global_types = self.repo.card_relationship.get_global_relationship_types_map([])
-        if global_types:
-            relationship_type_id = next(iter(global_types.values())).id
-            self.repo.card_relationship.insert(
-                CardRelationship(
-                    card_id_parent=card.id,
-                    card_id_child=child.id,
-                    relationship_type_id=relationship_type_id,
+            # Link parent → child with the first global relationship type
+            global_types = self.repo.card_relationship.get_global_relationship_types_map([])
+            if global_types:
+                relationship_type_id = next(iter(global_types.values())).id
+                self.repo.card_relationship.insert(
+                    CardRelationship(
+                        card_id_parent=card.id,
+                        card_id_child=child.id,
+                        relationship_type_id=relationship_type_id,
+                    )
                 )
-            )
 
-        # Replace the selection with a link in the parent body
-        full_markdown = card.description.content or ""
-        link = f"[[{title}]]"
-        index = full_markdown.find(selected_markdown)
-        if index != -1:
-            new_markdown = full_markdown[:index] + link + full_markdown[index + len(selected_markdown) :]
-            card.description = EditorContentModel(content=new_markdown)
-            self.repo.card.update(card)
+            # Replace the selection with a link in the parent body
+            full_markdown = card.description.content or ""
+            link = f"[[{title}]]"
+            index = full_markdown.find(selected_markdown)
+            if index != -1:
+                new_markdown = full_markdown[:index] + link + full_markdown[index + len(selected_markdown) :]
+                card.description = EditorContentModel(content=new_markdown)
+                self.repo.card.update(card)
 
         CardPublisher.updated(project, card, None, {"description": link})
         CardActivityTask.card_created(user_or_bot, project, child)
@@ -1213,7 +1217,8 @@ class CardService(BaseDomainService):
             else:
                 card.archived_at = None
 
-        with DbSession.atomic():
+        with execution_readiness_uow() as execution:
+            execution.watch_card_and_dependents(card.id)
             old_order = card.order
             card.order = order
             self.repo.card.update_row_order(card, old_column, old_order, order, new_column)
@@ -1421,23 +1426,25 @@ class CardService(BaseDomainService):
                 should_publish=False,
             )
 
-        self.repo.card_assigned_user.delete_all_by_card(card)
-        self.repo.card_relationship.delete_all_by_card(card)
+        with execution_readiness_uow() as execution:
+            execution.watch_card_and_dependents(card.id)
+            self.repo.card_assigned_user.delete_all_by_card(card)
+            self.repo.card_relationship.delete_all_by_card(card)
 
-        BotScopeHelper.delete_by_scope(CardBotScope, card)
-        BotScheduleHelper.unschedule_by_scope(CardBotSchedule, card)
-        self._get_service(GraphApprovalRequestService).cancel_pending_by_scope(
-            project,
-            Card.__tablename__,
-            card.get_uid(),
-            reason="card deleted",
-        )
+            BotScopeHelper.delete_by_scope(CardBotScope, card)
+            BotScheduleHelper.unschedule_by_scope(CardBotSchedule, card)
+            self._get_service(GraphApprovalRequestService).cancel_pending_by_scope(
+                project,
+                Card.__tablename__,
+                card.get_uid(),
+                reason="card deleted",
+            )
 
-        # Linked cards are disposable references. Purging the board-side row
-        # allows the same source to be linked again while its Wiki stays intact.
-        is_linked_resource = card.is_linked_resource
-        self.repo.card.delete(card, purge=is_linked_resource)
-        self.repo.card.reoder_after_delete(card.project_column_id, card.order)
+            # Linked cards are disposable references. Purging the board-side row
+            # allows the same source to be linked again while its Wiki stays intact.
+            is_linked_resource = card.is_linked_resource
+            self.repo.card.delete(card, purge=is_linked_resource)
+            self.repo.card.reoder_after_delete(card.project_column_id, card.order)
 
         CardPublisher.deleted(project, card)
         if not is_linked_resource:

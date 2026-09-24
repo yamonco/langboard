@@ -9,13 +9,15 @@ the board and FractalOps project mapping before enabling it.
 1. Deploy the native CloudEvents producer contract and the FractalOps consumer
    that verifies `X-Langboard-Webhook-*` headers. Keep the FractalOps consumer
    disabled until its signing secret and board mapping are configured.
-2. Apply migration `71df4c6a9b20` and start `executionoutbox`. Confirm the
-   outbox is empty and the process is listening before enabling a binding.
+2. Apply migrations through `c7e2b4a091dd` with the API and workers stopped,
+   then start the API and existing Celery workers. Confirm the API is healthy
+   and the recovery cron is registered. There is no dedicated outbox daemon.
 3. Configure a signed webhook whose explicit allowlist includes
    `io.langboard.work.ready.v1`. Configure the board's ready and terminal
    columns and prerequisite relationship type, then enable its binding.
 4. Move a controlled card from non-ready to ready. Verify one committed
-   `execution_outbox` row with a frozen payload snapshot, one native webhook delivery, and one FractalOps
+   `execution_outbox` row with a frozen payload and destination, prompt
+   after-commit Celery enqueue, one native webhook delivery, and one FractalOps
    Studio Run with key `langboard:{project}:{card}:{generation}`. Retry the
    delivery and verify the same run is acknowledged as duplicate. Move the
    card out and back to ready to verify a new generation.
@@ -23,7 +25,11 @@ the board and FractalOps project mapping before enabling it.
    must match the point-read `core.updated_at`; `description.revision` is a
    separate content projection hash. The frozen event uses a relative
    `card_url` path so retries preserve the same bytes across UI host changes;
-   consumers resolve it against their bound board origin.
+   consumers resolve it against their bound board origin. Before execution,
+   the consumer must compare the event revision and generation with the card
+   point-read's `core.updated_at` and `execution.{is_ready,generation}`.
+   Repeat with a ready-to-blocked transition: the pending generation is
+   superseded and cannot run; returning to ready creates a new generation.
 5. Only after the live path passes should the FractalOps poller be removed.
    Check for zero idle polling and no duplicate runs before declaring cutover.
 
@@ -32,16 +38,17 @@ the board and FractalOps project mapping before enabling it.
 - `uv run --no-sync python -m langboard_shared.tasks.webhooks.ExecutionOutboxWorker diagnose <project_uid>`
   reports outbox counts by state and error code without payloads or secrets.
 - `uv run --no-sync python -m langboard_shared.tasks.webhooks.ExecutionOutboxWorker drain`
-  runs the committed queue once.
+  runs the committed queue once. Cron runs this as recovery for failed enqueue.
 - `uv run --no-sync python -m langboard_shared.tasks.webhooks.ExecutionOutboxWorker reconcile <project_uid>`
-  re-evaluates one board and retries its blocked rows. Existing generations
-  remain stable; FractalOps deduplicates replayed deliveries.
+  retries recoverable blocked rows; it does not create new readiness events.
+  Existing generations remain stable; FractalOps deduplicates replayed deliveries.
 
 ## Rollback
 
 Disable the board binding first. This stops new execution events and rechecks
-at delivery. Keep the outbox and worker available for inspection. Restore the
+at delivery. Keep the outbox and recovery cron available for inspection. Restore the
 FractalOps poller only if its previous deployment and idempotency state are
 confirmed; do not run poller and producer against the same board at once.
-Schema downgrade deletes generation and outbox history, so use it only after
-exporting and reconciling those rows.
+The UoW migration has no schema downgrade because reverting to trigger
+ownership after application events would risk duplicate generations. Roll
+forward with a corrective migration while preserving outbox history.

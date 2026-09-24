@@ -8,6 +8,7 @@ from ....core.types.ParamTypes import TGlobalCardRelationshipTypeParam
 from ....core.utils.Converter import convert_python_data
 from ....helpers import InfraHelper, ModelHelper
 from ....publishers import AppSettingPublisher
+from ....tasks.webhooks.ExecutionReadinessUow import execution_readiness_uow
 from ....tasks.webhooks.utils import validate_webhook_events, validate_webhook_url
 from ...models import ApiComfortTool, GlobalCardRelationshipType, NotificationScheduleRule, WebhookSetting
 from ...models.ApiComfortTool import ApiComfortToolMap
@@ -179,7 +180,10 @@ class AppSettingService(BaseDomainService):
         if not setting.has_changes():
             return setting
 
-        self.repo.webhook_setting.update(setting)
+        with execution_readiness_uow() as execution:
+            if replace_events or events is not None:
+                execution.watch_webhook(setting.id)
+            self.repo.webhook_setting.update(setting)
 
         AppSettingPublisher.webhook_setting_updated(setting.get_uid(), model)
 
@@ -191,7 +195,9 @@ class AppSettingService(BaseDomainService):
             return False
 
         secret_id = setting.secret_id
-        self.repo.webhook_setting.delete(setting)
+        with execution_readiness_uow() as execution:
+            execution.watch_webhook(setting.id)
+            self.repo.webhook_setting.delete(setting)
         if secret_id:
             KeyVault.delete_key(secret_id)
 
@@ -203,11 +209,17 @@ class AppSettingService(BaseDomainService):
         if isinstance(webhook_setting_uids, str):
             webhook_setting_uids = [webhook_setting_uids]
         secret_ids: list[str] = []
+        setting_ids: list[int] = []
         for webhook_setting_uid in webhook_setting_uids:
             setting = InfraHelper.get_by_id_like(WebhookSetting, webhook_setting_uid)
-            if setting and setting.secret_id:
-                secret_ids.append(setting.secret_id)
-        self.repo.webhook_setting.delete(webhook_setting_uids)
+            if setting:
+                setting_ids.append(setting.id)
+                if setting.secret_id:
+                    secret_ids.append(setting.secret_id)
+        with execution_readiness_uow() as execution:
+            for setting_id in setting_ids:
+                execution.watch_webhook(setting_id)
+            self.repo.webhook_setting.delete(webhook_setting_uids)
         for secret_id in secret_ids:
             KeyVault.delete_key(secret_id)
 
