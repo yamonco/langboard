@@ -445,12 +445,11 @@ class ExternalWorkImporter:
                 assignee_uids,
                 dispatch_effects=False,
                 order_override=record.order,
+                deadline_at=record.deadline_at,
             )
             if created is None:
                 raise ExternalImportError("card creation failed")
             target, _ = created
-            target.deadline_at = record.deadline_at
-            db.update(target)
             if record.label_source_ids:
                 label_uids = [targets[("label", label_id)].get_uid() for label_id in record.label_source_ids]
                 if self._domain.card.update_labels(actor, project, target, label_uids, dispatch_effects=False) is None:
@@ -471,12 +470,10 @@ class ExternalWorkImporter:
                 raise ExternalImportError("checklist card disappeared before checkitem creation")
             target = self._domain.checkitem.create(
                 actor, project, card, checklist, record.title,
-                dispatch_effects=False, order_override=record.order,
+                dispatch_effects=False, order_override=record.order, initially_checked=record.is_checked,
             )
             if target is None:
                 raise ExternalImportError("checkitem creation failed")
-            target.is_checked = record.is_checked
-            db.update(target)
             return target
         elif isinstance(record, ExternalRelationship):
             parent = targets[("card", record.parent_card_source_id)]
