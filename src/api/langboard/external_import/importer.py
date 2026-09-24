@@ -392,16 +392,15 @@ class ExternalWorkImporter:
 
     @staticmethod
     def _validate_relationship_graph(db, project, bundle, existing, targets) -> None:
-        cards = db.exec(SqlBuilder.select.table(Card).where(Card.project_id == project.id)).all()
-        card_ids = {card.id for card in cards}
-        edges: set[tuple[int | str, int | str]] = set()
-        if card_ids:
-            relationships = db.exec(
-                SqlBuilder.select.table(CardRelationship).where(
-                    CardRelationship.card_id_parent.in_(card_ids) & CardRelationship.card_id_child.in_(card_ids)
-                )
-            ).all()
-            edges.update((int(item.card_id_parent), int(item.card_id_child)) for item in relationships)
+        card_ids = SqlBuilder.select.columns(Card.id).where(Card.project_id == project.id)
+        relationships = db.exec(
+            SqlBuilder.select.table(CardRelationship).where(
+                CardRelationship.card_id_parent.in_(card_ids) & CardRelationship.card_id_child.in_(card_ids)
+            )
+        ).all()
+        edges: set[tuple[int | str, int | str]] = {
+            (int(item.card_id_parent), int(item.card_id_child)) for item in relationships
+        }
         refs = {
             card.source_id: int(targets[("card", card.source_id)].id)
             if ("card", card.source_id) in targets
@@ -560,19 +559,17 @@ class ExternalWorkImporter:
     @staticmethod
     def _checkpoint_effects(lineage: ExternalImportRecord, error: str | None = None) -> None:
         with DbSession.use(readonly=False) as db:
-            current = db.exec(
-                SqlBuilder.select.table(ExternalImportRecord).where(ExternalImportRecord.id == lineage.id).limit(1)
-            ).first()
-            if current is None:
+            updated = db.exec(
+                SqlBuilder.update.table(ExternalImportRecord)
+                .where(ExternalImportRecord.id == lineage.id)
+                .values(
+                    effects_attempts=ExternalImportRecord.effects_attempts + 1,
+                    effects_error=error[:4000] if error else None,
+                    effects_dispatched_at=SafeDateTime.now() if error is None else None,
+                )
+            )
+            if updated != 1:
                 raise ExternalImportError("import lineage disappeared before side-effect checkpoint")
-            current.effects_attempts += 1
-            current.effects_error = error[:4000] if error else None
-            if error is None:
-                current.effects_dispatched_at = SafeDateTime.now()
-            db.update(current)
-            lineage.effects_attempts = current.effects_attempts
-            lineage.effects_error = current.effects_error
-            lineage.effects_dispatched_at = current.effects_dispatched_at
 
     @staticmethod
     def _card_for_checklist(checklist: Checklist) -> Card:
