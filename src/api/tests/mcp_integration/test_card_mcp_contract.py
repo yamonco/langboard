@@ -354,6 +354,30 @@ def test_comment_reaction_schema_exposes_only_native_reactions() -> None:
     assert schema["properties"]["reaction"]["enum"] == REACTION_TYPES
 
 
+def test_graph_patch_uses_native_owner_after_shared_validation(monkeypatch: pytest.MonkeyPatch) -> None:
+    from langboard.card_workspace.domain import CardGraphEdge, CardGraphNewCard
+
+    calls: list[tuple[Any, ...]] = []
+    graph = SimpleNamespace(
+        apply_graph_patch=lambda actor, *patch: (
+            calls.append((actor, *patch)) or {"created_cards": [], "created_relationships": []}
+        )
+    )
+    service = SimpleNamespace(card_relationship=graph)
+    monkeypatch.setattr(CardMcp, "_adapter", lambda *args: pytest.fail("workspace adapter used"))
+    actor = object()
+    cards = [CardGraphNewCard("new:a", " A ")]
+    edges = [CardGraphEdge("root", "new:a", "blocks")]
+
+    result = CardMcp.apply_card_graph_patch("project", "root", cards, edges, [], actor, service)
+    assert result == {"created_cards": [], "created_relationships": []}
+    assert calls == [(actor, "project", "root", [("new:a", "A", None)], [("root", "new:a", "blocks")], [])]
+
+    with pytest.raises(ValueError, match="at least one change"):
+        CardMcp.apply_card_graph_patch("project", "root", [], [], [], actor, service)
+    assert len(calls) == 1
+
+
 def test_graph_patch_schema_exposes_typed_request_local_references() -> None:
     """Clients can mix existing UIDs and request-local cards in one explicit patch."""
 

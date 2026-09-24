@@ -42,7 +42,7 @@ from langboard_shared.filter import RoleFilter
 from langboard_shared.helpers import InfraHelper
 from langboard_shared.security import Auth, RoleFinder
 from langboard_shared.tasks.webhooks.ExecutionReadinessUow import current_execution
-from ...card_workspace.application import apply_card_graph_patch, get_card_bundle
+from ...card_workspace.application import get_card_bundle, validate_card_graph_patch
 from ...card_workspace.domain import CardBundleInclude, CardGraphEdge, CardGraphNewCard, CommentPage, SectionPage
 from ...card_workspace.infrastructure import NativeCardWorkspaceAdapter
 from .ExecutionReceiptApi import receipt_history
@@ -555,14 +555,16 @@ def patch_card_relationships(
     user_or_bot: User | Bot = Auth.scope("all"),
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
-    result = apply_card_graph_patch(
-        NativeCardWorkspaceAdapter(user_or_bot, service),
+    patch = validate_card_graph_patch(
         project_uid,
         card_uid,
         [CardGraphNewCard(item.client_ref, item.title, item.description) for item in form.new_cards],
         [CardGraphEdge(item.parent_ref, item.child_ref, item.relationship_type_uid) for item in form.add_edges],
         form.remove_relationship_uids,
     )
+    result = service.card_relationship.apply_graph_patch(user_or_bot, *patch)
+    if result is None:
+        raise ValueError("Anchor card not found in project")
     return JsonResponse(content=result)
 
 
