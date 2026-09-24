@@ -296,6 +296,8 @@ def get_archived_project_cards(
                                 "completed": "boolean",
                                 "is_check_card": "boolean",
                                 "member_uids": "string[]",
+                                "checklist_total_count": "integer",
+                                "checklist_completed_count": "integer",
                                 "relationships": [CardRelationship],
                                 "labels": [ProjectLabel],
                                 "creator?": {

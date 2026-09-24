@@ -90,6 +90,7 @@ const SERVER = {
                 TITLE_CHANGED: "board:card:checklist:title:changed:{uid}",
                 ORDER_CHANGED: "board:card:checklist:order:changed:{uid}",
                 CHECKED_CHANGED: "board:card:checklist:checked:changed:{uid}",
+                PROGRESS_CHANGED: "board:card:checklist:progress:changed:{uid}",
                 DELETED: "board:card:checklist:deleted:{uid}",
             },
             CHECKITEM: {
