@@ -38,7 +38,7 @@ from ..projections import (
 )
 
 
-def create_project_board(
+def provision_project(
     port: CardWorkspaceCommandPort,
     title: str,
     description: str | None = None,
@@ -48,7 +48,7 @@ def create_project_board(
     """Create a project with the native standard workflow."""
 
     normalized_template = _required_text(template_name, "Template name") if template_name is not None else None
-    return port.create_project_board(
+    return port.provision_project(
         _required_text(title, "Project title"),
         description,
         normalized_template,

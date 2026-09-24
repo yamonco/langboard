@@ -12,21 +12,21 @@ depends_on = []
 visibility = [
     "langboard.card_workspace.application",
     "langboard.card_workspace.infrastructure",
-    "langboard.mcp_tools.CardWorkspaceMcp",
+    "langboard.mcp_tools.CardMcp",
 ]
 
 [[modules]]
 path = "langboard.card_workspace.application"
 depends_on = ["langboard.card_workspace.domain"]
-visibility = ["langboard.card_workspace.infrastructure", "langboard.mcp_tools.CardWorkspaceMcp"]
+visibility = ["langboard.card_workspace.infrastructure", "langboard.mcp_tools.CardMcp"]
 
 [[modules]]
 path = "langboard.card_workspace.infrastructure"
 depends_on = ["langboard.card_workspace.application", "langboard.card_workspace.domain"]
-visibility = ["langboard.mcp_tools.CardWorkspaceMcp"]
+visibility = ["langboard.mcp_tools.CardMcp"]
 
 [[modules]]
-path = "langboard.mcp_tools.CardWorkspaceMcp"
+path = "langboard.mcp_tools.CardMcp"
 depends_on = [
     "langboard.card_workspace.application",
     "langboard.card_workspace.domain",
@@ -55,5 +55,5 @@ path = "langboard.wiki_workspace.infrastructure"
 depends_on = ["langboard.wiki_workspace.domain"]
 
 [[modules]]
-path = "langboard.mcp_tools.WikiWorkspaceMcp"
+path = "langboard.mcp_tools.WikiMcp"
 depends_on = ["langboard.wiki_workspace.domain", "langboard.wiki_workspace.application", "langboard.wiki_workspace.infrastructure"]

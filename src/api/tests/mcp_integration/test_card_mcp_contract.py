@@ -9,7 +9,7 @@ os.environ.setdefault("PROJECT_NAME", "langboard")
 
 from langboard.card_workspace.application.dtos import CardBundleDto, CardBundleResponse  # noqa: E402
 from langboard.mcp_integration import McpRoleFilter, McpTool  # noqa: E402
-from langboard.mcp_tools import CardMcp, CardWorkspaceMcp  # noqa: E402, F401
+from langboard.mcp_tools import CardMcp  # noqa: E402, F401
 from langboard.routes.mcp.McpApi import serialize_mcp_result  # noqa: E402
 from langboard_shared.domain.models.bases import REACTION_TYPES  # noqa: E402
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction  # noqa: E402
@@ -72,10 +72,10 @@ def test_description_conflict_is_transport_validation(monkeypatch: pytest.Monkey
     def reject(*args: Any, **kwargs: Any) -> None:
         raise DescriptionPatchConflict(reason)
 
-    monkeypatch.setattr(CardWorkspaceMcp, "_adapter", lambda *args: object())
-    monkeypatch.setattr(CardWorkspaceMcp, "replace_description_text", reject)
+    monkeypatch.setattr(CardMcp, "_adapter", lambda *args: object())
+    monkeypatch.setattr(CardMcp, "replace_description_text", reject)
     with pytest.raises(ValidationError, match="No changes saved"):
-        CardWorkspaceMcp.patch_card_description("project", "card", None, None, old_text="old", new_text="new")
+        CardMcp.patch_card_description("project", "card", None, None, old_text="old", new_text="new")
 
 
 def test_description_unexpected_failure_is_not_claimed_unsaved(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -84,10 +84,10 @@ def test_description_unexpected_failure_is_not_claimed_unsaved(monkeypatch: pyte
     def fail(*args: Any, **kwargs: Any) -> None:
         raise ValueError("downstream effect failed")
 
-    monkeypatch.setattr(CardWorkspaceMcp, "_adapter", lambda *args: object())
-    monkeypatch.setattr(CardWorkspaceMcp, "replace_description_text", fail)
+    monkeypatch.setattr(CardMcp, "_adapter", lambda *args: object())
+    monkeypatch.setattr(CardMcp, "replace_description_text", fail)
     with pytest.raises(ValueError, match="downstream effect failed"):
-        CardWorkspaceMcp.patch_card_description("project", "card", None, None, old_text="old", new_text="new")
+        CardMcp.patch_card_description("project", "card", None, None, old_text="old", new_text="new")
 
 
 @pytest.mark.asyncio
@@ -108,20 +108,20 @@ async def test_description_conflict_through_http_route(monkeypatch: pytest.Monke
     )
     monkeypatch.setattr(route, "DomainService", lambda: service)
     monkeypatch.setattr(route, "User", SimpleNamespace)
-    monkeypatch.setattr(CardWorkspaceMcp, "_adapter", lambda *args: object())
+    monkeypatch.setattr(CardMcp, "_adapter", lambda *args: object())
 
     def reject(*args: Any, **kwargs: Any) -> None:
         if reason == "effect failure":
             raise ValueError("effect failure")
         raise DescriptionPatchConflict(reason)
 
-    monkeypatch.setattr(CardWorkspaceMcp, "replace_description_text", reject)
+    monkeypatch.setattr(CardMcp, "replace_description_text", reject)
     mcp = FastMCP("description-http-test")
 
     @mcp.tool(name="patch_card_description")
     def patch() -> Any:
         """Run the real MCP boundary without database or external effects."""
-        return CardWorkspaceMcp.patch_card_description("project", "card", None, None, old_text="old", new_text="new")
+        return CardMcp.patch_card_description("project", "card", None, None, old_text="old", new_text="new")
 
     monkeypatch.setattr(route.McpServer, "mcp", mcp)
     app = FastAPI()
@@ -242,7 +242,7 @@ def test_project_member_projection_omits_email_and_is_bounded() -> None:
         )
     )
 
-    result = CardWorkspaceMcp.list_project_members("project", service)
+    result = CardMcp.list_project_members("project", service)
 
     assert len(result["items"]) == 50
     assert result["truncated"] is True
@@ -270,7 +270,7 @@ def test_project_member_projection_does_not_expose_invitation_email_as_name() ->
         )
     )
 
-    result = CardWorkspaceMcp.list_project_members("project", service)
+    result = CardMcp.list_project_members("project", service)
 
     assert result["items"] == [{"uid": "group_email", "username": ""}, {"uid": "unknown", "username": ""}]
     assert "hidden@example.com" not in str(result)

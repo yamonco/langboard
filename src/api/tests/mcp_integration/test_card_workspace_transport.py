@@ -2,7 +2,7 @@
 
 import pytest
 from langboard.card_workspace.domain import CardBundleInclude, ChecklistProjectionItem
-from langboard.mcp_tools.CardWorkspaceMcp import JsonCardBundleInclude, JsonChecklistProjectionItem
+from langboard.mcp_tools.CardMcp import JsonCardBundleInclude, JsonChecklistProjectionItem
 from pydantic import TypeAdapter, ValidationError
 
 

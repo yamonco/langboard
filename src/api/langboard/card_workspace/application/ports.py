@@ -82,7 +82,7 @@ class CardWorkspaceQueryPort(Protocol):
 class CardWorkspaceCommandPort(Protocol):
     """Write capabilities required by card workspace commands."""
 
-    def create_project_board(
+    def provision_project(
         self,
         title: str,
         description: str | None,
