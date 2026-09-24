@@ -127,48 +127,6 @@ class CardWorkspaceCommandPort(Protocol):
     ) -> str:
         """Atomically replace one revision-bound description, including an empty body."""
 
-    def create_card_content_block(
-        self,
-        project_uid: str,
-        card_uid: str,
-        block_type: str,
-        payload: dict[str, Any],
-        order: int | None,
-        after_block_uid: str | None,
-    ) -> dict[str, Any] | None:
-        """Create one typed content block on a card."""
-
-        ...
-
-    def update_card_content_block(
-        self,
-        project_uid: str,
-        card_uid: str,
-        block_uid: str,
-        expected_revision: int,
-        payload: dict[str, Any],
-    ) -> dict[str, Any] | None:
-        """Partially update one content block under optimistic locking."""
-
-        ...
-
-    def delete_card_content_block(self, project_uid: str, card_uid: str, block_uid: str) -> bool | None:
-        """Delete one content block."""
-
-        ...
-
-    def move_card_content_block(
-        self,
-        project_uid: str,
-        card_uid: str,
-        block_uid: str,
-        after_block_uid: str | None,
-        order: int | None,
-    ) -> bool | None:
-        """Reposition one content block."""
-
-        ...
-
     def create_card_checklist(self, project_uid: str, card_uid: str, title: str) -> dict[str, Any]:
         """Create a checklist."""
 

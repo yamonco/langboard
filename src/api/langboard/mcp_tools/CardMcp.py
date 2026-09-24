@@ -27,19 +27,16 @@ from ..card_workspace.application import apply_card_graph_patch as apply_graph_p
 from ..card_workspace.application import cardify_card_checkitem as cardify_checkitem
 from ..card_workspace.application import create_card_checkitem as create_checkitem
 from ..card_workspace.application import create_card_checklist as create_checklist
-from ..card_workspace.application import create_card_content_block as create_content_block
 from ..card_workspace.application import create_card_in_leftmost_column as create_leftmost
 from ..card_workspace.application import delete_card_attachment as delete_attachment
 from ..card_workspace.application import delete_card_checkitem as delete_checkitem
 from ..card_workspace.application import delete_card_checklist as delete_checklist
-from ..card_workspace.application import delete_card_content_block as delete_content_block
 from ..card_workspace.application import delete_public_card_metadata as delete_public_metadata
 from ..card_workspace.application import get_card_bundle as query_card_bundle
 from ..card_workspace.application import get_project_identity as query_project_identity
 from ..card_workspace.application import get_public_card_metadata as query_public_metadata
 from ..card_workspace.application import get_public_card_metadata_by_key as query_public_metadata_key
 from ..card_workspace.application import list_project_cards as query_project_cards
-from ..card_workspace.application import move_card_content_block as move_content_block
 from ..card_workspace.application import patch_card_description as replace_description_text
 from ..card_workspace.application import provision_project as provision
 from ..card_workspace.application import reconcile_card_checklist_projection as reconcile_checklist
@@ -50,7 +47,6 @@ from ..card_workspace.application import set_card_relationships as replace_relat
 from ..card_workspace.application import update_card_attachment as update_attachment
 from ..card_workspace.application import update_card_checkitem as update_checkitem
 from ..card_workspace.application import update_card_checklist as update_checklist
-from ..card_workspace.application import update_card_content_block as update_content_block
 from ..card_workspace.application.dtos import BoundedItemsDto
 from ..card_workspace.application.projections import public_comment
 from ..card_workspace.domain import (
@@ -978,9 +974,14 @@ def create_card_content_block(
 ) -> dict[str, Any]:
     """Create one typed content block anchored to a card."""
 
-    return create_content_block(
-        _adapter(user_or_bot, service), project_uid, card_uid, block_type, payload, order, after_block_uid
+    if block_type not in ("rich_text", "code", "diagram"):
+        raise ValueError("block_type must be rich_text, code or diagram")
+    block = service.card_content_block.create(
+        user_or_bot, project_uid, card_uid, block_type, payload, order, after_block_uid
     )
+    if block is None:
+        raise ValueError("Card not found in project")
+    return {"content_block": _public_content_block(block)}
 
 
 @McpTool.add(
@@ -1001,9 +1002,12 @@ def update_card_content_block(
 ) -> dict[str, Any]:
     """Update one content block under optimistic locking."""
 
-    return update_content_block(
-        _adapter(user_or_bot, service), project_uid, card_uid, block_uid, expected_revision, payload
-    )
+    if expected_revision < 1:
+        raise ValueError("expected_revision must be positive")
+    block = service.card_content_block.update(user_or_bot, project_uid, card_uid, block_uid, expected_revision, payload)
+    if block is None:
+        raise PermissionError("Block not found in card")
+    return {"content_block": _public_content_block(block)}
 
 
 @McpTool.add(description="Delete a card content block by uid.")
@@ -1017,7 +1021,9 @@ def delete_card_content_block(
 ) -> dict[str, bool]:
     """Delete one content block after project-card-block validation."""
 
-    return delete_content_block(_adapter(user_or_bot, service), project_uid, card_uid, block_uid)
+    if not service.card_content_block.delete(user_or_bot, project_uid, card_uid, block_uid):
+        raise PermissionError("Block not found in card")
+    return {"deleted": True}
 
 
 @McpTool.add(description="Reposition a card content block using after_block_uid or an explicit order (not both).")
@@ -1033,4 +1039,19 @@ def move_card_content_block(
 ) -> dict[str, bool]:
     """Move one content block within its card."""
 
-    return move_content_block(_adapter(user_or_bot, service), project_uid, card_uid, block_uid, after_block_uid, order)
+    if after_block_uid is not None and order is not None:
+        raise ValueError("pass either after_block_uid or order, not both")
+    if not service.card_content_block.move(user_or_bot, project_uid, card_uid, block_uid, after_block_uid, order):
+        raise PermissionError("Block not found in card")
+    return {"moved": True}
+
+
+def _public_content_block(block: Any) -> dict[str, Any]:
+    return {
+        "block_uid": block.get_uid(),
+        "type": block.block_type,
+        "order": block.order,
+        "revision": block.revision,
+        "payload": block.payload,
+        "updated_at": block.updated_at.isoformat() if block.updated_at else None,
+    }
