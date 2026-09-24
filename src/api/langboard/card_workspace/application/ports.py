@@ -80,15 +80,6 @@ class CardWorkspaceQueryPort(Protocol):
 class CardWorkspaceCommandPort(Protocol):
     """Write capabilities required by card workspace commands."""
 
-    def provision_project(
-        self,
-        title: str,
-        description: str | None,
-        template_name: str | None,
-        infer_template_prefix: bool,
-    ) -> dict[str, Any]:
-        """Create a project and its standard workflow."""
-
     def create_card_in_leftmost_column(
         self,
         project_uid: str,

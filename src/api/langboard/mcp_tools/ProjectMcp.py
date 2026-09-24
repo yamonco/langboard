@@ -2,6 +2,7 @@ from re import fullmatch
 from langboard_shared.domain.models import Bot, ProjectRole, User
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.domain.services.DomainService import DomainService
+from langboard_shared.Env import Env
 from langboard_shared.security import RoleFinder
 from ..mcp_integration import McpRoleFilter, McpTool
 
@@ -37,10 +38,54 @@ def toggle_star_project(project_uid: str, user: User, service: DomainService) ->
     return {"message": "Toggled"}
 
 
-@McpTool.add("user", description="Create a new project.")
-def create_project(title: str, description: str | None, project_type: str, user: User, service: DomainService) -> dict:
-    project, _, _ = service.project_template.create_project(user, title, description, project_type)
-    return {"project_uid": project.get_uid()}
+def create_template_project(
+    title: str,
+    description: str | None,
+    project_type: str,
+    user: User,
+    service: DomainService,
+    template_name: str | None = None,
+    infer_template_prefix: bool = False,
+) -> dict:
+    """Use the project owner service and return the public template projection."""
+
+    if not isinstance(title, str) or not title.strip():
+        raise ValueError("Project title is required")
+    if template_name is not None:
+        if not isinstance(template_name, str) or not template_name.strip():
+            raise ValueError("Template name is required")
+        template_name = template_name.strip()
+    project, columns, template = service.project_template.create_project(
+        user, title.strip(), description, project_type, template_name, infer_template_prefix
+    )
+    uid = project.get_uid()
+    return {
+        "project": {
+            "uid": uid,
+            "title": project.title,
+            "project_type": project.project_type,
+            "url": f"{Env.PUBLIC_UI_URL}/board/{uid}",
+            "template": template.name,
+        },
+        "columns": [{**column.api_response(), "count": 0} for column in columns],
+    }
+
+
+@McpTool.add("user", description="Create a new project with an optional named workflow template.")
+def create_project(
+    title: str,
+    description: str | None,
+    project_type: str,
+    user: User,
+    service: DomainService,
+    template_name: str | None = None,
+    infer_template_prefix: bool = False,
+) -> dict:
+    result = create_template_project(
+        title, description, project_type, user, service, template_name, infer_template_prefix
+    )
+    project = result["project"]
+    return {"project_uid": project["uid"]}
 
 
 @McpTool.add(description="Check if the project is available.")
