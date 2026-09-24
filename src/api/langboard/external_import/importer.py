@@ -10,8 +10,6 @@ from langboard_shared.core.storage import FileModel, Storage, StorageName
 from langboard_shared.core.types import SafeDateTime, SnowflakeID
 from langboard_shared.domain.models import (
     Card,
-    CardAssignedProjectLabel,
-    CardAssignedUser,
     CardAttachment,
     CardComment,
     CardRelationship,
@@ -448,20 +446,27 @@ class ExternalWorkImporter:
             db.update(target)
             return target
         elif isinstance(record, ExternalCard):
-            target = Card(
-                project_id=project.id,
-                project_column_id=targets[("column", record.column_source_id)].id,
-                title=record.title,
-                description=EditorContentModel(content=record.description),
-                deadline_at=record.deadline_at,
-                order=record.order,
+            column = targets[("column", record.column_source_id)]
+            assignee_uids = [principals[external_id][0].get_uid() for external_id in record.assignee_scim_external_ids]
+            created = self._domain.card.create(
+                actor,
+                project,
+                column,
+                record.title,
+                EditorContentModel(content=record.description),
+                assignee_uids,
+                dispatch_effects=False,
             )
-            db.insert(target)
-            for label_id in record.label_source_ids:
-                db.insert(CardAssignedProjectLabel(card_id=target.id, project_label_id=targets[("label", label_id)].id))
-            for external_id in record.assignee_scim_external_ids:
-                user, membership = principals[external_id]
-                db.insert(CardAssignedUser(project_assigned_id=membership.id, card_id=target.id, user_id=user.id))
+            if created is None:
+                raise ExternalImportError("card creation failed")
+            target, _ = created
+            target.order = record.order
+            target.deadline_at = record.deadline_at
+            db.update(target)
+            if record.label_source_ids:
+                label_uids = [targets[("label", label_id)].get_uid() for label_id in record.label_source_ids]
+                if self._domain.card.update_labels(actor, project, target, label_uids, dispatch_effects=False) is None:
+                    raise ExternalImportError("card label assignment failed")
             return target
         elif isinstance(record, ExternalChecklist):
             target = Checklist(
