@@ -382,7 +382,7 @@ function BoardTaskCardResult({ isExpanded, setIsExpanded, onClose, onEditModeSta
                                                 {executionReceipts.length > 0 && (
                                                     <BoardCardSection title="실행 기록">
                                                         <div className="space-y-3">
-                                                            {executionReceipts.map(({ generation, receipt }) => (
+                                                            {executionReceipts.map(({ generation, receipt, checklist_projection }) => (
                                                                 <div key={generation} className="rounded-md border p-3 text-sm">
                                                                     <div className="font-medium">#{generation} · {receipt.status}</div>
                                                                     <p className="mt-1 whitespace-pre-wrap">{receipt.summary}</p>
@@ -391,10 +391,13 @@ function BoardTaskCardResult({ isExpanded, setIsExpanded, onClose, onEditModeSta
                                                                             {artifact.type}: {artifact.url}
                                                                         </a>
                                                                     ))}
-                                                                    {receipt.checklist_evidence.length > 0 && (
-                                                                        <ul className="mt-2 list-disc pl-5">
-                                                                            {receipt.checklist_evidence.map((evidence) => (
-                                                                                <li key={evidence.item_uid}>{evidence.item_uid}: {evidence.kind}{evidence.refs.length > 0 && ` · ${evidence.refs.join(", ")}`}</li>
+                                                                    {checklist_projection?.length > 0 && (
+                                                                        <ul className="mt-2 space-y-1" aria-label="실행 근거 체크리스트">
+                                                                            {checklist_projection.map((item) => (
+                                                                                <li key={item.item_uid}>
+                                                                                    {item.is_checked ? "☑" : "☐"} {item.item_uid}: {item.kind}
+                                                                                    {item.refs.length > 0 && ` · ${item.refs.join(", ")}`}
+                                                                                </li>
                                                                             ))}
                                                                         </ul>
                                                                     )}

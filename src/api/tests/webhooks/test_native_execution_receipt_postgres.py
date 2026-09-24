@@ -22,6 +22,7 @@ def test_native_receipt_is_idempotent_and_never_writes_user_description(monkeypa
         pytest.skip("PostgreSQL test URL is not configured")
     engine = create_engine(url)
     with engine.begin() as connection:
+        connection.execute(text("DROP TABLE IF EXISTS execution_checklist_projection"))
         connection.execute(text("DROP TABLE IF EXISTS execution_receipt"))
         connection.execute(text("CREATE TABLE card (id bigint PRIMARY KEY, description text NOT NULL, project_column_id bigint NOT NULL, \"order\" integer NOT NULL, updated_at timestamptz NOT NULL, deleted_at timestamptz)"))
         connection.execute(text("INSERT INTO card VALUES (100, 'user-authored markdown', 1, 0, now(), NULL)"))
@@ -35,6 +36,12 @@ def test_native_receipt_is_idempotent_and_never_writes_user_description(monkeypa
         )
         monkeypatch.setattr(module, "op", Operations(MigrationContext.configure(connection)))
         module.upgrade()
+        projection_module = __import__(
+            "langboard.migrations.versions.20260924200000-a24ec4b7d19f",
+            fromlist=["upgrade"],
+        )
+        monkeypatch.setattr(projection_module, "op", Operations(MigrationContext.configure(connection)))
+        projection_module.upgrade()
     monkeypatch.setattr(DbEngine, "get_main_engine", lambda: engine)
     monkeypatch.setattr(
         receipt_api.InfraHelper,
@@ -54,23 +61,34 @@ def test_native_receipt_is_idempotent_and_never_writes_user_description(monkeypa
         summary="PR submitted",
         artifacts=[{"type": "pull_request", "url": "https://github.com/example/repo/pull/1"}],
         evidence=[{"kind": "pr_submitted", "refs": ["https://github.com/example/repo/pull/1"]}],
-        checklist_evidence=[],
+        checklist_evidence=[
+            {"item_uid": "user-item", "kind": "pr_submitted", "refs": ["https://github.com/example/repo/pull/1"]},
+            {"item_uid": "unverified-item", "kind": "manual_note", "refs": ["studio://reports/1"]},
+        ],
         occurred_at=datetime(2026, 9, 24, tzinfo=timezone.utc),
     )
     key = "langboard:board:card:5:receipt"
     try:
         first = receipt_api.put_execution_receipt("board", "card", 5, form, key)
+        # Simulate a missing derived row after a previous receipt was stored.
+        with engine.begin() as connection:
+            connection.execute(text("DELETE FROM execution_checklist_projection WHERE item_uid='user-item'"))
         retried = form.model_copy(update={"occurred_at": datetime.now(timezone.utc)})
         second = receipt_api.put_execution_receipt("board", "card", 5, retried, key)
         assert json.loads(first.body)["created"] is True
         assert json.loads(second.body)["created"] is False
         with engine.connect() as connection:
             assert connection.execute(text("SELECT count(*) FROM execution_receipt")).scalar() == 1
+            projected = connection.execute(
+                text("SELECT item_uid, is_checked FROM execution_checklist_projection ORDER BY item_uid")
+            ).all()
+            assert projected == [("unverified-item", False), ("user-item", True)]
             assert connection.execute(text("SELECT description FROM card WHERE id=100")).scalar() == "user-authored markdown"
             assert connection.execute(text("SELECT project_column_id FROM card WHERE id=100")).scalar() == 2
         history = receipt_api.receipt_history(100)
         assert len(history) == 1
         assert history[0]["receipt"]["summary"] == "PR submitted"
+        assert len(history[0]["checklist_projection"]) == 2
         changed = form.model_copy(update={"summary": "different result"})
         with pytest.raises(receipt_api.ApiException.Conflict_409):
             receipt_api.put_execution_receipt("board", "card", 5, changed, key)
@@ -78,6 +96,7 @@ def test_native_receipt_is_idempotent_and_never_writes_user_description(monkeypa
             assert connection.execute(text("SELECT count(*) FROM execution_receipt")).scalar() == 1
     finally:
         with engine.begin() as connection:
+            connection.execute(text("DROP TABLE IF EXISTS execution_checklist_projection"))
             connection.execute(text("DROP TABLE IF EXISTS execution_receipt"))
             connection.execute(text("DROP TABLE IF EXISTS project_execution_binding"))
             connection.execute(text("DROP TABLE IF EXISTS project_column"))
