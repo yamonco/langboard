@@ -86,7 +86,6 @@ async def test_invalid_execution_binding_never_schedules_delivery(monkeypatch: p
     from langboard_shared.tasks.webhooks.utils import WebhookModel
 
     queued = []
-    monkeypatch.setattr(WebhookTask, "binding_for_project", lambda project_uid: None)
     monkeypatch.setattr(WebhookTask, "webhook_delivery_task", lambda *args: queued.append(args))
     model = WebhookModel(event="io.langboard.work.ready.v1", data={
         "project_uid": "p", "card_uid": "c", "execution_generation": 1,
@@ -101,125 +100,35 @@ async def test_deleted_binding_target_cannot_deliver_queued_event(monkeypatch: p
     from langboard_shared.tasks.webhooks import WebhookTask
     from langboard_shared.tasks.webhooks.utils import WebhookModel
 
-    monkeypatch.setattr(WebhookTask, "_get_webhook_setting", lambda uid: SimpleNamespace(events=["io.langboard.work.ready.v1"]))
-    monkeypatch.setattr(WebhookTask, "binding_for_project", lambda project_uid: None)
+    posted = []
+
+    async def fake_post(model, setting):
+        posted.append((model, setting))
+
+    monkeypatch.setattr(WebhookTask, "_get_webhook_setting", lambda uid: None)
+    monkeypatch.setattr(WebhookTask, "post_signed_webhook", fake_post)
     model = WebhookModel(event="io.langboard.work.ready.v1", data={
         "project_uid": "p", "card_uid": "c", "execution_generation": 1,
         "title": "Task", "card_url": "/board/p/c", "source_revision": "r",
     })
     await WebhookTask.deliver_webhook(model, "deleted-hook")
-
-
-def _deliver_harness(monkeypatch: pytest.MonkeyPatch, current) -> dict:
-    """Patch one execution delivery run; return the payload captured at signing time."""
-    from contextlib import contextmanager
-    from datetime import datetime, timezone
-    from langboard_shared.tasks.webhooks import ExecutionReadinessUow, WebhookTask
-
-    captured: dict = {}
-    occurred_at = datetime(2026, 9, 24, tzinfo=timezone.utc)
-
-    def fake_signed_request(model, secret, *, timestamp=None):
-        captured["data"] = model.data
-        return b"{}", {"Content-Type": "application/json"}
-
-    class FakeResponse:
-        def raise_for_status(self) -> None:
-            return None
-
-    class FakeClient:
-        def __init__(self, **kwargs) -> None:
-            return None
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, *args):
-            return False
-
-        async def post(self, *args, **kwargs):
-            return FakeResponse()
-
-    @contextmanager
-    def fake_repository():
-        yield SimpleNamespace(
-            webhook_setting=SimpleNamespace(record_delivery_success=lambda uid, now: None)
-        )
-
-    monkeypatch.setattr(WebhookTask, "signed_request", fake_signed_request)
-    monkeypatch.setattr(WebhookTask, "AsyncClient", FakeClient)
-    async def fake_resolve(url: str):
-        return SimpleNamespace(url="https://example.com/hook", host_header="example.com", sni_hostname="example.com")
-
-    monkeypatch.setattr(WebhookTask, "ensure_public_webhook_url", fake_resolve)
-    monkeypatch.setattr(WebhookTask.Repository, "use", fake_repository)
-    monkeypatch.setattr(
-        WebhookTask,
-        "_get_webhook_setting",
-        lambda uid: SimpleNamespace(events=["io.langboard.work.ready.v1"], secret_id=None, url="https://example.com/hook"),
-    )
-    monkeypatch.setattr(
-        WebhookTask,
-        "binding_for_project",
-        lambda uid: SimpleNamespace(id=8, updated_at=occurred_at, webhook_uid="hook-40"),
-    )
-    monkeypatch.setattr(WebhookTask, "binding_invalid_reasons", lambda binding, event: [])
-    monkeypatch.setattr(ExecutionReadinessUow, "current_execution", lambda card_id, db=None: current)
-    return captured
+    assert posted == []
 
 
 @pytest.mark.asyncio
-async def test_execution_delivery_survives_content_edit_and_signs_latest_content(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A READY-preserving edit between drain and delivery must not supersede the event."""
-    from datetime import datetime, timezone
+async def test_legacy_fanout_delivery_posts_signed_webhook(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Non-execution fanout keeps silent-skip semantics and posts through the shared signer."""
     from langboard_shared.tasks.webhooks import WebhookTask
-    from langboard_shared.tasks.webhooks.ExecutionReadinessUow import CurrentExecution
     from langboard_shared.tasks.webhooks.utils import WebhookModel
 
-    current = CurrentExecution(
-        revision=datetime(2026, 9, 24, 1, tzinfo=timezone.utc),
-        is_ready=True,
-        generation=5,
-        title="Edited at delivery time",
-        labels=["reviewer"],
-        assignee_ids=[7],
-    )
-    captured = _deliver_harness(monkeypatch, current)
-    model = WebhookModel(event="io.langboard.work.ready.v1", data={
-        "project_uid": "p", "card_uid": "c", "execution_generation": 5,
-        "title": "Frozen title", "labels": ["frozen-role"], "assignees": [],
-        "card_url": "/board/p/c", "source_revision": "2026-09-24T00:00:00+00:00",
-    })
-    await WebhookTask.deliver_webhook(model, "hook-40", "8", "2026-09-24T00:00:00+00:00")
-    assert captured["data"]["title"] == "Edited at delivery time"
-    assert captured["data"]["labels"] == ["reviewer"]
-    assert captured["data"]["source_revision"] == current.revision.isoformat()
-    assert captured["data"]["execution_generation"] == 5
+    posted = []
 
+    async def fake_post(model, webhook_uid, setting=None):
+        posted.append((model, webhook_uid, setting))
 
-@pytest.mark.asyncio
-async def test_execution_delivery_superseded_only_on_lost_readiness_or_new_generation(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from datetime import datetime, timezone
-    from langboard_shared.tasks.webhooks import WebhookTask
-    from langboard_shared.tasks.webhooks.ExecutionReadinessUow import CurrentExecution
-    from langboard_shared.tasks.webhooks.utils import WebhookModel
-
-    for current in (
-        CurrentExecution(datetime(2026, 9, 24, tzinfo=timezone.utc), False, 5, "Task", [], []),
-        CurrentExecution(datetime(2026, 9, 24, tzinfo=timezone.utc), True, 6, "Task", [], []),
-    ):
-        captured = _deliver_harness(monkeypatch, current)
-        model = WebhookModel(event="io.langboard.work.ready.v1", data={
-            "project_uid": "p", "card_uid": "c", "execution_generation": 5,
-            "title": "Task", "card_url": "/board/p/c", "source_revision": "r",
-        })
-        await WebhookTask.deliver_webhook(model, "hook-40", "8", "2026-09-24T00:00:00+00:00")
-        assert captured == {}
-
-
-def test_disabled_binding_never_requires_a_target() -> None:
-    BoardSettingApi._validate_execution_binding(
-        SimpleNamespace(id=1), UpdateProjectExecutionBindingForm(is_enabled=False)
-    )
+    setting = SimpleNamespace(events=["card_created"], secret_id=None)
+    monkeypatch.setattr(WebhookTask, "_get_webhook_setting", lambda uid: setting)
+    monkeypatch.setattr(WebhookTask, "post_signed_webhook", fake_post)
+    model = WebhookModel(event="card_created", data={"card_uid": "c"})
+    await WebhookTask.deliver_webhook(model, "hook-1")
+    assert posted == [(model, "hook-1", setting)]

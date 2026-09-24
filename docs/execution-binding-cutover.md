@@ -52,15 +52,39 @@ became executable, not an immutable task snapshot:
 - Consumers that need authoritative content should use their own point-read
   under their authorization; the event payload is a routing and fence signal.
 
+## Delivery lifecycle and broker hops
+
+Execution delivery runs in one Celery task, `execution_outbox_task(event_id)`:
+claim, readiness and binding fence, signed HTTP delivery, terminal mark, with
+Celery retries around HTTP failures. Outbox states:
+
+- `pending`: committed, waiting for a claim.
+- `delivering`: claimed with a lease and attempt count; a crashed worker's
+  lease expires and the cron re-drains the row.
+- `delivered`: terminal success, marked in the same task as the HTTP POST.
+- `failed`: attempt budget exhausted; operator `reconcile` re-queues it with
+  a fresh budget. No state is left permanently in flight.
+- `superseded` / `blocked`: readiness revoked or destination invalid.
+
+Broker hops per normal delivery: previously 2 Celery dispatches
+(`execution_outbox_task` → `webhook_delivery_task`) plus 1 HTTP POST; now
+1 Celery dispatch plus 1 HTTP POST. The recovery cron previously drained into
+a second dispatch; it now delivers directly (0 extra dispatches). Logical
+delivery is at-least-once: the event id is the outbox row id and is stable
+across retries and lease recoveries, so consumers deduplicate by event id and
+fence by execution generation.
+
 ## Diagnostics and recovery
 
 - `uv run --no-sync python -m langboard_shared.tasks.webhooks.ExecutionOutboxWorker diagnose <project_uid>`
   reports outbox counts by state and error code without payloads or secrets.
 - `uv run --no-sync python -m langboard_shared.tasks.webhooks.ExecutionOutboxWorker drain`
-  runs the committed queue once. Cron runs this as recovery for failed enqueue.
+  runs the committed queue once. Cron runs this as recovery for failed enqueue
+  and for expired delivery leases.
 - `uv run --no-sync python -m langboard_shared.tasks.webhooks.ExecutionOutboxWorker reconcile <project_uid>`
-  retries recoverable blocked rows; it does not create new readiness events.
-  Existing generations remain stable; FractalOps deduplicates replayed deliveries.
+  retries recoverable blocked rows and re-queues failed ones with a fresh
+  attempt budget; it does not create new readiness events.
+  Existing generations remain stable; consumers deduplicate replayed deliveries.
 
 ## Rollback
 
