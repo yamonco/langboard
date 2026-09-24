@@ -1,5 +1,7 @@
 from __future__ import annotations
 from collections import Counter
+from datetime import datetime
+from functools import partial
 from hashlib import sha256
 from json import dumps
 from pathlib import Path
@@ -39,6 +41,7 @@ from .contract import (
     ExternalRelationship,
     ExternalWorkBundle,
 )
+from .effects import dispatch_imported_effects
 
 
 class ExternalImportError(ValueError):
@@ -79,8 +82,8 @@ class ExternalWorkImporter:
         effect_dispatcher: TImportEffectDispatcher | None = None,
     ):
         self._attachments_root = attachments_root.resolve() if attachments_root else None
-        self._effect_dispatcher = effect_dispatcher or self._dispatch_native_effects
         self._domain = DomainService()
+        self._effect_dispatcher = effect_dispatcher or partial(dispatch_imported_effects, self._domain)
 
     def import_bundle(
         self,
@@ -408,21 +411,20 @@ class ExternalWorkImporter:
 
     def _create_target(self, db, project, actor, record, targets, principals, staged_file: FileModel | None):
         if isinstance(record, ExternalColumn):
-            target = self._domain.project_column.create(actor, project, record.name, dispatch_effects=False)
+            target = self._domain.project_column.create(
+                actor, project, record.name, dispatch_effects=False, order_override=record.order
+            )
             if target is None:
                 raise ExternalImportError("project column creation failed")
-            target.order = record.order
-            db.update(target)
             return target
         elif isinstance(record, ExternalLabel):
             created = self._domain.project_label.create(
-                actor, project, record.name, record.color, record.description, dispatch_effects=False
+                actor, project, record.name, record.color, record.description,
+                dispatch_effects=False, order_override=record.order,
             )
             if created is None:
                 raise ExternalImportError("project label creation failed")
             target, _ = created
-            target.order = record.order
-            db.update(target)
             return target
         elif isinstance(record, ExternalCard):
             column = targets[("column", record.column_source_id)]
@@ -450,22 +452,20 @@ class ExternalWorkImporter:
         elif isinstance(record, ExternalChecklist):
             card = targets[("card", record.card_source_id)]
             target = self._domain.checklist.create(
-                actor, project, card, record.title, dispatch_effects=False
+                actor, project, card, record.title, dispatch_effects=False, order_override=record.order
             )
             if target is None:
                 raise ExternalImportError("checklist creation failed")
-            target.order = record.order
-            db.update(target)
             return target
         elif isinstance(record, ExternalCheckitem):
             checklist = targets[("checklist", record.checklist_source_id)]
             card = self._card_for_checklist(checklist)
             target = self._domain.checkitem.create(
-                actor, project, card, checklist, record.title, dispatch_effects=False
+                actor, project, card, checklist, record.title,
+                dispatch_effects=False, order_override=record.order,
             )
             if target is None:
                 raise ExternalImportError("checkitem creation failed")
-            target.order = record.order
             target.is_checked = record.is_checked
             db.update(target)
             return target
@@ -497,16 +497,7 @@ class ExternalWorkImporter:
             )
             if target is None:
                 raise ExternalImportError("comment creation failed")
-            db.exec(
-                SqlBuilder.update.table(CardComment)
-                .where(CardComment.column("id") == target.id)
-                .values({
-                    CardComment.column("created_at"): record.created_at,
-                    CardComment.column("updated_at"): record.created_at,
-                })
-            )
-            target.created_at = record.created_at
-            target.updated_at = record.created_at
+            self._restore_historical_timestamps(db, target, record.created_at)
             return target
         elif isinstance(record, ExternalAttachment):
             user, _ = principals[record.author_scim_external_id]
@@ -521,21 +512,23 @@ class ExternalWorkImporter:
             )
             if target is None:
                 raise ExternalImportError("attachment creation failed")
-            db.exec(
-                SqlBuilder.update.table(CardAttachment)
-                .where(CardAttachment.column("id") == target.id)
-                .values({
-                    CardAttachment.column("created_at"): record.created_at,
-                    CardAttachment.column("updated_at"): record.created_at,
-                })
-            )
-            target.created_at = record.created_at
-            target.updated_at = record.created_at
+            self._restore_historical_timestamps(db, target, record.created_at)
             return target
-        else:
-            raise TypeError(f"unsupported external work record: {type(record).__name__}")
-        db.insert(target)
-        return target
+        raise TypeError(f"unsupported external work record: {type(record).__name__}")
+
+    @staticmethod
+    def _restore_historical_timestamps(
+        db: DbSession, target: CardComment | CardAttachment, created_at: datetime
+    ) -> None:
+        model = type(target)
+        db.exec(
+            SqlBuilder.update.table(model).where(model.column("id") == target.id).values({
+                model.column("created_at"): created_at,
+                model.column("updated_at"): created_at,
+            })
+        )
+        target.created_at = created_at
+        target.updated_at = created_at
 
     def _dispatch_and_checkpoint(
         self,
@@ -571,72 +564,6 @@ class ExternalWorkImporter:
             lineage.effects_attempts = current.effects_attempts
             lineage.effects_error = current.effects_error
             lineage.effects_dispatched_at = current.effects_dispatched_at
-
-    def _dispatch_native_effects(
-        self,
-        kind: str,
-        record: BaseModel,
-        target: Any,
-        project: Project,
-        actor: User,
-        targets: dict[tuple[str, str], Any],
-        principals: dict[str, tuple[User, ProjectAssignedUser]],
-    ) -> None:
-        """Emit the same realtime and activity signals as native creation paths.
-
-        Historical imports deliberately do not notify mentions, execute bots, or alter
-        approval state. Those are live workflow actions rather than imported domain data.
-        """
-
-        if kind == "column" and isinstance(record, ExternalColumn):
-            self._domain.project_column.dispatch_created(actor, project, target, include_bot=False)
-            return
-        if kind == "label" and isinstance(record, ExternalLabel):
-            self._domain.project_label.dispatch_created(actor, project, target, include_bot=False)
-            return
-        if kind == "card" and isinstance(record, ExternalCard):
-            column = targets[("column", record.column_source_id)]
-            member_uids = [principals[external_id][0].get_uid() for external_id in record.assignee_scim_external_ids]
-            labels = [targets[("label", source_id)].api_response() for source_id in record.label_source_ids]
-            self._domain.card.dispatch_created(
-                actor,
-                project,
-                column,
-                target,
-                {"card": target.board_api_response(0, member_uids, [], labels)},
-                include_bot=False,
-                include_notifications=False,
-            )
-            return
-        if kind == "checklist" and isinstance(record, ExternalChecklist):
-            card = targets[("card", record.card_source_id)]
-            self._domain.checklist.dispatch_created(actor, project, card, target, include_bot=False)
-            return
-        if kind == "checkitem" and isinstance(record, ExternalCheckitem):
-            checklist = targets[("checklist", record.checklist_source_id)]
-            card = ExternalWorkImporter._card_for_checklist(checklist)
-            self._domain.checkitem.dispatch_created(actor, project, card, checklist, target, include_bot=False)
-            return
-        if kind == "relationship" and isinstance(record, ExternalRelationship):
-            parent = targets[("card", record.parent_card_source_id)]
-            child = targets[("card", record.child_card_source_id)]
-            self._domain.card_relationship.dispatch_updated(
-                actor, project, parent, [], [child.id], False, include_bot=False
-            )
-            return
-        if kind == "comment" and isinstance(record, ExternalComment):
-            card = targets[("card", record.card_source_id)]
-            author, _ = principals[record.author_scim_external_id]
-            self._domain.card_comment.dispatch_created(
-                author, project, card, target, include_notifications=False, include_bot=False
-            )
-            return
-        if kind == "attachment" and isinstance(record, ExternalAttachment):
-            card = targets[("card", record.card_source_id)]
-            author, _ = principals[record.author_scim_external_id]
-            self._domain.card_attachment.dispatch_created(author, project, card, target, include_bot=False)
-            return
-        raise ExternalImportError(f"unsupported side-effect record: {kind}")
 
     @staticmethod
     def _card_for_checklist(checklist: Checklist) -> Card:

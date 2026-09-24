@@ -80,6 +80,7 @@ class ProjectColumnService(BaseDomainService):
         description: str = "",
         *,
         dispatch_effects: bool = True,
+        order_override: int | None = None,
     ) -> ProjectColumn | None:
         """Create a workflow column with optional guidance, preserving legacy name-only callers."""
         if len(description) > 4096:
@@ -92,7 +93,7 @@ class ProjectColumnService(BaseDomainService):
             project_id=project.id,
             name=name,
             description=description,
-            order=self.repo.project_column.get_next_order(project),
+            order=order_override if order_override is not None else self.repo.project_column.get_next_order(project),
         )
 
         self.repo.project_column.insert(column)

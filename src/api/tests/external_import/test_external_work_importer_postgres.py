@@ -31,6 +31,8 @@ from langboard_shared.domain.models import (  # noqa: E402
     GlobalCardRelationshipType,
     Project,
     ProjectAssignedUser,
+    ProjectColumn,
+    ProjectLabel,
     User,
     UserIdentityLink,
 )
@@ -106,8 +108,14 @@ def test_imported_card_shares_native_creation_invariants(monkeypatch: pytest.Mon
         bundle = ExternalWorkBundle.model_validate({
             "schema_version": "1",
             "source": {"namespace": "tracker", "container_id": "project-1", "batch_id": "batch-1"},
-            "columns": [{"source_id": "column-1", "name": "Backlog", "order": 4}],
-            "labels": [{"source_id": "label-1", "name": "Imported", "color": "#112233", "order": 7}],
+            "columns": [
+                {"source_id": "column-1", "name": "Backlog", "order": 4},
+                {"source_id": "column-2", "name": "Done", "order": 8},
+            ],
+            "labels": [
+                {"source_id": "label-1", "name": "Imported", "color": "#112233", "order": 7},
+                {"source_id": "label-2", "name": "Urgent", "color": "#aa0000", "order": 11},
+            ],
             "cards": [
                 {
                     "source_id": "card-1", "column_source_id": "column-1", "title": "Imported work",
@@ -115,13 +123,20 @@ def test_imported_card_shares_native_creation_invariants(monkeypatch: pytest.Mon
                 },
                 {"source_id": "card-2", "column_source_id": "column-1", "title": "Dependent work", "order": 10},
             ],
-            "checklists": [{
-                "source_id": "checklist-1", "card_source_id": "card-1", "title": "Imported checks", "order": 3,
-            }],
-            "checkitems": [{
-                "source_id": "item-1", "checklist_source_id": "checklist-1", "title": "Imported item",
-                "order": 5, "is_checked": True,
-            }],
+            "checklists": [
+                {"source_id": "checklist-1", "card_source_id": "card-1", "title": "Imported checks", "order": 3},
+                {"source_id": "checklist-2", "card_source_id": "card-1", "title": "Later checks", "order": 6},
+            ],
+            "checkitems": [
+                {
+                    "source_id": "item-1", "checklist_source_id": "checklist-1", "title": "Imported item",
+                    "order": 5, "is_checked": True,
+                },
+                {
+                    "source_id": "item-2", "checklist_source_id": "checklist-1", "title": "Later item",
+                    "order": 8,
+                },
+            ],
             "relationships": [{
                 "source_id": "edge-1", "parent_card_source_id": "card-1", "child_card_source_id": "card-2",
                 "relationship_type_uid": relationship_type_id.to_short_code(),
@@ -148,7 +163,7 @@ def test_imported_card_shares_native_creation_invariants(monkeypatch: pytest.Mon
             lambda *_args: pytest.fail("historical attachment dispatched a live bot"),
         )
         importer = ExternalWorkImporter(attachments_root)
-        native_dispatch = importer._dispatch_native_effects
+        native_dispatch = importer._effect_dispatcher
         importer._effect_dispatcher = lambda kind, *args: native_dispatch(kind, *args) if kind == "attachment" else None
         first = importer.import_bundle(
             bundle, project_uid=project_id.to_short_code(), actor_uid=actor_id.to_short_code()
@@ -157,7 +172,7 @@ def test_imported_card_shares_native_creation_invariants(monkeypatch: pytest.Mon
             bundle, project_uid=project_id.to_short_code(), actor_uid=actor_id.to_short_code()
         )
         expected = {
-            "column": 1, "label": 1, "card": 2, "checklist": 1, "checkitem": 1,
+            "column": 2, "label": 2, "card": 2, "checklist": 2, "checkitem": 2,
             "relationship": 1, "comment": 1, "attachment": 1,
         }
         assert first.created == expected
@@ -172,19 +187,30 @@ def test_imported_card_shares_native_creation_invariants(monkeypatch: pytest.Mon
             assert card["order"] == 9
             assert dependent["order"] == 10
             assert connection.execute(select(CardAssignedProjectLabel.__table__)).one() is not None
+            assert {
+                row["name"]: row["order"]
+                for row in connection.execute(select(ProjectColumn.__table__)).mappings()
+            } == {"Backlog": 4, "Done": 8}
+            assert {
+                row["name"]: row["order"]
+                for row in connection.execute(select(ProjectLabel.__table__)).mappings()
+            } == {"Imported": 7, "Urgent": 11}
             checklists = connection.execute(
                 select(Checklist.__table__).where(
                     Checklist.deleted_at.is_(None), Checklist.card_id == card["id"]
                 )
             ).mappings().all()
-            assert len(checklists) == 1  # Native creation soft-deleted the hidden completion checklist.
-            assert checklists[0]["title"] == "Imported checks"
-            assert checklists[0]["order"] == 3
-            assert checklists[0]["is_system"] is False
-            item = connection.execute(
-                select(Checkitem.__table__).where(Checkitem.checklist_id == checklists[0]["id"])
-            ).mappings().one()
-            assert (item["title"], item["order"], item["is_checked"]) == ("Imported item", 5, True)
+            assert {row["title"]: row["order"] for row in checklists} == {
+                "Imported checks": 3, "Later checks": 6,
+            }
+            assert all(row["is_system"] is False for row in checklists)
+            imported_checklist = next(row for row in checklists if row["title"] == "Imported checks")
+            items = connection.execute(
+                select(Checkitem.__table__).where(Checkitem.checklist_id == imported_checklist["id"])
+            ).mappings().all()
+            assert {row["title"]: (row["order"], row["is_checked"]) for row in items} == {
+                "Imported item": (5, True), "Later item": (8, False),
+            }
             edge = connection.execute(select(CardRelationship.__table__)).mappings().one()
             assert (edge["card_id_parent"], edge["card_id_child"], edge["relationship_type_id"]) == (
                 card["id"], dependent["id"], relationship_type_id
@@ -200,7 +226,7 @@ def test_imported_card_shares_native_creation_invariants(monkeypatch: pytest.Mon
             assert attachment["created_at"] == comment_time
             assert attachment["filename"] == "note.txt"
             assert Storage.get_file(attachment["file"]) == attachment_bytes
-            assert len(connection.execute(select(ExternalImportRecord.__table__)).all()) == 9
+            assert len(connection.execute(select(ExternalImportRecord.__table__)).all()) == 13
     finally:
         engine.dispose()
         with admin.begin() as connection:
