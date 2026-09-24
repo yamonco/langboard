@@ -106,8 +106,17 @@ def _counts(engine: sa.Engine) -> tuple[int, int]:
         )
 
 
-def test_partial_database_failure_resumes_without_duplicate_targets(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize("failure_index, persisted", [(2, 0), (26, 25)])
+def test_partial_database_failure_resumes_without_duplicate_targets(
+    monkeypatch: pytest.MonkeyPatch, failure_index: int, persisted: int
+) -> None:
     engine, project_uid, actor_uid = _database(monkeypatch)
+    payload = _bundle().model_dump()
+    payload["columns"] = [
+        {"source_id": f"column-{index}", "name": f"Column {index}", "order": index - 1}
+        for index in range(1, 27)
+    ]
+    bundle = ExternalWorkBundle.model_validate(payload)
     effects: list[str] = []
     importer = ExternalWorkImporter(effect_dispatcher=lambda _kind, record, *_args: effects.append(record.source_id))
     create_target = importer._create_target
@@ -115,23 +124,23 @@ def test_partial_database_failure_resumes_without_duplicate_targets(monkeypatch:
     def fail_second(
         db: Any, project: Any, actor: Any, record: Any, targets: Any, principals: Any, staged_file: Any
     ) -> Any:
-        if record.source_id == "column-2":
+        if record.source_id == f"column-{failure_index}":
             raise RuntimeError("injected batch failure")
         return create_target(db, project, actor, record, targets, principals, staged_file)
 
     monkeypatch.setattr(importer, "_create_target", fail_second)
     with pytest.raises(RuntimeError, match="injected batch failure"):
-        importer.import_bundle(_bundle(), project_uid=project_uid, actor_uid=actor_uid)
+        importer.import_bundle(bundle, project_uid=project_uid, actor_uid=actor_uid)
 
-    assert _counts(engine) == (1, 1)
+    assert _counts(engine) == (persisted, persisted)
     monkeypatch.setattr(importer, "_create_target", create_target)
 
-    receipt = importer.import_bundle(_bundle(), project_uid=project_uid, actor_uid=actor_uid)
+    receipt = importer.import_bundle(bundle, project_uid=project_uid, actor_uid=actor_uid)
 
-    assert receipt.created == {"column": 1}
-    assert receipt.unchanged == {"column": 1}
-    assert _counts(engine) == (2, 2)
-    assert effects == ["column-1", "column-2"]
+    assert receipt.created == {"column": 26 - persisted}
+    assert receipt.unchanged == ({"column": persisted} if persisted else {})
+    assert _counts(engine) == (26, 26)
+    assert effects == [f"column-{index}" for index in range(1, 27)]
 
 
 def test_failed_post_commit_effect_is_durably_replayed(monkeypatch: pytest.MonkeyPatch) -> None:

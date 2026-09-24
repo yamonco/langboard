@@ -3,6 +3,7 @@ from collections import Counter
 from datetime import datetime
 from functools import partial
 from hashlib import sha256
+from itertools import batched, groupby
 from json import dumps
 from pathlib import Path
 from typing import Any, Callable, TypeVar
@@ -113,37 +114,43 @@ class ExternalWorkImporter:
                 unchanged=dict(unchanged),
             )
 
-        for kind, record in bundle.records():
-            key = (kind, record.source_id)
-            lineage = existing.get(key)
-            if lineage:
-                if lineage.effects_dispatched_at is None:
-                    self._dispatch_and_checkpoint(
-                        kind, record, targets[key], project, actor, targets, principals, lineage
-                    )
-                continue
+        for (_, was_imported), records in groupby(
+            bundle.records(), key=lambda pair: (pair[0], (pair[0], pair[1].source_id) in existing)
+        ):
+            if was_imported:
+                for kind, record in records:
+                    key = (kind, record.source_id)
+                    lineage = existing[key]
+                    if lineage.effects_dispatched_at is None:
+                        self._dispatch_and_checkpoint(
+                            kind, record, targets[key], project, actor, targets, principals, lineage
+                        )
+            else:
+                for chunk in batched(records, 25):
+                    self._import_chunk(chunk, bundle, project_uid, actor_uid, files, targets, principals, existing)
 
-            staged_file = (
-                self._upload_attachment(project_uid, bundle, record, files)
-                if isinstance(record, ExternalAttachment)
-                else None
-            )
-            try:
-                with DbSession.atomic() as db:
-                    current_project = self._require_uid(db, Project, project_uid, "project")
-                    current_actor = self._require_uid(db, User, actor_uid, "actor")
-                    self._authorize(db, current_project, current_actor)
-                    target = self._create_target(
-                        db,
-                        current_project,
-                        current_actor,
-                        record,
-                        targets,
-                        principals,
-                        staged_file,
-                    )
+        return ExternalImportReceipt(
+            dry_run=False,
+            created=dict(Counter(kind for kind, _ in pending)),
+            unchanged=dict(unchanged),
+        )
+
+    def _import_chunk(self, chunk, bundle, project_uid, actor_uid, files, targets, principals, existing) -> None:
+        staged: dict[tuple[str, str], FileModel] = {}
+        created = []
+        try:
+            for kind, record in chunk:
+                if isinstance(record, ExternalAttachment):
+                    staged[(kind, record.source_id)] = self._upload_attachment(project_uid, bundle, record, files)
+            with DbSession.atomic() as db:
+                project = self._require_uid(db, Project, project_uid, "project")
+                actor = self._require_uid(db, User, actor_uid, "actor")
+                self._authorize(db, project, actor)
+                for kind, record in chunk:
+                    key = (kind, record.source_id)
+                    target = self._create_target(db, project, actor, record, targets, principals, staged.get(key))
                     lineage = ExternalImportRecord(
-                        project_id=current_project.id,
+                        project_id=project.id,
                         source_namespace=bundle.source.namespace,
                         source_container_id=bundle.source.container_id,
                         record_type=kind,
@@ -159,26 +166,17 @@ class ExternalWorkImporter:
                         ),
                     )
                     db.insert(lineage)
-            except Exception:
-                if staged_file is not None and not self._matching_lineage_exists(
-                    project_uid,
-                    bundle,
-                    kind,
-                    record,
-                ):
-                    self._delete_staged_file(staged_file)
-                raise
-
-            project, actor = current_project, current_actor
-            targets[key] = target
-            existing[key] = lineage
+                    targets[key] = target
+                    created.append((kind, record, target, lineage))
+        except Exception:
+            for kind, record in chunk:
+                file = staged.get((kind, record.source_id))
+                if file is not None and not self._matching_lineage_exists(project_uid, bundle, kind, record):
+                    self._delete_staged_file(file)
+            raise
+        for kind, record, target, lineage in created:
+            existing[(kind, record.source_id)] = lineage
             self._dispatch_and_checkpoint(kind, record, target, project, actor, targets, principals, lineage)
-
-        return ExternalImportReceipt(
-            dry_run=False,
-            created=dict(Counter(kind for kind, _ in pending)),
-            unchanged=dict(unchanged),
-        )
 
     @staticmethod
     def _upload_attachment(
