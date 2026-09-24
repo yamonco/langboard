@@ -127,9 +127,6 @@ class CardWorkspaceCommandPort(Protocol):
     ) -> str:
         """Atomically replace one revision-bound description, including an empty body."""
 
-    def create_card_checklist(self, project_uid: str, card_uid: str, title: str) -> dict[str, Any]:
-        """Create a checklist."""
-
     def update_card_checklist(
         self,
         project_uid: str,
@@ -139,12 +136,6 @@ class CardWorkspaceCommandPort(Protocol):
         is_checked: bool | None,
     ) -> list[dict[str, Any]]:
         """Validate and update checklist fields."""
-
-    def delete_card_checklist(self, project_uid: str, card_uid: str, checklist_uid: str) -> None:
-        """Delete a checklist."""
-
-    def create_card_checkitem(self, project_uid: str, card_uid: str, checklist_uid: str, title: str) -> dict[str, Any]:
-        """Create a checkitem."""
 
     def cardify_card_checkitem(
         self,
@@ -165,9 +156,6 @@ class CardWorkspaceCommandPort(Protocol):
         is_checked: bool | None,
     ) -> list[dict[str, Any]]:
         """Validate and update checkitem fields."""
-
-    def delete_card_checkitem(self, project_uid: str, card_uid: str, checkitem_uid: str) -> None:
-        """Delete a checkitem."""
 
     def replace_card_people_and_labels(
         self,

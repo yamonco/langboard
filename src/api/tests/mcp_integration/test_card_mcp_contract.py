@@ -96,6 +96,41 @@ def test_comment_tools_use_native_owner_without_workspace_adapter(monkeypatch: p
         CardMcp.delete_card_comment("project", "card", "comment", None, missing)
 
 
+def test_checklist_create_delete_tools_use_native_owner(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[str, str]] = []
+    checklist = SimpleNamespace(api_response=lambda: {"uid": "list", "title": "Tasks", "private": "hidden"})
+    item = SimpleNamespace(api_response=lambda: {"uid": "item", "title": "Task", "private": "hidden"})
+    service = SimpleNamespace(
+        checklist=SimpleNamespace(
+            create=lambda actor, project, card, title: (calls.append(("create_list", title)) or checklist),
+            delete=lambda actor, project, card, uid: (calls.append(("delete_list", uid)) or True),
+        ),
+        checkitem=SimpleNamespace(
+            create=lambda actor, project, card, uid, title: (calls.append(("create_item", title)) or item),
+            delete=lambda actor, project, card, uid: (calls.append(("delete_item", uid)) or True),
+        ),
+    )
+    monkeypatch.setattr(CardMcp, "_adapter", lambda *args: pytest.fail("workspace adapter used"))
+
+    created_list = CardMcp.create_card_checklist("project", "card", " Tasks ", None, service)["checklist"]
+    created_item = CardMcp.create_card_checkitem("project", "card", "list", " Task ", None, service)["checkitem"]
+    assert created_list["uid"] == "list" and "private" not in created_list
+    assert created_item["uid"] == "item" and "private" not in created_item
+    assert CardMcp.delete_card_checklist("project", "card", "list", None, service) == {"deleted": True}
+    assert CardMcp.delete_card_checkitem("project", "card", "item", None, service) == {"deleted": True}
+    assert calls == [
+        ("create_list", "Tasks"),
+        ("create_item", "Task"),
+        ("delete_list", "list"),
+        ("delete_item", "item"),
+    ]
+
+    with pytest.raises(ValueError, match="Checklist title is required"):
+        CardMcp.create_card_checklist("project", "card", " ", None, service)
+    with pytest.raises(ValueError, match="Checkitem title is required"):
+        CardMcp.create_card_checkitem("project", "card", "list", " ", None, service)
+
+
 @pytest.mark.parametrize("reason", ["stale revision", "missing fragment", "ambiguous fragment"])
 def test_description_conflict_is_transport_validation(monkeypatch: pytest.MonkeyPatch, reason: str) -> None:
     """Only a known pre-save conflict becomes a recoverable MCP validation error."""

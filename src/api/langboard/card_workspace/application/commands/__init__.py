@@ -29,7 +29,6 @@ from ..projections import (
     bounded_items,
     public_attachment,
     public_card_summary,
-    public_checkitem,
     public_checklist,
     public_label,
     public_metadata,
@@ -147,18 +146,6 @@ def replace_card_description(
     }
 
 
-def create_card_checklist(
-    port: CardWorkspaceCommandPort, project_uid: str, card_uid: str, title: str
-) -> dict[str, Any]:
-    """Create and return a sanitized native checklist."""
-
-    return {
-        "checklist": public_checklist(
-            port.create_card_checklist(project_uid, card_uid, _required_text(title, "Checklist title"))
-        )
-    }
-
-
 def update_card_checklist(
     port: CardWorkspaceCommandPort,
     project_uid: str,
@@ -176,31 +163,6 @@ def update_card_checklist(
     checklists = port.update_card_checklist(project_uid, card_uid, checklist_uid, normalized_title, is_checked)
     return {
         "checklists": bounded_items([public_checklist(item) for item in checklists], CardBundleSection.Checklists, 25)
-    }
-
-
-def delete_card_checklist(
-    port: CardWorkspaceCommandPort, project_uid: str, card_uid: str, checklist_uid: str
-) -> dict[str, bool]:
-    """Delete one native checklist."""
-
-    port.delete_card_checklist(project_uid, card_uid, checklist_uid)
-    return {"deleted": True}
-
-
-def create_card_checkitem(
-    port: CardWorkspaceCommandPort,
-    project_uid: str,
-    card_uid: str,
-    checklist_uid: str,
-    title: str,
-) -> dict[str, Any]:
-    """Create and return a sanitized checkitem."""
-
-    return {
-        "checkitem": public_checkitem(
-            port.create_card_checkitem(project_uid, card_uid, checklist_uid, _required_text(title, "Checkitem title"))
-        )
     }
 
 
@@ -244,15 +206,6 @@ def update_card_checkitem(
     return {
         "checklists": bounded_items([public_checklist(item) for item in checklists], CardBundleSection.Checklists, 25)
     }
-
-
-def delete_card_checkitem(
-    port: CardWorkspaceCommandPort, project_uid: str, card_uid: str, checkitem_uid: str
-) -> dict[str, bool]:
-    """Delete one native checkitem."""
-
-    port.delete_card_checkitem(project_uid, card_uid, checkitem_uid)
-    return {"deleted": True}
 
 
 def set_card_people_and_labels(
