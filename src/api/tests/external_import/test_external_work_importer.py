@@ -14,7 +14,13 @@ from langboard.external_import import ExternalWorkBundle  # noqa: E402
 from langboard.external_import.importer import ExternalWorkImporter  # noqa: E402
 from langboard_shared.core.db import DbSession  # noqa: E402
 from langboard_shared.core.types import SnowflakeID  # noqa: E402
-from langboard_shared.domain.models import ExternalImportRecord, Project, ProjectColumn, User  # noqa: E402
+from langboard_shared.domain.models import (  # noqa: E402
+    ExternalImportRecord,
+    Project,
+    ProjectColumn,
+    ProjectLabel,
+    User,
+)
 
 
 def _bundle() -> ExternalWorkBundle:
@@ -38,7 +44,10 @@ def _database(monkeypatch: pytest.MonkeyPatch) -> tuple[sa.Engine, str, str]:
     )
     User.metadata.create_all(
         engine,
-        tables=[User.__table__, Project.__table__, ProjectColumn.__table__, ExternalImportRecord.__table__],
+        tables=[
+            User.__table__, Project.__table__, ProjectColumn.__table__, ProjectLabel.__table__,
+            ExternalImportRecord.__table__,
+        ],
     )
     actor_id = SnowflakeID(1001)
     project_id = SnowflakeID(2001)
@@ -69,6 +78,10 @@ def _database(monkeypatch: pytest.MonkeyPatch) -> tuple[sa.Engine, str, str]:
 
     @contextmanager
     def use_database(*, readonly: bool):
+        active = DbSession._atomic_session.get()
+        if active is not None:
+            yield active
+            return
         with Session(engine, expire_on_commit=False) as session:
             db = DbSession(session, readonly=readonly)
             if readonly:
@@ -99,10 +112,12 @@ def test_partial_database_failure_resumes_without_duplicate_targets(monkeypatch:
     importer = ExternalWorkImporter(effect_dispatcher=lambda _kind, record, *_args: effects.append(record.source_id))
     create_target = importer._create_target
 
-    def fail_second(db: Any, project: Any, record: Any, targets: Any, principals: Any, staged_file: Any) -> Any:
+    def fail_second(
+        db: Any, project: Any, actor: Any, record: Any, targets: Any, principals: Any, staged_file: Any
+    ) -> Any:
         if record.source_id == "column-2":
             raise RuntimeError("injected batch failure")
-        return create_target(db, project, record, targets, principals, staged_file)
+        return create_target(db, project, actor, record, targets, principals, staged_file)
 
     monkeypatch.setattr(importer, "_create_target", fail_second)
     with pytest.raises(RuntimeError, match="injected batch failure"):
@@ -151,3 +166,57 @@ def test_failed_post_commit_effect_is_durably_replayed(monkeypatch: pytest.Monke
     assert completed["effects_dispatched_at"] is not None
     assert completed["effects_attempts"] == 2
     assert completed["effects_error"] is None
+
+
+def test_native_column_create_and_lineage_share_one_transaction(monkeypatch: pytest.MonkeyPatch) -> None:
+    engine, project_uid, actor_uid = _database(monkeypatch)
+    original_insert = DbSession.insert
+
+    def fail_lineage(db: DbSession, model: Any) -> Any:
+        if isinstance(model, ExternalImportRecord):
+            raise RuntimeError("lineage write failed")
+        return original_insert(db, model)
+
+    monkeypatch.setattr(DbSession, "insert", fail_lineage)
+    importer = ExternalWorkImporter(effect_dispatcher=lambda *_args: None)
+    with pytest.raises(RuntimeError, match="lineage write failed"):
+        importer.import_bundle(_bundle(), project_uid=project_uid, actor_uid=actor_uid)
+    assert _counts(engine) == (0, 0)
+
+
+def test_import_dispatches_column_effects_once_after_native_create(monkeypatch: pytest.MonkeyPatch) -> None:
+    from langboard_shared.publishers import ProjectColumnPublisher
+    from langboard_shared.tasks.activities import ProjectColumnActivityTask
+    from langboard_shared.tasks.bots import ProjectColumnBotTask
+
+    engine, project_uid, actor_uid = _database(monkeypatch)
+    events: list[str] = []
+    monkeypatch.setattr(ProjectColumnPublisher, "created", lambda *_args: events.append("publisher"))
+    monkeypatch.setattr(
+        ProjectColumnActivityTask, "project_column_created", lambda *_args: events.append("activity")
+    )
+    monkeypatch.setattr(ProjectColumnBotTask, "project_column_created", lambda *_args: events.append("bot"))
+
+    receipt = ExternalWorkImporter().import_bundle(_bundle(), project_uid=project_uid, actor_uid=actor_uid)
+
+    assert receipt.created == {"column": 2}
+    assert _counts(engine) == (2, 2)
+    assert events == ["publisher", "activity", "publisher", "activity"]
+
+
+def test_native_label_create_preserves_historical_order_and_lineage(monkeypatch: pytest.MonkeyPatch) -> None:
+    engine, project_uid, actor_uid = _database(monkeypatch)
+    payload = _bundle().model_dump()
+    payload["columns"] = []
+    payload["labels"] = [{"source_id": "label-1", "name": "Imported", "color": "#112233", "order": 7}]
+    bundle = ExternalWorkBundle.model_validate(payload)
+    importer = ExternalWorkImporter(effect_dispatcher=lambda *_args: None)
+
+    first = importer.import_bundle(bundle, project_uid=project_uid, actor_uid=actor_uid)
+    second = importer.import_bundle(bundle, project_uid=project_uid, actor_uid=actor_uid)
+
+    assert first.created == {"label": 1}
+    assert second.unchanged == {"label": 1}
+    with engine.connect() as connection:
+        label = connection.execute(sa.select(ProjectLabel.__table__)).mappings().one()
+        assert (label["name"], label["color"], label["order"]) == ("Imported", "#112233", 7)
