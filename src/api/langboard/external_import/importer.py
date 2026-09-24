@@ -419,18 +419,12 @@ class ExternalWorkImporter:
             target = self._domain.project_column.create(
                 actor, project, record.name, dispatch_effects=False, order_override=record.order
             )
-            if target is None:
-                raise ExternalImportError("project column creation failed")
-            return target
         elif isinstance(record, ExternalLabel):
             created = self._domain.project_label.create(
                 actor, project, record.name, record.color, record.description,
                 dispatch_effects=False, order_override=record.order,
             )
-            if created is None:
-                raise ExternalImportError("project label creation failed")
-            target, _ = created
-            return target
+            target = created[0] if created is not None else None
         elif isinstance(record, ExternalCard):
             column = targets[("column", record.column_source_id)]
             assignee_uids = [principals[external_id][0].get_uid() for external_id in record.assignee_scim_external_ids]
@@ -445,22 +439,16 @@ class ExternalWorkImporter:
                 order_override=record.order,
                 deadline_at=record.deadline_at,
             )
-            if created is None:
-                raise ExternalImportError("card creation failed")
-            target, _ = created
-            if record.label_source_ids:
+            target = created[0] if created is not None else None
+            if target is not None and record.label_source_ids:
                 label_uids = [targets[("label", label_id)].get_uid() for label_id in record.label_source_ids]
                 if self._domain.card.update_labels(actor, project, target, label_uids, dispatch_effects=False) is None:
                     raise ExternalImportError("card label assignment failed")
-            return target
         elif isinstance(record, ExternalChecklist):
             card = targets[("card", record.card_source_id)]
             target = self._domain.checklist.create(
                 actor, project, card, record.title, dispatch_effects=False, order_override=record.order
             )
-            if target is None:
-                raise ExternalImportError("checklist creation failed")
-            return target
         elif isinstance(record, ExternalCheckitem):
             checklist = targets[("checklist", record.checklist_source_id)]
             card = self._domain.card.get_by_id_like(checklist.card_id)
@@ -470,9 +458,6 @@ class ExternalWorkImporter:
                 actor, project, card, checklist, record.title,
                 dispatch_effects=False, order_override=record.order, initially_checked=record.is_checked,
             )
-            if target is None:
-                raise ExternalImportError("checkitem creation failed")
-            return target
         elif isinstance(record, ExternalRelationship):
             parent = targets[("card", record.parent_card_source_id)]
             child = targets[("card", record.child_card_source_id)]
@@ -487,38 +472,31 @@ class ExternalWorkImporter:
             )
             if result is None or len(result["created_relationships"]) != 1:
                 raise ExternalImportError("relationship creation failed")
-            return self._require_uid(
+            target = self._require_uid(
                 db, CardRelationship, result["created_relationships"][0]["uid"], "relationship"
             )
-        elif isinstance(record, ExternalComment):
+        elif isinstance(record, (ExternalComment, ExternalAttachment)):
             user, _ = principals[record.author_scim_external_id]
-            target = self._domain.card_comment.create(
-                user,
-                project,
-                targets[("card", record.card_source_id)],
-                EditorContentModel(content=record.content),
-                dispatch_effects=False,
-            )
-            if target is None:
-                raise ExternalImportError("comment creation failed")
+            card = targets[("card", record.card_source_id)]
+            if isinstance(record, ExternalComment):
+                target = self._domain.card_comment.create(
+                    user, project, card, EditorContentModel(content=record.content), dispatch_effects=False
+                )
+            else:
+                if staged_file is None:
+                    raise ExternalImportError("attachment was not staged")
+                target = self._domain.card_attachment.create(
+                    user, project, card, staged_file, dispatch_effects=False
+                )
+        else:
+            raise TypeError(f"unsupported external work record: {type(record).__name__}")
+        if target is None:
+            kind = type(record).__name__.removeprefix("External").lower()
+            prefix = "project " if isinstance(record, (ExternalColumn, ExternalLabel)) else ""
+            raise ExternalImportError(f"{prefix}{kind} creation failed")
+        if isinstance(record, (ExternalComment, ExternalAttachment)):
             self._restore_historical_timestamps(db, target, record.created_at)
-            return target
-        elif isinstance(record, ExternalAttachment):
-            user, _ = principals[record.author_scim_external_id]
-            if staged_file is None:
-                raise ExternalImportError("attachment was not staged")
-            target = self._domain.card_attachment.create(
-                user,
-                project,
-                targets[("card", record.card_source_id)],
-                staged_file,
-                dispatch_effects=False,
-            )
-            if target is None:
-                raise ExternalImportError("attachment creation failed")
-            self._restore_historical_timestamps(db, target, record.created_at)
-            return target
-        raise TypeError(f"unsupported external work record: {type(record).__name__}")
+        return target
 
     @staticmethod
     def _restore_historical_timestamps(
