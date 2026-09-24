@@ -91,7 +91,14 @@ class CheckitemService(BaseDomainService):
         return api_checkitems, list(api_cards.values()), list(api_projects.values())
 
     def create(
-        self, user_or_bot: TUserOrBot, project: TProjectParam, card: TCardParam, checklist: TChecklistParam, title: str
+        self,
+        user_or_bot: TUserOrBot,
+        project: TProjectParam,
+        card: TCardParam,
+        checklist: TChecklistParam,
+        title: str,
+        *,
+        dispatch_effects: bool = True,
     ) -> Checkitem | None:
         params = InfraHelper.get_records_with_foreign_by_params(
             (Project, project), (Card, card), (Checklist, checklist)
@@ -105,10 +112,12 @@ class CheckitemService(BaseDomainService):
         )
         self.repo.checkitem.insert(checkitem)
 
-        CheckitemPublisher.created(card, checklist, checkitem)
+        if dispatch_effects:
+            CheckitemPublisher.created(card, checklist, checkitem)
         self._mark_card_changed_for_unread(card, "checkitem", checkitem.id)
-        CardCheckitemActivityTask.card_checkitem_created(user_or_bot, project, card, checkitem)
-        CardCheckitemBotTask.card_checkitem_created(user_or_bot, project, card, checkitem)
+        if dispatch_effects:
+            CardCheckitemActivityTask.card_checkitem_created(user_or_bot, project, card, checkitem)
+            CardCheckitemBotTask.card_checkitem_created(user_or_bot, project, card, checkitem)
 
         return checkitem
 

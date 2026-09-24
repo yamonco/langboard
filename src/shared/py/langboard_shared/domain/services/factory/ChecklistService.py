@@ -93,7 +93,13 @@ class ChecklistService(BaseDomainService):
         return [checklist.api_response() for checklist in checklists]
 
     def create(
-        self, user_or_bot: TUserOrBot, project: TProjectParam | None, card: TCardParam | None, title: str
+        self,
+        user_or_bot: TUserOrBot,
+        project: TProjectParam | None,
+        card: TCardParam | None,
+        title: str,
+        *,
+        dispatch_effects: bool = True,
     ) -> Checklist | None:
         params = InfraHelper.get_records_with_foreign_by_params((Project, project), (Card, card))
         if not params:
@@ -108,10 +114,12 @@ class ChecklistService(BaseDomainService):
         card_service = self._get_service_by_name("card")
         card_service.remove_completion_checklist(card)
 
-        ChecklistPublisher.created(card, checklist)
+        if dispatch_effects:
+            ChecklistPublisher.created(card, checklist)
         self._mark_card_changed_for_unread(card, "checklist", checklist.id)
-        CardChecklistActivityTask.card_checklist_created(user_or_bot, project, card, checklist)
-        CardChecklistBotTask.card_checklist_created(user_or_bot, project, card, checklist)
+        if dispatch_effects:
+            CardChecklistActivityTask.card_checklist_created(user_or_bot, project, card, checklist)
+            CardChecklistBotTask.card_checklist_created(user_or_bot, project, card, checklist)
 
         return checklist
 

@@ -17,6 +17,8 @@ from langboard_shared.core.types import SnowflakeID  # noqa: E402
 from langboard_shared.domain.models import (  # noqa: E402
     Card,
     CardAssignedProjectLabel,
+    Checkitem,
+    Checklist,
     ExternalImportRecord,
     Project,
     User,
@@ -74,7 +76,14 @@ def test_imported_card_shares_native_creation_invariants(monkeypatch: pytest.Mon
             "labels": [{"source_id": "label-1", "name": "Imported", "color": "#112233", "order": 7}],
             "cards": [{
                 "source_id": "card-1", "column_source_id": "column-1", "title": "Imported work",
-                "description": "Historical description", "order": 9, "label_source_ids": ["label-1"],
+                "description": "", "order": 9, "label_source_ids": ["label-1"],
+            }],
+            "checklists": [{
+                "source_id": "checklist-1", "card_source_id": "card-1", "title": "Imported checks", "order": 3,
+            }],
+            "checkitems": [{
+                "source_id": "item-1", "checklist_source_id": "checklist-1", "title": "Imported item",
+                "order": 5, "is_checked": True,
             }],
         })
         importer = ExternalWorkImporter(effect_dispatcher=lambda *_args: None)
@@ -84,16 +93,28 @@ def test_imported_card_shares_native_creation_invariants(monkeypatch: pytest.Mon
         second = importer.import_bundle(
             bundle, project_uid=project_id.to_short_code(), actor_uid=actor_id.to_short_code()
         )
-        assert first.created == {"column": 1, "label": 1, "card": 1}
-        assert second.unchanged == {"column": 1, "label": 1, "card": 1}
+        expected = {"column": 1, "label": 1, "card": 1, "checklist": 1, "checkitem": 1}
+        assert first.created == expected
+        assert second.unchanged == expected
         with engine.connect() as connection:
             card = connection.execute(select(Card.__table__)).mappings().one()
             assert card["created_by_user_id"] == actor_id
             assert card["last_change_seq"] > 0
-            assert card["last_change_target_type"] == "card"
+            assert card["last_change_target_type"] == "checkitem"
             assert card["order"] == 9
             assert connection.execute(select(CardAssignedProjectLabel.__table__)).one() is not None
-            assert len(connection.execute(select(ExternalImportRecord.__table__)).all()) == 3
+            checklists = connection.execute(
+                select(Checklist.__table__).where(Checklist.deleted_at.is_(None))
+            ).mappings().all()
+            assert len(checklists) == 1  # Native creation soft-deleted the hidden completion checklist.
+            assert checklists[0]["title"] == "Imported checks"
+            assert checklists[0]["order"] == 3
+            assert checklists[0]["is_system"] is False
+            item = connection.execute(
+                select(Checkitem.__table__).where(Checkitem.checklist_id == checklists[0]["id"])
+            ).mappings().one()
+            assert (item["title"], item["order"], item["is_checked"]) == ("Imported item", 5, True)
+            assert len(connection.execute(select(ExternalImportRecord.__table__)).all()) == 5
     finally:
         engine.dispose()
         with admin.begin() as connection:
