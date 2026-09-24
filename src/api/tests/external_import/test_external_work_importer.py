@@ -1,5 +1,6 @@
 import os
 from contextlib import contextmanager
+from types import SimpleNamespace
 from typing import Any
 import pytest
 import sqlalchemy as sa
@@ -11,16 +12,20 @@ from sqlalchemy.pool import StaticPool
 os.environ.setdefault("PROJECT_NAME", "langboard")
 
 from langboard.external_import import ExternalWorkBundle  # noqa: E402
-from langboard.external_import.importer import ExternalWorkImporter  # noqa: E402
+from langboard.external_import.importer import ExternalImportError, ExternalWorkImporter  # noqa: E402
 from langboard_shared.core.db import DbSession  # noqa: E402
 from langboard_shared.core.types import SnowflakeID  # noqa: E402
 from langboard_shared.domain.models import (  # noqa: E402
     ExternalImportRecord,
     Project,
+    ProjectAssignedUser,
     ProjectColumn,
     ProjectLabel,
     User,
+    UserIdentityLink,
 )
+from langboard_shared.domain.models.UserIdentityLink import IdentityProvider  # noqa: E402
+from langboard_shared.Env import Env  # noqa: E402
 
 
 def _bundle() -> ExternalWorkBundle:
@@ -45,8 +50,13 @@ def _database(monkeypatch: pytest.MonkeyPatch) -> tuple[sa.Engine, str, str]:
     User.metadata.create_all(
         engine,
         tables=[
-            User.__table__, Project.__table__, ProjectColumn.__table__, ProjectLabel.__table__,
+            User.__table__,
+            Project.__table__,
+            ProjectColumn.__table__,
+            ProjectLabel.__table__,
             ExternalImportRecord.__table__,
+            ProjectAssignedUser.__table__,
+            UserIdentityLink.__table__,
         ],
     )
     actor_id = SnowflakeID(1001)
@@ -106,6 +116,77 @@ def _counts(engine: sa.Engine) -> tuple[int, int]:
         )
 
 
+def test_principal_resolution_batches_users_and_preserves_membership_gate(monkeypatch: pytest.MonkeyPatch) -> None:
+    engine, project_uid, _actor_uid = _database(monkeypatch)
+    monkeypatch.setattr(type(Env), "SCIM_ISSUER", property(lambda _self: "test-issuer"))
+    project_id = SnowflakeID.from_short_code(project_uid)
+    with engine.begin() as connection:
+        for index in (1, 2, 3):
+            user_id = SnowflakeID(1001 + index)
+            connection.execute(
+                User.__table__.insert(),
+                {
+                    "id": user_id,
+                    "firstname": "Import",
+                    "lastname": f"Person {index}",
+                    "email": f"person-{index}@example.invalid",
+                    "username": f"person-{index}",
+                    "password": SecretStr("unused"),
+                    "is_admin": False,
+                    "preferred_lang": "en-US",
+                },
+            )
+            connection.execute(
+                UserIdentityLink.__table__.insert(),
+                {
+                    "id": SnowflakeID(5000 + index),
+                    "user_id": user_id,
+                    "provider": IdentityProvider.Scim,
+                    "external_id": f"scim-{index}",
+                    "issuer": "test-issuer",
+                },
+            )
+            if index < 3:
+                connection.execute(
+                    ProjectAssignedUser.__table__.insert(),
+                    {
+                        "id": SnowflakeID(4000 + index),
+                        "project_id": project_id,
+                        "user_id": user_id,
+                        "starred": False,
+                    },
+                )
+    bundle = SimpleNamespace(
+        cards=[SimpleNamespace(assignee_scim_external_ids=["scim-1", "scim-2"])],
+        comments=[],
+        attachments=[],
+    )
+    statements: list[str] = []
+
+    def count_select(
+        _connection: Any, _cursor: Any, statement: str, _parameters: Any, _context: Any, _many: Any
+    ) -> None:
+        if statement.lstrip().upper().startswith("SELECT"):
+            statements.append(statement)
+
+    sa.event.listen(engine, "before_cursor_execute", count_select)
+    try:
+        with DbSession.use(readonly=True) as db:
+            project = ExternalWorkImporter._require_uid(db, Project, project_uid, "project")
+            statements.clear()
+            principals = ExternalWorkImporter._resolve_principals(db, project, bundle)
+            assert len(statements) == 2
+            assert {key: user.id for key, (user, _membership) in principals.items()} == {
+                "scim-1": SnowflakeID(1002),
+                "scim-2": SnowflakeID(1003),
+            }
+            bundle.comments = [SimpleNamespace(author_scim_external_id="scim-3")]
+            with pytest.raises(ExternalImportError, match="not an active project member"):
+                ExternalWorkImporter._resolve_principals(db, project, bundle)
+    finally:
+        sa.event.remove(engine, "before_cursor_execute", count_select)
+
+
 @pytest.mark.parametrize("failure_index, persisted", [(2, 0), (26, 25)])
 def test_partial_database_failure_resumes_without_duplicate_targets(
     monkeypatch: pytest.MonkeyPatch, failure_index: int, persisted: int
@@ -113,8 +194,7 @@ def test_partial_database_failure_resumes_without_duplicate_targets(
     engine, project_uid, actor_uid = _database(monkeypatch)
     payload = _bundle().model_dump()
     payload["columns"] = [
-        {"source_id": f"column-{index}", "name": f"Column {index}", "order": index - 1}
-        for index in range(1, 27)
+        {"source_id": f"column-{index}", "name": f"Column {index}", "order": index - 1} for index in range(1, 27)
     ]
     bundle = ExternalWorkBundle.model_validate(payload)
     effects: list[str] = []
@@ -201,9 +281,7 @@ def test_import_dispatches_column_effects_once_after_native_create(monkeypatch: 
     engine, project_uid, actor_uid = _database(monkeypatch)
     events: list[str] = []
     monkeypatch.setattr(ProjectColumnPublisher, "created", lambda *_args: events.append("publisher"))
-    monkeypatch.setattr(
-        ProjectColumnActivityTask, "project_column_created", lambda *_args: events.append("activity")
-    )
+    monkeypatch.setattr(ProjectColumnActivityTask, "project_column_created", lambda *_args: events.append("activity"))
     monkeypatch.setattr(ProjectColumnBotTask, "project_column_created", lambda *_args: events.append("bot"))
 
     receipt = ExternalWorkImporter().import_bundle(_bundle(), project_uid=project_uid, actor_uid=actor_uid)
