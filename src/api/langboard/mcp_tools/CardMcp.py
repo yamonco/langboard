@@ -39,12 +39,17 @@ from ..card_workspace.application import replace_card_description as replace_des
 from ..card_workspace.application import set_card_people_and_labels as replace_people_and_labels
 from ..card_workspace.application import set_card_relationships as replace_relationships
 from ..card_workspace.application import update_card_attachment as update_attachment
-from ..card_workspace.application import update_card_checkitem as update_checkitem
-from ..card_workspace.application import update_card_checklist as update_checklist
 from ..card_workspace.application.dtos import BoundedItemsDto
-from ..card_workspace.application.projections import public_checkitem, public_checklist, public_comment, public_metadata
+from ..card_workspace.application.projections import (
+    bounded_items,
+    public_checkitem,
+    public_checklist,
+    public_comment,
+    public_metadata,
+)
 from ..card_workspace.domain import (
     CardBundleInclude,
+    CardBundleSection,
     CardGraphEdge,
     CardGraphNewCard,
     ChecklistProjectionItem,
@@ -693,14 +698,27 @@ def update_card_checklist(
 ) -> dict[str, Any]:
     """Update a native checklist after validating every requested field."""
 
-    return update_checklist(
-        _adapter(user_or_bot, service),
-        project_uid,
-        card_uid,
-        checklist_uid,
-        title,
-        is_checked,
-    )
+    if title is None and is_checked is None:
+        raise ValueError("At least one checklist field is required")
+    if title is not None and (not isinstance(title, str) or not title.strip()):
+        raise ValueError("Checklist title is required")
+    if is_checked is not None and not isinstance(is_checked, bool):
+        raise ValueError("is_checked must be a boolean")
+    _, card = _require_task_card(project_uid, card_uid)
+    checklist = service.checklist.get_by_id_like(checklist_uid)
+    if checklist is None or checklist.card_id != card.id:
+        raise ValueError("Checklist not found in card")
+    if title is not None and checklist.title != title.strip():
+        if not service.checklist.change_title(user_or_bot, project_uid, card_uid, checklist, title.strip()):
+            raise ValueError("Checklist not found in card")
+    if is_checked is not None and not service.checklist.toggle_checked(
+        user_or_bot, project_uid, card_uid, checklist, desired_checked=is_checked
+    ):
+        raise ValueError("Checklist not found in card")
+    checklists = service.checklist.get_api_list_by_card(card_uid, limit=26, checkitems_limit=26)
+    return {
+        "checklists": bounded_items([public_checklist(item) for item in checklists], CardBundleSection.Checklists, 25)
+    }
 
 
 @McpTool.add(description="Delete a checklist from a card.")
@@ -809,15 +827,35 @@ def update_card_checkitem(
 ) -> dict[str, Any]:
     """Update a native checkitem after validating every requested field."""
 
-    return update_checkitem(
-        _adapter(user_or_bot, service),
-        project_uid,
-        card_uid,
-        checkitem_uid,
-        title,
-        deadline_at,
-        is_checked,
-    )
+    if title is None and deadline_at is None and is_checked is None:
+        raise ValueError("At least one checkitem field is required")
+    if title is not None and (not isinstance(title, str) or not title.strip()):
+        raise ValueError("Checkitem title is required")
+    if is_checked is not None and not isinstance(is_checked, bool):
+        raise ValueError("is_checked must be a boolean")
+    deadline = None
+    if deadline_at:
+        deadline = SafeDateTime.fromisoformat(deadline_at)
+        if deadline.tzinfo is None:
+            deadline = deadline.replace(tzinfo=SafeDateTime.now().astimezone().tzinfo)
+    _, card = _require_task_card(project_uid, card_uid)
+    item = service.checkitem.get_by_id_like(checkitem_uid)
+    checklist = service.checklist.get_by_id_like(item.checklist_id) if item is not None else None
+    if item is None or checklist is None or checklist.card_id != card.id:
+        raise ValueError("Checkitem not found in card")
+    if title is not None and item.title != title.strip():
+        if not service.checkitem.change_title(user_or_bot, project_uid, card_uid, item, title.strip()):
+            raise ValueError("Checkitem not found in card")
+    if deadline_at is not None and not service.checkitem.change_deadline(project_uid, card_uid, item, deadline):
+        raise ValueError("Checkitem not found in card")
+    if is_checked is not None and not service.checkitem.toggle_checked(
+        user_or_bot, project_uid, card_uid, item, desired_checked=is_checked
+    ):
+        raise ValueError("Checkitem not found in card")
+    checklists = service.checklist.get_api_list_by_card(card_uid, limit=26, checkitems_limit=26)
+    return {
+        "checklists": bounded_items([public_checklist(item) for item in checklists], CardBundleSection.Checklists, 25)
+    }
 
 
 @McpTool.add(description="Delete a checkitem from a card checklist.")

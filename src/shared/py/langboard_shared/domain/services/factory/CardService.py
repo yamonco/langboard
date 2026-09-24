@@ -779,7 +779,7 @@ class CardService(BaseDomainService):
         checkitem = checkitems[0][0]
         if checkitem.is_checked != completed:
             checkitem_service = self._get_service(CheckitemService)
-            checkitem_service.toggle_checked(user_or_bot, project, card, checkitem)
+            checkitem_service.toggle_checked(user_or_bot, project, card, checkitem, desired_checked=completed)
             checklist.is_checked = completed
             self.repo.checklist.update(checklist)
         return True
@@ -813,9 +813,9 @@ class CardService(BaseDomainService):
                 title=title,
                 description=description or EditorContentModel(),
                 deadline_at=deadline_at,
-                order=order_override if order_override is not None else self.repo.card.get_next_order(
-                    column, {"project_id": project.id}
-                ),
+                order=order_override
+                if order_override is not None
+                else self.repo.card.get_next_order(column, {"project_id": project.id}),
             )
             card.last_change_seq = self.next_change_seq()
             card.last_change_target_type = self.UNREAD_TARGET_CARD

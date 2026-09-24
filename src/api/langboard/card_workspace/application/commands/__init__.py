@@ -144,26 +144,6 @@ def replace_card_description(
     }
 
 
-def update_card_checklist(
-    port: CardWorkspaceCommandPort,
-    project_uid: str,
-    card_uid: str,
-    checklist_uid: str,
-    title: str | None,
-    is_checked: bool | None,
-) -> dict[str, Any]:
-    """Validate all fields before updating a checklist."""
-
-    if title is None and is_checked is None:
-        raise ValueError("At least one checklist field is required")
-    normalized_title = _required_text(title, "Checklist title") if title is not None else None
-    _optional_bool(is_checked, "is_checked")
-    checklists = port.update_card_checklist(project_uid, card_uid, checklist_uid, normalized_title, is_checked)
-    return {
-        "checklists": bounded_items([public_checklist(item) for item in checklists], CardBundleSection.Checklists, 25)
-    }
-
-
 def cardify_card_checkitem(
     port: CardWorkspaceCommandPort,
     project_uid: str,
@@ -181,29 +161,6 @@ def cardify_card_checkitem(
         _required_text(project_column_uid, "Project column UID"),
     )
     return {"card": public_card_summary(card), "source_checkitem_uid": normalized_checkitem_uid}
-
-
-def update_card_checkitem(
-    port: CardWorkspaceCommandPort,
-    project_uid: str,
-    card_uid: str,
-    checkitem_uid: str,
-    title: str | None,
-    deadline_at: str | None,
-    is_checked: bool | None,
-) -> dict[str, Any]:
-    """Validate all fields before updating a checkitem."""
-
-    if title is None and deadline_at is None and is_checked is None:
-        raise ValueError("At least one checkitem field is required")
-    normalized_title = _required_text(title, "Checkitem title") if title is not None else None
-    _optional_bool(is_checked, "is_checked")
-    checklists = port.update_card_checkitem(
-        project_uid, card_uid, checkitem_uid, normalized_title, deadline_at, is_checked
-    )
-    return {
-        "checklists": bounded_items([public_checklist(item) for item in checklists], CardBundleSection.Checklists, 25)
-    }
 
 
 def set_card_people_and_labels(

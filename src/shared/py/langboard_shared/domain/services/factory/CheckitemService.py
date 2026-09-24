@@ -306,14 +306,21 @@ class CheckitemService(BaseDomainService):
         return True
 
     def toggle_checked(
-        self, user_or_bot: TUserOrBot, project: TProjectParam, card: TCardParam, checkitem: TCheckitemParam
+        self,
+        user_or_bot: TUserOrBot,
+        project: TProjectParam,
+        card: TCardParam,
+        checkitem: TCheckitemParam,
+        desired_checked: bool | None = None,
     ) -> bool | None:
         params = self.__get_records_by_params(project, card, checkitem)
         if not params:
             return None
         project, card, checkitem = params
 
-        checkitem.is_checked = not checkitem.is_checked
+        if desired_checked is not None and checkitem.is_checked == desired_checked:
+            return True
+        checkitem.is_checked = desired_checked if desired_checked is not None else not checkitem.is_checked
 
         if checkitem.status != CheckitemStatus.Stopped:
             self.change_status(user_or_bot, project, card, checkitem, CheckitemStatus.Stopped)

@@ -126,6 +126,52 @@ def test_public_metadata_mutations_use_native_owner_and_bounded_response(monkeyp
     assert len(calls) == 2
 
 
+def test_checklist_updates_use_native_set_state_without_workspace_adapter(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[str, Any]] = []
+    card = SimpleNamespace(id=10)
+    checklist = SimpleNamespace(id=20, card_id=10, title="Old")
+    item = SimpleNamespace(checklist_id=20, title="Old item")
+    monkeypatch.setattr(CardMcp, "_require_task_card", lambda *_: (object(), card))
+    monkeypatch.setattr(CardMcp, "_adapter", lambda *args: pytest.fail("workspace adapter used"))
+    service = SimpleNamespace(
+        checklist=SimpleNamespace(
+            get_by_id_like=lambda uid: checklist,
+            change_title=lambda *args: (calls.append(("checklist_title", args[-1])) or True),
+            toggle_checked=lambda *args, **kwargs: (
+                calls.append(("checklist_checked", kwargs["desired_checked"])) or True
+            ),
+            get_api_list_by_card=lambda *args, **kwargs: [{"uid": "l", "title": "New", "checkitems": []}],
+        ),
+        checkitem=SimpleNamespace(
+            get_by_id_like=lambda uid: item,
+            change_title=lambda *args: (calls.append(("checkitem_title", args[-1])) or True),
+            change_deadline=lambda *args: (calls.append(("checkitem_deadline", args[-1])) or True),
+            toggle_checked=lambda *args, **kwargs: (
+                calls.append(("checkitem_checked", kwargs["desired_checked"])) or True
+            ),
+        ),
+    )
+
+    first = CardMcp.update_card_checklist("project", "card", "list", None, service, title=" New ", is_checked=True)
+    second = CardMcp.update_card_checkitem(
+        "project", "card", "item", None, service, title=" New item ", deadline_at="", is_checked=False
+    )
+    assert first["checklists"].items[0]["title"] == "New"
+    assert second["checklists"].items[0]["uid"] == "l"
+    assert calls == [
+        ("checklist_title", "New"),
+        ("checklist_checked", True),
+        ("checkitem_title", "New item"),
+        ("checkitem_deadline", None),
+        ("checkitem_checked", False),
+    ]
+
+    for kwargs in ({}, {"title": " "}, {"is_checked": "yes"}):
+        with pytest.raises(ValueError):
+            CardMcp.update_card_checklist("project", "card", "list", None, service, **kwargs)
+    assert len(calls) == 5
+
+
 def test_checklist_create_delete_tools_use_native_owner(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[tuple[str, str]] = []
     checklist = SimpleNamespace(api_response=lambda: {"uid": "list", "title": "Tasks", "private": "hidden"})
