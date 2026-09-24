@@ -16,7 +16,7 @@ from langboard.external_import import ExternalWorkBundle  # noqa: E402
 from langboard.external_import.importer import ExternalWorkImporter  # noqa: E402
 from langboard_shared.core.db.DbEngine import DbEngine  # noqa: E402
 from langboard_shared.core.db.Models import BaseDbModel  # noqa: E402
-from langboard_shared.core.storage import Storage  # noqa: E402
+from langboard_shared.core.storage import Storage, StorageName  # noqa: E402
 from langboard_shared.core.storage.LocalStorage import LocalStorage  # noqa: E402
 from langboard_shared.core.types import SnowflakeID  # noqa: E402
 from langboard_shared.domain.models import (  # noqa: E402
@@ -236,6 +236,44 @@ def test_imported_card_shares_native_creation_invariants(
             assert attachment["filename"] == "note.txt"
             assert Storage.get_file(attachment["file"]) == attachment_bytes
             assert len(connection.execute(select(ExternalImportRecord.__table__)).all()) == 13 + extra_card_count
+        if extra_card_count == 0:
+            more = bundle.model_dump(mode="json")
+            for index in (2, 3):
+                filename = f"note-{index}.txt"
+                data = f"attachment {index}\n".encode()
+                (attachments_root / filename).write_bytes(data)
+                more["attachments"].append({
+                    "source_id": f"attachment-{index}", "card_source_id": "card-1",
+                    "author_scim_external_id": "scim-actor", "created_at": comment_time.isoformat(),
+                    "relative_path": filename, "original_filename": filename,
+                    "sha256": sha256(data).hexdigest(), "size": len(data),
+                })
+            expanded = ExternalWorkBundle.model_validate(more)
+            storage_dir = tmp_path / "storage" / StorageName.CardAttachment.value
+            before_files = set(storage_dir.iterdir())
+            failed_importer = ExternalWorkImporter(attachments_root, effect_dispatcher=lambda *_args: None)
+            original_create = failed_importer._create_target
+
+            def fail_second_attachment(*args):
+                if args[3].source_id == "attachment-3":
+                    raise RuntimeError("injected attachment chunk failure")
+                return original_create(*args)
+
+            monkeypatch.setattr(failed_importer, "_create_target", fail_second_attachment)
+            with pytest.raises(RuntimeError, match="injected attachment chunk failure"):
+                failed_importer.import_bundle(
+                    expanded, project_uid=project_id.to_short_code(), actor_uid=actor_id.to_short_code()
+                )
+            assert set(storage_dir.iterdir()) == before_files
+            with engine.connect() as connection:
+                assert len(connection.execute(select(CardAttachment.__table__)).all()) == 1
+            monkeypatch.setattr(failed_importer, "_create_target", original_create)
+            resumed = failed_importer.import_bundle(
+                expanded, project_uid=project_id.to_short_code(), actor_uid=actor_id.to_short_code()
+            )
+            assert resumed.created == {"attachment": 2}
+            with engine.connect() as connection:
+                assert len(connection.execute(select(CardAttachment.__table__)).all()) == 3
     finally:
         engine.dispose()
         with admin.begin() as connection:
