@@ -27,24 +27,6 @@ from langboard_shared.domain.models import (
 from langboard_shared.domain.models.UserIdentityLink import IdentityProvider
 from langboard_shared.domain.services import DomainService
 from langboard_shared.Env import Env
-from langboard_shared.publishers import (
-    CardCommentPublisher,
-    CardPublisher,
-    CardRelationshipPublisher,
-    CheckitemPublisher,
-    ChecklistPublisher,
-    ProjectColumnPublisher,
-    ProjectLabelPublisher,
-)
-from langboard_shared.tasks.activities import (
-    CardActivityTask,
-    CardCheckitemActivityTask,
-    CardChecklistActivityTask,
-    CardCommentActivityTask,
-    CardRelationshipActivityTask,
-    ProjectColumnActivityTask,
-    ProjectLabelActivityTask,
-)
 from pydantic import BaseModel
 from .contract import (
     ExternalAttachment,
@@ -607,47 +589,47 @@ class ExternalWorkImporter:
         """
 
         if kind == "column" and isinstance(record, ExternalColumn):
-            ProjectColumnPublisher.created(project, target)
-            ProjectColumnActivityTask.project_column_created(actor, project, target)
+            self._domain.project_column.dispatch_created(actor, project, target, include_bot=False)
             return
         if kind == "label" and isinstance(record, ExternalLabel):
-            ProjectLabelPublisher.created(project, target)
-            ProjectLabelActivityTask.project_label_created(actor, project, target)
+            self._domain.project_label.dispatch_created(actor, project, target, include_bot=False)
             return
         if kind == "card" and isinstance(record, ExternalCard):
             column = targets[("column", record.column_source_id)]
             member_uids = [principals[external_id][0].get_uid() for external_id in record.assignee_scim_external_ids]
             labels = [targets[("label", source_id)].api_response() for source_id in record.label_source_ids]
-            CardPublisher.created(
+            self._domain.card.dispatch_created(
+                actor,
                 project,
                 column,
+                target,
                 {"card": target.board_api_response(0, member_uids, [], labels)},
+                include_bot=False,
+                include_notifications=False,
             )
-            CardActivityTask.card_created(actor, project, target)
             return
         if kind == "checklist" and isinstance(record, ExternalChecklist):
             card = targets[("card", record.card_source_id)]
-            ChecklistPublisher.created(card, target)
-            CardChecklistActivityTask.card_checklist_created(actor, project, card, target)
+            self._domain.checklist.dispatch_created(actor, project, card, target, include_bot=False)
             return
         if kind == "checkitem" and isinstance(record, ExternalCheckitem):
             checklist = targets[("checklist", record.checklist_source_id)]
             card = ExternalWorkImporter._card_for_checklist(checklist)
-            CheckitemPublisher.created(card, checklist, target)
-            CardCheckitemActivityTask.card_checkitem_created(actor, project, card, target)
+            self._domain.checkitem.dispatch_created(actor, project, card, checklist, target, include_bot=False)
             return
         if kind == "relationship" and isinstance(record, ExternalRelationship):
             parent = targets[("card", record.parent_card_source_id)]
             child = targets[("card", record.child_card_source_id)]
-            relationships = ExternalWorkImporter._relationships_for_card(parent)
-            CardRelationshipPublisher.updated(project, parent, relationships)
-            CardRelationshipActivityTask.card_relationship_updated(actor, project, parent, [], [child.id], False)
+            self._domain.card_relationship.dispatch_updated(
+                actor, project, parent, [], [child.id], False, include_bot=False
+            )
             return
         if kind == "comment" and isinstance(record, ExternalComment):
             card = targets[("card", record.card_source_id)]
             author, _ = principals[record.author_scim_external_id]
-            CardCommentPublisher.created(author, project, card, target)
-            CardCommentActivityTask.card_comment_added(author, project, card, target)
+            self._domain.card_comment.dispatch_created(
+                author, project, card, target, include_notifications=False, include_bot=False
+            )
             return
         if kind == "attachment" and isinstance(record, ExternalAttachment):
             card = targets[("card", record.card_source_id)]
@@ -663,13 +645,3 @@ class ExternalWorkImporter:
         if card is None:
             raise ExternalImportError("checklist card disappeared before side-effect dispatch")
         return card
-
-    @staticmethod
-    def _relationships_for_card(card: Card) -> list[dict[str, Any]]:
-        with DbSession.use(readonly=True) as db:
-            rows = db.exec(
-                SqlBuilder.select.table(CardRelationship).where(
-                    (CardRelationship.card_id_parent == card.id) | (CardRelationship.card_id_child == card.id)
-                )
-            ).all()
-        return [relationship.api_response() for relationship in rows]

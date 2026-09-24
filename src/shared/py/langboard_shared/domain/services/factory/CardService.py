@@ -843,15 +843,30 @@ class CardService(BaseDomainService):
             model = {"card": api_card}
 
         if dispatch_effects:
-            CardPublisher.created(project, column, model)
-            CardActivityTask.card_created(user_or_bot, project, card)
-            CardBotTask.card_created(user_or_bot, project, card)
+            self.dispatch_created(user_or_bot, project, column, card, model, users)
 
+        return card, api_card
+
+    def dispatch_created(
+        self,
+        user_or_bot: TUserOrBot,
+        project: Project,
+        column: ProjectColumn,
+        card: Card,
+        model: dict[str, Any],
+        users: list[User] | None = None,
+        *,
+        include_bot: bool = True,
+        include_notifications: bool = True,
+    ) -> None:
+        CardPublisher.created(project, column, model)
+        CardActivityTask.card_created(user_or_bot, project, card)
+        if include_bot:
+            CardBotTask.card_created(user_or_bot, project, card)
+        if include_notifications and users:
             notification_service = self._get_service(NotificationService)
             for user in users:
                 notification_service.notify_assigned_to_card(user_or_bot, user, project, card)
-
-        return card, api_card
 
     def cardify_selection(
         self,
