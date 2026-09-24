@@ -9,7 +9,7 @@ the board and FractalOps project mapping before enabling it.
 1. Deploy the native CloudEvents producer contract and the FractalOps consumer
    that verifies `X-Langboard-Webhook-*` headers. Keep the FractalOps consumer
    disabled until its signing secret and board mapping are configured.
-2. Apply migrations through `c7e2b4a091dd` with the API and workers stopped,
+2. Apply migrations through `7ad15b1d0b70` with the API and workers stopped,
    then start the API and existing Celery workers. Confirm the API is healthy
    and the recovery cron is registered. There is no dedicated outbox daemon.
 3. Configure a signed webhook whose explicit allowlist includes
@@ -92,6 +92,18 @@ Disable the board binding first. This stops new execution events and rechecks
 at delivery. Keep the outbox and recovery cron available for inspection. Restore the
 FractalOps poller only if its previous deployment and idempotency state are
 confirmed; do not run poller and producer against the same board at once.
-The UoW migration has no schema downgrade because reverting to trigger
-ownership after application events would risk duplicate generations. Roll
-forward with a corrective migration while preserving outbox history.
+There is no path back to trigger-based readiness ownership: reverting to
+trigger ownership after application events would risk duplicate generations.
+Roll forward with a corrective migration while preserving outbox history.
+
+## Migration history note
+
+The execution schema ships as one install migration, `7ad15b1d0b70`, which
+creates the final tables and columns directly. It squashes the interim
+branch-only migrations that briefly owned readiness through database
+triggers, so fresh installs never create and drop the transient trigger
+mini-engine and the upgrade path equals the fresh-install schema. Only
+databases that already applied the interim chain (for example a canary built
+from review branches) need attention: rebuild them, or reconcile their
+alembic version table with a branch-only script, before adopting the public
+history.

@@ -21,7 +21,7 @@ from langboard_shared.tasks.webhooks.ExecutionReadinessUow import (  # noqa: E40
 
 
 DATABASE_URL = os.getenv("LANGBOARD_OUTBOX_TEST_DATABASE_URL")
-MIGRATION = Path(__file__).parents[2] / "langboard/migrations/versions/20260924180000-c7e2b4a091dd.py"
+MIGRATION = Path(__file__).parents[2] / "langboard/migrations/versions/20260924220000-7ad15b1d0b70.py"
 EVENT = "io.langboard.work.ready.v1"
 
 
@@ -47,22 +47,18 @@ def test_application_uow_emits_only_ready_edges_and_freezes_payload(monkeypatch:
             for statement in (
                 "CREATE TABLE project_column (id bigint PRIMARY KEY, deleted_at timestamptz, is_archive boolean NOT NULL)",
                 "CREATE TABLE webhook_setting (id bigint PRIMARY KEY, secret_id bigint, events jsonb NOT NULL)",
+                # Baseline binding shape as the public main history leaves it;
+                # the install migration adds the semantic id columns on top.
                 "CREATE TABLE project_execution_binding (id bigint PRIMARY KEY, project_id bigint UNIQUE, "
                 "updated_at timestamptz NOT NULL, is_enabled boolean NOT NULL, "
-                "prerequisite_relationship_type_id bigint, webhook_id bigint, webhook_uid text, events jsonb NOT NULL, "
-                "column_semantic_ids jsonb NOT NULL)",
+                "column_semantics jsonb NOT NULL, prerequisite_relationship_type_uid text, "
+                "webhook_uid text, events jsonb NOT NULL)",
                 "CREATE TABLE card (id bigint PRIMARY KEY, project_id bigint, project_column_id bigint, "
                 "deleted_at timestamptz, archived_at timestamptz, source_type text, title text, updated_at timestamptz)",
                 "CREATE TABLE card_relationship (card_id_parent bigint, card_id_child bigint, relationship_type_id bigint)",
                 "CREATE TABLE project_label (id bigint PRIMARY KEY, name text)",
                 "CREATE TABLE card_assigned_project_label (card_id bigint, project_label_id bigint)",
                 "CREATE TABLE card_assigned_user (card_id bigint, user_id bigint)",
-                "CREATE TABLE card_execution_readiness (card_id bigint PRIMARY KEY, is_ready boolean NOT NULL DEFAULT false, "
-                "execution_generation integer NOT NULL DEFAULT 0, updated_at timestamptz DEFAULT now())",
-                "CREATE TABLE execution_outbox (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), project_id bigint, "
-                "card_id bigint, execution_generation integer, occurred_at timestamptz, event_type text, "
-                "payload_json jsonb, state text DEFAULT 'pending', last_error text, "
-                "CONSTRAINT uq_execution_outbox_card_generation UNIQUE(card_id, execution_generation))",
             ):
                 connection.execute(text(statement))
             with Operations.context(MigrationContext.configure(connection)):
@@ -76,9 +72,11 @@ def test_application_uow_emits_only_ready_edges_and_freezes_payload(monkeypatch:
             )
             connection.execute(
                 text(
-                    "INSERT INTO project_execution_binding VALUES "
+                    "INSERT INTO project_execution_binding "
+                    "(id, project_id, updated_at, is_enabled, prerequisite_relationship_type_id, "
+                    "webhook_id, webhook_uid, events, column_semantics, column_semantic_ids) VALUES "
                     "(8, 7, '2026-09-24T00:00:00+00:00', true, 30, 40, 'hook-40', "
-                    "CAST(:events AS jsonb), CAST(:semantics AS jsonb))"
+                    "CAST(:events AS jsonb), CAST(:semantics AS jsonb), CAST(:semantics AS jsonb))"
                 ),
                 {"events": f'["{EVENT}"]', "semantics": '{"20":"ready","21":"terminal"}'},
             )
@@ -199,23 +197,18 @@ def test_ready_content_edit_drains_latest_content_and_only_readiness_edges_super
             for statement in (
                 "CREATE TABLE project_column (id bigint PRIMARY KEY, deleted_at timestamptz, is_archive boolean NOT NULL)",
                 "CREATE TABLE webhook_setting (id bigint PRIMARY KEY, secret_id bigint, events jsonb NOT NULL)",
+                # Baseline binding shape as the public main history leaves it;
+                # the install migration adds the semantic id columns on top.
                 "CREATE TABLE project_execution_binding (id bigint PRIMARY KEY, project_id bigint UNIQUE, "
                 "updated_at timestamptz NOT NULL, is_enabled boolean NOT NULL, "
-                "prerequisite_relationship_type_id bigint, webhook_id bigint, webhook_uid text, events jsonb NOT NULL, "
-                "column_semantic_ids jsonb NOT NULL)",
+                "column_semantics jsonb NOT NULL, prerequisite_relationship_type_uid text, "
+                "webhook_uid text, events jsonb NOT NULL)",
                 "CREATE TABLE card (id bigint PRIMARY KEY, project_id bigint, project_column_id bigint, "
                 "deleted_at timestamptz, archived_at timestamptz, source_type text, title text, updated_at timestamptz)",
                 "CREATE TABLE card_relationship (card_id_parent bigint, card_id_child bigint, relationship_type_id bigint)",
                 "CREATE TABLE project_label (id bigint PRIMARY KEY, name text)",
                 "CREATE TABLE card_assigned_project_label (card_id bigint, project_label_id bigint)",
                 "CREATE TABLE card_assigned_user (card_id bigint, user_id bigint)",
-                "CREATE TABLE card_execution_readiness (card_id bigint PRIMARY KEY, is_ready boolean NOT NULL DEFAULT false, "
-                "execution_generation integer NOT NULL DEFAULT 0, updated_at timestamptz DEFAULT now())",
-                "CREATE TABLE execution_outbox (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), project_id bigint, "
-                "card_id bigint, execution_generation integer, occurred_at timestamptz, event_type text, "
-                "payload_json jsonb, state text DEFAULT 'pending', last_error text, processed_at timestamptz, "
-                "attempt_count integer NOT NULL DEFAULT 0, lease_until timestamptz, "
-                "CONSTRAINT uq_execution_outbox_card_generation UNIQUE(card_id, execution_generation))",
             ):
                 connection.execute(text(statement))
             with Operations.context(MigrationContext.configure(connection)):
@@ -229,9 +222,11 @@ def test_ready_content_edit_drains_latest_content_and_only_readiness_edges_super
             )
             connection.execute(
                 text(
-                    "INSERT INTO project_execution_binding VALUES "
+                    "INSERT INTO project_execution_binding "
+                    "(id, project_id, updated_at, is_enabled, prerequisite_relationship_type_id, "
+                    "webhook_id, webhook_uid, events, column_semantics, column_semantic_ids) VALUES "
                     "(8, 7, '2026-09-24T00:00:00+00:00', true, 30, 40, 'hook-40', "
-                    "CAST(:events AS jsonb), CAST(:semantics AS jsonb))"
+                    "CAST(:events AS jsonb), CAST(:semantics AS jsonb), CAST(:semantics AS jsonb))"
                 ),
                 {"events": f'["{EVENT}"]', "semantics": '{"20":"ready","21":"terminal"}'},
             )
