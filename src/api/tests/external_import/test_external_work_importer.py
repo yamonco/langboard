@@ -116,6 +116,14 @@ def _counts(engine: sa.Engine) -> tuple[int, int]:
         )
 
 
+def test_native_target_failure_keeps_the_import_error() -> None:
+    importer = ExternalWorkImporter(effect_dispatcher=lambda *_args: None)
+    importer._domain = SimpleNamespace(project_column=SimpleNamespace(create=lambda *_args, **_kwargs: None))
+
+    with pytest.raises(ExternalImportError, match="project column creation failed"):
+        importer._create_target(None, None, None, _bundle().columns[0], {}, {}, None)
+
+
 def test_principal_resolution_batches_users_and_preserves_membership_gate(monkeypatch: pytest.MonkeyPatch) -> None:
     engine, project_uid, _actor_uid = _database(monkeypatch)
     monkeypatch.setattr(type(Env), "SCIM_ISSUER", property(lambda _self: "test-issuer"))
