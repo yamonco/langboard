@@ -418,23 +418,6 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
             raise RuntimeError("Validated card description replacement failed")
         return description
 
-    def update_card_checklist(
-        self,
-        project_uid: str,
-        card_uid: str,
-        checklist_uid: str,
-        title: str | None,
-        is_checked: bool | None,
-    ) -> list[dict[str, Any]]:
-        checklist = self._ensure_checklist(project_uid, card_uid, checklist_uid)
-        if title is not None and checklist.title != title:
-            if not self._service.checklist.change_title(self._actor, project_uid, card_uid, checklist, title):
-                raise ValueError("Checklist not found in card")
-        if is_checked is not None and checklist.is_checked != is_checked:
-            if not self._service.checklist.toggle_checked(self._actor, project_uid, card_uid, checklist):
-                raise ValueError("Checklist not found in card")
-        return self._service.checklist.get_api_list_by_card(card_uid, limit=26, checkitems_limit=26)
-
     def cardify_card_checkitem(
         self,
         project_uid: str,
@@ -466,33 +449,6 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
         if card is None:
             raise RuntimeError("Cardified card could not be read back")
         return card.board_api_response(0, [], [], [])
-
-    def update_card_checkitem(
-        self,
-        project_uid: str,
-        card_uid: str,
-        checkitem_uid: str,
-        title: str | None,
-        deadline_at: str | None,
-        is_checked: bool | None,
-    ) -> list[dict[str, Any]]:
-        item = self._ensure_checkitem(project_uid, card_uid, checkitem_uid)
-        deadline = None
-        if deadline_at is not None and deadline_at != "":
-            deadline = SafeDateTime.fromisoformat(deadline_at)
-            if deadline.tzinfo is None:
-                deadline = deadline.replace(tzinfo=SafeDateTime.now().astimezone().tzinfo)
-        if title is not None and item.title != title:
-            if not self._service.checkitem.change_title(self._actor, project_uid, card_uid, item, title):
-                raise ValueError("Checkitem not found in card")
-        if deadline_at is not None and not self._service.checkitem.change_deadline(
-            project_uid, card_uid, item, deadline
-        ):
-            raise ValueError("Checkitem not found in card")
-        if is_checked is not None and item.is_checked != is_checked:
-            if not self._service.checkitem.toggle_checked(self._actor, project_uid, card_uid, item):
-                raise ValueError("Checkitem not found in card")
-        return self._service.checklist.get_api_list_by_card(card_uid, limit=26, checkitems_limit=26)
 
     def replace_card_people_and_labels(
         self,
@@ -666,7 +622,9 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
                     raise ValueError("Checkitem not found in card")
                 changed = True
             if bool(actual.get("is_checked")) != item.is_checked:
-                if not self._service.checkitem.toggle_checked(self._actor, project_uid, card_uid, native_item):
+                if not self._service.checkitem.toggle_checked(
+                    self._actor, project_uid, card_uid, native_item, desired_checked=item.is_checked
+                ):
                     raise ValueError("Checkitem not found in card")
                 changed = True
 

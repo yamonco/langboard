@@ -192,6 +192,7 @@ class ChecklistService(BaseDomainService):
         project: TProjectParam | None,
         card: TCardParam | None,
         checklist: TChecklistParam | None,
+        desired_checked: bool | None = None,
     ) -> bool | None:
         params = InfraHelper.get_records_with_foreign_by_params(
             (Project, project), (Card, card), (Checklist, checklist)
@@ -200,7 +201,9 @@ class ChecklistService(BaseDomainService):
             return None
         project, card, checklist = params
 
-        checklist.is_checked = not checklist.is_checked
+        if desired_checked is not None and checklist.is_checked == desired_checked:
+            return True
+        checklist.is_checked = desired_checked if desired_checked is not None else not checklist.is_checked
         self.repo.checklist.update(checklist)
 
         ChecklistPublisher.checked_changed(card, checklist)

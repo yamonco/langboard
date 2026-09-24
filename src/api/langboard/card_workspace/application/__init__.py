@@ -12,8 +12,6 @@ from .commands import (
     set_card_people_and_labels,
     set_card_relationships,
     update_card_attachment,
-    update_card_checkitem,
-    update_card_checklist,
 )
 from .dtos import CardBundleResponse, ProjectCardListResponse, ProjectIdentityResponse
 from .queries import (
@@ -45,6 +43,4 @@ __all__ = [
     "set_card_people_and_labels",
     "set_card_relationships",
     "update_card_attachment",
-    "update_card_checkitem",
-    "update_card_checklist",
 ]
