@@ -794,6 +794,7 @@ class CardService(BaseDomainService):
         assign_user_uids: list[str] | None = None,
         *,
         dispatch_effects: bool = True,
+        order_override: int | None = None,
     ) -> tuple[Card, dict[str, Any]] | None:
         params = InfraHelper.get_records_with_foreign_by_params((Project, project), (ProjectColumn, column))
         if not params:
@@ -810,7 +811,9 @@ class CardService(BaseDomainService):
                 project_column_id=column.id,
                 title=title,
                 description=description or EditorContentModel(),
-                order=self.repo.card.get_next_order(column, {"project_id": project.id}),
+                order=order_override if order_override is not None else self.repo.card.get_next_order(
+                    column, {"project_id": project.id}
+                ),
             )
             card.last_change_seq = self.next_change_seq()
             card.last_change_target_type = self.UNREAD_TARGET_CARD
