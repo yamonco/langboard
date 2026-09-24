@@ -1,8 +1,6 @@
 from typing import Any
 import pytest
 from langboard.card_workspace.application.commands import (
-    cardify_card_checkitem,
-    create_card_in_leftmost_column,
     patch_card_description,
     replace_card_description,
     set_card_people_and_labels,
@@ -16,26 +14,6 @@ class FakeCommandPort:
 
     def __init__(self) -> None:
         self.calls: list[tuple[str, tuple[Any, ...]]] = []
-
-    def create_card_in_leftmost_column(
-        self,
-        project_uid: str,
-        title: str,
-        description: str | None,
-        assign_user_uids: list[str] | None,
-    ) -> dict[str, Any]:
-        self.calls.append(("create_card_in_leftmost_column", (project_uid, title, description, assign_user_uids)))
-        return {"card": {"uid": "c1", "title": title}, "column": {"uid": "left"}}
-
-    def cardify_card_checkitem(
-        self,
-        project_uid: str,
-        card_uid: str,
-        checkitem_uid: str,
-        project_column_uid: str,
-    ) -> dict[str, Any]:
-        self.calls.append(("cardify_card_checkitem", (project_uid, card_uid, checkitem_uid, project_column_uid)))
-        return {"uid": "promoted", "title": "Promoted", "private": "hidden"}
 
     def patch_card_description(self, project_uid: str, card_uid: str, patch: Any) -> str:
         self.calls.append(("patch_card_description", (project_uid, card_uid, patch)))
@@ -56,32 +34,6 @@ class FakeCommandPort:
     ) -> dict[str, Any]:
         self.calls.append(("replace_card_people_and_labels", (project_uid, card_uid, assign_user_uids, label_uids)))
         return {"member_uids": assign_user_uids or [], "labels": []}
-
-
-def test_create_commands_normalize_before_calling_port() -> None:
-    """The application owns input normalization while the adapter owns native mechanics."""
-
-    port = FakeCommandPort()
-
-    create_card_in_leftmost_column(port, "p1", " Task ", assign_user_uids=["u1"])
-
-    assert port.calls == [
-        ("create_card_in_leftmost_column", ("p1", "Task", None, ["u1"])),
-    ]
-
-
-def test_cardify_checkitem_returns_bounded_created_card() -> None:
-    """Cardification returns the new card identity without leaking unknown native fields."""
-
-    port = FakeCommandPort()
-
-    result = cardify_card_checkitem(port, " project ", " card ", " item ", " column ")
-
-    assert result == {
-        "card": {"uid": "promoted", "title": "Promoted"},
-        "source_checkitem_uid": "item",
-    }
-    assert port.calls == [("cardify_card_checkitem", ("project", "card", "item", "column"))]
 
 
 def test_description_patch_returns_receipt_without_echoing_the_body() -> None:

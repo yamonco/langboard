@@ -24,8 +24,6 @@ from ..card_workspace.application import (
     ProjectIdentityResponse,
     validate_card_graph_patch,
 )
-from ..card_workspace.application import cardify_card_checkitem as cardify_checkitem
-from ..card_workspace.application import create_card_in_leftmost_column as create_leftmost
 from ..card_workspace.application import get_card_bundle as query_card_bundle
 from ..card_workspace.application import get_project_identity as query_project_identity
 from ..card_workspace.application import get_public_card_metadata as query_public_metadata
@@ -40,6 +38,7 @@ from ..card_workspace.application.dtos import BoundedItemsDto
 from ..card_workspace.application.projections import (
     bounded_items,
     public_attachment,
+    public_card_summary,
     public_checkitem,
     public_checklist,
     public_comment,
@@ -73,6 +72,57 @@ def _require_task_card(project_uid: str, card_uid: str) -> tuple[Project, Card]:
     if params[1].is_linked_resource:
         raise ValueError("Linked Wiki cards are read-only references; move or remove the card, or edit the source Wiki")
     return params
+
+
+def _create_card_in_project(
+    project_uid: str,
+    column_uid: str,
+    title: str,
+    description: str | None,
+    assign_user_uids: list[str] | None,
+    user_or_bot: User | Bot,
+    service: DomainService,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    project = service.project.get_by_id_like(project_uid)
+    if project is None:
+        raise ValueError("Project not found")
+    if not isinstance(title, str) or not title.strip():
+        raise ValueError("Card title is required")
+    normalized_users = (
+        [uid.strip() if isinstance(uid, str) else "" for uid in assign_user_uids]
+        if assign_user_uids is not None
+        else None
+    )
+    if normalized_users is not None:
+        if any(not uid for uid in normalized_users) or len(normalized_users) != len(set(normalized_users)):
+            raise ValueError("assign_user_uids contains empty or duplicate values")
+        available = {
+            member["uid"]
+            for member in service.project.get_api_assigned_user_list(project, where_user_in=normalized_users)
+        }
+        unknown = next((uid for uid in normalized_users if uid not in available), None)
+        if unknown is not None:
+            raise ValueError(f"Unknown project member: {unknown}")
+    columns = [column for column in service.project_column.get_api_list_by_project(project) if not column["is_archive"]]
+    columns.sort(key=lambda column: (column["order"], column["uid"]))
+    if not columns:
+        raise ValueError("Project has no active column")
+    column = (
+        columns[0] if column_uid == "leftmost" else next((item for item in columns if item["uid"] == column_uid), None)
+    )
+    if column is None:
+        raise ValueError("Destination column is not active in the project")
+    result = service.card.create(
+        user_or_bot,
+        project,
+        column["uid"],
+        title.strip(),
+        EditorContentModel(content=description or ""),
+        normalized_users,
+    )
+    if result is None:
+        raise RuntimeError("Failed to create card")
+    return result[1], column
 
 
 @McpTool.add(description="Get all cards in a project.")
@@ -140,7 +190,9 @@ def get_card_bot_scopes(project_uid: str, card_uid: str, user_or_bot: User | Bot
     return {"bot_scopes": bot_scopes}
 
 
-@McpTool.add(description="Create a card.")
+@McpTool.add(
+    description="Create a card in an active project column; use column_uid='leftmost' for the first active column."
+)
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
 def create_card(
     project_uid: str,
@@ -151,11 +203,9 @@ def create_card(
     user_or_bot: User | Bot,
     service: DomainService,
 ) -> dict:
-    description_model = EditorContentModel(content=description or "")
-    result = service.card.create(user_or_bot, project_uid, column_uid, title, description_model, assign_user_uids)
-    if not result:
-        raise ValueError("Failed to create")
-    _, api_card = result
+    api_card, _ = _create_card_in_project(
+        project_uid, column_uid, title, description, assign_user_uids, user_or_bot, service
+    )
     return api_card
 
 
@@ -402,7 +452,9 @@ def provision_project(
     return create_template_project(title, description, "Other", user, service, template_name, infer_template_prefix)
 
 
-@McpTool.add(description="Create a card in the current leftmost non-archive project column.")
+@McpTool.add(
+    description="Compatibility alias; migrate to create_card with column_uid='leftmost'. Retire after callers migrate."
+)
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
 def create_card_in_leftmost_column(
     project_uid: str,
@@ -414,7 +466,10 @@ def create_card_in_leftmost_column(
 ) -> dict[str, Any]:
     """Create a card without trusting a caller-provided destination column."""
 
-    return create_leftmost(_adapter(user_or_bot, service), project_uid, title, description, assign_user_uids)
+    api_card, column = _create_card_in_project(
+        project_uid, "leftmost", title, description, assign_user_uids, user_or_bot, service
+    )
+    return {"card": api_card, "column": {"uid": column["uid"], "name": column["name"]}}
 
 
 @McpTool.add(
@@ -767,13 +822,33 @@ def cardify_card_checkitem(
 ) -> dict[str, Any]:
     """Promote one native checkitem to a linked card."""
 
-    return cardify_checkitem(
-        _adapter(user_or_bot, service),
-        project_uid,
-        card_uid,
-        checkitem_uid,
-        project_column_uid,
-    )
+    normalized = [
+        value.strip() if isinstance(value, str) else ""
+        for value in (project_uid, card_uid, checkitem_uid, project_column_uid)
+    ]
+    if not all(normalized):
+        raise ValueError("Project, card, checkitem, and column UIDs are required")
+    project_uid, card_uid, checkitem_uid, project_column_uid = normalized
+    project, card = _require_task_card(project_uid, card_uid)
+    item = service.checkitem.get_by_id_like(checkitem_uid)
+    checklist = service.checklist.get_by_id_like(item.checklist_id) if item is not None else None
+    if item is None or checklist is None or checklist.card_id != card.id:
+        raise ValueError("Checkitem not found in card")
+    if item.cardified_id:
+        raise ValueError("Checkitem is already cardified")
+    column = service.project_column.get_by_id_like(project_column_uid)
+    if column is None or column.project_id != project.id or column.is_archive:
+        raise ValueError("Destination column is not active in the source project")
+    if not service.checkitem.cardify(user_or_bot, project_uid, card_uid, item, project_column_uid):
+        raise ValueError("Checkitem could not be cardified in the requested column")
+    persisted = service.checkitem.get_by_id_like(checkitem_uid)
+    created = service.card.get_by_id_like(persisted.cardified_id) if persisted is not None else None
+    if created is None:
+        raise RuntimeError("Cardified card could not be read back")
+    return {
+        "card": public_card_summary(created.board_api_response(0, [], [], [])),
+        "source_checkitem_uid": checkitem_uid,
+    }
 
 
 @McpTool.add(

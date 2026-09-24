@@ -24,28 +24,10 @@ from ...domain import (
 )
 from ..ports import CardWorkspaceCommandPort
 from ..projections import (
-    public_card_summary,
     public_checklist,
     public_label,
     public_relationship,
 )
-
-
-def create_card_in_leftmost_column(
-    port: CardWorkspaceCommandPort,
-    project_uid: str,
-    title: str,
-    description: str | None = None,
-    assign_user_uids: list[str] | None = None,
-) -> dict[str, Any]:
-    """Create a card in the server-selected leftmost active column."""
-
-    return port.create_card_in_leftmost_column(
-        project_uid,
-        _required_text(title, "Card title"),
-        description,
-        _unique_uids(assign_user_uids, "assign_user_uids") if assign_user_uids is not None else None,
-    )
 
 
 def validate_card_graph_patch(
@@ -120,25 +102,6 @@ def replace_card_description(
         "description_revision": projection_revision(content),
         "description_chars": len(content),
     }
-
-
-def cardify_card_checkitem(
-    port: CardWorkspaceCommandPort,
-    project_uid: str,
-    card_uid: str,
-    checkitem_uid: str,
-    project_column_uid: str,
-) -> dict[str, Any]:
-    """Create and return a bounded card from one existing checkitem."""
-
-    normalized_checkitem_uid = _required_text(checkitem_uid, "Checkitem UID")
-    card = port.cardify_card_checkitem(
-        _required_text(project_uid, "Project UID"),
-        _required_text(card_uid, "Card UID"),
-        normalized_checkitem_uid,
-        _required_text(project_column_uid, "Project column UID"),
-    )
-    return {"card": public_card_summary(card), "source_checkitem_uid": normalized_checkitem_uid}
 
 
 def set_card_people_and_labels(

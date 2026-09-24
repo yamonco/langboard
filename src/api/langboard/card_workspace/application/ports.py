@@ -80,15 +80,6 @@ class CardWorkspaceQueryPort(Protocol):
 class CardWorkspaceCommandPort(Protocol):
     """Write capabilities required by card workspace commands."""
 
-    def create_card_in_leftmost_column(
-        self,
-        project_uid: str,
-        title: str,
-        description: str | None,
-        assign_user_uids: list[str] | None,
-    ) -> dict[str, Any]:
-        """Create a card in the server-selected leftmost active column."""
-
     def patch_card_description(
         self,
         project_uid: str,
@@ -105,15 +96,6 @@ class CardWorkspaceCommandPort(Protocol):
         expected_revision: str,
     ) -> str:
         """Atomically replace one revision-bound description, including an empty body."""
-
-    def cardify_card_checkitem(
-        self,
-        project_uid: str,
-        card_uid: str,
-        checkitem_uid: str,
-        project_column_uid: str,
-    ) -> dict[str, Any]:
-        """Create a card from one existing checkitem."""
 
     def replace_card_people_and_labels(
         self,
