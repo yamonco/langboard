@@ -418,12 +418,6 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
             raise RuntimeError("Validated card description replacement failed")
         return description
 
-    def create_card_checklist(self, project_uid: str, card_uid: str, title: str) -> dict[str, Any]:
-        checklist = self._service.checklist.create(self._actor, project_uid, card_uid, title)
-        if checklist is None:
-            raise ValueError("Card not found in project")
-        return {**checklist.api_response(), "checkitems": []}
-
     def update_card_checklist(
         self,
         project_uid: str,
@@ -440,18 +434,6 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
             if not self._service.checklist.toggle_checked(self._actor, project_uid, card_uid, checklist):
                 raise ValueError("Checklist not found in card")
         return self._service.checklist.get_api_list_by_card(card_uid, limit=26, checkitems_limit=26)
-
-    def delete_card_checklist(self, project_uid: str, card_uid: str, checklist_uid: str) -> None:
-        self._ensure_checklist(project_uid, card_uid, checklist_uid)
-        if not self._service.checklist.delete(self._actor, project_uid, card_uid, checklist_uid):
-            raise ValueError("Checklist not found in card")
-
-    def create_card_checkitem(self, project_uid: str, card_uid: str, checklist_uid: str, title: str) -> dict[str, Any]:
-        self._ensure_checklist(project_uid, card_uid, checklist_uid)
-        item = self._service.checkitem.create(self._actor, project_uid, card_uid, checklist_uid, title)
-        if item is None:
-            raise ValueError("Checklist not found in card")
-        return item.api_response()
 
     def cardify_card_checkitem(
         self,
@@ -511,11 +493,6 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
             if not self._service.checkitem.toggle_checked(self._actor, project_uid, card_uid, item):
                 raise ValueError("Checkitem not found in card")
         return self._service.checklist.get_api_list_by_card(card_uid, limit=26, checkitems_limit=26)
-
-    def delete_card_checkitem(self, project_uid: str, card_uid: str, checkitem_uid: str) -> None:
-        self._ensure_checkitem(project_uid, card_uid, checkitem_uid)
-        if not self._service.checkitem.delete(self._actor, project_uid, card_uid, checkitem_uid):
-            raise ValueError("Checkitem not found in card")
 
     def replace_card_people_and_labels(
         self,

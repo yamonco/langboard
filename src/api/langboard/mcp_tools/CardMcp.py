@@ -25,12 +25,8 @@ from ..card_workspace.application import (
 )
 from ..card_workspace.application import apply_card_graph_patch as apply_graph_patch
 from ..card_workspace.application import cardify_card_checkitem as cardify_checkitem
-from ..card_workspace.application import create_card_checkitem as create_checkitem
-from ..card_workspace.application import create_card_checklist as create_checklist
 from ..card_workspace.application import create_card_in_leftmost_column as create_leftmost
 from ..card_workspace.application import delete_card_attachment as delete_attachment
-from ..card_workspace.application import delete_card_checkitem as delete_checkitem
-from ..card_workspace.application import delete_card_checklist as delete_checklist
 from ..card_workspace.application import delete_public_card_metadata as delete_public_metadata
 from ..card_workspace.application import get_card_bundle as query_card_bundle
 from ..card_workspace.application import get_project_identity as query_project_identity
@@ -48,7 +44,7 @@ from ..card_workspace.application import update_card_attachment as update_attach
 from ..card_workspace.application import update_card_checkitem as update_checkitem
 from ..card_workspace.application import update_card_checklist as update_checklist
 from ..card_workspace.application.dtos import BoundedItemsDto
-from ..card_workspace.application.projections import public_comment
+from ..card_workspace.application.projections import public_checkitem, public_checklist, public_comment
 from ..card_workspace.domain import (
     CardBundleInclude,
     CardGraphEdge,
@@ -677,7 +673,12 @@ def create_card_checklist(
 ) -> dict[str, Any]:
     """Create a native checklist."""
 
-    return create_checklist(_adapter(user_or_bot, service), project_uid, card_uid, title)
+    if not isinstance(title, str) or not title.strip():
+        raise ValueError("Checklist title is required")
+    checklist = service.checklist.create(user_or_bot, project_uid, card_uid, title.strip())
+    if checklist is None:
+        raise ValueError("Card not found in project")
+    return {"checklist": public_checklist({**checklist.api_response(), "checkitems": []})}
 
 
 @McpTool.add(description="Update a card checklist title and/or checked state atomically validated.")
@@ -714,7 +715,9 @@ def delete_card_checklist(
 ) -> dict[str, bool]:
     """Delete a native checklist and its checkitems."""
 
-    return delete_checklist(_adapter(user_or_bot, service), project_uid, card_uid, checklist_uid)
+    if not service.checklist.delete(user_or_bot, project_uid, card_uid, checklist_uid):
+        raise ValueError("Checklist not found in card")
+    return {"deleted": True}
 
 
 @McpTool.add(description="Create a checkitem in a card checklist.")
@@ -729,7 +732,12 @@ def create_card_checkitem(
 ) -> dict[str, Any]:
     """Create a native checkitem."""
 
-    return create_checkitem(_adapter(user_or_bot, service), project_uid, card_uid, checklist_uid, title)
+    if not isinstance(title, str) or not title.strip():
+        raise ValueError("Checkitem title is required")
+    item = service.checkitem.create(user_or_bot, project_uid, card_uid, checklist_uid, title.strip())
+    if item is None:
+        raise ValueError("Checklist not found in card")
+    return {"checkitem": public_checkitem(item.api_response())}
 
 
 @McpTool.add(
@@ -824,7 +832,9 @@ def delete_card_checkitem(
 ) -> dict[str, bool]:
     """Delete a native checkitem after ancestry validation."""
 
-    return delete_checkitem(_adapter(user_or_bot, service), project_uid, card_uid, checkitem_uid)
+    if not service.checkitem.delete(user_or_bot, project_uid, card_uid, checkitem_uid):
+        raise ValueError("Checkitem not found in card")
+    return {"deleted": True}
 
 
 @McpTool.add(description="Replace a card's assigned members and/or labels after validating every UID.")
