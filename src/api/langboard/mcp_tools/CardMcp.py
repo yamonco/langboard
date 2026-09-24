@@ -32,7 +32,6 @@ from ..card_workspace.application import list_project_cards as query_project_car
 from ..card_workspace.application import patch_card_description as replace_description_text
 from ..card_workspace.application import reconcile_card_checklist_projection as reconcile_checklist
 from ..card_workspace.application import replace_card_description as replace_description
-from ..card_workspace.application import set_card_people_and_labels as replace_people_and_labels
 from ..card_workspace.application import set_card_relationships as replace_relationships
 from ..card_workspace.application.dtos import BoundedItemsDto
 from ..card_workspace.application.projections import (
@@ -42,6 +41,7 @@ from ..card_workspace.application.projections import (
     public_checkitem,
     public_checklist,
     public_comment,
+    public_label,
     public_metadata,
 )
 from ..card_workspace.domain import (
@@ -954,13 +954,48 @@ def set_card_people_and_labels(
 ) -> dict[str, Any]:
     """Replace optional native member and label sets."""
 
-    return replace_people_and_labels(
-        _adapter(user_or_bot, service),
-        project_uid,
-        card_uid,
-        assign_user_uids,
-        label_uids,
-    )
+    if assign_user_uids is None and label_uids is None:
+        raise ValueError("At least one member or label field is required")
+    normalized: dict[str, list[str]] = {}
+    for field, values in (("assign_user_uids", assign_user_uids), ("label_uids", label_uids)):
+        if values is None:
+            continue
+        uids = [value.strip() if isinstance(value, str) else "" for value in values]
+        if any(not uid for uid in uids):
+            raise ValueError(f"{field} is required")
+        if len(uids) != len(set(uids)):
+            raise ValueError(f"{field} contains duplicates")
+        normalized[field] = uids
+    project, card = _require_task_card(project_uid, card_uid)
+    if assign_user_uids is not None:
+        available = {
+            member["uid"]
+            for member in service.project.get_api_assigned_user_list(
+                project, where_user_in=normalized["assign_user_uids"]
+            )
+        }
+        unknown = next((uid for uid in normalized["assign_user_uids"] if uid not in available), None)
+        if unknown:
+            raise ValueError(f"Unknown project member: {unknown}")
+    if label_uids is not None:
+        available = {
+            label["uid"]
+            for label in service.project_label.get_api_list_by_project(project, where_in=normalized["label_uids"])
+        }
+        unknown = next((uid for uid in normalized["label_uids"] if uid not in available), None)
+        if unknown:
+            raise ValueError(f"Unknown label: {unknown}")
+    result: dict[str, Any] = {}
+    if assign_user_uids is not None:
+        users = service.card.update_assigned_users(user_or_bot, project, card, normalized["assign_user_uids"])
+        if users is None:
+            raise RuntimeError("Validated member replacement failed")
+        result["member_uids"] = [user.get_uid() for user in users]
+    if label_uids is not None:
+        if not service.card.update_labels(user_or_bot, project, card, normalized["label_uids"]):
+            raise RuntimeError("Validated label replacement failed")
+        result["labels"] = [public_label(label) for label in service.project_label.get_api_list_by_card(card)]
+    return result
 
 
 @McpTool.add(description="Replace one direction of a card's typed relationships after full validation.")

@@ -27,5 +27,5 @@ jobs:
           python-version: "3.12"
       - run: uv sync --frozen
       - run: uv run --no-sync ruff check src/api/langboard/mcp_tools/ProjectMcp.py src/api/langboard/mcp_tools/CardMcp.py src/api/langboard/card_workspace/application src/api/langboard/card_workspace/infrastructure/native.py src/api/tests/card_workspace/test_commands.py src/api/tests/card_workspace/test_native_adapter.py
-      - run: uv run --no-sync pytest -q src/api/tests/card_workspace/test_commands.py src/api/tests/card_workspace/test_native_adapter.py -k 'project_mcp_creation or card_mcp_creation or card_mcp_cardify'
+      - run: uv run --no-sync pytest -q src/api/tests/card_workspace/test_commands.py src/api/tests/card_workspace/test_native_adapter.py -k 'project_mcp_creation or card_mcp_creation or card_mcp_cardify or card_mcp_people_and_labels'
       - run: uv run --no-sync pytest -q src/api/tests/mcp_integration/test_card_mcp_contract.py

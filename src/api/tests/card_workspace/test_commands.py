@@ -3,7 +3,6 @@ import pytest
 from langboard.card_workspace.application.commands import (
     patch_card_description,
     replace_card_description,
-    set_card_people_and_labels,
     validate_card_graph_patch,
 )
 from langboard.card_workspace.domain import CardGraphEdge, CardGraphNewCard, ExactTextReplacement
@@ -24,16 +23,6 @@ class FakeCommandPort:
     ) -> str:
         self.calls.append(("replace_card_description", (project_uid, card_uid, description, expected_revision)))
         return description
-
-    def replace_card_people_and_labels(
-        self,
-        project_uid: str,
-        card_uid: str,
-        assign_user_uids: list[str] | None,
-        label_uids: list[str] | None,
-    ) -> dict[str, Any]:
-        self.calls.append(("replace_card_people_and_labels", (project_uid, card_uid, assign_user_uids, label_uids)))
-        return {"member_uids": assign_user_uids or [], "labels": []}
 
 
 def test_description_patch_returns_receipt_without_echoing_the_body() -> None:
@@ -73,26 +62,6 @@ def test_description_replacement_supports_initialization_and_clearing_without_ec
         ("replace_card_description", ("p1", "c1", "first body", "a" * 64)),
         ("replace_card_description", ("p1", "c1", "", "b" * 64)),
     ]
-
-
-@pytest.mark.parametrize(
-    ("invoke", "message"),
-    [
-        (
-            lambda port: set_card_people_and_labels(port, "p", "c", ["u1", "u1"], None),
-            "duplicates",
-        ),
-    ],
-)
-def test_invalid_multi_field_mutations_never_reach_port(invoke: Any, message: str) -> None:
-    """Every supplied field is validated before any infrastructure mutation can occur."""
-
-    port = FakeCommandPort()
-
-    with pytest.raises(ValueError, match=message):
-        invoke(port)
-
-    assert port.calls == []
 
 
 def test_graph_patch_supports_a_branched_tree_of_existing_and_new_cards() -> None:

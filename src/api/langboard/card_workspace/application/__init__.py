@@ -4,7 +4,6 @@ from .commands import (
     patch_card_description,
     reconcile_card_checklist_projection,
     replace_card_description,
-    set_card_people_and_labels,
     set_card_relationships,
     validate_card_graph_patch,
 )
@@ -31,6 +30,5 @@ __all__ = [
     "patch_card_description",
     "replace_card_description",
     "reconcile_card_checklist_projection",
-    "set_card_people_and_labels",
     "set_card_relationships",
 ]
