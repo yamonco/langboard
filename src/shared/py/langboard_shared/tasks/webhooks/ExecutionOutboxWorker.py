@@ -8,7 +8,7 @@ from ...core.db import DbSession
 from ...core.types import SnowflakeID
 from ...helpers import InfraHelper
 from .ExecutionBindingPolicy import binding_for_project, binding_invalid_reasons
-from .ExecutionReadinessUow import current_execution
+from .ExecutionReadinessUow import CurrentExecution, current_execution
 from .utils import WebhookModel
 from .WebhookTask import webhook_delivery_task
 
@@ -35,19 +35,19 @@ def _mark(db: DbSession, event_id: UUID, state: str, error: str | None = None) -
     )
 
 
-def _event_data(project_id: int, card_id: int, generation: int, snapshot: dict) -> dict:
-    """Only deterministic ID projection; mutable Card data was frozen at commit."""
+def _event_data(project_id: int, card_id: int, generation: int, current: CurrentExecution) -> dict:
+    """Project the delivery-time point-read; the outbox row keeps commit-time provenance."""
     project_uid = SnowflakeID(project_id).to_short_code()
     card_uid = SnowflakeID(card_id).to_short_code()
     return {
         "project_uid": project_uid,
         "card_uid": card_uid,
         "execution_generation": generation,
-        "title": snapshot["title"],
-        "labels": snapshot["labels"],
-        "assignees": [SnowflakeID(uid).to_short_code() for uid in snapshot["assignee_ids"]],
+        "title": current.title,
+        "labels": current.labels,
+        "assignees": [SnowflakeID(uid).to_short_code() for uid in current.assignee_ids],
         "card_url": f"/board/{project_uid}/{card_uid}",
-        "source_revision": snapshot["source_revision"],
+        "source_revision": current.revision.isoformat(),
     }
 
 
@@ -82,12 +82,10 @@ def drain_one(event_id: UUID | None = None) -> bool:
             _mark(db, event_id, "blocked", "destination_unavailable")
             return True
         current = current_execution(card_id, db)
-        if (
-            current is None
-            or not current[1]
-            or current[2] != generation
-            or current[0].isoformat() != snapshot.get("source_revision")
-        ):
+        # The event is a "this generation is executable" signal, not an
+        # immutable snapshot: a READY-preserving content edit must not discard
+        # the execution. Only lost readiness or a newer generation supersedes.
+        if current is None or not current.is_ready or current.generation != generation:
             _mark(db, event_id, "superseded", "stale_readiness")
             return True
         project_uid = SnowflakeID(project_id).to_short_code()
@@ -107,7 +105,7 @@ def drain_one(event_id: UUID | None = None) -> bool:
             event=event_type,
             event_id=str(event_id),
             occurred_at=occurred_at.astimezone(timezone.utc).isoformat(),
-            data=_event_data(project_id, card_id, generation, snapshot),
+            data=_event_data(project_id, card_id, generation, current),
         )
         webhook_delivery_task(
             model,
