@@ -28,7 +28,6 @@ from langboard_shared.domain.models.UserIdentityLink import IdentityProvider
 from langboard_shared.domain.services import DomainService
 from langboard_shared.Env import Env
 from langboard_shared.publishers import (
-    CardAttachmentPublisher,
     CardCommentPublisher,
     CardPublisher,
     CardRelationshipPublisher,
@@ -39,7 +38,6 @@ from langboard_shared.publishers import (
 )
 from langboard_shared.tasks.activities import (
     CardActivityTask,
-    CardAttachmentActivityTask,
     CardCheckitemActivityTask,
     CardChecklistActivityTask,
     CardCommentActivityTask,
@@ -532,14 +530,26 @@ class ExternalWorkImporter:
             user, _ = principals[record.author_scim_external_id]
             if staged_file is None:
                 raise ExternalImportError("attachment was not staged")
-            target = CardAttachment(
-                user_id=user.id,
-                card_id=targets[("card", record.card_source_id)].id,
-                filename=record.original_filename,
-                file=staged_file,
-                created_at=record.created_at,
-                updated_at=record.created_at,
+            target = self._domain.card_attachment.create(
+                user,
+                project,
+                targets[("card", record.card_source_id)],
+                staged_file,
+                dispatch_effects=False,
             )
+            if target is None:
+                raise ExternalImportError("attachment creation failed")
+            db.exec(
+                SqlBuilder.update.table(CardAttachment)
+                .where(CardAttachment.column("id") == target.id)
+                .values({
+                    CardAttachment.column("created_at"): record.created_at,
+                    CardAttachment.column("updated_at"): record.created_at,
+                })
+            )
+            target.created_at = record.created_at
+            target.updated_at = record.created_at
+            return target
         else:
             raise TypeError(f"unsupported external work record: {type(record).__name__}")
         db.insert(target)
@@ -580,8 +590,8 @@ class ExternalWorkImporter:
             lineage.effects_error = current.effects_error
             lineage.effects_dispatched_at = current.effects_dispatched_at
 
-    @staticmethod
     def _dispatch_native_effects(
+        self,
         kind: str,
         record: BaseModel,
         target: Any,
@@ -642,8 +652,7 @@ class ExternalWorkImporter:
         if kind == "attachment" and isinstance(record, ExternalAttachment):
             card = targets[("card", record.card_source_id)]
             author, _ = principals[record.author_scim_external_id]
-            CardAttachmentPublisher.uploaded(author, card, target)
-            CardAttachmentActivityTask.card_attachment_uploaded(author, project, card, target)
+            self._domain.card_attachment.dispatch_created(author, project, card, target, include_bot=False)
             return
         raise ExternalImportError(f"unsupported side-effect record: {kind}")
 
