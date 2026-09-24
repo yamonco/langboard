@@ -275,36 +275,6 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
         )
         return {str(key): str(value) for key, value in metadata.items()}
 
-    def provision_project(
-        self,
-        title: str,
-        description: str | None,
-        template_name: str | None = None,
-        infer_template_prefix: bool = False,
-    ) -> dict[str, Any]:
-        if not isinstance(self._actor, User):
-            raise PermissionError("Only users can create projects")
-        project, created_columns, template = self._service.project_template.create_project(
-            self._actor,
-            title,
-            description,
-            "Other",
-            template_name,
-            infer_template_prefix,
-        )
-        columns = [{**column.api_response(), "count": 0} for column in created_columns]
-        uid = project.get_uid()
-        return {
-            "project": {
-                "uid": uid,
-                "title": project.title,
-                "project_type": project.project_type,
-                "url": f"{Env.PUBLIC_UI_URL}/board/{uid}",
-                "template": template.name,
-            },
-            "columns": columns,
-        }
-
     def create_card_in_leftmost_column(
         self,
         project_uid: str,

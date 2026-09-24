@@ -4,7 +4,6 @@ from langboard.card_workspace.application.commands import (
     cardify_card_checkitem,
     create_card_in_leftmost_column,
     patch_card_description,
-    provision_project,
     replace_card_description,
     set_card_people_and_labels,
     validate_card_graph_patch,
@@ -17,16 +16,6 @@ class FakeCommandPort:
 
     def __init__(self) -> None:
         self.calls: list[tuple[str, tuple[Any, ...]]] = []
-
-    def provision_project(
-        self,
-        title: str,
-        description: str | None,
-        template_name: str | None,
-        infer_template_prefix: bool,
-    ) -> dict[str, Any]:
-        self.calls.append(("provision_project", (title, description, template_name, infer_template_prefix)))
-        return {"project": {"uid": "p1", "title": title}, "columns": []}
 
     def create_card_in_leftmost_column(
         self,
@@ -74,11 +63,9 @@ def test_create_commands_normalize_before_calling_port() -> None:
 
     port = FakeCommandPort()
 
-    provision_project(port, " Delivery ")
     create_card_in_leftmost_column(port, "p1", " Task ", assign_user_uids=["u1"])
 
     assert port.calls == [
-        ("provision_project", ("Delivery", None, None, False)),
         ("create_card_in_leftmost_column", ("p1", "Task", None, ["u1"])),
     ]
 

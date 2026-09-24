@@ -32,7 +32,6 @@ from ..card_workspace.application import get_public_card_metadata as query_publi
 from ..card_workspace.application import get_public_card_metadata_by_key as query_public_metadata_key
 from ..card_workspace.application import list_project_cards as query_project_cards
 from ..card_workspace.application import patch_card_description as replace_description_text
-from ..card_workspace.application import provision_project as provision
 from ..card_workspace.application import reconcile_card_checklist_projection as reconcile_checklist
 from ..card_workspace.application import replace_card_description as replace_description
 from ..card_workspace.application import set_card_people_and_labels as replace_people_and_labels
@@ -60,6 +59,7 @@ from ..card_workspace.domain import (
 )
 from ..card_workspace.infrastructure import NativeCardWorkspaceAdapter
 from ..mcp_integration import McpRoleFilter, McpTool
+from .ProjectMcp import create_template_project
 
 
 def _get_card_in_project(project_uid: str, card_uid: str) -> tuple[Project, Card] | None:
@@ -384,7 +384,10 @@ def _adapter(actor: User | Bot, service: DomainService) -> NativeCardWorkspaceAd
 
 @McpTool.add(
     "user",
-    description="Provision a new project with its standard workflow from a named template, or the configured default.",
+    description=(
+        "Compatibility alias. Migrate to ProjectMcp.create_project with template_name, then get_project_columns; "
+        "retire this tool after callers migrate."
+    ),
 )
 def provision_project(
     title: str,
@@ -396,13 +399,7 @@ def provision_project(
 ) -> dict[str, Any]:
     """Provision a template-backed project with its kanban workflow columns."""
 
-    return provision(
-        _adapter(user, service),
-        title,
-        description,
-        template_name,
-        infer_template_prefix,
-    )
+    return create_template_project(title, description, "Other", user, service, template_name, infer_template_prefix)
 
 
 @McpTool.add(description="Create a card in the current leftmost non-archive project column.")

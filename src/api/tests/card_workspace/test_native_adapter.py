@@ -17,6 +17,7 @@ from langboard.card_workspace.infrastructure.native import (  # noqa: E402
     MAX_NATIVE_SECTION_SOURCE,
     NativeCardWorkspaceAdapter,
 )
+from langboard.mcp_tools import CardMcp, ProjectMcp  # noqa: E402
 
 
 class Card:
@@ -277,8 +278,8 @@ def test_native_cardify_rejects_column_from_another_project() -> None:
         adapter.cardify_card_checkitem("project", "card", "item", "foreign-column")
 
 
-def test_native_project_creation_uses_template_service(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The native project API, not Hermes, owns template selection and board shape."""
+def test_project_mcp_creation_uses_template_service() -> None:
+    """Both project creation tools use the project owner without a card workspace port."""
 
     class Actor:
         pass
@@ -306,14 +307,14 @@ def test_native_project_creation_uses_template_service(monkeypatch: pytest.Monke
             )[1],
         ),
     )
-    monkeypatch.setattr("langboard.card_workspace.infrastructure.native.User", Actor)
+    result = CardMcp.provision_project(" Operations ", actor, service, "Room board")
+    canonical = ProjectMcp.create_project(" Operations ", "Room board", "Other", actor, service, "SI")
 
-    result = NativeCardWorkspaceAdapter(actor, service).provision_project(
-        "Operations",
-        "Room board",
-    )
-
-    assert create_project_calls == [(actor, "Operations", "Room board", "Other", None, False)]
+    assert create_project_calls == [
+        (actor, "Operations", "Room board", "Other", None, False),
+        (actor, "Operations", "Room board", "Other", "SI", False),
+    ]
+    assert canonical == {"project_uid": "project-one"}
     assert result["project"] == {
         "uid": "project-one",
         "title": "Operations",
@@ -322,10 +323,15 @@ def test_native_project_creation_uses_template_service(monkeypatch: pytest.Monke
         "template": "SI",
     }
     assert [column["name"] for column in result["columns"]] == names
+    with pytest.raises(ValueError, match="Project title"):
+        ProjectMcp.create_project(" ", None, "Other", actor, service)
+    with pytest.raises(ValueError, match="Template name"):
+        CardMcp.provision_project("Operations", actor, service, template_name=" ")
+    assert len(create_project_calls) == 2
 
 
-def test_native_project_creation_propagates_template_failure(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The adapter does not hide atomic template creation failures."""
+def test_project_mcp_creation_propagates_template_failure() -> None:
+    """The project owner failure is not hidden by the compatibility alias."""
 
     class Actor:
         pass
@@ -336,10 +342,8 @@ def test_native_project_creation_propagates_template_failure(monkeypatch: pytest
             create_project=lambda *_args: (_ for _ in ()).throw(RuntimeError("column insert failed"))
         )
     )
-    monkeypatch.setattr("langboard.card_workspace.infrastructure.native.User", Actor)
-
     with pytest.raises(RuntimeError, match="column insert failed"):
-        NativeCardWorkspaceAdapter(actor, service).provision_project("Operations", None)
+        CardMcp.provision_project("Operations", actor, service)
 
 
 def test_native_card_creation_selects_server_side_leftmost_active_column() -> None:
