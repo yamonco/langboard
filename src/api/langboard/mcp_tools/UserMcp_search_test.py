@@ -7,7 +7,7 @@ import pytest
 
 os.environ.setdefault("PROJECT_NAME", "langboard")
 
-from langboard.mcp_tools import UserWorkspaceMcp  # noqa: E402
+from langboard.mcp_tools import UserMcp  # noqa: E402
 
 
 def test_search_passes_timezone_aware_half_open_period_to_native_query() -> None:
@@ -17,7 +17,7 @@ def test_search_passes_timezone_aware_half_open_period_to_native_query() -> None
             search_context_by_project=lambda project, query, **filters: calls.append((project, query, filters)) or [],
         )
     )
-    assert UserWorkspaceMcp.search_project_cards(
+    assert UserMcp.search_project_cards(
         "project",
         " release ",
         service,
@@ -42,4 +42,4 @@ def test_search_passes_timezone_aware_half_open_period_to_native_query() -> None
 )
 def test_search_rejects_invalid_period_before_service_access(since, until) -> None:
     with pytest.raises(ValueError):
-        UserWorkspaceMcp.search_project_cards("project", "release", SimpleNamespace(), since=since, until=until)
+        UserMcp.search_project_cards("project", "release", SimpleNamespace(), since=since, until=until)

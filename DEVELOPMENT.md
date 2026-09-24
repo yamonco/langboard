@@ -352,3 +352,19 @@ make stop_docker WITH_DOCS=true WITH_UI_WATCHER=true WITH_OLLAMA_GPU=true
 - hashicorp
 - aws
 - azure
+
+## Naming (MCP tools, API payloads, and code)
+
+Langboard keeps one ubiquitous language across API routes, MCP tools, and
+internal code. The glossary in `docs/docs/ubiquitous-language.md` is the
+single source of truth:
+
+- The aggregate root is a **Project**, identified as `project_uid`
+  everywhere. `/board/*` REST routes are compatibility aliases only; never
+  name a variable, DTO field, or MCP argument `board_uid`.
+- MCP module and tool names follow the domain concept: `UserMcp`,
+  `WikiMcp`, and one `CardMcp` module hold the user, wiki, and card tools.
+  The `Workspace` suffix is reserved for real workspace concepts such as the
+  `card_workspace` application slice.
+- Renames land without permanent compatibility wrappers; move callers in the
+  same change.

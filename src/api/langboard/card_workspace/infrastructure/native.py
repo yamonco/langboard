@@ -325,7 +325,7 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
         )
         return {str(key): str(value) for key, value in metadata.items()}
 
-    def create_project_board(
+    def provision_project(
         self,
         title: str,
         description: str | None,

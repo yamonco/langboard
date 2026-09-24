@@ -308,7 +308,7 @@ def test_native_project_creation_uses_template_service(monkeypatch: pytest.Monke
     )
     monkeypatch.setattr("langboard.card_workspace.infrastructure.native.User", Actor)
 
-    result = NativeCardWorkspaceAdapter(actor, service).create_project_board(
+    result = NativeCardWorkspaceAdapter(actor, service).provision_project(
         "Operations",
         "Room board",
     )
@@ -339,7 +339,7 @@ def test_native_project_creation_propagates_template_failure(monkeypatch: pytest
     monkeypatch.setattr("langboard.card_workspace.infrastructure.native.User", Actor)
 
     with pytest.raises(RuntimeError, match="column insert failed"):
-        NativeCardWorkspaceAdapter(actor, service).create_project_board("Operations", None)
+        NativeCardWorkspaceAdapter(actor, service).provision_project("Operations", None)
 
 
 def test_native_card_creation_selects_server_side_leftmost_active_column() -> None:

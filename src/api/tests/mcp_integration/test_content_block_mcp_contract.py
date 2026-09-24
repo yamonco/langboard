@@ -9,7 +9,7 @@ from langboard.card_workspace.application.commands import (  # noqa: E402
     move_card_content_block,
 )
 from langboard.mcp_integration import McpTool  # noqa: E402
-from langboard.mcp_tools import CardWorkspaceMcp  # noqa: E402, F401
+from langboard.mcp_tools import CardMcp  # noqa: E402, F401
 from langboard_shared.domain.contracts.content_blocks import (  # noqa: E402
     ContentBlockConflictError,
     ContentBlockType,
