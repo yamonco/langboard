@@ -2,6 +2,7 @@
 
 import importlib.util
 import os
+from asyncio import run as asyncio_run
 from pathlib import Path
 from uuid import uuid4
 import pytest
@@ -188,7 +189,11 @@ def test_ready_content_edit_drains_latest_content_and_only_readiness_edges_super
     monkeypatch.setattr(ExecutionOutboxTask, "execution_outbox_task", enqueued.append)
     monkeypatch.setattr(worker, "binding_for_project", lambda uid: None)  # replaced after reading binding row
     monkeypatch.setattr(worker, "binding_invalid_reasons", lambda binding, event: [])
-    monkeypatch.setattr(worker, "webhook_delivery_task", lambda *args: delivered.append(args))
+
+    async def fake_post(model, webhook_uid):
+        delivered.append((model, webhook_uid))
+
+    monkeypatch.setattr(worker, "post_signed_webhook", fake_post)
     try:
         with engine.begin() as connection:
             for statement in (
@@ -209,6 +214,7 @@ def test_ready_content_edit_drains_latest_content_and_only_readiness_edges_super
                 "CREATE TABLE execution_outbox (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), project_id bigint, "
                 "card_id bigint, execution_generation integer, occurred_at timestamptz, event_type text, "
                 "payload_json jsonb, state text DEFAULT 'pending', last_error text, processed_at timestamptz, "
+                "attempt_count integer NOT NULL DEFAULT 0, lease_until timestamptz, "
                 "CONSTRAINT uq_execution_outbox_card_generation UNIQUE(card_id, execution_generation))",
             ):
                 connection.execute(text(statement))
@@ -265,7 +271,7 @@ def test_ready_content_edit_drains_latest_content_and_only_readiness_edges_super
             connection.execute(
                 text("UPDATE card SET updated_at = now() + interval '1 second' WHERE id = 100")
             )
-        assert worker.drain_one()
+        assert asyncio_run(worker.drain_one())
         assert len(delivered) == 1
         delivered_model = delivered[0][0]
         assert delivered_model.data["execution_generation"] == 1
@@ -276,7 +282,7 @@ def test_ready_content_edit_drains_latest_content_and_only_readiness_edges_super
                 text("SELECT payload_json, state FROM execution_outbox WHERE card_id = 100")
             ).one()
             assert frozen[0]["title"] == "Frozen title"
-            assert frozen[1] == "scheduled"
+            assert frozen[1] == "delivered"
 
         # Completion 2: READY-preserving label change delivers the latest labels.
         with engine.begin() as connection:
@@ -288,7 +294,7 @@ def test_ready_content_edit_drains_latest_content_and_only_readiness_edges_super
                 text("UPDATE execution_outbox SET state = 'pending', last_error = NULL WHERE card_id = 100")
             )
         delivered.clear()
-        assert worker.drain_one()
+        assert asyncio_run(worker.drain_one())
         assert [delivery[0].data["labels"] for delivery in delivered] == [["reviewer"]]
 
         # Completion 3: a prerequisite that is not terminal blocks readiness; old generation executes zero.
@@ -304,7 +310,7 @@ def test_ready_content_edit_drains_latest_content_and_only_readiness_edges_super
             connection.execute(
                 text("UPDATE execution_outbox SET state = 'pending', last_error = NULL WHERE card_id = 100")
             )
-        assert worker.drain_one()
+        assert asyncio_run(worker.drain_one())
         assert delivered == []
         with engine.connect() as connection:
             assert (
@@ -321,7 +327,7 @@ def test_ready_content_edit_drains_latest_content_and_only_readiness_edges_super
         current = current_execution(100)
         assert (current.is_ready, current.generation) == (True, 2)
         delivered.clear()
-        assert worker.drain_one()
+        assert asyncio_run(worker.drain_one())
         assert [delivery[0].data["execution_generation"] for delivery in delivered] == [2]
         with engine.connect() as connection:
             states = dict(
@@ -329,7 +335,7 @@ def test_ready_content_edit_drains_latest_content_and_only_readiness_edges_super
                     text("SELECT execution_generation, state FROM execution_outbox WHERE card_id = 100")
                 ).all()
             )
-        assert states == {1: "superseded", 2: "scheduled"}
+        assert states == {1: "superseded", 2: "delivered"}
     finally:
         engine.dispose()
         with admin.begin() as connection:

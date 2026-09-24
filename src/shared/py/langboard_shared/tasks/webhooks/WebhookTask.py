@@ -14,7 +14,6 @@ from ...domain.models import WebhookSetting
 from ...helpers import InfraHelper
 from ...infrastructure.repositories import Repository
 from ...publishers import AppSettingPublisher
-from .ExecutionBindingPolicy import binding_for_project, binding_invalid_reasons
 from .utils import (
     WORK_EVENT_NAME,
     WORK_EXECUTION_EVENTS,
@@ -84,22 +83,17 @@ async def webhook_task(model: WebhookModel) -> None:
 
 
 @Broker.wrap_async_task_decorator(WEBHOOK_DELIVERY_RETRY_OPTIONS)
-async def webhook_delivery_task(
-    model: WebhookModel,
-    webhook_uid: str,
-    binding_id: str | None = None,
-    binding_revision: str | None = None,
-) -> None:
+async def webhook_delivery_task(model: WebhookModel, webhook_uid: str) -> None:
     """Deliver one event to one endpoint with an independent retry budget."""
 
-    await deliver_webhook(model, webhook_uid, binding_id, binding_revision)
+    await deliver_webhook(model, webhook_uid)
 
 
 async def run_webhook(model: WebhookModel) -> None:
     """Schedule one delivery task for each endpoint that accepts the event."""
 
     if model.event in WORK_EXECUTION_EVENTS:
-        Broker.logger.error("Execution event requires frozen outbox destination: event=%s", model.event_id)
+        Broker.logger.error("Execution event requires the transactional outbox path: event=%s", model.event_id)
         return
 
     after_id: SnowflakeID | None = None
@@ -123,57 +117,27 @@ async def run_webhook(model: WebhookModel) -> None:
         after_id = settings[-1].id
 
 
-async def deliver_webhook(
-    model: WebhookModel,
-    webhook_uid: str,
-    binding_id: str | None = None,
-    binding_revision: str | None = None,
-) -> None:
+async def deliver_webhook(model: WebhookModel, webhook_uid: str) -> None:
     """POST one event to one current endpoint with bounded I/O."""
 
     setting = _get_webhook_setting(webhook_uid)
     if not setting or not _accepts_event(setting, model.event):
         return
-    if model.event in WORK_EXECUTION_EVENTS:
-        if not binding_id or not binding_revision:
-            Broker.logger.error("Execution delivery has no frozen binding: event=%s", model.event_id)
-            return
-        data = ExecutionEventData.model_validate(model.data)
-        from .ExecutionReadinessUow import current_execution
+    await post_signed_webhook(model, webhook_uid, setting)
 
-        current = current_execution(InfraHelper.convert_id(data.card_uid))
-        # Same fence as the outbox drain: READY-preserving content edits keep
-        # the execution alive, so only lost readiness or a newer generation
-        # supersedes a delivery. Content is refreshed from this point-read so
-        # the signed payload never mixes commit-time and delivery-time views.
-        if current is None or not current.is_ready or current.generation != data.execution_generation:
-            Broker.logger.info("Execution delivery superseded: event=%s", model.event_id)
-            return
-        model = model.model_copy(
-            update={
-                "data": {
-                    **model.data,
-                    "title": current.title,
-                    "labels": current.labels,
-                    "assignees": [SnowflakeID(uid).to_short_code() for uid in current.assignee_ids],
-                    "source_revision": current.revision.isoformat(),
-                }
-            }
-        )
-        binding = binding_for_project(data.project_uid)
-        reasons = binding_invalid_reasons(binding, model.event)
-        if (
-            reasons
-            or str(binding.id) != binding_id
-            or binding.updated_at.isoformat() != binding_revision
-            or binding.webhook_uid != webhook_uid
-        ):
-            Broker.logger.error(
-                "Execution binding invalid at delivery: project=%s reasons=%s",
-                data.project_uid,
-                reasons or ["stale_binding"],
-            )
-            return
+
+async def post_signed_webhook(model: WebhookModel, webhook_uid: str, setting: WebhookSetting | None = None) -> None:
+    """Sign and POST one event to the endpoint's current target, then record success.
+
+    Raises WebhookDeliveryError when the endpoint is unavailable or rejects the
+    delivery, so callers with a retry budget can retry; execution outbox claims
+    rely on this to release and eventually mark the attempt as failed.
+    """
+
+    if setting is None:
+        setting = _get_webhook_setting(webhook_uid)
+        if not setting or not _accepts_event(setting, model.event):
+            raise WebhookDeliveryError(f"Webhook endpoint unavailable: endpoint={webhook_uid}")
 
     try:
         secret = KeyVault.get_key(setting.secret_id) if setting.secret_id else None
