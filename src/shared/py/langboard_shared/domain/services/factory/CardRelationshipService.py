@@ -123,18 +123,33 @@ class CardRelationshipService(BaseDomainService):
 
             self._mark_card_changed_for_unread(card, "relationship")
 
-        CardRelationshipPublisher.updated(project, card, new_relationships)
-        CardRelationshipActivityTask.card_relationship_updated(
-            user_or_bot,
-            project,
-            card,
-            old_relationship_ids,
-            list(new_relationships_dict.keys()),
-            is_parent,
+        self.dispatch_updated(
+            user_or_bot, project, card, old_relationship_ids, list(new_relationships_dict.keys()),
+            is_parent, relationships=new_relationships,
         )
-        CardBotTask.card_relationship_updated(user_or_bot, project, card)
 
         return new_relationships
+
+    def dispatch_updated(
+        self,
+        user_or_bot: TUserOrBot,
+        project: Project,
+        card: Card,
+        old_relationship_ids: list[SnowflakeID],
+        new_related_card_ids: list[SnowflakeID],
+        is_parent: bool,
+        *,
+        relationships: list[dict[str, Any]] | None = None,
+        include_bot: bool = True,
+    ) -> None:
+        CardRelationshipPublisher.updated(
+            project, card, relationships if relationships is not None else self.get_api_list_by_card(card)
+        )
+        CardRelationshipActivityTask.card_relationship_updated(
+            user_or_bot, project, card, old_relationship_ids, new_related_card_ids, is_parent
+        )
+        if include_bot:
+            CardBotTask.card_relationship_updated(user_or_bot, project, card)
 
     def apply_graph_patch(
         self,

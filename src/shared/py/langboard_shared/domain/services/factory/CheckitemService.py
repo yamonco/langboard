@@ -112,14 +112,26 @@ class CheckitemService(BaseDomainService):
         )
         self.repo.checkitem.insert(checkitem)
 
-        if dispatch_effects:
-            CheckitemPublisher.created(card, checklist, checkitem)
         self._mark_card_changed_for_unread(card, "checkitem", checkitem.id)
         if dispatch_effects:
-            CardCheckitemActivityTask.card_checkitem_created(user_or_bot, project, card, checkitem)
-            CardCheckitemBotTask.card_checkitem_created(user_or_bot, project, card, checkitem)
+            self.dispatch_created(user_or_bot, project, card, checklist, checkitem)
 
         return checkitem
+
+    def dispatch_created(
+        self,
+        user_or_bot: TUserOrBot,
+        project: Project,
+        card: Card,
+        checklist: Checklist,
+        checkitem: Checkitem,
+        *,
+        include_bot: bool = True,
+    ) -> None:
+        CheckitemPublisher.created(card, checklist, checkitem)
+        CardCheckitemActivityTask.card_checkitem_created(user_or_bot, project, card, checkitem)
+        if include_bot:
+            CardCheckitemBotTask.card_checkitem_created(user_or_bot, project, card, checkitem)
 
     def change_title(
         self,

@@ -63,11 +63,17 @@ class ProjectLabelService(BaseDomainService):
         self.repo.project_label.insert(label)
 
         if dispatch_effects:
-            ProjectLabelPublisher.created(project, label)
-            ProjectLabelActivityTask.project_label_created(user_or_bot, project, label)
-            ProjectLabelBotTask.project_label_created(user_or_bot, project, label)
+            self.dispatch_created(user_or_bot, project, label)
 
         return label, label.api_response()
+
+    def dispatch_created(
+        self, user_or_bot: TUserOrBot, project: Project, label: ProjectLabel, *, include_bot: bool = True
+    ) -> None:
+        ProjectLabelPublisher.created(project, label)
+        ProjectLabelActivityTask.project_label_created(user_or_bot, project, label)
+        if include_bot:
+            ProjectLabelBotTask.project_label_created(user_or_bot, project, label)
 
     def update(
         self, user_or_bot: TUserOrBot, project: TProjectParam | None, label: TProjectLabelParam | None, form: dict

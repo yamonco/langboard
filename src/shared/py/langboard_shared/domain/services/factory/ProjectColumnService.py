@@ -98,11 +98,17 @@ class ProjectColumnService(BaseDomainService):
         self.repo.project_column.insert(column)
 
         if dispatch_effects:
-            ProjectColumnPublisher.created(project, column)
-            ProjectColumnActivityTask.project_column_created(user_or_bot, project, column)
-            ProjectColumnBotTask.project_column_created(user_or_bot, project, column)
+            self.dispatch_created(user_or_bot, project, column)
 
         return column
+
+    def dispatch_created(
+        self, user_or_bot: TUserOrBot, project: Project, column: ProjectColumn, *, include_bot: bool = True
+    ) -> None:
+        ProjectColumnPublisher.created(project, column)
+        ProjectColumnActivityTask.project_column_created(user_or_bot, project, column)
+        if include_bot:
+            ProjectColumnBotTask.project_column_created(user_or_bot, project, column)
 
     def change_description(self, project: TProjectParam | None, column: TColumnParam | None, description: str) -> bool:
         """Change guidance only within the requested board; never rename or move cards."""
