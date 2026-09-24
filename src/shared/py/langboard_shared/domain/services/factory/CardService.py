@@ -792,6 +792,8 @@ class CardService(BaseDomainService):
         title: str,
         description: EditorContentModel | None = None,
         assign_user_uids: list[str] | None = None,
+        *,
+        dispatch_effects: bool = True,
     ) -> tuple[Card, dict[str, Any]] | None:
         params = InfraHelper.get_records_with_foreign_by_params((Project, project), (ProjectColumn, column))
         if not params:
@@ -837,13 +839,14 @@ class CardService(BaseDomainService):
             )
             model = {"card": api_card}
 
-        CardPublisher.created(project, column, model)
-        CardActivityTask.card_created(user_or_bot, project, card)
-        CardBotTask.card_created(user_or_bot, project, card)
+        if dispatch_effects:
+            CardPublisher.created(project, column, model)
+            CardActivityTask.card_created(user_or_bot, project, card)
+            CardBotTask.card_created(user_or_bot, project, card)
 
-        notification_service = self._get_service(NotificationService)
-        for user in users:
-            notification_service.notify_assigned_to_card(user_or_bot, user, project, card)
+            notification_service = self._get_service(NotificationService)
+            for user in users:
+                notification_service.notify_assigned_to_card(user_or_bot, user, project, card)
 
         return card, api_card
 
@@ -1345,6 +1348,8 @@ class CardService(BaseDomainService):
         project: TProjectParam | None,
         card: TCardParam | None,
         labels: Sequence[TProjectLabelParam],
+        *,
+        dispatch_effects: bool = True,
     ) -> bool | None:
         params = InfraHelper.get_records_with_foreign_by_params((Project, project), (Card, card))
         if not params:
@@ -1362,16 +1367,18 @@ class CardService(BaseDomainService):
             card_assigned_label = CardAssignedProjectLabel(card_id=card.id, project_label_id=label.id)
             self.repo.card_assigned_project_label.insert(card_assigned_label)
 
-        CardPublisher.labels_updated(project, card, new_labels)
+        if dispatch_effects:
+            CardPublisher.labels_updated(project, card, new_labels)
         self.mark_card_changed(card, self.UNREAD_TARGET_CARD)
-        CardActivityTask.card_labels_updated(
-            user_or_bot,
-            project,
-            card,
-            [label.id for label in old_labels],
-            [label.id for label in new_labels],
-        )
-        CardBotTask.card_labels_updated(user_or_bot, project, card)
+        if dispatch_effects:
+            CardActivityTask.card_labels_updated(
+                user_or_bot,
+                project,
+                card,
+                [label.id for label in old_labels],
+                [label.id for label in new_labels],
+            )
+            CardBotTask.card_labels_updated(user_or_bot, project, card)
 
         return True
 
