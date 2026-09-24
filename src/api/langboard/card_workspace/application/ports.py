@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Protocol
 from ..domain import (
     CardDescriptionPatch,
@@ -16,6 +16,7 @@ class CardBundleSource:
     metadata: dict[str, str]
     bot_scopes: list[dict[str, Any]]
     bot_schedules: list[dict[str, Any]]
+    content_blocks: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -67,11 +68,6 @@ class CardWorkspaceQueryPort(Protocol):
         before_card_uid: str | None,
     ) -> ProjectCardPageSource:
         """Load one bounded project-card keyset page."""
-
-    def get_card_content_blocks(self, project_uid: str, card_uid: str) -> list[dict[str, Any]] | None:
-        """Return the ordered public content blocks of a card."""
-
-        ...
 
     def get_public_card_metadata(self, project_uid: str, card_uid: str) -> dict[str, str] | None:
         """Load raw card metadata after ancestry validation."""

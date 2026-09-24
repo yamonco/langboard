@@ -189,6 +189,11 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
             metadata={str(key): value for key, value in metadata.items()},
             bot_scopes=bot_scopes,
             bot_schedules=bot_schedules,
+            content_blocks=(
+                self._service.card_content_block.api_blocks_by_card(card)
+                if "content_blocks" in requested_sections
+                else []
+            ),
         )
 
     def get_comment_page(
@@ -257,13 +262,6 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
             raise ValueError("Project not found")
         items, total_count, next_fields = result
         return ProjectCardPageSource(items, total_count, next_fields)
-
-    def get_card_content_blocks(self, project_uid: str, card_uid: str) -> list[dict[str, Any]] | None:
-        try:
-            _project, card = self._ensure_project_card(project_uid, card_uid)
-        except ValueError:
-            return None
-        return self._service.card_content_block.api_blocks_by_card(card)
 
     def get_public_card_metadata(self, project_uid: str, card_uid: str) -> dict[str, str] | None:
         card = self._ensure_card(project_uid, card_uid, required=False)

@@ -11,7 +11,13 @@ from langboard.card_workspace.application.queries import (
     get_public_card_metadata,
     list_project_cards,
 )
-from langboard.card_workspace.domain import CardBundleInclude, CommentPage, SectionPage
+from langboard.card_workspace.domain import (
+    CardBundleInclude,
+    CardBundleSection,
+    CommentPage,
+    SectionCursor,
+    SectionPage,
+)
 
 
 class FakeQueryPort:
@@ -60,6 +66,7 @@ class FakeQueryPort:
             },
             bot_scopes=[{"uid": "s1", "bot_uid": "b1", "prompt": "internal prompt"}],
             bot_schedules=[{"uid": "bs1", "bot_uid": "b1", "status": "active", "token": "secret"}],
+            content_blocks=[{"block_uid": f"b{i}", "order": i} for i in range(30)],
         )
 
     def get_card_bundle_source(
@@ -135,9 +142,6 @@ class FakeQueryPort:
 
     def get_public_card_metadata(self, project_uid: str, card_uid: str) -> dict[str, str] | None:
         return self.source.metadata
-
-    def get_card_content_blocks(self, project_uid: str, card_uid: str) -> list[dict[str, object]]:
-        return []
 
 
 def test_initial_card_bundle_is_bounded_and_privacy_preserving() -> None:
@@ -251,6 +255,28 @@ def test_section_continuation_rejects_changed_projection() -> None:
 
     with pytest.raises(ValueError, match="stale"):
         get_card_bundle(port, "p1", "c1", CommentPage(), SectionPage(limit=10, cursor=cursor))
+
+
+def test_content_blocks_share_the_bundle_source_and_page_independently() -> None:
+    port = FakeQueryPort()
+    first = get_card_bundle(
+        port, "p1", "c1", CommentPage(), SectionPage(limit=25), [CardBundleInclude.ContentBlocks]
+    )
+
+    assert first.card is not None
+    assert first.card.content_blocks is not None
+    assert [block["block_uid"] for block in first.card.content_blocks.items] == [f"b{i}" for i in range(25)]
+    cursor = first.card.content_blocks.next_cursor
+    assert cursor and SectionCursor.decode(cursor).section == CardBundleSection.ContentBlocks
+    assert port.requested_sections == [frozenset({CardBundleSection.ContentBlocks.value})]
+
+    second = get_card_bundle(port, "p1", "c1", CommentPage(), SectionPage(limit=25, cursor=cursor))
+
+    assert second.continuation is not None
+    assert second.continuation.section == CardBundleSection.ContentBlocks
+    assert [block["block_uid"] for block in second.continuation.page.items] == [f"b{i}" for i in range(25, 30)]
+    assert second.continuation.page.next_cursor is None
+    assert port.requested_sections[-1] == frozenset({CardBundleSection.ContentBlocks.value})
 
 
 def test_optional_native_sections_are_requested_lazily() -> None:

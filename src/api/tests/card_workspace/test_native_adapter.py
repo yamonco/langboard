@@ -140,6 +140,21 @@ def test_native_source_fetches_optional_sections_lazily_with_hard_query_limits()
     ]
 
 
+def test_native_source_fetches_content_blocks_only_for_the_requested_bundle_section() -> None:
+    service, _ = _service()
+    blocks = [{"block_uid": "block-1", "order": 0}]
+    service.card_content_block = SimpleNamespace(api_blocks_by_card=Mock(return_value=blocks))
+    adapter = NativeCardWorkspaceAdapter(object(), service)
+
+    default = adapter.get_card_bundle_source("p1", "c1", frozenset())
+    assert default is not None and default.content_blocks == []
+    service.card_content_block.api_blocks_by_card.assert_not_called()
+
+    requested = adapter.get_card_bundle_source("p1", "c1", frozenset({"content_blocks"}))
+    assert requested is not None and requested.content_blocks == blocks
+    service.card_content_block.api_blocks_by_card.assert_called_once()
+
+
 def test_native_source_rejects_over_bound_people_before_projection() -> None:
     """A native section that exceeds the contract fails instead of entering the projection graph."""
 
