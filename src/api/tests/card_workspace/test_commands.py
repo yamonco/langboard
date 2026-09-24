@@ -1,13 +1,13 @@
 from typing import Any
 import pytest
 from langboard.card_workspace.application.commands import (
-    apply_card_graph_patch,
     cardify_card_checkitem,
     create_card_in_leftmost_column,
     patch_card_description,
     provision_project,
     replace_card_description,
     set_card_people_and_labels,
+    validate_card_graph_patch,
 )
 from langboard.card_workspace.domain import CardGraphEdge, CardGraphNewCard, ExactTextReplacement
 
@@ -37,22 +37,6 @@ class FakeCommandPort:
     ) -> dict[str, Any]:
         self.calls.append(("create_card_in_leftmost_column", (project_uid, title, description, assign_user_uids)))
         return {"card": {"uid": "c1", "title": title}, "column": {"uid": "left"}}
-
-    def apply_card_graph_patch(
-        self,
-        project_uid: str,
-        anchor_card_uid: str,
-        new_cards: list[CardGraphNewCard],
-        add_edges: list[CardGraphEdge],
-        remove_relationship_uids: list[str],
-    ) -> dict[str, Any]:
-        self.calls.append(
-            (
-                "apply_card_graph_patch",
-                (project_uid, anchor_card_uid, new_cards, add_edges, remove_relationship_uids),
-            )
-        )
-        return {"created_cards": [], "created_relationships": [], "removed_relationship_uids": []}
 
     def cardify_card_checkitem(
         self,
@@ -175,7 +159,6 @@ def test_invalid_multi_field_mutations_never_reach_port(invoke: Any, message: st
 def test_graph_patch_supports_a_branched_tree_of_existing_and_new_cards() -> None:
     """A graph patch preserves request-local references for one atomic native call."""
 
-    port = FakeCommandPort()
     new_cards = [
         CardGraphNewCard("new:research", "Research"),
         CardGraphNewCard("new:api", "API"),
@@ -187,23 +170,19 @@ def test_graph_patch_supports_a_branched_tree_of_existing_and_new_cards() -> Non
         CardGraphEdge("new:research", "new:ui", "blocks"),
     ]
 
-    apply_card_graph_patch(port, "project", "existing-root", new_cards, edges, ["old-edge"])
-
-    assert port.calls == [
-        (
-            "apply_card_graph_patch",
-            ("project", "existing-root", new_cards, edges, ["old-edge"]),
-        )
-    ]
+    assert validate_card_graph_patch("project", "existing-root", new_cards, edges, ["old-edge"]) == (
+        "project",
+        "existing-root",
+        [(card.client_ref, card.title, card.description) for card in new_cards],
+        [(edge.parent_ref, edge.child_ref, edge.relationship_type_uid) for edge in edges],
+        ["old-edge"],
+    )
 
 
 def test_graph_patch_rejects_more_than_seven_new_cards_before_mutation() -> None:
-    """The application bound is enforced before infrastructure can mutate."""
+    """The shared validator rejects an oversized batch before native mutation."""
 
-    port = FakeCommandPort()
     cards = [CardGraphNewCard(f"new:{index}", f"Card {index}") for index in range(8)]
 
     with pytest.raises(ValueError, match="more than 7"):
-        apply_card_graph_patch(port, "project", "anchor", cards, [], [])
-
-    assert port.calls == []
+        validate_card_graph_patch("project", "anchor", cards, [], [])

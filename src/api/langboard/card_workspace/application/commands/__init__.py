@@ -66,15 +66,14 @@ def create_card_in_leftmost_column(
     )
 
 
-def apply_card_graph_patch(
-    port: CardWorkspaceCommandPort,
+def validate_card_graph_patch(
     project_uid: str,
     anchor_card_uid: str,
     new_cards: list[CardGraphNewCard],
     add_edges: list[CardGraphEdge],
     remove_relationship_uids: list[str],
-) -> dict[str, Any]:
-    """Validate and atomically apply one bounded card relationship graph patch."""
+) -> tuple[str, str, list[tuple[str, str, str | None]], list[tuple[str, str, str]], list[str]]:
+    """Validate one bounded patch before the native graph transaction starts."""
 
     if not new_cards and not add_edges and not remove_relationship_uids:
         raise ValueError("Graph patch must contain at least one change")
@@ -93,11 +92,11 @@ def apply_card_graph_patch(
     if len(removals) != len(set(removals)):
         raise ValueError("Graph patch contains duplicate relationship removals")
 
-    return port.apply_card_graph_patch(
+    return (
         _required_text(project_uid, "Project UID"),
         _required_text(anchor_card_uid, "Anchor card UID"),
-        [CardGraphNewCard(card.client_ref, card.title.strip(), card.description) for card in new_cards],
-        add_edges,
+        [(card.client_ref, card.title.strip(), card.description) for card in new_cards],
+        [(edge.parent_ref, edge.child_ref, edge.relationship_type_uid) for edge in add_edges],
         removals,
     )
 

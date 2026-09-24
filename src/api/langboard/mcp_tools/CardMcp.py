@@ -22,8 +22,8 @@ from ..card_workspace.application import (
     CardBundleResponse,
     ProjectCardListResponse,
     ProjectIdentityResponse,
+    validate_card_graph_patch,
 )
-from ..card_workspace.application import apply_card_graph_patch as apply_graph_patch
 from ..card_workspace.application import cardify_card_checkitem as cardify_checkitem
 from ..card_workspace.application import create_card_in_leftmost_column as create_leftmost
 from ..card_workspace.application import get_card_bundle as query_card_bundle
@@ -438,14 +438,11 @@ def apply_card_graph_patch(
 ) -> dict[str, Any]:
     """Apply one approved card graph patch without partial persistence."""
 
-    return apply_graph_patch(
-        _adapter(user_or_bot, service),
-        project_uid,
-        anchor_card_uid,
-        new_cards,
-        add_edges,
-        remove_relationship_uids,
-    )
+    patch = validate_card_graph_patch(project_uid, anchor_card_uid, new_cards, add_edges, remove_relationship_uids)
+    result = service.card_relationship.apply_graph_patch(user_or_bot, *patch)
+    if result is None:
+        raise ValueError("Anchor card not found in project")
+    return result
 
 
 @McpTool.add(
