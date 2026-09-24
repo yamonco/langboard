@@ -28,6 +28,7 @@ from langboard_shared.domain.models import (
     UserIdentityLink,
 )
 from langboard_shared.domain.models.UserIdentityLink import IdentityProvider
+from langboard_shared.domain.services import DomainService
 from langboard_shared.Env import Env
 from langboard_shared.publishers import (
     CardAttachmentPublisher,
@@ -102,6 +103,7 @@ class ExternalWorkImporter:
     ):
         self._attachments_root = attachments_root.resolve() if attachments_root else None
         self._effect_dispatcher = effect_dispatcher or self._dispatch_native_effects
+        self._domain = DomainService()
 
     def import_bundle(
         self,
@@ -147,13 +149,14 @@ class ExternalWorkImporter:
                 else None
             )
             try:
-                with DbSession.use(readonly=False) as db:
+                with DbSession.atomic() as db:
                     current_project = self._require_uid(db, Project, project_uid, "project")
                     current_actor = self._require_uid(db, User, actor_uid, "actor")
                     self._authorize(db, current_project, current_actor)
                     target = self._create_target(
                         db,
                         current_project,
+                        current_actor,
                         record,
                         targets,
                         principals,
@@ -426,17 +429,24 @@ class ExternalWorkImporter:
         if ExternalWorkBundle._has_cycle(edges):
             raise ExternalImportError("import would create a relationship cycle")
 
-    def _create_target(self, db, project, record, targets, principals, staged_file: FileModel | None):
+    def _create_target(self, db, project, actor, record, targets, principals, staged_file: FileModel | None):
         if isinstance(record, ExternalColumn):
-            target = ProjectColumn(project_id=project.id, name=record.name, order=record.order)
+            target = self._domain.project_column.create(actor, project, record.name, dispatch_effects=False)
+            if target is None:
+                raise ExternalImportError("project column creation failed")
+            target.order = record.order
+            db.update(target)
+            return target
         elif isinstance(record, ExternalLabel):
-            target = ProjectLabel(
-                project_id=project.id,
-                name=record.name,
-                color=record.color,
-                description=record.description,
-                order=record.order,
+            created = self._domain.project_label.create(
+                actor, project, record.name, record.color, record.description, dispatch_effects=False
             )
+            if created is None:
+                raise ExternalImportError("project label creation failed")
+            target, _ = created
+            target.order = record.order
+            db.update(target)
+            return target
         elif isinstance(record, ExternalCard):
             target = Card(
                 project_id=project.id,

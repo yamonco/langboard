@@ -40,7 +40,14 @@ class ProjectLabelService(BaseDomainService):
         return [label.api_response() for label in labels]
 
     def create(
-        self, user_or_bot: TUserOrBot, project: TProjectParam | None, name: str, color: str, description: str
+        self,
+        user_or_bot: TUserOrBot,
+        project: TProjectParam | None,
+        name: str,
+        color: str,
+        description: str,
+        *,
+        dispatch_effects: bool = True,
     ) -> tuple[ProjectLabel, dict[str, Any]] | None:
         project = InfraHelper.get_by_id_like(Project, project)
         if not project:
@@ -55,9 +62,10 @@ class ProjectLabelService(BaseDomainService):
         )
         self.repo.project_label.insert(label)
 
-        ProjectLabelPublisher.created(project, label)
-        ProjectLabelActivityTask.project_label_created(user_or_bot, project, label)
-        ProjectLabelBotTask.project_label_created(user_or_bot, project, label)
+        if dispatch_effects:
+            ProjectLabelPublisher.created(project, label)
+            ProjectLabelActivityTask.project_label_created(user_or_bot, project, label)
+            ProjectLabelBotTask.project_label_created(user_or_bot, project, label)
 
         return label, label.api_response()
 

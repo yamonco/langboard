@@ -73,7 +73,13 @@ class ProjectColumnService(BaseDomainService):
         return schedules
 
     def create(
-        self, user_or_bot: TUserOrBot, project: TProjectParam | None, name: str, description: str = ""
+        self,
+        user_or_bot: TUserOrBot,
+        project: TProjectParam | None,
+        name: str,
+        description: str = "",
+        *,
+        dispatch_effects: bool = True,
     ) -> ProjectColumn | None:
         """Create a workflow column with optional guidance, preserving legacy name-only callers."""
         if len(description) > 4096:
@@ -91,9 +97,10 @@ class ProjectColumnService(BaseDomainService):
 
         self.repo.project_column.insert(column)
 
-        ProjectColumnPublisher.created(project, column)
-        ProjectColumnActivityTask.project_column_created(user_or_bot, project, column)
-        ProjectColumnBotTask.project_column_created(user_or_bot, project, column)
+        if dispatch_effects:
+            ProjectColumnPublisher.created(project, column)
+            ProjectColumnActivityTask.project_column_created(user_or_bot, project, column)
+            ProjectColumnBotTask.project_column_created(user_or_bot, project, column)
 
         return column
 
