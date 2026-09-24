@@ -110,8 +110,9 @@ def get_card_bundle(
         checklists = [public_checklist(item) for item in source.checklists if isinstance(item, dict)]
         bundle.checklists = bounded_items(checklists, CardBundleSection.Checklists, section_page.limit)
     if CardBundleInclude.ContentBlocks in requested:
-        blocks = port.get_card_content_blocks(project_uid, card_uid) or []
-        bundle.content_blocks = bounded_items(blocks, CardBundleSection.Checklists, section_page.limit)
+        bundle.content_blocks = bounded_items(
+            source.content_blocks, CardBundleSection.ContentBlocks, section_page.limit
+        )
     if comment_projection is not None:
         bundle.comments = comment_projection
     if CardBundleInclude.Attachments in requested:
@@ -256,6 +257,7 @@ def _section_continuation(
             CardBundleSection.Checklists: [
                 public_checklist(item) for item in source.checklists if isinstance(item, dict)
             ],
+            CardBundleSection.ContentBlocks: source.content_blocks,
             CardBundleSection.Attachments: [
                 public_attachment(item) for item in source.attachments if isinstance(item, dict)
             ],
@@ -310,6 +312,8 @@ def _requested_source_sections(
         sections.update({CardBundleSection.Labels.value, CardBundleSection.Relationships.value})
     if CardBundleInclude.Checklists in requested:
         sections.add(CardBundleSection.Checklists.value)
+    if CardBundleInclude.ContentBlocks in requested:
+        sections.add(CardBundleSection.ContentBlocks.value)
     if CardBundleInclude.Attachments in requested:
         sections.add(CardBundleSection.Attachments.value)
     if CardBundleInclude.Metadata in requested:

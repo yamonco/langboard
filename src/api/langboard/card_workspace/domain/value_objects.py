@@ -60,6 +60,7 @@ class CardBundleSection(StrEnum):
     Labels = "classification.labels"
     Relationships = "classification.relationships"
     Checklists = "checklists"
+    ContentBlocks = "content_blocks"
     Comments = "comments"
     Attachments = "attachments"
     Metadata = "metadata"
