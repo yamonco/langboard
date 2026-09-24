@@ -320,11 +320,22 @@ class ExternalWorkImporter:
         self, db: DbSession, existing: dict[tuple[str, str], ExternalImportRecord]
     ) -> dict[tuple[str, str], Any]:
         targets: dict[tuple[str, str], Any] = {}
-        for key, row in existing.items():
-            model = _TARGET_MODELS.get(row.target_type)
-            if model is None or row.target_type != key[0]:
-                raise ExternalImportError(f"invalid import lineage target: {key[0]}:{key[1]}")
-            targets[key] = self._require_uid(db, model, row.target_uid, f"import target for {key[0]}:{key[1]}")
+        for kind, rows in groupby(
+            sorted(existing.items(), key=lambda pair: pair[0][0]), key=lambda pair: pair[0][0]
+        ):
+            model = _TARGET_MODELS.get(kind)
+            for batch in batched(rows, 500):
+                if model is None or any(row.target_type != kind for _, row in batch):
+                    raise ExternalImportError(f"invalid import lineage target: {kind}")
+                ids = [SnowflakeID.from_short_code(row.target_uid) for _, row in batch]
+                found = {
+                    target.id: target for target in db.exec(
+                        SqlBuilder.select.table(model).where(model.column("id").in_(ids))
+                    ).all()
+                }
+                if len(found) != len(set(ids)):
+                    raise ExternalImportError(f"unknown import target for {kind}")
+                targets.update((key, found[target_id]) for (key, _), target_id in zip(batch, ids))
         return targets
 
     @staticmethod

@@ -188,6 +188,11 @@ def test_imported_card_shares_native_creation_invariants(
         assert second.unchanged == expected
         assert effects == ["published", "activity"]
         with engine.connect() as connection:
+            checkpoints = connection.execute(
+                select(ExternalImportRecord.effects_attempts, ExternalImportRecord.effects_dispatched_at)
+            ).all()
+            assert len(checkpoints) == 13 + extra_card_count
+            assert all(attempts == 1 and dispatched_at is not None for attempts, dispatched_at in checkpoints)
             card = connection.execute(select(Card.__table__).where(Card.title == "Imported work")).mappings().one()
             dependent = connection.execute(select(Card.__table__).where(Card.title == "Dependent work")).mappings().one()
             assert card["created_by_user_id"] == actor_id
