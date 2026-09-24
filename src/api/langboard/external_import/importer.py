@@ -16,7 +16,6 @@ from langboard_shared.domain.models import (
     Checkitem,
     Checklist,
     ExternalImportRecord,
-    GlobalCardRelationshipType,
     Project,
     ProjectAssignedUser,
     ProjectColumn,
@@ -456,11 +455,11 @@ class ExternalWorkImporter:
                 EditorContentModel(content=record.description),
                 assignee_uids,
                 dispatch_effects=False,
+                order_override=record.order,
             )
             if created is None:
                 raise ExternalImportError("card creation failed")
             target, _ = created
-            target.order = record.order
             target.deadline_at = record.deadline_at
             db.update(target)
             if record.label_source_ids:
@@ -491,13 +490,21 @@ class ExternalWorkImporter:
             db.update(target)
             return target
         elif isinstance(record, ExternalRelationship):
-            relationship_type = self._require_uid(
-                db, GlobalCardRelationshipType, record.relationship_type_uid, "relationship type"
+            parent = targets[("card", record.parent_card_source_id)]
+            child = targets[("card", record.child_card_source_id)]
+            result = self._domain.card_relationship.apply_graph_patch(
+                actor,
+                project,
+                parent,
+                [],
+                [(parent.get_uid(), child.get_uid(), record.relationship_type_uid)],
+                [],
+                dispatch_effects=False,
             )
-            target = CardRelationship(
-                relationship_type_id=relationship_type.id,
-                card_id_parent=targets[("card", record.parent_card_source_id)].id,
-                card_id_child=targets[("card", record.child_card_source_id)].id,
+            if result is None or len(result["created_relationships"]) != 1:
+                raise ExternalImportError("relationship creation failed")
+            return self._require_uid(
+                db, CardRelationship, result["created_relationships"][0]["uid"], "relationship"
             )
         elif isinstance(record, ExternalComment):
             user, _ = principals[record.author_scim_external_id]

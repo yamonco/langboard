@@ -17,9 +17,11 @@ from langboard_shared.core.types import SnowflakeID  # noqa: E402
 from langboard_shared.domain.models import (  # noqa: E402
     Card,
     CardAssignedProjectLabel,
+    CardRelationship,
     Checkitem,
     Checklist,
     ExternalImportRecord,
+    GlobalCardRelationshipType,
     Project,
     User,
 )
@@ -53,7 +55,7 @@ def test_imported_card_shares_native_creation_invariants(monkeypatch: pytest.Mon
             if len(needed) == previous:
                 break
         BaseDbModel.metadata.create_all(engine, tables=[BaseDbModel.metadata.tables[name] for name in needed])
-        actor_id, project_id = SnowflakeID(1001), SnowflakeID(2001)
+        actor_id, project_id, relationship_type_id = SnowflakeID(1001), SnowflakeID(2001), SnowflakeID(3001)
         with engine.begin() as connection:
             connection.execute(text("CREATE SEQUENCE content_change_seq"))
             connection.execute(text(
@@ -69,21 +71,31 @@ def test_imported_card_shares_native_creation_invariants(monkeypatch: pytest.Mon
                 "id": project_id, "owner_id": actor_id, "title": "Import target",
                 "project_type": "Other", "archive_visible_days": 7,
             })
+            connection.execute(GlobalCardRelationshipType.__table__.insert(), {
+                "id": relationship_type_id, "parent_name": "blocks", "child_name": "blocked by", "description": "",
+            })
         bundle = ExternalWorkBundle.model_validate({
             "schema_version": "1",
             "source": {"namespace": "tracker", "container_id": "project-1", "batch_id": "batch-1"},
             "columns": [{"source_id": "column-1", "name": "Backlog", "order": 4}],
             "labels": [{"source_id": "label-1", "name": "Imported", "color": "#112233", "order": 7}],
-            "cards": [{
-                "source_id": "card-1", "column_source_id": "column-1", "title": "Imported work",
-                "description": "", "order": 9, "label_source_ids": ["label-1"],
-            }],
+            "cards": [
+                {
+                    "source_id": "card-1", "column_source_id": "column-1", "title": "Imported work",
+                    "description": "", "order": 9, "label_source_ids": ["label-1"],
+                },
+                {"source_id": "card-2", "column_source_id": "column-1", "title": "Dependent work", "order": 10},
+            ],
             "checklists": [{
                 "source_id": "checklist-1", "card_source_id": "card-1", "title": "Imported checks", "order": 3,
             }],
             "checkitems": [{
                 "source_id": "item-1", "checklist_source_id": "checklist-1", "title": "Imported item",
                 "order": 5, "is_checked": True,
+            }],
+            "relationships": [{
+                "source_id": "edge-1", "parent_card_source_id": "card-1", "child_card_source_id": "card-2",
+                "relationship_type_uid": relationship_type_id.to_short_code(),
             }],
         })
         importer = ExternalWorkImporter(effect_dispatcher=lambda *_args: None)
@@ -93,18 +105,22 @@ def test_imported_card_shares_native_creation_invariants(monkeypatch: pytest.Mon
         second = importer.import_bundle(
             bundle, project_uid=project_id.to_short_code(), actor_uid=actor_id.to_short_code()
         )
-        expected = {"column": 1, "label": 1, "card": 1, "checklist": 1, "checkitem": 1}
+        expected = {"column": 1, "label": 1, "card": 2, "checklist": 1, "checkitem": 1, "relationship": 1}
         assert first.created == expected
         assert second.unchanged == expected
         with engine.connect() as connection:
-            card = connection.execute(select(Card.__table__)).mappings().one()
+            card = connection.execute(select(Card.__table__).where(Card.title == "Imported work")).mappings().one()
+            dependent = connection.execute(select(Card.__table__).where(Card.title == "Dependent work")).mappings().one()
             assert card["created_by_user_id"] == actor_id
             assert card["last_change_seq"] > 0
             assert card["last_change_target_type"] == "checkitem"
             assert card["order"] == 9
+            assert dependent["order"] == 10
             assert connection.execute(select(CardAssignedProjectLabel.__table__)).one() is not None
             checklists = connection.execute(
-                select(Checklist.__table__).where(Checklist.deleted_at.is_(None))
+                select(Checklist.__table__).where(
+                    Checklist.deleted_at.is_(None), Checklist.card_id == card["id"]
+                )
             ).mappings().all()
             assert len(checklists) == 1  # Native creation soft-deleted the hidden completion checklist.
             assert checklists[0]["title"] == "Imported checks"
@@ -114,7 +130,11 @@ def test_imported_card_shares_native_creation_invariants(monkeypatch: pytest.Mon
                 select(Checkitem.__table__).where(Checkitem.checklist_id == checklists[0]["id"])
             ).mappings().one()
             assert (item["title"], item["order"], item["is_checked"]) == ("Imported item", 5, True)
-            assert len(connection.execute(select(ExternalImportRecord.__table__)).all()) == 5
+            edge = connection.execute(select(CardRelationship.__table__)).mappings().one()
+            assert (edge["card_id_parent"], edge["card_id_child"], edge["relationship_type_id"]) == (
+                card["id"], dependent["id"], relationship_type_id
+            )
+            assert len(connection.execute(select(ExternalImportRecord.__table__)).all()) == 7
     finally:
         engine.dispose()
         with admin.begin() as connection:

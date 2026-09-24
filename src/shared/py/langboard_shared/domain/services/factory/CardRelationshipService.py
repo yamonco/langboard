@@ -144,6 +144,8 @@ class CardRelationshipService(BaseDomainService):
         new_cards: list[tuple[str, str, str | None]],
         add_edges: list[tuple[str, str, str]],
         remove_relationship_uids: list[str],
+        *,
+        dispatch_effects: bool = True,
     ) -> dict[str, Any] | None:
         """Atomically create cards and patch typed relationships around an anchor card."""
 
@@ -212,7 +214,7 @@ class CardRelationshipService(BaseDomainService):
         if new_refs and not self._all_connected(symbolic_edges, anchor_id, new_refs):
             raise ValueError("Every new card must connect to the anchor card")
 
-        next_order = self.repo.card.get_next_order(column, {"project_id": project.id})
+        next_order = self.repo.card.get_next_order(column, {"project_id": project.id}) if new_cards else 0
         cards_to_create = {
             client_ref: Card(
                 project_id=project.id,
@@ -243,9 +245,10 @@ class CardRelationshipService(BaseDomainService):
         for card in cards_to_create.values():
             api_card = card.board_api_response(0, [], [], [])
             created_cards.append(api_card)
-            CardPublisher.created(project, column, {"card": api_card})
-            CardActivityTask.card_created(user_or_bot, project, card)
-            CardBotTask.card_created(user_or_bot, project, card)
+            if dispatch_effects:
+                CardPublisher.created(project, column, {"card": api_card})
+                CardActivityTask.card_created(user_or_bot, project, card)
+                CardBotTask.card_created(user_or_bot, project, card)
 
         affected_ids = {parent_id for _, parent_id, _ in remove_relationships} | {
             child_id for _, _, child_id in remove_relationships
@@ -260,10 +263,11 @@ class CardRelationshipService(BaseDomainService):
         affected_cards = [
             card for card in [*existing_cards.values(), *cards_to_create.values()] if card.id in affected_ids
         ]
-        for card in {card.id: card for card in affected_cards}.values():
-            relationships = self.get_api_list_by_card(card)
-            CardRelationshipPublisher.updated(project, card, relationships)
-            CardBotTask.card_relationship_updated(user_or_bot, project, card)
+        if dispatch_effects:
+            for card in {card.id: card for card in affected_cards}.values():
+                relationships = self.get_api_list_by_card(card)
+                CardRelationshipPublisher.updated(project, card, relationships)
+                CardBotTask.card_relationship_updated(user_or_bot, project, card)
 
         return {
             "anchor_card_uid": anchor_card.get_uid(),
