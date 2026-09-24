@@ -3,7 +3,7 @@ from ....core.domain import BaseDomainService
 from ....core.types import SafeDateTime
 from ....core.types.ParamTypes import TCardParam, TChecklistParam, TProjectParam, TUserOrBot
 from ....helpers import InfraHelper
-from ....publishers import ChecklistPublisher
+from ....publishers import CheckitemPublisher, ChecklistPublisher
 from ....tasks.activities import CardChecklistActivityTask
 from ....tasks.bots import CardChecklistBotTask
 from ...models import Card, Checklist, Project
@@ -273,6 +273,7 @@ class ChecklistService(BaseDomainService):
         self.repo.checklist.delete(checklist)
 
         ChecklistPublisher.deleted(card, checklist)
+        CheckitemPublisher.board_progress_changed(project, card)
         self._mark_card_changed_for_unread(card, "checklist")
         CardChecklistActivityTask.card_checklist_deleted(user_or_bot, project, card, checklist)
         CardChecklistBotTask.card_checklist_deleted(user_or_bot, project, card, checklist)

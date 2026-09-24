@@ -1,0 +1,51 @@
+name: Check Board Card Status
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/check-board-card-status.yaml
+      - src/api/langboard/routes/board/BoardApi.py
+      - src/api/tests/card_workspace/test_archive_cold_store.py
+      - src/shared/py/langboard_shared/domain/services/factory/CardService.py
+      - src/shared/py/langboard_shared/domain/services/factory/CheckitemService.py
+      - src/shared/py/langboard_shared/domain/services/factory/ChecklistService.py
+      - src/shared/py/langboard_shared/infrastructure/repositories/factory/CheckitemRepository.py
+      - src/shared/py/langboard_shared/publishers/CheckitemPublisher.py
+      - src/shared/ts/src/constants/SocketEvents.ts
+      - src/ui/src/core/models/ProjectCard.ts
+      - src/ui/src/core/providers/BoardProvider.tsx
+      - src/ui/src/controllers/socket/card/checklist/useBoardChecklistProgressChangedHandlers.ts
+      - src/ui/src/pages/BoardPage/components/board/BoardColumnCardCollapsible.tsx
+      - src/ui/src/pages/BoardPage/components/board/BoardColumnCardStatus.*
+  workflow_dispatch:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: uv sync --frozen
+      - run: uv run --no-sync pytest -q src/api/tests/card_workspace/test_archive_cold_store.py
+
+  ui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: yarn
+          cache-dependency-path: src/ui/yarn.lock
+      - run: corepack enable
+      - run: yarn install --frozen-lockfile
+        working-directory: src/ui
+      - run: yarn eslint src/core/models/ProjectCard.ts src/core/providers/BoardProvider.tsx src/controllers/socket/card/checklist/useBoardChecklistProgressChangedHandlers.ts src/pages/BoardPage/components/board/BoardColumnCardCollapsible.tsx src/pages/BoardPage/components/board/BoardColumnCardStatus.ts src/pages/BoardPage/components/board/BoardColumnCardStatus.test.ts --max-warnings 0
+        working-directory: src/ui
+      - run: node --experimental-strip-types --test src/pages/BoardPage/components/board/BoardColumnCardStatus.test.ts
+        working-directory: src/ui

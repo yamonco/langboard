@@ -134,6 +134,7 @@ class CheckitemService(BaseDomainService):
         include_bot: bool = True,
     ) -> None:
         CheckitemPublisher.created(card, checklist, checkitem)
+        CheckitemPublisher.board_progress_changed(project, card)
         CardCheckitemActivityTask.card_checkitem_created(user_or_bot, project, card, checkitem)
         if include_bot:
             CardCheckitemBotTask.card_checkitem_created(user_or_bot, project, card, checkitem)
@@ -291,6 +292,7 @@ class CheckitemService(BaseDomainService):
 
         if should_publish:
             CheckitemPublisher.status_changed(project, card, checkitem, timer_record, target_user)
+            CheckitemPublisher.board_progress_changed(project, card)
             self._mark_card_changed_for_unread(card, "checkitem", checkitem.id)
 
         if status == CheckitemStatus.Started:
@@ -328,6 +330,7 @@ class CheckitemService(BaseDomainService):
             self.repo.checkitem.update(checkitem)
 
             CheckitemPublisher.checked_changed(project, card, checkitem)
+            CheckitemPublisher.board_progress_changed(project, card)
             self._mark_card_changed_for_unread(card, "checkitem", checkitem.id)
 
         if checkitem.is_checked:
@@ -403,6 +406,7 @@ class CheckitemService(BaseDomainService):
         self.repo.checkitem.delete(checkitem)
 
         CheckitemPublisher.deleted(project, card, checkitem)
+        CheckitemPublisher.board_progress_changed(project, card)
         self._mark_card_changed_for_unread(card, "checkitem", checkitem.id)
         CardCheckitemActivityTask.card_checkitem_deleted(user_or_bot, project, card, checkitem)
         CardCheckitemBotTask.card_checkitem_deleted(user_or_bot, project, card, checkitem)

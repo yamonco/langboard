@@ -22,6 +22,7 @@ from langboard_shared.domain.models import (  # noqa: E402
     CardAssignedUser,
     CardComment,
     CardRelationship,
+    Checkitem,
     Checklist,
     GlobalCardRelationshipType,
     Project,
@@ -38,6 +39,7 @@ from langboard_shared.infrastructure.repositories.factory.CardRelationshipReposi
     CardRelationshipRepository,
 )
 from langboard_shared.infrastructure.repositories.factory.CardRepository import CardRepository  # noqa: E402
+from langboard_shared.infrastructure.repositories.factory.CheckitemRepository import CheckitemRepository  # noqa: E402
 from langboard_shared.infrastructure.repositories.factory.ChecklistRepository import ChecklistRepository  # noqa: E402
 from langboard_shared.infrastructure.repositories.factory.ProjectLabelRepository import (  # noqa: E402
     ProjectLabelRepository,
@@ -52,6 +54,8 @@ class FakeCard:
         self.id = card_id
         self._uid = uid
         self.archived_at = archived_at
+        self.description = SimpleNamespace(content="")
+        self.is_linked_resource = False
 
     def get_uid(self) -> str:
         return self._uid
@@ -84,6 +88,18 @@ def _service(card_repository: Any, calls: dict[str, Any] | None = None) -> CardS
         card_assigned_user=SimpleNamespace(get_all_by_project=capture("members")),
         card_relationship=SimpleNamespace(get_all_by_project=capture("relationships")),
         project_label=SimpleNamespace(get_all_card_labels_by_project=capture("labels")),
+        checklist=SimpleNamespace(
+            get_all_by_project=lambda _project, *, archive_visible_since: (
+                calls.__setitem__("checklists", archive_visible_since),
+                [],
+            )[1]
+        ),
+        checkitem=SimpleNamespace(
+            get_board_progress_by_project=lambda _project, cutoff: (
+                calls.__setitem__("progress", cutoff),
+                {},
+            )[1]
+        ),
     )
     return CardService(lambda _service: None, lambda _name: None, repository)
 
@@ -108,6 +124,8 @@ def test_board_list_passes_one_visibility_cutoff_to_all_hot_path_queries(
     assert observed["members"] == observed["cutoff"]
     assert observed["relationships"] == observed["cutoff"]
     assert observed["labels"] == observed["cutoff"]
+    assert observed["checklists"] == observed["cutoff"]
+    assert observed["progress"] == observed["cutoff"]
     assert result == [
         {
             "uid": "visible-card",
@@ -116,6 +134,10 @@ def test_board_list_passes_one_visibility_cutoff_to_all_hot_path_queries(
             "relationships": [],
             "labels": [],
             "creator": None,
+            "completed": False,
+            "is_check_card": True,
+            "checklist_total_count": 0,
+            "checklist_completed_count": 0,
         }
     ]
 
@@ -199,6 +221,7 @@ def test_hot_queries_share_the_exact_boundary_and_hide_cold_relationship_endpoin
         ProjectLabel.__table__,
         CardAssignedProjectLabel.__table__,
         Checklist.__table__,
+        Checkitem.__table__,
     ]
     User.metadata.create_all(engine, tables=tables)
     cutoff = SafeDateTime.fromisoformat("2026-09-10T12:00:00+00:00")
@@ -311,6 +334,51 @@ def test_hot_queries_share_the_exact_boundary_and_hide_cold_relationship_endpoin
                 for offset, card_id in enumerate((active_id, boundary_id, cold_id))
             ],
         )
+        connection.execute(
+            Checklist.__table__.insert(),
+            {"id": 600, "card_id": active_id, "title": "Hidden", "order": 1, "is_checked": False, "is_system": True},
+        )
+        connection.execute(
+            Checkitem.__table__.insert(),
+            [
+                {
+                    "id": 601,
+                    "checklist_id": 501,
+                    "title": "Done",
+                    "order": 0,
+                    "is_checked": True,
+                    "status": "stopped",
+                    "accumulated_seconds": 0,
+                },
+                {
+                    "id": 602,
+                    "checklist_id": 501,
+                    "title": "Open",
+                    "order": 1,
+                    "is_checked": False,
+                    "status": "stopped",
+                    "accumulated_seconds": 0,
+                },
+                {
+                    "id": 603,
+                    "checklist_id": 600,
+                    "title": "Hidden",
+                    "order": 0,
+                    "is_checked": True,
+                    "status": "stopped",
+                    "accumulated_seconds": 0,
+                },
+                {
+                    "id": 604,
+                    "checklist_id": 503,
+                    "title": "Cold",
+                    "order": 0,
+                    "is_checked": True,
+                    "status": "stopped",
+                    "accumulated_seconds": 0,
+                },
+            ],
+        )
 
     @contextmanager
     def use_database(*, readonly: bool):
@@ -329,9 +397,11 @@ def test_hot_queries_share_the_exact_boundary_and_hide_cold_relationship_endpoin
     relationships = make_repo(CardRelationshipRepository).get_all_by_project(project, cutoff)
     labels = make_repo(ProjectLabelRepository).get_all_card_labels_by_project(project, cutoff)
     checklists = make_repo(ChecklistRepository).get_all_by_project(project, cutoff)
+    progress = make_repo(CheckitemRepository).get_board_progress_by_project(project, cutoff)
 
     assert {card.id for card, _ in cards} == {active_id, boundary_id}
     assert {assignment.card_id for _, assignment in members} == {active_id, boundary_id}
     assert {relationship.id for relationship, _ in relationships} == {301}
     assert {assignment.card_id for _, assignment in labels} == {active_id, boundary_id}
     assert {checklist.card_id for checklist in checklists} == {active_id, boundary_id}
+    assert progress == {active_id: (2, 1)}

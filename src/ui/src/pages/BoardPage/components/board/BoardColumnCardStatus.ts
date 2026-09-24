@@ -19,6 +19,12 @@ export const calculateChecklistProgress = (checkitems: ReadonlyArray<{ is_checke
     };
 };
 
+export const calculateChecklistProgressFromCounts = (completedCount = 0, totalCount = 0): IBoardCardChecklistProgress => {
+    const total = Math.max(0, totalCount);
+    const completed = Math.min(total, Math.max(0, completedCount));
+    return { completed, total, ratio: total ? completed / total : 0 };
+};
+
 export const calculateDeadlinePressure = ({
     deadlineAt,
     isCompleted = false,

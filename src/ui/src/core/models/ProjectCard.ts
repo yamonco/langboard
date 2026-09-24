@@ -81,6 +81,8 @@ export interface IStore extends Interface {
     // check-card summary flags from the board API
     completed?: bool;
     is_check_card?: bool;
+    checklist_total_count?: number;
+    checklist_completed_count?: number;
 
     // variable set from the client side
     isCollapseOpened?: bool;

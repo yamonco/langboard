@@ -205,6 +205,7 @@ class CardService(BaseDomainService):
             checklist.card_id: checklist.is_checked for checklist in raw_checklists if checklist.is_system
         }
         user_checklist_card_ids = {checklist.card_id for checklist in raw_checklists if not checklist.is_system}
+        checklist_progress_by_card = self.repo.checkitem.get_board_progress_by_project(project, archive_visible_since)
 
         user = user_or_bot if isinstance(user_or_bot, User) else None
         seen_map: dict[int, int] = {}
@@ -237,6 +238,9 @@ class CardService(BaseDomainService):
                 completed=completed_by_card.get(card.id, False),
                 is_check_card=is_check_card,
             )
+            checklist_total, checklist_completed = checklist_progress_by_card.get(card.id, (0, 0))
+            api_card["checklist_total_count"] = checklist_total
+            api_card["checklist_completed_count"] = checklist_completed
             if getattr(card, "is_linked_resource", False):
                 api_card["linked_resource"] = resource_payloads[card.get_uid()]
             if user is not None:
