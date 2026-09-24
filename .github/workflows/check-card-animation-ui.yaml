@@ -1,0 +1,31 @@
+name: Check Card Animation UI
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/check-card-animation-ui.yaml
+      - src/ui/src/assets/styles/main.css
+      - src/ui/src/components/base/Dialog/index.tsx
+      - src/ui/src/pages/BoardPage/BoardCardPage.tsx
+      - src/ui/src/pages/BoardPage/index.tsx
+      - src/ui/src/pages/BoardPage/components/board/BoardColumnCardCollapsible.tsx
+      - src/ui/src/pages/BoardPage/components/board/CardAnimation.*
+  workflow_dispatch:
+
+jobs:
+  lint-and-transform:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: yarn
+          cache-dependency-path: src/ui/yarn.lock
+      - run: corepack enable
+      - run: yarn install --frozen-lockfile
+        working-directory: src/ui
+      - run: yarn eslint src/components/base/Dialog/index.tsx src/pages/BoardPage/BoardCardPage.tsx src/pages/BoardPage/index.tsx src/pages/BoardPage/components/board/BoardColumnCardCollapsible.tsx src/pages/BoardPage/components/board/CardAnimation.ts src/pages/BoardPage/components/board/CardAnimation.test.ts --max-warnings 0
+        working-directory: src/ui
+      - run: node --experimental-strip-types --test src/pages/BoardPage/components/board/CardAnimation.test.ts
+        working-directory: src/ui

@@ -9,9 +9,16 @@ import { cn } from "@/core/utils/ComponentUtils";
 import BoardCard from "@/pages/BoardPage/components/card/BoardCard";
 import { BoardCardSectionSaveProvider } from "@/pages/BoardPage/components/card/BoardCardSectionSaveProvider";
 import { EHttpStatus } from "@langboard/core/enums";
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Navigate, useParams } from "react-router";
 import { useBoardController } from "@/core/providers/BoardController";
+import {
+    CARD_ANIMATION_DURATION_MS,
+    closedTransform,
+    prefersReducedMotion,
+    takeCardOrigin,
+    type CardRect,
+} from "@/pages/BoardPage/components/board/CardAnimation";
 
 interface IBoardCardPageProps {
     projectUID?: string;
@@ -34,6 +41,12 @@ const BoardCardPageComponent = ({
     const projectUID = projectUIDProp ?? params.projectUID;
     const cardUID = cardUIDProp ?? params.cardUID;
     const viewportRef = useRef<HTMLDivElement | null>(null);
+    const contentRef = useRef<HTMLDivElement | null>(null);
+    const originRef = useRef<CardRect | null | undefined>(undefined);
+    const closeTimerRef = useRef<number | null>(null);
+    const closingRef = useRef(false);
+    const finishedCloseRef = useRef(false);
+    const [isClosing, setIsClosing] = useState(false);
     const isCardEditingRef = useRef(false);
     const cancelCardEditRef = useRef<(() => void) | null>(null);
     const [isComposing, setIsComposing] = useState(false);
@@ -43,15 +56,69 @@ const BoardCardPageComponent = ({
     const { selectCardViewType } = useBoardController();
     const shouldHideForCardSelection = !!selectCardViewType;
 
-    if (!projectUID || !cardUID) {
-        return <Navigate to={ROUTES.ERROR(EHttpStatus.HTTP_404_NOT_FOUND)} replace />;
-    }
+    useLayoutEffect(() => {
+        const content = contentRef.current;
+        if (!content || !projectUID || !cardUID) {
+            return;
+        }
 
-    const close = () => {
+        if (originRef.current === undefined) {
+            originRef.current = takeCardOrigin(projectUID, cardUID);
+        }
+        const sourceRect = originRef.current;
+        const targetRect = content.getBoundingClientRect();
+        if (sourceRect && targetRect.width > 0 && targetRect.height > 0) {
+            content.style.setProperty("--card-origin-transform", closedTransform(sourceRect, targetRect));
+        }
+        content.dataset.cardViewerReady = "true";
+    }, [projectUID, cardUID, currentUser]);
+
+    useEffect(
+        () => () => {
+            if (closeTimerRef.current !== null) {
+                window.clearTimeout(closeTimerRef.current);
+            }
+        },
+        []
+    );
+
+    const finishClose = () => {
+        if (!projectUID || finishedCloseRef.current) {
+            return;
+        }
+        finishedCloseRef.current = true;
+        if (closeTimerRef.current !== null) {
+            window.clearTimeout(closeTimerRef.current);
+            closeTimerRef.current = null;
+        }
         navigate({
             pathname: ROUTES.BOARD.MAIN(projectUID),
             search: window.location.search,
         });
+    };
+
+    const close = () => {
+        if (closingRef.current) {
+            return;
+        }
+        closingRef.current = true;
+
+        if (prefersReducedMotion()) {
+            finishClose();
+            return;
+        }
+
+        const source = document.getElementById(`board-card-${cardUID}`);
+        const content = contentRef.current;
+        const sourceRect = source?.getBoundingClientRect();
+        const targetRect = content?.getBoundingClientRect();
+        if (sourceRect && targetRect && sourceRect.width > 0 && targetRect.width > 0 && targetRect.height > 0) {
+            content?.style.setProperty("--card-origin-transform", closedTransform(sourceRect, targetRect));
+        } else {
+            content?.style.removeProperty("--card-origin-transform");
+        }
+        setIsClosing(true);
+        closeTimerRef.current = window.setTimeout(finishClose, CARD_ANIMATION_DURATION_MS + 50);
     };
 
     const handleCloseRequest = () => {
@@ -93,6 +160,10 @@ const BoardCardPageComponent = ({
         };
     }, []);
 
+    if (!projectUID || !cardUID) {
+        return <Navigate to={ROUTES.ERROR(EHttpStatus.HTTP_404_NOT_FOUND)} replace />;
+    }
+
     return (
         <>
             {currentUser && cardUID && (
@@ -107,6 +178,15 @@ const BoardCardPageComponent = ({
                         }}
                     >
                         <Dialog.Content
+                            ref={contentRef}
+                            data-card-viewer=""
+                            data-card-viewer-closing={isClosing ? "true" : undefined}
+                            disableMotionAnimation
+                            onAnimationEnd={(event) => {
+                                if (isClosing && event.target === event.currentTarget && event.animationName === "card-viewer-close") {
+                                    finishClose();
+                                }
+                            }}
                             className={cn(
                                 "border-0 p-0 shadow-none",
                                 isExpanded &&

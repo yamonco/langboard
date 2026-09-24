@@ -4,7 +4,9 @@ import {
     CARD_ANIMATION_DURATION_MS,
     CARD_ANIMATION_EASING,
     cardOpenAnimation,
+    captureCardOrigin,
     closedTransform,
+    takeCardOrigin,
 } from "./CardAnimation.ts";
 
 test("animation duration is in the 160-220ms spec range", () => {
@@ -31,9 +33,16 @@ test("closedTransform computes scale and translate from rects", () => {
     const cardRect = { left: 100, top: 200, width: 300, height: 150 } as DOMRect;
     const targetRect = { left: 0, top: 0, width: 600, height: 400 } as DOMRect;
     const transform = closedTransform(cardRect, targetRect);
-    assert.ok(transform.includes("translate("));
-    assert.ok(transform.includes("scale("));
-    assert.ok(transform.includes("0.5"), "scaleX should be 300/600");
+    assert.equal(transform, "translate(-50px, 75px) scale(0.5, 0.375)");
+});
+
+test("card origin is keyed, copied, and consumed once", () => {
+    const rect = { left: 25, top: 50, width: 180, height: 80 } as DOMRect;
+    captureCardOrigin("board-a", "card-a", rect);
+    assert.deepEqual(takeCardOrigin("board-a", "card-a"), { left: 25, top: 50, width: 180, height: 80 });
+    assert.equal(takeCardOrigin("board-a", "card-a"), null);
+    captureCardOrigin("board-a", "card-a", rect);
+    assert.equal(takeCardOrigin("board-a", "card-b"), null);
 });
 
 test("closedTransform handles zero-size target gracefully", () => {

@@ -58,6 +58,7 @@ interface IContentProps extends React.ComponentPropsWithoutRef<typeof DialogPrim
     viewportClassName?: string;
     nonModalOverlay?: bool;
     disablePortal?: bool;
+    disableMotionAnimation?: bool;
     disableOverlayClick?: bool;
     onOverlayInteract?: (
         event:
@@ -82,6 +83,7 @@ const Content = React.forwardRef<React.ComponentRef<typeof DialogPrimitive.Conte
             viewportClassName,
             nonModalOverlay,
             disablePortal,
+            disableMotionAnimation,
             disableOverlayClick,
             onPointerDownOutside,
             onOverlayInteract,
@@ -140,9 +142,9 @@ const Content = React.forwardRef<React.ComponentRef<typeof DialogPrimitive.Conte
                 viewportAsTable
             >
                 <motion.div
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.95 }}
+                    initial={disableMotionAnimation ? false : { opacity: 0, scale: 0.95 }}
+                    animate={disableMotionAnimation ? undefined : { opacity: 1, scale: 1 }}
+                    exit={disableMotionAnimation ? undefined : { opacity: 0, scale: 0.95 }}
                     transition={{ duration: 0.2 }}
                     className={cn("z-50 flex size-full items-center justify-center shadow-lg", contentWrapperClassName)}
                     ref={motionRef}
