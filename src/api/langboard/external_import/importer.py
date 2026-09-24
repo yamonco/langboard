@@ -373,20 +373,18 @@ class ExternalWorkImporter:
         missing = external_ids - links_by_id.keys()
         if missing:
             raise ExternalImportError(f"unknown SCIM principal: {sorted(missing)[0]}")
-        memberships = db.exec(
-            SqlBuilder.select.table(ProjectAssignedUser).where(
-                (ProjectAssignedUser.project_id == project.id)
-                & ProjectAssignedUser.user_id.in_(link.user_id for link in links)
-            )
+        members = db.exec(
+            SqlBuilder.select.tables(User, ProjectAssignedUser)
+            .join(ProjectAssignedUser, ProjectAssignedUser.user_id == User.id)
+            .where((ProjectAssignedUser.project_id == project.id) & User.id.in_(link.user_id for link in links))
         ).all()
-        memberships_by_user = {item.user_id: item for item in memberships}
+        members_by_user = {user.id: (user, membership) for user, membership in members}
         principals = {}
         for external_id, link in links_by_id.items():
-            membership = memberships_by_user.get(link.user_id)
-            user = db.exec(SqlBuilder.select.table(User).where(User.id == link.user_id).limit(1)).first()
-            if not membership or not user:
+            member = members_by_user.get(link.user_id)
+            if member is None:
                 raise ExternalImportError(f"SCIM principal is not an active project member: {external_id}")
-            principals[external_id] = (user, membership)
+            principals[external_id] = member
         return principals
 
     @staticmethod
