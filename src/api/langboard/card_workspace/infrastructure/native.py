@@ -275,41 +275,6 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
         )
         return {str(key): str(value) for key, value in metadata.items()}
 
-    def create_card_in_leftmost_column(
-        self,
-        project_uid: str,
-        title: str,
-        description: str | None,
-        assign_user_uids: list[str] | None,
-    ) -> dict[str, Any]:
-        project = self._service.project.get_by_id_like(project_uid)
-        if project is None:
-            raise ValueError("Project not found")
-        if assign_user_uids is not None:
-            self._require_members(project, assign_user_uids)
-        columns = sorted(
-            (
-                column
-                for column in self._service.project_column.get_api_list_by_project(project)
-                if not column["is_archive"]
-            ),
-            key=lambda column: (column["order"], column["uid"]),
-        )
-        if not columns:
-            raise ValueError("Project has no active column")
-        result = self._service.card.create(
-            self._actor,
-            project,
-            columns[0]["uid"],
-            title,
-            EditorContentModel(content=description or ""),
-            assign_user_uids,
-        )
-        if result is None:
-            raise RuntimeError("Failed to create card")
-        _, card = result
-        return {"card": card, "column": {"uid": columns[0]["uid"], "name": columns[0]["name"]}}
-
     def patch_card_description(
         self,
         project_uid: str,
@@ -363,38 +328,6 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
         if not result:
             raise RuntimeError("Validated card description replacement failed")
         return description
-
-    def cardify_card_checkitem(
-        self,
-        project_uid: str,
-        card_uid: str,
-        checkitem_uid: str,
-        project_column_uid: str,
-    ) -> dict[str, Any]:
-        """Cardify an existing item and return the created native card."""
-
-        project, _ = self._ensure_project_card(project_uid, card_uid)
-        item = self._ensure_checkitem(project_uid, card_uid, checkitem_uid)
-        if item.cardified_id:
-            raise ValueError("Checkitem is already cardified")
-        column = self._service.project_column.get_by_id_like(project_column_uid)
-        if column is None or column.project_id != project.id or column.is_archive:
-            raise ValueError("Destination column is not active in the source project")
-        if not self._service.checkitem.cardify(
-            self._actor,
-            project_uid,
-            card_uid,
-            item,
-            project_column_uid,
-        ):
-            raise ValueError("Checkitem could not be cardified in the requested column")
-        # The native service resolves its own model instance before persisting.
-        # Re-read the source instead of relying on mutation of our stale object.
-        item = self._ensure_checkitem(project_uid, card_uid, checkitem_uid)
-        card = self._service.card.get_by_id_like(item.cardified_id)
-        if card is None:
-            raise RuntimeError("Cardified card could not be read back")
-        return card.board_api_response(0, [], [], [])
 
     def replace_card_people_and_labels(
         self,
