@@ -10,11 +10,16 @@ from alembic.operations import Operations
 from sqlalchemy import create_engine, text
 
 
+os.environ.setdefault("PROJECT_NAME", "langboard")
+from langboard_shared.core.db.Models import BaseDbModel
+
+
 DATABASE_URL = os.getenv("LANGBOARD_OUTBOX_TEST_DATABASE_URL")
 MIGRATION = (
     Path(__file__).parents[2]
     / "langboard/migrations/versions/20260924220000-7ad15b1d0b70.py"
 )
+RECONCILIATION = Path(__file__).parents[4] / "scripts/reconcile_execution_squash.sql"
 
 
 @pytest.mark.skipif(not DATABASE_URL, reason="dedicated PostgreSQL proof URL not set")
@@ -45,7 +50,7 @@ def test_fresh_install_creates_final_schema_without_transient_objects() -> None:
                 "column_semantics jsonb NOT NULL, prerequisite_relationship_type_uid text, "
                 "webhook_uid text, events jsonb NOT NULL)"
             ))
-            with Operations.context(MigrationContext.configure(connection)):
+            with Operations.context(MigrationContext.configure(connection, opts={"target_metadata": BaseDbModel.metadata})):
                 migration.upgrade()
             outbox_columns = {
                 row[0]
@@ -101,6 +106,59 @@ def test_fresh_install_creates_final_schema_without_transient_objects() -> None:
         with engine.begin() as connection:
             connection.execute(text(f"DROP SCHEMA IF EXISTS {schema} CASCADE"))
         engine.dispose()
+
+
+@pytest.mark.skipif(not DATABASE_URL, reason="dedicated PostgreSQL proof URL not set")
+def test_legacy_execution_squash_reconciliation_preserves_rows_and_matches_fresh_names() -> None:
+    """A deployed legacy canary can adopt the squashed history without losing work."""
+    import psycopg
+
+    spec = importlib.util.spec_from_file_location("execution_reconcile_migration", MIGRATION)
+    assert spec is not None and spec.loader is not None
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+    schema = f"outbox_reconcile_{uuid4().hex}"
+    admin = create_engine(DATABASE_URL)
+    with admin.begin() as connection:
+        connection.execute(text(f"CREATE SCHEMA {schema}"))
+    engine = create_engine(DATABASE_URL, connect_args={"options": f"-csearch_path={schema}"})
+    try:
+        with engine.begin() as connection:
+            connection.execute(text("CREATE TABLE card (id bigint PRIMARY KEY)"))
+            connection.execute(text("CREATE TABLE project_execution_binding (id bigint PRIMARY KEY)"))
+            connection.execute(text("CREATE TABLE alembic_version (version_num varchar(32) NOT NULL)"))
+            connection.execute(text("INSERT INTO alembic_version VALUES ('b3d5e7f9a1c2')"))
+            with Operations.context(MigrationContext.configure(connection, opts={"target_metadata": BaseDbModel.metadata})):
+                migration.upgrade()
+            connection.execute(text("ALTER TABLE card_execution_generation "
+                                    "RENAME CONSTRAINT pk_card_execution_generation TO pk_card_execution_readiness"))
+            connection.execute(text("ALTER TABLE card_execution_generation "
+                                    "RENAME CONSTRAINT fk_card_execution_generation_card_id_card "
+                                    "TO fk_card_execution_readiness_card_id_card"))
+            connection.execute(text("INSERT INTO card VALUES (101)"))
+            connection.execute(text("INSERT INTO card_execution_generation VALUES (101, 4)"))
+            connection.execute(text("INSERT INTO execution_outbox "
+                                    "(project_id, card_id, execution_generation, state) "
+                                    "VALUES (7, 101, 4, 'delivered')"))
+        # The script owns its transaction, just as psql does during the canary rollout.
+        dsn = DATABASE_URL.replace("postgresql+psycopg://", "postgresql://", 1)
+        with psycopg.connect(dsn, autocommit=True, options=f"-csearch_path={schema}") as connection:
+            connection.execute(RECONCILIATION.read_text())
+            assert connection.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "7ad15b1d0b70"
+            assert connection.execute("SELECT execution_generation FROM card_execution_generation "
+                                      "WHERE card_id = 101").fetchone()[0] == 4
+            assert connection.execute("SELECT state FROM execution_outbox WHERE card_id = 101").fetchone()[0] == "delivered"
+            constraints = {row[0] for row in connection.execute(
+                "SELECT conname FROM pg_constraint WHERE conrelid = 'card_execution_generation'::regclass"
+            )}
+            assert constraints == {"pk_card_execution_generation", "fk_card_execution_generation_card_id_card"}
+            with pytest.raises(psycopg.errors.RaiseException):
+                connection.execute(RECONCILIATION.read_text())
+    finally:
+        engine.dispose()
+        with admin.begin() as connection:
+            connection.execute(text(f"DROP SCHEMA IF EXISTS {schema} CASCADE"))
+        admin.dispose()
 
 
 @pytest.mark.skipif(not DATABASE_URL, reason="dedicated PostgreSQL proof URL not set")
