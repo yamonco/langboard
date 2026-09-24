@@ -8,7 +8,6 @@ from langboard.card_workspace.application.commands import (
     provision_project,
     replace_card_description,
     set_card_people_and_labels,
-    update_card_attachment,
 )
 from langboard.card_workspace.domain import CardGraphEdge, CardGraphNewCard, ExactTextReplacement
 
@@ -85,25 +84,6 @@ class FakeCommandPort:
         self.calls.append(("replace_card_people_and_labels", (project_uid, card_uid, assign_user_uids, label_uids)))
         return {"member_uids": assign_user_uids or [], "labels": []}
 
-    def update_card_attachment(
-        self,
-        project_uid: str,
-        card_uid: str,
-        attachment_uid: str,
-        name: str | None,
-        order: int | None,
-    ) -> list[dict[str, Any]]:
-        self.calls.append(("update_card_attachment", (project_uid, card_uid, attachment_uid, name, order)))
-        return [
-            {
-                "uid": attachment_uid,
-                "name": name or "file.pdf",
-                "order": order or 0,
-                "storage_key": "private/object",
-                "user": {"uid": "u1", "username": "safe", "email": "hidden@example.com"},
-            }
-        ]
-
 
 def test_create_commands_normalize_before_calling_port() -> None:
     """The application owns input normalization while the adapter owns native mechanics."""
@@ -175,7 +155,6 @@ def test_description_replacement_supports_initialization_and_clearing_without_ec
 @pytest.mark.parametrize(
     ("invoke", "message"),
     [
-        (lambda port: update_card_attachment(port, "p", "c", "a", " renamed ", -1), "non-negative"),
         (
             lambda port: set_card_people_and_labels(port, "p", "c", ["u1", "u1"], None),
             "duplicates",
@@ -191,19 +170,6 @@ def test_invalid_multi_field_mutations_never_reach_port(invoke: Any, message: st
         invoke(port)
 
     assert port.calls == []
-
-
-def test_attachment_mutation_response_is_bounded_and_strips_private_fields() -> None:
-    """Attachment mutations never echo storage internals or user email."""
-
-    port = FakeCommandPort()
-
-    response = update_card_attachment(port, "p", "c", "a", "report.pdf", 2)
-    item = response["attachments"].items[0]
-
-    assert item["user"] == {"uid": "u1", "username": "safe"}
-    assert "storage_key" not in item
-    assert response["attachments"].limit == 25
 
 
 def test_graph_patch_supports_a_branched_tree_of_existing_and_new_cards() -> None:

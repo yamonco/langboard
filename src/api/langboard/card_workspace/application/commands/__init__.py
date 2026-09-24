@@ -5,7 +5,6 @@ from ...domain import (
     MAX_CHECKITEMS_PER_CHECKLIST,
     MAX_GRAPH_EDGE_CHANGES,
     MAX_GRAPH_NEW_CARDS,
-    CardBundleSection,
     CardDescriptionPatch,
     CardGraphEdge,
     CardGraphNewCard,
@@ -25,8 +24,6 @@ from ...domain import (
 )
 from ..ports import CardWorkspaceCommandPort
 from ..projections import (
-    bounded_items,
-    public_attachment,
     public_card_summary,
     public_checklist,
     public_label,
@@ -206,38 +203,6 @@ def set_card_relationships(
         normalized.append(pair)
     result = port.replace_card_relationships(project_uid, card_uid, is_parent, normalized)
     return {"relationships": [public_relationship(item) for item in result][:25]}
-
-
-def update_card_attachment(
-    port: CardWorkspaceCommandPort,
-    project_uid: str,
-    card_uid: str,
-    attachment_uid: str,
-    name: str | None,
-    order: int | None,
-) -> dict[str, Any]:
-    """Validate all attachment fields before applying any mutation."""
-
-    if name is None and order is None:
-        raise ValueError("At least one attachment field is required")
-    normalized_name = _required_text(name, "Attachment name") if name is not None else None
-    if order is not None and (isinstance(order, bool) or order < 0):
-        raise ValueError("Attachment order must be a non-negative integer")
-    attachments = port.update_card_attachment(project_uid, card_uid, attachment_uid, normalized_name, order)
-    return {
-        "attachments": bounded_items(
-            [public_attachment(item) for item in attachments], CardBundleSection.Attachments, 25
-        )
-    }
-
-
-def delete_card_attachment(
-    port: CardWorkspaceCommandPort, project_uid: str, card_uid: str, attachment_uid: str
-) -> dict[str, bool]:
-    """Delete one attachment without returning file or actor details."""
-
-    port.delete_card_attachment(project_uid, card_uid, attachment_uid)
-    return {"deleted": True}
 
 
 def reconcile_card_checklist_projection(

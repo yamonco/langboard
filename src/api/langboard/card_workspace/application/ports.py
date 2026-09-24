@@ -154,19 +154,6 @@ class CardWorkspaceCommandPort(Protocol):
     ) -> list[dict[str, Any]]:
         """Validate all relationship edges before replacing them."""
 
-    def update_card_attachment(
-        self,
-        project_uid: str,
-        card_uid: str,
-        attachment_uid: str,
-        name: str | None,
-        order: int | None,
-    ) -> list[dict[str, Any]]:
-        """Validate and update attachment metadata."""
-
-    def delete_card_attachment(self, project_uid: str, card_uid: str, attachment_uid: str) -> None:
-        """Delete a card attachment."""
-
     def reconcile_card_checklist_projection(
         self,
         project_uid: str,
