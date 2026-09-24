@@ -77,15 +77,69 @@ def _receipt_rows(db: DbSession, card_id: int):
 
 def receipt_history(card_id: int) -> list[dict]:
     with DbSession.use(readonly=False) as db:
+        projections = db.exec(
+            select(
+                text("execution_generation"),
+                text("item_uid"),
+                text("evidence_kind"),
+                text("evidence_refs"),
+                text("is_checked"),
+            )
+            .select_from(text("execution_checklist_projection"))
+            .where(text("card_id = :card_id"))
+            .order_by(text("execution_generation DESC, item_uid")),
+            params={"card_id": card_id},
+        ).all()
+        by_generation: dict[int, list[dict]] = {}
+        for generation, item_uid, kind, refs, is_checked in projections:
+            by_generation.setdefault(generation, []).append(
+                {"item_uid": item_uid, "kind": kind, "refs": refs, "is_checked": is_checked}
+            )
         return [
             {
                 "generation": generation,
                 "idempotency_key": key,
                 "receipt": payload,
+                "checklist_projection": by_generation.get(generation, []),
                 "created_at": created_at.isoformat(),
             }
             for generation, key, payload, created_at in _receipt_rows(db, card_id)
         ]
+
+
+def _reconcile_machine_checklist(db: DbSession, card_id: int, generation: int, payload: dict) -> None:
+    """Project only receipt evidence; never mutate user-authored checkitems.
+
+    A matching PR artifact and `pr_submitted` claim form the one deterministic
+    auto-check rule. Other claims stay visible but unchecked for human review.
+    Retrying a saved receipt recreates a missing projection row without toggles.
+    """
+    pr_urls = {artifact["url"] for artifact in payload["artifacts"] if artifact["type"] == "pull_request"}
+    reviewable = payload["status"] in {"review_ready", "completed", "success"}
+    for evidence in payload["checklist_evidence"]:
+        checked = reviewable and evidence["kind"] == "pr_submitted" and bool(
+            pr_urls.intersection(evidence["refs"])
+        )
+        db.exec(
+            text("""
+                INSERT INTO execution_checklist_projection(
+                    card_id, execution_generation, item_uid, evidence_kind, evidence_refs, is_checked
+                ) VALUES (
+                    :card_id, :generation, :item_uid, :kind, CAST(:refs AS jsonb), :checked
+                ) ON CONFLICT (card_id, execution_generation, item_uid) DO UPDATE SET
+                    evidence_kind = EXCLUDED.evidence_kind,
+                    evidence_refs = EXCLUDED.evidence_refs,
+                    is_checked = EXCLUDED.is_checked
+            """),
+            params={
+                "card_id": card_id,
+                "generation": generation,
+                "item_uid": evidence["item_uid"],
+                "kind": evidence["kind"],
+                "refs": dumps(evidence["refs"]),
+                "checked": checked,
+            },
+        )
 
 
 def _move_to_review(db: DbSession, card_id: int, project_id: int) -> bool:
@@ -197,6 +251,7 @@ def put_execution_receipt(
         ).first()
         if saved is None or saved[0] != expected_key or saved[1] != content_hash:
             raise ApiException.Conflict_409()
+        _reconcile_machine_checklist(db, card.id, generation, saved[2])
         if created and payload["status"] in {"review_ready", "completed", "success"}:
             _move_to_review(db, card.id, project.id)
     return JsonResponse(content={"receipt": saved[2], "created": created, "generation": generation})

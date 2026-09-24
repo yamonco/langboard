@@ -29,6 +29,7 @@ export interface IGetCardDetailsResponse {
     execution_receipts: {
         generation: number;
         created_at: string;
+        checklist_projection: { item_uid: string; kind: string; refs: string[]; is_checked: boolean }[];
         receipt: {
             status: string;
             summary: string;
