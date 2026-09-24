@@ -1,0 +1,29 @@
+name: Check Card Workspace
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/check-card-workspace.yaml
+      - src/api/langboard/card_workspace/**
+      - src/api/langboard/mcp_tools/CardMcp.py
+      - src/api/tests/card_workspace/**
+      - src/api/tests/mcp_integration/test_card_mcp_contract.py
+      - src/api/tests/mcp_integration/test_card_workspace_transport.py
+  workflow_dispatch:
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    env:
+      PROJECT_NAME: langboard
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: uv sync --frozen
+      - run: uv run --no-sync ruff check src/api/langboard/card_workspace src/api/langboard/mcp_tools/CardMcp.py src/api/tests/card_workspace src/api/tests/mcp_integration/test_card_mcp_contract.py src/api/tests/mcp_integration/test_card_workspace_transport.py
+      - run: uv run --no-sync pytest -q src/api/tests/card_workspace/test_commands.py src/api/tests/card_workspace/test_queries.py src/api/tests/mcp_integration/test_card_mcp_contract.py src/api/tests/mcp_integration/test_card_workspace_transport.py
