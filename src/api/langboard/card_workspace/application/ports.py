@@ -169,15 +169,6 @@ class CardWorkspaceCommandPort(Protocol):
 
         ...
 
-    def add_card_comment(self, project_uid: str, card_uid: str, content: str) -> dict[str, Any]:
-        """Create a comment."""
-
-    def update_card_comment(self, project_uid: str, card_uid: str, comment_uid: str, content: str) -> dict[str, Any]:
-        """Update an owned comment."""
-
-    def delete_card_comment(self, project_uid: str, card_uid: str, comment_uid: str) -> None:
-        """Delete an owned comment."""
-
     def create_card_checklist(self, project_uid: str, card_uid: str, title: str) -> dict[str, Any]:
         """Create a checklist."""
 

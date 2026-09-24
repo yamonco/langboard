@@ -23,7 +23,6 @@ from ..card_workspace.application import (
     ProjectCardListResponse,
     ProjectIdentityResponse,
 )
-from ..card_workspace.application import add_card_comment as add_comment
 from ..card_workspace.application import apply_card_graph_patch as apply_graph_patch
 from ..card_workspace.application import cardify_card_checkitem as cardify_checkitem
 from ..card_workspace.application import create_card_checkitem as create_checkitem
@@ -33,7 +32,6 @@ from ..card_workspace.application import create_card_in_leftmost_column as creat
 from ..card_workspace.application import delete_card_attachment as delete_attachment
 from ..card_workspace.application import delete_card_checkitem as delete_checkitem
 from ..card_workspace.application import delete_card_checklist as delete_checklist
-from ..card_workspace.application import delete_card_comment as delete_comment
 from ..card_workspace.application import delete_card_content_block as delete_content_block
 from ..card_workspace.application import delete_public_card_metadata as delete_public_metadata
 from ..card_workspace.application import get_card_bundle as query_card_bundle
@@ -52,9 +50,9 @@ from ..card_workspace.application import set_card_relationships as replace_relat
 from ..card_workspace.application import update_card_attachment as update_attachment
 from ..card_workspace.application import update_card_checkitem as update_checkitem
 from ..card_workspace.application import update_card_checklist as update_checklist
-from ..card_workspace.application import update_card_comment as update_comment
 from ..card_workspace.application import update_card_content_block as update_content_block
 from ..card_workspace.application.dtos import BoundedItemsDto
+from ..card_workspace.application.projections import public_comment
 from ..card_workspace.domain import (
     CardBundleInclude,
     CardGraphEdge,
@@ -298,9 +296,11 @@ def upload_card_attachment(
 
     return result.api_response()
 
+
 # ---------------------------------------------------------------------------
 # Safe native card workspace tools
 # ---------------------------------------------------------------------------
+
 
 @McpTool.add("user", description="Assign the authenticated user to this card, preserving every existing assignee.")
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
@@ -601,7 +601,14 @@ def add_card_comment(
 ) -> dict[str, Any]:
     """Add a native card comment."""
 
-    return add_comment(_adapter(user_or_bot, service), project_uid, card_uid, content)
+    if not isinstance(content, str) or not content.strip():
+        raise ValueError("Comment is required")
+    comment = service.card_comment.create(
+        user_or_bot, project_uid, card_uid, EditorContentModel(content=content.strip())
+    )
+    if comment is None:
+        raise ValueError("Card not found in project")
+    return {"comment": public_comment(comment.api_response())}
 
 
 @McpTool.add(description="Toggle one reaction supported by Langboard on a card comment.")
@@ -637,7 +644,14 @@ def update_card_comment(
 ) -> dict[str, Any]:
     """Update an owned native comment."""
 
-    return update_comment(_adapter(user_or_bot, service), project_uid, card_uid, comment_uid, content)
+    if not isinstance(content, str) or not content.strip():
+        raise ValueError("Comment is required")
+    comment = service.card_comment.update(
+        user_or_bot, project_uid, card_uid, comment_uid, EditorContentModel(content=content.strip())
+    )
+    if comment is None:
+        raise PermissionError("Comment not found or not owned by current actor")
+    return {"comment": public_comment(comment.api_response())}
 
 
 @McpTool.add(description="Delete a card comment owned by the current actor.")
@@ -651,7 +665,9 @@ def delete_card_comment(
 ) -> dict[str, bool]:
     """Delete an owned native comment."""
 
-    return delete_comment(_adapter(user_or_bot, service), project_uid, card_uid, comment_uid)
+    if not service.card_comment.delete(user_or_bot, project_uid, card_uid, comment_uid):
+        raise PermissionError("Comment not found or not owned by current actor")
+    return {"deleted": True}
 
 
 @McpTool.add(description="Create a checklist on a card.")
@@ -1004,9 +1020,7 @@ def delete_card_content_block(
     return delete_content_block(_adapter(user_or_bot, service), project_uid, card_uid, block_uid)
 
 
-@McpTool.add(
-    description="Reposition a card content block using after_block_uid or an explicit order (not both)."
-)
+@McpTool.add(description="Reposition a card content block using after_block_uid or an explicit order (not both).")
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
 def move_card_content_block(
     project_uid: str,
@@ -1019,6 +1033,4 @@ def move_card_content_block(
 ) -> dict[str, bool]:
     """Move one content block within its card."""
 
-    return move_content_block(
-        _adapter(user_or_bot, service), project_uid, card_uid, block_uid, after_block_uid, order
-    )
+    return move_content_block(_adapter(user_or_bot, service), project_uid, card_uid, block_uid, after_block_uid, order)

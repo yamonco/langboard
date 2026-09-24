@@ -1,7 +1,6 @@
 """Card workspace commands, queries, ports, and typed responses."""
 
 from .commands import (
-    add_card_comment,
     apply_card_graph_patch,
     cardify_card_checkitem,
     create_card_checkitem,
@@ -11,7 +10,6 @@ from .commands import (
     delete_card_attachment,
     delete_card_checkitem,
     delete_card_checklist,
-    delete_card_comment,
     delete_card_content_block,
     delete_public_card_metadata,
     move_card_content_block,
@@ -25,7 +23,6 @@ from .commands import (
     update_card_attachment,
     update_card_checkitem,
     update_card_checklist,
-    update_card_comment,
     update_card_content_block,
 )
 from .dtos import CardBundleResponse, ProjectCardListResponse, ProjectIdentityResponse
@@ -42,7 +39,6 @@ __all__ = [
     "CardBundleResponse",
     "ProjectCardListResponse",
     "ProjectIdentityResponse",
-    "add_card_comment",
     "apply_card_graph_patch",
     "cardify_card_checkitem",
     "create_card_content_block",
@@ -56,7 +52,6 @@ __all__ = [
     "delete_card_attachment",
     "delete_card_checkitem",
     "delete_card_checklist",
-    "delete_card_comment",
     "delete_public_card_metadata",
     "get_card_bundle",
     "get_project_identity",
@@ -72,5 +67,4 @@ __all__ = [
     "update_card_attachment",
     "update_card_checkitem",
     "update_card_checklist",
-    "update_card_comment",
 ]

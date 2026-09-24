@@ -63,6 +63,39 @@ def test_attachment_upload_requires_card_update_permission() -> None:
     assert actions == [ProjectRoleAction.CardUpdate.value]
 
 
+def test_comment_tools_use_native_owner_without_workspace_adapter(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[str, str]] = []
+    comment = SimpleNamespace(api_response=lambda: {"uid": "comment", "content": "hello"})
+    native = SimpleNamespace(
+        create=lambda actor, project, card, body: (calls.append(("create", body.content)) or comment),
+        update=lambda actor, project, card, uid, body: (calls.append(("update", body.content)) or comment),
+        delete=lambda actor, project, card, uid: (calls.append(("delete", uid)) or True),
+    )
+    service = SimpleNamespace(card_comment=native)
+    monkeypatch.setattr(CardMcp, "_adapter", lambda *args: pytest.fail("workspace adapter used"))
+
+    assert CardMcp.add_card_comment("project", "card", " hello ", None, service)["comment"]["uid"] == "comment"
+    assert (
+        CardMcp.update_card_comment("project", "card", "comment", " hello ", None, service)["comment"]["uid"]
+        == "comment"
+    )
+    assert CardMcp.delete_card_comment("project", "card", "comment", None, service) == {"deleted": True}
+    assert calls == [("create", "hello"), ("update", "hello"), ("delete", "comment")]
+
+    with pytest.raises(ValueError, match="Comment is required"):
+        CardMcp.add_card_comment("project", "card", " ", None, service)
+
+    missing = SimpleNamespace(
+        card_comment=SimpleNamespace(create=lambda *args: None, update=lambda *args: None, delete=lambda *args: False)
+    )
+    with pytest.raises(ValueError, match="Card not found in project"):
+        CardMcp.add_card_comment("project", "card", "hello", None, missing)
+    with pytest.raises(PermissionError, match="not owned"):
+        CardMcp.update_card_comment("project", "card", "comment", "hello", None, missing)
+    with pytest.raises(PermissionError, match="not owned"):
+        CardMcp.delete_card_comment("project", "card", "comment", None, missing)
+
+
 @pytest.mark.parametrize("reason", ["stale revision", "missing fragment", "ambiguous fragment"])
 def test_description_conflict_is_transport_validation(monkeypatch: pytest.MonkeyPatch, reason: str) -> None:
     """Only a known pre-save conflict becomes a recoverable MCP validation error."""
