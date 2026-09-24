@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
-import { motion, useMotionValue, useSpring, useTransform } from "framer-motion";
+import { motion, useMotionValue, useSpring, useTransform, type MotionValue } from "framer-motion";
 import type { PropsWithChildren } from "react";
 import React, { useRef } from "react";
 import { VariantProps, tv } from "tailwind-variants";
@@ -20,6 +20,7 @@ export interface DockProps extends VariantProps<typeof DockVariants> {
 
 const DEFAULT_MAGNIFICATION = 60;
 const DEFAULT_DISTANCE = 140;
+const MouseXContext = React.createContext<MotionValue<number> | null>(null);
 
 const DockVariants = tv(
     {
@@ -74,21 +75,23 @@ const Root = React.forwardRef<HTMLDivElement, DockProps>(
         };
 
         return (
-            <motion.div
-                ref={ref}
-                onMouseMove={(e) => mouseX.set(e.pageX)}
-                onMouseLeave={() => mouseX.set(Infinity)}
-                {...props}
-                className={cn(
-                    DockVariants({ size }),
-                    direction === "top" ? "items-start" : "",
-                    direction === "middle" ? "items-center" : "",
-                    direction === "bottom" ? "items-end" : "",
-                    className
-                )}
-            >
-                {renderChildren()}
-            </motion.div>
+            <MouseXContext.Provider value={mouseX}>
+                <motion.div
+                    ref={ref}
+                    onMouseMove={(e) => mouseX.set(e.pageX)}
+                    onMouseLeave={() => mouseX.set(Infinity)}
+                    {...props}
+                    className={cn(
+                        DockVariants({ size }),
+                        direction === "top" ? "items-start" : "",
+                        direction === "middle" ? "items-center" : "",
+                        direction === "bottom" ? "items-end" : "",
+                        className
+                    )}
+                >
+                    {renderChildren()}
+                </motion.div>
+            </MouseXContext.Provider>
         );
     }
 );
@@ -107,8 +110,10 @@ export interface DockIconProps {
 
 function Icon({ magnification = DEFAULT_MAGNIFICATION, distance = DEFAULT_DISTANCE, mouseX, className, children, ...props }: DockIconProps) {
     const ref = useRef<HTMLDivElement>(null);
+    const contextMouseX = React.useContext(MouseXContext);
+    const fallbackMouseX = useMotionValue(Infinity);
 
-    const distanceCalc = useTransform(mouseX, (val: number) => {
+    const distanceCalc = useTransform(mouseX ?? contextMouseX ?? fallbackMouseX, (val: number) => {
         const bounds = ref.current?.getBoundingClientRect() ?? { x: 0, width: 0 };
 
         return val - bounds.x - bounds.width / 2;
