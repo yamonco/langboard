@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { isAxiosError } from "axios";
 import { dropTargetForElements } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
 import { Routing } from "@langboard/core/constants";
@@ -14,6 +14,8 @@ import setupApiErrorHandler from "@/core/helpers/setupApiErrorHandler";
 import { Project, ProjectCard, ProjectCheckitem } from "@/core/models";
 import { cn } from "@/core/utils/ComponentUtils";
 import { Utils } from "@langboard/core/utils";
+import { ROUTES } from "@/core/routing/constants";
+import { usePageNavigateRef } from "@/core/hooks/usePageNavigate";
 import { BOARD_DND_SYMBOL_SET } from "@/pages/BoardPage/components/board/BoardConstants";
 import { draggedBoardCard } from "@/pages/BoardPage/components/board/BoardGestureData";
 
@@ -59,6 +61,7 @@ export default function BoardWorkIsland({
     dragging: bool;
 }) {
     const targetRef = useRef<HTMLButtonElement>(null);
+    const navigate = usePageNavigateRef();
     const [over, setOver] = useState(false);
     const [activeWork, setActiveWork] = useState<IActiveWork[]>([]);
     const [candidateCard, setCandidateCard] = useState<ProjectCard.TModel>();
@@ -192,7 +195,7 @@ export default function BoardWorkIsland({
                 aria-label={over ? "Release to start work" : currentLabel}
                 onClick={() => {
                     if (current) {
-                        window.dispatchEvent(new CustomEvent("langboard:open-my-work"));
+                        navigate(ROUTES.DASHBOARD.TRACKING, { smooth: true });
                     }
                 }}
             >
