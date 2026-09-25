@@ -195,7 +195,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-    [data-card-viewer][data-state="open"],
+    [data-card-viewer][data-card-viewer-ready="true"][data-state="open"]:not([data-card-viewer-closing="true"]),
     [data-card-viewer][data-card-viewer-closing="true"] {
         animation: none;
         opacity: 1;
