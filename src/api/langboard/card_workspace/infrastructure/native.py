@@ -7,6 +7,8 @@ from langboard_shared.core.db import EditorContentModel
 from langboard_shared.core.exceptions.CardDescriptionConflict import CardDescriptionConflict
 from langboard_shared.core.types import SafeDateTime
 from langboard_shared.domain.models import Bot, CardMetadata, User
+from langboard_shared.domain.models.bases import ALL_GRANTED
+from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.domain.services import DomainService
 from langboard_shared.Env import Env
 from ..application.ports import (
@@ -166,12 +168,16 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
             if "metadata" in requested_sections
             else {}
         )
+        can_read_automation = isinstance(self._actor, Bot)
+        if isinstance(self._actor, User):
+            actions = self._service.project.get_user_role_actions_by_project(self._actor, project)
+            can_read_automation = ALL_GRANTED in actions or ProjectRoleAction.Update.value in actions
         bot_scopes = (
             self._bounded_source(
                 self._service.card.get_api_bot_scope_list(project, card, limit=_SOURCE_QUERY_LIMIT),
                 "bot scopes",
             )
-            if "automation.bot_scopes" in requested_sections
+            if can_read_automation and "automation.bot_scopes" in requested_sections
             else []
         )
         bot_schedules = (
@@ -179,7 +185,7 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
                 self._service.card.get_api_bot_schedule_list(project, card, limit=_SOURCE_QUERY_LIMIT),
                 "bot schedules",
             )
-            if "automation.bot_schedules" in requested_sections
+            if can_read_automation and "automation.bot_schedules" in requested_sections
             else []
         )
         return CardBundleSource(
