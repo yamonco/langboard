@@ -532,17 +532,6 @@ function BoardProxyDisplay({ pageRoute, isFetching, project }: IBoardProxyDispla
             },
         },
         {
-            name: t("board.Relationship graph"),
-            icon: "git-fork",
-            active: boardViewType === "graph",
-            hidden: !!selectCardViewType,
-            onClick: () => {
-                setActiveSidePanel(undefined);
-                setBoardViewType("graph");
-                navigate(ROUTES.BOARD.GRAPH(project.uid), { smooth: true });
-            },
-        },
-        {
             name: t("settings.Bots"),
             icon: "bot",
             badge: pendingGraphApprovalBadge,
