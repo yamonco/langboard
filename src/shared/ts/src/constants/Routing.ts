@@ -69,6 +69,7 @@ const API = {
         CREATE_PROJECT: "/dashboard/projects/new",
         CARDS: "/dashboard/cards",
         TRACKING: "/dashboard/tracking",
+        ACTIVE_WORK: "/dashboard/work/active",
     },
     BOARD: {
         GET: "/board/{uid}",
