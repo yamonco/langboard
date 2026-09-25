@@ -133,6 +133,8 @@ export default function BoardWorkIsland({
                     return;
                 }
                 if (next.length === 1) {
+                    setCandidateCard(card);
+                    setCandidates(next);
                     setBusy(false);
                     await start(card, next[0]);
                     return;
