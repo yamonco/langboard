@@ -15,6 +15,7 @@ import { useBoardController } from "@/core/providers/BoardController";
 import {
     CARD_ANIMATION_DURATION_MS,
     closedTransform,
+    isRectCenterInside,
     prefersReducedMotion,
     takeCardOrigin,
     type CardRect,
@@ -112,7 +113,16 @@ const BoardCardPageComponent = ({
         const content = contentRef.current;
         const sourceRect = source?.getBoundingClientRect();
         const targetRect = content?.getBoundingClientRect();
-        if (sourceRect && targetRect && sourceRect.width > 0 && targetRect.width > 0 && targetRect.height > 0) {
+        const windowRect = { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
+        const boardRect = document.getElementById("board-scrollport")?.getBoundingClientRect();
+        if (
+            sourceRect &&
+            targetRect &&
+            isRectCenterInside(sourceRect, windowRect) &&
+            (!boardRect || isRectCenterInside(sourceRect, boardRect)) &&
+            targetRect.width > 0 &&
+            targetRect.height > 0
+        ) {
             content?.style.setProperty("--card-origin-transform", closedTransform(sourceRect, targetRect));
         } else {
             content?.style.removeProperty("--card-origin-transform");

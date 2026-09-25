@@ -50,6 +50,21 @@ export const closedTransform = (rect: CardRect, targetRect: CardRect): string =>
     return `translate(${translateX}px, ${translateY}px) scale(${scaleX}, ${scaleY})`;
 };
 
+export const isRectCenterInside = (rect: CardRect, clip: CardRect): boolean => {
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    return (
+        rect.width > 0 &&
+        rect.height > 0 &&
+        clip.width > 0 &&
+        clip.height > 0 &&
+        centerX >= clip.left &&
+        centerX <= clip.left + clip.width &&
+        centerY >= clip.top &&
+        centerY <= clip.top + clip.height
+    );
+};
+
 /**
  * Get the animation style object, respecting reduced motion.
  */
