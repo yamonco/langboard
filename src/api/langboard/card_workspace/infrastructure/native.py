@@ -458,7 +458,8 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
         for stale_key in sorted(set(item_uids) - desired_keys):
             stale_uid = item_uids.pop(stale_key)
             if stale_uid in actual_items:
-                self.delete_card_checkitem(project_uid, card_uid, stale_uid)
+                if not self._service.checkitem.delete(self._actor, project_uid, card_uid, stale_uid):
+                    raise ValueError("Checkitem not found in card")
             self._save_checklist_projection_state(card, metadata_key, state)
             changed = True
 

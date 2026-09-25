@@ -1,3 +1,4 @@
+import json
 import os
 from types import SimpleNamespace
 from typing import Any
@@ -617,6 +618,48 @@ def test_native_description_patch_requires_revision_before_lookup() -> None:
     adapter = NativeCardWorkspaceAdapter(object(), SimpleNamespace())
     with pytest.raises(ValueError, match="expected_revision is required"):
         adapter.patch_card_description("p", "c", CardDescriptionPatch((ExactTextReplacement("old", "new"),)))
+
+
+def test_checklist_projection_deletes_stale_native_item_and_commits_receipt_last() -> None:
+    """Removing a projected key must use the still-live native deletion service."""
+
+    project = SimpleNamespace(id=1)
+    card = SimpleNamespace(id=2, project_id=1)
+    stored = json.dumps({"version": 1, "checklist_uid": "cl1", "items": {"stale": "item1"}})
+    deleted: list[tuple[Any, ...]] = []
+
+    def save(_model: Any, _card: Any, _key: str, value: str) -> bool:
+        nonlocal stored
+        stored = value
+        return True
+
+    def delete(*args: Any) -> bool:
+        deleted.append(args)
+        return True
+
+    def checklists(*_args: Any, **_kwargs: Any) -> list[dict[str, Any]]:
+        return [{"uid": "cl1", "title": "Projected", "checkitems": [] if deleted else [{"uid": "item1"}]}]
+
+    service = SimpleNamespace(
+        project=SimpleNamespace(get_by_id_like=lambda _uid: project),
+        card=SimpleNamespace(get_by_id_like=lambda _uid: card),
+        checklist=SimpleNamespace(get_api_list_by_card=checklists),
+        checkitem=SimpleNamespace(delete=delete),
+        metadata=SimpleNamespace(
+            get_all_as_api=lambda *_args, **_kwargs: {"projection.checklist.test": stored},
+            save=save,
+        ),
+    )
+    actor = object()
+    result = NativeCardWorkspaceAdapter(actor, service).reconcile_card_checklist_projection(
+        "p1", "c1", "test", "Projected", [], expected_receipt=None
+    )
+
+    assert deleted == [(actor, "p1", "c1", "item1")]
+    assert result["changed"] is True
+    assert result["checklist"]["checkitems"] == []
+    assert json.loads(stored)["items"] == {}
+    assert json.loads(stored)["receipt"] == result["receipt"]
 
 
 def test_description_repository_rejects_stale_writer_and_preserves_other_fields(
