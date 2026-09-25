@@ -44,6 +44,10 @@ class BaseCache(ABC):
         """
 
     @abstractmethod
+    def set_if_absent(self, key: str, value: Any, ttl: int) -> bool:
+        """Atomically set a value with a positive TTL when the key is absent."""
+
+    @abstractmethod
     def delete(self, key: str) -> None:
         """Deletes value from cache by key
 

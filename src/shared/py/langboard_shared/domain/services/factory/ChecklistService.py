@@ -18,6 +18,13 @@ class ChecklistService(BaseDomainService):
         """DO NOT EDIT THIS METHOD"""
         return "checklist"
 
+    def _mark_card_changed_for_unread(self, card, target_type: str, target_id=None) -> None:
+        """Stamp the unread cursor for this card change (lazy import avoids cycles)."""
+        from .CardService import CardService
+
+        card_service = self._get_service(CardService)
+        card_service.mark_card_changed(card, target_type, target_id)
+
     def get_by_id_like(self, checklist: TChecklistParam | None) -> Checklist | None:
         checklist = InfraHelper.get_by_id_like(Checklist, checklist)
         return checklist
@@ -34,7 +41,7 @@ class ChecklistService(BaseDomainService):
         if not card:
             return []
 
-        raw_checklists = self.repo.checklist.get_all_by_card(card, limit=limit)
+        raw_checklists = self.repo.checklist.get_all_by_card(card, limit=limit, is_system=False)
         if not raw_checklists:
             return []
 
@@ -64,17 +71,25 @@ class ChecklistService(BaseDomainService):
         if not card:
             return []
 
-        checklists = self.repo.checklist.get_all_by_card(card)
+        checklists = self.repo.checklist.get_all_by_card(card, is_system=False)
         return [checklist.api_response() for checklist in checklists]
 
     def get_api_list_only_by_project(
-        self, project: TProjectParam | None, limit: int | None = None
+        self,
+        project: TProjectParam | None,
+        archive_visible_since: SafeDateTime | None = None,
+        limit: int | None = None,
     ) -> list[dict[str, Any]]:
         project = InfraHelper.get_by_id_like(Project, project)
         if not project:
             return []
 
-        checklists = self.repo.checklist.get_all_by_project(project, limit=limit)
+        checklists = self.repo.checklist.get_all_by_project(
+            project,
+            archive_visible_since=archive_visible_since,
+            limit=limit,
+            is_system=False,
+        )
         return [checklist.api_response() for checklist in checklists]
 
     def create(
@@ -84,11 +99,17 @@ class ChecklistService(BaseDomainService):
         if not params:
             return None
         project, card = params
+        if card.is_linked_resource:
+            return None
 
         checklist = Checklist(card_id=card.id, title=title, order=self.repo.checklist.get_next_order(card))
         self.repo.checklist.insert(checklist)
 
+        card_service = self._get_service_by_name("card")
+        card_service.remove_completion_checklist(card)
+
         ChecklistPublisher.created(card, checklist)
+        self._mark_card_changed_for_unread(card, "checklist", checklist.id)
         CardChecklistActivityTask.card_checklist_created(user_or_bot, project, card, checklist)
         CardChecklistBotTask.card_checklist_created(user_or_bot, project, card, checklist)
 
@@ -118,6 +139,7 @@ class ChecklistService(BaseDomainService):
         self.repo.checklist.update(checklist)
 
         ChecklistPublisher.title_changed(card, checklist)
+        self._mark_card_changed_for_unread(card, "checklist", checklist.id)
         CardChecklistActivityTask.card_checklist_title_changed(user_or_bot, project, card, old_title, checklist)
         CardChecklistBotTask.card_checklist_title_changed(user_or_bot, project, card, checklist)
 
@@ -164,6 +186,8 @@ class ChecklistService(BaseDomainService):
         self.repo.checklist.update(checklist)
 
         ChecklistPublisher.checked_changed(card, checklist)
+        if not checklist.is_system:
+            self._mark_card_changed_for_unread(card, "checklist", checklist.id)
 
         if checklist.is_checked:
             CardChecklistActivityTask.card_checklist_checked(user_or_bot, project, card, checklist)
@@ -228,7 +252,13 @@ class ChecklistService(BaseDomainService):
         self.repo.checklist.delete(checklist)
 
         ChecklistPublisher.deleted(card, checklist)
+        self._mark_card_changed_for_unread(card, "checklist")
         CardChecklistActivityTask.card_checklist_deleted(user_or_bot, project, card, checklist)
         CardChecklistBotTask.card_checklist_deleted(user_or_bot, project, card, checklist)
+
+        if not checklist.is_system:
+            card_service = self._get_service_by_name("card")
+            if card_service.is_check_card(card):
+                card_service.ensure_completion_checklist(card)
 
         return True

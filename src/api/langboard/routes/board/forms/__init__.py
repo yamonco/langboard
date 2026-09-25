@@ -1,5 +1,15 @@
 from .Attachment import ChangeAttachmentNameForm
-from .Card import ChangeCardDetailsForm, CreateCardForm, UpdateCardLabelsForm, UpdateCardRelationshipsForm
+from .Card import (
+    CardifySelectionForm,
+    CopySelectionToWikiForm,
+    ChangeCardDetailsForm,
+    ConvertCheckboxesForm,
+    CreateCardForm,
+    PatchCardGraphForm,
+    SetCardCompletedForm,
+    UpdateCardLabelsForm,
+    UpdateCardRelationshipsForm,
+)
 from .Chat import CreateChatTemplate, UpdateChatTemplate
 from .Check import (
     CardChecklistNotifyForm,
@@ -8,8 +18,8 @@ from .Check import (
     ChangeCardCheckitemDeadlineForm,
     ChangeCardCheckitemStatusForm,
 )
-from .Column import ColumnForm
-from .Comment import ToggleCardCommentReactionForm
+from .Column import ColumnDescriptionForm, ColumnForm, CreateColumnForm
+from .Comment import CreateCardCommentForm, ToggleCardCommentReactionForm
 from .Project import (
     ChangeInternalBotForm,
     ChangeInternalBotSettingsForm,
@@ -35,10 +45,17 @@ __all__ = [
     "ChangeRootOrderForm",
     "ChangeChildOrderForm",
     "ColumnForm",
+    "ColumnDescriptionForm",
+    "CreateColumnForm",
     "CreateCardForm",
     "UpdateCardLabelsForm",
     "UpdateCardRelationshipsForm",
+    "PatchCardGraphForm",
+    "CardifySelectionForm",
+    "CopySelectionToWikiForm",
+    "ConvertCheckboxesForm",
     "ChangeCardDetailsForm",
+    "SetCardCompletedForm",
     "CreateChatTemplate",
     "UpdateChatTemplate",
     "InviteProjectMemberForm",
@@ -53,6 +70,7 @@ __all__ = [
     "RejectGraphApprovalForm",
     "ChangeAttachmentNameForm",
     "ToggleCardCommentReactionForm",
+    "CreateCardCommentForm",
     "CardCheckRelatedForm",
     "ChangeCardCheckitemDeadlineForm",
     "ChangeCardCheckitemStatusForm",

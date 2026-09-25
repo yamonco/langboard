@@ -95,7 +95,6 @@ const useChangeEditMode = <
     onStopEditing,
 }: TUseChangeEditModeProps<TValue>): IUseChangeEditMode<TValue> => {
     const valueRef = useRef<TRef>((valueType === "editor" ? originalValue : undefined) as unknown as TRef);
-    const isSavingRef = useRef(false);
     const [height, setHeight] = useState(0);
     const [isEditing, setIsEditing] = useEditorState(editorName);
 
@@ -118,7 +117,6 @@ const useChangeEditMode = <
             }
 
             if (mode === "edit") {
-                isSavingRef.current = false;
                 if (customStartEditing) {
                     setIsEditing(() => true);
                     customStartEditing();
@@ -141,10 +139,6 @@ const useChangeEditMode = <
                     valueRef.current.selectionEnd = valueRef.current.value.length;
                     valueRef.current.focus();
                 }, 0);
-                return;
-            }
-
-            if (isSavingRef.current) {
                 return;
             }
 
@@ -179,20 +173,13 @@ const useChangeEditMode = <
             }
 
             onStopEditing?.();
-            isSavingRef.current = true;
-            try {
-                save(value as IEditorContent & string, () => {
-                    isSavingRef.current = false;
-                    if (customStartEditing) {
-                        return;
-                    }
+            save(value as IEditorContent & string, () => {
+                if (customStartEditing) {
+                    return;
+                }
 
-                    setIsEditing(() => false);
-                });
-            } catch (error) {
-                isSavingRef.current = false;
-                throw error;
-            }
+                setIsEditing(() => false);
+            });
         },
         [canEdit, customStartEditing, originalValue, save, canEmpty, disableNewLine]
     );

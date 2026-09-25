@@ -17,6 +17,13 @@ class CheckitemService(BaseDomainService):
         """DO NOT EDIT THIS METHOD"""
         return "checkitem"
 
+    def _mark_card_changed_for_unread(self, card, target_type: str, target_id=None) -> None:
+        """Stamp the unread cursor for this card change (lazy import avoids cycles)."""
+        from .CardService import CardService
+
+        card_service = self._get_service(CardService)
+        card_service.mark_card_changed(card, target_type, target_id)
+
     def get_by_id_like(self, checkitem: TCheckitemParam | None) -> Checkitem | None:
         checkitem = InfraHelper.get_by_id_like(Checkitem, checkitem)
         return checkitem
@@ -98,6 +105,7 @@ class CheckitemService(BaseDomainService):
         self.repo.checkitem.insert(checkitem)
 
         CheckitemPublisher.created(card, checklist, checkitem)
+        self._mark_card_changed_for_unread(card, "checkitem", checkitem.id)
         CardCheckitemActivityTask.card_checkitem_created(user_or_bot, project, card, checkitem)
         CardCheckitemBotTask.card_checkitem_created(user_or_bot, project, card, checkitem)
 
@@ -130,6 +138,7 @@ class CheckitemService(BaseDomainService):
         self.repo.checkitem.update(checkitem)
 
         CheckitemPublisher.title_changed(project, card, checkitem, cardified_card)
+        self._mark_card_changed_for_unread(card, "checkitem", checkitem.id)
         CardCheckitemActivityTask.card_checkitem_title_changed(user_or_bot, project, card, old_title, checkitem)
         CardCheckitemBotTask.card_checkitem_title_changed(user_or_bot, project, card, checkitem)
 
@@ -151,6 +160,7 @@ class CheckitemService(BaseDomainService):
         self.repo.checkitem.update(checkitem)
 
         CheckitemPublisher.deadline_changed(project, card, checkitem)
+        self._mark_card_changed_for_unread(card, "checkitem", checkitem.id)
 
         return True
 
@@ -254,6 +264,7 @@ class CheckitemService(BaseDomainService):
 
         if should_publish:
             CheckitemPublisher.status_changed(project, card, checkitem, timer_record, target_user)
+            self._mark_card_changed_for_unread(card, "checkitem", checkitem.id)
 
         if status == CheckitemStatus.Started:
             CardCheckitemActivityTask.card_checkitem_timer_started(user_or_bot, project, card, checkitem)
@@ -283,6 +294,7 @@ class CheckitemService(BaseDomainService):
             self.repo.checkitem.update(checkitem)
 
             CheckitemPublisher.checked_changed(project, card, checkitem)
+            self._mark_card_changed_for_unread(card, "checkitem", checkitem.id)
 
         if checkitem.is_checked:
             CardCheckitemActivityTask.card_checkitem_checked(user_or_bot, project, card, checkitem)
@@ -327,7 +339,9 @@ class CheckitemService(BaseDomainService):
         checkitem.cardified_id = new_card.id
         self.repo.checkitem.update(checkitem)
 
-        api_card = new_card.board_api_response(0, [], [], [])
+        card_service = self._get_service_by_name("card")
+        card_service.ensure_completion_checklist(new_card)
+        api_card = new_card.board_api_response(0, [], [], [], completed=False, is_check_card=True)
         CheckitemPublisher.cardified(card, checkitem, target_column, api_card)
         CardCheckitemActivityTask.card_checkitem_cardified(user_or_bot, project, card, checkitem)
         CardCheckitemBotTask.card_checkitem_cardified(user_or_bot, project, card, checkitem, new_card)
@@ -353,6 +367,7 @@ class CheckitemService(BaseDomainService):
         self.repo.checkitem.delete(checkitem)
 
         CheckitemPublisher.deleted(project, card, checkitem)
+        self._mark_card_changed_for_unread(card, "checkitem", checkitem.id)
         CardCheckitemActivityTask.card_checkitem_deleted(user_or_bot, project, card, checkitem)
         CardCheckitemBotTask.card_checkitem_deleted(user_or_bot, project, card, checkitem)
 

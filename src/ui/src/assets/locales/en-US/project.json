@@ -1,4 +1,7 @@
 {
+  "Column description": "Column description",
+  "When should a card enter this column?": "When should a card enter this column?",
+  "No column description": "No column description",
   "Project title": "Project title",
   "Project description": "Project description",
   "Project type": "Project type",

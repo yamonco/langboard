@@ -19,6 +19,11 @@ class ChangeCardDetailsForm(BaseFormModel):
 
 
 @form_model
+class SetCardCompletedForm(BaseFormModel):
+    completed: bool = Field(..., title="Whether the check card's completion item is checked")
+
+
+@form_model
 class UpdateCardLabelsForm(BaseFormModel):
     labels: list[str] = Field(..., title="List of label UIDs")
 
@@ -27,3 +32,38 @@ class UpdateCardLabelsForm(BaseFormModel):
 class UpdateCardRelationshipsForm(BaseFormModel):
     is_parent: bool = Field(..., title="Is the card that is being updated the parent card?")
     relationships: list[tuple[str, str]] = Field(..., title="List of tuples of card UID and relationship type UID")
+
+
+class CardGraphNewCardForm(BaseFormModel):
+    client_ref: str = Field(..., title="Request-local reference beginning with new:")
+    title: str = Field(..., title="Title of the new card")
+    description: str | None = Field(default=None, title="Description of the new card")
+
+
+class CardGraphEdgeForm(BaseFormModel):
+    parent_ref: str = Field(..., title="Existing card UID or request-local new: reference")
+    child_ref: str = Field(..., title="Existing card UID or request-local new: reference")
+    relationship_type_uid: str = Field(..., title="Relationship type UID")
+
+
+@form_model
+class PatchCardGraphForm(BaseFormModel):
+    new_cards: list[CardGraphNewCardForm] = Field(default_factory=list, max_length=7)
+    add_edges: list[CardGraphEdgeForm] = Field(default_factory=list, max_length=25)
+    remove_relationship_uids: list[str] = Field(default_factory=list, max_length=25)
+
+
+@form_model
+class CardifySelectionForm(BaseFormModel):
+    selected_markdown: str = Field(..., min_length=3, max_length=32000, title="Selected body markdown to extract into a child card")
+
+
+@form_model
+class ConvertCheckboxesForm(BaseFormModel):
+    pass
+
+
+@form_model
+class CopySelectionToWikiForm(BaseFormModel):
+    selected_markdown: str = Field(..., min_length=3, max_length=32000, title="Selected body markdown to copy into a wiki")
+    wiki_title: str | None = Field(default=None, max_length=300, title="Optional title for the new wiki")

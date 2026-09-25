@@ -19,14 +19,11 @@ const useWebhookCreatedHandlers = ({ callback }: IBaseUseSocketHandlersProps<{}>
             callback,
             responseConverter: (data) => {
                 const url = Utils.String.format(Routing.API.SETTINGS.WEBHOOKS.GET, { webhook_uid: data.uid });
-                void api
-                    .get(url, {
-                        env: { interceptToast: true } as never,
-                    })
-                    .then((res) => {
-                        WebhookModel.Model.fromOne(res.data.webhook, true);
-                    })
-                    .catch(() => undefined);
+                api.get(url, {
+                    env: { interceptToast: true } as never,
+                }).then((res) => {
+                    WebhookModel.Model.fromOne(res.data.webhook, true);
+                });
                 return {};
             },
         },

@@ -39,9 +39,9 @@
     .dark {
         --background: 224 71.4% 4.1%;
         --foreground: 210 20% 98%;
-        --card: 224 71.4% 4.1%;
+        --card: 224 71.4% 7.5%;
         --card-foreground: 210 20% 98%;
-        --popover: 224 71.4% 4.1%;
+        --popover: 224 71.4% 9%;
         --popover-foreground: 210 20% 98%;
         --primary: 263.4 70% 50.4%;
         --primary-foreground: 210 20% 98%;
@@ -66,6 +66,53 @@
         --chart-5: 340 75% 55%;
         --brand: 213.3 93.9% 67.8%;
         --highlight: 48 96% 53%;
+    }
+}
+
+.board-card-progress-track,
+.board-card-progress-value {
+    fill: none;
+    vector-effect: non-scaling-stroke;
+}
+
+.board-card-progress-track {
+    stroke: hsl(var(--border));
+    stroke-width: 1;
+}
+
+.board-card-progress-value {
+    stroke: hsl(var(--primary));
+    stroke-width: 2.5;
+    stroke-linecap: round;
+    transition: stroke-dasharray 280ms ease;
+}
+
+.board-card-deadline-aura::after {
+    content: "";
+    position: absolute;
+    inset: -2px;
+    border-radius: inherit;
+    pointer-events: none;
+    box-shadow:
+        0 0 calc(4px + 12px * var(--board-card-deadline-pressure)) hsl(var(--destructive) / calc(0.04 + 0.3 * var(--board-card-deadline-pressure))),
+        0 0 0 1px hsl(var(--destructive) / calc(0.03 + 0.28 * var(--board-card-deadline-pressure)));
+    opacity: var(--board-card-deadline-pressure);
+    transition:
+        opacity 220ms ease,
+        box-shadow 220ms ease;
+}
+
+.board-card-deadline-aura[data-deadline-pressure-level="critical"]::after,
+.board-card-deadline-aura[data-deadline-pressure-level="overdue"]::after {
+    box-shadow:
+        0 0 calc(8px + 18px * var(--board-card-deadline-pressure)) hsl(var(--destructive) / calc(0.08 + 0.34 * var(--board-card-deadline-pressure))),
+        0 0 0 1px hsl(var(--destructive) / calc(0.08 + 0.3 * var(--board-card-deadline-pressure)));
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .board-card-progress-value,
+    .board-card-deadline-aura::after {
+        transition: none;
     }
 }
 
@@ -110,5 +157,48 @@
     ::-webkit-scrollbar-track {
         background: transparent;
         border-radius: 0;
+    }
+}
+
+/* ─── Card open/close animation (UoW-26) ─── */
+
+@keyframes card-viewer-open {
+    from {
+        opacity: 0;
+        transform: var(--card-origin-transform, scale(0.9));
+    }
+    to {
+        opacity: 1;
+        transform: translate(0, 0) scale(1, 1);
+    }
+}
+
+@keyframes card-viewer-close {
+    from {
+        opacity: 1;
+        transform: translate(0, 0) scale(1, 1);
+    }
+    to {
+        opacity: 0;
+        transform: var(--card-origin-transform, scale(0.9));
+    }
+}
+
+[data-radix-dialog-content][data-state="open"] {
+    animation: card-viewer-open 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    will-change: transform, opacity;
+}
+
+[data-radix-dialog-content][data-state="closed"] {
+    animation: card-viewer-close 180ms cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+    will-change: transform, opacity;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    [data-radix-dialog-content][data-state="open"],
+    [data-radix-dialog-content][data-state="closed"] {
+        animation: none;
+        opacity: 1;
+        transform: none;
     }
 }

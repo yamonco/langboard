@@ -130,6 +130,7 @@
   "Loading...": "Loading...",
   "Rendering...": "Rendering...",
   "Preview will appear here": "Preview will appear here",
+  "Navigate description": "Go to description {{position}} of {{total}}",
   "Show less": "Show less",
   "Show more": "Show more",
   "Show all": "Show all",

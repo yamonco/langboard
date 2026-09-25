@@ -1,6 +1,7 @@
 """Safe native MCP tools for room-bound Langboard project workspaces."""
 
 from typing import Annotated, Any, Literal
+from fastmcp.exceptions import ValidationError
 from langboard_shared.domain.models import Bot, ProjectRole, User
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.domain.services import DomainService
@@ -12,21 +13,28 @@ from ..card_workspace.application import (
     ProjectIdentityResponse,
 )
 from ..card_workspace.application import add_card_comment as add_comment
+from ..card_workspace.application import apply_card_graph_patch as apply_graph_patch
+from ..card_workspace.application import cardify_card_checkitem as cardify_checkitem
 from ..card_workspace.application import create_card_checkitem as create_checkitem
 from ..card_workspace.application import create_card_checklist as create_checklist
+from ..card_workspace.application import create_card_content_block as create_content_block
 from ..card_workspace.application import create_card_in_leftmost_column as create_leftmost
 from ..card_workspace.application import create_project_board as create_board
 from ..card_workspace.application import delete_card_attachment as delete_attachment
 from ..card_workspace.application import delete_card_checkitem as delete_checkitem
 from ..card_workspace.application import delete_card_checklist as delete_checklist
 from ..card_workspace.application import delete_card_comment as delete_comment
+from ..card_workspace.application import delete_card_content_block as delete_content_block
 from ..card_workspace.application import delete_public_card_metadata as delete_public_metadata
 from ..card_workspace.application import get_card_bundle as query_card_bundle
 from ..card_workspace.application import get_project_identity as query_project_identity
 from ..card_workspace.application import get_public_card_metadata as query_public_metadata
 from ..card_workspace.application import get_public_card_metadata_by_key as query_public_metadata_key
 from ..card_workspace.application import list_project_cards as query_project_cards
+from ..card_workspace.application import move_card_content_block as move_content_block
+from ..card_workspace.application import patch_card_description as replace_description_text
 from ..card_workspace.application import reconcile_card_checklist_projection as reconcile_checklist
+from ..card_workspace.application import replace_card_description as replace_description
 from ..card_workspace.application import save_public_card_metadata as save_public_metadata
 from ..card_workspace.application import set_card_people_and_labels as replace_people_and_labels
 from ..card_workspace.application import set_card_relationships as replace_relationships
@@ -34,18 +42,32 @@ from ..card_workspace.application import update_card_attachment as update_attach
 from ..card_workspace.application import update_card_checkitem as update_checkitem
 from ..card_workspace.application import update_card_checklist as update_checklist
 from ..card_workspace.application import update_card_comment as update_comment
+from ..card_workspace.application import update_card_content_block as update_content_block
 from ..card_workspace.application.dtos import BoundedItemsDto
 from ..card_workspace.domain import (
     CardBundleInclude,
+    CardGraphEdge,
+    CardGraphNewCard,
     ChecklistProjectionItem,
     CommentPage,
+    DescriptionPatchConflict,
+    ExactTextReplacement,
     SectionPage,
 )
 from ..card_workspace.infrastructure import NativeCardWorkspaceAdapter
 from ..mcp_integration import McpRoleFilter, McpTool
 
 
-MAX_PROJECT_MEMBER_ITEMS = 50
+@McpTool.add("user", description="Assign the authenticated user to this card, preserving every existing assignee.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+def assign_card_to_me(project_uid: str, card_uid: str, user: User, service: DomainService) -> dict[str, Any]:
+    """Use the server-authenticated identity, never a caller-supplied user UID."""
+    try:
+        return service.card.assign_self(user, project_uid, card_uid)
+    except ValueError as exc:
+        raise ValidationError(
+            f"{exc}. No assignment was made. Ask a board updater to onboard you as a member, then retry once."
+        ) from exc
 
 
 def _as_card_bundle_include(value: str | CardBundleInclude) -> CardBundleInclude:
@@ -82,6 +104,36 @@ CardCommentReactionType = Literal[
     "rocket",
     "thumbs-down",
     "thumbs-up",
+]
+
+
+def _as_card_graph_new_card(value: dict[str, Any] | CardGraphNewCard) -> CardGraphNewCard:
+    """Parse one request-local card without leaking transport types inward."""
+
+    return value if isinstance(value, CardGraphNewCard) else CardGraphNewCard(**value)
+
+
+def _as_card_graph_edge(value: dict[str, Any] | CardGraphEdge) -> CardGraphEdge:
+    """Parse one typed graph edge without leaking transport types inward."""
+
+    return value if isinstance(value, CardGraphEdge) else CardGraphEdge(**value)
+
+
+JsonCardGraphNewCard = Annotated[CardGraphNewCard, BeforeValidator(_as_card_graph_new_card)]
+JsonCardGraphEdge = Annotated[CardGraphEdge, BeforeValidator(_as_card_graph_edge)]
+
+
+def _as_exact_text_replacement(
+    value: dict[str, Any] | ExactTextReplacement,
+) -> ExactTextReplacement:
+    """Parse one transport edit into the immutable domain value."""
+
+    return value if isinstance(value, ExactTextReplacement) else ExactTextReplacement(**value)
+
+
+JsonExactTextReplacement = Annotated[
+    ExactTextReplacement,
+    BeforeValidator(_as_exact_text_replacement),
 ]
 
 
@@ -128,7 +180,35 @@ def create_card_in_leftmost_column(
 
 @McpTool.add(
     description=(
-        "Read compact card core and workflow fields. Request description, people, classification, checklists, "
+        "Atomically create up to seven cards and add or remove typed parent-child relationships. "
+        "References beginning with 'new:' address cards created by this same request."
+    )
+)
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+def apply_card_graph_patch(
+    project_uid: str,
+    anchor_card_uid: str,
+    new_cards: list[JsonCardGraphNewCard],
+    add_edges: list[JsonCardGraphEdge],
+    remove_relationship_uids: list[str],
+    user_or_bot: User | Bot,
+    service: DomainService,
+) -> dict[str, Any]:
+    """Apply one approved card graph patch without partial persistence."""
+
+    return apply_graph_patch(
+        _adapter(user_or_bot, service),
+        project_uid,
+        anchor_card_uid,
+        new_cards,
+        add_edges,
+        remove_relationship_uids,
+    )
+
+
+@McpTool.add(
+    description=(
+        "Read compact card core, public creator identity, and workflow fields. Request description, people, classification, checklists, "
         "comments, attachments, public metadata, or automation explicitly. Use returned opaque cursors for "
         "rich description and every collection."
     )
@@ -177,10 +257,15 @@ def list_project_members(project_uid: str, service: DomainService) -> dict[str, 
     project = service.project.get_by_id_like(project_uid)
     if not project:
         raise ValueError("Project not found")
-    members = service.project.get_api_assigned_user_list(project, limit=MAX_PROJECT_MEMBER_ITEMS)
-    total_count = service.project.count_assigned_users(project)
-    items = [{key: member[key] for key in ("uid", "username") if key in member} for member in members]
-    return {"items": items, "total_count": total_count, "truncated": total_count > len(items)}
+    members = service.project.get_api_assigned_user_list(project)
+    items = []
+    for member in members[:50]:
+        fields = ("uid", "username")
+        # Invitation placeholders store an email in firstname; expose names only for real users.
+        if member.get("type") == User.USER_TYPE:
+            fields += ("firstname", "lastname")
+        items.append({key: member[key] for key in fields if key in member})
+    return {"items": items, "total_count": len(members), "truncated": len(members) > 50}
 
 
 @McpTool.add(description="List a bounded newest-updated-first page of cards in a project.")
@@ -195,6 +280,67 @@ def list_project_cards(
     """Read one safe project card page with an opaque keyset cursor."""
 
     return query_project_cards(_adapter(user_or_bot, service), project_uid, limit, cursor)
+
+
+@McpTool.add(
+    description=(
+        "Atomically apply one or more exact edits to Plate-compatible Markdown. Pass edits for a multi-hunk patch, "
+        "or old_text/new_text for backwards compatibility. Fails without writing when the revision or any reviewed "
+        "fragment is stale or ambiguous."
+    )
+)
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+def patch_card_description(
+    project_uid: str,
+    card_uid: str,
+    user_or_bot: User | Bot,
+    service: DomainService,
+    old_text: str | None = None,
+    new_text: str | None = None,
+    edits: list[JsonExactTextReplacement] | None = None,
+    expected_revision: str | None = None,
+) -> dict[str, Any]:
+    """Conditionally apply one approved Markdown patch."""
+
+    if edits is not None:
+        if old_text is not None or new_text is not None:
+            raise ValueError("Pass either edits or old_text/new_text, not both")
+        replacements = edits
+    else:
+        if old_text is None or new_text is None:
+            raise ValueError("old_text and new_text are required when edits is omitted")
+        replacements = [ExactTextReplacement(old_text=old_text, new_text=new_text)]
+
+    try:
+        return replace_description_text(
+            _adapter(user_or_bot, service),
+            project_uid,
+            card_uid,
+            replacements,
+            expected_revision,
+        )
+    except DescriptionPatchConflict as exc:
+        raise ValidationError(f"{exc}. No changes saved; read the description and review a new patch.") from exc
+
+
+@McpTool.add(description="Replace a complete card description after reviewing its current revision.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+def replace_card_description(
+    project_uid: str,
+    card_uid: str,
+    description: str,
+    expected_revision: str,
+    user_or_bot: User | Bot,
+    service: DomainService,
+) -> dict[str, Any]:
+    """Safely initialize, clear, or replace the complete Markdown body."""
+
+    try:
+        return replace_description(
+            _adapter(user_or_bot, service), project_uid, card_uid, description, expected_revision
+        )
+    except DescriptionPatchConflict as exc:
+        raise ValidationError(f"{exc}. No changes saved; read the description and review the replacement.") from exc
 
 
 @McpTool.add(description="Add a rich-text comment to a card.")
@@ -325,6 +471,32 @@ def create_card_checkitem(
     """Create a native checkitem."""
 
     return create_checkitem(_adapter(user_or_bot, service), project_uid, card_uid, checklist_uid, title)
+
+
+@McpTool.add(
+    description=(
+        "Create a card from one existing checkitem in an explicit active project column. "
+        "The checkitem remains linked to the resulting card."
+    )
+)
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+def cardify_card_checkitem(
+    project_uid: str,
+    card_uid: str,
+    checkitem_uid: str,
+    project_column_uid: str,
+    user_or_bot: User | Bot,
+    service: DomainService,
+) -> dict[str, Any]:
+    """Promote one native checkitem to a linked card."""
+
+    return cardify_checkitem(
+        _adapter(user_or_bot, service),
+        project_uid,
+        card_uid,
+        checkitem_uid,
+        project_column_uid,
+    )
 
 
 @McpTool.add(
@@ -519,3 +691,87 @@ def delete_public_card_metadata(
     """Delete one or more explicitly public metadata entries."""
 
     return delete_public_metadata(_adapter(user_or_bot, service), project_uid, card_uid, keys)
+
+
+@McpTool.add(
+    description=(
+        "Create a structured content block on a card. block_type must be "
+        "'code' (payload: language, source, optional title) or 'diagram' "
+        "(payload: engine mermaid|plantuml|graphviz|flowchart, source, "
+        "optional view_mode source|rendered|both) or 'rich_text' (payload: text). "
+        "No Markdown delimiters are needed."
+    )
+)
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+def create_card_content_block(
+    project_uid: str,
+    card_uid: str,
+    block_type: str,
+    payload: dict[str, Any],
+    order: int | None = None,
+    after_block_uid: str | None = None,
+    user_or_bot: User | Bot = None,
+    service: DomainService = None,
+) -> dict[str, Any]:
+    """Create one typed content block anchored to a card."""
+
+    return create_content_block(
+        _adapter(user_or_bot, service), project_uid, card_uid, block_type, payload, order, after_block_uid
+    )
+
+
+@McpTool.add(
+    description=(
+        "Partially update a card content block. Requires the block's current "
+        "revision for optimistic locking; a mismatch fails with a conflict error."
+    )
+)
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+def update_card_content_block(
+    project_uid: str,
+    card_uid: str,
+    block_uid: str,
+    expected_revision: int,
+    payload: dict[str, Any],
+    user_or_bot: User | Bot = None,
+    service: DomainService = None,
+) -> dict[str, Any]:
+    """Update one content block under optimistic locking."""
+
+    return update_content_block(
+        _adapter(user_or_bot, service), project_uid, card_uid, block_uid, expected_revision, payload
+    )
+
+
+@McpTool.add(description="Delete a card content block by uid.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+def delete_card_content_block(
+    project_uid: str,
+    card_uid: str,
+    block_uid: str,
+    user_or_bot: User | Bot = None,
+    service: DomainService = None,
+) -> dict[str, bool]:
+    """Delete one content block after project-card-block validation."""
+
+    return delete_content_block(_adapter(user_or_bot, service), project_uid, card_uid, block_uid)
+
+
+@McpTool.add(
+    description="Reposition a card content block using after_block_uid or an explicit order (not both)."
+)
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+def move_card_content_block(
+    project_uid: str,
+    card_uid: str,
+    block_uid: str,
+    after_block_uid: str | None = None,
+    order: int | None = None,
+    user_or_bot: User | Bot = None,
+    service: DomainService = None,
+) -> dict[str, bool]:
+    """Move one content block within its card."""
+
+    return move_content_block(
+        _adapter(user_or_bot, service), project_uid, card_uid, block_uid, after_block_uid, order
+    )

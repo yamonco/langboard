@@ -1,6 +1,4 @@
-from copy import deepcopy
-from typing import Any, TypeVar
-from sqlalchemy.exc import IntegrityError
+from typing import Any
 from ....core.domain import BaseDomainService
 from ....helpers import InfraHelper
 from ...models import (
@@ -21,13 +19,19 @@ from ...models.ProjectEmailNotificationPolicy import ProjectEmailNotificationCat
 
 
 SI_COLUMNS = ["Backlog", "Ready", "In Progress", "Review", "Done"]
+SI_COLUMN_DESCRIPTIONS = [
+    "Untriaged or uncommitted work. Claiming ownership alone does not mean work has started.",
+    "Owned, prepared work waiting to start. Suggest this stage when someone commits to take a backlog item.",
+    "Work actively being executed. Enter when the assignee explicitly starts work, not merely when assigned.",
+    "Implementation is ready for review or acceptance. Do not infer approval from assignment.",
+    "Completed and accepted work. Move here only when completion is explicitly confirmed.",
+]
 SI_EMAIL_NOTIFICATION_POLICY = {
     "is_enabled": True,
     "notify_all_members": True,
     "categories": [ProjectEmailNotificationCategory.Cards.value],
     "card_move_target_columns": ["Review"],
 }
-_TScope = TypeVar("_TScope", ProjectBotScope, ProjectColumnBotScope)
 
 
 class ProjectTemplateService(BaseDomainService):
@@ -46,25 +50,22 @@ class ProjectTemplateService(BaseDomainService):
                 self.repo.project_template.replace_default(template)
                 template.is_default = True
             if not template.email_notification_policy:
-                template.email_notification_policy = deepcopy(SI_EMAIL_NOTIFICATION_POLICY)
+                template.email_notification_policy = SI_EMAIL_NOTIFICATION_POLICY
+                self.repo.project_template.update(template)
+            if not template.column_descriptions and template.columns == SI_COLUMNS:
+                template.column_descriptions = SI_COLUMN_DESCRIPTIONS
                 self.repo.project_template.update(template)
             return template
-        current_default = self.repo.project_template.get_default()
         template = ProjectTemplate(
             name="SI",
-            columns=list(SI_COLUMNS),
-            email_notification_policy=deepcopy(SI_EMAIL_NOTIFICATION_POLICY),
+            columns=SI_COLUMNS,
+            column_descriptions=SI_COLUMN_DESCRIPTIONS,
+            email_notification_policy=SI_EMAIL_NOTIFICATION_POLICY,
             is_builtin=True,
-            is_default=current_default is None,
+            is_default=True,
         )
-        try:
-            self.repo.project_template.insert(template)
-        except IntegrityError as error:
-            existing = self.repo.project_template.get_by_name("SI")
-            if existing and existing.is_builtin:
-                return existing
-            raise ValueError("SI is reserved for the built-in project template") from error
-        if current_default is None:
+        self.repo.project_template.insert(template)
+        if self.repo.project_template.get_default() is None:
             self.repo.project_template.replace_default(template)
         return template
 
@@ -115,15 +116,13 @@ class ProjectTemplateService(BaseDomainService):
         template = ProjectTemplate(
             name=clean_name,
             columns=[column.name for column in columns],
+            column_descriptions=[column.description for column in columns],
             internal_bots=internal_bots,
             project_bot_scopes=project_scopes,
             column_bot_scopes=column_scopes,
             email_notification_policy=self._email_notification_policy_snapshot(project),
         )
-        try:
-            self.repo.project_template.insert(template)
-        except IntegrityError as error:
-            raise ValueError("Project template name already exists") from error
+        self.repo.project_template.insert(template)
         return template
 
     def create_project(
@@ -146,8 +145,11 @@ class ProjectTemplateService(BaseDomainService):
         project = project_service.create(user, title, description, project_type)
         columns: list[ProjectColumn] = []
         try:
-            for column_name in template.columns:
-                column = column_service.create(user, project, column_name)
+            for index, column_name in enumerate(template.columns):
+                column_description = (
+                    template.column_descriptions[index] if index < len(template.column_descriptions) else ""
+                )
+                column = column_service.create(user, project, column_name, description=column_description)
                 if not column:
                     raise RuntimeError(f"Failed to create project column: {column_name}")
                 columns.append(column)
@@ -267,20 +269,18 @@ class ProjectTemplateService(BaseDomainService):
             if scope:
                 self.repo.project_column_bot_scope.insert(scope)
 
-    def _build_scope(
-        self,
-        model: type[_TScope],
-        snapshot: dict[str, Any],
-        **scope: Any,
-    ) -> _TScope | None:
+    def _build_scope(self, model: type, snapshot: dict[str, Any], **scope: Any) -> Any | None:
         bot = self._find_bot(str(snapshot.get("bot_uname") or ""))
         if not bot:
             return None
         branch_name = snapshot.get("default_scope_branch")
-        branch = (
-            self.repo.bot_default_scope_branch.get_by_bot_and_name(bot, str(branch_name))
-            if branch_name is not None
-            else None
+        branch = next(
+            (
+                item
+                for item in InfraHelper.get_all_by(BotDefaultScopeBranch, "bot_id", bot.id)
+                if item.name == branch_name
+            ),
+            None,
         )
         available = model.get_available_conditions()
         conditions = []

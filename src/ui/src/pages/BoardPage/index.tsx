@@ -1,12 +1,13 @@
-import { memo, Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Navigate, useLocation } from "react-router";
 import { DashboardStyledLayout } from "@/components/Layout";
 import Box from "@/components/base/Box";
 import Button from "@/components/base/Button";
 import Flex from "@/components/base/Flex";
-import Floating from "@/components/base/Floating";
+import BoardFloatingNavigation from "@/pages/BoardPage/components/board/BoardFloatingNavigation";
 import IconComponent from "@/components/base/IconComponent";
+import Input from "@/components/base/Input";
 import ScrollArea from "@/components/base/ScrollArea";
 import Toast from "@/components/base/Toast";
 import { ROUTES } from "@/core/routing/constants";
@@ -55,6 +56,10 @@ import useBoardGraphApprovalDeletedHandlers from "@/controllers/socket/board/gra
 import useBoardGraphApprovalRequestedHandlers from "@/controllers/socket/board/graphApprovals/useBoardGraphApprovalRequestedHandlers";
 import useBoardGraphApprovalUpdatedHandlers from "@/controllers/socket/board/graphApprovals/useBoardGraphApprovalUpdatedHandlers";
 import { getBoardChatStore } from "@/core/stores/BoardChatStore";
+import { compareProjectActivityPriority } from "@/pages/DashboardPage/components/ProjectActivityPriority";
+import { Utils } from "@langboard/core/utils";
+
+const BoardGraphPage = lazy(() => import("@/pages/BoardPage/BoardGraphPage"));
 
 const getCurrentPage = (pageRoute?: string): TBoardViewType => {
     switch (pageRoute) {
@@ -62,6 +67,8 @@ const getCurrentPage = (pageRoute?: string): TBoardViewType => {
             return "card";
         case "wiki":
             return "wiki";
+        case "graph":
+            return "graph";
         case "settings":
             return "settings";
         default:
@@ -89,8 +96,6 @@ const BoardProxy = memo((): React.JSX.Element => {
             return;
         }
 
-        let retryTimeout: ReturnType<typeof setTimeout> | undefined;
-
         const { handle } = setupApiErrorHandler({
             [EHttpStatus.HTTP_403_FORBIDDEN]: {
                 after: () => navigate(ROUTES.ERROR(EHttpStatus.HTTP_403_FORBIDDEN), { replace: true }),
@@ -100,19 +105,14 @@ const BoardProxy = memo((): React.JSX.Element => {
             },
             network: {
                 after: () => {
-                    retryTimeout = setTimeout(() => {
-                        void refetch();
+                    setTimeout(() => {
+                        refetch();
                     }, 5000);
                 },
             },
         });
 
         handle(error);
-        return () => {
-            if (retryTimeout) {
-                clearTimeout(retryTimeout);
-            }
-        };
     }, [error]);
 
     useEffect(() => {
@@ -180,7 +180,7 @@ function BoardProxyDisplay({ pageRoute, isFetching, project }: IBoardProxyDispla
         setChatResizableSidebar,
         setBoardChat,
     } = useBoardController();
-    const isCardPage = !!pageRoute && !["wiki", "settings"].includes(pageRoute);
+    const isCardPage = !!pageRoute && !["graph", "wiki", "settings"].includes(pageRoute);
     const projectTitle = project.useField("title");
     useGetGraphApprovals(
         {
@@ -465,6 +465,15 @@ function BoardProxyDisplay({ pageRoute, isFetching, project }: IBoardProxyDispla
             hidden: !!selectCardViewType,
         },
         {
+            name: t("board.Relationship graph"),
+            onClick: () => {
+                setBoardViewType("graph");
+                navigate(ROUTES.BOARD.GRAPH(project.uid), { smooth: true });
+            },
+            active: boardViewType === "graph",
+            hidden: !!selectCardViewType,
+        },
+        {
             name: t("board.Activity"),
             onClick: openActivityDialog,
             active: isActivityDialogOpened,
@@ -523,6 +532,17 @@ function BoardProxyDisplay({ pageRoute, isFetching, project }: IBoardProxyDispla
             },
         },
         {
+            name: t("board.Relationship graph"),
+            icon: "git-fork",
+            active: boardViewType === "graph",
+            hidden: !!selectCardViewType,
+            onClick: () => {
+                setActiveSidePanel(undefined);
+                setBoardViewType("graph");
+                navigate(ROUTES.BOARD.GRAPH(project.uid), { smooth: true });
+            },
+        },
+        {
             name: t("settings.Bots"),
             icon: "bot",
             badge: pendingGraphApprovalBadge,
@@ -541,7 +561,16 @@ function BoardProxyDisplay({ pageRoute, isFetching, project }: IBoardProxyDispla
 
     let PageComponent;
     let SkeletonComponent;
-    switch (boardViewType) {
+    // Route-backed pages must win during the render that observes a location
+    // change. Waiting for the boardViewType effect leaves the previous Wiki
+    // tree mounted for one render, where its auto-selection can overwrite a
+    // card deep link and navigate back to the Wiki.
+    const renderedViewType = pageRoute ? getCurrentPage(pageRoute) : boardViewType;
+    switch (renderedViewType) {
+        case "graph":
+            PageComponent = BoardGraphPage;
+            SkeletonComponent = SkeletonBoard;
+            break;
         case "wiki":
             PageComponent = BoardWikiPage;
             SkeletonComponent = SkeletonBoardWikiPage;
@@ -616,8 +645,10 @@ function BoardProxyDisplay({ pageRoute, isFetching, project }: IBoardProxyDispla
                                 />
                             )}
                             {!isCardPage && !selectCardViewType && (
-                                <Floating.Nav
-                                    fixed
+                                <BoardFloatingNavigation
+                                    project={project}
+                                    currentUser={currentUser}
+                                    dockEnabled={renderedViewType === "board"}
                                     items={floatingNavs.map((nav, index) => ({
                                         key: index,
                                         label: nav.name,
@@ -748,32 +779,51 @@ function BoardSwitchProjectSidebar({
     currentProject: Project.TModel;
     onSelectProject: (projectUID: string) => void;
 }): React.JSX.Element {
+    const [t] = useTranslation();
     const { data, isFetching, isLoading } = useGetProjects();
+    const [searchQuery, setSearchQuery] = useState("");
     const projects = useMemo(() => {
         const projectMap = new Map<string, Project.TModel>();
         [currentProject, ...(data?.projects ?? [])].forEach((project) => {
             projectMap.set(project.uid, project);
         });
-        return [...projectMap.values()];
-    }, [currentProject, data]);
+        const query = searchQuery.trim().toLowerCase();
+        return [...projectMap.values()]
+            .filter((project) => !query || project.title.toLowerCase().includes(query))
+            .sort(compareProjectActivityPriority);
+    }, [currentProject, data, searchQuery]);
 
     return (
-        <ScrollArea.Root className="h-full min-h-0">
-            <Flex direction="col" gap="1" p="2">
-                {(isLoading || isFetching) && projects.length === 0 ? (
-                    <Box className="px-2 py-3 text-sm text-muted-foreground">Loading...</Box>
-                ) : (
-                    projects.map((project) => (
-                        <BoardSwitchProjectSidebarItem
-                            key={project.uid}
-                            project={project}
-                            active={project.uid === currentProjectUID}
-                            onClick={() => onSelectProject(project.uid)}
-                        />
-                    ))
-                )}
-            </Flex>
-        </ScrollArea.Root>
+        <Flex direction="col" h="full" className="min-h-0">
+            <Box className="shrink-0 border-b p-2">
+                <Input
+                    value={searchQuery}
+                    onChange={(event) => setSearchQuery(event.currentTarget.value)}
+                    placeholder={t("dashboard.Search projects...")}
+                    aria-label={t("dashboard.Search projects")}
+                    leftIcon={<IconComponent icon="search" />}
+                    clearable
+                />
+            </Box>
+            <ScrollArea.Root className="h-full min-h-0">
+                <Flex direction="col" gap="1" p="2">
+                    {(isLoading || isFetching) && projects.length === 0 ? (
+                        <Box className="px-2 py-3 text-sm text-muted-foreground">{t("common.Loading...")}</Box>
+                    ) : projects.length === 0 ? (
+                        <Box className="px-2 py-3 text-sm text-muted-foreground">{t("dashboard.No projects found")}</Box>
+                    ) : (
+                        projects.map((project) => (
+                            <BoardSwitchProjectSidebarItem
+                                key={project.uid}
+                                project={project}
+                                active={project.uid === currentProjectUID}
+                                onClick={() => onSelectProject(project.uid)}
+                            />
+                        ))
+                    )}
+                </Flex>
+            </ScrollArea.Root>
+        </Flex>
     );
 }
 
@@ -786,8 +836,12 @@ function BoardSwitchProjectSidebarItem({
     active: bool;
     onClick: () => void;
 }): React.JSX.Element {
+    const [t, i18n] = useTranslation();
     const title = project.useField("title");
     const projectType = project.useField("project_type");
+    const starred = project.useField("starred");
+    const lastActivityAt = project.useField("last_activity_at");
+    const createdAt = project.useField("created_at");
 
     return (
         <Button
@@ -796,10 +850,13 @@ function BoardSwitchProjectSidebarItem({
             className="h-auto justify-start gap-2 rounded-lg px-3 py-2 text-left"
             onClick={onClick}
         >
-            <IconComponent icon="folder-kanban" size="4" />
+            <IconComponent icon={starred ? "star" : "folder-kanban"} size="4" />
             <Box className="min-w-0">
                 <Box className="truncate text-sm font-medium">{title}</Box>
-                <Box className="truncate text-xs text-muted-foreground">{projectType}</Box>
+                <Box className="truncate text-xs text-muted-foreground">
+                    {t(projectType === "Other" ? "common.Other" : `project.types.${projectType}`)} ·{" "}
+                    {Utils.String.formatDateDistance(i18n, t, lastActivityAt ?? createdAt)}
+                </Box>
             </Box>
         </Button>
     );

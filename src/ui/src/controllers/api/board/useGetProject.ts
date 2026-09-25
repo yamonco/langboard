@@ -3,6 +3,7 @@ import { api } from "@/core/helpers/Api";
 import { TQueryOptions, useQueryMutation } from "@/core/helpers/QueryMutation";
 import { Project, ProjectBotSchedule, ProjectBotScope } from "@/core/models";
 import { Utils } from "@langboard/core/utils";
+import refreshProjectColumnDock from "@/controllers/api/board/refreshProjectColumnDock";
 
 export interface IGetProjectForm {
     uid: string;
@@ -28,6 +29,7 @@ const useGetProject = (form: IGetProjectForm, options?: TQueryOptions<unknown, I
 
         ProjectBotScope.Model.fromArray(res.data.project_bot_scopes, true);
         ProjectBotSchedule.Model.fromArray(res.data.project_bot_schedules, true);
+        await refreshProjectColumnDock(form.uid);
 
         return {
             project,

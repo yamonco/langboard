@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
 import * as React from "react";
@@ -10,7 +11,6 @@ import { PlateElement, useEditorPlugin, withHOC } from "platejs/react";
 import { useFilePicker } from "use-file-picker";
 import { cn } from "@/core/utils/ComponentUtils";
 import { useUploadFile } from "@/components/plate-ui/uploadthing";
-import { getInitialImageWidth } from "@/components/plate-ui/media-image-width";
 import { useTranslation } from "react-i18next";
 import { Utils } from "@langboard/core/utils";
 
@@ -50,75 +50,55 @@ export const PlaceholderElement = withHOC(PlaceholderProvider, function Placehol
     const { api } = useEditorPlugin(PlaceholderPlugin);
     const { isUploading, progress, uploadedFile, uploadFile, uploadingFile } = useUploadFile();
     const loading = isUploading && uploadingFile;
-    const currentContent = typeof element.mediaType === "string" ? CONTENT[element.mediaType] : undefined;
+    const currentContent = CONTENT[element.mediaType];
     const isImage = element.mediaType === KEYS.img;
     const imageRef = React.useRef<HTMLImageElement>(null);
 
-    const replaceCurrentPlaceholder = React.useCallback(
-        (file: File) => {
-            if (typeof element.id !== "string") {
-                return;
-            }
-
-            void uploadFile(file);
-            api.placeholder.addUploadingFile(element.id, file);
-        },
-        [element]
-    );
-
     const { openFilePicker } = useFilePicker({
-        accept: currentContent?.accept ?? [],
+        accept: currentContent.accept,
         multiple: true,
-        readFilesContent: false,
-        onFilesSelected: ({ plainFiles: updatedFiles }) => {
-            if (!updatedFiles?.length) {
-                return;
-            }
-
+        onFilesSelected: (({ plainFiles: updatedFiles }: { plainFiles: File[] }) => {
             const firstFile = updatedFiles[0];
             const restFiles = updatedFiles.slice(1);
 
             replaceCurrentPlaceholder(firstFile);
 
             if (restFiles.length > 0) {
-                const dataTransfer = new DataTransfer();
-                restFiles.forEach((file) => dataTransfer.items.add(file));
-                editor.getTransforms(PlaceholderPlugin).insert.media(dataTransfer.files);
+                editor.getTransforms(PlaceholderPlugin).insert.media(restFiles as unknown as FileList);
             }
-        },
+        }) as any,
     });
 
+    const replaceCurrentPlaceholder = React.useCallback(
+        (file: File) => {
+            void uploadFile(file);
+            api.placeholder.addUploadingFile(element.id as string, file);
+        },
+        [api.placeholder, element.id, uploadFile]
+    );
+
     React.useEffect(() => {
-        const placeholderId = element.id;
-        const mediaType = element.mediaType;
-        if (!uploadedFile || typeof placeholderId !== "string" || typeof mediaType !== "string") return;
+        if (!uploadedFile) return;
 
         const path = editor.api.findPath(element);
-        const image = imageRef.current;
-        const imageWidth = image?.naturalWidth && image.clientWidth ? getInitialImageWidth(image) : undefined;
 
         editor.tf.withoutSaving(() => {
             editor.tf.removeNodes({ at: path });
 
             const node = {
                 children: [{ text: "" }],
+                initialHeight: imageRef.current?.height,
+                initialWidth: imageRef.current?.width,
                 isUpload: true,
-                name: mediaType === KEYS.file ? uploadedFile.name : "",
-                placeholderId,
-                type: mediaType,
+                name: element.mediaType === KEYS.file ? uploadedFile.name : "",
+                placeholderId: element.id as string,
+                type: element.mediaType!,
                 url: uploadedFile.url,
-                ...(imageWidth === undefined ? {} : { width: imageWidth }),
             };
 
             editor.history.undos.reverse().forEach((batch) => {
-                const insertedPlaceholder = batch.operations.some(
-                    (operation) =>
-                        operation.type === "insert_node" &&
-                        Utils.Type.isObject<Record<string, unknown>>(operation.node) &&
-                        operation.node.id === node.placeholderId
-                );
-                if (insertedPlaceholder) {
-                    Object.assign(batch, { [PlaceholderPlugin.key]: true });
+                if (batch.operations.some((operation) => operation.type === "insert_node" && (operation.node as any).id === node.placeholderId)) {
+                    (batch as any)[PlaceholderPlugin.key] = true;
                 }
             });
 
@@ -127,8 +107,8 @@ export const PlaceholderElement = withHOC(PlaceholderProvider, function Placehol
             updateUploadHistory(editor, node);
         });
 
-        api.placeholder.removeUploadingFile(placeholderId);
-    }, [uploadedFile, element]);
+        api.placeholder.removeUploadingFile(element.id as string);
+    }, [uploadedFile, element.id]);
 
     // React dev mode will call React.useEffect twice
     const isReplaced = React.useRef(false);
@@ -138,18 +118,12 @@ export const PlaceholderElement = withHOC(PlaceholderProvider, function Placehol
         if (isReplaced.current) return;
 
         isReplaced.current = true;
-        if (typeof element.id !== "string") return;
-
-        const currentFiles = api.placeholder.getUploadingFile(element.id);
+        const currentFiles = api.placeholder.getUploadingFile(element.id as string);
 
         if (!currentFiles) return;
 
         replaceCurrentPlaceholder(currentFiles);
-    }, []);
-
-    if (!currentContent) {
-        return null;
-    }
+    }, [isReplaced]);
 
     return (
         <PlateElement className="my-1" {...props}>
@@ -218,7 +192,7 @@ export function ImageProgress({
 
     return (
         <div className={cn("relative", className)} contentEditable={false}>
-            <img ref={imageRef} className="mx-auto h-auto w-full max-w-2xl rounded-sm object-cover" alt={file.name} src={objectUrl} />
+            <img ref={imageRef} className="h-auto w-full rounded-sm object-cover" alt={file.name} src={objectUrl} />
             {progress < 100 && (
                 <div className="absolute bottom-1 right-1 flex items-center space-x-2 rounded-full bg-black/50 px-1 py-0.5">
                     <Loader2Icon className="size-3.5 animate-spin text-muted-foreground" />

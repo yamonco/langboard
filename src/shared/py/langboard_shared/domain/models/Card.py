@@ -1,5 +1,5 @@
-from typing import Any
-from sqlalchemy import TEXT
+from typing import Any, ClassVar
+from sqlalchemy import TEXT, CheckConstraint, Index
 from ...core.db import ApiField, DateTimeField, EditorContentModel, Field, ModelColumnType, SnowflakeIDField
 from ...core.types import SafeDateTime, SnowflakeID
 from .BaseNotificationScheduleModel import BaseNotificationScheduleModel
@@ -8,8 +8,23 @@ from .ProjectColumn import ProjectColumn
 
 
 class Card(BaseNotificationScheduleModel, table=True):
+    LINKED_RESOURCE_PROJECT_WIKI: ClassVar[str] = "project_wiki"
+    __table_args__ = (
+        CheckConstraint(
+            "(source_type IS NULL) = (source_uid IS NULL)",
+            name="linked_source_complete",
+        ),
+        Index("ix_card_project_archive_page", "project_id", "archived_at", "id"),
+    )
+
+    created_by_user_id: SnowflakeID | None = SnowflakeIDField(nullable=True, index=True)
+    created_by_bot_id: SnowflakeID | None = SnowflakeIDField(nullable=True, index=True)
     project_id: SnowflakeID = SnowflakeIDField(
-        foreign_key=Project, nullable=False, index=True, api_field=ApiField(name="project_uid")
+        foreign_key=Project,
+        nullable=False,
+        index=True,
+        unique_groups=["linked_resource"],
+        api_field=ApiField(name="project_uid"),
     )
     project_column_id: SnowflakeID = SnowflakeIDField(
         foreign_key=ProjectColumn, nullable=False, index=True, api_field=ApiField(name="project_column_uid")
@@ -22,6 +37,31 @@ class Card(BaseNotificationScheduleModel, table=True):
     deadline_at: SafeDateTime | None = DateTimeField(default=None, nullable=True, api_field=ApiField())
     order: int = Field(default=0, nullable=False, api_field=ApiField())
     archived_at: SafeDateTime | None = DateTimeField(default=None, nullable=True, api_field=ApiField())
+    source_type: str | None = Field(
+        default=None,
+        nullable=True,
+        unique_groups=["linked_resource"],
+        api_field=ApiField(),
+    )
+    source_uid: str | None = Field(
+        default=None,
+        nullable=True,
+        unique_groups=["linked_resource"],
+        api_field=ApiField(),
+    )
+
+    @property
+    def is_linked_resource(self) -> bool:
+        return self.source_type is not None and self.source_uid is not None
+
+    last_change_seq: int = Field(default=0, nullable=False, sa_column_kwargs={"server_default": "0"}, api_field=ApiField())
+    last_change_target_type: str = Field(
+        default="none", nullable=False, sa_column_kwargs={"server_default": "none"}, api_field=ApiField()
+    )
+    last_change_target_id: SnowflakeID | None = SnowflakeIDField(
+        nullable=True, api_field=ApiField(name="last_change_target_uid")
+    )
+    last_change_at: SafeDateTime | None = DateTimeField(default=None, nullable=True, api_field=ApiField())
 
     def board_api_response(
         self,
@@ -29,6 +69,9 @@ class Card(BaseNotificationScheduleModel, table=True):
         member_uids: list[str],
         relationships: list[dict[str, Any]],
         labels: list[dict[str, Any]],
+        creator: dict[str, Any] | None = None,
+        completed: bool = False,
+        is_check_card: bool = False,
     ) -> dict[str, Any]:
         return {
             **self.api_response(),
@@ -36,6 +79,10 @@ class Card(BaseNotificationScheduleModel, table=True):
             "member_uids": member_uids,
             "relationships": relationships,
             "labels": labels,
+            "creator": creator,
+            "has_description": bool(self.description.content.strip()),
+            "completed": completed,
+            "is_check_card": is_check_card,
         }
 
     def notification_data(self) -> dict[str, Any]:
@@ -62,6 +109,8 @@ class Card(BaseNotificationScheduleModel, table=True):
         operator: str | None,
         now: SafeDateTime,
     ) -> dict[str, Any] | None:
+        if self.is_linked_resource:
+            return None
         if field != "deadline_at" or operator not in [self.OPERATOR_WITHIN_NEXT_DAYS, self.OPERATOR_OVERDUE]:
             return super().get_notification_schedule_rule_message_vars(field, operator, now)
         if not self.deadline_at:
@@ -72,4 +121,4 @@ class Card(BaseNotificationScheduleModel, table=True):
         }
 
     def _get_repr_keys(self) -> list[str | tuple[str, str]]:
-        return ["project_id", "project_column_id", "title", "deadline_at", "order", "archived_at"]
+        return ["project_id", "project_column_id", "title", "deadline_at", "order", "archived_at", "last_change_seq"]

@@ -1,16 +1,21 @@
 import { api } from "@/core/helpers/Api";
 import setupApiErrorHandler from "@/core/helpers/setupApiErrorHandler";
-import { IEditorUploadedFile, useEditorData } from "@/core/providers/EditorDataProvider";
+import { useEditorData } from "@/core/providers/EditorDataProvider";
 import { Utils } from "@langboard/core/utils";
 import { EHttpStatus } from "@langboard/core/enums";
 import { AxiosProgressEvent } from "axios";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 
+export interface UploadedFile {
+    name: string;
+    url: string;
+}
+
 export function useUploadFile() {
     const [t] = useTranslation();
     const { uploadPath, uploadedCallback } = useEditorData();
-    const [uploadedFile, setUploadedFile] = React.useState<IEditorUploadedFile>();
+    const [uploadedFile, setUploadedFile] = React.useState<UploadedFile>();
     const [uploadingFile, setUploadingFile] = React.useState<File>();
     const [progress, setProgress] = React.useState<number>(0);
     const [isUploading, setIsUploading] = React.useState(false);
@@ -28,7 +33,7 @@ export function useUploadFile() {
 
         try {
             const uploadURL = Utils.String.convertServerFileURL(uploadPath);
-            const result = await api.post<IEditorUploadedFile>(uploadURL, formData, {
+            const result = await api.post(uploadURL, formData, {
                 onUploadProgress: (progressEvent: AxiosProgressEvent) => {
                     const total = progressEvent.total ?? 0;
                     const progress = (progressEvent.loaded / total) * 100;
@@ -36,9 +41,10 @@ export function useUploadFile() {
                 },
             });
 
-            const uploadedFile: IEditorUploadedFile = {
-                name: result.data.name,
-                url: Utils.String.convertServerFileURL(result.data.url),
+            const { name, url } = result.data;
+            const uploadedFile = {
+                name,
+                url: Utils.String.convertServerFileURL(url as string),
             };
 
             setUploadedFile(uploadedFile);

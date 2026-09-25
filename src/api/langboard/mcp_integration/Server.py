@@ -31,8 +31,9 @@ def _create_fastmcp() -> FastMCP:
 
 @class_instance()
 class McpServer:
-    def __init__(self) -> None:
+    def __init__(self):
         self.mcp = _create_fastmcp()
+        self._streamable_http_app = None
 
     def get_http_app(self) -> tuple[Any, FastMCP]:
         """Build the MCP transport or fail application startup."""
@@ -57,7 +58,7 @@ class McpServer:
         self.mcp = app
         return http_app, app
 
-    def _wrap_tool(self, tool_name: str, handler: Callable[..., Any]) -> Callable[..., Any]:
+    def _wrap_tool(self, tool_name: str, handler: Callable[..., Any]):
         sig = signature(handler)
         tool_data = McpTool.get_tool(tool_name)
         exclude = tool_data.get("exclude", []) if tool_data else []
@@ -67,7 +68,7 @@ class McpServer:
         filtered_sig = sig.replace(parameters=filtered_params)
 
         @wraps(handler)
-        async def wrapper(**kwargs: Any) -> Any:
+        async def wrapper(**kwargs):
             auth_data = mcp_auth_context.get()
             auth_value: User | Bot | None = auth_data.get("user_or_bot") if auth_data else None
 

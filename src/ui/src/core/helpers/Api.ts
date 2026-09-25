@@ -26,6 +26,12 @@ export const api = axios.create({
     }),
 });
 
+const requestSessions = new WeakMap<AxiosRequestConfig, number>();
+const isPreviousSession = (config?: AxiosRequestConfig) => {
+    const version = config ? requestSessions.get(config) : undefined;
+    return version !== undefined && version !== getAuthStore().getSessionVersion();
+};
+
 export const refresh = async (): Promise<bool> => {
     const authStore = getAuthStore();
 
@@ -40,7 +46,7 @@ export const refresh = async (): Promise<bool> => {
         await authStore.updateToken(response.data.access_token, api);
         return true;
     } catch (e) {
-        authStore.removeToken();
+        if (!axios.isCancel(e)) authStore.removeToken();
         return false;
     }
 };
@@ -64,9 +70,21 @@ api.interceptors.request.use(
     }
 );
 
+// Axios request interceptors run in reverse registration order. Capture before
+// asynchronous token attachment, including cookie-based refresh requests.
+api.interceptors.request.use((config) => {
+    requestSessions.set(config, getAuthStore().getSessionVersion());
+    return config;
+});
+
 api.interceptors.response.use(
-    (value) => value,
+    (value) => {
+        if (isPreviousSession(value.config)) throw new axios.CanceledError("Session changed");
+        return value;
+    },
     async (error) => {
+        if (axios.isCancel(error)) throw error;
+        if (isPreviousSession(error.config)) throw new axios.CanceledError("Session changed");
         const interceptToast = error.config?.env?.interceptToast;
         const { handleAsync } = setupApiErrorHandler({
             code: {

@@ -18,6 +18,7 @@ from .CardBotSchedule import CardBotSchedule
 from .CardBotScope import CardBotScope
 from .CardComment import CardComment
 from .CardCommentReaction import CardCommentReaction
+from .CardContentBlock import CardContentBlock
 from .CardMetadata import CardMetadata
 from .CardRelationship import CardRelationship
 from .ChatGraphApprovalRequest import ChatGraphApprovalRequest
@@ -28,6 +29,7 @@ from .Checkitem import Checkitem
 from .CheckitemTimerRecord import CheckitemTimerRecord
 from .Checklist import Checklist
 from .EditorGraphApprovalRequest import EditorGraphApprovalRequest
+from .ExternalImportRecord import ExternalImportRecord
 from .GlobalCardRelationshipType import GlobalCardRelationshipType
 from .GraphApprovalRequest import GraphApprovalRequest
 from .InternalBot import InternalBot
@@ -36,6 +38,7 @@ from .McpRole import McpRole
 from .McpToolGroup import McpToolGroup
 from .McpToolGroupUsage import McpToolGroupUsage
 from .NotificationScheduleRule import NotificationScheduleRule
+from .Organization import Organization
 from .Project import Project
 from .ProjectActivity import ProjectActivity
 from .ProjectAssignedInternalBot import ProjectAssignedInternalBot
@@ -50,8 +53,7 @@ from .ProjectColumnBotDefaultScope import ProjectColumnBotDefaultScope
 from .ProjectColumnBotLog import ProjectColumnBotLog
 from .ProjectColumnBotSchedule import ProjectColumnBotSchedule
 from .ProjectColumnBotScope import ProjectColumnBotScope
-from .ProjectEmailNotificationPolicy import ProjectEmailNotificationPolicy
-from .ProjectEmailNotificationRecipient import ProjectEmailNotificationRecipient
+from .ProjectEmailNotificationPolicy import ProjectEmailNotificationPolicy, ProjectEmailNotificationRecipient
 from .ProjectInvitation import ProjectInvitation
 from .ProjectLabel import ProjectLabel
 from .ProjectRole import ProjectRole
@@ -67,6 +69,7 @@ from .ScimGroupMember import ScimGroupMember
 from .SettingRole import SettingRole
 from .User import User
 from .UserActivity import UserActivity
+from .UserCardReadState import UserCardReadState
 from .UserEmail import UserEmail
 from .UserGroup import UserGroup
 from .UserGroupAssignedEmail import UserGroupAssignedEmail
@@ -100,6 +103,7 @@ __all__ = [
     "CardBotScope",
     "CardComment",
     "CardCommentReaction",
+    "CardContentBlock",
     "CardMetadata",
     "CardRelationship",
     "ChatHistory",
@@ -113,6 +117,7 @@ __all__ = [
     "BotTriggerGraphApprovalRequest",
     "ChatGraphApprovalRequest",
     "EditorGraphApprovalRequest",
+    "ExternalImportRecord",
     "ManualScopeRunGraphApprovalRequest",
     "GraphApprovalRequest",
     "IdentityProvider",
@@ -120,6 +125,7 @@ __all__ = [
     "McpToolGroup",
     "McpToolGroupUsage",
     "NotificationScheduleRule",
+    "Organization",
     "Project",
     "ProjectActivity",
     "ProjectEmailNotificationPolicy",
@@ -149,6 +155,7 @@ __all__ = [
     "ScimGroupMember",
     "User",
     "UserActivity",
+    "UserCardReadState",
     "UserEmail",
     "UserSignInHistory",
     "UserGroup",

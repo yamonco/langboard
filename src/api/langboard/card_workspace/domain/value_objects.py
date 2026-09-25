@@ -16,6 +16,9 @@ MAX_METADATA_VALUE_CHARS = 4_000
 MAX_METADATA_KEY_CHARS = 128
 MAX_PROJECTION_KEY_CHARS = 64
 MAX_CURSOR_CHARS = 1_024
+MAX_GRAPH_NEW_CARDS = 7
+MAX_GRAPH_EDGE_CHANGES = 25
+MAX_DESCRIPTION_PATCH_EDITS = 20
 
 _COMPACT_SECRET_FRAGMENTS = (
     "accesskey",
@@ -46,6 +49,7 @@ class CardBundleInclude(StrEnum):
     Attachments = "attachments"
     Metadata = "metadata"
     Automation = "automation"
+    ContentBlocks = "content_blocks"
 
 
 class CardBundleSection(StrEnum):
@@ -61,6 +65,65 @@ class CardBundleSection(StrEnum):
     Metadata = "metadata"
     BotScopes = "automation.bot_scopes"
     BotSchedules = "automation.bot_schedules"
+
+
+class DescriptionPatchConflict(ValueError):
+    """A reviewed description patch was rejected before persistence."""
+
+
+@dataclass(frozen=True)
+class ExactTextReplacement:
+    """One conflict-detecting replacement inside a card description."""
+
+    old_text: str
+    new_text: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.old_text, str) or not self.old_text:
+            raise ValueError("old_text must not be empty")
+        if not isinstance(self.new_text, str):
+            raise ValueError("new_text must be a string")
+        if self.old_text == self.new_text:
+            raise ValueError("old_text and new_text must differ")
+
+    def apply(self, content: str) -> str:
+        """Replace exactly one match or fail without changing content."""
+
+        matches = content.count(self.old_text)
+        if matches == 0:
+            raise DescriptionPatchConflict("Card description changed after review: old_text was not found")
+        if matches > 1:
+            raise DescriptionPatchConflict("Card description patch is ambiguous: old_text occurs more than once")
+        return content.replace(self.old_text, self.new_text, 1)
+
+
+@dataclass(frozen=True)
+class CardDescriptionPatch:
+    """One atomic, revision-bound set of exact Markdown replacements."""
+
+    edits: tuple[ExactTextReplacement, ...]
+    expected_revision: str | None = None
+
+    def __post_init__(self) -> None:
+        if not self.edits:
+            raise ValueError("Description patch must contain at least one edit")
+        if len(self.edits) > MAX_DESCRIPTION_PATCH_EDITS:
+            raise ValueError(f"Description patch cannot contain more than {MAX_DESCRIPTION_PATCH_EDITS} edits")
+        if self.expected_revision is not None and (
+            len(self.expected_revision) != 64
+            or any(character not in "0123456789abcdef" for character in self.expected_revision.lower())
+        ):
+            raise ValueError("expected_revision must be a SHA-256 hex digest")
+
+    def apply(self, content: str) -> str:
+        """Apply every edit in memory or fail before the caller persists anything."""
+
+        if self.expected_revision is not None and projection_revision(content) != self.expected_revision.lower():
+            raise DescriptionPatchConflict("Card description changed after review: revision does not match")
+        patched = content
+        for edit in self.edits:
+            patched = edit.apply(patched)
+        return patched
 
 
 @dataclass(frozen=True)
@@ -81,6 +144,42 @@ class ChecklistProjectionItem:
             raise ValueError("Checklist projection item checked state must be boolean")
         if self.deadline_at is not None:
             datetime.fromisoformat(self.deadline_at)
+
+
+@dataclass(frozen=True)
+class CardGraphNewCard:
+    """One not-yet-persisted card addressed by a request-local reference."""
+
+    client_ref: str
+    title: str
+    description: str | None = None
+
+    def __post_init__(self) -> None:
+        if (
+            not isinstance(self.client_ref, str)
+            or self.client_ref != self.client_ref.strip()
+            or not self.client_ref.startswith("new:")
+        ):
+            raise ValueError("New card client_ref must start with 'new:'")
+        if len(self.client_ref) > 80 or not self.client_ref[4:]:
+            raise ValueError("New card client_ref is invalid")
+        if not isinstance(self.title, str) or not self.title.strip() or len(self.title) > 500:
+            raise ValueError("New card title is invalid")
+
+
+@dataclass(frozen=True)
+class CardGraphEdge:
+    """One typed parent-to-child relationship between existing or new cards."""
+
+    parent_ref: str
+    child_ref: str
+    relationship_type_uid: str
+
+    def __post_init__(self) -> None:
+        if not all(isinstance(value, str) and value and value == value.strip() for value in self.__dict__.values()):
+            raise ValueError("Graph edge references and relationship type are required")
+        if self.parent_ref == self.child_ref:
+            raise ValueError("A card cannot relate to itself")
 
 
 def require_projection_key(value: str) -> str:
@@ -230,11 +329,42 @@ class ProjectCardCursor:
 
         try:
             payload = _decode_cursor_payload(value)
-            if payload.get("v") != 1:
+            if not isinstance(payload, dict) or payload.get("v") != 1:
                 raise ValueError("Unsupported cursor version")
             return cls(updated_at=payload["updated_at"], card_uid=payload["card_uid"])
         except (KeyError, TypeError, ValueError) as exc:
             raise ValueError("Invalid cards_cursor") from exc
+
+
+@dataclass(frozen=True)
+class ArchivedCardCursor:
+    """Opaque keyset cursor for the archive-only card list."""
+
+    archived_at: str
+    card_uid: str
+
+    def __post_init__(self) -> None:
+        datetime.fromisoformat(self.archived_at)
+        if not self.card_uid:
+            raise ValueError("Archived card cursor UID is required")
+
+    def encode(self) -> str:
+        payload = dumps(
+            {"v": 1, "archived_at": self.archived_at, "card_uid": self.card_uid},
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode()
+        return urlsafe_b64encode(payload).decode().rstrip("=")
+
+    @classmethod
+    def decode(cls, value: str) -> "ArchivedCardCursor":
+        try:
+            payload = _decode_cursor_payload(value)
+            if payload.get("v") != 1:
+                raise ValueError("Unsupported cursor version")
+            return cls(archived_at=payload["archived_at"], card_uid=payload["card_uid"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError("Invalid archive cursor") from exc
 
 
 def projection_revision(value: Any) -> str:

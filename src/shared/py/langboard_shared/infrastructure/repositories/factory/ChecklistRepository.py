@@ -1,7 +1,8 @@
 from ....core.db import DbSession, SqlBuilder
 from ....core.domain import BaseOrderRepository
+from ....core.types import SafeDateTime
 from ....core.types.ParamTypes import TCardParam, TProjectParam
-from ....domain.models import Card, Checklist
+from ....domain.models import Card, Checkitem, Checklist
 from ....helpers import InfraHelper
 
 
@@ -18,7 +19,12 @@ class ChecklistRepository(BaseOrderRepository[Checklist, Card]):
     def name() -> str:
         return "checklist"
 
-    def get_all_by_card(self, card: TCardParam, limit: int | None = None) -> list[Checklist]:
+    def get_all_by_card(
+        self,
+        card: TCardParam,
+        limit: int | None = None,
+        is_system: bool | None = None,
+    ) -> list[Checklist]:
         """Return card checklists, optionally enforcing a database row limit."""
 
         card_id = InfraHelper.convert_id(card)
@@ -27,12 +33,20 @@ class ChecklistRepository(BaseOrderRepository[Checklist, Card]):
             .where(Checklist.column("card_id") == card_id)
             .order_by(Checklist.column("order").asc(), Checklist.column("id").asc())
         )
+        if is_system is not None:
+            query = query.where(Checklist.column("is_system") == is_system)
         if limit is not None:
             query = query.limit(limit)
         with DbSession.use(readonly=True) as db:
             return list(db.exec(query).all())
 
-    def get_all_by_project(self, project: TProjectParam, limit: int | None = None) -> list[Checklist]:
+    def get_all_by_project(
+        self,
+        project: TProjectParam,
+        archive_visible_since: SafeDateTime | None = None,
+        limit: int | None = None,
+        is_system: bool | None = None,
+    ) -> list[Checklist]:
         project_id = InfraHelper.convert_id(project)
 
         query = (
@@ -41,8 +55,23 @@ class ChecklistRepository(BaseOrderRepository[Checklist, Card]):
             .where(Card.column("project_id") == project_id)
             .order_by(Checklist.column("id").asc())
         )
+        if archive_visible_since is not None:
+            query = query.where(
+                (Card.column("archived_at") == None)  # noqa: E711
+                | (Card.column("archived_at") >= archive_visible_since)
+            )
+        if is_system is not None:
+            query = query.where(Checklist.column("is_system") == is_system)
         if limit is not None:
             query = query.limit(limit)
 
         with DbSession.use(readonly=True) as db:
             return list(db.exec(query).all())
+
+    def insert_completion(self, checklist: Checklist, checkitem: Checkitem) -> None:
+        """Create the hidden checklist and its only item in one transaction."""
+
+        with DbSession.use(readonly=False) as db:
+            db.insert(checklist)
+            checkitem.checklist_id = checklist.id
+            db.insert(checkitem)

@@ -1,3 +1,4 @@
+from datetime import timedelta
 from fastapi import Query
 from langboard_shared.core.filter import AuthFilter
 from langboard_shared.core.routing import (
@@ -12,6 +13,7 @@ from langboard_shared.core.routing import (
     create_editor_collaboration_document_id,
 )
 from langboard_shared.core.schema import OpenApiSchema
+from langboard_shared.core.types import SafeDateTime
 from langboard_shared.domain.models import (
     Bot,
     Card,
@@ -33,6 +35,7 @@ from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.domain.services import DomainService
 from langboard_shared.filter import RoleFilter
 from langboard_shared.security import Auth, RoleFinder
+from ...card_workspace.domain import ArchivedCardCursor
 from .forms import InviteProjectMemberForm, ProjectInvitationForm
 
 
@@ -130,7 +133,7 @@ def get_project_assigned_users(project_uid: str, service: DomainService = Domain
     description="Search project member invite candidates.",
     responses=OpenApiSchema().suc({"users": [User]}).auth().forbidden().err(404, ApiErrorCode.NF2001).get(),
 )
-@RoleFilter.add(ProjectRole, [ProjectRoleAction.Update], RoleFinder.project)
+@RoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
 @AuthFilter.add("user")
 def search_project_member_candidates(
     project_uid: str, query: str = "", user: User = Auth.scope("user"), service: DomainService = DomainService.scope()
@@ -221,6 +224,60 @@ def get_project_card_context(
 
 @AppRouter.schema(permission=ApiPermission.Read)
 @AppRouter.api.get(
+    "/board/{project_uid}/cards/archive",
+    tags=["Board"],
+    description="Search and page archived cards without loading them into the active board.",
+    responses=(
+        OpenApiSchema()
+        .suc(
+            {
+                "cards": [(Card, {"schema": {"project_column_name": "string"}})],
+                "total_count": "integer",
+                "next_cursor": ["string", None],
+                "limit": "integer",
+            }
+        )
+        .auth()
+        .forbidden()
+        .err(400, ApiErrorCode.VA0000)
+        .err(404, ApiErrorCode.NF2001)
+        .get()
+    ),
+)
+@RoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+@AuthFilter.add()
+def get_archived_project_cards(
+    project_uid: str,
+    limit: int = Query(default=25, ge=1, le=100),
+    cursor: str | None = Query(default=None, max_length=2048),
+    input_value: str | None = Query(default=None, min_length=1, max_length=1000),
+    service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    project = service.project.get_by_id_like(project_uid)
+    if project is None:
+        raise ApiException.NotFound_404(ApiErrorCode.NF2001)
+    try:
+        decoded = ArchivedCardCursor.decode(cursor) if cursor else None
+        result = service.card.get_api_archived_page_by_project(
+            project,
+            limit,
+            SafeDateTime.fromisoformat(decoded.archived_at) if decoded else None,
+            decoded.card_uid if decoded else None,
+            input_value,
+        )
+    except ValueError as exc:
+        raise ApiException.BadRequest_400(ApiErrorCode.VA0000) from exc
+    if result is None:
+        raise ApiException.NotFound_404(ApiErrorCode.NF2001)
+    cards, total_count, next_fields = result
+    next_cursor = ArchivedCardCursor(*next_fields).encode() if next_fields else None
+    return JsonResponse(
+        content={"cards": cards, "total_count": total_count, "next_cursor": next_cursor, "limit": limit}
+    )
+
+
+@AppRouter.schema(permission=ApiPermission.Read)
+@AppRouter.api.get(
     "/board/{project_uid}/cards",
     tags=["Board"],
     description="Get project cards.",
@@ -235,9 +292,25 @@ def get_project_card_context(
                             "schema": {
                                 "project_column_name": "string",
                                 "count_comment": "integer",
+                                "has_description": "boolean",
+                                "completed": "boolean",
+                                "is_check_card": "boolean",
                                 "member_uids": "string[]",
                                 "relationships": [CardRelationship],
                                 "labels": [ProjectLabel],
+                                "creator?": {
+                                    "uid": "string",
+                                    "type": "Enum[user, bot]",
+                                    "name": "string",
+                                    "avatar": "string?",
+                                    "created_at": "string",
+                                },
+                                "linked_resource?": {
+                                    "type": "string",
+                                    "uid": "string",
+                                    "status": "Enum[available, forbidden, missing]",
+                                    "title?": "string",
+                                },
                             }
                         },
                     )
@@ -257,16 +330,24 @@ def get_project_card_context(
 )
 @RoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
 @AuthFilter.add()
-def get_project_cards(project_uid: str, service: DomainService = DomainService.scope()) -> JsonResponse:
+def get_project_cards(
+    project_uid: str,
+    user_or_bot: User | Bot = Auth.scope("all"),
+    service: DomainService = DomainService.scope(),
+) -> JsonResponse:
     project = service.project.get_by_id_like(project_uid)
     if project is None:
         raise ApiException.NotFound_404(ApiErrorCode.NF2001)
     global_relationships = service.app_setting.get_api_global_relationship_list()
     columns = service.project_column.get_api_list_by_project(project)
-    cards = service.card.get_board_list(project)
-    checklists = service.checklist.get_api_list_only_by_project(project)
+    archive_visible_since = SafeDateTime.now() - timedelta(days=project.archive_visible_days)
+    cards = service.card.get_board_list(project, user_or_bot, archive_visible_since)
+    checklists = service.checklist.get_api_list_only_by_project(
+        project,
+        archive_visible_since=archive_visible_since,
+    )
     column_bot_scopes = service.project_column.get_api_bot_scopes_by_project(project)
-    column_bot_schedules = service.project_column.get_api_bot_schedule_list_by_project(project)
+    column_bot_schedules = service.project_column.get_api_bot_schedule_list_by_project(project, columns)
 
     column_names_by_uid = {col["uid"]: col["name"] for col in columns}
     for card in cards:
@@ -282,6 +363,56 @@ def get_project_cards(project_uid: str, service: DomainService = DomainService.s
             "column_bot_schedules": column_bot_schedules,
         }
     )
+
+
+@AppRouter.schema(permission=ApiPermission.Read)
+@AppRouter.api.get(
+    "/board/{project_uid}/change-feed",
+    tags=["Board"],
+    description="Get a cursor-based board change feed for external orchestrators.",
+    responses=(
+        OpenApiSchema()
+        .suc(
+            {
+                "entries": [
+                    {
+                        "activity_uid": "string",
+                        "activity_type": "string",
+                        "card_uid?": "string",
+                        "project_uid": "string",
+                        "actor_user_uid?": "string",
+                        "actor_bot_uid?": "string",
+                        "created_at": "string",
+                    }
+                ],
+                "has_more": "boolean",
+                "next_cursor?": "string",
+            }
+        )
+        .auth()
+        .forbidden()
+        .err(404, ApiErrorCode.NF2001)
+        .get()
+    ),
+)
+@RoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+@AuthFilter.add()
+def get_board_change_feed(
+    project_uid: str,
+    limit: int = 50,
+    cursor: str | None = None,
+    service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    """Return board changes for external consumption with cursor-based pagination."""
+
+    project = service.project.get_by_id_like(project_uid)
+    if project is None:
+        raise ApiException.NotFound_404(ApiErrorCode.NF2001)
+
+    result = service.card.get_change_feed(project_uid, limit=limit, before_activity_uid=cursor)
+    if result is None:
+        raise ApiException.NotFound_404(ApiErrorCode.NF2001)
+    return JsonResponse(result)
 
 
 @collaborative_edit(
@@ -302,7 +433,15 @@ def update_project_member(
     user: User = Auth.scope("user"),
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
-    result = service.project.update_assigned_users(user, project_uid, form.emails)
+    direct_members = [service.user.get_by_id_like(uid) for uid in dict.fromkeys(form.member_uids)]
+    if any(member is None or member.deleted_at is not None for member in direct_members):
+        raise ApiException.BadRequest_400(ApiErrorCode.VA0000)
+    result = service.project.update_assigned_users(
+        user,
+        project_uid,
+        form.emails,
+        direct_members=[member for member in direct_members if member is not None],
+    )
     if result is None:
         raise ApiException.NotFound_404(ApiErrorCode.NF2001)
 

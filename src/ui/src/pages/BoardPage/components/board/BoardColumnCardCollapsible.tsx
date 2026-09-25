@@ -1,4 +1,5 @@
 import Button from "@/components/base/Button";
+import Avatar from "@/components/base/Avatar";
 import Card from "@/components/base/Card";
 import Collapsible from "@/components/base/Collapsible";
 import Flex from "@/components/base/Flex";
@@ -6,6 +7,7 @@ import IconComponent from "@/components/base/IconComponent";
 import ShineBorder from "@/components/base/ShineBorder";
 import { UserAvatarList } from "@/components/UserAvatarList";
 import { DISABLE_DRAGGING_ATTR } from "@/constants";
+import { ProjectCheckitem } from "@/core/models";
 import { useBoardController } from "@/core/providers/BoardController";
 import { useBoard } from "@/core/providers/BoardProvider";
 import { ROUTES } from "@/core/routing/constants";
@@ -21,7 +23,19 @@ import useCardStore, { useCardIsCollapsed } from "@/core/stores/CardStore";
 import { useHasRunningBot } from "@/core/stores/BotStatusStore";
 import BoardGraphApprovalTargetBadge from "@/pages/BoardPage/components/board/BoardGraphApprovalTargetBadge";
 import { EGraphApprovalScopeTable } from "@/core/models/GraphApprovalRequestModel";
+import { Utils } from "@langboard/core/utils";
+import {
+    calculateChecklistProgress,
+    calculateDeadlinePressure,
+    getDeadlinePressureLevel,
+    type IBoardCardChecklistProgress,
+} from "@/pages/BoardPage/components/board/BoardColumnCardStatus";
 import BoardTaskMetadataBadges from "@/pages/BoardPage/components/task/BoardTaskMetadataBadges";
+import Avatar from "@/components/base/Avatar";
+import { Utils } from "@langboard/core/utils";
+import BoardCardMove from "@/pages/BoardPage/components/board/BoardCardMove";
+import { getBoardCardWidgetVisibility } from "@/pages/BoardPage/components/board/BoardCardWidgetVisibility";
+import useSetCardCompleted from "@/controllers/api/board/useSetCardCompleted";
 
 export interface IBoardColumnCardCollapsibleProps {
     isDragging: bool;
@@ -29,11 +43,79 @@ export interface IBoardColumnCardCollapsibleProps {
 }
 
 function BoardColumnCardCollapsible({ isDragging, compact = false }: IBoardColumnCardCollapsibleProps) {
+    const { model: card } = ModelRegistry.ProjectCard.useContext<IBoardColumnCardContextParams>();
+
+    if (card.source_type === "project_wiki") {
+        return <BoardColumnWikiCard isDragging={isDragging} />;
+    }
+
+    return <BoardColumnTaskCard isDragging={isDragging} compact={compact} />;
+}
+
+function BoardColumnWikiCard({ isDragging }: IBoardColumnCardCollapsibleProps) {
+    const { selectCardViewType } = useBoardController();
+    const { project, navigateWithFilters } = useBoard();
+    const [t] = useTranslation();
+    const { model: card } = ModelRegistry.ProjectCard.useContext<IBoardColumnCardContextParams>();
+    const resource = card.useField("linked_resource");
+    const openCard = useCallback(() => {
+        if (selectCardViewType || isDragging) {
+            return;
+        }
+
+        navigateWithFilters(ROUTES.BOARD.CARD(project.uid, card.uid));
+    }, [card.uid, isDragging, navigateWithFilters, project.uid, selectCardViewType]);
+
+    if (!resource) {
+        return null;
+    }
+
+    const isAvailable = resource.status === "available";
+    const resourceTitle = isAvailable ? resource.title : undefined;
+    const fallbackTitle = resource.status === "forbidden" ? t("wiki.Restricted wiki") : t("wiki.Source unavailable");
+
+    return (
+        <Card.Root
+            id={`board-card-${card.uid}`}
+            className={cn(
+                "group relative cursor-pointer overflow-hidden border-amber-400/35 bg-gradient-to-br from-amber-50/85 to-background",
+                "shadow-sm transition hover:border-amber-500/65 hover:shadow-md dark:from-amber-950/20 dark:to-card",
+                !!selectCardViewType && "cursor-not-allowed opacity-50"
+            )}
+            onClick={openCard}
+        >
+            <Card.Header className="space-y-2 px-5 py-4">
+                <Flex items="center" justify="between" gap="2">
+                    <Flex items="center" gap="2" className="min-w-0 text-amber-700 dark:text-amber-300">
+                        <IconComponent icon={isAvailable ? "book-text" : "lock"} size="4" />
+                        <span className="text-xs font-semibold uppercase tracking-[0.12em]">{t("wiki.Linked wiki")}</span>
+                    </Flex>
+                    <IconComponent icon="external-link" size="3.5" className="shrink-0 text-muted-foreground opacity-60" />
+                </Flex>
+                <Card.Title className="break-words text-[0.95rem] leading-snug">{resourceTitle || fallbackTitle}</Card.Title>
+            </Card.Header>
+        </Card.Root>
+    );
+}
+
+function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCollapsibleProps) {
     const { selectCardViewType, selectedRelationshipUIDs, currentCardUIDRef, isDisabledCard } = useBoardController();
     const { project, filters, cardsMap, globalRelationshipTypes, navigateWithFilters } = useBoard();
     const [t] = useTranslation();
     const { model: card } = ModelRegistry.ProjectCard.useContext<IBoardColumnCardContextParams>();
     const title = card.useField("title");
+    const deadlineAt = card.useField("deadline_at");
+    const checklistItems = ProjectCheckitem.Model.useModels((model) => model.card_uid === card.uid);
+    const checklistProgress = useMemo(() => calculateChecklistProgress(checklistItems), [checklistItems]);
+    const isChecklistCompleted = checklistProgress.total > 0 && checklistProgress.completed === checklistProgress.total;
+    const deadlinePressure = useMemo(
+        () => calculateDeadlinePressure({ deadlineAt, isCompleted: isChecklistCompleted, now: new Date() }),
+        [deadlineAt, isChecklistCompleted]
+    );
+    const deadlinePressureLevel = useMemo(
+        () => getDeadlinePressureLevel({ deadlineAt, isCompleted: isChecklistCompleted, now: new Date() }),
+        [deadlineAt, isChecklistCompleted]
+    );
     const projectMembers = project.useForeignFieldArray("all_members");
     const cardMemberUIDs = card.useField("member_uids") ?? [];
     const cardMembers = useMemo(
@@ -41,6 +123,16 @@ function BoardColumnCardCollapsible({ isDragging, compact = false }: IBoardColum
         [projectMembers, cardMemberUIDs]
     );
     const commentCount = card.useField("count_comment");
+    const creator = card.useField("creator");
+    const hasDescription = card.useField("has_description");
+    const isCheckCard = card.useField("is_check_card") ?? false;
+    const completed = card.useField("completed") ?? false;
+    const widgetVisibility = useMemo(
+        () => getBoardCardWidgetVisibility({ has_description: hasDescription, count_comment: commentCount }),
+        [hasDescription, commentCount]
+    );
+    const { mutateAsync: setCardCompletedAsync } = useSetCardCompleted({ interceptToast: true });
+    const hasUnreadChange = card.useField("has_unread_change") ?? false;
     const { updateCollapsed } = useCardStore();
     const isCollapsed = useCardIsCollapsed(card.uid);
     const labels = card.useForeignFieldArray("labels");
@@ -73,6 +165,20 @@ function BoardColumnCardCollapsible({ isDragging, compact = false }: IBoardColum
             navigateWithFilters(ROUTES.BOARD.CARD(project.uid, card.uid));
         },
         [card, isDragging, isDisabledCard, navigateWithFilters, project, selectCardViewType]
+    );
+
+    const handleToggleCompleted = useCallback(
+        (e: React.MouseEvent<HTMLButtonElement>) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const nextCompleted = !completed;
+            // Optimistic toggle; the hidden completion checklist persists the real state.
+            card.update({ completed: nextCompleted });
+            setCardCompletedAsync({ project_uid: project.uid, card_uid: card.uid, completed: nextCompleted }).catch(() => {
+                card.update({ completed });
+            });
+        },
+        [card, completed, project.uid, setCardCompletedAsync]
     );
 
     const handleOpenCollapsible = useCallback(
@@ -144,42 +250,95 @@ function BoardColumnCardCollapsible({ isDragging, compact = false }: IBoardColum
         [DISABLE_DRAGGING_ATTR]: "",
     };
 
+    // Check cards stay collapsed: no expand affordances, no always-on meta, only a hover checkbox.
+    const showCollapsedOnly = isCheckCard && !compact;
+
     return (
         <>
             <Card.Root
                 id={`board-card-${card.uid}`}
+                data-deadline-pressure-level={deadlinePressureLevel}
                 className={cn(
-                    "relative hover:border-primary",
+                    "group/card relative hover:border-primary",
                     compact && "border-border/60 bg-background/80 shadow-none transition-colors hover:bg-background",
                     !!selectCardViewType && isDisabledCard(card.uid) ? "cursor-not-allowed" : "cursor-pointer"
                 )}
+                style={{ "--board-card-deadline-pressure": deadlinePressure } as React.CSSProperties}
                 onClick={openCard}
             >
+                <BoardCardProgressTrace progress={checklistProgress} />
+                {checklistProgress.total > 0 && (
+                    <span className="sr-only">
+                        {[
+                            t("card.Checklist progress: {{completed}} of {{total}} complete", {
+                                completed: checklistProgress.completed,
+                                total: checklistProgress.total,
+                            }),
+                            deadlineAt && t("card.Deadline {{date}}", { date: Utils.String.formatDateLocale(deadlineAt) }),
+                            deadlinePressureLevel === "critical" && t("card.Due within a day"),
+                            deadlinePressureLevel === "overdue" && t("card.Overdue"),
+                        ]
+                            .filter(Boolean)
+                            .join(" ")}
+                    </span>
+                )}
                 {hasRunningBot && <ShineBorder className="z-50" />}
+                {hasUnreadChange && (
+                    <span
+                        aria-label={t("board.Unread changes")}
+                        title={t("board.Unread changes")}
+                        className="absolute right-1.5 top-1.5 z-40 size-2 rounded-full bg-primary"
+                    />
+                )}
                 <Collapsible.Root
-                    open={!compact && !isCollapsed}
+                    open={!compact && !isCollapsed && !showCollapsedOnly}
                     onOpenChange={(opened) => {
                         updateCollapsed(card.uid, !opened);
                     }}
                 >
-                    <Card.Header className={cn("relative block space-y-0", compact ? "px-3 py-2" : "py-4")}>
-                        {!compact && !isCollapsed && !!labels.length && (
+                    <Card.Header className={cn("relative block space-y-0", compact ? "px-3 py-2" : "py-4", showCollapsedOnly && "py-2.5")}>
+                        {!compact && !isCollapsed && !showCollapsedOnly && !!labels.length && (
                             <Flex items="center" gap="1" mb="1.5" wrap>
                                 {labels.map((label) => (
                                     <LabelModelBadge key={`board-card-label-${label.uid}`} model={label} />
                                 ))}
                             </Flex>
                         )}
-                        {!compact && !isCollapsed && <BoardTaskMetadataBadges cardUID={card.uid} compact className="mb-1.5" />}
+                        {!compact && !isCollapsed && !showCollapsedOnly && <BoardTaskMetadataBadges cardUID={card.uid} compact className="mb-1.5" />}
                         <Card.Title
                             className={cn(
                                 "break-all leading-tight",
-                                compact ? "max-w-full text-sm font-medium text-muted-foreground" : "max-w-[calc(100%_-_theme(spacing.8))]"
+                                compact ? "max-w-full text-sm font-medium text-muted-foreground" : "max-w-[calc(100%_-_theme(spacing.8))]",
+                                showCollapsedOnly && "text-sm",
+                                completed && "line-through opacity-60"
                             )}
                         >
-                            {title}
+                            <button
+                                type="button"
+                                data-board-card-open=""
+                                className={cn(
+                                    "w-full rounded-sm text-left [font:inherit]",
+                                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                )}
+                                disabled={!!selectCardViewType && isDisabledCard(card.uid)}
+                            >
+                                {title}
+                            </button>
                         </Card.Title>
-                        {!compact && (
+                        {showCollapsedOnly && (
+                            <Button
+                                variant="ghost"
+                                className="absolute left-1.5 top-1/2 z-10 -translate-y-1/2 opacity-0 transition-opacity group-hover/card:opacity-100"
+                                size="icon-sm"
+                                title={t(completed ? "card.Mark as not done" : "card.Mark as done")}
+                                titleSide="top"
+                                onClick={handleToggleCompleted}
+                                {...attributes}
+                            >
+                                <IconComponent icon={completed ? "check" : "circle"} size="4" className="text-muted-foreground" />
+                            </Button>
+                        )}
+                        {!compact && !showCollapsedOnly && (
                             <BoardGraphApprovalTargetBadge
                                 projectUID={project.uid}
                                 scopeTable={EGraphApprovalScopeTable.Card}
@@ -187,10 +346,10 @@ function BoardColumnCardCollapsible({ isDragging, compact = false }: IBoardColum
                                 className="absolute right-11 top-3"
                             />
                         )}
-                        {!compact && (
+                        {!compact && !showCollapsedOnly && (
                             <Button
                                 variant="ghost"
-                                className={cn("absolute right-2.5 top-2.5 mt-0")}
+                                className={cn("absolute right-0 top-0 mt-0 size-11 md:right-1 md:top-1 md:size-8")}
                                 size="icon-sm"
                                 title={t(`common.${!isCollapsed ? "Collapse" : "Expand"}`)}
                                 titleSide="top"
@@ -201,51 +360,157 @@ function BoardColumnCardCollapsible({ isDragging, compact = false }: IBoardColum
                             </Button>
                         )}
                     </Card.Header>
-                    <Collapsible.Content
-                        className={cn(
-                            "overflow-hidden text-sm transition-all",
-                            "data-[state=closed]:animate-collapse-up data-[state=open]:animate-collapse-down"
-                        )}
-                    >
-                        {!!presentableRelationships.length && (
-                            <Card.Content className="px-6 pb-4">
-                                {presentableRelationships.map(([relatedCardTitle, relationshipName], index) => (
-                                    <Flex
-                                        key={`board-card-presentable-relationship-${card.uid}-${relationshipName}-${relatedCardTitle}-${index}`}
-                                        items="center"
-                                        gap="2"
-                                        className="truncate text-accent-foreground/70"
+                    {showCollapsedOnly ? (
+                        <>
+                            {!!cardMembers.length && (
+                                <div className="flex items-center justify-end px-4 pb-1.5">
+                                    <UserAvatarList
+                                        maxVisible={3}
+                                        userOrBots={cardMembers}
+                                        scope={{
+                                            projectUID: project.uid,
+                                            cardUID: card.uid,
+                                        }}
+                                        size="sm"
+                                        {...attributes}
+                                        className="cursor-default"
+                                    />
+                                </div>
+                            )}
+                            <div className="flex items-center px-4 pb-2 opacity-0 transition-opacity duration-200 group-hover/card:opacity-100">
+                                {creator && (
+                                    <span
+                                        title={t("card.Created by {{name}}", {
+                                            name: creator.name,
+                                        })}
+                                        className="mr-0 inline-flex max-w-0 overflow-hidden opacity-0 transition-all duration-200 ease-out group-hover/card:mr-2 group-hover/card:max-w-8 group-hover/card:opacity-100"
+                                        {...attributes}
                                     >
-                                        <span>{relationshipName}</span>
-                                        <span className="text-muted-foreground">&gt;</span>
-                                        <span className="truncate">{relatedCardTitle}</span>
-                                    </Flex>
-                                ))}
-                            </Card.Content>
-                        )}
-                        <Card.Footer className="flex items-end justify-between gap-1.5 pb-4">
-                            <Flex items="center" gap="2">
-                                <IconComponent icon="message-square" size="4" className="text-secondary" strokeWidth="4" />
-                                <span>{commentCount}</span>
-                            </Flex>
-                            <UserAvatarList
-                                maxVisible={3}
-                                userOrBots={cardMembers}
-                                scope={{
-                                    projectUID: project.uid,
-                                    cardUID: card.uid,
-                                }}
-                                size="sm"
-                                {...attributes}
-                                className="cursor-default"
-                            />
-                        </Card.Footer>
-                    </Collapsible.Content>
+                                        <Avatar.Root size="xs">
+                                            {creator.avatar && <Avatar.Image src={Utils.String.convertServerFileURL(creator.avatar)} alt={creator.name} />}
+                                            <Avatar.Fallback className="text-[10px] font-medium">
+                                                {Utils.String.getInitials(creator.name, "")}
+                                            </Avatar.Fallback>
+                                        </Avatar.Root>
+                                    </span>
+                                )}
+                                <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                    {commentCount ? (
+                                        <>
+                                            <IconComponent icon="message-square" size="3.5" />
+                                            <span>{commentCount}</span>
+                                        </>
+                                    ) : null}
+                                </span>
+                            </div>
+                        </>
+                    ) : (
+                        <Collapsible.Content
+                            className={cn(
+                                "overflow-hidden text-sm transition-all",
+                                "data-[state=closed]:animate-collapse-up data-[state=open]:animate-collapse-down"
+                            )}
+                        >
+                            {!!presentableRelationships.length && (
+                                <Card.Content className="px-6 pb-4">
+                                    {presentableRelationships.map(([relatedCardTitle, relationshipName], index) => (
+                                        <Flex
+                                            key={`board-card-presentable-relationship-${card.uid}-${relationshipName}-${relatedCardTitle}-${index}`}
+                                            items="center"
+                                            gap="2"
+                                            className="truncate text-accent-foreground/70"
+                                        >
+                                            <span>{relationshipName}</span>
+                                            <span className="text-muted-foreground">&gt;</span>
+                                            <span className="truncate">{relatedCardTitle}</span>
+                                        </Flex>
+                                    ))}
+                                </Card.Content>
+                            )}
+                            <Card.Footer className="flex items-end justify-between gap-1.5 pb-4">
+                                <Flex items="center">
+                                    {creator && (
+                                        <span
+                                            title={t("card.Created by {{name}}", {
+                                                name: creator.name,
+                                            })}
+                                            className="mr-0 inline-flex max-w-0 overflow-hidden opacity-0 transition-all duration-200 ease-out group-hover/card:mr-2 group-hover/card:max-w-8 group-hover/card:opacity-100"
+                                            {...attributes}
+                                        >
+                                            <Avatar.Root size="xs">
+                                                {creator.avatar && <Avatar.Image src={Utils.String.convertServerFileURL(creator.avatar)} alt={creator.name} />}
+                                                <Avatar.Fallback className="text-[10px] font-medium">
+                                                    {Utils.String.getInitials(creator.name, "")}
+                                                </Avatar.Fallback>
+                                            </Avatar.Root>
+                                        </span>
+                                    )}
+                                    {widgetVisibility.showDescriptionIcon && (
+                                        <IconComponent
+                                            icon="file-text"
+                                            size="4"
+                                            className="text-secondary"
+                                            strokeWidth="4"
+                                            {...attributes}
+                                            aria-label={t("card.Description")}
+                                        />
+                                    )}
+                                    {widgetVisibility.showCommentCount && (
+                                        <span className="ml-2 flex items-center gap-1">
+                                            <IconComponent icon="message-square" size="4" className="text-secondary" strokeWidth="4" />
+                                            <span>{commentCount}</span>
+                                        </span>
+                                    )}
+                                </Flex>
+                                <UserAvatarList
+                                    maxVisible={3}
+                                    userOrBots={cardMembers}
+                                    scope={{
+                                        projectUID: project.uid,
+                                        cardUID: card.uid,
+                                    }}
+                                    size="sm"
+                                    {...attributes}
+                                    className="cursor-default"
+                                />
+                            </Card.Footer>
+                        </Collapsible.Content>
+                    )}
                 </Collapsible.Root>
-                <BoardColumnCardRelationship attributes={attributes} />
+                <BoardColumnCardRelationship attributes={attributes} compact={compact} />
             </Card.Root>
             <SelectRelationshipDialog isOpened={isSelectRelationshipDialogOpened} setIsOpened={setIsSelectRelationshipDialogOpened} />
         </>
+    );
+}
+
+function BoardCardProgressTrace({ progress }: { progress: IBoardCardChecklistProgress }) {
+    if (!progress.total) {
+        return null;
+    }
+
+    const progressPct = progress.ratio * 100;
+
+    return (
+        <span aria-hidden="true" className="pointer-events-none absolute inset-0 z-[1] overflow-hidden rounded-[inherit]">
+            <svg className="h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+                <rect className="board-card-progress-track" x="1" y="1" width="98" height="98" rx="10" ry="10" pathLength={100} />
+                {progressPct > 0 && (
+                    <rect
+                        className="board-card-progress-value"
+                        x="1"
+                        y="1"
+                        width="98"
+                        height="98"
+                        rx="10"
+                        ry="10"
+                        pathLength={100}
+                        transform="rotate(90 50 50)"
+                        style={{ strokeDasharray: `${progressPct} 100` }}
+                    />
+                )}
+            </svg>
+        </span>
     );
 }
 BoardColumnCardCollapsible.displayName = "Board.ColumnCard.Collapsible";

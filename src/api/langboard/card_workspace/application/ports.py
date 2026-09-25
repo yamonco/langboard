@@ -1,6 +1,11 @@
 from dataclasses import dataclass
 from typing import Any, Protocol
-from ..domain import ChecklistProjectionItem
+from ..domain import (
+    CardDescriptionPatch,
+    CardGraphEdge,
+    CardGraphNewCard,
+    ChecklistProjectionItem,
+)
 
 
 @dataclass(frozen=True)
@@ -43,7 +48,6 @@ class CardWorkspaceQueryPort(Protocol):
         requested_sections: frozenset[str],
     ) -> CardBundleSource | None:
         """Load bounded native facts, fetching optional sections only when requested."""
-        ...
 
     def get_comment_page(
         self,
@@ -53,11 +57,9 @@ class CardWorkspaceQueryPort(Protocol):
         before_comment_uid: str | None,
     ) -> CommentPageSource:
         """Load one newest-first comment page."""
-        ...
 
     def get_project_identity(self, project_uid: str) -> dict[str, Any] | None:
         """Load the minimal identity of one accessible project."""
-        ...
 
     def get_project_card_page(
         self,
@@ -67,20 +69,14 @@ class CardWorkspaceQueryPort(Protocol):
         before_card_uid: str | None,
     ) -> ProjectCardPageSource:
         """Load one bounded project-card keyset page."""
+
+    def get_card_content_blocks(self, project_uid: str, card_uid: str) -> list[dict[str, Any]] | None:
+        """Return the ordered public content blocks of a card."""
+
         ...
 
     def get_public_card_metadata(self, project_uid: str, card_uid: str) -> dict[str, str] | None:
         """Load raw card metadata after ancestry validation."""
-        ...
-
-    def get_public_card_metadata_by_key(
-        self,
-        project_uid: str,
-        card_uid: str,
-        key: str,
-    ) -> dict[str, str] | None:
-        """Load one raw card metadata entry after ancestry validation."""
-        ...
 
 
 class CardWorkspaceCommandPort(Protocol):
@@ -94,7 +90,6 @@ class CardWorkspaceCommandPort(Protocol):
         infer_template_prefix: bool,
     ) -> dict[str, Any]:
         """Create a project and its standard workflow."""
-        ...
 
     def create_card_in_leftmost_column(
         self,
@@ -104,23 +99,87 @@ class CardWorkspaceCommandPort(Protocol):
         assign_user_uids: list[str] | None,
     ) -> dict[str, Any]:
         """Create a card in the server-selected leftmost active column."""
+
+    def apply_card_graph_patch(
+        self,
+        project_uid: str,
+        anchor_card_uid: str,
+        new_cards: list[CardGraphNewCard],
+        add_edges: list[CardGraphEdge],
+        remove_relationship_uids: list[str],
+    ) -> dict[str, Any]:
+        """Atomically create cards and add or remove typed relationship edges."""
+
+    def patch_card_description(
+        self,
+        project_uid: str,
+        card_uid: str,
+        patch: CardDescriptionPatch,
+    ) -> str:
+        """Atomically apply one revision-bound description patch."""
+
+    def replace_card_description(
+        self,
+        project_uid: str,
+        card_uid: str,
+        description: str,
+        expected_revision: str,
+    ) -> str:
+        """Atomically replace one revision-bound description, including an empty body."""
+
+    def create_card_content_block(
+        self,
+        project_uid: str,
+        card_uid: str,
+        block_type: str,
+        payload: dict[str, Any],
+        order: int | None,
+        after_block_uid: str | None,
+    ) -> dict[str, Any] | None:
+        """Create one typed content block on a card."""
+
+        ...
+
+    def update_card_content_block(
+        self,
+        project_uid: str,
+        card_uid: str,
+        block_uid: str,
+        expected_revision: int,
+        payload: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        """Partially update one content block under optimistic locking."""
+
+        ...
+
+    def delete_card_content_block(self, project_uid: str, card_uid: str, block_uid: str) -> bool | None:
+        """Delete one content block."""
+
+        ...
+
+    def move_card_content_block(
+        self,
+        project_uid: str,
+        card_uid: str,
+        block_uid: str,
+        after_block_uid: str | None,
+        order: int | None,
+    ) -> bool | None:
+        """Reposition one content block."""
+
         ...
 
     def add_card_comment(self, project_uid: str, card_uid: str, content: str) -> dict[str, Any]:
         """Create a comment."""
-        ...
 
     def update_card_comment(self, project_uid: str, card_uid: str, comment_uid: str, content: str) -> dict[str, Any]:
         """Update an owned comment."""
-        ...
 
     def delete_card_comment(self, project_uid: str, card_uid: str, comment_uid: str) -> None:
         """Delete an owned comment."""
-        ...
 
     def create_card_checklist(self, project_uid: str, card_uid: str, title: str) -> dict[str, Any]:
         """Create a checklist."""
-        ...
 
     def update_card_checklist(
         self,
@@ -131,15 +190,21 @@ class CardWorkspaceCommandPort(Protocol):
         is_checked: bool | None,
     ) -> list[dict[str, Any]]:
         """Validate and update checklist fields."""
-        ...
 
     def delete_card_checklist(self, project_uid: str, card_uid: str, checklist_uid: str) -> None:
         """Delete a checklist."""
-        ...
 
     def create_card_checkitem(self, project_uid: str, card_uid: str, checklist_uid: str, title: str) -> dict[str, Any]:
         """Create a checkitem."""
-        ...
+
+    def cardify_card_checkitem(
+        self,
+        project_uid: str,
+        card_uid: str,
+        checkitem_uid: str,
+        project_column_uid: str,
+    ) -> dict[str, Any]:
+        """Create a card from one existing checkitem."""
 
     def update_card_checkitem(
         self,
@@ -151,11 +216,9 @@ class CardWorkspaceCommandPort(Protocol):
         is_checked: bool | None,
     ) -> list[dict[str, Any]]:
         """Validate and update checkitem fields."""
-        ...
 
     def delete_card_checkitem(self, project_uid: str, card_uid: str, checkitem_uid: str) -> None:
         """Delete a checkitem."""
-        ...
 
     def replace_card_people_and_labels(
         self,
@@ -165,7 +228,6 @@ class CardWorkspaceCommandPort(Protocol):
         label_uids: list[str] | None,
     ) -> dict[str, Any]:
         """Validate complete replacement sets before mutating."""
-        ...
 
     def replace_card_relationships(
         self,
@@ -175,7 +237,6 @@ class CardWorkspaceCommandPort(Protocol):
         relationships: list[tuple[str, str]],
     ) -> list[dict[str, Any]]:
         """Validate all relationship edges before replacing them."""
-        ...
 
     def update_card_attachment(
         self,
@@ -186,11 +247,9 @@ class CardWorkspaceCommandPort(Protocol):
         order: int | None,
     ) -> list[dict[str, Any]]:
         """Validate and update attachment metadata."""
-        ...
 
     def delete_card_attachment(self, project_uid: str, card_uid: str, attachment_uid: str) -> None:
         """Delete a card attachment."""
-        ...
 
     def save_public_card_metadata(
         self,
@@ -201,11 +260,9 @@ class CardWorkspaceCommandPort(Protocol):
         old_key: str | None,
     ) -> dict[str, str]:
         """Save one public metadata entry."""
-        ...
 
     def delete_public_card_metadata(self, project_uid: str, card_uid: str, keys: list[str]) -> None:
         """Delete public metadata entries."""
-        ...
 
     def reconcile_card_checklist_projection(
         self,
@@ -217,4 +274,3 @@ class CardWorkspaceCommandPort(Protocol):
         expected_receipt: str | None,
     ) -> dict[str, Any]:
         """Converge one caller-owned checklist and persist its receipt last."""
-        ...

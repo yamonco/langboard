@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
 import { Plate } from "platejs/react";
@@ -7,8 +8,7 @@ import { IEditorContent } from "@/core/models/Base";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type Value } from "platejs";
 import { FocusScope } from "@radix-ui/react-focus-scope";
-import { useComposedRefs } from "@radix-ui/react-compose-refs";
-import { EditorDataProvider, TEditorDataProviderValueProps, useEditorData } from "@/core/providers/EditorDataProvider";
+import { EditorDataProvider, TEditorDataProviderProps, useEditorData } from "@/core/providers/EditorDataProvider";
 import { TEditor } from "@/components/Editor/editor-kit";
 import { useMounted } from "@/core/hooks/useMounted";
 import { YjsPlugin } from "@platejs/yjs/react";
@@ -57,12 +57,13 @@ const isYjsSelectionMismatchError = (error: unknown) => {
     return error instanceof Error && error.message.includes(YJS_SELECTION_MISMATCH_ERROR);
 };
 
-interface IBasePlateEditorProps extends Omit<TUseCreateEditor, "plugins" | "readOnly"> {
+interface IBasePlateEditorProps extends Omit<TUseCreateEditor, "plugins"> {
     setValue?: (value: IEditorContent) => void;
     onEditorChange?: (editor: TEditor) => void;
     onEditorReady?: (editor: TEditor) => void;
     serializeOnChange?: bool;
     focusOnReady?: bool;
+    focusOnReadyEdge?: "startEditor" | "endEditor";
     variant?: React.ComponentProps<typeof Editor>["variant"];
     className?: string;
     containerClassName?: string;
@@ -70,6 +71,7 @@ interface IBasePlateEditorProps extends Omit<TUseCreateEditor, "plugins" | "read
     editorComponentRef?: React.Ref<HTMLDivElement>;
     placeholder?: string;
     deserializedValue?: Value;
+    authoritativeCollaborativeValue?: string;
     onCollaborativeValueReady?: (updateValue: ((value: string) => void) | null) => void;
     onCollaborativeValueResetReady?: (resetValue: ((value: string) => void) | null) => void;
 }
@@ -86,39 +88,41 @@ interface IPlateEditorProps extends IBasePlateEditorProps {
 
 export type TPlateEditorProps = IPlateViewerProps | IPlateEditorProps;
 
-export function PlateEditor(props: TPlateEditorProps & TEditorDataProviderValueProps) {
+export function PlateEditor(props: TPlateEditorProps & Omit<TEditorDataProviderProps, "children">) {
     return (
-        <EditorDataProvider {...props}>
+        <EditorDataProvider {...(props as any)}>
             <EditorWrapper {...props} />
         </EditorDataProvider>
     );
 }
 
-function EditorWrapper(editorProps: TPlateEditorProps) {
-    const {
-        value,
-        readOnly,
-        variant = "ai",
-        serializeOnChange = true,
-        focusOnReady = false,
-        className,
-        containerClassName,
-        setValue,
-        onEditorChange,
-        onEditorReady,
-        editorRef,
-        editorComponentRef,
-        placeholder,
-        deserializedValue,
-        onCollaborativeValueReady,
-        onCollaborativeValueResetReady,
-    } = editorProps;
+function EditorWrapper({
+    value,
+    readOnly,
+    variant = "ai",
+    serializeOnChange = true,
+    focusOnReady = false,
+    focusOnReadyEdge = "endEditor",
+    className,
+    containerClassName,
+    setValue,
+    onEditorChange,
+    onEditorReady,
+    editorRef,
+    editorComponentRef,
+    placeholder,
+    deserializedValue,
+    authoritativeCollaborativeValue,
+    onCollaborativeValueReady,
+    onCollaborativeValueResetReady,
+    ...props
+}: TPlateEditorProps) {
+    if (!editorRef) {
+        editorRef = useRef<TEditor>(null);
+    }
 
     const [t] = useTranslation();
-    const internalEditorRef = useRef<TEditor>(null);
-    const resolvedEditorRef = editorRef ?? internalEditorRef;
     const internalEditorComponentRef = useRef<HTMLDivElement>(null);
-    const composedEditorComponentRef = useComposedRefs(internalEditorComponentRef, editorComponentRef);
     const [isCollaborativeReady, setIsCollaborativeReady] = useState(false);
     const [showSyncUnavailable, setShowSyncUnavailable] = useState(false);
     const [collaborativeRetryKey, setCollaborativeRetryKey] = useState(0);
@@ -126,9 +130,12 @@ function EditorWrapper(editorProps: TPlateEditorProps) {
         setIsCollaborativeReady(isSynced);
     }, []);
     const editor = useCreateEditor({
-        ...editorProps,
+        value,
+        readOnly,
+        deserializedValue,
         onCollaborativeSyncChange: handleCollaborativeSyncChange,
-    });
+        ...props,
+    } as TUseCreateEditor);
     const mounted = useMounted();
     const socket = useSocket();
     const { documentID, editorType, form } = useEditorData();
@@ -136,6 +143,7 @@ function EditorWrapper(editorProps: TPlateEditorProps) {
     const isWaitingForCollaborativeReady = !readOnly && !!documentID && !isCollaborativeReady;
     const valueRef = useRef(value);
     const deserializedValueRef = useRef(deserializedValue);
+    const restoredCollaborativeValueRef = useRef<string | null>(null);
     valueRef.current = value;
     deserializedValueRef.current = deserializedValue;
     const richPatchSocketTarget = useMemo<IRichPatchSocketTarget | null>(() => {
@@ -146,14 +154,14 @@ function EditorWrapper(editorProps: TPlateEditorProps) {
         if (editorType === EEditorType.CardDescription && form?.card_uid) {
             return {
                 topic: ESocketTopic.BoardCard,
-                topicId: form.card_uid,
+                topicId: form.card_uid as string,
             };
         }
 
         if (editorType === EEditorType.WikiContent && form?.wiki_uid) {
             return {
                 topic: ESocketTopic.BoardWikiPrivate,
-                topicId: form.wiki_uid,
+                topicId: form.wiki_uid as string,
             };
         }
 
@@ -171,13 +179,13 @@ function EditorWrapper(editorProps: TPlateEditorProps) {
 
         window.setTimeout(() => {
             try {
-                editor.tf.focus({ edge: "endEditor", retries: 3 });
+                editor.tf.focus({ edge: focusOnReadyEdge, retries: 3 });
             } catch (e) {
                 console.log(e);
                 focusElement.focus();
             }
         }, 0);
-    }, [editor, focusOnReady, readOnly]);
+    }, [editor, focusOnReady, focusOnReadyEdge, readOnly]);
     const normalizeEditorValue = useCallback((value: Value) => {
         if (value.length) {
             return value;
@@ -224,7 +232,7 @@ function EditorWrapper(editorProps: TPlateEditorProps) {
         [onEditorChange, readOnly, serializeOnChange, setValue]
     );
 
-    resolvedEditorRef.current = editor;
+    editorRef.current = editor;
 
     const updateCollaborativeValue = useCallback(
         (nextContent: string) => {
@@ -257,6 +265,25 @@ function EditorWrapper(editorProps: TPlateEditorProps) {
         },
         [hasRemoteCollaborativeEditor, updateCollaborativeValue]
     );
+
+    useEffect(() => {
+        if (readOnly) {
+            restoredCollaborativeValueRef.current = null;
+            return;
+        }
+
+        if (!documentID || !isCollaborativeReady || authoritativeCollaborativeValue === undefined) {
+            return;
+        }
+
+        const restoreKey = `${documentID}\u0000${authoritativeCollaborativeValue}`;
+        if (restoredCollaborativeValueRef.current === restoreKey) {
+            return;
+        }
+
+        resetCollaborativeValue(authoritativeCollaborativeValue);
+        restoredCollaborativeValueRef.current = restoreKey;
+    }, [authoritativeCollaborativeValue, documentID, isCollaborativeReady, readOnly, resetCollaborativeValue]);
 
     useEffect(() => {
         if (readOnly || !documentID || !isCollaborativeReady) {
@@ -313,7 +340,7 @@ function EditorWrapper(editorProps: TPlateEditorProps) {
                 topicId: richPatchSocketTarget.topicId,
                 event: EDITOR_SYNC_RICH_PATCH_REQUEST_EVENT,
                 eventKey: documentID,
-                callback,
+                callback: callback as unknown as (data: unknown) => void,
             });
         };
     }, [documentID, mounted, readOnly, richPatchSocketTarget, socket, updateCollaborativeValue]);
@@ -447,18 +474,30 @@ function EditorWrapper(editorProps: TPlateEditorProps) {
         focusEditor();
     }, [documentID, focusEditor, focusOnReady, mounted, readOnly]);
 
+    const setEditorComponentRefs = useCallback(
+        (node: HTMLDivElement | null) => {
+            internalEditorComponentRef.current = node;
+
+            if (!editorComponentRef) {
+                return;
+            }
+
+            if (Utils.Type.isFunction(editorComponentRef)) {
+                editorComponentRef(node);
+                return;
+            }
+
+            editorComponentRef.current = node;
+        },
+        [editorComponentRef]
+    );
+
     return (
         <FocusScope trapped={false} loop={false} className="w-full outline-none">
             <Plate editor={editor} readOnly={readOnly} onValueChange={handleValueChange}>
                 <div className="relative">
                     <EditorContainer className={containerClassName}>
-                        <Editor
-                            variant={variant}
-                            className={className}
-                            placeholder={placeholder}
-                            readOnly={readOnly}
-                            ref={composedEditorComponentRef}
-                        />
+                        <Editor variant={variant} className={className} placeholder={placeholder} readOnly={readOnly} ref={setEditorComponentRefs} />
                     </EditorContainer>
                     {isWaitingForCollaborativeReady && (
                         <SyncBlocker

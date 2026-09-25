@@ -21,6 +21,7 @@ class BoundedTextDto(BaseModel):
     content: str
     format: str
     total_chars: int
+    revision: str
     next_cursor: str | None
 
 
@@ -56,6 +57,7 @@ class CardBundleDto(BaseModel):
     attachments: BoundedItemsDto | None = None
     metadata: BoundedItemsDto | None = None
     automation: AutomationDto | None = None
+    content_blocks: BoundedItemsDto | None = None
 
     @model_serializer(mode="wrap")
     def serialize_selected_sections(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:

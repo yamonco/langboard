@@ -14,7 +14,7 @@ from ...domain.models import WebhookSetting
 from ...helpers import InfraHelper
 from ...infrastructure.repositories import Repository
 from ...publishers import AppSettingPublisher
-from .utils import WebhookModel, ensure_public_webhook_url
+from .utils import WORK_EVENT_NAME, WebhookModel, WorkEventData, ensure_public_webhook_url
 
 
 WEBHOOK_TIMEOUT = Timeout(5.0, connect=2.0)
@@ -161,7 +161,7 @@ def signed_request(
         "event_id": model.event_id,
         "occurred_at": model.occurred_at,
         "event": model.event,
-        "data": minimal_event_data(model.data),
+        "data": minimal_event_data(model.data, event=model.event),
     }
     body = json_dumps(
         payload,
@@ -186,8 +186,11 @@ def signed_request(
     return body, headers
 
 
-def minimal_event_data(data: dict[str, Any]) -> dict[str, Any]:
+def minimal_event_data(data: dict[str, Any], *, event: str | None = None) -> dict[str, Any]:
     """Project bot-trigger data to non-PII webhook routing metadata."""
+
+    if event == WORK_EVENT_NAME:
+        return WorkEventData.model_validate(data).model_dump()
 
     result = {
         key: convert_python_data(value, recursive=True)
@@ -222,11 +225,11 @@ def _executor_display_name(executor: dict[str, Any], executor_type: str) -> str:
         if full_name:
             return full_name
         username = executor.get("username")
-        return username.strip() if isinstance(username, str) and username.strip() else "Unknown"
+        return username.strip() if isinstance(username, str) and username.strip() else "알 수 없음"
     if executor_type == "bot":
         name = executor.get("name")
         return name.strip() if isinstance(name, str) and name.strip() else "Langboard"
-    return "Unknown"
+    return "알 수 없음"
 
 
 def _get_webhook_settings(after_id: SnowflakeID | None = None) -> list[WebhookSetting]:
@@ -244,4 +247,6 @@ def _get_webhook_setting(webhook_uid: str) -> WebhookSetting | None:
 
 def _accepts_event(setting: WebhookSetting, event: str) -> bool:
     events = setting.events
+    if event == WORK_EVENT_NAME:
+        return events is not None and event in events
     return events is None or event in events

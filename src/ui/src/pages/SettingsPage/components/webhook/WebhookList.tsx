@@ -9,11 +9,10 @@ import useInfiniteScrollPager from "@/core/hooks/useInfiniteScrollPager";
 import useScrollToTop from "@/core/hooks/useScrollToTop";
 import { WebhookModel } from "@/core/models";
 import { cn } from "@/core/utils/ComponentUtils";
+import { Utils } from "@langboard/core/utils";
 import WebhookRow from "@/pages/SettingsPage/components/webhook/WebhookRow";
 import { useReducer } from "react";
 import { useTranslation } from "react-i18next";
-
-const PAGE_SIZE = 30;
 
 export interface IWebhookListProps {
     selectedWebhooks: string[];
@@ -25,14 +24,15 @@ function WebhookList({ selectedWebhooks, setSelectedWebhooks }: IWebhookListProp
     const { scrollableRef, isAtTop, scrollToTop } = useScrollToTop({});
     const updater = useReducer((x) => x + 1, 0);
     const rawWebhooks = WebhookModel.Model.useModels(() => true);
+    const PAGE_SIZE = 30;
     const { items: webhooks, nextPage, hasMore } = useInfiniteScrollPager({ allItems: rawWebhooks, size: PAGE_SIZE, updater });
 
     const selectAll = () => {
         setSelectedWebhooks((prev) => {
-            if (prev.length === rawWebhooks.length) {
+            if (prev.length === webhooks.length) {
                 return [];
             } else {
-                return rawWebhooks.map((webhook) => webhook.uid);
+                return webhooks.map((webhook) => webhook.uid);
             }
         });
     };
@@ -51,7 +51,7 @@ function WebhookList({ selectedWebhooks, setSelectedWebhooks }: IWebhookListProp
                 <InfiniteScroller.Table.Default
                     columns={[
                         {
-                            name: <Checkbox checked={!!rawWebhooks.length && rawWebhooks.length === selectedWebhooks.length} onClick={selectAll} />,
+                            name: <Checkbox checked={!!webhooks.length && webhooks.length === selectedWebhooks.length} onClick={selectAll} />,
                             className: "w-12 text-center",
                         },
                         { name: t("settings.Name"), className: "w-1/6 text-center" },
@@ -64,9 +64,9 @@ function WebhookList({ selectedWebhooks, setSelectedWebhooks }: IWebhookListProp
                     scrollable={() => scrollableRef.current}
                     loadMore={nextPage}
                     hasMore={hasMore}
-                    totalCount={rawWebhooks.length}
+                    totalCount={webhooks.length}
                     loader={
-                        <Flex justify="center" py="6">
+                        <Flex justify="center" py="6" key={Utils.String.Token.shortUUID()}>
                             <Loading variant="secondary" />
                         </Flex>
                     }

@@ -36,10 +36,11 @@ export const AuthProvider = ({ children }: IAuthProviderProps): React.ReactNode 
     const [_, i18n] = useTranslation();
     const { queryClient } = useQueryMutation();
     const { state, currentUser, pageLoaded, updateToken, removeToken } = useAuthStore();
-    const { mutate } = useGetNotificationList();
+    const { mutateAsync } = useGetNotificationList();
     const timeRange = useUserSettings("notifications_time_range");
     const navigate = usePageNavigateRef();
     const hadAuthenticatedUserRef = useRef(false);
+
     useEffect(() => {
         if (state !== "loaded" || !currentUser) {
             return;
@@ -49,7 +50,7 @@ export const AuthProvider = ({ children }: IAuthProviderProps): React.ReactNode 
             i18n.changeLanguage(currentUser.preferred_lang);
             getAuthStore().setPreferredLangHandled();
         }
-    }, [state, currentUser]);
+    }, [state]);
 
     useEffect(() => {
         const shouldSkip =
@@ -60,7 +61,15 @@ export const AuthProvider = ({ children }: IAuthProviderProps): React.ReactNode 
 
         switch (state) {
             case "initial":
-                refresh();
+                refresh().finally(() => {
+                    if (!getAuthStore().pageLoaded) {
+                        return;
+                    }
+
+                    mutateAsync({
+                        time_range: timeRange || "3d",
+                    });
+                });
                 return;
             case "loaded":
                 if (!currentUser && !shouldSkip) {
@@ -68,17 +77,7 @@ export const AuthProvider = ({ children }: IAuthProviderProps): React.ReactNode 
                 }
                 return;
         }
-    }, [state, currentUser]);
-
-    useEffect(() => {
-        if (state !== "loaded" || !pageLoaded || !currentUser) {
-            return;
-        }
-
-        mutate({
-            time_range: timeRange || "3d",
-        });
-    }, [state, pageLoaded, currentUser, timeRange]);
+    }, [state]);
 
     useEffect(() => {
         if (currentUser) {

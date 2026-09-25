@@ -210,6 +210,8 @@ def create_scim_group(
         raise ApiException.BadRequest_400(ApiErrorCode.VA0000) from error
     except ScimProvisioningException.Conflict as error:
         raise ApiException.Conflict_409(ApiErrorCode.EX1003) from error
+    except ScimProvisioningException.Unavailable as error:
+        raise ApiException.ServiceUnavailable_503(ApiErrorCode.OP0000) from error
 
     return JsonResponse(status_code=status.HTTP_201_CREATED, content=service.scim_provisioning.build_scim_group(group))
 
@@ -247,6 +249,8 @@ def replace_scim_group(
         raise ApiException.BadRequest_400(ApiErrorCode.VA0000) from error
     except ScimProvisioningException.Conflict as error:
         raise ApiException.Conflict_409(ApiErrorCode.EX1003) from error
+    except ScimProvisioningException.Unavailable as error:
+        raise ApiException.ServiceUnavailable_503(ApiErrorCode.OP0000) from error
     return JsonResponse(content=service.scim_provisioning.build_scim_group(group))
 
 
@@ -283,6 +287,8 @@ def patch_scim_group(
         raise ApiException.BadRequest_400(ApiErrorCode.VA0000) from error
     except ScimProvisioningException.Conflict as error:
         raise ApiException.Conflict_409(ApiErrorCode.EX1003) from error
+    except ScimProvisioningException.Unavailable as error:
+        raise ApiException.ServiceUnavailable_503(ApiErrorCode.OP0000) from error
 
     return JsonResponse(content=service.scim_provisioning.build_scim_group(group))
 
@@ -305,7 +311,10 @@ def delete_scim_group(group_id: str, request: Request, service: DomainService = 
     if not group:
         raise ApiException.NotFound_404(ApiErrorCode.NF1004)
 
-    service.scim_provisioning.delete_group(group)
+    try:
+        service.scim_provisioning.delete_group(group)
+    except ScimProvisioningException.Unavailable as error:
+        raise ApiException.ServiceUnavailable_503(ApiErrorCode.OP0000) from error
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -340,7 +349,7 @@ def get_scim_user(user_id: str, request: Request, service: DomainService = Domai
         .suc(_scim_user_example(), status_code=201)
         .err(400, ApiErrorCode.VA0000)
         .err(401, ApiErrorCode.AU1001)
-        .err(409, ApiErrorCode.EX1003)
+        .err(409, ApiErrorCode.EX1003, ApiErrorCode.EX1005, ApiErrorCode.EX1006)
         .err(503, ApiErrorCode.OP0000)
         .get()
     ),
@@ -354,8 +363,14 @@ def create_scim_user(
         user = service.scim_provisioning.create_or_upsert_user(payload)
     except ScimProvisioningException.InvalidRequest as error:
         raise ApiException.BadRequest_400(ApiErrorCode.VA0000) from error
+    except ScimProvisioningException.IdentityLinkRequired as error:
+        raise ApiException.Conflict_409(ApiErrorCode.EX1005) from error
+    except ScimProvisioningException.ExternalIdentityConflict as error:
+        raise ApiException.Conflict_409(ApiErrorCode.EX1006) from error
     except ScimProvisioningException.Conflict as error:
         raise ApiException.Conflict_409(ApiErrorCode.EX1003) from error
+    except ScimProvisioningException.Unavailable as error:
+        raise ApiException.ServiceUnavailable_503(ApiErrorCode.OP0000) from error
 
     return JsonResponse(status_code=status.HTTP_201_CREATED, content=service.scim_provisioning.build_scim_user(user))
 
@@ -370,7 +385,7 @@ def create_scim_user(
         .err(400, ApiErrorCode.VA0000)
         .err(401, ApiErrorCode.AU1001)
         .err(404, ApiErrorCode.NF1004)
-        .err(409, ApiErrorCode.EX1003)
+        .err(409, ApiErrorCode.EX1003, ApiErrorCode.EX1005, ApiErrorCode.EX1006)
         .err(503, ApiErrorCode.OP0000)
         .get()
     ),
@@ -389,8 +404,14 @@ def replace_scim_user(
     payload = form.model_dump(exclude_unset=True)
     try:
         service.scim_provisioning.apply_user_mutations(user, payload)
+    except ScimProvisioningException.IdentityLinkRequired as error:
+        raise ApiException.Conflict_409(ApiErrorCode.EX1005) from error
+    except ScimProvisioningException.ExternalIdentityConflict as error:
+        raise ApiException.Conflict_409(ApiErrorCode.EX1006) from error
     except ScimProvisioningException.Conflict as error:
         raise ApiException.Conflict_409(ApiErrorCode.EX1003) from error
+    except ScimProvisioningException.Unavailable as error:
+        raise ApiException.ServiceUnavailable_503(ApiErrorCode.OP0000) from error
     return JsonResponse(content=service.scim_provisioning.build_scim_user(user))
 
 
@@ -404,7 +425,7 @@ def replace_scim_user(
         .err(400, ApiErrorCode.VA0000)
         .err(401, ApiErrorCode.AU1001)
         .err(404, ApiErrorCode.NF1004)
-        .err(409, ApiErrorCode.EX1003)
+        .err(409, ApiErrorCode.EX1003, ApiErrorCode.EX1005, ApiErrorCode.EX1006)
         .err(503, ApiErrorCode.OP0000)
         .get()
     ),
@@ -424,8 +445,14 @@ def patch_scim_user(
     normalized_payload = service.scim_provisioning.normalize_patch_payload(operations)
     try:
         service.scim_provisioning.apply_user_mutations(user, normalized_payload)
+    except ScimProvisioningException.IdentityLinkRequired as error:
+        raise ApiException.Conflict_409(ApiErrorCode.EX1005) from error
+    except ScimProvisioningException.ExternalIdentityConflict as error:
+        raise ApiException.Conflict_409(ApiErrorCode.EX1006) from error
     except ScimProvisioningException.Conflict as error:
         raise ApiException.Conflict_409(ApiErrorCode.EX1003) from error
+    except ScimProvisioningException.Unavailable as error:
+        raise ApiException.ServiceUnavailable_503(ApiErrorCode.OP0000) from error
 
     return JsonResponse(content=service.scim_provisioning.build_scim_user(user))
 
@@ -448,5 +475,8 @@ def delete_scim_user(user_id: str, request: Request, service: DomainService = Do
     if not user:
         raise ApiException.NotFound_404(ApiErrorCode.NF1004)
 
-    service.scim_provisioning.delete_user(user)
+    try:
+        service.scim_provisioning.delete_user(user)
+    except ScimProvisioningException.Unavailable as error:
+        raise ApiException.ServiceUnavailable_503(ApiErrorCode.OP0000) from error
     return Response(status_code=status.HTTP_204_NO_CONTENT)

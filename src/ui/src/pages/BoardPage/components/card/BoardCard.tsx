@@ -10,6 +10,10 @@ import Skeleton from "@/components/base/Skeleton";
 import Toast from "@/components/base/Toast";
 import useChangeCardDetails from "@/controllers/api/card/useChangeCardDetails";
 import useGetCardDetails from "@/controllers/api/card/useGetCardDetails";
+import useUnreadChangeNavigation from "@/pages/BoardPage/components/card/useUnreadChangeNavigation";
+
+import useReplaceCardContentBlocks from "@/controllers/api/board/useReplaceCardContentBlocks";
+import { extractContentBlocks } from "@/pages/BoardPage/components/card/contentBlockSerializer";
 import setupApiErrorHandler from "@/core/helpers/setupApiErrorHandler";
 import { BoardCardProvider, useBoardCard, useBoardCardPanel } from "@/core/providers/BoardCardProvider";
 import { useBoardController } from "@/core/providers/BoardController";
@@ -21,11 +25,12 @@ import { useBoardCardSectionSaveActions } from "@/pages/BoardPage/components/car
 import BoardCardColumnName, { SkeletonBoardCardColumnName } from "@/pages/BoardPage/components/card/BoardCardColumnName";
 import BoardCardDeadline, { SkeletonBoardCardDeadline } from "@/pages/BoardPage/components/card/BoardCardDeadline";
 import BoardCardDescription, { SkeletonBoardCardDescription } from "@/pages/BoardPage/components/card/BoardCardDescription";
+import BoardCardCheckBody from "@/pages/BoardPage/components/card/BoardCardCheckBody";
 import BoardCardAttachmentList, { SkeletonBoardCardAttachmentList } from "@/pages/BoardPage/components/card/attachment/BoardCardAttachmentList";
 import BoardCardTitle, { SkeletonBoardCardTitle } from "@/pages/BoardPage/components/card/BoardCardTitle";
 import BoardCommentForm from "@/pages/BoardPage/components/card/comment/BoardCommentForm";
 import BoardCommentList, { SkeletonBoardCommentList } from "@/pages/BoardPage/components/card/comment/BoardCommentList";
-import { forwardRef, memo, useCallback, useEffect, useRef, useState } from "react";
+import { forwardRef, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import BoardCardMemberList from "@/pages/BoardPage/components/card/BoardCardMemberList";
 import { SkeletonUserAvatarList } from "@/components/UserAvatarList";
@@ -42,6 +47,10 @@ import { cn } from "@/core/utils/ComponentUtils";
 import { useBoardChat } from "@/core/providers/BoardChatProvider";
 import { useIsMobile } from "@/core/hooks/useIsMobile";
 import BoardTaskMetadataSection from "@/pages/BoardPage/components/task/BoardTaskMetadataSection";
+import BoardLinkedWikiCard from "@/pages/BoardPage/components/card/BoardLinkedWikiCard";
+import useCardLinkedResourceChangedHandlers from "@/controllers/socket/card/useCardLinkedResourceChangedHandlers";
+import useSwitchSocketHandlers from "@/core/hooks/useSwitchSocketHandlers";
+import { useQueryClient } from "@tanstack/react-query";
 
 export interface IBoardCardProps {
     projectUID: string;
@@ -69,6 +78,7 @@ const BoardCard = memo(
         const { data: cardData, isFetching, error } = useGetCardDetails({ project_uid: projectUID, card_uid: cardUID });
         const [t] = useTranslation();
         const socket = useSocket();
+        const queryClient = useQueryClient();
         const navigate = usePageNavigateRef();
         const { on: onCardDeletedHandlers } = useCardDeletedHandlers({
             projectUID,
@@ -77,6 +87,22 @@ const BoardCard = memo(
                 Toast.Add.error(t("project.errors.Card deleted."));
                 navigate(ROUTES.BOARD.MAIN(projectUID), { replace: true });
             },
+        });
+        const linkedResourceChangedHandler = useMemo(
+            () =>
+                useCardLinkedResourceChangedHandlers({
+                    projectUID,
+                    cardUID,
+                    detail: true,
+                    callback: () => queryClient.invalidateQueries({ queryKey: [`get-card-details-${projectUID}-${cardUID}`] }),
+                }),
+            [cardUID, projectUID, queryClient]
+        );
+
+        useSwitchSocketHandlers({
+            socket,
+            handlers: cardData?.card?.source_type === "project_wiki" ? [linkedResourceChangedHandler] : [],
+            dependencies: [cardData?.card?.source_type, linkedResourceChangedHandler],
         });
 
         useEffect(() => {
@@ -97,7 +123,7 @@ const BoardCard = memo(
         }, [error]);
 
         useEffect(() => {
-            setPageAliasRef.current(cardData?.card?.title || "");
+            setPageAliasRef.current(cardData?.card?.linked_resource?.title || cardData?.card?.title || "");
             if (!cardData || isFetching) {
                 return;
             }
@@ -208,7 +234,17 @@ interface IBoardCardResultProps {
     onEditModeStateChange?: (isEditing: bool, cancelEdit: (() => void) | null) => void;
 }
 
-function BoardCardResult({ isExpanded, setIsExpanded, onClose, onEditModeStateChange }: IBoardCardResultProps): React.JSX.Element {
+function BoardCardResult(props: IBoardCardResultProps): React.JSX.Element {
+    const { card } = useBoardCard();
+
+    if (card.source_type === "project_wiki" && card.linked_resource) {
+        return <BoardLinkedWikiCard {...props} />;
+    }
+
+    return <BoardTaskCardResult {...props} />;
+}
+
+function BoardTaskCardResult({ isExpanded, setIsExpanded, onClose, onEditModeStateChange }: IBoardCardResultProps): React.JSX.Element {
     const { card, isCardEditing, leaveCardEditMode } = useBoardCard();
     const { isActionPanelOpen } = useBoardCardPanel();
     const { boardChat } = useBoardController();
@@ -216,8 +252,16 @@ function BoardCardResult({ isExpanded, setIsExpanded, onClose, onEditModeStateCh
     const [t] = useTranslation();
     const attachments = ProjectCardAttachment.Model.useModels((model) => model.card_uid === card.uid);
     const checklists = ProjectChecklist.Model.useModels((model) => model.card_uid === card.uid);
+    const description = card.useField("description");
+    // Check-card view: no body and no user checklist. Comments, members, and deadlines never affect it.
+    const isCheckCardView = useMemo(() => {
+        const content = typeof description?.content === "string" ? description.content : "";
+        return !content.trim() && checklists.length === 0;
+    }, [description, checklists.length]);
     const hasRunningBot = useHasRunningBot({ type: "card", targetUID: card.uid });
     const contentViewportRef = useRef<HTMLDivElement | null>(null);
+
+    useUnreadChangeNavigation();
 
     useEffect(() => {
         return () => {
@@ -313,28 +357,37 @@ function BoardCardResult({ isExpanded, setIsExpanded, onClose, onEditModeStateCh
                             <Flex gap="3" direction={{ initial: "col-reverse", sm: "row" }} className="min-h-0 flex-1">
                                 <Box ref={contentViewportRef} className="min-h-0 flex-1 overflow-y-auto">
                                     <Flex direction="col" gap="4" className="min-w-0 pb-6 pr-1">
-                                        <Flex direction={{ initial: "col", sm: "row" }} gap="4">
-                                            <BoardCardSection title="card.Members" className="sm:w-1/2" contentClassName="flex gap-1">
-                                                <BoardCardMemberList key={`board-card-member-list-${card.uid}`} />
-                                            </BoardCardSection>
-                                            <BoardCardSection title="card.Deadline" className="sm:w-1/2">
-                                                <BoardCardDeadline key={`board-card-deadline-${card.uid}`} />
-                                            </BoardCardSection>
-                                        </Flex>
-                                        <BoardTaskMetadataSection cardUID={card.uid} />
-                                        <BoardCardMobileActions />
-                                        <BoardCardSection title="card.Description" className="relative min-h-56">
-                                            <BoardCardDescription key={`board-card-description-${card.uid}`} />
-                                        </BoardCardSection>
-                                        {checklists.length > 0 && (
-                                            <BoardCardSection title="card.Checklists">
-                                                <BoardCardChecklistGroup key={`board-card-checklist-${card.uid}`} />
-                                            </BoardCardSection>
-                                        )}
-                                        {attachments.length > 0 && (
-                                            <BoardCardSection title="card.Attached files">
-                                                <BoardCardAttachmentList key={`board-card-attachment-list-${card.uid}`} />
-                                            </BoardCardSection>
+                                        {isCheckCardView ? (
+                                            <BoardCardCheckBody key={`board-card-check-body-${card.uid}`} scrollParentRef={contentViewportRef} />
+                                        ) : (
+                                            <>
+                                                <Flex direction={{ initial: "col", sm: "row" }} gap="4">
+                                                    <BoardCardSection title="card.Members" className="sm:w-1/2" contentClassName="flex gap-1">
+                                                        <BoardCardMemberList key={`board-card-member-list-${card.uid}`} />
+                                                    </BoardCardSection>
+                                                    <BoardCardSection title="card.Deadline" className="sm:w-1/2">
+                                                        <BoardCardDeadline key={`board-card-deadline-${card.uid}`} />
+                                                    </BoardCardSection>
+                                                </Flex>
+                                                <BoardTaskMetadataSection cardUID={card.uid} />
+                                                <BoardCardMobileActions />
+                                                <BoardCardSection title="card.Description" className="relative min-h-56">
+                                                    <BoardCardDescription
+                                                        key={`board-card-description-${card.uid}`}
+                                                        scrollParentRef={contentViewportRef}
+                                                    />
+                                                </BoardCardSection>
+                                                {checklists.length > 0 && (
+                                                    <BoardCardSection title="card.Checklists">
+                                                        <BoardCardChecklistGroup key={`board-card-checklist-${card.uid}`} />
+                                                    </BoardCardSection>
+                                                )}
+                                                {attachments.length > 0 && (
+                                                    <BoardCardSection title="card.Attached files">
+                                                        <BoardCardAttachmentList key={`board-card-attachment-list-${card.uid}`} />
+                                                    </BoardCardSection>
+                                                )}
+                                            </>
                                         )}
                                         <BoardCardMobileComments scrollableRef={contentViewportRef} />
                                     </Flex>
@@ -467,6 +520,7 @@ function BoardCardFloatingNav({ isExpanded }: { isExpanded: bool }): React.JSX.E
     const [isSaving, setIsSaving] = useState(false);
     const isMobile = useIsMobile();
     const { mutateAsync: changeCardDetailsMutateAsync } = useChangeCardDetails({ interceptToast: true });
+    const { mutateAsync: replaceContentBlocksAsync } = useReplaceCardContentBlocks({ interceptToast: true });
     const shouldShowChatButton = !!boardChat && !!chatResizableSidebar && (isExpanded || isMobile);
 
     const handleSaveEditing = useCallback(async () => {
@@ -509,11 +563,26 @@ function BoardCardFloatingNav({ isExpanded }: { isExpanded: bool }): React.JSX.E
                 }
             }
 
+            if (details && details.description) {
+                const blocks = extractContentBlocks(details.description.content ?? "");
+                if (blocks.length >= 0) {
+                    try {
+                        await replaceContentBlocksAsync({
+                            project_uid: projectUID,
+                            card_uid: card.uid,
+                            blocks,
+                        });
+                    } catch {
+                        // 블록 동기화 실패는 본문 저장를 롤백하지 않는다 — 다음 저장 시 재동기화
+                    }
+                }
+            }
+
             leaveCardEditMode();
         } finally {
             setIsSaving(false);
         }
-    }, [card, changeCardDetailsMutateAsync, isSaving, leaveCardEditMode, projectUID, saveSections]);
+    }, [card, changeCardDetailsMutateAsync, isSaving, leaveCardEditMode, projectUID, replaceContentBlocksAsync, saveSections]);
 
     const handleCancelEditing = useCallback(() => {
         try {

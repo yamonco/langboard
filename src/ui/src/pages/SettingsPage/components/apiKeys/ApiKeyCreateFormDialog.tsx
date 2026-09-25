@@ -47,7 +47,7 @@ function ApiKeyCreateFormDialog({ opened, setOpened }: ISharedSettingsModalProps
         setIsValidating(true);
 
         const values = {} as Record<keyof typeof inputsRef.current, string>;
-        const newErrors: Record<string, string> = {};
+        const newErrors = {} as Record<keyof typeof inputsRef.current, string>;
         let focusableInput = null as HTMLInputElement | HTMLTextAreaElement | null;
 
         const shouldValidateInputs: (keyof typeof inputsRef.current)[] = ["name"];
@@ -67,10 +67,6 @@ function ApiKeyCreateFormDialog({ opened, setOpened }: ISharedSettingsModalProps
                 values[key] = value;
             }
         });
-
-        if (!ipWhitelistRef.current.length) {
-            newErrors.ip_whitelist = t("settings.errors.missing.api_key_ip_whitelist");
-        }
 
         if (Object.keys(newErrors).length) {
             setErrors(newErrors);
@@ -144,7 +140,6 @@ function ApiKeyCreateFormDialog({ opened, setOpened }: ISharedSettingsModalProps
                                 selectedValue={[]}
                                 onValueChange={(values) => {
                                     ipWhitelistRef.current = values;
-                                    setErrors((current) => ({ ...current, ip_whitelist: "" }));
                                 }}
                                 className="w-[calc(100%_-_theme(spacing.24))]"
                                 inputClassName="ml-1 placeholder:text-gray-500 placeholder:font-medium"
@@ -181,13 +176,11 @@ function ApiKeyCreateFormDialog({ opened, setOpened }: ISharedSettingsModalProps
                                         }
 
                                         setIsAllAllowedIP(checked);
-                                        setErrors((current) => ({ ...current, ip_whitelist: "" }));
                                     }}
                                 />
                                 {t("settings.Allow all")}
                             </Label>
                         </Flex>
-                        {errors.ip_whitelist && <FormErrorMessage error={errors.ip_whitelist} notInForm />}
                         <Box mt="4">
                             <Floating.LabelSelect
                                 label={t("settings.Expires in")}

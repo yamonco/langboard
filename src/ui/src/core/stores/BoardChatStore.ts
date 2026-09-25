@@ -18,7 +18,7 @@ const getStoredCurrentSessionUID = (projectUID: string): string | undefined => {
 };
 
 const getStoredChatVisible = (projectUID: string): bool => {
-    return localStorage.getItem(getChatVisibleStorageKey(projectUID)) === "true";
+    return localStorage.getItem(getChatVisibleStorageKey(projectUID)) !== "false";
 };
 
 const useBoardChatStore = create(
