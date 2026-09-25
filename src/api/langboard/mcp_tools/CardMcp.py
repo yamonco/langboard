@@ -9,7 +9,6 @@ from langboard_shared.core.db import EditorContentModel
 from langboard_shared.core.exceptions.CardDeleteForbidden import CardDeleteForbidden
 from langboard_shared.core.storage import Storage, StorageName
 from langboard_shared.core.types import SafeDateTime
-from langboard_shared.core.utils.Converter import convert_python_data
 from langboard_shared.domain.models import Bot, Card, CardMetadata, Project, ProjectRole, User
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.domain.services.DomainService import DomainService
@@ -143,7 +142,7 @@ def create_card(
     return api_card
 
 
-@McpTool.add(description="Change card details.")
+@McpTool.add(description="Change a card title or deadline; use revision-bound description tools for body edits.")
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
 def change_card_details(
     project_uid: str,
@@ -151,10 +150,9 @@ def change_card_details(
     user_or_bot: User | Bot,
     service: DomainService,
     title: str | None = None,
-    description: str | None = None,
     deadline_at: str | None = None,
 ) -> dict:
-    if title is None and description is None and deadline_at is None:
+    if title is None and deadline_at is None:
         raise ValueError("At least one card detail field is required")
     normalized_title = None
     if title is not None:
@@ -170,8 +168,6 @@ def change_card_details(
     form_dict = {}
     if normalized_title is not None:
         form_dict["title"] = normalized_title
-    if description is not None:
-        form_dict["description"] = EditorContentModel(content=description)
     if deadline_at is not None:
         form_dict["deadline_at"] = parsed_deadline
     _require_task_card(project_uid, card_uid)
@@ -182,8 +178,6 @@ def change_card_details(
         response = {}
         if normalized_title is not None:
             response["title"] = normalized_title
-        if description is not None:
-            response["description"] = convert_python_data(EditorContentModel(content=description))
         if deadline_at is not None:
             response["deadline_at"] = deadline_at
         return response

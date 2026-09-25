@@ -14,3 +14,5 @@ The following legacy tools are retired from `CardMcp` after their replacement be
 | `get_card_bot_scopes` | `get_card_bundle` with `include=["automation"]` |
 
 `BotMcp.get_card_bot_scopes` remains available to callers with project Update permission; the retired CardMcp read alias is gone. Direct MCP callers must migrate to the bounded tools before deploying this release. REST and UI routes keep their existing contracts.
+
+`change_card_details` now accepts only title and deadline changes. For body edits, use `patch_card_description` or `replace_card_description` with the current description revision from `get_card_bundle`.
