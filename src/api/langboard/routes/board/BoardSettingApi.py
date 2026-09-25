@@ -1,4 +1,5 @@
 from fastapi import status
+from langboard_shared.core.db import DbSession, SqlBuilder
 from langboard_shared.core.filter import AuthFilter
 from langboard_shared.core.routing import (
     ApiErrorCode,
@@ -18,20 +19,27 @@ from langboard_shared.domain.models import (
     Bot,
     Card,
     ChatTemplate,
+    GlobalCardRelationshipType,
     InternalBot,
     Project,
     ProjectAssignedInternalBot,
     ProjectColumn,
+    ProjectExecutionBinding,
     ProjectLabel,
     ProjectRole,
     User,
+    WebhookSetting,
 )
 from langboard_shared.domain.models.bases import ALL_GRANTED
 from langboard_shared.domain.models.InternalBot import InternalBotType
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.domain.services import DomainService
 from langboard_shared.filter import RoleFilter
+from langboard_shared.helpers import InfraHelper
 from langboard_shared.security import Auth, RoleFinder
+from langboard_shared.tasks.webhooks.ExecutionBindingPolicy import binding_invalid_reasons
+from langboard_shared.tasks.webhooks.ExecutionReadinessUow import execution_readiness_uow
+from langboard_shared.tasks.webhooks.utils import WORK_EXECUTION_EVENTS
 from .forms import (
     ChangeInternalBotForm,
     ChangeInternalBotSettingsForm,
@@ -40,9 +48,124 @@ from .forms import (
     CreateProjectLabelForm,
     UpdateProjectDetailsForm,
     UpdateProjectEmailNotificationPolicyForm,
+    UpdateProjectExecutionBindingForm,
     UpdateProjectLabelDetailsForm,
     UpdateRolesForm,
 )
+
+
+def _execution_binding(project_uid: str) -> ProjectExecutionBinding | None:
+    project = InfraHelper.get_by_id_like(Project, project_uid)
+    if project is None:
+        return None
+    with DbSession.use(readonly=True) as db:
+        return db.exec(
+            SqlBuilder.select.table(ProjectExecutionBinding).where(
+                ProjectExecutionBinding.column("project_id") == project.id
+            )
+        ).first()
+
+
+def _validate_execution_binding(project: Project, form: UpdateProjectExecutionBindingForm) -> None:
+    if len(form.events) != len(set(form.events)):
+        raise ValueError("Execution events must be unique")
+    if not form.is_enabled:
+        return
+    states = set(form.column_semantics.values())
+    if not {"ready", "terminal"} <= states:
+        raise ValueError("Enabled binding needs ready and terminal columns")
+    if not form.prerequisite_relationship_type_uid or not form.webhook_uid:
+        raise ValueError("Enabled binding needs a relationship type and webhook")
+    if "io.langboard.work.ready.v1" not in form.events:
+        raise ValueError("Enabled binding must include work.ready")
+    for column_uid in form.column_semantics:
+        column = InfraHelper.get_by_id_like(ProjectColumn, column_uid)
+        if column is None or column.project_id != project.id or column.is_archive:
+            raise ValueError("Execution column must belong to this active board")
+    relation_type = InfraHelper.get_by_id_like(GlobalCardRelationshipType, form.prerequisite_relationship_type_uid)
+    if relation_type is None:
+        raise ValueError("Unknown prerequisite relationship type")
+    webhook = InfraHelper.get_by_id_like(WebhookSetting, form.webhook_uid)
+    if webhook is None or not set(form.events) <= set(webhook.events or []):
+        raise ValueError("Webhook must explicitly allow every execution event")
+    if not webhook.secret_id:
+        raise ValueError("Execution webhook needs a signing secret")
+    if not set(form.events) <= WORK_EXECUTION_EVENTS:
+        raise ValueError("Unknown execution event")
+
+
+@AppRouter.api.get(
+    "/board/{project_uid}/settings/execution-binding",
+    tags=["Board.Settings"],
+    responses=OpenApiSchema().suc({"binding": ProjectExecutionBinding}).auth().forbidden().get(),
+)
+@RoleFilter.add(ProjectRole, [ProjectRoleAction.Update], RoleFinder.project)
+@AuthFilter.add("user")
+def get_project_execution_binding(project_uid: str) -> JsonResponse:
+    binding = _execution_binding(project_uid)
+    reasons = binding_invalid_reasons(binding, "io.langboard.work.ready.v1") if binding else []
+    return JsonResponse(
+        content={
+            "binding": binding.api_response() if binding else None,
+            "binding_status": {
+                "state": "binding_invalid" if reasons else "valid" if binding else "unconfigured",
+                "reasons": reasons,
+            },
+        }
+    )
+
+
+@AppRouter.api.put(
+    "/board/{project_uid}/settings/execution-binding",
+    tags=["Board.Settings"],
+    responses=OpenApiSchema().suc({"binding": ProjectExecutionBinding}).auth().forbidden().get(),
+)
+@RoleFilter.add(ProjectRole, [ProjectRoleAction.Update], RoleFinder.project)
+@AuthFilter.add("user")
+def update_project_execution_binding(project_uid: str, form: UpdateProjectExecutionBindingForm) -> JsonResponse:
+    project = InfraHelper.get_by_id_like(Project, project_uid)
+    if project is None:
+        raise ApiException.NotFound_404(ApiErrorCode.NF2001)
+    try:
+        _validate_execution_binding(project, form)
+    except ValueError as exc:
+        raise ApiException.BadRequest_400(ApiErrorCode.VA0000) from exc
+    with execution_readiness_uow() as execution:
+        execution.watch_project(project.id)
+        db = execution.db
+        binding = db.exec(
+            SqlBuilder.select.table(ProjectExecutionBinding)
+            .where(ProjectExecutionBinding.column("project_id") == project.id)
+            .with_for_update()
+        ).first()
+        if binding is None:
+            binding = ProjectExecutionBinding(project_id=project.id)
+            db.insert(binding)
+        binding.is_enabled = form.is_enabled
+        binding.column_semantics = dict(form.column_semantics)
+        binding.column_semantic_ids = (
+            {
+                str(InfraHelper.get_by_id_like(ProjectColumn, uid).id): state
+                for uid, state in form.column_semantics.items()
+            }
+            if form.is_enabled
+            else {}
+        )
+        binding.prerequisite_relationship_type_uid = form.prerequisite_relationship_type_uid
+        binding.prerequisite_relationship_type_id = (
+            InfraHelper.get_by_id_like(GlobalCardRelationshipType, form.prerequisite_relationship_type_uid).id
+            if form.is_enabled and form.prerequisite_relationship_type_uid
+            else None
+        )
+        binding.webhook_uid = form.webhook_uid
+        binding.webhook_id = (
+            InfraHelper.get_by_id_like(WebhookSetting, form.webhook_uid).id
+            if form.is_enabled and form.webhook_uid
+            else None
+        )
+        binding.events = list(form.events)
+        db.update(binding)
+    return JsonResponse(content={"binding": binding.api_response()})
 
 
 _EMAIL_NOTIFICATION_POLICY_SCHEMA = {

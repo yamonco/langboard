@@ -1,4 +1,4 @@
-import { createContext, memo, useCallback, useContext, useEffect, useMemo, useReducer, useRef } from "react";
+import { createContext, memo, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import {
     AuthUser,
     GlobalRelationshipType,
@@ -28,6 +28,7 @@ import useSwitchSocketHandlers from "@/core/hooks/useSwitchSocketHandlers";
 import useBoardCardMetadataDeletedHandlers from "@/controllers/socket/metadata/useBoardCardMetadataDeletedHandlers";
 import useBoardCardMetadataUpdatedHandlers from "@/controllers/socket/metadata/useBoardCardMetadataUpdatedHandlers";
 import useCardLinkedResourceChangedHandlers from "@/controllers/socket/card/useCardLinkedResourceChangedHandlers";
+import useBoardChecklistProgressChangedHandlers from "@/controllers/socket/card/checklist/useBoardChecklistProgressChangedHandlers";
 import { useQueryClient } from "@tanstack/react-query";
 
 const DEFAULT_ARCHIVE_CARD_VISIBLE_DAYS = 3;
@@ -63,6 +64,7 @@ export interface IBoardContext {
     filterCardRelationships: (card: ProjectCard.TModel) => bool;
     canDragAndDrop: bool;
     canDragCards: bool;
+    deadlineClock: Date;
 }
 
 interface IBoardProviderProps {
@@ -91,6 +93,7 @@ const initialContext = {
     filterCardRelationships: () => true,
     canDragAndDrop: false,
     canDragCards: false,
+    deadlineClock: new Date(),
 };
 
 const BoardContext = createContext<IBoardContext>(initialContext);
@@ -99,6 +102,11 @@ export const BoardProvider = memo(({ project, currentUser, children }: IBoardPro
     const navigate = usePageNavigateRef();
     const socket = useSocket();
     const queryClient = useQueryClient();
+    const [deadlineClock, setDeadlineClock] = useState(() => new Date());
+    useEffect(() => {
+        const timer = window.setInterval(() => setDeadlineClock(new Date()), 15 * 60 * 1000);
+        return () => window.clearInterval(timer);
+    }, []);
     const { selectCardViewType } = useBoardController();
     const [t] = useTranslation();
     const members = project.useForeignFieldArray("all_members");
@@ -149,8 +157,15 @@ export const BoardProvider = memo(({ project, currentUser, children }: IBoardPro
         [linkedCardUIDs, project, queryClient]
     );
     const boardSocketHandlers = useMemo(
-        () => [...boardCardMetadataHandlers, ...linkedResourceHandlers],
-        [boardCardMetadataHandlers, linkedResourceHandlers]
+        () => [
+            ...boardCardMetadataHandlers,
+            ...linkedResourceHandlers,
+            useBoardChecklistProgressChangedHandlers({
+                projectUID: project.uid,
+                callback: () => queryClient.invalidateQueries({ queryKey: [`get-cards-${project.uid}`] }),
+            }),
+        ],
+        [boardCardMetadataHandlers, linkedResourceHandlers, project.uid, queryClient]
     );
     const cardMetadataRecords = MetadataModel.Model.useModels((model) => model.type === "card", [cards, metadataUpdated]);
     const forbiddenMessageIdRef = useRef<string | number | null>(null);
@@ -406,6 +421,7 @@ export const BoardProvider = memo(({ project, currentUser, children }: IBoardPro
                 filterCardRelationships,
                 canDragAndDrop,
                 canDragCards,
+                deadlineClock,
             }}
         >
             {children}

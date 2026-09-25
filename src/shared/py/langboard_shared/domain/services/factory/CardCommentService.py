@@ -116,6 +116,8 @@ class CardCommentService(BaseDomainService):
         card: TCardParam | None,
         content: EditorContentModel | dict[str, Any],
         anchor: CardCommentAnchorModel | dict[str, Any] | None = None,
+        *,
+        dispatch_effects: bool = True,
     ) -> CardComment | None:
         params = InfraHelper.get_records_with_foreign_by_params((Project, project), (Card, card))
         if not params:
@@ -144,15 +146,28 @@ class CardCommentService(BaseDomainService):
         card_service = self._get_service(CardService)
         card_service.mark_card_changed(card, CardService.UNREAD_TARGET_COMMENT, comment.id)
 
-        CardCommentPublisher.created(user_or_bot, project, card, comment)
-
-        notification_service = self._get_service(NotificationService)
-        notification_service.notify_mentioned_in_comment(user_or_bot, project, card, comment)
-
-        CardCommentActivityTask.card_comment_added(user_or_bot, project, card, comment)
-        CardCommentBotTask.card_comment_added(user_or_bot, project, card, comment)
+        if dispatch_effects:
+            self.dispatch_created(user_or_bot, project, card, comment)
 
         return comment
+
+    def dispatch_created(
+        self,
+        user_or_bot: TUserOrBot,
+        project: Project,
+        card: Card,
+        comment: CardComment,
+        *,
+        include_notifications: bool = True,
+        include_bot: bool = True,
+    ) -> None:
+        CardCommentPublisher.created(user_or_bot, project, card, comment)
+        if include_notifications:
+            notification_service = self._get_service(NotificationService)
+            notification_service.notify_mentioned_in_comment(user_or_bot, project, card, comment)
+        CardCommentActivityTask.card_comment_added(user_or_bot, project, card, comment)
+        if include_bot:
+            CardCommentBotTask.card_comment_added(user_or_bot, project, card, comment)
 
     def update(
         self,

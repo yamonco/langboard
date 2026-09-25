@@ -7,7 +7,7 @@ import pytest
 os.environ.setdefault("PROJECT_NAME", "langboard")
 
 from langboard.mcp_integration import McpTool  # noqa: E402
-from langboard.mcp_tools import UserWorkspaceMcp  # noqa: E402
+from langboard.mcp_tools import UserMcp  # noqa: E402
 from langboard_shared.domain.services.factory.NotificationService import NotificationService  # noqa: E402
 from langboard_shared.helpers import InfraHelper  # noqa: E402
 
@@ -33,7 +33,7 @@ def test_unread_query_is_bounded_side_effect_free_and_project_governed() -> None
         notification=SimpleNamespace(get_api_list=get_api_list),
     )
 
-    result = UserWorkspaceMcp.get_unread_notifications(user, service, limit=10)
+    result = UserMcp.get_unread_notifications(user, service, limit=10)
 
     assert [notification["uid"] for notification in result["notifications"]] == ["n1", "n3"]
     assert result["returned_count"] == 2
@@ -55,8 +55,8 @@ def test_notification_read_tools_mutate_only_when_called() -> None:
         )
     )
 
-    assert UserWorkspaceMcp.mark_notification_read("notification-1", user, service) == {"read": True}
-    assert UserWorkspaceMcp.mark_all_notifications_read(user, service) == {"read": True}
+    assert UserMcp.mark_notification_read("notification-1", user, service) == {"read": True}
+    assert UserMcp.mark_all_notifications_read(user, service) == {"read": True}
     assert read_calls == [(user, "notification-1")]
     assert read_all_calls == [user]
 
@@ -96,7 +96,7 @@ def test_project_search_reuses_native_bounded_search() -> None:
         )
     )
 
-    assert UserWorkspaceMcp.search_project_cards("project-1", "  release  ", service) == {"cards": [{"uid": "c1"}]}
+    assert UserMcp.search_project_cards("project-1", "  release  ", service) == {"cards": [{"uid": "c1"}]}
     assert calls == [("project-1", "release")]
 
 
@@ -108,7 +108,7 @@ def test_project_search_normalizes_offset_bounds_to_utc() -> None:
         card=SimpleNamespace(search_context_by_project=lambda *_args, **filters: captured.update(filters) or [])
     )
 
-    UserWorkspaceMcp.search_project_cards(
+    UserMcp.search_project_cards(
         "project-1",
         "release",
         service,
@@ -137,7 +137,7 @@ def test_my_work_lookup_is_governed_read_only_and_notified_read_state_independen
         card=SimpleNamespace(get_my_work_cards=get_my_work_cards),
     )
 
-    result = UserWorkspaceMcp.get_my_work_cards(
+    result = UserMcp.get_my_work_cards(
         user,
         service,
         purposes=["mentioned"],
@@ -166,7 +166,7 @@ def test_my_work_due_filters_include_mentioned_cards_and_normalize_bounds() -> N
         card=SimpleNamespace(get_my_work_cards=get_my_work_cards),
     )
 
-    UserWorkspaceMcp.get_my_work_cards(
+    UserMcp.get_my_work_cards(
         user,
         service,
         purposes=["due_soon"],
@@ -200,4 +200,4 @@ def test_project_search_rejects_empty_or_oversized_queries(query: str) -> None:
     """Search rejects unbounded or empty model input before repository access."""
 
     with pytest.raises(ValueError):
-        UserWorkspaceMcp.search_project_cards("project-1", query, SimpleNamespace())
+        UserMcp.search_project_cards("project-1", query, SimpleNamespace())

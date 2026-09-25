@@ -46,7 +46,13 @@ class CardAttachmentService(BaseDomainService):
         ]
 
     def create(
-        self, user: User, project: TProjectParam | None, card: TCardParam | None, attachment: FileModel
+        self,
+        user: User,
+        project: TProjectParam | None,
+        card: TCardParam | None,
+        attachment: FileModel,
+        *,
+        dispatch_effects: bool = True,
     ) -> CardAttachment | None:
         params = InfraHelper.get_records_with_foreign_by_params((Project, project), (Card, card))
         if not params:
@@ -64,17 +70,25 @@ class CardAttachmentService(BaseDomainService):
         )
 
         self.repo.card_attachment.insert(card_attachment)
+        self._mark_card_changed_for_unread(card, "attachment", card_attachment.id)
+        if dispatch_effects:
+            self.dispatch_created(user, project, card, card_attachment)
+
+        return card_attachment
+
+    def dispatch_created(
+        self, user: User, project: Project, card: Card, card_attachment: CardAttachment, *, include_bot: bool = True
+    ) -> None:
+        """Dispatch effects after a persisted attachment is available."""
         docling_metadata = self._get_service(DoclingMetadataService)
         if docling_metadata.queue_document(CardMetadata, card, card_attachment.get_uid(), card_attachment.filename):
             docling_metadata.publish_update(CardMetadata, card, SocketTopic.BoardCard)
             self._queue_docling_index_task(card_attachment)
 
         CardAttachmentPublisher.uploaded(user, card, card_attachment)
-        self._mark_card_changed_for_unread(card, "attachment", card_attachment.id)
         CardAttachmentActivityTask.card_attachment_uploaded(user, project, card, card_attachment)
-        CardAttachmentBotTask.card_attachment_uploaded(user, project, card, card_attachment)
-
-        return card_attachment
+        if include_bot:
+            CardAttachmentBotTask.card_attachment_uploaded(user, project, card, card_attachment)
 
     def change_order(
         self,

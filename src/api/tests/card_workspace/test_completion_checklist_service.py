@@ -8,9 +8,14 @@ from sqlalchemy.exc import IntegrityError
 os.environ.setdefault("PROJECT_NAME", "langboard")
 
 from langboard_shared.core.db import EditorContentModel  # noqa: E402
-from langboard_shared.domain.models import Card, Checklist, Project  # noqa: E402
+from langboard_shared.domain.models import Card, Checkitem, Checklist, Project  # noqa: E402
 from langboard_shared.domain.services.factory.CardService import CardService  # noqa: E402
+from langboard_shared.domain.services.factory.CheckitemService import CheckitemService  # noqa: E402
 from langboard_shared.domain.services.factory.ChecklistService import ChecklistService  # noqa: E402
+from langboard_shared.helpers import InfraHelper  # noqa: E402
+from langboard_shared.publishers import CheckitemPublisher, ChecklistPublisher  # noqa: E402
+from langboard_shared.tasks.activities import CardCheckitemActivityTask, CardChecklistActivityTask  # noqa: E402
+from langboard_shared.tasks.bots import CardCheckitemBotTask, CardChecklistBotTask  # noqa: E402
 
 
 def _card() -> Card:
@@ -95,3 +100,65 @@ def test_checklist_model_declares_one_active_system_row_constraint() -> None:
     assert str(index.dialect_options["postgresql"]["where"]) == "is_system AND deleted_at IS NULL"
     assert str(index.dialect_options["sqlite"]["where"]) == "is_system = 1 AND deleted_at IS NULL"
     assert Checklist.__table__.c.is_system.server_default is not None
+
+
+def test_explicit_checked_state_replay_does_not_toggle_or_emit(monkeypatch: pytest.MonkeyPatch) -> None:
+    project, card = Project(owner_id=1, title="Board"), _card()
+    checklist = Checklist(card_id=1, title="Tasks", is_checked=True)
+    item = Checkitem(checklist_id=2, title="Done", is_checked=True)
+    repository = SimpleNamespace(
+        checklist=SimpleNamespace(update=lambda *_: pytest.fail("checklist replay mutated state")),
+        checkitem=SimpleNamespace(update=lambda *_: pytest.fail("checkitem replay mutated state")),
+    )
+    checklist_service = _service(ChecklistService, repository)
+    item_service = _service(CheckitemService, repository)
+    monkeypatch.setattr(InfraHelper, "get_records_with_foreign_by_params", lambda *_: (project, card, checklist))
+    monkeypatch.setattr(item_service, "_CheckitemService__get_records_by_params", lambda *_: (project, card, item))
+
+    assert checklist_service.toggle_checked(None, project, card, checklist, desired_checked=True) is True
+    assert item_service.toggle_checked(None, project, card, item, desired_checked=True) is True
+    assert checklist.is_checked is True and item.is_checked is True
+
+
+def test_explicit_checked_state_emits_once_across_replay(monkeypatch: pytest.MonkeyPatch) -> None:
+    project, card = Project(owner_id=1, title="Board"), _card()
+    checklist = Checklist(card_id=1, title="Tasks", is_checked=False)
+    item = Checkitem(checklist_id=2, title="Done", is_checked=False)
+    calls: list[str] = []
+    repository = SimpleNamespace(
+        checklist=SimpleNamespace(update=lambda *_: calls.append("checklist_update")),
+        checkitem=SimpleNamespace(update=lambda *_: calls.append("checkitem_update")),
+    )
+    checklist_service = _service(ChecklistService, repository)
+    item_service = _service(CheckitemService, repository)
+    monkeypatch.setattr(InfraHelper, "get_records_with_foreign_by_params", lambda *_: (project, card, checklist))
+    monkeypatch.setattr(item_service, "_CheckitemService__get_records_by_params", lambda *_: (project, card, item))
+    monkeypatch.setattr(checklist_service, "_mark_card_changed_for_unread", lambda *_: calls.append("checklist_unread"))
+    monkeypatch.setattr(item_service, "_mark_card_changed_for_unread", lambda *_: calls.append("checkitem_unread"))
+    for owner, method, name in (
+        (ChecklistPublisher, "checked_changed", "checklist_publish"),
+        (CardChecklistActivityTask, "card_checklist_checked", "checklist_activity"),
+        (CardChecklistBotTask, "card_checklist_checked", "checklist_bot"),
+        (CheckitemPublisher, "checked_changed", "checkitem_publish"),
+        (CardCheckitemActivityTask, "card_checkitem_checked", "checkitem_activity"),
+        (CardCheckitemBotTask, "card_checkitem_checked", "checkitem_bot"),
+    ):
+        monkeypatch.setattr(owner, method, lambda *_, name=name: calls.append(name))
+
+    for _ in range(2):
+        assert checklist_service.toggle_checked(None, project, card, checklist, desired_checked=True) is True
+        assert item_service.toggle_checked(None, project, card, item, desired_checked=True) is True
+
+    assert checklist.is_checked is True and item.is_checked is True
+    assert calls == [
+        "checklist_update",
+        "checklist_publish",
+        "checklist_unread",
+        "checklist_activity",
+        "checklist_bot",
+        "checkitem_update",
+        "checkitem_publish",
+        "checkitem_unread",
+        "checkitem_activity",
+        "checkitem_bot",
+    ]

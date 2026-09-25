@@ -11,7 +11,7 @@ os.environ.setdefault("PROJECT_NAME", "langboard")
 from fastmcp.exceptions import AuthorizationError, ValidationError
 from langboard_shared.domain.services.factory.CardService import CardService
 from langboard.mcp_integration import McpTool
-from langboard.mcp_tools import CardWorkspaceMcp, WikiWorkspaceMcp
+from langboard.mcp_tools import CardMcp, WikiMcp
 from langboard.wiki_workspace.domain import WikiSnapshot
 from langboard.wiki_workspace.infrastructure import NativeWikiRepository
 
@@ -22,7 +22,7 @@ def test_self_assignment_identity_is_never_a_caller_argument() -> None:
     assert set(schema["properties"]) == {"project_uid", "card_uid"}
     user = object()
     service = SimpleNamespace(card=SimpleNamespace(assign_self=Mock(return_value={"changed": True})))
-    CardWorkspaceMcp.assign_card_to_me("p", "c", user, service)
+    CardMcp.assign_card_to_me("p", "c", user, service)
     service.card.assign_self.assert_called_once_with(user, "p", "c")
 
 
@@ -34,8 +34,8 @@ def test_self_assignment_returns_onboarding_guidance_instead_of_an_internal_erro
         )
     )
 
-    with pytest.raises(ValidationError, match="Ask a board updater to onboard you"):
-        CardWorkspaceMcp.assign_card_to_me("p", "c", object(), service)
+    with pytest.raises(ValidationError, match="Ask a project updater to onboard you"):
+        CardMcp.assign_card_to_me("p", "c", object(), service)
 
     service.card.assign_self.assert_called_once()
 
@@ -81,24 +81,24 @@ def test_stale_append_is_rejected_before_storage() -> None:
     """Stale revision reports validation, but unrelated post-save failures are not mislabeled."""
     repository = Mock()
     repository.snapshot.return_value = WikiSnapshot("w", "title", "original")
-    with patch.object(WikiWorkspaceMcp, "NativeWikiRepository", return_value=repository):
+    with patch.object(WikiMcp, "NativeWikiRepository", return_value=repository):
         with pytest.raises(ValidationError):
-            WikiWorkspaceMcp.append_wiki_content("p", "w", "stale", "add", None, None)
+            WikiMcp.append_wiki_content("p", "w", "stale", "add", None, None)
         repository.append.assert_not_called()
         repository.append.side_effect = RuntimeError("post-save publisher failure")
         with pytest.raises(RuntimeError):
-            WikiWorkspaceMcp.append_wiki_content("p", "w", repository.snapshot.return_value.revision, "add", None, None)
+            WikiMcp.append_wiki_content("p", "w", repository.snapshot.return_value.revision, "add", None, None)
 
 
 def test_wiki_patch_and_delete_require_exact_identity_and_revision() -> None:
     repository = Mock()
     repository.snapshot.return_value = WikiSnapshot("w", "title", "one two")
-    with patch.object(WikiWorkspaceMcp, "NativeWikiRepository", return_value=repository):
-        patched = WikiWorkspaceMcp.patch_wiki_content(
+    with patch.object(WikiMcp, "NativeWikiRepository", return_value=repository):
+        patched = WikiMcp.patch_wiki_content(
             "p",
             "w",
             repository.snapshot.return_value.revision,
-            [WikiWorkspaceMcp.WikiTextEdit(old_text="two", new_text="three")],
+            [WikiMcp.WikiTextEdit(old_text="two", new_text="three")],
             None,
             None,
         )
@@ -106,10 +106,10 @@ def test_wiki_patch_and_delete_require_exact_identity_and_revision() -> None:
         repository.replace.assert_called_once_with("p", "w", "one two", "one three")
 
         with pytest.raises(ValidationError, match="changed after review"):
-            WikiWorkspaceMcp.delete_project_wiki("p", "w", "stale", None, None)
+            WikiMcp.delete_project_wiki("p", "w", "stale", None, None)
         repository.delete.assert_not_called()
 
-        deleted = WikiWorkspaceMcp.delete_project_wiki("p", "w", repository.snapshot.return_value.revision, None, None)
+        deleted = WikiMcp.delete_project_wiki("p", "w", repository.snapshot.return_value.revision, None, None)
         assert deleted == {"deleted": True}
         repository.delete.assert_called_once_with("p", "w", "one two")
 
@@ -122,8 +122,8 @@ def test_wiki_patch_and_delete_require_exact_identity_and_revision() -> None:
 def test_wiki_replacement_schema_and_boundary_allow_empty_content() -> None:
     repository = Mock()
     repository.snapshot.return_value = WikiSnapshot("w", "title", "existing")
-    with patch.object(WikiWorkspaceMcp, "NativeWikiRepository", return_value=repository):
-        result = WikiWorkspaceMcp.replace_wiki_content(
+    with patch.object(WikiMcp, "NativeWikiRepository", return_value=repository):
+        result = WikiMcp.replace_wiki_content(
             "p", "w", repository.snapshot.return_value.revision, "", None, None
         )
 

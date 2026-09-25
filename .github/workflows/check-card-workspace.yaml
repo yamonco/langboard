@@ -1,0 +1,49 @@
+name: Check Card Workspace
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/check-card-workspace.yaml
+      - src/api/langboard/card_workspace/**
+      - src/api/langboard/mcp_tools/CardMcp.py
+      - src/api/langboard/routes/board/BoardCardApi.py
+      - src/api/tests/card_workspace/**
+      - src/api/tests/mcp_integration/test_card_mcp_contract.py
+      - src/api/tests/mcp_integration/test_card_workspace_transport.py
+      - src/shared/py/langboard_shared/domain/services/factory/CardService.py
+      - src/shared/py/langboard_shared/domain/services/factory/CardRelationshipService.py
+      - src/shared/py/langboard_shared/domain/services/factory/ChecklistService.py
+      - src/shared/py/langboard_shared/domain/services/factory/CheckitemService.py
+  workflow_dispatch:
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: langboard_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d langboard_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      PROJECT_NAME: langboard
+      LANGBOARD_TEST_DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/langboard_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: uv sync --frozen
+      - run: uv run --no-sync ruff check src/api/langboard/card_workspace src/api/langboard/mcp_tools/CardMcp.py src/api/langboard/routes/board/BoardCardApi.py src/api/tests/card_workspace src/api/tests/mcp_integration/test_card_mcp_contract.py src/api/tests/mcp_integration/test_card_workspace_transport.py src/shared/py/langboard_shared/domain/services/factory/CardService.py src/shared/py/langboard_shared/domain/services/factory/CardRelationshipService.py src/shared/py/langboard_shared/domain/services/factory/ChecklistService.py src/shared/py/langboard_shared/domain/services/factory/CheckitemService.py
+      - run: uv run --no-sync pytest -q src/api/tests/card_workspace/test_commands.py src/api/tests/card_workspace/test_queries.py src/api/tests/card_workspace/test_completion_checklist_service.py src/api/tests/card_workspace/test_graph_patch_route.py src/api/tests/card_workspace/test_card_relationship_concurrency.py src/api/tests/mcp_integration/test_card_mcp_contract.py src/api/tests/mcp_integration/test_card_workspace_transport.py

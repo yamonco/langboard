@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any, Literal, Sequence, cast, overload
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
@@ -23,6 +23,7 @@ from ....helpers import InfraHelper
 from ....publishers import CardPublisher
 from ....tasks.activities import CardActivityTask
 from ....tasks.bots import CardBotTask
+from ....tasks.webhooks.ExecutionReadinessUow import execution_readiness_uow
 from ...models import (
     Bot,
     Card,
@@ -204,6 +205,7 @@ class CardService(BaseDomainService):
             checklist.card_id: checklist.is_checked for checklist in raw_checklists if checklist.is_system
         }
         user_checklist_card_ids = {checklist.card_id for checklist in raw_checklists if not checklist.is_system}
+        checklist_progress_by_card = self.repo.checkitem.get_board_progress_by_project(project, archive_visible_since)
 
         user = user_or_bot if isinstance(user_or_bot, User) else None
         seen_map: dict[int, int] = {}
@@ -236,6 +238,9 @@ class CardService(BaseDomainService):
                 completed=completed_by_card.get(card.id, False),
                 is_check_card=is_check_card,
             )
+            checklist_total, checklist_completed = checklist_progress_by_card.get(card.id, (0, 0))
+            api_card["checklist_total_count"] = checklist_total
+            api_card["checklist_completed_count"] = checklist_completed
             if getattr(card, "is_linked_resource", False):
                 api_card["linked_resource"] = resource_payloads[card.get_uid()]
             if user is not None:
@@ -778,7 +783,7 @@ class CardService(BaseDomainService):
         checkitem = checkitems[0][0]
         if checkitem.is_checked != completed:
             checkitem_service = self._get_service(CheckitemService)
-            checkitem_service.toggle_checked(user_or_bot, project, card, checkitem)
+            checkitem_service.toggle_checked(user_or_bot, project, card, checkitem, desired_checked=completed)
             checklist.is_checked = completed
             self.repo.checklist.update(checklist)
         return True
@@ -791,6 +796,10 @@ class CardService(BaseDomainService):
         title: str,
         description: EditorContentModel | None = None,
         assign_user_uids: list[str] | None = None,
+        *,
+        dispatch_effects: bool = True,
+        order_override: int | None = None,
+        deadline_at: datetime | None = None,
     ) -> tuple[Card, dict[str, Any]] | None:
         params = InfraHelper.get_records_with_foreign_by_params((Project, project), (ProjectColumn, column))
         if not params:
@@ -799,50 +808,71 @@ class CardService(BaseDomainService):
         if column.is_archive:
             return None
 
-        card = Card(
-            created_by_user_id=user_or_bot.id if isinstance(user_or_bot, User) else None,
-            created_by_bot_id=user_or_bot.id if isinstance(user_or_bot, Bot) else None,
-            project_id=project.id,
-            project_column_id=column.id,
-            title=title,
-            description=description or EditorContentModel(),
-            order=self.repo.card.get_next_order(column, {"project_id": project.id}),
-        )
-        card.last_change_seq = self.next_change_seq()
-        card.last_change_target_type = self.UNREAD_TARGET_CARD
-        card.last_change_at = SafeDateTime.now()
-        self.repo.card.insert(card)
+        with execution_readiness_uow() as execution:
+            card = Card(
+                created_by_user_id=user_or_bot.id if isinstance(user_or_bot, User) else None,
+                created_by_bot_id=user_or_bot.id if isinstance(user_or_bot, Bot) else None,
+                project_id=project.id,
+                project_column_id=column.id,
+                title=title,
+                description=description or EditorContentModel(),
+                deadline_at=deadline_at,
+                order=order_override
+                if order_override is not None
+                else self.repo.card.get_next_order(column, {"project_id": project.id}),
+            )
+            card.last_change_seq = self.next_change_seq()
+            card.last_change_target_type = self.UNREAD_TARGET_CARD
+            card.last_change_at = SafeDateTime.now()
+            self.repo.card.insert(card)
+            execution.watch_new(card.id)
 
-        users: list[User] = []
-        if assign_user_uids:
-            raw_users = self.repo.project_assigned_user.get_all_by_project(project, where_users_in=assign_user_uids)
-            for assign_user, project_assigned_user in raw_users:
-                card_assigned_user = CardAssignedUser(
-                    project_assigned_id=project_assigned_user.id,
-                    card_id=card.id,
-                    user_id=assign_user.id,
-                )
-                users.append(assign_user)
-                self.repo.card_assigned_user.insert(card_assigned_user)
+            users: list[User] = []
+            if assign_user_uids:
+                raw_users = self.repo.project_assigned_user.get_all_by_project(project, where_users_in=assign_user_uids)
+                for assign_user, project_assigned_user in raw_users:
+                    card_assigned_user = CardAssignedUser(
+                        project_assigned_id=project_assigned_user.id,
+                        card_id=card.id,
+                        user_id=assign_user.id,
+                    )
+                    users.append(assign_user)
+                    self.repo.card_assigned_user.insert(card_assigned_user)
 
-        is_check_card = not card.description.content.strip()
-        if is_check_card:
-            self.ensure_completion_checklist(card)
+            is_check_card = not card.description.content.strip()
+            if is_check_card:
+                self.ensure_completion_checklist(card)
 
-        api_card = card.board_api_response(
-            0, [user.get_uid() for user in users], [], [], completed=False, is_check_card=is_check_card
-        )
-        model = {"card": api_card}
+            api_card = card.board_api_response(
+                0, [user.get_uid() for user in users], [], [], completed=False, is_check_card=is_check_card
+            )
+            model = {"card": api_card}
 
-        CardPublisher.created(project, column, model)
-        CardActivityTask.card_created(user_or_bot, project, card)
-        CardBotTask.card_created(user_or_bot, project, card)
-
-        notification_service = self._get_service(NotificationService)
-        for user in users:
-            notification_service.notify_assigned_to_card(user_or_bot, user, project, card)
+        if dispatch_effects:
+            self.dispatch_created(user_or_bot, project, column, card, model, users)
 
         return card, api_card
+
+    def dispatch_created(
+        self,
+        user_or_bot: TUserOrBot,
+        project: Project,
+        column: ProjectColumn,
+        card: Card,
+        model: dict[str, Any],
+        users: list[User] | None = None,
+        *,
+        include_bot: bool = True,
+        include_notifications: bool = True,
+    ) -> None:
+        CardPublisher.created(project, column, model)
+        CardActivityTask.card_created(user_or_bot, project, card)
+        if include_bot:
+            CardBotTask.card_created(user_or_bot, project, card)
+        if include_notifications and users:
+            notification_service = self._get_service(NotificationService)
+            for user in users:
+                notification_service.notify_assigned_to_card(user_or_bot, user, project, card)
 
     def cardify_selection(
         self,
@@ -884,28 +914,30 @@ class CardService(BaseDomainService):
                 {"project_id": project.id},
             ),
         )
-        self.repo.card.insert(child)
+        with execution_readiness_uow() as execution:
+            self.repo.card.insert(child)
+            execution.watch_new(child.id)
 
-        # Link parent → child with the first global relationship type
-        global_types = self.repo.card_relationship.get_global_relationship_types_map([])
-        if global_types:
-            relationship_type_id = next(iter(global_types.values())).id
-            self.repo.card_relationship.insert(
-                CardRelationship(
-                    card_id_parent=card.id,
-                    card_id_child=child.id,
-                    relationship_type_id=relationship_type_id,
+            # Link parent → child with the first global relationship type
+            global_types = self.repo.card_relationship.get_global_relationship_types_map([])
+            if global_types:
+                relationship_type_id = next(iter(global_types.values())).id
+                self.repo.card_relationship.insert(
+                    CardRelationship(
+                        card_id_parent=card.id,
+                        card_id_child=child.id,
+                        relationship_type_id=relationship_type_id,
+                    )
                 )
-            )
 
-        # Replace the selection with a link in the parent body
-        full_markdown = card.description.content or ""
-        link = f"[[{title}]]"
-        index = full_markdown.find(selected_markdown)
-        if index != -1:
-            new_markdown = full_markdown[:index] + link + full_markdown[index + len(selected_markdown) :]
-            card.description = EditorContentModel(content=new_markdown)
-            self.repo.card.update(card)
+            # Replace the selection with a link in the parent body
+            full_markdown = card.description.content or ""
+            link = f"[[{title}]]"
+            index = full_markdown.find(selected_markdown)
+            if index != -1:
+                new_markdown = full_markdown[:index] + link + full_markdown[index + len(selected_markdown) :]
+                card.description = EditorContentModel(content=new_markdown)
+                self.repo.card.update(card)
 
         CardPublisher.updated(project, card, None, {"description": link})
         CardActivityTask.card_created(user_or_bot, project, child)
@@ -1212,19 +1244,21 @@ class CardService(BaseDomainService):
             else:
                 card.archived_at = None
 
-        old_order = card.order
-        card.order = order
-        self.repo.card.update_row_order(card, old_column, old_order, order, new_column)
-        self.repo.card.update(card)
+        with execution_readiness_uow() as execution:
+            execution.watch_card_and_dependents(card.id)
+            old_order = card.order
+            card.order = order
+            self.repo.card.update_row_order(card, old_column, old_order, order, new_column)
+            self.repo.card.update(card)
+
+            if new_column is not None:
+                card.last_change_seq = self.next_change_seq()
+                card.last_change_target_type = self.UNREAD_TARGET_CARD
+                card.last_change_target_id = None
+                card.last_change_at = SafeDateTime.now()
+                self.repo.card.update(card)
 
         CardPublisher.order_changed(project, card, old_column, cast(ProjectColumn, new_column))
-
-        if new_column is not None:
-            card.last_change_seq = self.next_change_seq()
-            card.last_change_target_type = self.UNREAD_TARGET_CARD
-            card.last_change_target_id = None
-            card.last_change_at = SafeDateTime.now()
-            self.repo.card.update(card)
 
         if new_column and not card.is_linked_resource:
             CardBotTask.enqueue_card_moved_webhook(
@@ -1338,6 +1372,8 @@ class CardService(BaseDomainService):
         project: TProjectParam | None,
         card: TCardParam | None,
         labels: Sequence[TProjectLabelParam],
+        *,
+        dispatch_effects: bool = True,
     ) -> bool | None:
         params = InfraHelper.get_records_with_foreign_by_params((Project, project), (Card, card))
         if not params:
@@ -1355,16 +1391,18 @@ class CardService(BaseDomainService):
             card_assigned_label = CardAssignedProjectLabel(card_id=card.id, project_label_id=label.id)
             self.repo.card_assigned_project_label.insert(card_assigned_label)
 
-        CardPublisher.labels_updated(project, card, new_labels)
+        if dispatch_effects:
+            CardPublisher.labels_updated(project, card, new_labels)
         self.mark_card_changed(card, self.UNREAD_TARGET_CARD)
-        CardActivityTask.card_labels_updated(
-            user_or_bot,
-            project,
-            card,
-            [label.id for label in old_labels],
-            [label.id for label in new_labels],
-        )
-        CardBotTask.card_labels_updated(user_or_bot, project, card)
+        if dispatch_effects:
+            CardActivityTask.card_labels_updated(
+                user_or_bot,
+                project,
+                card,
+                [label.id for label in old_labels],
+                [label.id for label in new_labels],
+            )
+            CardBotTask.card_labels_updated(user_or_bot, project, card)
 
         return True
 
@@ -1419,23 +1457,25 @@ class CardService(BaseDomainService):
                 should_publish=False,
             )
 
-        self.repo.card_assigned_user.delete_all_by_card(card)
-        self.repo.card_relationship.delete_all_by_card(card)
+        with execution_readiness_uow() as execution:
+            execution.watch_card_and_dependents(card.id)
+            self.repo.card_assigned_user.delete_all_by_card(card)
+            self.repo.card_relationship.delete_all_by_card(card)
 
-        BotScopeHelper.delete_by_scope(CardBotScope, card)
-        BotScheduleHelper.unschedule_by_scope(CardBotSchedule, card)
-        self._get_service(GraphApprovalRequestService).cancel_pending_by_scope(
-            project,
-            Card.__tablename__,
-            card.get_uid(),
-            reason="card deleted",
-        )
+            BotScopeHelper.delete_by_scope(CardBotScope, card)
+            BotScheduleHelper.unschedule_by_scope(CardBotSchedule, card)
+            self._get_service(GraphApprovalRequestService).cancel_pending_by_scope(
+                project,
+                Card.__tablename__,
+                card.get_uid(),
+                reason="card deleted",
+            )
 
-        # Linked cards are disposable references. Purging the board-side row
-        # allows the same source to be linked again while its Wiki stays intact.
-        is_linked_resource = card.is_linked_resource
-        self.repo.card.delete(card, purge=is_linked_resource)
-        self.repo.card.reoder_after_delete(card.project_column_id, card.order)
+            # Linked cards are disposable references. Purging the board-side row
+            # allows the same source to be linked again while its Wiki stays intact.
+            is_linked_resource = card.is_linked_resource
+            self.repo.card.delete(card, purge=is_linked_resource)
+            self.repo.card.reoder_after_delete(card.project_column_id, card.order)
 
         CardPublisher.deleted(project, card)
         if not is_linked_resource:

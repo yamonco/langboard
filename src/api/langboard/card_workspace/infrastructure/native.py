@@ -19,8 +19,6 @@ from ..application.ports import (
 from ..domain import (
     MAX_METADATA_VALUE_CHARS,
     CardDescriptionPatch,
-    CardGraphEdge,
-    CardGraphNewCard,
     ChecklistProjectionItem,
     DescriptionPatchConflict,
     projection_revision,
@@ -191,6 +189,11 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
             metadata={str(key): value for key, value in metadata.items()},
             bot_scopes=bot_scopes,
             bot_schedules=bot_schedules,
+            content_blocks=(
+                self._service.card_content_block.api_blocks_by_card(card)
+                if "content_blocks" in requested_sections
+                else []
+            ),
         )
 
     def get_comment_page(
@@ -260,61 +263,6 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
         items, total_count, next_fields = result
         return ProjectCardPageSource(items, total_count, next_fields)
 
-    def get_card_content_blocks(self, project_uid: str, card_uid: str) -> list[dict[str, Any]] | None:
-        try:
-            _project, card = self._ensure_project_card(project_uid, card_uid)
-        except ValueError:
-            return None
-        return self._service.card_content_block.api_blocks_by_card(card)
-
-    def create_card_content_block(
-        self,
-        project_uid: str,
-        card_uid: str,
-        block_type: str,
-        payload: dict[str, Any],
-        order: int | None,
-        after_block_uid: str | None,
-    ) -> dict[str, Any] | None:
-        block = self._service.card_content_block.create(
-            self._actor, project_uid, card_uid, block_type, payload, order, after_block_uid
-        )
-        if block is None:
-            raise ValueError("Card not found in project")
-        return _public_content_block(block)
-
-    def update_card_content_block(
-        self,
-        project_uid: str,
-        card_uid: str,
-        block_uid: str,
-        expected_revision: int,
-        payload: dict[str, Any],
-    ) -> dict[str, Any] | None:
-        block = self._service.card_content_block.update(
-            self._actor, project_uid, card_uid, block_uid, expected_revision, payload
-        )
-        if block is None:
-            raise PermissionError("Block not found in card")
-        return _public_content_block(block)
-
-    def delete_card_content_block(self, project_uid: str, card_uid: str, block_uid: str) -> None:
-        if not self._service.card_content_block.delete(self._actor, project_uid, card_uid, block_uid):
-            raise PermissionError("Block not found in card")
-
-    def move_card_content_block(
-        self,
-        project_uid: str,
-        card_uid: str,
-        block_uid: str,
-        after_block_uid: str | None,
-        order: int | None,
-    ) -> None:
-        if not self._service.card_content_block.move(
-            self._actor, project_uid, card_uid, block_uid, after_block_uid, order
-        ):
-            raise PermissionError("Block not found in card")
-
     def get_public_card_metadata(self, project_uid: str, card_uid: str) -> dict[str, str] | None:
         card = self._ensure_card(project_uid, card_uid, required=False)
         if card is None:
@@ -324,93 +272,6 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
             "metadata",
         )
         return {str(key): str(value) for key, value in metadata.items()}
-
-    def create_project_board(
-        self,
-        title: str,
-        description: str | None,
-        template_name: str | None = None,
-        infer_template_prefix: bool = False,
-    ) -> dict[str, Any]:
-        if not isinstance(self._actor, User):
-            raise PermissionError("Only users can create projects")
-        project, created_columns, template = self._service.project_template.create_project(
-            self._actor,
-            title,
-            description,
-            "Other",
-            template_name,
-            infer_template_prefix,
-        )
-        columns = [{**column.api_response(), "count": 0} for column in created_columns]
-        uid = project.get_uid()
-        return {
-            "project": {
-                "uid": uid,
-                "title": project.title,
-                "project_type": project.project_type,
-                "url": f"{Env.PUBLIC_UI_URL}/board/{uid}",
-                "template": template.name,
-            },
-            "columns": columns,
-        }
-
-    def create_card_in_leftmost_column(
-        self,
-        project_uid: str,
-        title: str,
-        description: str | None,
-        assign_user_uids: list[str] | None,
-    ) -> dict[str, Any]:
-        project = self._service.project.get_by_id_like(project_uid)
-        if project is None:
-            raise ValueError("Project not found")
-        if assign_user_uids is not None:
-            self._require_members(project, assign_user_uids)
-        columns = sorted(
-            (
-                column
-                for column in self._service.project_column.get_api_list_by_project(project)
-                if not column["is_archive"]
-            ),
-            key=lambda column: (column["order"], column["uid"]),
-        )
-        if not columns:
-            raise ValueError("Project has no active column")
-        result = self._service.card.create(
-            self._actor,
-            project,
-            columns[0]["uid"],
-            title,
-            EditorContentModel(content=description or ""),
-            assign_user_uids,
-        )
-        if result is None:
-            raise RuntimeError("Failed to create card")
-        _, card = result
-        return {"card": card, "column": {"uid": columns[0]["uid"], "name": columns[0]["name"]}}
-
-    def apply_card_graph_patch(
-        self,
-        project_uid: str,
-        anchor_card_uid: str,
-        new_cards: list[CardGraphNewCard],
-        add_edges: list[CardGraphEdge],
-        remove_relationship_uids: list[str],
-    ) -> dict[str, Any]:
-        """Apply one native card relationship graph transaction."""
-
-        result = self._service.card_relationship.apply_graph_patch(
-            self._actor,
-            project_uid,
-            anchor_card_uid,
-            [(card.client_ref, card.title, card.description) for card in new_cards],
-            [(edge.parent_ref, edge.child_ref, edge.relationship_type_uid) for edge in add_edges],
-            remove_relationship_uids,
-        )
-        if result is None:
-            raise ValueError("Anchor card not found in project")
-        return result
 
     def patch_card_description(
         self,
@@ -466,153 +327,6 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
             raise RuntimeError("Validated card description replacement failed")
         return description
 
-    def add_card_comment(self, project_uid: str, card_uid: str, content: str) -> dict[str, Any]:
-        comment = self._service.card_comment.create(
-            self._actor, project_uid, card_uid, EditorContentModel(content=content)
-        )
-        if comment is None:
-            raise ValueError("Card not found in project")
-        return comment.api_response()
-
-    def update_card_comment(self, project_uid: str, card_uid: str, comment_uid: str, content: str) -> dict[str, Any]:
-        comment = self._service.card_comment.update(
-            self._actor, project_uid, card_uid, comment_uid, EditorContentModel(content=content)
-        )
-        if comment is None:
-            raise PermissionError("Comment not found or not owned by current actor")
-        return comment.api_response()
-
-    def delete_card_comment(self, project_uid: str, card_uid: str, comment_uid: str) -> None:
-        if not self._service.card_comment.delete(self._actor, project_uid, card_uid, comment_uid):
-            raise PermissionError("Comment not found or not owned by current actor")
-
-    def create_card_checklist(self, project_uid: str, card_uid: str, title: str) -> dict[str, Any]:
-        checklist = self._service.checklist.create(self._actor, project_uid, card_uid, title)
-        if checklist is None:
-            raise ValueError("Card not found in project")
-        return {**checklist.api_response(), "checkitems": []}
-
-    def update_card_checklist(
-        self,
-        project_uid: str,
-        card_uid: str,
-        checklist_uid: str,
-        title: str | None,
-        is_checked: bool | None,
-    ) -> list[dict[str, Any]]:
-        checklist = self._ensure_checklist(project_uid, card_uid, checklist_uid)
-        if title is not None and checklist.title != title:
-            if not self._service.checklist.change_title(self._actor, project_uid, card_uid, checklist, title):
-                raise ValueError("Checklist not found in card")
-        if is_checked is not None and checklist.is_checked != is_checked:
-            if not self._service.checklist.toggle_checked(self._actor, project_uid, card_uid, checklist):
-                raise ValueError("Checklist not found in card")
-        return self._service.checklist.get_api_list_by_card(card_uid, limit=26, checkitems_limit=26)
-
-    def delete_card_checklist(self, project_uid: str, card_uid: str, checklist_uid: str) -> None:
-        self._ensure_checklist(project_uid, card_uid, checklist_uid)
-        if not self._service.checklist.delete(self._actor, project_uid, card_uid, checklist_uid):
-            raise ValueError("Checklist not found in card")
-
-    def create_card_checkitem(self, project_uid: str, card_uid: str, checklist_uid: str, title: str) -> dict[str, Any]:
-        self._ensure_checklist(project_uid, card_uid, checklist_uid)
-        item = self._service.checkitem.create(self._actor, project_uid, card_uid, checklist_uid, title)
-        if item is None:
-            raise ValueError("Checklist not found in card")
-        return item.api_response()
-
-    def cardify_card_checkitem(
-        self,
-        project_uid: str,
-        card_uid: str,
-        checkitem_uid: str,
-        project_column_uid: str,
-    ) -> dict[str, Any]:
-        """Cardify an existing item and return the created native card."""
-
-        project, _ = self._ensure_project_card(project_uid, card_uid)
-        item = self._ensure_checkitem(project_uid, card_uid, checkitem_uid)
-        if item.cardified_id:
-            raise ValueError("Checkitem is already cardified")
-        column = self._service.project_column.get_by_id_like(project_column_uid)
-        if column is None or column.project_id != project.id or column.is_archive:
-            raise ValueError("Destination column is not active in the source project")
-        if not self._service.checkitem.cardify(
-            self._actor,
-            project_uid,
-            card_uid,
-            item,
-            project_column_uid,
-        ):
-            raise ValueError("Checkitem could not be cardified in the requested column")
-        # The native service resolves its own model instance before persisting.
-        # Re-read the source instead of relying on mutation of our stale object.
-        item = self._ensure_checkitem(project_uid, card_uid, checkitem_uid)
-        card = self._service.card.get_by_id_like(item.cardified_id)
-        if card is None:
-            raise RuntimeError("Cardified card could not be read back")
-        return card.board_api_response(0, [], [], [])
-
-    def update_card_checkitem(
-        self,
-        project_uid: str,
-        card_uid: str,
-        checkitem_uid: str,
-        title: str | None,
-        deadline_at: str | None,
-        is_checked: bool | None,
-    ) -> list[dict[str, Any]]:
-        item = self._ensure_checkitem(project_uid, card_uid, checkitem_uid)
-        deadline = None
-        if deadline_at is not None and deadline_at != "":
-            deadline = SafeDateTime.fromisoformat(deadline_at)
-            if deadline.tzinfo is None:
-                deadline = deadline.replace(tzinfo=SafeDateTime.now().astimezone().tzinfo)
-        if title is not None and item.title != title:
-            if not self._service.checkitem.change_title(self._actor, project_uid, card_uid, item, title):
-                raise ValueError("Checkitem not found in card")
-        if deadline_at is not None and not self._service.checkitem.change_deadline(
-            project_uid, card_uid, item, deadline
-        ):
-            raise ValueError("Checkitem not found in card")
-        if is_checked is not None and item.is_checked != is_checked:
-            if not self._service.checkitem.toggle_checked(self._actor, project_uid, card_uid, item):
-                raise ValueError("Checkitem not found in card")
-        return self._service.checklist.get_api_list_by_card(card_uid, limit=26, checkitems_limit=26)
-
-    def delete_card_checkitem(self, project_uid: str, card_uid: str, checkitem_uid: str) -> None:
-        self._ensure_checkitem(project_uid, card_uid, checkitem_uid)
-        if not self._service.checkitem.delete(self._actor, project_uid, card_uid, checkitem_uid):
-            raise ValueError("Checkitem not found in card")
-
-    def replace_card_people_and_labels(
-        self,
-        project_uid: str,
-        card_uid: str,
-        assign_user_uids: list[str] | None,
-        label_uids: list[str] | None,
-    ) -> dict[str, Any]:
-        project, card = self._ensure_project_card(project_uid, card_uid)
-        if assign_user_uids is not None:
-            self._require_members(project, assign_user_uids)
-        if label_uids is not None:
-            available = {
-                label["uid"]
-                for label in self._service.project_label.get_api_list_by_project(project, where_in=label_uids)
-            }
-            self._require_known("label", label_uids, available)
-        response: dict[str, Any] = {}
-        if assign_user_uids is not None:
-            users = self._service.card.update_assigned_users(self._actor, project, card, assign_user_uids)
-            if users is None:
-                raise RuntimeError("Validated member replacement failed")
-            response["member_uids"] = [user.get_uid() for user in users]
-        if label_uids is not None:
-            if not self._service.card.update_labels(self._actor, project, card, label_uids):
-                raise RuntimeError("Validated label replacement failed")
-            response["labels"] = self._service.project_label.get_api_list_by_card(card)
-        return response
-
     def replace_card_relationships(
         self,
         project_uid: str,
@@ -645,57 +359,6 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
         if result is None:
             raise RuntimeError("Validated relationship replacement failed")
         return result
-
-    def update_card_attachment(
-        self,
-        project_uid: str,
-        card_uid: str,
-        attachment_uid: str,
-        name: str | None,
-        order: int | None,
-    ) -> list[dict[str, Any]]:
-        if not isinstance(self._actor, User):
-            raise PermissionError("Only users can update attachments")
-        attachment = self._ensure_attachment(project_uid, card_uid, attachment_uid)
-        if name is not None and not self._service.card_attachment.change_name(
-            self._actor, project_uid, card_uid, attachment, name
-        ):
-            raise ValueError("Attachment not found in card")
-        if order is not None and not self._service.card_attachment.change_order(
-            project_uid, card_uid, attachment, order
-        ):
-            raise ValueError("Attachment not found in card")
-        return self._service.card_attachment.get_api_list_by_card(card_uid, limit=26)
-
-    def delete_card_attachment(self, project_uid: str, card_uid: str, attachment_uid: str) -> None:
-        if not isinstance(self._actor, User):
-            raise PermissionError("Only users can delete attachments")
-        attachment = self._ensure_attachment(project_uid, card_uid, attachment_uid)
-        if not self._service.card_attachment.delete(self._actor, project_uid, card_uid, attachment):
-            raise ValueError("Attachment not found in card")
-
-    def save_public_card_metadata(
-        self,
-        project_uid: str,
-        card_uid: str,
-        key: str,
-        value: str,
-        old_key: str | None,
-    ) -> dict[str, str]:
-        key = require_public_metadata_key(key)
-        if old_key is not None:
-            old_key = require_public_metadata_key(old_key)
-        card = self._ensure_card(project_uid, card_uid)
-        metadata = self._service.metadata.save(CardMetadata, card, key, value, old_key)
-        if metadata is None:
-            raise RuntimeError("Failed to save metadata")
-        return self.get_public_card_metadata(project_uid, card_uid) or {}
-
-    def delete_public_card_metadata(self, project_uid: str, card_uid: str, keys: list[str]) -> None:
-        normalized = [require_public_metadata_key(key) for key in keys]
-        card = self._ensure_card(project_uid, card_uid)
-        if not self._service.metadata.delete(CardMetadata, card, normalized):
-            raise ValueError("Metadata not found")
 
     def reconcile_card_checklist_projection(
         self,
@@ -780,7 +443,9 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
                     raise ValueError("Checkitem not found in card")
                 changed = True
             if bool(actual.get("is_checked")) != item.is_checked:
-                if not self._service.checkitem.toggle_checked(self._actor, project_uid, card_uid, native_item):
+                if not self._service.checkitem.toggle_checked(
+                    self._actor, project_uid, card_uid, native_item, desired_checked=item.is_checked
+                ):
                     raise ValueError("Checkitem not found in card")
                 changed = True
 
@@ -876,26 +541,6 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
             raise ValueError("Checkitem not found in card")
         return item
 
-    def _ensure_attachment(self, project_uid: str, card_uid: str, attachment_uid: str) -> Any:
-        _, card = self._ensure_project_card(project_uid, card_uid)
-        attachment = self._service.card_attachment.get_by_id_like(attachment_uid)
-        if attachment is None or attachment.card_id != card.id:
-            raise ValueError("Attachment not found in card")
-        return attachment
-
-    def _require_members(self, project: Any, requested: list[str]) -> None:
-        available = {
-            member["uid"]
-            for member in self._service.project.get_api_assigned_user_list(project, where_user_in=requested)
-        }
-        self._require_known("project member", requested, available)
-
-    @staticmethod
-    def _require_known(label: str, requested: list[str], available: set[str]) -> None:
-        unknown = [uid for uid in requested if uid not in available]
-        if unknown:
-            raise ValueError(f"Unknown {label}: {unknown[0]}")
-
     @staticmethod
     def _bounded_source(items: list[Any], label: str) -> list[Any]:
         """Enforce the adapter's hard native source cardinality contract."""
@@ -911,14 +556,3 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
         if len(items) > MAX_NATIVE_SECTION_SOURCE:
             raise ValueError(f"{label} exceeds the safe {MAX_NATIVE_SECTION_SOURCE}-item MCP source bound")
         return items
-
-
-def _public_content_block(block) -> dict[str, Any]:
-    return {
-        "block_uid": block.get_uid(),
-        "type": block.block_type,
-        "order": block.order,
-        "revision": block.revision,
-        "payload": block.payload,
-        "updated_at": block.updated_at.isoformat() if block.updated_at else None,
-    }

@@ -1,3 +1,4 @@
+from .ExecutionEventModel import WORK_EXECUTION_EVENTS, ExecutionEventData, cloudevents_fields
 from .WebhookDataHelper import WebhookDataHelper
 from .WebhookModel import WEBHOOK_EVENT_NAMES, WORK_EVENT_NAME, WebhookModel, validate_webhook_events
 from .WebhookUrlPolicy import ResolvedWebhookTarget, ensure_public_webhook_url, validate_webhook_url
@@ -14,6 +15,9 @@ __all__ = [
     "WEBHOOK_EVENT_NAMES",
     "WebhookModel",
     "WORK_EVENT_NAME",
+    "ExecutionEventData",
+    "WORK_EXECUTION_EVENTS",
+    "cloudevents_fields",
     "ACTION_REQUIRED_NOTIFICATION_TYPES",
     "WorkEventData",
     "WorkEventPrincipal",

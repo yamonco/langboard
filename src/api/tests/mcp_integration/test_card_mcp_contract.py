@@ -9,7 +9,7 @@ os.environ.setdefault("PROJECT_NAME", "langboard")
 
 from langboard.card_workspace.application.dtos import CardBundleDto, CardBundleResponse  # noqa: E402
 from langboard.mcp_integration import McpRoleFilter, McpTool  # noqa: E402
-from langboard.mcp_tools import CardMcp, CardWorkspaceMcp  # noqa: E402, F401
+from langboard.mcp_tools import CardMcp  # noqa: E402, F401
 from langboard.routes.mcp.McpApi import serialize_mcp_result  # noqa: E402
 from langboard_shared.domain.models.bases import REACTION_TYPES  # noqa: E402
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction  # noqa: E402
@@ -63,6 +63,188 @@ def test_attachment_upload_requires_card_update_permission() -> None:
     assert actions == [ProjectRoleAction.CardUpdate.value]
 
 
+def test_comment_tools_use_native_owner_without_workspace_adapter(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[str, str]] = []
+    comment = SimpleNamespace(api_response=lambda: {"uid": "comment", "content": "hello"})
+    native = SimpleNamespace(
+        create=lambda actor, project, card, body: (calls.append(("create", body.content)) or comment),
+        update=lambda actor, project, card, uid, body: (calls.append(("update", body.content)) or comment),
+        delete=lambda actor, project, card, uid: (calls.append(("delete", uid)) or True),
+    )
+    service = SimpleNamespace(card_comment=native)
+    monkeypatch.setattr(CardMcp, "_adapter", lambda *args: pytest.fail("workspace adapter used"))
+
+    assert CardMcp.add_card_comment("project", "card", " hello ", None, service)["comment"]["uid"] == "comment"
+    assert (
+        CardMcp.update_card_comment("project", "card", "comment", " hello ", None, service)["comment"]["uid"]
+        == "comment"
+    )
+    assert CardMcp.delete_card_comment("project", "card", "comment", None, service) == {"deleted": True}
+    assert calls == [("create", "hello"), ("update", "hello"), ("delete", "comment")]
+
+    with pytest.raises(ValueError, match="Comment is required"):
+        CardMcp.add_card_comment("project", "card", " ", None, service)
+
+    missing = SimpleNamespace(
+        card_comment=SimpleNamespace(create=lambda *args: None, update=lambda *args: None, delete=lambda *args: False)
+    )
+    with pytest.raises(ValueError, match="Card not found in project"):
+        CardMcp.add_card_comment("project", "card", "hello", None, missing)
+    with pytest.raises(PermissionError, match="not owned"):
+        CardMcp.update_card_comment("project", "card", "comment", "hello", None, missing)
+    with pytest.raises(PermissionError, match="not owned"):
+        CardMcp.delete_card_comment("project", "card", "comment", None, missing)
+
+
+def test_public_metadata_mutations_use_native_owner_and_bounded_response(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[str, Any]] = []
+    card = object()
+    monkeypatch.setattr(CardMcp, "_require_task_card", lambda *_: (object(), card))
+    monkeypatch.setattr(CardMcp, "_adapter", lambda *args: pytest.fail("workspace adapter used"))
+    service = SimpleNamespace(
+        metadata=SimpleNamespace(
+            save=lambda model, target, key, value, old_key: (
+                calls.append(("save", (target, key, value, old_key))) or SimpleNamespace(value=value)
+            ),
+            delete=lambda model, target, keys: (calls.append(("delete", (target, keys))) or True),
+        )
+    )
+
+    saved = CardMcp.save_public_card_metadata("project", "card", " note ", "x" * 4001, None, service)
+    assert saved == {"key": "note", "value": "x" * 4000, "total_chars": 4001, "truncated": True}
+    assert CardMcp.delete_public_card_metadata("project", "card", [" note "], None, service) == {"deleted": True}
+    assert calls == [
+        ("save", (card, "note", "x" * 4001, None)),
+        ("delete", (card, ["note"])),
+    ]
+
+    for keys in (["api_token"], ["note", " note "]):
+        with pytest.raises(ValueError):
+            CardMcp.delete_public_card_metadata("project", "card", keys, None, service)
+    with pytest.raises(ValueError, match="reserved or secret-like"):
+        CardMcp.save_public_card_metadata("project", "card", "api_token", "secret", None, service)
+    assert len(calls) == 2
+
+
+def test_attachment_mutations_use_native_owner_and_bounded_response(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[str, Any]] = []
+    project = SimpleNamespace(id=1)
+    card = SimpleNamespace(id=2)
+    attachment = SimpleNamespace(card_id=2)
+    monkeypatch.setattr(CardMcp, "_get_card_in_project", lambda *_: (project, card))
+    monkeypatch.setattr(CardMcp, "_adapter", lambda *args: pytest.fail("workspace adapter used"))
+    native = SimpleNamespace(
+        get_by_id_like=lambda uid: attachment,
+        change_name=lambda actor, p, c, item, name: (calls.append(("name", name)) or True),
+        change_order=lambda p, c, item, order: (calls.append(("order", order)) or True),
+        delete=lambda actor, p, c, item: (calls.append(("delete", item)) or True),
+        get_api_list_by_card=lambda uid, limit: [
+            {"uid": str(index), "storage_key": "private/object", "user": {"uid": "u1", "email": "hidden"}}
+            for index in range(26)
+        ],
+    )
+    service = SimpleNamespace(card_attachment=native)
+
+    with pytest.raises(ValueError, match="non-negative"):
+        CardMcp.update_card_attachment("p", "c", "a", None, service, " renamed ", -1)
+    assert calls == []
+    response = CardMcp.update_card_attachment("p", "c", "a", None, service, " renamed ", 2)
+    assert calls == [("name", "renamed"), ("order", 2)]
+    assert response["attachments"].total_count == 26
+    assert len(response["attachments"].items) == 25
+    assert response["attachments"].items[0]["user"] == {"uid": "u1"}
+    assert "storage_key" not in response["attachments"].items[0]
+
+    attachment.card_id = 3
+    with pytest.raises(ValueError, match="Attachment not found in card"):
+        CardMcp.delete_card_attachment("p", "c", "a", None, service)
+    assert len(calls) == 2
+    attachment.card_id = 2
+    assert CardMcp.delete_card_attachment("p", "c", "a", None, service) == {"deleted": True}
+    assert calls[-1] == ("delete", attachment)
+
+
+def test_checklist_updates_use_native_set_state_without_workspace_adapter(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[str, Any]] = []
+    card = SimpleNamespace(id=10)
+    checklist = SimpleNamespace(id=20, card_id=10, title="Old")
+    item = SimpleNamespace(checklist_id=20, title="Old item")
+    monkeypatch.setattr(CardMcp, "_require_task_card", lambda *_: (object(), card))
+    monkeypatch.setattr(CardMcp, "_adapter", lambda *args: pytest.fail("workspace adapter used"))
+    service = SimpleNamespace(
+        checklist=SimpleNamespace(
+            get_by_id_like=lambda uid: checklist,
+            change_title=lambda *args: (calls.append(("checklist_title", args[-1])) or True),
+            toggle_checked=lambda *args, **kwargs: (
+                calls.append(("checklist_checked", kwargs["desired_checked"])) or True
+            ),
+            get_api_list_by_card=lambda *args, **kwargs: [{"uid": "l", "title": "New", "checkitems": []}],
+        ),
+        checkitem=SimpleNamespace(
+            get_by_id_like=lambda uid: item,
+            change_title=lambda *args: (calls.append(("checkitem_title", args[-1])) or True),
+            change_deadline=lambda *args: (calls.append(("checkitem_deadline", args[-1])) or True),
+            toggle_checked=lambda *args, **kwargs: (
+                calls.append(("checkitem_checked", kwargs["desired_checked"])) or True
+            ),
+        ),
+    )
+
+    first = CardMcp.update_card_checklist("project", "card", "list", None, service, title=" New ", is_checked=True)
+    second = CardMcp.update_card_checkitem(
+        "project", "card", "item", None, service, title=" New item ", deadline_at="", is_checked=False
+    )
+    assert first["checklists"].items[0]["title"] == "New"
+    assert second["checklists"].items[0]["uid"] == "l"
+    assert calls == [
+        ("checklist_title", "New"),
+        ("checklist_checked", True),
+        ("checkitem_title", "New item"),
+        ("checkitem_deadline", None),
+        ("checkitem_checked", False),
+    ]
+
+    for kwargs in ({}, {"title": " "}, {"is_checked": "yes"}):
+        with pytest.raises(ValueError):
+            CardMcp.update_card_checklist("project", "card", "list", None, service, **kwargs)
+    assert len(calls) == 5
+
+
+def test_checklist_create_delete_tools_use_native_owner(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[str, str]] = []
+    checklist = SimpleNamespace(api_response=lambda: {"uid": "list", "title": "Tasks", "private": "hidden"})
+    item = SimpleNamespace(api_response=lambda: {"uid": "item", "title": "Task", "private": "hidden"})
+    service = SimpleNamespace(
+        checklist=SimpleNamespace(
+            create=lambda actor, project, card, title: (calls.append(("create_list", title)) or checklist),
+            delete=lambda actor, project, card, uid: (calls.append(("delete_list", uid)) or True),
+        ),
+        checkitem=SimpleNamespace(
+            create=lambda actor, project, card, uid, title: (calls.append(("create_item", title)) or item),
+            delete=lambda actor, project, card, uid: (calls.append(("delete_item", uid)) or True),
+        ),
+    )
+    monkeypatch.setattr(CardMcp, "_adapter", lambda *args: pytest.fail("workspace adapter used"))
+
+    created_list = CardMcp.create_card_checklist("project", "card", " Tasks ", None, service)["checklist"]
+    created_item = CardMcp.create_card_checkitem("project", "card", "list", " Task ", None, service)["checkitem"]
+    assert created_list["uid"] == "list" and "private" not in created_list
+    assert created_item["uid"] == "item" and "private" not in created_item
+    assert CardMcp.delete_card_checklist("project", "card", "list", None, service) == {"deleted": True}
+    assert CardMcp.delete_card_checkitem("project", "card", "item", None, service) == {"deleted": True}
+    assert calls == [
+        ("create_list", "Tasks"),
+        ("create_item", "Task"),
+        ("delete_list", "list"),
+        ("delete_item", "item"),
+    ]
+
+    with pytest.raises(ValueError, match="Checklist title is required"):
+        CardMcp.create_card_checklist("project", "card", " ", None, service)
+    with pytest.raises(ValueError, match="Checkitem title is required"):
+        CardMcp.create_card_checkitem("project", "card", "list", " ", None, service)
+
+
 @pytest.mark.parametrize("reason", ["stale revision", "missing fragment", "ambiguous fragment"])
 def test_description_conflict_is_transport_validation(monkeypatch: pytest.MonkeyPatch, reason: str) -> None:
     """Only a known pre-save conflict becomes a recoverable MCP validation error."""
@@ -72,10 +254,10 @@ def test_description_conflict_is_transport_validation(monkeypatch: pytest.Monkey
     def reject(*args: Any, **kwargs: Any) -> None:
         raise DescriptionPatchConflict(reason)
 
-    monkeypatch.setattr(CardWorkspaceMcp, "_adapter", lambda *args: object())
-    monkeypatch.setattr(CardWorkspaceMcp, "replace_description_text", reject)
+    monkeypatch.setattr(CardMcp, "_adapter", lambda *args: object())
+    monkeypatch.setattr(CardMcp, "replace_description_text", reject)
     with pytest.raises(ValidationError, match="No changes saved"):
-        CardWorkspaceMcp.patch_card_description("project", "card", None, None, old_text="old", new_text="new")
+        CardMcp.patch_card_description("project", "card", None, None, old_text="old", new_text="new")
 
 
 def test_description_unexpected_failure_is_not_claimed_unsaved(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -84,10 +266,10 @@ def test_description_unexpected_failure_is_not_claimed_unsaved(monkeypatch: pyte
     def fail(*args: Any, **kwargs: Any) -> None:
         raise ValueError("downstream effect failed")
 
-    monkeypatch.setattr(CardWorkspaceMcp, "_adapter", lambda *args: object())
-    monkeypatch.setattr(CardWorkspaceMcp, "replace_description_text", fail)
+    monkeypatch.setattr(CardMcp, "_adapter", lambda *args: object())
+    monkeypatch.setattr(CardMcp, "replace_description_text", fail)
     with pytest.raises(ValueError, match="downstream effect failed"):
-        CardWorkspaceMcp.patch_card_description("project", "card", None, None, old_text="old", new_text="new")
+        CardMcp.patch_card_description("project", "card", None, None, old_text="old", new_text="new")
 
 
 @pytest.mark.asyncio
@@ -108,20 +290,20 @@ async def test_description_conflict_through_http_route(monkeypatch: pytest.Monke
     )
     monkeypatch.setattr(route, "DomainService", lambda: service)
     monkeypatch.setattr(route, "User", SimpleNamespace)
-    monkeypatch.setattr(CardWorkspaceMcp, "_adapter", lambda *args: object())
+    monkeypatch.setattr(CardMcp, "_adapter", lambda *args: object())
 
     def reject(*args: Any, **kwargs: Any) -> None:
         if reason == "effect failure":
             raise ValueError("effect failure")
         raise DescriptionPatchConflict(reason)
 
-    monkeypatch.setattr(CardWorkspaceMcp, "replace_description_text", reject)
+    monkeypatch.setattr(CardMcp, "replace_description_text", reject)
     mcp = FastMCP("description-http-test")
 
     @mcp.tool(name="patch_card_description")
     def patch() -> Any:
         """Run the real MCP boundary without database or external effects."""
-        return CardWorkspaceMcp.patch_card_description("project", "card", None, None, old_text="old", new_text="new")
+        return CardMcp.patch_card_description("project", "card", None, None, old_text="old", new_text="new")
 
     monkeypatch.setattr(route.McpServer, "mcp", mcp)
     app = FastAPI()
@@ -170,6 +352,30 @@ def test_comment_reaction_schema_exposes_only_native_reactions() -> None:
     schema = McpTool.get_tool("toggle_card_comment_reaction")["input_schema"]
 
     assert schema["properties"]["reaction"]["enum"] == REACTION_TYPES
+
+
+def test_graph_patch_uses_native_owner_after_shared_validation(monkeypatch: pytest.MonkeyPatch) -> None:
+    from langboard.card_workspace.domain import CardGraphEdge, CardGraphNewCard
+
+    calls: list[tuple[Any, ...]] = []
+    graph = SimpleNamespace(
+        apply_graph_patch=lambda actor, *patch: (
+            calls.append((actor, *patch)) or {"created_cards": [], "created_relationships": []}
+        )
+    )
+    service = SimpleNamespace(card_relationship=graph)
+    monkeypatch.setattr(CardMcp, "_adapter", lambda *args: pytest.fail("workspace adapter used"))
+    actor = object()
+    cards = [CardGraphNewCard("new:a", " A ")]
+    edges = [CardGraphEdge("root", "new:a", "blocks")]
+
+    result = CardMcp.apply_card_graph_patch("project", "root", cards, edges, [], actor, service)
+    assert result == {"created_cards": [], "created_relationships": []}
+    assert calls == [(actor, "project", "root", [("new:a", "A", None)], [("root", "new:a", "blocks")], [])]
+
+    with pytest.raises(ValueError, match="at least one change"):
+        CardMcp.apply_card_graph_patch("project", "root", [], [], [], actor, service)
+    assert len(calls) == 1
 
 
 def test_graph_patch_schema_exposes_typed_request_local_references() -> None:
@@ -242,7 +448,7 @@ def test_project_member_projection_omits_email_and_is_bounded() -> None:
         )
     )
 
-    result = CardWorkspaceMcp.list_project_members("project", service)
+    result = CardMcp.list_project_members("project", service)
 
     assert len(result["items"]) == 50
     assert result["truncated"] is True
@@ -270,7 +476,7 @@ def test_project_member_projection_does_not_expose_invitation_email_as_name() ->
         )
     )
 
-    result = CardWorkspaceMcp.list_project_members("project", service)
+    result = CardMcp.list_project_members("project", service)
 
     assert result["items"] == [{"uid": "group_email", "username": ""}, {"uid": "unknown", "username": ""}]
     assert "hidden@example.com" not in str(result)

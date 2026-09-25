@@ -9,7 +9,7 @@ import ShineBorder from "@/components/base/ShineBorder";
 import Skeleton from "@/components/base/Skeleton";
 import Toast from "@/components/base/Toast";
 import useChangeCardDetails from "@/controllers/api/card/useChangeCardDetails";
-import useGetCardDetails from "@/controllers/api/card/useGetCardDetails";
+import useGetCardDetails, { IGetCardDetailsResponse } from "@/controllers/api/card/useGetCardDetails";
 import useUnreadChangeNavigation from "@/pages/BoardPage/components/card/useUnreadChangeNavigation";
 
 import useReplaceCardContentBlocks from "@/controllers/api/board/useReplaceCardContentBlocks";
@@ -51,6 +51,32 @@ import BoardLinkedWikiCard from "@/pages/BoardPage/components/card/BoardLinkedWi
 import useCardLinkedResourceChangedHandlers from "@/controllers/socket/card/useCardLinkedResourceChangedHandlers";
 import useSwitchSocketHandlers from "@/core/hooks/useSwitchSocketHandlers";
 import { useQueryClient } from "@tanstack/react-query";
+import {
+    clampCommentPanelWidth,
+    DEFAULT_COMMENT_PANEL_WIDTH,
+    getCommentPanelWidthBounds,
+    MAX_COMMENT_PANEL_WIDTH,
+    MIN_COMMENT_PANEL_WIDTH,
+} from "@/pages/BoardPage/components/card/comment/CommentPanelWidth";
+
+const COMMENT_PANEL_WIDTH_KEY = "langboard-comment-panel-width";
+
+function readCommentPanelWidth(): number {
+    try {
+        const saved = Number(window.sessionStorage.getItem(COMMENT_PANEL_WIDTH_KEY));
+        return saved > 0 ? Math.min(MAX_COMMENT_PANEL_WIDTH, Math.max(MIN_COMMENT_PANEL_WIDTH, saved)) : DEFAULT_COMMENT_PANEL_WIDTH;
+    } catch {
+        return DEFAULT_COMMENT_PANEL_WIDTH;
+    }
+}
+
+function saveCommentPanelWidth(width: number): void {
+    try {
+        window.sessionStorage.setItem(COMMENT_PANEL_WIDTH_KEY, String(width));
+    } catch {
+        // Resizing still works when browser storage is disabled.
+    }
+}
 
 export interface IBoardCardProps {
     projectUID: string;
@@ -144,6 +170,7 @@ const BoardCard = memo(
                 ) : (
                     <BoardCardProvider key={cardUID} projectUID={projectUID} card={cardData.card} currentUser={currentUser} viewportRef={viewportRef}>
                         <BoardCardResult
+                            executionReceipts={cardData.execution_receipts}
                             isExpanded={isExpanded}
                             setIsExpanded={setIsExpanded}
                             onClose={onClose}
@@ -195,7 +222,7 @@ export function SkeletonBoardCard(): React.JSX.Element {
                         <BoardCardSection title="card.Attached files">
                             <SkeletonBoardCardAttachmentList />
                         </BoardCardSection>
-                        <Box className="sm:hidden">
+                        <Box className="lg:hidden">
                             <BoardCardSection title="card.Comments">
                                 <SkeletonBoardCommentList />
                             </BoardCardSection>
@@ -228,6 +255,7 @@ export function SkeletonBoardCard(): React.JSX.Element {
 }
 
 interface IBoardCardResultProps {
+    executionReceipts?: IGetCardDetailsResponse["execution_receipts"];
     isExpanded: bool;
     setIsExpanded?: React.Dispatch<React.SetStateAction<bool>>;
     onClose?: () => void;
@@ -244,7 +272,13 @@ function BoardCardResult(props: IBoardCardResultProps): React.JSX.Element {
     return <BoardTaskCardResult {...props} />;
 }
 
-function BoardTaskCardResult({ isExpanded, setIsExpanded, onClose, onEditModeStateChange }: IBoardCardResultProps): React.JSX.Element {
+function BoardTaskCardResult({
+    isExpanded,
+    setIsExpanded,
+    onClose,
+    onEditModeStateChange,
+    executionReceipts = [],
+}: IBoardCardResultProps): React.JSX.Element {
     const { card, isCardEditing, leaveCardEditMode } = useBoardCard();
     const { isActionPanelOpen } = useBoardCardPanel();
     const { boardChat } = useBoardController();
@@ -377,6 +411,41 @@ function BoardTaskCardResult({ isExpanded, setIsExpanded, onClose, onEditModeSta
                                                         scrollParentRef={contentViewportRef}
                                                     />
                                                 </BoardCardSection>
+                                                {executionReceipts.length > 0 && (
+                                                    <BoardCardSection title="실행 기록">
+                                                        <div className="space-y-3">
+                                                            {executionReceipts.map(({ generation, receipt, checklist_projection }) => (
+                                                                <div key={generation} className="rounded-md border p-3 text-sm">
+                                                                    <div className="font-medium">
+                                                                        #{generation} · {receipt.status}
+                                                                    </div>
+                                                                    <p className="mt-1 whitespace-pre-wrap">{receipt.summary}</p>
+                                                                    {receipt.artifacts.map((artifact) => (
+                                                                        <a
+                                                                            key={artifact.url}
+                                                                            href={artifact.url}
+                                                                            target="_blank"
+                                                                            rel="noopener noreferrer"
+                                                                            className="mt-1 block break-all underline"
+                                                                        >
+                                                                            {artifact.type}: {artifact.url}
+                                                                        </a>
+                                                                    ))}
+                                                                    {checklist_projection?.length > 0 && (
+                                                                        <ul className="mt-2 space-y-1" aria-label="실행 근거 체크리스트">
+                                                                            {checklist_projection.map((item) => (
+                                                                                <li key={item.item_uid}>
+                                                                                    {item.is_checked ? "☑" : "☐"} {item.item_uid}: {item.kind}
+                                                                                    {item.refs.length > 0 && ` · ${item.refs.join(", ")}`}
+                                                                                </li>
+                                                                            ))}
+                                                                        </ul>
+                                                                    )}
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </BoardCardSection>
+                                                )}
                                                 {checklists.length > 0 && (
                                                     <BoardCardSection title="card.Checklists">
                                                         <BoardCardChecklistGroup key={`board-card-checklist-${card.uid}`} />
@@ -400,7 +469,7 @@ function BoardTaskCardResult({ isExpanded, setIsExpanded, onClose, onEditModeSta
                                     </BoardCardSection>
                                 </Box>
                             </Flex>
-                            <Box className="pt-3 sm:hidden">
+                            <Box className="pt-3 lg:hidden">
                                 <BoardCommentForm variant="mobile" />
                             </Box>
                         </Box>
@@ -438,7 +507,7 @@ function BoardCardMobileComments({ scrollableRef }: { scrollableRef?: React.RefO
     }
 
     return (
-        <Box className="sm:hidden">
+        <Box className="lg:hidden">
             <BoardCardSection title="card.Comments">
                 <BoardCommentList key={`board-card-comment-list-mobile-${card.uid}`} scrollableRef={scrollableRef} />
             </BoardCardSection>
@@ -452,20 +521,141 @@ function BoardCardCommentPanel(): React.JSX.Element {
     const commentViewportRef = useRef<HTMLDivElement | null>(null);
     const [t] = useTranslation();
     const isPanelLayout = commentLayoutMode === "panel";
+    const isOpen = isPanelLayout && isCommentPanelOpen;
+    const panelRef = useRef<HTMLDivElement | null>(null);
+    const dragRef = useRef<{ pointerId: number; startX: number; startWidth: number } | null>(null);
+    const [width, setWidth] = useState(readCommentPanelWidth);
+    const widthRef = useRef(width);
+    const [maxWidth, setMaxWidth] = useState(MAX_COMMENT_PANEL_WIDTH);
+    const [isResizing, setIsResizing] = useState(false);
+
+    const sharedWidth = useCallback(() => {
+        const panel = panelRef.current;
+        const body = panel?.previousElementSibling;
+        return (body?.getBoundingClientRect().width ?? 0) + (panel?.getBoundingClientRect().width ?? 0);
+    }, []);
+    const applyWidth = useCallback(
+        (nextWidth: number) => {
+            const available = sharedWidth();
+            const bounds = getCommentPanelWidthBounds(available);
+            const next = clampCommentPanelWidth(nextWidth, available);
+            widthRef.current = next;
+            setWidth(next);
+            setMaxWidth(bounds.max);
+        },
+        [sharedWidth]
+    );
+
+    useEffect(() => {
+        if (!isPanelLayout || !panelRef.current?.parentElement) {
+            return;
+        }
+        const observer = new ResizeObserver(() => applyWidth(widthRef.current));
+        observer.observe(panelRef.current.parentElement);
+        applyWidth(widthRef.current);
+        return () => observer.disconnect();
+    }, [applyWidth, isPanelLayout]);
+
+    useEffect(() => {
+        return () => {
+            document.documentElement.style.userSelect = "";
+            document.documentElement.style.cursor = "";
+        };
+    }, []);
+
+    const stopResizing = (event: React.PointerEvent<HTMLDivElement>) => {
+        if (dragRef.current?.pointerId !== event.pointerId) {
+            return;
+        }
+        dragRef.current = null;
+        setIsResizing(false);
+        document.documentElement.style.userSelect = "";
+        document.documentElement.style.cursor = "";
+        saveCommentPanelWidth(widthRef.current);
+        if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+            event.currentTarget.releasePointerCapture(event.pointerId);
+        }
+    };
+
+    const startResizing = (event: React.PointerEvent<HTMLDivElement>) => {
+        if (event.button !== 0) {
+            return;
+        }
+        event.preventDefault();
+        event.currentTarget.setPointerCapture(event.pointerId);
+        dragRef.current = { pointerId: event.pointerId, startX: event.clientX, startWidth: widthRef.current };
+        setIsResizing(true);
+        document.documentElement.style.userSelect = "none";
+        document.documentElement.style.cursor = "col-resize";
+    };
+
+    const resizeWithKeyboard = (event: React.KeyboardEvent<HTMLDivElement>) => {
+        const available = sharedWidth();
+        const bounds = getCommentPanelWidthBounds(available);
+        const next =
+            event.key === "ArrowLeft"
+                ? widthRef.current + 20
+                : event.key === "ArrowRight"
+                  ? widthRef.current - 20
+                  : event.key === "Home"
+                    ? bounds.min
+                    : event.key === "End"
+                      ? bounds.max
+                      : null;
+        if (next === null) {
+            return;
+        }
+        event.preventDefault();
+        applyWidth(next);
+        saveCommentPanelWidth(widthRef.current);
+    };
 
     return (
         <Box
+            ref={panelRef}
             className={cn(
-                "hidden min-h-0 overflow-hidden transition-all duration-300 sm:block",
-                isPanelLayout && isCommentPanelOpen ? "sm:w-[360px] sm:min-w-[360px]" : "sm:w-0 sm:min-w-0 sm:border-transparent"
+                "relative hidden min-h-0 shrink-0 overflow-hidden lg:block",
+                isResizing ? "transition-none" : "transition-[width,min-width] duration-300 motion-reduce:transition-none"
             )}
-            aria-hidden={!isPanelLayout || !isCommentPanelOpen}
+            style={{ width: isOpen ? width : 0, minWidth: isOpen ? width : 0 }}
+            aria-hidden={!isOpen}
         >
+            {isOpen && (
+                <div
+                    role="separator"
+                    aria-orientation="vertical"
+                    aria-label={`${t("card.Comments")} panel width`}
+                    aria-valuemin={MIN_COMMENT_PANEL_WIDTH}
+                    aria-valuemax={maxWidth}
+                    aria-valuenow={width}
+                    tabIndex={0}
+                    className={cn(
+                        "absolute inset-y-0 left-0 z-10 w-2 cursor-col-resize touch-none",
+                        "before:absolute before:inset-y-0 before:left-0 before:w-px before:bg-border hover:before:bg-primary",
+                        "focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+                    )}
+                    onPointerDown={startResizing}
+                    onPointerMove={(event) => {
+                        const drag = dragRef.current;
+                        if (drag?.pointerId === event.pointerId) {
+                            applyWidth(drag.startWidth + drag.startX - event.clientX);
+                        }
+                    }}
+                    onPointerUp={stopResizing}
+                    onPointerCancel={stopResizing}
+                    onLostPointerCapture={stopResizing}
+                    onKeyDown={resizeWithKeyboard}
+                    onDoubleClick={() => {
+                        applyWidth(DEFAULT_COMMENT_PANEL_WIDTH);
+                        saveCommentPanelWidth(widthRef.current);
+                    }}
+                />
+            )}
             <Box
                 className={cn(
                     "h-full",
                     "overflow-hidden bg-background transition-opacity duration-200",
-                    isPanelLayout && isCommentPanelOpen ? "opacity-100" : "pointer-events-none opacity-0"
+                    isOpen ? "opacity-100" : "pointer-events-none opacity-0"
                 )}
             >
                 <Flex direction="col" className="h-full min-h-0">

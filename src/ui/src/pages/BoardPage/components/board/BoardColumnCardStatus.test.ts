@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 
 import {
     calculateChecklistProgress,
+    calculateChecklistProgressFromCounts,
     calculateDeadlinePressure,
     DEADLINE_PRESSURE_WINDOW_MS,
     getDeadlinePressureLevel,
@@ -16,6 +17,12 @@ describe("board column card status", () => {
             total: 2,
             ratio: 0.5,
         });
+    });
+
+    it("uses bounded board summary counts without detail hydration", () => {
+        assert.deepEqual(calculateChecklistProgressFromCounts(7, 8), { completed: 7, total: 8, ratio: 0.875 });
+        assert.deepEqual(calculateChecklistProgressFromCounts(0, 0), { completed: 0, total: 0, ratio: 0 });
+        assert.deepEqual(calculateChecklistProgressFromCounts(9, 8), { completed: 8, total: 8, ratio: 1 });
     });
 
     it("ramps deadline pressure across seven days and suppresses completed cards", () => {

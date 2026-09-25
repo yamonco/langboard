@@ -1,15 +1,12 @@
 import os
+from types import SimpleNamespace
 
 
 os.environ.setdefault("PROJECT_NAME", "langboard")
 
 import pytest  # noqa: E402
-from langboard.card_workspace.application.commands import (  # noqa: E402
-    create_card_content_block,
-    move_card_content_block,
-)
 from langboard.mcp_integration import McpTool  # noqa: E402
-from langboard.mcp_tools import CardWorkspaceMcp  # noqa: E402, F401
+from langboard.mcp_tools import CardMcp  # noqa: E402, F401
 from langboard_shared.domain.contracts.content_blocks import (  # noqa: E402
     ContentBlockConflictError,
     ContentBlockType,
@@ -34,19 +31,42 @@ class TestToolSchema:
 
     def test_move_schema_rejects_double_hint_at_runtime(self) -> None:
         with pytest.raises(ValueError):
-            move_card_content_block(_Port(), "p", "c", "b", after_block_uid="x", order=0)
+            CardMcp.move_card_content_block("p", "c", "b", after_block_uid="x", order=0)
 
     def test_create_schema_rejects_unknown_type_at_runtime(self) -> None:
         with pytest.raises(ValueError):
-            create_card_content_block(_Port(), "p", "c", "iframe", {})
+            CardMcp.create_card_content_block("p", "c", "iframe", {})
 
 
-class _Port:
-    def create_card_content_block(self, *args, **kwargs):
-        return {}
+def test_content_block_tools_use_native_owner(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[str] = []
+    block = SimpleNamespace(
+        get_uid=lambda: "block", block_type="code", order=0, revision=1, payload={"source": "x"}, updated_at=None
+    )
+    native = SimpleNamespace(
+        create=lambda *args: (calls.append("create") or block),
+        update=lambda *args: (calls.append("update") or block),
+        delete=lambda *args: (calls.append("delete") or True),
+        move=lambda *args: (calls.append("move") or True),
+    )
+    service = SimpleNamespace(card_content_block=native)
+    monkeypatch.setattr(CardMcp, "_adapter", lambda *args: pytest.fail("workspace adapter used"))
 
-    def move_card_content_block(self, *args, **kwargs):
-        return None
+    assert (
+        CardMcp.create_card_content_block("p", "c", "code", {"source": "x"}, service=service)["content_block"][
+            "block_uid"
+        ]
+        == "block"
+    )
+    assert (
+        CardMcp.update_card_content_block("p", "c", "block", 1, {"source": "y"}, service=service)["content_block"][
+            "block_uid"
+        ]
+        == "block"
+    )
+    assert CardMcp.delete_card_content_block("p", "c", "block", service=service) == {"deleted": True}
+    assert CardMcp.move_card_content_block("p", "c", "block", order=0, service=service) == {"moved": True}
+    assert calls == ["create", "update", "delete", "move"]
 
 
 class TestPayloadContract:

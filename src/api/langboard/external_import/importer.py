@@ -1,6 +1,9 @@
 from __future__ import annotations
 from collections import Counter
+from datetime import datetime
+from functools import partial
 from hashlib import sha256
+from itertools import batched, groupby
 from json import dumps
 from pathlib import Path
 from typing import Any, Callable, TypeVar
@@ -10,15 +13,12 @@ from langboard_shared.core.storage import FileModel, Storage, StorageName
 from langboard_shared.core.types import SafeDateTime, SnowflakeID
 from langboard_shared.domain.models import (
     Card,
-    CardAssignedProjectLabel,
-    CardAssignedUser,
     CardAttachment,
     CardComment,
     CardRelationship,
     Checkitem,
     Checklist,
     ExternalImportRecord,
-    GlobalCardRelationshipType,
     Project,
     ProjectAssignedUser,
     ProjectColumn,
@@ -28,27 +28,8 @@ from langboard_shared.domain.models import (
     UserIdentityLink,
 )
 from langboard_shared.domain.models.UserIdentityLink import IdentityProvider
+from langboard_shared.domain.services import DomainService
 from langboard_shared.Env import Env
-from langboard_shared.publishers import (
-    CardAttachmentPublisher,
-    CardCommentPublisher,
-    CardPublisher,
-    CardRelationshipPublisher,
-    CheckitemPublisher,
-    ChecklistPublisher,
-    ProjectColumnPublisher,
-    ProjectLabelPublisher,
-)
-from langboard_shared.tasks.activities import (
-    CardActivityTask,
-    CardAttachmentActivityTask,
-    CardCheckitemActivityTask,
-    CardChecklistActivityTask,
-    CardCommentActivityTask,
-    CardRelationshipActivityTask,
-    ProjectColumnActivityTask,
-    ProjectLabelActivityTask,
-)
 from pydantic import BaseModel
 from .contract import (
     ExternalAttachment,
@@ -61,6 +42,7 @@ from .contract import (
     ExternalRelationship,
     ExternalWorkBundle,
 )
+from .effects import dispatch_imported_effects
 
 
 class ExternalImportError(ValueError):
@@ -101,7 +83,8 @@ class ExternalWorkImporter:
         effect_dispatcher: TImportEffectDispatcher | None = None,
     ):
         self._attachments_root = attachments_root.resolve() if attachments_root else None
-        self._effect_dispatcher = effect_dispatcher or self._dispatch_native_effects
+        self._domain = DomainService()
+        self._effect_dispatcher = effect_dispatcher or partial(dispatch_imported_effects, self._domain)
 
     def import_bundle(
         self,
@@ -131,36 +114,43 @@ class ExternalWorkImporter:
                 unchanged=dict(unchanged),
             )
 
-        for kind, record in bundle.records():
-            key = (kind, record.source_id)
-            lineage = existing.get(key)
-            if lineage:
-                if lineage.effects_dispatched_at is None:
-                    self._dispatch_and_checkpoint(
-                        kind, record, targets[key], project, actor, targets, principals, lineage
-                    )
-                continue
+        for (_, was_imported), records in groupby(
+            bundle.records(), key=lambda pair: (pair[0], (pair[0], pair[1].source_id) in existing)
+        ):
+            if was_imported:
+                for kind, record in records:
+                    key = (kind, record.source_id)
+                    lineage = existing[key]
+                    if lineage.effects_dispatched_at is None:
+                        self._dispatch_and_checkpoint(
+                            kind, record, targets[key], project, actor, targets, principals, lineage
+                        )
+            else:
+                for chunk in batched(records, 25):
+                    self._import_chunk(chunk, bundle, project_uid, actor_uid, files, targets, principals, existing)
 
-            staged_file = (
-                self._upload_attachment(project_uid, bundle, record, files)
-                if isinstance(record, ExternalAttachment)
-                else None
-            )
-            try:
-                with DbSession.use(readonly=False) as db:
-                    current_project = self._require_uid(db, Project, project_uid, "project")
-                    current_actor = self._require_uid(db, User, actor_uid, "actor")
-                    self._authorize(db, current_project, current_actor)
-                    target = self._create_target(
-                        db,
-                        current_project,
-                        record,
-                        targets,
-                        principals,
-                        staged_file,
-                    )
+        return ExternalImportReceipt(
+            dry_run=False,
+            created=dict(Counter(kind for kind, _ in pending)),
+            unchanged=dict(unchanged),
+        )
+
+    def _import_chunk(self, chunk, bundle, project_uid, actor_uid, files, targets, principals, existing) -> None:
+        staged: dict[tuple[str, str], FileModel] = {}
+        created = []
+        try:
+            for kind, record in chunk:
+                if isinstance(record, ExternalAttachment):
+                    staged[(kind, record.source_id)] = self._upload_attachment(project_uid, bundle, record, files)
+            with DbSession.atomic() as db:
+                project = self._require_uid(db, Project, project_uid, "project")
+                actor = self._require_uid(db, User, actor_uid, "actor")
+                self._authorize(db, project, actor)
+                for kind, record in chunk:
+                    key = (kind, record.source_id)
+                    target = self._create_target(db, project, actor, record, targets, principals, staged.get(key))
                     lineage = ExternalImportRecord(
-                        project_id=current_project.id,
+                        project_id=project.id,
                         source_namespace=bundle.source.namespace,
                         source_container_id=bundle.source.container_id,
                         record_type=kind,
@@ -176,26 +166,17 @@ class ExternalWorkImporter:
                         ),
                     )
                     db.insert(lineage)
-            except Exception:
-                if staged_file is not None and not self._matching_lineage_exists(
-                    project_uid,
-                    bundle,
-                    kind,
-                    record,
-                ):
-                    self._delete_staged_file(staged_file)
-                raise
-
-            project, actor = current_project, current_actor
-            targets[key] = target
-            existing[key] = lineage
+                    targets[key] = target
+                    created.append((kind, record, target, lineage))
+        except Exception:
+            for kind, record in chunk:
+                file = staged.get((kind, record.source_id))
+                if file is not None and not self._matching_lineage_exists(project_uid, bundle, kind, record):
+                    self._delete_staged_file(file)
+            raise
+        for kind, record, target, lineage in created:
+            existing[(kind, record.source_id)] = lineage
             self._dispatch_and_checkpoint(kind, record, target, project, actor, targets, principals, lineage)
-
-        return ExternalImportReceipt(
-            dry_run=False,
-            created=dict(Counter(kind for kind, _ in pending)),
-            unchanged=dict(unchanged),
-        )
 
     @staticmethod
     def _upload_attachment(
@@ -246,11 +227,10 @@ class ExternalWorkImporter:
 
         try:
             with DbSession.use(readonly=True) as db:
-                project = ExternalWorkImporter._require_uid(db, Project, project_uid, "project")
                 lineage = db.exec(
                     SqlBuilder.select.table(ExternalImportRecord)
                     .where(
-                        (ExternalImportRecord.project_id == project.id)
+                        (ExternalImportRecord.project_id == SnowflakeID.from_short_code(project_uid))
                         & (ExternalImportRecord.source_namespace == bundle.source.namespace)
                         & (ExternalImportRecord.source_container_id == bundle.source.container_id)
                         & (ExternalImportRecord.record_type == kind)
@@ -339,11 +319,22 @@ class ExternalWorkImporter:
         self, db: DbSession, existing: dict[tuple[str, str], ExternalImportRecord]
     ) -> dict[tuple[str, str], Any]:
         targets: dict[tuple[str, str], Any] = {}
-        for key, row in existing.items():
-            model = _TARGET_MODELS.get(row.target_type)
-            if model is None or row.target_type != key[0]:
-                raise ExternalImportError(f"invalid import lineage target: {key[0]}:{key[1]}")
-            targets[key] = self._require_uid(db, model, row.target_uid, f"import target for {key[0]}:{key[1]}")
+        for kind, rows in groupby(
+            sorted(existing.items(), key=lambda pair: pair[0][0]), key=lambda pair: pair[0][0]
+        ):
+            model = _TARGET_MODELS.get(kind)
+            for batch in batched(rows, 500):
+                if model is None or any(row.target_type != kind for _, row in batch):
+                    raise ExternalImportError(f"invalid import lineage target: {kind}")
+                ids = [SnowflakeID.from_short_code(row.target_uid) for _, row in batch]
+                found = {
+                    target.id: target for target in db.exec(
+                        SqlBuilder.select.table(model).where(model.column("id").in_(ids))
+                    ).all()
+                }
+                if len(found) != len(set(ids)):
+                    raise ExternalImportError(f"unknown import target for {kind}")
+                targets.update((key, found[target_id]) for (key, _), target_id in zip(batch, ids))
         return targets
 
     @staticmethod
@@ -382,34 +373,31 @@ class ExternalWorkImporter:
         missing = external_ids - links_by_id.keys()
         if missing:
             raise ExternalImportError(f"unknown SCIM principal: {sorted(missing)[0]}")
-        memberships = db.exec(
-            SqlBuilder.select.table(ProjectAssignedUser).where(
-                (ProjectAssignedUser.project_id == project.id)
-                & ProjectAssignedUser.user_id.in_(link.user_id for link in links)
-            )
+        members = db.exec(
+            SqlBuilder.select.tables(User, ProjectAssignedUser)
+            .join(ProjectAssignedUser, ProjectAssignedUser.user_id == User.id)
+            .where((ProjectAssignedUser.project_id == project.id) & User.id.in_(link.user_id for link in links))
         ).all()
-        memberships_by_user = {item.user_id: item for item in memberships}
+        members_by_user = {user.id: (user, membership) for user, membership in members}
         principals = {}
         for external_id, link in links_by_id.items():
-            membership = memberships_by_user.get(link.user_id)
-            user = db.exec(SqlBuilder.select.table(User).where(User.id == link.user_id).limit(1)).first()
-            if not membership or not user:
+            member = members_by_user.get(link.user_id)
+            if member is None:
                 raise ExternalImportError(f"SCIM principal is not an active project member: {external_id}")
-            principals[external_id] = (user, membership)
+            principals[external_id] = member
         return principals
 
     @staticmethod
     def _validate_relationship_graph(db, project, bundle, existing, targets) -> None:
-        cards = db.exec(SqlBuilder.select.table(Card).where(Card.project_id == project.id)).all()
-        card_ids = {card.id for card in cards}
-        edges: set[tuple[int | str, int | str]] = set()
-        if card_ids:
-            relationships = db.exec(
-                SqlBuilder.select.table(CardRelationship).where(
-                    CardRelationship.card_id_parent.in_(card_ids) & CardRelationship.card_id_child.in_(card_ids)
-                )
-            ).all()
-            edges.update((int(item.card_id_parent), int(item.card_id_child)) for item in relationships)
+        card_ids = SqlBuilder.select.columns(Card.id).where(Card.project_id == project.id)
+        relationships = db.exec(
+            SqlBuilder.select.table(CardRelationship).where(
+                CardRelationship.card_id_parent.in_(card_ids) & CardRelationship.card_id_child.in_(card_ids)
+            )
+        ).all()
+        edges: set[tuple[int | str, int | str]] = {
+            (int(item.card_id_parent), int(item.card_id_child)) for item in relationships
+        }
         refs = {
             card.source_id: int(targets[("card", card.source_id)].id)
             if ("card", card.source_id) in targets
@@ -426,78 +414,103 @@ class ExternalWorkImporter:
         if ExternalWorkBundle._has_cycle(edges):
             raise ExternalImportError("import would create a relationship cycle")
 
-    def _create_target(self, db, project, record, targets, principals, staged_file: FileModel | None):
+    def _create_target(self, db, project, actor, record, targets, principals, staged_file: FileModel | None):
         if isinstance(record, ExternalColumn):
-            target = ProjectColumn(project_id=project.id, name=record.name, order=record.order)
+            target = self._domain.project_column.create(
+                actor, project, record.name, dispatch_effects=False, order_override=record.order
+            )
         elif isinstance(record, ExternalLabel):
-            target = ProjectLabel(
-                project_id=project.id,
-                name=record.name,
-                color=record.color,
-                description=record.description,
-                order=record.order,
+            created = self._domain.project_label.create(
+                actor, project, record.name, record.color, record.description,
+                dispatch_effects=False, order_override=record.order,
             )
+            target = created[0] if created is not None else None
         elif isinstance(record, ExternalCard):
-            target = Card(
-                project_id=project.id,
-                project_column_id=targets[("column", record.column_source_id)].id,
-                title=record.title,
-                description=EditorContentModel(content=record.description),
+            column = targets[("column", record.column_source_id)]
+            assignee_uids = [principals[external_id][0].get_uid() for external_id in record.assignee_scim_external_ids]
+            created = self._domain.card.create(
+                actor,
+                project,
+                column,
+                record.title,
+                EditorContentModel(content=record.description),
+                assignee_uids,
+                dispatch_effects=False,
+                order_override=record.order,
                 deadline_at=record.deadline_at,
-                order=record.order,
             )
-            db.insert(target)
-            for label_id in record.label_source_ids:
-                db.insert(CardAssignedProjectLabel(card_id=target.id, project_label_id=targets[("label", label_id)].id))
-            for external_id in record.assignee_scim_external_ids:
-                user, membership = principals[external_id]
-                db.insert(CardAssignedUser(project_assigned_id=membership.id, card_id=target.id, user_id=user.id))
-            return target
+            target = created[0] if created is not None else None
+            if target is not None and record.label_source_ids:
+                label_uids = [targets[("label", label_id)].get_uid() for label_id in record.label_source_ids]
+                if self._domain.card.update_labels(actor, project, target, label_uids, dispatch_effects=False) is None:
+                    raise ExternalImportError("card label assignment failed")
         elif isinstance(record, ExternalChecklist):
-            target = Checklist(
-                card_id=targets[("card", record.card_source_id)].id, title=record.title, order=record.order
+            card = targets[("card", record.card_source_id)]
+            target = self._domain.checklist.create(
+                actor, project, card, record.title, dispatch_effects=False, order_override=record.order
             )
         elif isinstance(record, ExternalCheckitem):
-            target = Checkitem(
-                checklist_id=targets[("checklist", record.checklist_source_id)].id,
-                title=record.title,
-                order=record.order,
-                is_checked=record.is_checked,
+            checklist = targets[("checklist", record.checklist_source_id)]
+            card = self._domain.card.get_by_id_like(checklist.card_id)
+            if card is None:
+                raise ExternalImportError("checklist card disappeared before checkitem creation")
+            target = self._domain.checkitem.create(
+                actor, project, card, checklist, record.title,
+                dispatch_effects=False, order_override=record.order, initially_checked=record.is_checked,
             )
         elif isinstance(record, ExternalRelationship):
-            relationship_type = self._require_uid(
-                db, GlobalCardRelationshipType, record.relationship_type_uid, "relationship type"
+            parent = targets[("card", record.parent_card_source_id)]
+            child = targets[("card", record.child_card_source_id)]
+            result = self._domain.card_relationship.apply_graph_patch(
+                actor,
+                project,
+                parent,
+                [],
+                [(parent.get_uid(), child.get_uid(), record.relationship_type_uid)],
+                [],
+                dispatch_effects=False,
             )
-            target = CardRelationship(
-                relationship_type_id=relationship_type.id,
-                card_id_parent=targets[("card", record.parent_card_source_id)].id,
-                card_id_child=targets[("card", record.child_card_source_id)].id,
+            if result is None or len(result["created_relationships"]) != 1:
+                raise ExternalImportError("relationship creation failed")
+            target = self._require_uid(
+                db, CardRelationship, result["created_relationships"][0]["uid"], "relationship"
             )
-        elif isinstance(record, ExternalComment):
+        elif isinstance(record, (ExternalComment, ExternalAttachment)):
             user, _ = principals[record.author_scim_external_id]
-            target = CardComment(
-                card_id=targets[("card", record.card_source_id)].id,
-                user_id=user.id,
-                content=EditorContentModel(content=record.content),
-                created_at=record.created_at,
-                updated_at=record.created_at,
-            )
-        elif isinstance(record, ExternalAttachment):
-            user, _ = principals[record.author_scim_external_id]
-            if staged_file is None:
-                raise ExternalImportError("attachment was not staged")
-            target = CardAttachment(
-                user_id=user.id,
-                card_id=targets[("card", record.card_source_id)].id,
-                filename=record.original_filename,
-                file=staged_file,
-                created_at=record.created_at,
-                updated_at=record.created_at,
-            )
+            card = targets[("card", record.card_source_id)]
+            if isinstance(record, ExternalComment):
+                target = self._domain.card_comment.create(
+                    user, project, card, EditorContentModel(content=record.content), dispatch_effects=False
+                )
+            else:
+                if staged_file is None:
+                    raise ExternalImportError("attachment was not staged")
+                target = self._domain.card_attachment.create(
+                    user, project, card, staged_file, dispatch_effects=False
+                )
         else:
             raise TypeError(f"unsupported external work record: {type(record).__name__}")
-        db.insert(target)
+        if target is None:
+            kind = type(record).__name__.removeprefix("External").lower()
+            prefix = "project " if isinstance(record, (ExternalColumn, ExternalLabel)) else ""
+            raise ExternalImportError(f"{prefix}{kind} creation failed")
+        if isinstance(record, (ExternalComment, ExternalAttachment)):
+            self._restore_historical_timestamps(db, target, record.created_at)
         return target
+
+    @staticmethod
+    def _restore_historical_timestamps(
+        db: DbSession, target: CardComment | CardAttachment, created_at: datetime
+    ) -> None:
+        model = type(target)
+        db.exec(
+            SqlBuilder.update.table(model).where(model.column("id") == target.id).values({
+                model.column("created_at"): created_at,
+                model.column("updated_at"): created_at,
+            })
+        )
+        target.created_at = created_at
+        target.updated_at = created_at
 
     def _dispatch_and_checkpoint(
         self,
@@ -520,101 +533,14 @@ class ExternalWorkImporter:
     @staticmethod
     def _checkpoint_effects(lineage: ExternalImportRecord, error: str | None = None) -> None:
         with DbSession.use(readonly=False) as db:
-            current = db.exec(
-                SqlBuilder.select.table(ExternalImportRecord).where(ExternalImportRecord.id == lineage.id).limit(1)
-            ).first()
-            if current is None:
-                raise ExternalImportError("import lineage disappeared before side-effect checkpoint")
-            current.effects_attempts += 1
-            current.effects_error = error[:4000] if error else None
-            if error is None:
-                current.effects_dispatched_at = SafeDateTime.now()
-            db.update(current)
-            lineage.effects_attempts = current.effects_attempts
-            lineage.effects_error = current.effects_error
-            lineage.effects_dispatched_at = current.effects_dispatched_at
-
-    @staticmethod
-    def _dispatch_native_effects(
-        kind: str,
-        record: BaseModel,
-        target: Any,
-        project: Project,
-        actor: User,
-        targets: dict[tuple[str, str], Any],
-        principals: dict[str, tuple[User, ProjectAssignedUser]],
-    ) -> None:
-        """Emit the same realtime and activity signals as native creation paths.
-
-        Historical imports deliberately do not notify mentions, execute bots, or alter
-        approval state. Those are live workflow actions rather than imported domain data.
-        """
-
-        if kind == "column" and isinstance(record, ExternalColumn):
-            ProjectColumnPublisher.created(project, target)
-            ProjectColumnActivityTask.project_column_created(actor, project, target)
-            return
-        if kind == "label" and isinstance(record, ExternalLabel):
-            ProjectLabelPublisher.created(project, target)
-            ProjectLabelActivityTask.project_label_created(actor, project, target)
-            return
-        if kind == "card" and isinstance(record, ExternalCard):
-            column = targets[("column", record.column_source_id)]
-            member_uids = [principals[external_id][0].get_uid() for external_id in record.assignee_scim_external_ids]
-            labels = [targets[("label", source_id)].api_response() for source_id in record.label_source_ids]
-            CardPublisher.created(
-                project,
-                column,
-                {"card": target.board_api_response(0, member_uids, [], labels)},
-            )
-            CardActivityTask.card_created(actor, project, target)
-            return
-        if kind == "checklist" and isinstance(record, ExternalChecklist):
-            card = targets[("card", record.card_source_id)]
-            ChecklistPublisher.created(card, target)
-            CardChecklistActivityTask.card_checklist_created(actor, project, card, target)
-            return
-        if kind == "checkitem" and isinstance(record, ExternalCheckitem):
-            checklist = targets[("checklist", record.checklist_source_id)]
-            card = ExternalWorkImporter._card_for_checklist(checklist)
-            CheckitemPublisher.created(card, checklist, target)
-            CardCheckitemActivityTask.card_checkitem_created(actor, project, card, target)
-            return
-        if kind == "relationship" and isinstance(record, ExternalRelationship):
-            parent = targets[("card", record.parent_card_source_id)]
-            child = targets[("card", record.child_card_source_id)]
-            relationships = ExternalWorkImporter._relationships_for_card(parent)
-            CardRelationshipPublisher.updated(project, parent, relationships)
-            CardRelationshipActivityTask.card_relationship_updated(actor, project, parent, [], [child.id], False)
-            return
-        if kind == "comment" and isinstance(record, ExternalComment):
-            card = targets[("card", record.card_source_id)]
-            author, _ = principals[record.author_scim_external_id]
-            CardCommentPublisher.created(author, project, card, target)
-            CardCommentActivityTask.card_comment_added(author, project, card, target)
-            return
-        if kind == "attachment" and isinstance(record, ExternalAttachment):
-            card = targets[("card", record.card_source_id)]
-            author, _ = principals[record.author_scim_external_id]
-            CardAttachmentPublisher.uploaded(author, card, target)
-            CardAttachmentActivityTask.card_attachment_uploaded(author, project, card, target)
-            return
-        raise ExternalImportError(f"unsupported side-effect record: {kind}")
-
-    @staticmethod
-    def _card_for_checklist(checklist: Checklist) -> Card:
-        with DbSession.use(readonly=True) as db:
-            card = db.exec(SqlBuilder.select.table(Card).where(Card.id == checklist.card_id).limit(1)).first()
-        if card is None:
-            raise ExternalImportError("checklist card disappeared before side-effect dispatch")
-        return card
-
-    @staticmethod
-    def _relationships_for_card(card: Card) -> list[dict[str, Any]]:
-        with DbSession.use(readonly=True) as db:
-            rows = db.exec(
-                SqlBuilder.select.table(CardRelationship).where(
-                    (CardRelationship.card_id_parent == card.id) | (CardRelationship.card_id_child == card.id)
+            updated = db.exec(
+                SqlBuilder.update.table(ExternalImportRecord)
+                .where(ExternalImportRecord.id == lineage.id)
+                .values(
+                    effects_attempts=ExternalImportRecord.effects_attempts + 1,
+                    effects_error=error[:4000] if error else None,
+                    effects_dispatched_at=SafeDateTime.now() if error is None else None,
                 )
-            ).all()
-        return [relationship.api_response() for relationship in rows]
+            )
+            if updated != 1:
+                raise ExternalImportError("import lineage disappeared before side-effect checkpoint")

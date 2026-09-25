@@ -1,0 +1,44 @@
+name: Check External Import
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/check-external-import.yaml
+      - src/api/langboard/external_import/**
+      - src/api/tests/external_import/**
+      - src/api/tests/card_workspace/test_completion_checklist*.py
+      - src/shared/py/langboard_shared/domain/services/factory/CardService.py
+      - src/shared/py/langboard_shared/domain/services/factory/CheckitemService.py
+  workflow_dispatch:
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: langboard_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d langboard_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      PROJECT_NAME: langboard
+      LANGBOARD_OUTBOX_TEST_DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/langboard_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: uv sync --frozen
+      - run: uv run --no-sync ruff check src/api/langboard/external_import src/api/tests/external_import src/api/tests/card_workspace/test_completion_checklist_migration.py src/api/tests/card_workspace/test_completion_checklist_service.py src/shared/py/langboard_shared/domain/services/factory/CardService.py src/shared/py/langboard_shared/domain/services/factory/CheckitemService.py
+      - run: uv run --no-sync pytest -q src/api/tests/external_import src/api/tests/card_workspace/test_completion_checklist_migration.py src/api/tests/card_workspace/test_completion_checklist_service.py

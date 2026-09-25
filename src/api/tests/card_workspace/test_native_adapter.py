@@ -17,6 +17,7 @@ from langboard.card_workspace.infrastructure.native import (  # noqa: E402
     MAX_NATIVE_SECTION_SOURCE,
     NativeCardWorkspaceAdapter,
 )
+from langboard.mcp_tools import CardMcp, ProjectMcp  # noqa: E402
 
 
 class Card:
@@ -139,6 +140,21 @@ def test_native_source_fetches_optional_sections_lazily_with_hard_query_limits()
     ]
 
 
+def test_native_source_fetches_content_blocks_only_for_the_requested_bundle_section() -> None:
+    service, _ = _service()
+    blocks = [{"block_uid": "block-1", "order": 0}]
+    service.card_content_block = SimpleNamespace(api_blocks_by_card=Mock(return_value=blocks))
+    adapter = NativeCardWorkspaceAdapter(object(), service)
+
+    default = adapter.get_card_bundle_source("p1", "c1", frozenset())
+    assert default is not None and default.content_blocks == []
+    service.card_content_block.api_blocks_by_card.assert_not_called()
+
+    requested = adapter.get_card_bundle_source("p1", "c1", frozenset({"content_blocks"}))
+    assert requested is not None and requested.content_blocks == blocks
+    service.card_content_block.api_blocks_by_card.assert_called_once()
+
+
 def test_native_source_rejects_over_bound_people_before_projection() -> None:
     """A native section that exceeds the contract fails instead of entering the projection graph."""
 
@@ -225,13 +241,15 @@ def test_native_checkitem_continuation_reads_only_the_requested_checklist() -> N
     assert calls == [(card, checklist, MAX_NATIVE_SECTION_SOURCE + 1)]
 
 
-def test_native_cardify_reads_back_created_card() -> None:
+def test_card_mcp_cardify_reads_back_created_card(monkeypatch: pytest.MonkeyPatch) -> None:
     """Cardification returns the exact card linked by the source checkitem."""
 
     calls: list[tuple[Any, ...]] = []
-    item = SimpleNamespace(cardified_id=None)
-    persisted_item = SimpleNamespace(cardified_id=None)
-    created = SimpleNamespace(board_api_response=lambda *_args: {"uid": "created-card", "title": "Promoted task"})
+    item = SimpleNamespace(checklist_id=9, cardified_id=None)
+    persisted_item = SimpleNamespace(checklist_id=9, cardified_id=None)
+    created = SimpleNamespace(
+        board_api_response=lambda *_args: {"uid": "created-card", "title": "Promoted task", "private": "hidden"}
+    )
 
     def cardify(*args: Any) -> bool:
         calls.append(args)
@@ -239,46 +257,43 @@ def test_native_cardify_reads_back_created_card() -> None:
         return True
 
     project = SimpleNamespace(id=7)
-    source_card = SimpleNamespace(project_id=7)
+    source_card = SimpleNamespace(id=8, project_id=7, is_linked_resource=False)
+    monkeypatch.setattr(CardMcp, "_require_task_card", lambda *_args: (project, source_card))
     service = SimpleNamespace(
-        checkitem=SimpleNamespace(cardify=cardify),
+        checkitem=SimpleNamespace(cardify=cardify, get_by_id_like=lambda _uid: persisted_item if calls else item),
+        checklist=SimpleNamespace(get_by_id_like=lambda _uid: SimpleNamespace(card_id=8)),
         card=SimpleNamespace(get_by_id_like=lambda card_id: created if card_id == 42 else None),
         project_column=SimpleNamespace(get_by_id_like=lambda _uid: SimpleNamespace(project_id=7, is_archive=False)),
     )
     actor = object()
-    adapter = NativeCardWorkspaceAdapter(actor, service)
-    adapter._ensure_project_card = lambda *_args: (project, source_card)  # type: ignore[method-assign]
-    adapter._ensure_checkitem = lambda *_args: persisted_item if calls else item  # type: ignore[method-assign]
+    result = CardMcp.cardify_card_checkitem(" project ", " card ", " item ", " column ", actor, service)
 
-    result = adapter.cardify_card_checkitem("project", "card", "item", "column")
-
-    assert result == {"uid": "created-card", "title": "Promoted task"}
+    assert result == {"card": {"uid": "created-card", "title": "Promoted task"}, "source_checkitem_uid": "item"}
     assert calls == [(actor, "project", "card", item, "column")]
     assert item.cardified_id is None
 
 
-def test_native_cardify_rejects_column_from_another_project() -> None:
+def test_card_mcp_cardify_rejects_column_from_another_project(monkeypatch: pytest.MonkeyPatch) -> None:
     """A caller cannot cardify into a column outside the source project."""
 
     service = SimpleNamespace(
         project_column=SimpleNamespace(get_by_id_like=lambda _uid: SimpleNamespace(project_id=99, is_archive=False)),
         checkitem=SimpleNamespace(cardify=lambda *_args: pytest.fail("cardify must not run")),
     )
-    adapter = NativeCardWorkspaceAdapter(object(), service)
-    adapter._ensure_project_card = lambda *_args: (  # type: ignore[method-assign]
-        SimpleNamespace(id=7),
-        SimpleNamespace(project_id=7),
+    monkeypatch.setattr(
+        CardMcp,
+        "_require_task_card",
+        lambda *_args: (SimpleNamespace(id=7), SimpleNamespace(id=8, project_id=7, is_linked_resource=False)),
     )
-    adapter._ensure_checkitem = lambda *_args: SimpleNamespace(  # type: ignore[method-assign]
-        cardified_id=None
-    )
+    service.checkitem.get_by_id_like = lambda _uid: SimpleNamespace(checklist_id=9, cardified_id=None)
+    service.checklist = SimpleNamespace(get_by_id_like=lambda _uid: SimpleNamespace(card_id=8))
 
     with pytest.raises(ValueError, match="not active in the source project"):
-        adapter.cardify_card_checkitem("project", "card", "item", "foreign-column")
+        CardMcp.cardify_card_checkitem("project", "card", "item", "foreign-column", object(), service)
 
 
-def test_native_project_creation_uses_template_service(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The native project API, not Hermes, owns template selection and board shape."""
+def test_project_mcp_creation_uses_template_service() -> None:
+    """Both project creation tools use the project owner without a card workspace port."""
 
     class Actor:
         pass
@@ -306,14 +321,14 @@ def test_native_project_creation_uses_template_service(monkeypatch: pytest.Monke
             )[1],
         ),
     )
-    monkeypatch.setattr("langboard.card_workspace.infrastructure.native.User", Actor)
+    result = CardMcp.provision_project(" Operations ", actor, service, "Room board")
+    canonical = ProjectMcp.create_project(" Operations ", "Room board", "Other", actor, service, "SI")
 
-    result = NativeCardWorkspaceAdapter(actor, service).create_project_board(
-        "Operations",
-        "Room board",
-    )
-
-    assert create_project_calls == [(actor, "Operations", "Room board", "Other", None, False)]
+    assert create_project_calls == [
+        (actor, "Operations", "Room board", "Other", None, False),
+        (actor, "Operations", "Room board", "Other", "SI", False),
+    ]
+    assert canonical == {"project_uid": "project-one"}
     assert result["project"] == {
         "uid": "project-one",
         "title": "Operations",
@@ -322,10 +337,15 @@ def test_native_project_creation_uses_template_service(monkeypatch: pytest.Monke
         "template": "SI",
     }
     assert [column["name"] for column in result["columns"]] == names
+    with pytest.raises(ValueError, match="Project title"):
+        ProjectMcp.create_project(" ", None, "Other", actor, service)
+    with pytest.raises(ValueError, match="Template name"):
+        CardMcp.provision_project("Operations", actor, service, template_name=" ")
+    assert len(create_project_calls) == 2
 
 
-def test_native_project_creation_propagates_template_failure(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The adapter does not hide atomic template creation failures."""
+def test_project_mcp_creation_propagates_template_failure() -> None:
+    """The project owner failure is not hidden by the compatibility alias."""
 
     class Actor:
         pass
@@ -336,20 +356,21 @@ def test_native_project_creation_propagates_template_failure(monkeypatch: pytest
             create_project=lambda *_args: (_ for _ in ()).throw(RuntimeError("column insert failed"))
         )
     )
-    monkeypatch.setattr("langboard.card_workspace.infrastructure.native.User", Actor)
-
     with pytest.raises(RuntimeError, match="column insert failed"):
-        NativeCardWorkspaceAdapter(actor, service).create_project_board("Operations", None)
+        CardMcp.provision_project("Operations", actor, service)
 
 
-def test_native_card_creation_selects_server_side_leftmost_active_column() -> None:
+def test_card_mcp_creation_selects_server_side_leftmost_active_column() -> None:
     """Callers cannot select a destination; archive and input order are ignored."""
 
     project = SimpleNamespace(id=1)
     created: list[tuple[Any, ...]] = []
     card = {"uid": "card-one", "title": "First task"}
     service = SimpleNamespace(
-        project=SimpleNamespace(get_by_id_like=lambda _uid: project),
+        project=SimpleNamespace(
+            get_by_id_like=lambda _uid: project,
+            get_api_assigned_user_list=lambda _project, where_user_in: [{"uid": "known"}],
+        ),
         project_column=SimpleNamespace(
             get_api_list_by_project=lambda _project: [
                 {"uid": "done", "name": "Done", "order": 20, "is_archive": False},
@@ -360,18 +381,65 @@ def test_native_card_creation_selects_server_side_leftmost_active_column() -> No
         card=SimpleNamespace(create=lambda *args: (created.append(args), (object(), card))[1]),
     )
 
-    result = NativeCardWorkspaceAdapter(object(), service).create_card_in_leftmost_column(
-        "project-one",
-        "First task",
-        None,
-        None,
-    )
+    actor = object()
+    result = CardMcp.create_card_in_leftmost_column("project-one", " First task ", actor, service)
+    canonical = CardMcp.create_card("project-one", "leftmost", "Second task", None, None, actor, service)
 
     assert created[0][2] == "backlog"
+    assert created[0][3] == "First task"
+    assert created[1][2] == "backlog"
+    assert canonical == card
     assert result == {
         "card": card,
         "column": {"uid": "backlog", "name": "Backlog"},
     }
+    with pytest.raises(ValueError, match="not active"):
+        CardMcp.create_card("project-one", "foreign-column", "Unsafe", None, None, actor, service)
+    with pytest.raises(ValueError, match="duplicate"):
+        CardMcp.create_card("project-one", "leftmost", "Unsafe", None, ["known", "known"], actor, service)
+    with pytest.raises(ValueError, match="Unknown project member"):
+        CardMcp.create_card("project-one", "leftmost", "Unsafe", None, ["unknown"], actor, service)
+    assert len(created) == 2
+
+
+def test_card_mcp_people_and_labels_validate_before_mutation(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A bad member or label cannot partially update the card."""
+
+    project = SimpleNamespace(id=1)
+    card = SimpleNamespace(id=2, project_id=1, is_linked_resource=False)
+    monkeypatch.setattr(CardMcp, "_require_task_card", lambda *_args: (project, card))
+    mutations: list[tuple[str, list[str]]] = []
+    actor = object()
+    service = SimpleNamespace(
+        project=SimpleNamespace(
+            get_api_assigned_user_list=lambda _project, where_user_in: [{"uid": "member"}],
+        ),
+        project_label=SimpleNamespace(
+            get_api_list_by_project=lambda _project, where_in: [{"uid": "label"}],
+            get_api_list_by_card=lambda _card: [{"uid": "label", "name": "Urgent", "secret": "hidden"}],
+        ),
+        card=SimpleNamespace(
+            update_assigned_users=lambda _actor, _project, _card, uids: (
+                mutations.append(("members", uids)),
+                [SimpleNamespace(get_uid=lambda: "member")],
+            )[1],
+            update_labels=lambda _actor, _project, _card, uids: mutations.append(("labels", uids)) or True,
+        ),
+    )
+
+    for people, labels, error in (
+        (["member", "member"], ["label"], "duplicates"),
+        (["member"], ["missing"], "Unknown label"),
+        (["missing"], ["label"], "Unknown project member"),
+        (["member"], [" "], "label_uids is required"),
+    ):
+        with pytest.raises(ValueError, match=error):
+            CardMcp.set_card_people_and_labels("project", "card", actor, service, people, labels)
+    assert mutations == []
+
+    result = CardMcp.set_card_people_and_labels("project", "card", actor, service, [" member "], [" label "])
+    assert result == {"member_uids": ["member"], "labels": [{"uid": "label", "name": "Urgent"}]}
+    assert mutations == [("members", ["member"]), ("labels", ["label"])]
 
 
 def test_native_description_patch_compares_before_updating() -> None:

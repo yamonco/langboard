@@ -73,7 +73,14 @@ class ProjectColumnService(BaseDomainService):
         return schedules
 
     def create(
-        self, user_or_bot: TUserOrBot, project: TProjectParam | None, name: str, description: str = ""
+        self,
+        user_or_bot: TUserOrBot,
+        project: TProjectParam | None,
+        name: str,
+        description: str = "",
+        *,
+        dispatch_effects: bool = True,
+        order_override: int | None = None,
     ) -> ProjectColumn | None:
         """Create a workflow column with optional guidance, preserving legacy name-only callers."""
         if len(description) > 4096:
@@ -86,16 +93,23 @@ class ProjectColumnService(BaseDomainService):
             project_id=project.id,
             name=name,
             description=description,
-            order=self.repo.project_column.get_next_order(project),
+            order=order_override if order_override is not None else self.repo.project_column.get_next_order(project),
         )
 
         self.repo.project_column.insert(column)
 
-        ProjectColumnPublisher.created(project, column)
-        ProjectColumnActivityTask.project_column_created(user_or_bot, project, column)
-        ProjectColumnBotTask.project_column_created(user_or_bot, project, column)
+        if dispatch_effects:
+            self.dispatch_created(user_or_bot, project, column)
 
         return column
+
+    def dispatch_created(
+        self, user_or_bot: TUserOrBot, project: Project, column: ProjectColumn, *, include_bot: bool = True
+    ) -> None:
+        ProjectColumnPublisher.created(project, column)
+        ProjectColumnActivityTask.project_column_created(user_or_bot, project, column)
+        if include_bot:
+            ProjectColumnBotTask.project_column_created(user_or_bot, project, column)
 
     def change_description(self, project: TProjectParam | None, column: TColumnParam | None, description: str) -> bool:
         """Change guidance only within the requested board; never rename or move cards."""

@@ -1,6 +1,6 @@
 # Governed wiki and self-assignment MCP operations
 
-These operations are generic Langboard capabilities, not a company identity provider or a ChatGPT-specific approval system.
+These operations are generic Langboard capabilities, not a company identity provider or a ChatGPT-specific approval system. Names follow the [ubiquitous language](docs/ubiquitous-language.md) glossary.
 The MCP user identity and existing project roles remain authoritative. No schema migration or search service is required.
 
 ## Public operations
@@ -20,7 +20,7 @@ The MCP user identity and existing project roles remain authoritative. No schema
 - `wiki_workspace/domain.py` owns exact-content revisions, paging/append invariants and the repository interface. It has no transport or persistence imports.
 - `wiki_workspace/application/queries` and `application/commands` separate reads from writes.
 - `wiki_workspace/infrastructure.py` implements permission filtering and reads existing native history. Native `ModelColumnType` stores model JSON as a JSON string; the search query decodes that wrapper instead of searching escaped serialization. PostgreSQL and SQLite paths are covered.
-- `mcp_tools/WikiWorkspaceMcp.py` exposes bounded inputs and native role checks.
+- `mcp_tools/WikiMcp.py` exposes bounded inputs and native role checks.
 - `ProjectWikiService.update(expected_content=...)` is additive. Only content can be changed in this mode. Existing callers that omit the keyword keep their original behavior.
 - `ProjectWikiRepository.update_content_if_current` locks the live row, compares the exact reviewed content and updates only content/timestamp. A stale caller cannot overwrite another committed edit or an unrelated title change. Events/history run only after a successful save.
 - `CardAssignedUserRepository.add_member` serializes same-card additive requests and inserts one member without a delete/replace step. `CardService.assign_self` retains native publishers and activity recording. Existing full-set assignment remains a distinct operation.

@@ -7,8 +7,8 @@ import { ProjectRole } from "@/core/models/roles";
 import { Utils } from "@langboard/core/utils";
 import type { ICardCommentAnchor } from "@/core/models/types/card-comment-anchor.type";
 
-// Must stay aligned with Tailwind `md` breakpoint in `tailwind.config.js` (768px).
-const DESKTOP_COMMENT_BREAKPOINT = 768;
+// Must stay aligned with Tailwind `lg` breakpoint so the body keeps usable width.
+const DESKTOP_COMMENT_BREAKPOINT = 1024;
 
 export interface IBoardCardContext {
     projectUID: string;

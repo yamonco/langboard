@@ -7,6 +7,7 @@ from ....helpers import InfraHelper
 from ....publishers import CheckitemPublisher
 from ....tasks.activities import CardCheckitemActivityTask
 from ....tasks.bots import CardBotTask, CardCheckitemBotTask
+from ....tasks.webhooks.ExecutionReadinessUow import execution_readiness_uow
 from ...models import Card, Checkitem, CheckitemTimerRecord, Checklist, Project, ProjectColumn, User
 from ...models.Checkitem import CheckitemStatus
 
@@ -90,7 +91,16 @@ class CheckitemService(BaseDomainService):
         return api_checkitems, list(api_cards.values()), list(api_projects.values())
 
     def create(
-        self, user_or_bot: TUserOrBot, project: TProjectParam, card: TCardParam, checklist: TChecklistParam, title: str
+        self,
+        user_or_bot: TUserOrBot,
+        project: TProjectParam,
+        card: TCardParam,
+        checklist: TChecklistParam,
+        title: str,
+        *,
+        dispatch_effects: bool = True,
+        order_override: int | None = None,
+        initially_checked: bool = False,
     ) -> Checkitem | None:
         params = InfraHelper.get_records_with_foreign_by_params(
             (Project, project), (Card, card), (Checklist, checklist)
@@ -100,16 +110,34 @@ class CheckitemService(BaseDomainService):
         project, card, checklist = params
 
         checkitem = Checkitem(
-            checklist_id=checklist.id, title=title, order=self.repo.checkitem.get_next_order(checklist)
+            checklist_id=checklist.id,
+            title=title,
+            is_checked=initially_checked,
+            order=order_override if order_override is not None else self.repo.checkitem.get_next_order(checklist),
         )
         self.repo.checkitem.insert(checkitem)
 
-        CheckitemPublisher.created(card, checklist, checkitem)
         self._mark_card_changed_for_unread(card, "checkitem", checkitem.id)
-        CardCheckitemActivityTask.card_checkitem_created(user_or_bot, project, card, checkitem)
-        CardCheckitemBotTask.card_checkitem_created(user_or_bot, project, card, checkitem)
+        if dispatch_effects:
+            self.dispatch_created(user_or_bot, project, card, checklist, checkitem)
 
         return checkitem
+
+    def dispatch_created(
+        self,
+        user_or_bot: TUserOrBot,
+        project: Project,
+        card: Card,
+        checklist: Checklist,
+        checkitem: Checkitem,
+        *,
+        include_bot: bool = True,
+    ) -> None:
+        CheckitemPublisher.created(card, checklist, checkitem)
+        CheckitemPublisher.board_progress_changed(project, card)
+        CardCheckitemActivityTask.card_checkitem_created(user_or_bot, project, card, checkitem)
+        if include_bot:
+            CardCheckitemBotTask.card_checkitem_created(user_or_bot, project, card, checkitem)
 
     def change_title(
         self,
@@ -264,6 +292,7 @@ class CheckitemService(BaseDomainService):
 
         if should_publish:
             CheckitemPublisher.status_changed(project, card, checkitem, timer_record, target_user)
+            CheckitemPublisher.board_progress_changed(project, card)
             self._mark_card_changed_for_unread(card, "checkitem", checkitem.id)
 
         if status == CheckitemStatus.Started:
@@ -279,14 +308,21 @@ class CheckitemService(BaseDomainService):
         return True
 
     def toggle_checked(
-        self, user_or_bot: TUserOrBot, project: TProjectParam, card: TCardParam, checkitem: TCheckitemParam
+        self,
+        user_or_bot: TUserOrBot,
+        project: TProjectParam,
+        card: TCardParam,
+        checkitem: TCheckitemParam,
+        desired_checked: bool | None = None,
     ) -> bool | None:
         params = self.__get_records_by_params(project, card, checkitem)
         if not params:
             return None
         project, card, checkitem = params
 
-        checkitem.is_checked = not checkitem.is_checked
+        if desired_checked is not None and checkitem.is_checked == desired_checked:
+            return True
+        checkitem.is_checked = desired_checked if desired_checked is not None else not checkitem.is_checked
 
         if checkitem.status != CheckitemStatus.Stopped:
             self.change_status(user_or_bot, project, card, checkitem, CheckitemStatus.Stopped)
@@ -294,6 +330,7 @@ class CheckitemService(BaseDomainService):
             self.repo.checkitem.update(checkitem)
 
             CheckitemPublisher.checked_changed(project, card, checkitem)
+            CheckitemPublisher.board_progress_changed(project, card)
             self._mark_card_changed_for_unread(card, "checkitem", checkitem.id)
 
         if checkitem.is_checked:
@@ -334,13 +371,15 @@ class CheckitemService(BaseDomainService):
             title=checkitem.title,
             order=self.repo.card.get_next_order(target_column, where_clauses={"project_id": card.project_id}),
         )
-        self.repo.card.insert(new_card)
+        with execution_readiness_uow() as execution:
+            self.repo.card.insert(new_card)
+            execution.watch_new(new_card.id)
 
-        checkitem.cardified_id = new_card.id
-        self.repo.checkitem.update(checkitem)
+            checkitem.cardified_id = new_card.id
+            self.repo.checkitem.update(checkitem)
 
-        card_service = self._get_service_by_name("card")
-        card_service.ensure_completion_checklist(new_card)
+            card_service = self._get_service_by_name("card")
+            card_service.ensure_completion_checklist(new_card)
         api_card = new_card.board_api_response(0, [], [], [], completed=False, is_check_card=True)
         CheckitemPublisher.cardified(card, checkitem, target_column, api_card)
         CardCheckitemActivityTask.card_checkitem_cardified(user_or_bot, project, card, checkitem)
@@ -367,6 +406,7 @@ class CheckitemService(BaseDomainService):
         self.repo.checkitem.delete(checkitem)
 
         CheckitemPublisher.deleted(project, card, checkitem)
+        CheckitemPublisher.board_progress_changed(project, card)
         self._mark_card_changed_for_unread(card, "checkitem", checkitem.id)
         CardCheckitemActivityTask.card_checkitem_deleted(user_or_bot, project, card, checkitem)
         CardCheckitemBotTask.card_checkitem_deleted(user_or_bot, project, card, checkitem)

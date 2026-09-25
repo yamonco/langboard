@@ -7,7 +7,6 @@ import IconComponent from "@/components/base/IconComponent";
 import ShineBorder from "@/components/base/ShineBorder";
 import { UserAvatarList } from "@/components/UserAvatarList";
 import { DISABLE_DRAGGING_ATTR } from "@/constants";
-import { ProjectCheckitem } from "@/core/models";
 import { useBoardController } from "@/core/providers/BoardController";
 import { useBoard } from "@/core/providers/BoardProvider";
 import { ROUTES } from "@/core/routing/constants";
@@ -25,17 +24,16 @@ import BoardGraphApprovalTargetBadge from "@/pages/BoardPage/components/board/Bo
 import { EGraphApprovalScopeTable } from "@/core/models/GraphApprovalRequestModel";
 import { Utils } from "@langboard/core/utils";
 import {
-    calculateChecklistProgress,
+    calculateChecklistProgressFromCounts,
     calculateDeadlinePressure,
     getDeadlinePressureLevel,
     type IBoardCardChecklistProgress,
 } from "@/pages/BoardPage/components/board/BoardColumnCardStatus";
 import BoardTaskMetadataBadges from "@/pages/BoardPage/components/task/BoardTaskMetadataBadges";
-import Avatar from "@/components/base/Avatar";
-import { Utils } from "@langboard/core/utils";
 import BoardCardMove from "@/pages/BoardPage/components/board/BoardCardMove";
 import { getBoardCardWidgetVisibility } from "@/pages/BoardPage/components/board/BoardCardWidgetVisibility";
 import useSetCardCompleted from "@/controllers/api/board/useSetCardCompleted";
+import { captureCardOrigin } from "@/pages/BoardPage/components/board/CardAnimation";
 
 export interface IBoardColumnCardCollapsibleProps {
     isDragging: bool;
@@ -58,13 +56,17 @@ function BoardColumnWikiCard({ isDragging }: IBoardColumnCardCollapsibleProps) {
     const [t] = useTranslation();
     const { model: card } = ModelRegistry.ProjectCard.useContext<IBoardColumnCardContextParams>();
     const resource = card.useField("linked_resource");
-    const openCard = useCallback(() => {
-        if (selectCardViewType || isDragging) {
-            return;
-        }
+    const openCard = useCallback(
+        (event: React.MouseEvent<HTMLDivElement>) => {
+            if (selectCardViewType || isDragging) {
+                return;
+            }
 
-        navigateWithFilters(ROUTES.BOARD.CARD(project.uid, card.uid));
-    }, [card.uid, isDragging, navigateWithFilters, project.uid, selectCardViewType]);
+            captureCardOrigin(project.uid, card.uid, event.currentTarget.getBoundingClientRect());
+            navigateWithFilters(ROUTES.BOARD.CARD(project.uid, card.uid));
+        },
+        [card.uid, isDragging, navigateWithFilters, project.uid, selectCardViewType]
+    );
 
     if (!resource) {
         return null;
@@ -100,21 +102,25 @@ function BoardColumnWikiCard({ isDragging }: IBoardColumnCardCollapsibleProps) {
 
 function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCollapsibleProps) {
     const { selectCardViewType, selectedRelationshipUIDs, currentCardUIDRef, isDisabledCard } = useBoardController();
-    const { project, filters, cardsMap, globalRelationshipTypes, navigateWithFilters } = useBoard();
+    const { project, filters, cardsMap, globalRelationshipTypes, navigateWithFilters, deadlineClock } = useBoard();
     const [t] = useTranslation();
     const { model: card } = ModelRegistry.ProjectCard.useContext<IBoardColumnCardContextParams>();
     const title = card.useField("title");
     const deadlineAt = card.useField("deadline_at");
-    const checklistItems = ProjectCheckitem.Model.useModels((model) => model.card_uid === card.uid);
-    const checklistProgress = useMemo(() => calculateChecklistProgress(checklistItems), [checklistItems]);
+    const checklistCompletedCount = card.useField("checklist_completed_count") ?? 0;
+    const checklistTotalCount = card.useField("checklist_total_count") ?? 0;
+    const checklistProgress = useMemo(
+        () => calculateChecklistProgressFromCounts(checklistCompletedCount, checklistTotalCount),
+        [checklistCompletedCount, checklistTotalCount]
+    );
     const isChecklistCompleted = checklistProgress.total > 0 && checklistProgress.completed === checklistProgress.total;
     const deadlinePressure = useMemo(
-        () => calculateDeadlinePressure({ deadlineAt, isCompleted: isChecklistCompleted, now: new Date() }),
-        [deadlineAt, isChecklistCompleted]
+        () => calculateDeadlinePressure({ deadlineAt, isCompleted: isChecklistCompleted, now: deadlineClock }),
+        [deadlineAt, isChecklistCompleted, deadlineClock]
     );
     const deadlinePressureLevel = useMemo(
-        () => getDeadlinePressureLevel({ deadlineAt, isCompleted: isChecklistCompleted, now: new Date() }),
-        [deadlineAt, isChecklistCompleted]
+        () => getDeadlinePressureLevel({ deadlineAt, isCompleted: isChecklistCompleted, now: deadlineClock }),
+        [deadlineAt, isChecklistCompleted, deadlineClock]
     );
     const projectMembers = project.useForeignFieldArray("all_members");
     const cardMemberUIDs = card.useField("member_uids") ?? [];
@@ -162,6 +168,7 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
                 return;
             }
 
+            captureCardOrigin(project.uid, card.uid, e.currentTarget.getBoundingClientRect());
             navigateWithFilters(ROUTES.BOARD.CARD(project.uid, card.uid));
         },
         [card, isDragging, isDisabledCard, navigateWithFilters, project, selectCardViewType]
@@ -383,11 +390,16 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
                                         title={t("card.Created by {{name}}", {
                                             name: creator.name,
                                         })}
-                                        className="mr-0 inline-flex max-w-0 overflow-hidden opacity-0 transition-all duration-200 ease-out group-hover/card:mr-2 group-hover/card:max-w-8 group-hover/card:opacity-100"
+                                        className={cn(
+                                            "mr-0 inline-flex max-w-0 overflow-hidden opacity-0 transition-all duration-200 ease-out",
+                                            "group-hover/card:mr-2 group-hover/card:max-w-8 group-hover/card:opacity-100"
+                                        )}
                                         {...attributes}
                                     >
                                         <Avatar.Root size="xs">
-                                            {creator.avatar && <Avatar.Image src={Utils.String.convertServerFileURL(creator.avatar)} alt={creator.name} />}
+                                            {creator.avatar && (
+                                                <Avatar.Image src={Utils.String.convertServerFileURL(creator.avatar)} alt={creator.name} />
+                                            )}
                                             <Avatar.Fallback className="text-[10px] font-medium">
                                                 {Utils.String.getInitials(creator.name, "")}
                                             </Avatar.Fallback>
@@ -434,11 +446,16 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
                                             title={t("card.Created by {{name}}", {
                                                 name: creator.name,
                                             })}
-                                            className="mr-0 inline-flex max-w-0 overflow-hidden opacity-0 transition-all duration-200 ease-out group-hover/card:mr-2 group-hover/card:max-w-8 group-hover/card:opacity-100"
+                                            className={cn(
+                                                "mr-0 inline-flex max-w-0 overflow-hidden opacity-0 transition-all duration-200 ease-out",
+                                                "group-hover/card:mr-2 group-hover/card:max-w-8 group-hover/card:opacity-100"
+                                            )}
                                             {...attributes}
                                         >
                                             <Avatar.Root size="xs">
-                                                {creator.avatar && <Avatar.Image src={Utils.String.convertServerFileURL(creator.avatar)} alt={creator.name} />}
+                                                {creator.avatar && (
+                                                    <Avatar.Image src={Utils.String.convertServerFileURL(creator.avatar)} alt={creator.name} />
+                                                )}
                                                 <Avatar.Fallback className="text-[10px] font-medium">
                                                     {Utils.String.getInitials(creator.name, "")}
                                                 </Avatar.Fallback>

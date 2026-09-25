@@ -3,6 +3,7 @@ import { useBoardSettings } from "@/core/providers/BoardSettingsProvider";
 import BoardSettingsBasic from "@/pages/BoardPage/components/settings/BoardSettingsBasic";
 import BoardSettingsDock from "@/pages/BoardPage/components/settings/BoardSettingsDock";
 import BoardSettingsEmailNotifications from "@/pages/BoardPage/components/settings/BoardSettingsEmailNotifications";
+import BoardSettingsExecutionBindingStatus from "@/pages/BoardPage/components/settings/BoardSettingsExecutionBindingStatus";
 import BoardSettingsOther from "@/pages/BoardPage/components/settings/BoardSettingsOther";
 import BoardSettingsSection from "@/pages/BoardPage/components/settings/BoardSettingsSection";
 import BoardSettingsChatTemplateList from "@/pages/BoardPage/components/settings/chat/BoardSettingsChatTemplateList";
@@ -38,6 +39,11 @@ const BoardSettingsList = memo(() => {
             <BoardSettingsSection title="project.settings.Email notifications">
                 <BoardSettingsEmailNotifications />
             </BoardSettingsSection>
+            {isAdmin || project.owner_uid === currentUser.uid ? (
+                <BoardSettingsSection title="project.settings.Execution binding">
+                    <BoardSettingsExecutionBindingStatus />
+                </BoardSettingsSection>
+            ) : null}
             <BoardSettingsSection title="project.settings.Internal bots">
                 <BoardSettingsInternalBotList key={`board-settings-internal-bots-${project.uid}`} />
             </BoardSettingsSection>

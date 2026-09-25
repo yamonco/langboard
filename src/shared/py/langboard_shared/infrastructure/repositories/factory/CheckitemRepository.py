@@ -1,6 +1,8 @@
+from sqlalchemy import case, func
 from ....core.db import DbSession, SqlBuilder
 from ....core.domain import BaseOrderRepository
 from ....core.schema import TimeBasedPagination
+from ....core.types import SafeDateTime
 from ....core.types.ParamTypes import TCardParam, TChecklistParam, TProjectParam, TUserParam
 from ....domain.models import Card, Checkitem, Checklist, Project, User
 from ....domain.models.Checkitem import CheckitemStatus
@@ -8,6 +10,33 @@ from ....helpers import InfraHelper
 
 
 class CheckitemRepository(BaseOrderRepository[Checkitem, Checklist]):
+    def get_board_progress_by_project(
+        self, project: TProjectParam, archive_visible_since: SafeDateTime
+    ) -> dict[int, tuple[int, int]]:
+        """Return user-checklist counts without loading checkitems into the board payload."""
+
+        project_id = InfraHelper.convert_id(project)
+        query = (
+            SqlBuilder.select.columns(
+                Checklist.column("card_id"),
+                func.count(Checkitem.column("id")),
+                func.sum(case((Checkitem.column("is_checked") == True, 1), else_=0)),  # noqa: E712
+            )
+            .join(Checklist, Checkitem.column("checklist_id") == Checklist.column("id"))
+            .join(Card, Checklist.column("card_id") == Card.column("id"))
+            .where(Card.column("project_id") == project_id)
+            .where(
+                (Card.column("archived_at") == None)  # noqa: E711
+                | (Card.column("archived_at") >= archive_visible_since)
+            )
+            .where(Checklist.column("is_system") == False)  # noqa: E712
+            .where(Checklist.column("deleted_at") == None)  # noqa: E711
+            .where(Checkitem.column("deleted_at") == None)  # noqa: E711
+            .group_by(Checklist.column("card_id"))
+        )
+        with DbSession.use(readonly=True) as db:
+            return {card_id: (int(total), int(completed or 0)) for card_id, total, completed in db.exec(query).all()}
+
     @staticmethod
     def parent_model_cls():
         return Checklist

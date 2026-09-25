@@ -60,6 +60,7 @@ class App:
                 "Content-Language",
                 "Authorization",
                 "Content-Type",
+                "Idempotency-Key",
                 "X-Requested-With",
                 "User-Agent",
                 "X-Forwarded-Proto",

@@ -3,7 +3,7 @@ from ....core.domain import BaseDomainService
 from ....core.types import SafeDateTime
 from ....core.types.ParamTypes import TCardParam, TChecklistParam, TProjectParam, TUserOrBot
 from ....helpers import InfraHelper
-from ....publishers import ChecklistPublisher
+from ....publishers import CheckitemPublisher, ChecklistPublisher
 from ....tasks.activities import CardChecklistActivityTask
 from ....tasks.bots import CardChecklistBotTask
 from ...models import Card, Checklist, Project
@@ -93,7 +93,14 @@ class ChecklistService(BaseDomainService):
         return [checklist.api_response() for checklist in checklists]
 
     def create(
-        self, user_or_bot: TUserOrBot, project: TProjectParam | None, card: TCardParam | None, title: str
+        self,
+        user_or_bot: TUserOrBot,
+        project: TProjectParam | None,
+        card: TCardParam | None,
+        title: str,
+        *,
+        dispatch_effects: bool = True,
+        order_override: int | None = None,
     ) -> Checklist | None:
         params = InfraHelper.get_records_with_foreign_by_params((Project, project), (Card, card))
         if not params:
@@ -102,18 +109,29 @@ class ChecklistService(BaseDomainService):
         if card.is_linked_resource:
             return None
 
-        checklist = Checklist(card_id=card.id, title=title, order=self.repo.checklist.get_next_order(card))
+        checklist = Checklist(
+            card_id=card.id,
+            title=title,
+            order=order_override if order_override is not None else self.repo.checklist.get_next_order(card),
+        )
         self.repo.checklist.insert(checklist)
 
         card_service = self._get_service_by_name("card")
         card_service.remove_completion_checklist(card)
 
-        ChecklistPublisher.created(card, checklist)
         self._mark_card_changed_for_unread(card, "checklist", checklist.id)
-        CardChecklistActivityTask.card_checklist_created(user_or_bot, project, card, checklist)
-        CardChecklistBotTask.card_checklist_created(user_or_bot, project, card, checklist)
+        if dispatch_effects:
+            self.dispatch_created(user_or_bot, project, card, checklist)
 
         return checklist
+
+    def dispatch_created(
+        self, user_or_bot: TUserOrBot, project: Project, card: Card, checklist: Checklist, *, include_bot: bool = True
+    ) -> None:
+        ChecklistPublisher.created(card, checklist)
+        CardChecklistActivityTask.card_checklist_created(user_or_bot, project, card, checklist)
+        if include_bot:
+            CardChecklistBotTask.card_checklist_created(user_or_bot, project, card, checklist)
 
     def change_title(
         self,
@@ -174,6 +192,7 @@ class ChecklistService(BaseDomainService):
         project: TProjectParam | None,
         card: TCardParam | None,
         checklist: TChecklistParam | None,
+        desired_checked: bool | None = None,
     ) -> bool | None:
         params = InfraHelper.get_records_with_foreign_by_params(
             (Project, project), (Card, card), (Checklist, checklist)
@@ -182,7 +201,9 @@ class ChecklistService(BaseDomainService):
             return None
         project, card, checklist = params
 
-        checklist.is_checked = not checklist.is_checked
+        if desired_checked is not None and checklist.is_checked == desired_checked:
+            return True
+        checklist.is_checked = desired_checked if desired_checked is not None else not checklist.is_checked
         self.repo.checklist.update(checklist)
 
         ChecklistPublisher.checked_changed(card, checklist)
@@ -252,6 +273,7 @@ class ChecklistService(BaseDomainService):
         self.repo.checklist.delete(checklist)
 
         ChecklistPublisher.deleted(card, checklist)
+        CheckitemPublisher.board_progress_changed(project, card)
         self._mark_card_changed_for_unread(card, "checklist")
         CardChecklistActivityTask.card_checklist_deleted(user_or_bot, project, card, checklist)
         CardChecklistBotTask.card_checklist_deleted(user_or_bot, project, card, checklist)

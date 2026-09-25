@@ -1,5 +1,6 @@
 import os
 from contextlib import contextmanager
+from types import SimpleNamespace
 from typing import Any
 import pytest
 import sqlalchemy as sa
@@ -11,10 +12,20 @@ from sqlalchemy.pool import StaticPool
 os.environ.setdefault("PROJECT_NAME", "langboard")
 
 from langboard.external_import import ExternalWorkBundle  # noqa: E402
-from langboard.external_import.importer import ExternalWorkImporter  # noqa: E402
+from langboard.external_import.importer import ExternalImportError, ExternalWorkImporter  # noqa: E402
 from langboard_shared.core.db import DbSession  # noqa: E402
 from langboard_shared.core.types import SnowflakeID  # noqa: E402
-from langboard_shared.domain.models import ExternalImportRecord, Project, ProjectColumn, User  # noqa: E402
+from langboard_shared.domain.models import (  # noqa: E402
+    ExternalImportRecord,
+    Project,
+    ProjectAssignedUser,
+    ProjectColumn,
+    ProjectLabel,
+    User,
+    UserIdentityLink,
+)
+from langboard_shared.domain.models.UserIdentityLink import IdentityProvider  # noqa: E402
+from langboard_shared.Env import Env  # noqa: E402
 
 
 def _bundle() -> ExternalWorkBundle:
@@ -38,7 +49,15 @@ def _database(monkeypatch: pytest.MonkeyPatch) -> tuple[sa.Engine, str, str]:
     )
     User.metadata.create_all(
         engine,
-        tables=[User.__table__, Project.__table__, ProjectColumn.__table__, ExternalImportRecord.__table__],
+        tables=[
+            User.__table__,
+            Project.__table__,
+            ProjectColumn.__table__,
+            ProjectLabel.__table__,
+            ExternalImportRecord.__table__,
+            ProjectAssignedUser.__table__,
+            UserIdentityLink.__table__,
+        ],
     )
     actor_id = SnowflakeID(1001)
     project_id = SnowflakeID(2001)
@@ -69,6 +88,10 @@ def _database(monkeypatch: pytest.MonkeyPatch) -> tuple[sa.Engine, str, str]:
 
     @contextmanager
     def use_database(*, readonly: bool):
+        active = DbSession._atomic_session.get()
+        if active is not None:
+            yield active
+            return
         with Session(engine, expire_on_commit=False) as session:
             db = DbSession(session, readonly=readonly)
             if readonly:
@@ -93,30 +116,119 @@ def _counts(engine: sa.Engine) -> tuple[int, int]:
         )
 
 
-def test_partial_database_failure_resumes_without_duplicate_targets(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_native_target_failure_keeps_the_import_error() -> None:
+    importer = ExternalWorkImporter(effect_dispatcher=lambda *_args: None)
+    importer._domain = SimpleNamespace(project_column=SimpleNamespace(create=lambda *_args, **_kwargs: None))
+
+    with pytest.raises(ExternalImportError, match="project column creation failed"):
+        importer._create_target(None, None, None, _bundle().columns[0], {}, {}, None)
+
+
+def test_principal_resolution_batches_users_and_preserves_membership_gate(monkeypatch: pytest.MonkeyPatch) -> None:
+    engine, project_uid, _actor_uid = _database(monkeypatch)
+    monkeypatch.setattr(type(Env), "SCIM_ISSUER", property(lambda _self: "test-issuer"))
+    project_id = SnowflakeID.from_short_code(project_uid)
+    with engine.begin() as connection:
+        for index in (1, 2, 3):
+            user_id = SnowflakeID(1001 + index)
+            connection.execute(
+                User.__table__.insert(),
+                {
+                    "id": user_id,
+                    "firstname": "Import",
+                    "lastname": f"Person {index}",
+                    "email": f"person-{index}@example.invalid",
+                    "username": f"person-{index}",
+                    "password": SecretStr("unused"),
+                    "is_admin": False,
+                    "preferred_lang": "en-US",
+                },
+            )
+            connection.execute(
+                UserIdentityLink.__table__.insert(),
+                {
+                    "id": SnowflakeID(5000 + index),
+                    "user_id": user_id,
+                    "provider": IdentityProvider.Scim,
+                    "external_id": f"scim-{index}",
+                    "issuer": "test-issuer",
+                },
+            )
+            if index < 3:
+                connection.execute(
+                    ProjectAssignedUser.__table__.insert(),
+                    {
+                        "id": SnowflakeID(4000 + index),
+                        "project_id": project_id,
+                        "user_id": user_id,
+                        "starred": False,
+                    },
+                )
+    bundle = SimpleNamespace(
+        cards=[SimpleNamespace(assignee_scim_external_ids=["scim-1", "scim-2"])],
+        comments=[],
+        attachments=[],
+    )
+    statements: list[str] = []
+
+    def count_select(
+        _connection: Any, _cursor: Any, statement: str, _parameters: Any, _context: Any, _many: Any
+    ) -> None:
+        if statement.lstrip().upper().startswith("SELECT"):
+            statements.append(statement)
+
+    sa.event.listen(engine, "before_cursor_execute", count_select)
+    try:
+        with DbSession.use(readonly=True) as db:
+            project = ExternalWorkImporter._require_uid(db, Project, project_uid, "project")
+            statements.clear()
+            principals = ExternalWorkImporter._resolve_principals(db, project, bundle)
+            assert len(statements) == 2
+            assert {key: user.id for key, (user, _membership) in principals.items()} == {
+                "scim-1": SnowflakeID(1002),
+                "scim-2": SnowflakeID(1003),
+            }
+            bundle.comments = [SimpleNamespace(author_scim_external_id="scim-3")]
+            with pytest.raises(ExternalImportError, match="not an active project member"):
+                ExternalWorkImporter._resolve_principals(db, project, bundle)
+    finally:
+        sa.event.remove(engine, "before_cursor_execute", count_select)
+
+
+@pytest.mark.parametrize("failure_index, persisted", [(2, 0), (26, 25)])
+def test_partial_database_failure_resumes_without_duplicate_targets(
+    monkeypatch: pytest.MonkeyPatch, failure_index: int, persisted: int
+) -> None:
     engine, project_uid, actor_uid = _database(monkeypatch)
+    payload = _bundle().model_dump()
+    payload["columns"] = [
+        {"source_id": f"column-{index}", "name": f"Column {index}", "order": index - 1} for index in range(1, 27)
+    ]
+    bundle = ExternalWorkBundle.model_validate(payload)
     effects: list[str] = []
     importer = ExternalWorkImporter(effect_dispatcher=lambda _kind, record, *_args: effects.append(record.source_id))
     create_target = importer._create_target
 
-    def fail_second(db: Any, project: Any, record: Any, targets: Any, principals: Any, staged_file: Any) -> Any:
-        if record.source_id == "column-2":
+    def fail_second(
+        db: Any, project: Any, actor: Any, record: Any, targets: Any, principals: Any, staged_file: Any
+    ) -> Any:
+        if record.source_id == f"column-{failure_index}":
             raise RuntimeError("injected batch failure")
-        return create_target(db, project, record, targets, principals, staged_file)
+        return create_target(db, project, actor, record, targets, principals, staged_file)
 
     monkeypatch.setattr(importer, "_create_target", fail_second)
     with pytest.raises(RuntimeError, match="injected batch failure"):
-        importer.import_bundle(_bundle(), project_uid=project_uid, actor_uid=actor_uid)
+        importer.import_bundle(bundle, project_uid=project_uid, actor_uid=actor_uid)
 
-    assert _counts(engine) == (1, 1)
+    assert _counts(engine) == (persisted, persisted)
     monkeypatch.setattr(importer, "_create_target", create_target)
 
-    receipt = importer.import_bundle(_bundle(), project_uid=project_uid, actor_uid=actor_uid)
+    receipt = importer.import_bundle(bundle, project_uid=project_uid, actor_uid=actor_uid)
 
-    assert receipt.created == {"column": 1}
-    assert receipt.unchanged == {"column": 1}
-    assert _counts(engine) == (2, 2)
-    assert effects == ["column-1", "column-2"]
+    assert receipt.created == {"column": 26 - persisted}
+    assert receipt.unchanged == ({"column": persisted} if persisted else {})
+    assert _counts(engine) == (26, 26)
+    assert effects == [f"column-{index}" for index in range(1, 27)]
 
 
 def test_failed_post_commit_effect_is_durably_replayed(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -151,3 +263,55 @@ def test_failed_post_commit_effect_is_durably_replayed(monkeypatch: pytest.Monke
     assert completed["effects_dispatched_at"] is not None
     assert completed["effects_attempts"] == 2
     assert completed["effects_error"] is None
+
+
+def test_native_column_create_and_lineage_share_one_transaction(monkeypatch: pytest.MonkeyPatch) -> None:
+    engine, project_uid, actor_uid = _database(monkeypatch)
+    original_insert = DbSession.insert
+
+    def fail_lineage(db: DbSession, model: Any) -> Any:
+        if isinstance(model, ExternalImportRecord):
+            raise RuntimeError("lineage write failed")
+        return original_insert(db, model)
+
+    monkeypatch.setattr(DbSession, "insert", fail_lineage)
+    importer = ExternalWorkImporter(effect_dispatcher=lambda *_args: None)
+    with pytest.raises(RuntimeError, match="lineage write failed"):
+        importer.import_bundle(_bundle(), project_uid=project_uid, actor_uid=actor_uid)
+    assert _counts(engine) == (0, 0)
+
+
+def test_import_dispatches_column_effects_once_after_native_create(monkeypatch: pytest.MonkeyPatch) -> None:
+    from langboard_shared.publishers import ProjectColumnPublisher
+    from langboard_shared.tasks.activities import ProjectColumnActivityTask
+    from langboard_shared.tasks.bots import ProjectColumnBotTask
+
+    engine, project_uid, actor_uid = _database(monkeypatch)
+    events: list[str] = []
+    monkeypatch.setattr(ProjectColumnPublisher, "created", lambda *_args: events.append("publisher"))
+    monkeypatch.setattr(ProjectColumnActivityTask, "project_column_created", lambda *_args: events.append("activity"))
+    monkeypatch.setattr(ProjectColumnBotTask, "project_column_created", lambda *_args: events.append("bot"))
+
+    receipt = ExternalWorkImporter().import_bundle(_bundle(), project_uid=project_uid, actor_uid=actor_uid)
+
+    assert receipt.created == {"column": 2}
+    assert _counts(engine) == (2, 2)
+    assert events == ["publisher", "activity", "publisher", "activity"]
+
+
+def test_native_label_create_preserves_historical_order_and_lineage(monkeypatch: pytest.MonkeyPatch) -> None:
+    engine, project_uid, actor_uid = _database(monkeypatch)
+    payload = _bundle().model_dump()
+    payload["columns"] = []
+    payload["labels"] = [{"source_id": "label-1", "name": "Imported", "color": "#112233", "order": 7}]
+    bundle = ExternalWorkBundle.model_validate(payload)
+    importer = ExternalWorkImporter(effect_dispatcher=lambda *_args: None)
+
+    first = importer.import_bundle(bundle, project_uid=project_uid, actor_uid=actor_uid)
+    second = importer.import_bundle(bundle, project_uid=project_uid, actor_uid=actor_uid)
+
+    assert first.created == {"label": 1}
+    assert second.unchanged == {"label": 1}
+    with engine.connect() as connection:
+        label = connection.execute(sa.select(ProjectLabel.__table__)).mappings().one()
+        assert (label["name"], label["color"], label["order"]) == ("Imported", "#112233", 7)

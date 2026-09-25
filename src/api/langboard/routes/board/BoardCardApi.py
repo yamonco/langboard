@@ -1,3 +1,4 @@
+from datetime import datetime
 from fastapi import status
 from langboard_shared.core.db import EditorContentModel
 from langboard_shared.core.exceptions.CardDeleteForbidden import CardDeleteForbidden
@@ -40,15 +41,17 @@ from langboard_shared.domain.services import DomainService
 from langboard_shared.filter import RoleFilter
 from langboard_shared.helpers import InfraHelper
 from langboard_shared.security import Auth, RoleFinder
-from ...card_workspace.application import apply_card_graph_patch, get_card_bundle
+from langboard_shared.tasks.webhooks.ExecutionReadinessUow import current_execution
+from ...card_workspace.application import get_card_bundle, validate_card_graph_patch
 from ...card_workspace.domain import CardBundleInclude, CardGraphEdge, CardGraphNewCard, CommentPage, SectionPage
 from ...card_workspace.infrastructure import NativeCardWorkspaceAdapter
+from .ExecutionReceiptApi import receipt_history
 from .forms import (
     AssignUsersForm,
     CardifySelectionForm,
-    CopySelectionToWikiForm,
     ChangeCardDetailsForm,
     ChangeChildOrderForm,
+    CopySelectionToWikiForm,
     CreateCardForm,
     PatchCardGraphForm,
     SetCardCompletedForm,
@@ -166,6 +169,7 @@ def get_card_details(
             "project_columns": project_columns,
             "project_labels": project_labels,
             "bot_scopes": bot_scopes,
+            "execution_receipts": receipt_history(card.id),
         }
     )
 
@@ -185,8 +189,10 @@ def get_card_context(
     user_or_bot: User | Bot = Auth.scope("all"),
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
-    if not InfraHelper.get_records_with_foreign_by_params((Project, project_uid), (Card, card_uid)):
+    records = InfraHelper.get_records_with_foreign_by_params((Project, project_uid), (Card, card_uid))
+    if not records:
         raise ApiException.NotFound_404(ApiErrorCode.NF2003)
+    _, card = records
 
     context = get_card_bundle(
         NativeCardWorkspaceAdapter(user_or_bot, service),
@@ -203,7 +209,21 @@ def get_card_context(
             CardBundleInclude.Metadata,
         ],
     )
-    return JsonResponse(content={"scope_context": context.model_dump(mode="json")})
+    payload = context.model_dump(mode="json")
+    fence = current_execution(card.id)
+    if fence is None or payload.get("card") is None:
+        raise ApiException.NotFound_404(ApiErrorCode.NF2003)
+    revision, is_ready, generation = fence.revision, fence.is_ready, fence.generation
+    core_revision = payload["card"]["core"].get("updated_at")
+    try:
+        same_revision = datetime.fromisoformat(core_revision.replace("Z", "+00:00")) == revision
+    except (AttributeError, ValueError):
+        same_revision = False
+    if not same_revision:
+        raise ApiException.Conflict_409()
+    payload["card"]["execution"] = {"is_ready": is_ready, "generation": generation}
+    payload["card"]["execution_receipts"] = receipt_history(card.id)
+    return JsonResponse(content={"scope_context": payload})
 
 
 @AppRouter.schema(permission=ApiPermission.Read)
@@ -535,14 +555,16 @@ def patch_card_relationships(
     user_or_bot: User | Bot = Auth.scope("all"),
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
-    result = apply_card_graph_patch(
-        NativeCardWorkspaceAdapter(user_or_bot, service),
+    patch = validate_card_graph_patch(
         project_uid,
         card_uid,
         [CardGraphNewCard(item.client_ref, item.title, item.description) for item in form.new_cards],
         [CardGraphEdge(item.parent_ref, item.child_ref, item.relationship_type_uid) for item in form.add_edges],
         form.remove_relationship_uids,
     )
+    result = service.card_relationship.apply_graph_patch(user_or_bot, *patch)
+    if result is None:
+        raise ValueError("Anchor card not found in project")
     return JsonResponse(content=result)
 
 
@@ -734,7 +756,9 @@ def copy_selection_to_wiki(
     user_or_bot: User | Bot = Auth.scope("all"),
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
-    result = service.card.copy_selection_to_wiki(user_or_bot, project_uid, card_uid, form.selected_markdown, form.wiki_title)
+    result = service.card.copy_selection_to_wiki(
+        user_or_bot, project_uid, card_uid, form.selected_markdown, form.wiki_title
+    )
     if not result:
         raise ApiException.NotFound_404(ApiErrorCode.NF2003)
     return JsonResponse(result)
@@ -815,7 +839,12 @@ def delete_card(
     "/board/{project_uid}/card/{card_uid}/seen",
     tags=["Board.Card"],
     description="Mark the card's latest change as seen for the current user.",
-    responses=OpenApiSchema().suc({"card_uid": "string", "seen_change_seq": "integer"}).auth().forbidden().err(404, ApiErrorCode.NF2004).get(),
+    responses=OpenApiSchema()
+    .suc({"card_uid": "string", "seen_change_seq": "integer"})
+    .auth()
+    .forbidden()
+    .err(404, ApiErrorCode.NF2004)
+    .get(),
 )
 @RoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
 @AuthFilter.add("user")
@@ -830,6 +859,7 @@ def mark_card_seen(
         raise ApiException.NotFound_404(ApiErrorCode.NF2004)
 
     return JsonResponse(content=result)
+
 
 @AppRouter.api.put(
     "/board/{project_uid}/card/{card_uid}/content-blocks",

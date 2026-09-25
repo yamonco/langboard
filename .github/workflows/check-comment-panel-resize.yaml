@@ -1,0 +1,28 @@
+name: Check Comment Panel Resize
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/check-comment-panel-resize.yaml
+      - src/ui/src/core/providers/BoardCardProvider.tsx
+      - src/ui/src/pages/BoardPage/components/card/BoardCard.tsx
+      - src/ui/src/pages/BoardPage/components/card/comment/CommentPanelWidth.*
+  workflow_dispatch:
+
+jobs:
+  lint-and-bounds:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: yarn
+          cache-dependency-path: src/ui/yarn.lock
+      - run: corepack enable
+      - run: yarn install --frozen-lockfile
+        working-directory: src/ui
+      - run: yarn eslint src/core/providers/BoardCardProvider.tsx src/pages/BoardPage/components/card/BoardCard.tsx src/pages/BoardPage/components/card/comment/CommentPanelWidth.ts src/pages/BoardPage/components/card/comment/CommentPanelWidth.test.ts --max-warnings 0
+        working-directory: src/ui
+      - run: node --experimental-strip-types --test src/pages/BoardPage/components/card/comment/CommentPanelWidth.test.ts
+        working-directory: src/ui

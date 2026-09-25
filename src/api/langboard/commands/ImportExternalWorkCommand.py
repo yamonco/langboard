@@ -35,7 +35,7 @@ class ImportExternalWorkCommand(BaseCommand):
 
     @property
     def description(self) -> str:
-        return "Atomically import a provider-neutral external work bundle"
+        return "Restartably import a provider-neutral external work bundle"
 
     @property
     def choices(self) -> list[str] | None:
