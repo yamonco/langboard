@@ -198,7 +198,9 @@
     }
 }
 
-[data-card-viewer][data-card-viewer-ready="true"][data-state="open"]:not([data-card-viewer-closing="true"]) {
+/* The open animation only starts once per viewer session: remounts and
+   Suspense visibility swaps must not replay the entry transition. */
+[data-card-viewer][data-card-viewer-ready="true"][data-state="open"]:not([data-card-viewer-closing="true"]):not([data-card-viewer-opened="true"]) {
     animation: card-viewer-open 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
     will-change: transform, opacity;
 }

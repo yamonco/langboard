@@ -5,7 +5,11 @@ import {
     CARD_ANIMATION_EASING,
     cardOpenAnimation,
     captureCardOrigin,
+    clearCardOpenAnimationSession,
     closedTransform,
+    markCardOpenAnimationPlayed,
+    OPEN_REPLAY_SUPPRESSION_MS,
+    shouldPlayCardOpenAnimation,
     takeCardOrigin,
 } from "./CardAnimation.ts";
 
@@ -53,4 +57,41 @@ test("closedTransform handles zero-size target gracefully", () => {
     assert.ok(transform.includes("scale("));
     assert.ok(!transform.includes("NaN"));
     assert.ok(!transform.includes("Infinity"));
+});
+
+test("open animation plays once per viewer session without an origin", () => {
+    const projectUID = "board-gate";
+    const cardUID = "card-gate";
+
+    try {
+        const now = 1_000;
+        // First deep-link entry animates.
+        assert.equal(shouldPlayCardOpenAnimation(projectUID, cardUID, false, now), true);
+        markCardOpenAnimationPlayed(projectUID, cardUID, now);
+        // A remount inside the suppression window (Suspense swap, re-key) must not replay.
+        assert.equal(shouldPlayCardOpenAnimation(projectUID, cardUID, false, now + 200), false);
+        // Another card in the same board is its own session.
+        assert.equal(shouldPlayCardOpenAnimation(projectUID, "card-other", false, now + 200), true);
+        // After the window, a genuinely new session animates again.
+        assert.equal(shouldPlayCardOpenAnimation(projectUID, cardUID, false, now + OPEN_REPLAY_SUPPRESSION_MS + 1), true);
+        // Closing the card ends the session immediately.
+        markCardOpenAnimationPlayed(projectUID, cardUID, now);
+        clearCardOpenAnimationSession(projectUID, cardUID);
+        assert.equal(shouldPlayCardOpenAnimation(projectUID, cardUID, false, now + 100), true);
+    } finally {
+        clearCardOpenAnimationSession(projectUID, cardUID);
+    }
+});
+
+test("click-open with a captured origin always animates, even after a recent play", () => {
+    const projectUID = "board-origin";
+    const cardUID = "card-origin";
+
+    try {
+        const now = 5_000;
+        markCardOpenAnimationPlayed(projectUID, cardUID, now);
+        assert.equal(shouldPlayCardOpenAnimation(projectUID, cardUID, true, now + 50), true);
+    } finally {
+        clearCardOpenAnimationSession(projectUID, cardUID);
+    }
 });
