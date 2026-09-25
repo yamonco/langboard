@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import {
     calculateChecklistProgress,
     calculateChecklistProgressFromCounts,
+    getChecklistBorderDashes,
     calculateDeadlinePressure,
     DEADLINE_PRESSURE_WINDOW_MS,
     getDeadlinePressureLevel,
@@ -23,6 +24,20 @@ describe("board column card status", () => {
         assert.deepEqual(calculateChecklistProgressFromCounts(7, 8), { completed: 7, total: 8, ratio: 0.875 });
         assert.deepEqual(calculateChecklistProgressFromCounts(0, 0), { completed: 0, total: 0, ratio: 0 });
         assert.deepEqual(calculateChecklistProgressFromCounts(9, 8), { completed: 8, total: 8, ratio: 1 });
+    });
+
+    it("divides the rounded border into one segment per checkitem", () => {
+        const dashes = getChecklistBorderDashes(4, 9, 780);
+        const track = dashes.track.split(" ").map(Number);
+        const value = dashes.value.split(" ").map(Number);
+        assert.equal(track[0] + track[1], 1);
+        assert.equal(value.length, 8);
+        assert.equal(
+            value.reduce((sum, length) => sum + length, 0),
+            9
+        );
+        assert.equal(getChecklistBorderDashes(1, 1, 780).track, "1 0");
+        assert.equal(getChecklistBorderDashes(0, 9, 780).value, "");
     });
 
     it("ramps deadline pressure across seven days and suppresses completed cards", () => {
