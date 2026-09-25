@@ -6,6 +6,7 @@ import {
     cardOpenAnimation,
     captureCardOrigin,
     closedTransform,
+    isRectCenterInside,
     takeCardOrigin,
 } from "./CardAnimation.ts";
 
@@ -53,4 +54,15 @@ test("closedTransform handles zero-size target gracefully", () => {
     assert.ok(transform.includes("scale("));
     assert.ok(!transform.includes("NaN"));
     assert.ok(!transform.includes("Infinity"));
+});
+
+test("close origin must remain visible inside both viewport and board scrollport", () => {
+    const card = { left: 1709, top: 201, width: 294, height: 114 } as DOMRect;
+    const viewport = { left: 0, top: 0, width: 1686, height: 900 } as DOMRect;
+    assert.equal(isRectCenterInside(card, viewport), false);
+    const visibleCard = { left: 500, top: 201, width: 294, height: 114 } as DOMRect;
+    const board = { left: 100, top: 100, width: 1200, height: 700 } as DOMRect;
+    assert.equal(isRectCenterInside(visibleCard, viewport) && isRectCenterInside(visibleCard, board), true);
+    const clippedBoard = { left: 800, top: 100, width: 600, height: 700 } as DOMRect;
+    assert.equal(isRectCenterInside(visibleCard, clippedBoard), false);
 });
