@@ -264,9 +264,11 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
         <>
             <Card.Root
                 id={`board-card-${card.uid}`}
+                data-checklist-completed={isChecklistCompleted}
                 data-deadline-pressure-level={deadlinePressureLevel}
                 className={cn(
                     "group/card relative hover:border-primary",
+                    deadlinePressure > 0 && "board-card-deadline-aura",
                     compact && "border-border/60 bg-background/80 shadow-none transition-colors hover:bg-background",
                     !!selectCardViewType && isDisabledCard(card.uid) ? "cursor-not-allowed" : "cursor-pointer"
                 )}
