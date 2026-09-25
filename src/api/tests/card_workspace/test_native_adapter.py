@@ -13,6 +13,7 @@ from langboard.card_workspace.domain import (  # noqa: E402
     ExactTextReplacement,
     projection_revision,
 )
+from langboard.card_workspace.infrastructure import native as native_module  # noqa: E402
 from langboard.card_workspace.infrastructure.native import (  # noqa: E402
     MAX_NATIVE_SECTION_SOURCE,
     NativeCardWorkspaceAdapter,
@@ -138,6 +139,34 @@ def test_native_source_fetches_optional_sections_lazily_with_hard_query_limits()
         ("attachments", expected_limit, None),
         ("metadata", expected_limit, None),
     ]
+
+
+def test_card_bundle_automation_requires_update_access(monkeypatch: pytest.MonkeyPatch) -> None:
+    class Reader:
+        pass
+
+    class BotActor:
+        pass
+
+    monkeypatch.setattr(native_module, "User", Reader)
+    monkeypatch.setattr(native_module, "Bot", BotActor)
+    service, _ = _service()
+    service.project.get_user_role_actions_by_project = Mock(return_value=[])
+    service.card.get_api_bot_scope_list = Mock(return_value=[{"uid": "scope"}])
+    service.card.get_api_bot_schedule_list = Mock(return_value=[{"uid": "schedule"}])
+    adapter = NativeCardWorkspaceAdapter(Reader(), service)
+    sections = frozenset({"automation.bot_scopes", "automation.bot_schedules"})
+
+    denied = adapter.get_card_bundle_source("p1", "c1", sections)
+    assert denied is not None and denied.bot_scopes == [] and denied.bot_schedules == []
+    service.card.get_api_bot_scope_list.assert_not_called()
+    service.card.get_api_bot_schedule_list.assert_not_called()
+
+    service.project.get_user_role_actions_by_project.return_value = [native_module.ProjectRoleAction.Update.value]
+    allowed = adapter.get_card_bundle_source("p1", "c1", sections)
+    assert allowed is not None
+    assert allowed.bot_scopes == [{"uid": "scope"}]
+    assert allowed.bot_schedules == [{"uid": "schedule"}]
 
 
 def test_native_source_fetches_content_blocks_only_for_the_requested_bundle_section() -> None:
@@ -361,7 +390,7 @@ def test_project_mcp_creation_propagates_template_failure() -> None:
 
 
 def test_card_mcp_creation_selects_server_side_leftmost_active_column() -> None:
-    """Callers cannot select a destination; archive and input order are ignored."""
+    """The canonical tool resolves leftmost server-side and ignores archive order."""
 
     project = SimpleNamespace(id=1)
     created: list[tuple[Any, ...]] = []
@@ -382,24 +411,18 @@ def test_card_mcp_creation_selects_server_side_leftmost_active_column() -> None:
     )
 
     actor = object()
-    result = CardMcp.create_card_in_leftmost_column("project-one", " First task ", actor, service)
-    canonical = CardMcp.create_card("project-one", "leftmost", "Second task", None, None, actor, service)
+    result = CardMcp.create_card("project-one", "leftmost", " First task ", None, None, actor, service)
 
     assert created[0][2] == "backlog"
     assert created[0][3] == "First task"
-    assert created[1][2] == "backlog"
-    assert canonical == card
-    assert result == {
-        "card": card,
-        "column": {"uid": "backlog", "name": "Backlog"},
-    }
+    assert result == card
     with pytest.raises(ValueError, match="not active"):
         CardMcp.create_card("project-one", "foreign-column", "Unsafe", None, None, actor, service)
     with pytest.raises(ValueError, match="duplicate"):
         CardMcp.create_card("project-one", "leftmost", "Unsafe", None, ["known", "known"], actor, service)
     with pytest.raises(ValueError, match="Unknown project member"):
         CardMcp.create_card("project-one", "leftmost", "Unsafe", None, ["unknown"], actor, service)
-    assert len(created) == 2
+    assert len(created) == 1
 
 
 def test_card_mcp_people_and_labels_validate_before_mutation(monkeypatch: pytest.MonkeyPatch) -> None:
