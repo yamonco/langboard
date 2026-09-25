@@ -60,6 +60,24 @@ class CheckitemService(BaseDomainService):
             checkitems_map[checkitem.checklist_id].append(api_checkitem)
         return checkitems_map
 
+    def get_active_work(self, user: User) -> list[dict[str, Any]]:
+        records = self.repo.checkitem.get_started_work_by_user(user)
+        active_work: list[dict[str, Any]] = []
+        for checkitem, card, project in records:
+            api_checkitem = checkitem.api_response()
+            api_checkitem["card_uid"] = card.get_uid()
+            last_timer = self.repo.checkitem_timer_record.get_by_checkitem_and_arc_type(checkitem, "last")
+            if last_timer and last_timer.status == CheckitemStatus.Started:
+                api_checkitem["timer_started_at"] = last_timer.created_at
+            active_work.append(
+                {
+                    "checkitem": api_checkitem,
+                    "card": card.api_response(),
+                    "project": project.api_response(),
+                }
+            )
+        return active_work
+
     def get_tracking_list(
         self, user: User, pagination: TimeBasedPagination
     ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
@@ -265,12 +283,13 @@ class CheckitemService(BaseDomainService):
                     return False
                 checkitem.user_id = user_or_bot.id
             if isinstance(user_or_bot, User):
-                started_checkitem = self.repo.checkitem.find_started_checkitem_by_user(user_or_bot)
-                if started_checkitem:
+                for started_checkitem, started_card, started_project in self.repo.checkitem.get_started_work_by_user(user_or_bot):
+                    if started_checkitem.id == checkitem.id:
+                        continue
                     self.change_status(
                         user_or_bot,
-                        project,
-                        card,
+                        started_project,
+                        started_card,
                         started_checkitem,
                         CheckitemStatus.Paused,
                         current_time,
