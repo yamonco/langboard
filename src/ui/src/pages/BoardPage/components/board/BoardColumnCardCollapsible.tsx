@@ -27,6 +27,7 @@ import {
     calculateChecklistProgressFromCounts,
     calculateDeadlinePressure,
     getDeadlinePressureLevel,
+    isChecklistCompleted,
     type IBoardCardChecklistProgress,
 } from "@/pages/BoardPage/components/board/BoardColumnCardStatus";
 import BoardTaskMetadataBadges from "@/pages/BoardPage/components/task/BoardTaskMetadataBadges";
@@ -113,14 +114,14 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
         () => calculateChecklistProgressFromCounts(checklistCompletedCount, checklistTotalCount),
         [checklistCompletedCount, checklistTotalCount]
     );
-    const isChecklistCompleted = checklistProgress.total > 0 && checklistProgress.completed === checklistProgress.total;
+    const isChecklistTerminated = isChecklistCompleted(checklistProgress);
     const deadlinePressure = useMemo(
-        () => calculateDeadlinePressure({ deadlineAt, isCompleted: isChecklistCompleted, now: deadlineClock }),
-        [deadlineAt, isChecklistCompleted, deadlineClock]
+        () => calculateDeadlinePressure({ deadlineAt, isCompleted: isChecklistTerminated, now: deadlineClock }),
+        [deadlineAt, isChecklistTerminated, deadlineClock]
     );
     const deadlinePressureLevel = useMemo(
-        () => getDeadlinePressureLevel({ deadlineAt, isCompleted: isChecklistCompleted, now: deadlineClock }),
-        [deadlineAt, isChecklistCompleted, deadlineClock]
+        () => getDeadlinePressureLevel({ deadlineAt, isCompleted: isChecklistTerminated, now: deadlineClock }),
+        [deadlineAt, isChecklistTerminated, deadlineClock]
     );
     const projectMembers = project.useForeignFieldArray("all_members");
     const cardMemberUIDs = card.useField("member_uids") ?? [];
@@ -264,7 +265,7 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
         <>
             <Card.Root
                 id={`board-card-${card.uid}`}
-                data-checklist-completed={isChecklistCompleted}
+                data-checklist-completed={isChecklistTerminated}
                 data-deadline-pressure-level={deadlinePressureLevel}
                 className={cn(
                     "group/card relative hover:border-primary",
@@ -319,7 +320,10 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
                                 "break-all leading-tight",
                                 compact ? "max-w-full text-sm font-medium text-muted-foreground" : "max-w-[calc(100%_-_theme(spacing.8))]",
                                 showCollapsedOnly && "text-sm",
-                                completed && "line-through opacity-60"
+                                completed && "line-through opacity-60",
+                                // Finished work reads with reduced emphasis; semantic
+                                // label and avatar colors outside the title are untouched.
+                                isChecklistTerminated && "text-muted-foreground"
                             )}
                         >
                             <button

@@ -25,6 +25,13 @@ export const calculateChecklistProgressFromCounts = (completedCount = 0, totalCo
     return { completed, total, ratio: total ? completed / total : 0 };
 };
 
+/**
+ * Terminated-state predicate: a card counts as finished work only when it has
+ * at least one checklist item and every item is completed.
+ */
+export const isChecklistCompleted = (progress: Pick<IBoardCardChecklistProgress, "completed" | "total">): boolean =>
+    progress.total > 0 && progress.completed === progress.total;
+
 export const calculateDeadlinePressure = ({
     deadlineAt,
     isCompleted = false,
