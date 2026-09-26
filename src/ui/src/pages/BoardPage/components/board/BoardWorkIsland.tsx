@@ -7,6 +7,7 @@ import Button from "@/components/base/Button";
 import Dialog from "@/components/base/Dialog";
 import Flex from "@/components/base/Flex";
 import IconComponent from "@/components/base/IconComponent";
+import Popover from "@/components/base/Popover";
 import Toast from "@/components/base/Toast";
 import useChangeCardCheckitemStatus from "@/controllers/api/card/checkitem/useChangeCardCheckitemStatus";
 import { api } from "@/core/helpers/Api";
@@ -25,6 +26,7 @@ interface IWorkItem {
     title: string;
     status: ProjectCheckitem.ECheckitemStatus;
     timer_started_at?: string;
+    accumulated_seconds?: number;
 }
 
 interface IActiveWork {
@@ -53,13 +55,7 @@ interface ICardDetailsResponse {
     }>;
 }
 
-export default function BoardWorkIsland({
-    project,
-    dragging,
-}: {
-    project: Project.TModel;
-    dragging: bool;
-}) {
+export default function BoardWorkIsland({ project, dragging }: { project: Project.TModel; dragging: bool }) {
     const targetRef = useRef<HTMLButtonElement>(null);
     const navigate = usePageNavigateRef();
     const [over, setOver] = useState(false);
@@ -68,18 +64,48 @@ export default function BoardWorkIsland({
     const [candidates, setCandidates] = useState<ICardCheckitem[]>([]);
     const [conflictTarget, setConflictTarget] = useState<ICardCheckitem>();
     const [busy, setBusy] = useState(false);
+    const [menuOpen, setMenuOpen] = useState(false);
+    const [loadingWork, setLoadingWork] = useState(false);
+    const [workError, setWorkError] = useState(false);
+    const [now, setNow] = useState(Date.now());
     const { mutateAsync: changeStatus } = useChangeCardCheckitemStatus({ interceptToast: true });
 
     const refreshActiveWork = useCallback(async () => {
-        const res = await api.get<{ active_work: IActiveWork[] }>(Routing.API.DASHBOARD.ACTIVE_WORK, {
-            env: { interceptToast: true } as never,
-        });
-        setActiveWork(res.data.active_work ?? []);
+        setLoadingWork(true);
+        try {
+            const res = await api.get<{ active_work: IActiveWork[] }>(Routing.API.DASHBOARD.ACTIVE_WORK, {
+                env: { interceptToast: true } as never,
+            });
+            setActiveWork(res.data.active_work ?? []);
+            setWorkError(false);
+        } catch {
+            setWorkError(true);
+        } finally {
+            setLoadingWork(false);
+        }
     }, []);
 
     useEffect(() => {
-        void refreshActiveWork().catch(() => undefined);
+        void refreshActiveWork();
+        const refreshVisible = () => {
+            if (!document.hidden) void refreshActiveWork();
+        };
+        window.addEventListener("focus", refreshVisible);
+        document.addEventListener("visibilitychange", refreshVisible);
+        const interval = window.setInterval(refreshVisible, 15_000);
+        return () => {
+            window.removeEventListener("focus", refreshVisible);
+            document.removeEventListener("visibilitychange", refreshVisible);
+            window.clearInterval(interval);
+        };
     }, [refreshActiveWork]);
+
+    useEffect(() => {
+        if (!menuOpen || !activeWork.length) return;
+        setNow(Date.now());
+        const interval = window.setInterval(() => setNow(Date.now()), 1_000);
+        return () => window.clearInterval(interval);
+    }, [menuOpen, activeWork.length]);
 
     const current = activeWork[0];
 
@@ -169,9 +195,7 @@ export default function BoardWorkIsland({
                 setOver(false);
                 const uid = draggedBoardCard(source.data, BOARD_DND_SYMBOL_SET.row, project.uid);
                 if (!uid) return;
-                const card = ProjectCard.Model.getModels(
-                    (model) => model.uid === uid && model.project_uid === project.uid && !model.archived_at
-                )[0];
+                const card = ProjectCard.Model.getModels((model) => model.uid === uid && model.project_uid === project.uid && !model.archived_at)[0];
                 if (card) void acceptCard(card);
             },
         });
@@ -182,24 +206,91 @@ export default function BoardWorkIsland({
 
     return (
         <>
-            <Button
-                ref={targetRef}
-                type="button"
-                variant={over ? "default" : current ? "secondary" : "ghost"}
-                disabled={busy}
-                className={cn(
-                    "h-11 min-w-0 shrink-0 gap-1 rounded-xl px-2 transition-[width,background-color,transform] duration-200 md:gap-2 md:rounded-full md:px-3",
-                    dragging ? "min-w-44 border border-dashed border-primary/60 md:px-4" : "min-w-0",
-                    over && "scale-[1.03]"
-                )}
-                aria-label={over ? "Release to start work" : currentLabel}
-                onClick={() => navigate(ROUTES.DASHBOARD.TRACKING, { smooth: true })}
+            <Popover.Root
+                open={menuOpen}
+                onOpenChange={(open) => {
+                    setMenuOpen(open);
+                    if (open) void refreshActiveWork();
+                }}
             >
-                <IconComponent icon="hammer" size="4" />
-                <span className={cn("max-w-16 truncate text-xs md:max-w-44", !dragging && !current && "md:max-w-20")}>
-                    {over ? "Release to start work" : dragging ? "Drop to start work" : currentLabel}
-                </span>
-            </Button>
+                <Popover.Trigger asChild>
+                    <Button
+                        ref={targetRef}
+                        type="button"
+                        variant={over ? "default" : current ? "secondary" : "ghost"}
+                        disabled={busy}
+                        className={cn(
+                            "h-11 min-w-0 shrink-0 gap-1 rounded-xl px-2 transition-[width,background-color,transform] duration-200 md:gap-2 md:rounded-full md:px-3",
+                            dragging ? "min-w-44 border border-dashed border-primary/60 md:px-4" : "min-w-0",
+                            over && "scale-[1.03]"
+                        )}
+                        aria-label={over ? "Release to start work" : currentLabel}
+                    >
+                        <IconComponent icon="hammer" size="4" />
+                        <span className={cn("max-w-16 truncate text-xs md:max-w-44", !dragging && !current && "md:max-w-20")}>
+                            {over ? "Release to start work" : dragging ? "Drop to start work" : currentLabel}
+                        </span>
+                    </Button>
+                </Popover.Trigger>
+                <Popover.Content side="top" align="end" className="w-[min(22rem,calc(100vw-1rem))] p-3">
+                    <div className="mb-2 text-sm font-semibold">My Work</div>
+                    {loadingWork && !activeWork.length ? (
+                        <div className="py-2 text-xs text-muted-foreground">작업을 불러오는 중...</div>
+                    ) : workError ? (
+                        <Button variant="ghost" size="sm" onClick={() => void refreshActiveWork()}>
+                            작업을 불러오지 못했습니다. 다시 시도
+                        </Button>
+                    ) : activeWork.length ? (
+                        <div className="max-h-64 space-y-1 overflow-y-auto">
+                            {activeWork.map((work) => {
+                                const elapsed = Math.max(
+                                    0,
+                                    (work.checkitem.accumulated_seconds ?? 0) +
+                                        (work.checkitem.timer_started_at
+                                            ? Math.floor((now - Date.parse(work.checkitem.timer_started_at)) / 1_000)
+                                            : 0)
+                                );
+                                const duration = [Math.floor(elapsed / 3_600), Math.floor((elapsed % 3_600) / 60), elapsed % 60]
+                                    .map((part) => String(part).padStart(2, "0"))
+                                    .join(":");
+                                return (
+                                    <button
+                                        key={work.checkitem.uid}
+                                        type="button"
+                                        className="w-full rounded-md p-2 text-left hover:bg-muted"
+                                        onClick={() => {
+                                            setMenuOpen(false);
+                                            navigate(ROUTES.BOARD.CARD(work.card.project_uid, work.card.uid));
+                                        }}
+                                    >
+                                        <div className="truncate text-xs text-muted-foreground">
+                                            {work.project.title} · {work.card.title}
+                                        </div>
+                                        <div className="flex items-center justify-between gap-2 text-sm">
+                                            <span className="truncate">{work.checkitem.title}</span>
+                                            <span className="shrink-0 font-mono text-xs tabular-nums">{duration}</span>
+                                        </div>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    ) : (
+                        <div className="py-2 text-xs text-muted-foreground">실행 중인 작업이 없습니다.</div>
+                    )}
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="mt-2 w-full justify-start"
+                        onClick={() => {
+                            setMenuOpen(false);
+                            navigate(ROUTES.DASHBOARD.TRACKING, { smooth: true });
+                        }}
+                    >
+                        모든 작업 보기
+                    </Button>
+                </Popover.Content>
+            </Popover.Root>
 
             <Dialog.Root
                 open={dialogOpen}
@@ -266,11 +357,7 @@ export default function BoardWorkIsland({
                             >
                                 취소
                             </Button>
-                            <Button
-                                type="button"
-                                disabled={busy}
-                                onClick={() => void start(candidateCard, conflictTarget, true)}
-                            >
+                            <Button type="button" disabled={busy} onClick={() => void start(candidateCard, conflictTarget, true)}>
                                 기존 작업 일시정지 후 전환
                             </Button>
                         </Dialog.Footer>
