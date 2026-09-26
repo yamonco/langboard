@@ -5,8 +5,10 @@ import {
     calculateChecklistProgress,
     calculateChecklistProgressFromCounts,
     calculateDeadlinePressure,
+    getChecklistBorderDashes,
     DEADLINE_PRESSURE_WINDOW_MS,
     getDeadlinePressureLevel,
+    isChecklistCompleted,
 } from "./BoardColumnCardStatus.ts";
 
 describe("board column card status", () => {
@@ -23,6 +25,43 @@ describe("board column card status", () => {
         assert.deepEqual(calculateChecklistProgressFromCounts(7, 8), { completed: 7, total: 8, ratio: 0.875 });
         assert.deepEqual(calculateChecklistProgressFromCounts(0, 0), { completed: 0, total: 0, ratio: 0 });
         assert.deepEqual(calculateChecklistProgressFromCounts(9, 8), { completed: 8, total: 8, ratio: 1 });
+    });
+
+    it("divides the rounded border into one segment per checkitem", () => {
+        const dashes = getChecklistBorderDashes(4, 9, 780);
+        const track = dashes.track.split(" ").map(Number);
+        const value = dashes.value.split(" ").map(Number);
+        assert.equal(track[0] + track[1], 1);
+        assert.equal(
+            value.reduce((sum, length) => sum + length, 0),
+            9
+        );
+        assert.equal(getChecklistBorderDashes(1, 1, 780).track, "1 0");
+        assert.equal(getChecklistBorderDashes(0, 9, 780).value, "");
+    });
+
+    it("marks the terminated state only when every item is completed", () => {
+        assert.equal(isChecklistCompleted({ completed: 3, total: 3 }), true);
+        assert.equal(isChecklistCompleted({ completed: 0, total: 3 }), false);
+        assert.equal(isChecklistCompleted({ completed: 2, total: 3 }), false);
+        // Empty checklists are in-progress work, not finished work.
+        assert.equal(isChecklistCompleted({ completed: 0, total: 0 }), false);
+        // Board summary counts are clamped before the predicate runs.
+        assert.equal(isChecklistCompleted(calculateChecklistProgressFromCounts(9, 8)), true);
+        assert.equal(isChecklistCompleted(calculateChecklistProgressFromCounts(0, 0)), false);
+    });
+
+    it("removes deadline pressure and aura styling for terminated cards", () => {
+        const now = new Date("2026-09-17T00:00:00.000Z");
+        const overdueButTerminated = { deadlineAt: new Date(now.getTime() - 1), isCompleted: true, now };
+
+        // Terminated cards expose pressure 0 and level "none", so the deadline
+        // aura class and pressure CSS variable resolve to a removed aura.
+        assert.equal(calculateDeadlinePressure(overdueButTerminated), 0);
+        assert.equal(getDeadlinePressureLevel(overdueButTerminated), "none");
+        // Un-checking any item restores pressure instantly from the same inputs.
+        assert.equal(calculateDeadlinePressure({ deadlineAt: overdueButTerminated.deadlineAt, isCompleted: false, now }), 1);
+        assert.equal(getDeadlinePressureLevel({ deadlineAt: overdueButTerminated.deadlineAt, isCompleted: false, now }), "overdue");
     });
 
     it("ramps deadline pressure across seven days and suppresses completed cards", () => {

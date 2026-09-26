@@ -11,7 +11,7 @@ import { useBoardController } from "@/core/providers/BoardController";
 import { useBoard } from "@/core/providers/BoardProvider";
 import { ROUTES } from "@/core/routing/constants";
 import { cn } from "@/core/utils/ComponentUtils";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import SelectRelationshipDialog from "@/pages/BoardPage/components/board/SelectRelationshipDialog";
 import BoardColumnCardRelationship from "@/pages/BoardPage/components/board/BoardColumnCardRelationship";
@@ -26,7 +26,9 @@ import { Utils } from "@langboard/core/utils";
 import {
     calculateChecklistProgressFromCounts,
     calculateDeadlinePressure,
+    getChecklistBorderDashes,
     getDeadlinePressureLevel,
+    isChecklistCompleted,
     type IBoardCardChecklistProgress,
 } from "@/pages/BoardPage/components/board/BoardColumnCardStatus";
 import BoardTaskMetadataBadges from "@/pages/BoardPage/components/task/BoardTaskMetadataBadges";
@@ -113,14 +115,14 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
         () => calculateChecklistProgressFromCounts(checklistCompletedCount, checklistTotalCount),
         [checklistCompletedCount, checklistTotalCount]
     );
-    const isChecklistCompleted = checklistProgress.total > 0 && checklistProgress.completed === checklistProgress.total;
+    const isChecklistTerminated = isChecklistCompleted(checklistProgress);
     const deadlinePressure = useMemo(
-        () => calculateDeadlinePressure({ deadlineAt, isCompleted: isChecklistCompleted, now: deadlineClock }),
-        [deadlineAt, isChecklistCompleted, deadlineClock]
+        () => calculateDeadlinePressure({ deadlineAt, isCompleted: isChecklistTerminated, now: deadlineClock }),
+        [deadlineAt, isChecklistTerminated, deadlineClock]
     );
     const deadlinePressureLevel = useMemo(
-        () => getDeadlinePressureLevel({ deadlineAt, isCompleted: isChecklistCompleted, now: deadlineClock }),
-        [deadlineAt, isChecklistCompleted, deadlineClock]
+        () => getDeadlinePressureLevel({ deadlineAt, isCompleted: isChecklistTerminated, now: deadlineClock }),
+        [deadlineAt, isChecklistTerminated, deadlineClock]
     );
     const projectMembers = project.useForeignFieldArray("all_members");
     const cardMemberUIDs = card.useField("member_uids") ?? [];
@@ -264,10 +266,13 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
         <>
             <Card.Root
                 id={`board-card-${card.uid}`}
+                data-checklist-completed={isChecklistTerminated}
                 data-deadline-pressure-level={deadlinePressureLevel}
                 className={cn(
                     "group/card relative hover:border-primary",
+                    deadlinePressure > 0 && "board-card-deadline-aura",
                     compact && "border-border/60 bg-background/80 shadow-none transition-colors hover:bg-background",
+                    checklistProgress.total > 0 && "border-transparent hover:border-transparent",
                     !!selectCardViewType && isDisabledCard(card.uid) ? "cursor-not-allowed" : "cursor-pointer"
                 )}
                 style={{ "--board-card-deadline-pressure": deadlinePressure } as React.CSSProperties}
@@ -502,31 +507,71 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
 }
 
 function BoardCardProgressTrace({ progress }: { progress: IBoardCardChecklistProgress }) {
-    if (!progress.total) {
+    const frameRef = useRef<HTMLSpanElement>(null);
+    const [size, setSize] = useState({ width: 0, height: 0, radius: 0 });
+    const hasChecklist = progress.total > 0;
+
+    useLayoutEffect(() => {
+        const frame = frameRef.current;
+        if (!frame) return;
+
+        const measure = () => {
+            const next = {
+                width: frame.clientWidth,
+                height: frame.clientHeight,
+                radius: parseFloat(getComputedStyle(frame).borderTopLeftRadius) || 0,
+            };
+            setSize((current) => (current.width === next.width && current.height === next.height && current.radius === next.radius ? current : next));
+        };
+        measure();
+        const observer = new ResizeObserver(measure);
+        observer.observe(frame);
+        return () => observer.disconnect();
+    }, [hasChecklist]);
+
+    if (!hasChecklist) {
         return null;
     }
 
-    const progressPct = progress.ratio * 100;
+    const strokeWidth = 2.5;
+    const inset = strokeWidth / 2;
+    const width = Math.max(0, size.width - strokeWidth);
+    const height = Math.max(0, size.height - strokeWidth);
+    const radius = Math.max(0, size.radius - inset);
+    const perimeter = 2 * (width + height - 4 * radius) + 2 * Math.PI * radius;
+    const completed = Math.min(progress.total, Math.max(0, progress.completed));
+    const dashes = getChecklistBorderDashes(completed, progress.total, perimeter);
 
     return (
-        <span aria-hidden="true" className="pointer-events-none absolute inset-0 z-[1] overflow-hidden rounded-[inherit]">
-            <svg className="h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none">
-                <rect className="board-card-progress-track" x="1" y="1" width="98" height="98" rx="10" ry="10" pathLength={100} />
-                {progressPct > 0 && (
+        <span ref={frameRef} aria-hidden="true" className="pointer-events-none absolute inset-0 z-[1] overflow-hidden rounded-[inherit]">
+            {size.width > strokeWidth && size.height > strokeWidth && (
+                <svg className="h-full w-full" viewBox={`0 0 ${size.width} ${size.height}`}>
                     <rect
-                        className="board-card-progress-value"
-                        x="1"
-                        y="1"
-                        width="98"
-                        height="98"
-                        rx="10"
-                        ry="10"
-                        pathLength={100}
-                        transform="rotate(90 50 50)"
-                        style={{ strokeDasharray: `${progressPct} 100` }}
+                        className="board-card-progress-track"
+                        x={inset}
+                        y={inset}
+                        width={width}
+                        height={height}
+                        rx={radius}
+                        ry={radius}
+                        pathLength={progress.total}
+                        style={{ strokeDasharray: dashes.track }}
                     />
-                )}
-            </svg>
+                    {completed > 0 && (
+                        <rect
+                            className="board-card-progress-value"
+                            x={inset}
+                            y={inset}
+                            width={width}
+                            height={height}
+                            rx={radius}
+                            ry={radius}
+                            pathLength={progress.total}
+                            style={{ strokeDasharray: dashes.value }}
+                        />
+                    )}
+                </svg>
+            )}
         </span>
     );
 }

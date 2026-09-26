@@ -9,9 +9,7 @@ from langboard_shared.core.db import EditorContentModel
 from langboard_shared.core.exceptions.CardDeleteForbidden import CardDeleteForbidden
 from langboard_shared.core.storage import Storage, StorageName
 from langboard_shared.core.types import SafeDateTime
-from langboard_shared.core.utils.Converter import convert_python_data
 from langboard_shared.domain.models import Bot, Card, CardMetadata, Project, ProjectRole, User
-from langboard_shared.domain.models.bases import ALL_GRANTED
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.domain.services.DomainService import DomainService
 from langboard_shared.Env import Env
@@ -125,71 +123,6 @@ def _create_card_in_project(
     return result[1], column
 
 
-@McpTool.add(description="Get all cards in a project.")
-@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
-def get_cards(project_uid: str, user_or_bot: User | Bot, service: DomainService) -> dict:
-    project = service.project.get_by_id_like(project_uid)
-    if not project:
-        raise ValueError("Project not found")
-    cards = service.card.get_api_list_by_project(project, user_or_bot)
-    return {"cards": cards}
-
-
-@McpTool.add(description="Get card details.")
-@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
-def get_card(project_uid: str, card_uid: str, user_or_bot: User | Bot, service: DomainService) -> dict:
-    params = _get_card_in_project(project_uid, card_uid)
-    if not params:
-        raise ValueError("Card not found")
-    project, card = params
-    api_card = service.card.get_details(project, card, user_or_bot)
-    if not api_card:
-        raise ValueError("Card not found")
-    return api_card
-
-
-@McpTool.add(description="Get card checklists.")
-@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
-def get_card_checklists(project_uid: str, card_uid: str, service: DomainService) -> dict:
-    params = InfraHelper.get_records_with_foreign_by_params((Project, project_uid), (Card, card_uid))
-    if not params:
-        raise ValueError("Card not found")
-    _, card = params
-    checklists = service.checklist.get_api_list_by_card(card)
-    return {"checklists": checklists}
-
-
-@McpTool.add(description="Get card attachments.")
-@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
-def get_card_attachments(project_uid: str, card_uid: str, service: DomainService) -> dict:
-    params = InfraHelper.get_records_with_foreign_by_params((Project, project_uid), (Card, card_uid))
-    if not params:
-        raise ValueError("Card not found")
-    _, card = params
-    attachments = service.card_attachment.get_api_list_by_card(card)
-    return {"attachments": attachments}
-
-
-@McpTool.add(description="Get bot scopes for a card.")
-@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
-def get_card_bot_scopes(project_uid: str, card_uid: str, user_or_bot: User | Bot, service: DomainService) -> dict:
-    params = InfraHelper.get_records_with_foreign_by_params((Project, project_uid), (Card, card_uid))
-    if not params:
-        raise ValueError("Card not found")
-    project, card = params
-    api_card = service.card.get_details(project, card, user_or_bot)
-    if not api_card:
-        raise ValueError("Card not found")
-    bot_scopes = []
-    can_set = isinstance(user_or_bot, Bot)
-    if isinstance(user_or_bot, User):
-        actions = service.project.get_user_role_actions_by_project(user_or_bot, project)
-        can_set = ALL_GRANTED in actions or ProjectRoleAction.Update.value in actions
-    if can_set and not card.is_linked_resource:
-        bot_scopes = service.card.get_api_bot_scope_list(project, card)
-    return {"bot_scopes": bot_scopes}
-
-
 @McpTool.add(
     description="Create a card in an active project column; use column_uid='leftmost' for the first active column."
 )
@@ -209,7 +142,7 @@ def create_card(
     return api_card
 
 
-@McpTool.add(description="Change card details.")
+@McpTool.add(description="Change a card title or deadline; use revision-bound description tools for body edits.")
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
 def change_card_details(
     project_uid: str,
@@ -217,10 +150,9 @@ def change_card_details(
     user_or_bot: User | Bot,
     service: DomainService,
     title: str | None = None,
-    description: str | None = None,
     deadline_at: str | None = None,
 ) -> dict:
-    if title is None and description is None and deadline_at is None:
+    if title is None and deadline_at is None:
         raise ValueError("At least one card detail field is required")
     normalized_title = None
     if title is not None:
@@ -236,8 +168,6 @@ def change_card_details(
     form_dict = {}
     if normalized_title is not None:
         form_dict["title"] = normalized_title
-    if description is not None:
-        form_dict["description"] = EditorContentModel(content=description)
     if deadline_at is not None:
         form_dict["deadline_at"] = parsed_deadline
     _require_task_card(project_uid, card_uid)
@@ -248,8 +178,6 @@ def change_card_details(
         response = {}
         if normalized_title is not None:
             response["title"] = normalized_title
-        if description is not None:
-            response["description"] = convert_python_data(EditorContentModel(content=description))
         if deadline_at is not None:
             response["deadline_at"] = deadline_at
         return response
@@ -450,26 +378,6 @@ def provision_project(
     """Provision a template-backed project with its kanban workflow columns."""
 
     return create_template_project(title, description, "Other", user, service, template_name, infer_template_prefix)
-
-
-@McpTool.add(
-    description="Compatibility alias; migrate to create_card with column_uid='leftmost'. Retire after callers migrate."
-)
-@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
-def create_card_in_leftmost_column(
-    project_uid: str,
-    title: str,
-    user_or_bot: User | Bot,
-    service: DomainService,
-    description: str | None = None,
-    assign_user_uids: list[str] | None = None,
-) -> dict[str, Any]:
-    """Create a card without trusting a caller-provided destination column."""
-
-    api_card, column = _create_card_in_project(
-        project_uid, "leftmost", title, description, assign_user_uids, user_or_bot, service
-    )
-    return {"card": api_card, "column": {"uid": column["uid"], "name": column["name"]}}
 
 
 @McpTool.add(
