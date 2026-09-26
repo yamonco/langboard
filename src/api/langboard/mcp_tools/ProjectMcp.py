@@ -88,6 +88,18 @@ def create_project(
     return {"project_uid": project["uid"]}
 
 
+@McpTool.add("user", description="Compatibility entry for template-backed board creation.")
+def create_project_board(
+    title: str,
+    user: User,
+    service: DomainService,
+    description: str | None = None,
+    template_name: str | None = None,
+    infer_template_prefix: bool = False,
+) -> dict:
+    return create_template_project(title, description, "Other", user, service, template_name, infer_template_prefix)
+
+
 @McpTool.add(description="Check if the project is available.")
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
 def is_project_available(project_uid: str, service: DomainService) -> dict:

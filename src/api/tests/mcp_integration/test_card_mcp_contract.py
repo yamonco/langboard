@@ -9,7 +9,7 @@ os.environ.setdefault("PROJECT_NAME", "langboard")
 
 from langboard.card_workspace.application.dtos import CardBundleDto, CardBundleResponse  # noqa: E402
 from langboard.mcp_integration import McpRoleFilter, McpTool  # noqa: E402
-from langboard.mcp_tools import CardMcp  # noqa: E402, F401
+from langboard.mcp_tools import CardMcp, ProjectMcp  # noqa: E402, F401
 from langboard.routes.mcp.McpApi import serialize_mcp_result  # noqa: E402
 from langboard_shared.domain.models.bases import REACTION_TYPES  # noqa: E402
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction  # noqa: E402
@@ -61,6 +61,38 @@ def test_attachment_upload_requires_card_update_permission() -> None:
     _, actions, _, _ = McpRoleFilter.get_filtered(CardMcp.upload_card_attachment)
 
     assert actions == [ProjectRoleAction.CardUpdate.value]
+
+
+def test_plugin_compatibility_tools_preserve_native_contracts(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The deployed plugin's four calls remain registered with their original result shapes."""
+
+    for name in ("create_project_board", "create_card_in_leftmost_column", "get_card", "get_card_attachments"):
+        assert McpTool.get_tool(name) is not None
+    assert McpRoleFilter.get_filtered(CardMcp.create_card_in_leftmost_column)[1] == [
+        ProjectRoleAction.CardUpdate.value
+    ]
+    for read in (CardMcp.get_card, CardMcp.get_card_attachments):
+        assert McpRoleFilter.get_filtered(read)[1] == [ProjectRoleAction.Read.value]
+
+    monkeypatch.setattr(ProjectMcp, "create_template_project", lambda *args: {"project": {"uid": "board"}})
+    assert ProjectMcp.create_project_board("Board", None, None)["project"]["uid"] == "board"
+    monkeypatch.setattr(
+        CardMcp,
+        "_create_card_in_project",
+        lambda *args: ({"uid": "card"}, {"uid": "column", "name": "Ready"}),
+    )
+    assert CardMcp.create_card_in_leftmost_column("board", "Card", None, None) == {
+        "card": {"uid": "card"},
+        "column": {"uid": "column", "name": "Ready"},
+    }
+    card = object()
+    monkeypatch.setattr(CardMcp, "_get_card_in_project", lambda *args: (object(), card))
+    service = SimpleNamespace(
+        card=SimpleNamespace(get_details=lambda *args: {"description": "![img](image.png)"}),
+        card_attachment=SimpleNamespace(get_api_list_by_card=lambda value: [{"uid": "attachment", "url": "image.png"}]),
+    )
+    assert "description" in CardMcp.get_card("board", "card", None, service)
+    assert CardMcp.get_card_attachments("board", "card", service)["attachments"][0]["uid"] == "attachment"
 
 
 def test_comment_tools_use_native_owner_without_workspace_adapter(monkeypatch: pytest.MonkeyPatch) -> None:
