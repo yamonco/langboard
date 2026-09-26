@@ -9,6 +9,7 @@ export interface IChangeCardCheckitemStatusForm {
     card_uid: string;
     checkitem_uid: string;
     status: ProjectCheckitem.ECheckitemStatus;
+    replace_active?: bool;
 }
 
 const useChangeCardCheckitemStatus = (options?: TMutationOptions<IChangeCardCheckitemStatusForm>) => {
@@ -24,6 +25,7 @@ const useChangeCardCheckitemStatus = (options?: TMutationOptions<IChangeCardChec
             url,
             {
                 status: params.status,
+                replace_active: params.replace_active ?? false,
             },
             {
                 env: {

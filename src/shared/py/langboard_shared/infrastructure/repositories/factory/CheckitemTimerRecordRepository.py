@@ -87,4 +87,4 @@ class CheckitemTimerRecordRepository(BaseRepository[CheckitemTimerRecord]):
 
         with DbSession.use(readonly=True) as db:
             rows = db.exec(SqlBuilder.select.column(ranked.c.id).where(ranked.c.row_number == 1)).all()
-        return [SnowflakeID(row[0]) for row in rows]
+        return [SnowflakeID(row) for row in rows]

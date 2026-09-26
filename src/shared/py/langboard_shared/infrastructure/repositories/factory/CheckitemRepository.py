@@ -142,16 +142,21 @@ class CheckitemRepository(BaseOrderRepository[Checkitem, Checklist]):
             checkitems = result.all()
         return checkitems
 
-    def find_started_checkitem_by_user(self, user: TUserParam):
+    def get_started_work_by_user(self, user: TUserParam) -> list[tuple[Checkitem, Card, Project]]:
         user_id = InfraHelper.convert_id(user)
-        record = None
-        with DbSession.use(readonly=True) as db:
-            result = db.exec(
-                SqlBuilder.select.table(Checkitem)
-                .where(
-                    (Checkitem.column("user_id") == user_id) & (Checkitem.column("status") == CheckitemStatus.Started)
-                )
-                .limit(1)
+        query = (
+            SqlBuilder.select.tables(Checkitem, Card, Project)
+            .join(Checklist, Checklist.column("id") == Checkitem.column("checklist_id"))
+            .join(Card, Card.column("id") == Checklist.column("card_id"))
+            .join(Project, Project.column("id") == Card.column("project_id"))
+            .where(
+                (Checkitem.column("user_id") == user_id) & (Checkitem.column("status") == CheckitemStatus.Started)
             )
-            record = result.first()
-        return record
+            .order_by(Checkitem.column("updated_at").desc(), Checkitem.column("id").desc())
+        )
+        with DbSession.use(readonly=True) as db:
+            return list(db.exec(query).all())
+
+    def find_started_checkitem_by_user(self, user: TUserParam):
+        records = self.get_started_work_by_user(user)
+        return records[0][0] if records else None
