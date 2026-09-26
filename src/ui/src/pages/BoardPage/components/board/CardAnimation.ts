@@ -23,6 +23,38 @@ export const takeCardOrigin = (projectUID: string, cardUID: string): CardRect | 
 };
 
 /**
+ * Open-animation session gate.
+ *
+ * The viewer entry animation may only start once per logical viewer session.
+ * Dialog content remounts — app-root Suspense fallback swaps, provider
+ * re-keys, double-invoked development mounts — must not replay the entry
+ * animation. Click-open captures an origin rect and therefore always
+ * animates, even inside the suppression window.
+ */
+export const OPEN_REPLAY_SUPPRESSION_MS = 1500;
+
+const openAnimationSessions = new Map<string, number>();
+
+const openAnimationSessionKey = (projectUID: string, cardUID: string): string => `${projectUID}:${cardUID}`;
+
+export const shouldPlayCardOpenAnimation = (projectUID: string, cardUID: string, hasOrigin: boolean, now: number = Date.now()): boolean => {
+    if (hasOrigin) {
+        return true;
+    }
+
+    const playedAt = openAnimationSessions.get(openAnimationSessionKey(projectUID, cardUID));
+    return playedAt === undefined || now - playedAt > OPEN_REPLAY_SUPPRESSION_MS;
+};
+
+export const markCardOpenAnimationPlayed = (projectUID: string, cardUID: string, now: number = Date.now()): void => {
+    openAnimationSessions.set(openAnimationSessionKey(projectUID, cardUID), now);
+};
+
+export const clearCardOpenAnimationSession = (projectUID: string, cardUID: string): void => {
+    openAnimationSessions.delete(openAnimationSessionKey(projectUID, cardUID));
+};
+
+/**
  * Build the CSS properties for the card open animation.
  * Uses transform and opacity only — no layout-triggering properties.
  */
