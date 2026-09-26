@@ -87,17 +87,8 @@
     transition: stroke-dasharray 280ms ease;
 }
 
-/* A fully completed checklist settles the whole card into a neutral surface. */
-[data-checklist-completed="true"],
-[data-checklist-completed="true"]:hover {
-    border-color: hsl(var(--border));
-    background-color: hsl(var(--muted));
-}
-
 [data-checklist-completed="true"] .board-card-progress-value {
     stroke: hsl(var(--muted-foreground));
-    /* Settle the accent ring to the track weight so the closed loop reads flush with the neutral border. */
-    stroke-width: 1;
 }
 
 .board-card-deadline-aura::after {
