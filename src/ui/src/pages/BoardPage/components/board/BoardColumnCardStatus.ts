@@ -32,9 +32,7 @@ export const getChecklistBorderDashes = (completed: number, total: number, perim
     const segment = 1 - gap;
     return {
         track: `${segment} ${gap}`,
-        value: Array.from({ length: done }, (_, index) => (index === done - 1 ? `${segment} ${count - done + gap}` : `${segment} ${gap}`)).join(
-            " "
-        ),
+        value: Array.from({ length: done }, (_, index) => (index === done - 1 ? `${segment} ${count - done + gap}` : `${segment} ${gap}`)).join(" "),
     };
 };
 
