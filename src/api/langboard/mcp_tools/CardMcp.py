@@ -72,6 +72,28 @@ def _require_task_card(project_uid: str, card_uid: str) -> tuple[Project, Card]:
     return params
 
 
+@McpTool.add(description="Compatibility entry for the complete card image source.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+def get_card(project_uid: str, card_uid: str, user_or_bot: User | Bot, service: DomainService) -> dict:
+    params = _get_card_in_project(project_uid, card_uid)
+    if not params:
+        raise ValueError("Card not found")
+    project, card = params
+    details = service.card.get_details(project, card, user_or_bot)
+    if not details:
+        raise ValueError("Card not found")
+    return details
+
+
+@McpTool.add(description="Compatibility entry for card attachment image selection.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+def get_card_attachments(project_uid: str, card_uid: str, service: DomainService) -> dict:
+    params = _get_card_in_project(project_uid, card_uid)
+    if not params:
+        raise ValueError("Card not found")
+    return {"attachments": service.card_attachment.get_api_list_by_card(params[1])}
+
+
 def _create_card_in_project(
     project_uid: str,
     column_uid: str,
@@ -140,6 +162,22 @@ def create_card(
         project_uid, column_uid, title, description, assign_user_uids, user_or_bot, service
     )
     return api_card
+
+
+@McpTool.add(description="Compatibility entry for creating in the leftmost active column.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+def create_card_in_leftmost_column(
+    project_uid: str,
+    title: str,
+    user_or_bot: User | Bot,
+    service: DomainService,
+    description: str | None = None,
+    assign_user_uids: list[str] | None = None,
+) -> dict:
+    card, column = _create_card_in_project(
+        project_uid, "leftmost", title, description, assign_user_uids, user_or_bot, service
+    )
+    return {"card": card, "column": {"uid": column["uid"], "name": column["name"]}}
 
 
 @McpTool.add(description="Change a card title or deadline; use revision-bound description tools for body edits.")
