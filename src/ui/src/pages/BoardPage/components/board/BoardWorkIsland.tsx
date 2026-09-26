@@ -188,19 +188,15 @@ export default function BoardWorkIsland({
                 variant={over ? "default" : current ? "secondary" : "ghost"}
                 disabled={busy}
                 className={cn(
-                    "h-11 shrink-0 gap-2 rounded-full px-3 transition-[width,background-color,transform] duration-200",
+                    "h-11 min-w-0 shrink-0 gap-1 rounded-xl px-2 transition-[width,background-color,transform] duration-200 md:gap-2 md:rounded-full md:px-3",
                     dragging ? "min-w-44 border border-dashed border-primary/60 md:px-4" : "min-w-0",
                     over && "scale-[1.03]"
                 )}
                 aria-label={over ? "Release to start work" : currentLabel}
-                onClick={() => {
-                    if (current) {
-                        navigate(ROUTES.DASHBOARD.TRACKING, { smooth: true });
-                    }
-                }}
+                onClick={() => navigate(ROUTES.DASHBOARD.TRACKING, { smooth: true })}
             >
                 <IconComponent icon="hammer" size="4" />
-                <span className={cn("max-w-44 truncate text-xs", !dragging && !current && "md:max-w-20")}>
+                <span className={cn("max-w-16 truncate text-xs md:max-w-44", !dragging && !current && "md:max-w-20")}>
                     {over ? "Release to start work" : dragging ? "Drop to start work" : currentLabel}
                 </span>
             </Button>
