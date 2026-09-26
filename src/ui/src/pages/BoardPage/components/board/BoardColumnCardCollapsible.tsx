@@ -11,14 +11,13 @@ import { useBoardController } from "@/core/providers/BoardController";
 import { useBoard } from "@/core/providers/BoardProvider";
 import { ROUTES } from "@/core/routing/constants";
 import { cn } from "@/core/utils/ComponentUtils";
-import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import SelectRelationshipDialog from "@/pages/BoardPage/components/board/SelectRelationshipDialog";
 import BoardColumnCardRelationship from "@/pages/BoardPage/components/board/BoardColumnCardRelationship";
 import { LabelModelBadge } from "@/components/LabelBadge";
 import { ModelRegistry } from "@/core/models/ModelRegistry";
 import { IBoardColumnCardContextParams } from "@/pages/BoardPage/components/board/BoardConstants";
-import useCardStore, { useCardIsCollapsed } from "@/core/stores/CardStore";
 import { useHasRunningBot } from "@/core/stores/BotStatusStore";
 import BoardGraphApprovalTargetBadge from "@/pages/BoardPage/components/board/BoardGraphApprovalTargetBadge";
 import { EGraphApprovalScopeTable } from "@/core/models/GraphApprovalRequestModel";
@@ -141,8 +140,6 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
     );
     const { mutateAsync: setCardCompletedAsync } = useSetCardCompleted({ interceptToast: true });
     const hasUnreadChange = card.useField("has_unread_change") ?? false;
-    const { updateCollapsed } = useCardStore();
-    const isCollapsed = useCardIsCollapsed(card.uid);
     const labels = card.useForeignFieldArray("labels");
     const cardRelationships = card.useForeignFieldArray("relationships");
     const hasRunningBot = useHasRunningBot({ type: "card", targetUID: card.uid });
@@ -190,14 +187,6 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
         [card, completed, project.uid, setCardCompletedAsync]
     );
 
-    const handleOpenCollapsible = useCallback(
-        (e: React.MouseEvent<HTMLButtonElement>) => {
-            e.preventDefault();
-            e.stopPropagation();
-            updateCollapsed(card.uid, !isCollapsed);
-        },
-        [card, isCollapsed, updateCollapsed]
-    );
     const presentableRelationships = useMemo(() => {
         const relationships: [string, string][] = [];
 
@@ -243,24 +232,9 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
         return relationships;
     }, [card, cardsMap, cardRelationships, filters, globalRelationshipTypes, selectCardViewType, selectedRelationship]);
 
-    useEffect(() => {
-        if (selectCardViewType && selectedRelationship) {
-            updateCollapsed(card.uid, false);
-        }
-    }, [card, selectCardViewType, selectedRelationship, updateCollapsed]);
-
-    useEffect(() => {
-        if (presentableRelationships.length) {
-            updateCollapsed(card.uid, false);
-        }
-    }, [card, filters, presentableRelationships.length, updateCollapsed]);
-
     const attributes = {
         [DISABLE_DRAGGING_ATTR]: "",
     };
-
-    // Check cards stay collapsed: no expand affordances, no always-on meta, only a hover checkbox.
-    const showCollapsedOnly = isCheckCard && !compact;
 
     return (
         <>
@@ -302,26 +276,20 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
                         className="absolute right-1.5 top-1.5 z-40 size-2 rounded-full bg-primary"
                     />
                 )}
-                <Collapsible.Root
-                    open={!compact && !isCollapsed && !showCollapsedOnly}
-                    onOpenChange={(opened) => {
-                        updateCollapsed(card.uid, !opened);
-                    }}
-                >
-                    <Card.Header className={cn("relative block space-y-0", compact ? "px-3 py-2" : "py-4", showCollapsedOnly && "py-2.5")}>
-                        {!compact && !isCollapsed && !showCollapsedOnly && !!labels.length && (
+                <Collapsible.Root open>
+                    <Card.Header className={cn("relative block space-y-0", compact ? "px-3 py-2" : "py-4")}>
+                        {!compact && !!labels.length && (
                             <Flex items="center" gap="1" mb="1.5" wrap>
                                 {labels.map((label) => (
                                     <LabelModelBadge key={`board-card-label-${label.uid}`} model={label} />
                                 ))}
                             </Flex>
                         )}
-                        {!compact && !isCollapsed && !showCollapsedOnly && <BoardTaskMetadataBadges cardUID={card.uid} compact className="mb-1.5" />}
+                        {!compact && <BoardTaskMetadataBadges cardUID={card.uid} compact className="mb-1.5" />}
                         <Card.Title
                             className={cn(
                                 "break-all leading-tight",
                                 compact ? "max-w-full text-sm font-medium text-muted-foreground" : "max-w-[calc(100%_-_theme(spacing.8))]",
-                                showCollapsedOnly && "text-sm",
                                 completed && "line-through opacity-60"
                             )}
                         >
@@ -337,7 +305,7 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
                                 {title}
                             </button>
                         </Card.Title>
-                        {showCollapsedOnly && (
+                        {isCheckCard && !compact && (
                             <Button
                                 variant="ghost"
                                 className="absolute left-1.5 top-1/2 z-10 -translate-y-1/2 opacity-0 transition-opacity group-hover/card:opacity-100"
@@ -350,46 +318,39 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
                                 <IconComponent icon={completed ? "check" : "circle"} size="4" className="text-muted-foreground" />
                             </Button>
                         )}
-                        {!compact && !showCollapsedOnly && (
+                        {!compact && (
                             <BoardGraphApprovalTargetBadge
                                 projectUID={project.uid}
                                 scopeTable={EGraphApprovalScopeTable.Card}
                                 scopeUID={card.uid}
-                                className="absolute right-11 top-3"
+                                className="absolute right-2 top-3"
                             />
                         )}
-                        {!compact && !showCollapsedOnly && (
-                            <Button
-                                variant="ghost"
-                                className={cn("absolute right-0 top-0 mt-0 size-11 md:right-1 md:top-1 md:size-8")}
-                                size="icon-sm"
-                                title={t(`common.${!isCollapsed ? "Collapse" : "Expand"}`)}
-                                titleSide="top"
-                                onClick={handleOpenCollapsible}
-                                {...attributes}
-                            >
-                                <IconComponent icon="chevron-down" size="4" className={cn("transition-all", !isCollapsed && "rotate-180")} />
-                            </Button>
-                        )}
                     </Card.Header>
-                    {showCollapsedOnly ? (
-                        <>
-                            {!!cardMembers.length && (
-                                <div className="flex items-center justify-end px-4 pb-1.5">
-                                    <UserAvatarList
-                                        maxVisible={3}
-                                        userOrBots={cardMembers}
-                                        scope={{
-                                            projectUID: project.uid,
-                                            cardUID: card.uid,
-                                        }}
-                                        size="sm"
-                                        {...attributes}
-                                        className="cursor-default"
-                                    />
-                                </div>
-                            )}
-                            <div className="flex items-center px-4 pb-2 opacity-0 transition-opacity duration-200 group-hover/card:opacity-100">
+                    <Collapsible.Content
+                        className={cn(
+                            "overflow-hidden text-sm transition-all",
+                            "data-[state=closed]:animate-collapse-up data-[state=open]:animate-collapse-down"
+                        )}
+                    >
+                        {!!presentableRelationships.length && (
+                            <Card.Content className="px-6 pb-4">
+                                {presentableRelationships.map(([relatedCardTitle, relationshipName], index) => (
+                                    <Flex
+                                        key={`board-card-presentable-relationship-${card.uid}-${relationshipName}-${relatedCardTitle}-${index}`}
+                                        items="center"
+                                        gap="2"
+                                        className="truncate text-accent-foreground/70"
+                                    >
+                                        <span>{relationshipName}</span>
+                                        <span className="text-muted-foreground">&gt;</span>
+                                        <span className="truncate">{relatedCardTitle}</span>
+                                    </Flex>
+                                ))}
+                            </Card.Content>
+                        )}
+                        <Card.Footer className="flex items-end justify-between gap-1.5 pb-4">
+                            <Flex items="center">
                                 {creator && (
                                     <span
                                         title={t("card.Created by {{name}}", {
@@ -411,93 +372,36 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
                                         </Avatar.Root>
                                     </span>
                                 )}
-                                <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                                    {commentCount ? (
-                                        <>
-                                            <IconComponent icon="message-square" size="3.5" />
-                                            <span>{commentCount}</span>
-                                        </>
-                                    ) : null}
-                                </span>
-                            </div>
-                        </>
-                    ) : (
-                        <Collapsible.Content
-                            className={cn(
-                                "overflow-hidden text-sm transition-all",
-                                "data-[state=closed]:animate-collapse-up data-[state=open]:animate-collapse-down"
-                            )}
-                        >
-                            {!!presentableRelationships.length && (
-                                <Card.Content className="px-6 pb-4">
-                                    {presentableRelationships.map(([relatedCardTitle, relationshipName], index) => (
-                                        <Flex
-                                            key={`board-card-presentable-relationship-${card.uid}-${relationshipName}-${relatedCardTitle}-${index}`}
-                                            items="center"
-                                            gap="2"
-                                            className="truncate text-accent-foreground/70"
-                                        >
-                                            <span>{relationshipName}</span>
-                                            <span className="text-muted-foreground">&gt;</span>
-                                            <span className="truncate">{relatedCardTitle}</span>
-                                        </Flex>
-                                    ))}
-                                </Card.Content>
-                            )}
-                            <Card.Footer className="flex items-end justify-between gap-1.5 pb-4">
-                                <Flex items="center">
-                                    {creator && (
-                                        <span
-                                            title={t("card.Created by {{name}}", {
-                                                name: creator.name,
-                                            })}
-                                            className={cn(
-                                                "mr-0 inline-flex max-w-0 overflow-hidden opacity-0 transition-all duration-200 ease-out",
-                                                "group-hover/card:mr-2 group-hover/card:max-w-8 group-hover/card:opacity-100"
-                                            )}
-                                            {...attributes}
-                                        >
-                                            <Avatar.Root size="xs">
-                                                {creator.avatar && (
-                                                    <Avatar.Image src={Utils.String.convertServerFileURL(creator.avatar)} alt={creator.name} />
-                                                )}
-                                                <Avatar.Fallback className="text-[10px] font-medium">
-                                                    {Utils.String.getInitials(creator.name, "")}
-                                                </Avatar.Fallback>
-                                            </Avatar.Root>
-                                        </span>
-                                    )}
-                                    {widgetVisibility.showDescriptionIcon && (
-                                        <IconComponent
-                                            icon="file-text"
-                                            size="4"
-                                            className="text-secondary"
-                                            strokeWidth="4"
-                                            {...attributes}
-                                            aria-label={t("card.Description")}
-                                        />
-                                    )}
-                                    {widgetVisibility.showCommentCount && (
-                                        <span className="ml-2 flex items-center gap-1">
-                                            <IconComponent icon="message-square" size="4" className="text-secondary" strokeWidth="4" />
-                                            <span>{commentCount}</span>
-                                        </span>
-                                    )}
-                                </Flex>
-                                <UserAvatarList
-                                    maxVisible={3}
-                                    userOrBots={cardMembers}
-                                    scope={{
-                                        projectUID: project.uid,
-                                        cardUID: card.uid,
-                                    }}
-                                    size="sm"
-                                    {...attributes}
-                                    className="cursor-default"
-                                />
-                            </Card.Footer>
-                        </Collapsible.Content>
-                    )}
+                                {widgetVisibility.showDescriptionIcon && (
+                                    <IconComponent
+                                        icon="file-text"
+                                        size="4"
+                                        className="text-secondary"
+                                        strokeWidth="4"
+                                        {...attributes}
+                                        aria-label={t("card.Description")}
+                                    />
+                                )}
+                                {widgetVisibility.showCommentCount && (
+                                    <span className="ml-2 flex items-center gap-1">
+                                        <IconComponent icon="message-square" size="4" className="text-secondary" strokeWidth="4" />
+                                        <span>{commentCount}</span>
+                                    </span>
+                                )}
+                            </Flex>
+                            <UserAvatarList
+                                maxVisible={3}
+                                userOrBots={cardMembers}
+                                scope={{
+                                    projectUID: project.uid,
+                                    cardUID: card.uid,
+                                }}
+                                size="sm"
+                                {...attributes}
+                                className="cursor-default"
+                            />
+                        </Card.Footer>
+                    </Collapsible.Content>
                 </Collapsible.Root>
                 <BoardColumnCardRelationship attributes={attributes} compact={compact} />
             </Card.Root>
