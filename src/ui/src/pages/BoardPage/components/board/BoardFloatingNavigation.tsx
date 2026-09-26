@@ -61,24 +61,24 @@ export default function BoardFloatingNavigation({
             )}
             trailing={
                 dockEnabled && (
-                    <div className="hidden min-w-0 items-center md:flex">
+                    <div className="flex min-w-0 items-center">
                         <span role="separator" aria-orientation="vertical" className="mx-1 h-6 w-px shrink-0 bg-border" />
                         <BoardWorkIsland project={project} dragging={dragging} />
                         {pinned.length > 0 && (
-                            <>
+                            <div className="hidden min-w-0 items-center md:flex">
                                 <span role="separator" aria-orientation="vertical" className="mx-1 h-6 w-px shrink-0 bg-border" />
                                 <div className="flex min-w-0 max-w-[35vw] gap-1 overflow-x-auto">
                                     {pinned.map((column) => (
                                         <DockTarget key={column.uid} column={column} canDrop={canDrop} dragging={dragging} />
                                     ))}
                                 </div>
-                            </>
+                            </div>
                         )}
                         {archive && (
-                            <>
+                            <div className="hidden items-center md:flex">
                                 <span role="separator" aria-orientation="vertical" className="mx-1 h-6 w-px shrink-0 bg-border" />
                                 <DockTarget column={archive} canDrop={canDrop} dragging={dragging} />
-                            </>
+                            </div>
                         )}
                     </div>
                 )
