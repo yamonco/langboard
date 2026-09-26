@@ -87,12 +87,11 @@
     transition: stroke-dasharray 280ms ease;
 }
 
-/* Terminated state: a fully completed checklist closes the progress frame.
-   The card keeps its geometry and semantic label/avatar colors; only the
-   frame, border, and title emphasis drop to neutral tokens. */
+/* A fully completed checklist settles the whole card into a neutral surface. */
 [data-checklist-completed="true"],
 [data-checklist-completed="true"]:hover {
     border-color: hsl(var(--border));
+    background-color: hsl(var(--muted));
 }
 
 [data-checklist-completed="true"] .board-card-progress-value {
