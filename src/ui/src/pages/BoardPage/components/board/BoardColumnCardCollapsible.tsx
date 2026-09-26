@@ -322,10 +322,7 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
                                 "break-all leading-tight",
                                 compact ? "max-w-full text-sm font-medium text-muted-foreground" : "max-w-[calc(100%_-_theme(spacing.8))]",
                                 showCollapsedOnly && "text-sm",
-                                completed && "line-through opacity-60",
-                                // Finished work reads with reduced emphasis; semantic
-                                // label and avatar colors outside the title are untouched.
-                                isChecklistTerminated && "text-muted-foreground"
+                                completed && "line-through opacity-60"
                             )}
                         >
                             <button
