@@ -24,7 +24,7 @@ export function SkeletonBoardColumnCard({ ref }: { ref?: React.Ref<HTMLDivElemen
     return (
         <Card.Root className="border-transparent shadow-transparent" ref={ref}>
             <Card.Header className="relative block py-4">
-                <Card.Title className="max-w-[calc(100%_-_theme(spacing.8))] leading-tight">
+                <Card.Title className="leading-tight">
                     <Skeleton display="inline-block" h="4" className="w-3/4" />
                 </Card.Title>
             </Card.Header>

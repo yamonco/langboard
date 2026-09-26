@@ -286,10 +286,18 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
                             </Flex>
                         )}
                         {!compact && <BoardTaskMetadataBadges cardUID={card.uid} compact className="mb-1.5" />}
+                        {!compact && (
+                            <BoardGraphApprovalTargetBadge
+                                projectUID={project.uid}
+                                scopeTable={EGraphApprovalScopeTable.Card}
+                                scopeUID={card.uid}
+                                className="float-right ml-1"
+                            />
+                        )}
                         <Card.Title
                             className={cn(
                                 "break-all leading-tight",
-                                compact ? "max-w-full text-sm font-medium text-muted-foreground" : "max-w-[calc(100%_-_theme(spacing.8))]",
+                                compact && "text-sm font-medium text-muted-foreground",
                                 completed && "line-through opacity-60"
                             )}
                         >
@@ -317,14 +325,6 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
                             >
                                 <IconComponent icon={completed ? "check" : "circle"} size="4" className="text-muted-foreground" />
                             </Button>
-                        )}
-                        {!compact && (
-                            <BoardGraphApprovalTargetBadge
-                                projectUID={project.uid}
-                                scopeTable={EGraphApprovalScopeTable.Card}
-                                scopeUID={card.uid}
-                                className="absolute right-2 top-3"
-                            />
                         )}
                     </Card.Header>
                     <Collapsible.Content
