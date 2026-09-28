@@ -45,7 +45,10 @@ class CardPublisher(BaseSocketPublisher):
                 topic=SocketTopic.Dashboard,
                 topic_id=topic_id,
                 event=f"dashboard:card:created:{topic_id}",
-                custom_data={"project_column_uid": column.get_uid()},
+                custom_data={
+                    "project_column_uid": column.get_uid(),
+                    "source_type": model.get("card", {}).get("source_type"),
+                },
             ),
         ]
 
@@ -156,6 +159,7 @@ class CardPublisher(BaseSocketPublisher):
                         custom_data={
                             "uid": card_uid,
                             "from_column_uid": old_column_uid,
+                            "source_type": card.source_type,
                         },
                     ),
                 ]
@@ -218,6 +222,7 @@ class CardPublisher(BaseSocketPublisher):
                 custom_data={
                     "uid": card_uid,
                     "project_column_uid": column_uid,
+                    "source_type": card.source_type,
                 },
             ),
         ]
