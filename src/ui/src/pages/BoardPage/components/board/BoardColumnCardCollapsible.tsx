@@ -27,7 +27,10 @@ import {
     calculateDeadlinePressure,
     getChecklistBorderDashes,
     getDeadlinePressureLevel,
+    getOverdueDays,
+    getUpcomingDeadlineDays,
     isChecklistCompleted,
+    isDeadlineFinished,
     type IBoardCardChecklistProgress,
 } from "@/pages/BoardPage/components/board/BoardColumnCardStatus";
 import BoardTaskMetadataBadges from "@/pages/BoardPage/components/task/BoardTaskMetadataBadges";
@@ -109,6 +112,7 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
     const { model: card } = ModelRegistry.ProjectCard.useContext<IBoardColumnCardContextParams>();
     const title = card.useField("title");
     const deadlineAt = card.useField("deadline_at");
+    const archivedAt = card.useField("archived_at");
     const checklistCompletedCount = card.useField("checklist_completed_count") ?? 0;
     const checklistTotalCount = card.useField("checklist_total_count") ?? 0;
     const checklistProgress = useMemo(
@@ -116,14 +120,17 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
         [checklistCompletedCount, checklistTotalCount]
     );
     const isChecklistTerminated = isChecklistCompleted(checklistProgress);
+    const isFinished = isDeadlineFinished({ archivedAt, checklist: checklistProgress });
     const deadlinePressure = useMemo(
-        () => calculateDeadlinePressure({ deadlineAt, isCompleted: isChecklistTerminated, now: deadlineClock }),
-        [deadlineAt, isChecklistTerminated, deadlineClock]
+        () => calculateDeadlinePressure({ deadlineAt, isCompleted: isFinished, now: deadlineClock }),
+        [deadlineAt, isFinished, deadlineClock]
     );
     const deadlinePressureLevel = useMemo(
-        () => getDeadlinePressureLevel({ deadlineAt, isCompleted: isChecklistTerminated, now: deadlineClock }),
-        [deadlineAt, isChecklistTerminated, deadlineClock]
+        () => getDeadlinePressureLevel({ deadlineAt, isCompleted: isFinished, now: deadlineClock }),
+        [deadlineAt, isFinished, deadlineClock]
     );
+    const overdueDays = getOverdueDays({ deadlineAt, now: deadlineClock });
+    const upcomingDays = getUpcomingDeadlineDays({ deadlineAt, now: deadlineClock, isCompleted: isFinished });
     const projectMembers = project.useForeignFieldArray("all_members");
     const cardMemberUIDs = card.useField("member_uids") ?? [];
     const cardMembers = useMemo(
@@ -246,6 +253,7 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
                 className={cn(
                     "group/card relative hover:border-primary",
                     deadlinePressure > 0 && "board-card-deadline-aura",
+                    deadlinePressureLevel === "overdue" && !isDragging && "board-card-overdue-shake",
                     compact && "border-border/60 bg-background/80 shadow-none transition-colors hover:bg-background",
                     checklistProgress.total > 0 && "border-transparent hover:border-transparent",
                     !!selectCardViewType && isDisabledCard(card.uid) ? "cursor-not-allowed" : "cursor-pointer"
@@ -253,14 +261,27 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
                 style={{ "--board-card-deadline-pressure": deadlinePressure } as React.CSSProperties}
                 onClick={openCard}
             >
+                {deadlinePressureLevel === "overdue" && (
+                    <div className="board-card-overdue-banner" aria-label={t("card.Overdue by {{days}} days", { days: overdueDays })}>
+                        <IconComponent icon="alarm-clock" size="3.5" aria-hidden="true" />
+                        <strong>{overdueDays > 0 ? t("card.Overdue by {{days}} days", { days: overdueDays }) : t("card.Overdue")}</strong>
+                    </div>
+                )}
+                {upcomingDays !== null && (
+                    <div className="board-card-due-banner" aria-label={upcomingDays === 0 ? t("card.D-Day") : `D-${upcomingDays}`}>
+                        <IconComponent icon="clock-3" size="3.5" aria-hidden="true" />
+                        <strong>{upcomingDays === 0 ? t("card.D-Day") : `D-${upcomingDays}`}</strong>
+                    </div>
+                )}
                 <BoardCardProgressTrace progress={checklistProgress} />
-                {checklistProgress.total > 0 && (
+                {(checklistProgress.total > 0 || deadlineAt) && (
                     <span className="sr-only">
                         {[
-                            t("card.Checklist progress: {{completed}} of {{total}} complete", {
-                                completed: checklistProgress.completed,
-                                total: checklistProgress.total,
-                            }),
+                            checklistProgress.total > 0 &&
+                                t("card.Checklist progress: {{completed}} of {{total}} complete", {
+                                    completed: checklistProgress.completed,
+                                    total: checklistProgress.total,
+                                }),
                             deadlineAt && t("card.Deadline {{date}}", { date: Utils.String.formatDateLocale(deadlineAt) }),
                             deadlinePressureLevel === "critical" && t("card.Due within a day"),
                             deadlinePressureLevel === "overdue" && t("card.Overdue"),

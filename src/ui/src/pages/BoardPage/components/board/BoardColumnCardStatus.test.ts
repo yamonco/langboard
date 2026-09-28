@@ -8,6 +8,9 @@ import {
     getChecklistBorderDashes,
     DEADLINE_PRESSURE_WINDOW_MS,
     getDeadlinePressureLevel,
+    getOverdueDays,
+    getUpcomingDeadlineDays,
+    isDeadlineFinished,
     isChecklistCompleted,
 } from "./BoardColumnCardStatus.ts";
 
@@ -51,6 +54,13 @@ describe("board column card status", () => {
         assert.equal(isChecklistCompleted(calculateChecklistProgressFromCounts(0, 0)), false);
     });
 
+    it("suppresses deadline warnings only for archived or fully checked cards", () => {
+        assert.equal(isDeadlineFinished({ checklist: { completed: 0, total: 0 } }), false);
+        assert.equal(isDeadlineFinished({ checklist: { completed: 1, total: 2 } }), false);
+        assert.equal(isDeadlineFinished({ checklist: { completed: 2, total: 2 } }), true);
+        assert.equal(isDeadlineFinished({ archivedAt: new Date(), checklist: { completed: 0, total: 2 } }), true);
+    });
+
     it("removes deadline pressure and aura styling for terminated cards", () => {
         const now = new Date("2026-09-17T00:00:00.000Z");
         const overdueButTerminated = { deadlineAt: new Date(now.getTime() - 1), isCompleted: true, now };
@@ -84,5 +94,24 @@ describe("board column card status", () => {
         assert.equal(getDeadlinePressureLevel({ deadlineAt: at(0.5), now }), "critical");
         assert.equal(getDeadlinePressureLevel({ deadlineAt: at(-0.1), now }), "overdue");
         assert.equal(getDeadlinePressureLevel({ deadlineAt: at(-0.1), isCompleted: true, now }), "none");
+    });
+
+    it("shows overdue calendar days in the user's local timezone", () => {
+        const now = new Date(2026, 8, 29, 12);
+        assert.equal(getOverdueDays({ deadlineAt: undefined, now }), 0);
+        assert.equal(getOverdueDays({ deadlineAt: new Date(2026, 8, 29, 8), now }), 0);
+        assert.equal(getOverdueDays({ deadlineAt: new Date(2026, 8, 26, 23), now }), 3);
+        assert.equal(getOverdueDays({ deadlineAt: new Date(2026, 8, 30, 8), now }), 0);
+    });
+
+    it("shows D-3 through D-Day by local calendar date and hides finished work", () => {
+        const now = new Date(2026, 8, 29, 12);
+        const at = (day: number, hour = 8) => new Date(2026, 8, day, hour);
+        assert.equal(getUpcomingDeadlineDays({ deadlineAt: at(32, 23), now }), 3);
+        assert.equal(getUpcomingDeadlineDays({ deadlineAt: at(30), now }), 1);
+        assert.equal(getUpcomingDeadlineDays({ deadlineAt: at(29, 18), now }), 0);
+        assert.equal(getUpcomingDeadlineDays({ deadlineAt: at(29, 8), now }), null);
+        assert.equal(getUpcomingDeadlineDays({ deadlineAt: at(33), now }), null);
+        assert.equal(getUpcomingDeadlineDays({ deadlineAt: at(30), now, isCompleted: true }), null);
     });
 });
