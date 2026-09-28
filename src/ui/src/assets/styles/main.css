@@ -113,11 +113,39 @@
         0 0 0 1px hsl(var(--destructive) / calc(0.08 + 0.3 * var(--board-card-deadline-pressure)));
 }
 
+.board-card-deadline-aura[data-deadline-pressure-level="overdue"]::after {
+    box-shadow:
+        0 0 24px 5px hsl(0 90% 55% / 0.52),
+        0 0 0 2px hsl(0 90% 55% / 0.7);
+}
+
+.board-card-overdue-banner {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.35rem 1rem;
+    background: hsl(0 90% 55% / 0.14);
+    color: hsl(0 75% 38%);
+    font-size: 0.75rem;
+    line-height: 1.25rem;
+}
+
+.dark .board-card-overdue-banner { color: hsl(0 95% 78%); }
+
+.board-card-overdue-shake { animation: board-card-overdue-shake 1.8s infinite; }
+
+@keyframes board-card-overdue-shake {
+    0%, 82%, 100% { translate: 0 0; }
+    86%, 94% { translate: -1px 0; }
+    90%, 98% { translate: 1px 0; }
+}
+
 @media (prefers-reduced-motion: reduce) {
     .board-card-progress-value,
     .board-card-deadline-aura::after {
         transition: none;
     }
+    .board-card-overdue-shake { animation: none; }
 }
 
 @layer base {

@@ -27,6 +27,7 @@ import {
     calculateDeadlinePressure,
     getChecklistBorderDashes,
     getDeadlinePressureLevel,
+    getOverdueDays,
     isChecklistCompleted,
     type IBoardCardChecklistProgress,
 } from "@/pages/BoardPage/components/board/BoardColumnCardStatus";
@@ -116,14 +117,17 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
         [checklistCompletedCount, checklistTotalCount]
     );
     const isChecklistTerminated = isChecklistCompleted(checklistProgress);
+    const completed = card.useField("completed") ?? false;
+    const isFinished = completed || isChecklistTerminated;
     const deadlinePressure = useMemo(
-        () => calculateDeadlinePressure({ deadlineAt, isCompleted: isChecklistTerminated, now: deadlineClock }),
-        [deadlineAt, isChecklistTerminated, deadlineClock]
+        () => calculateDeadlinePressure({ deadlineAt, isCompleted: isFinished, now: deadlineClock }),
+        [deadlineAt, isFinished, deadlineClock]
     );
     const deadlinePressureLevel = useMemo(
-        () => getDeadlinePressureLevel({ deadlineAt, isCompleted: isChecklistTerminated, now: deadlineClock }),
-        [deadlineAt, isChecklistTerminated, deadlineClock]
+        () => getDeadlinePressureLevel({ deadlineAt, isCompleted: isFinished, now: deadlineClock }),
+        [deadlineAt, isFinished, deadlineClock]
     );
+    const overdueDays = getOverdueDays({ deadlineAt, now: deadlineClock });
     const projectMembers = project.useForeignFieldArray("all_members");
     const cardMemberUIDs = card.useField("member_uids") ?? [];
     const cardMembers = useMemo(
@@ -134,7 +138,6 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
     const creator = card.useField("creator");
     const hasDescription = card.useField("has_description");
     const isCheckCard = card.useField("is_check_card") ?? false;
-    const completed = card.useField("completed") ?? false;
     const widgetVisibility = useMemo(
         () => getBoardCardWidgetVisibility({ has_description: hasDescription, count_comment: commentCount }),
         [hasDescription, commentCount]
@@ -246,6 +249,7 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
                 className={cn(
                     "group/card relative hover:border-primary",
                     deadlinePressure > 0 && "board-card-deadline-aura",
+                    deadlinePressureLevel === "overdue" && !isDragging && "board-card-overdue-shake",
                     compact && "border-border/60 bg-background/80 shadow-none transition-colors hover:bg-background",
                     checklistProgress.total > 0 && "border-transparent hover:border-transparent",
                     !!selectCardViewType && isDisabledCard(card.uid) ? "cursor-not-allowed" : "cursor-pointer"
@@ -253,11 +257,17 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
                 style={{ "--board-card-deadline-pressure": deadlinePressure } as React.CSSProperties}
                 onClick={openCard}
             >
+                {deadlinePressureLevel === "overdue" && (
+                    <div className="board-card-overdue-banner" aria-label={t("card.Overdue by {{days}} days", { days: overdueDays })}>
+                        <IconComponent icon="alarm-clock" size="3.5" aria-hidden="true" />
+                        <strong>{overdueDays > 0 ? t("card.Overdue by {{days}} days", { days: overdueDays }) : t("card.Overdue")}</strong>
+                    </div>
+                )}
                 <BoardCardProgressTrace progress={checklistProgress} />
-                {checklistProgress.total > 0 && (
+                {(checklistProgress.total > 0 || deadlineAt) && (
                     <span className="sr-only">
                         {[
-                            t("card.Checklist progress: {{completed}} of {{total}} complete", {
+                            checklistProgress.total > 0 && t("card.Checklist progress: {{completed}} of {{total}} complete", {
                                 completed: checklistProgress.completed,
                                 total: checklistProgress.total,
                             }),

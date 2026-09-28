@@ -20,7 +20,7 @@ export default function CardTimestamps({ card, compact = false }: { card: Projec
                         dateTime={createdAt.toISOString()}
                         tabIndex={0}
                         aria-label={`${t("card.Created")}: ${exact(createdAt)}`}
-                        className="inline-flex items-center gap-1 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        className={`inline-flex items-center gap-1 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${compact ? "max-w-0 overflow-hidden opacity-0 transition-all duration-200 group-hover/card:max-w-32 group-hover/card:opacity-100 group-focus-within/card:max-w-32 group-focus-within/card:opacity-100" : ""}`}
                     >
                         <IconComponent icon="calendar-plus" size="3" className="shrink-0 opacity-70" aria-hidden="true" />
                         {createdDistance}

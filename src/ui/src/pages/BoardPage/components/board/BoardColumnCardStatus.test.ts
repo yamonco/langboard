@@ -8,6 +8,7 @@ import {
     getChecklistBorderDashes,
     DEADLINE_PRESSURE_WINDOW_MS,
     getDeadlinePressureLevel,
+    getOverdueDays,
     isChecklistCompleted,
 } from "./BoardColumnCardStatus.ts";
 
@@ -84,5 +85,13 @@ describe("board column card status", () => {
         assert.equal(getDeadlinePressureLevel({ deadlineAt: at(0.5), now }), "critical");
         assert.equal(getDeadlinePressureLevel({ deadlineAt: at(-0.1), now }), "overdue");
         assert.equal(getDeadlinePressureLevel({ deadlineAt: at(-0.1), isCompleted: true, now }), "none");
+    });
+
+    it("shows overdue calendar days in the user's local timezone", () => {
+        const now = new Date(2026, 8, 29, 12);
+        assert.equal(getOverdueDays({ deadlineAt: undefined, now }), 0);
+        assert.equal(getOverdueDays({ deadlineAt: new Date(2026, 8, 29, 8), now }), 0);
+        assert.equal(getOverdueDays({ deadlineAt: new Date(2026, 8, 26, 23), now }), 3);
+        assert.equal(getOverdueDays({ deadlineAt: new Date(2026, 8, 30, 8), now }), 0);
     });
 });
