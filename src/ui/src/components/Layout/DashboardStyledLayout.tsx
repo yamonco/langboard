@@ -22,6 +22,8 @@ interface IBaseDashboardStyledLayoutProps {
     className?: string;
     scrollAreaMutable?: React.ComponentPropsWithoutRef<typeof ScrollArea.Root>["mutable"];
     activityRailItems?: IActivityRailItem[];
+    workbenchContext?: React.ReactNode;
+    workbenchContextHidden?: boolean;
 }
 
 interface IHeaderDashboardStyledLayoutProps extends IBaseDashboardStyledLayoutProps {
@@ -52,7 +54,22 @@ export type TDashboardStyledLayoutProps =
     | IBaseDashboardStyledLayoutProps;
 
 const DashboardStyledLayout = forwardRef<HTMLDivElement, TDashboardStyledLayoutProps>(
-    ({ children, headerNavs, headerTitle, sidebarNavs, resizableSidebar, activityRailItems, className, scrollAreaMutable, ...props }, ref) => {
+    (
+        {
+            children,
+            headerNavs,
+            headerTitle,
+            sidebarNavs,
+            resizableSidebar,
+            activityRailItems,
+            workbenchContext,
+            workbenchContextHidden,
+            className,
+            scrollAreaMutable,
+            ...props
+        },
+        ref
+    ) => {
         const { scrollableRef, isAtTop, scrollToTop } = useScrollToTop({});
 
         const main = (
@@ -92,7 +109,25 @@ const DashboardStyledLayout = forwardRef<HTMLDivElement, TDashboardStyledLayoutP
                     {activityRailItems ? (
                         <div className="flex size-full">
                             <ActivityRail items={activityRailItems} />
-                            <div className="min-w-0 flex-1">{sidebar}</div>
+                            <div className="min-w-0 flex-1">
+                                {workbenchContext ? (
+                                    <ResizableSidebar
+                                        main={<div className="min-w-0 flex-1">{sidebar}</div>}
+                                        initialWidth={280}
+                                        collapsableWidth={220}
+                                        minWidth={220}
+                                        maxWidth={420}
+                                        compactHeight
+                                        floatingHidden
+                                        showCollapseButton={false}
+                                        hidden={workbenchContextHidden}
+                                    >
+                                        {workbenchContextHidden ? null : workbenchContext}
+                                    </ResizableSidebar>
+                                ) : (
+                                    sidebar
+                                )}
+                            </div>
                         </div>
                     ) : (
                         sidebar

@@ -1,4 +1,4 @@
-import { memo, useMemo, useReducer } from "react";
+import { memo, useMemo, useReducer, useState } from "react";
 import { IHeaderNavItem } from "@/components/Header/types";
 import { DashboardStyledLayout } from "@/components/Layout";
 import { ISidebarNavItem } from "@/components/Sidebar/types";
@@ -15,9 +15,11 @@ import { Project } from "@/core/models";
 import { useTranslation } from "react-i18next";
 import { SkeletonProjecTabs } from "@/pages/DashboardPage/components/ProjectTabs";
 import { PROJECT_QUICK_SWITCHER_EVENT } from "@/pages/DashboardPage/components/ProjectDiscovery";
+import ProjectExplorerSidebar from "@/pages/DashboardPage/components/ProjectExplorerSidebar";
 
 const DashboardProxy = memo((): React.JSX.Element => {
     const [t] = useTranslation();
+    const [isExplorerOpen, setIsExplorerOpen] = useState(true);
     const navigate = usePageNavigateRef();
     const [pageType, tabName] = location.pathname.split("/").slice(2);
     const { data, isFetching } = useGetAllStarredProjects();
@@ -129,12 +131,15 @@ const DashboardProxy = memo((): React.JSX.Element => {
         <DashboardStyledLayout
             headerNavs={headerNavs}
             activityRailItems={[
+                { icon: "panel-left", label: "Explorer", onClick: () => setIsExplorerOpen((open) => !open), active: isExplorerOpen },
                 { icon: "folder-kanban", label: t("dashboard.Projects"), onClick: headerNavs[0].onClick!, active: pageType === "projects" },
                 { icon: "layout-dashboard", label: t("dashboard.Cards"), onClick: headerNavs[1].onClick!, active: pageType === "cards" },
                 { icon: "star", label: t("dashboard.Starred"), onClick: () => window.dispatchEvent(new Event(PROJECT_QUICK_SWITCHER_EVENT)) },
                 { icon: "clock", label: t("dashboard.Tracking"), onClick: headerNavs[3].onClick!, active: pageType === "tracking" },
                 ...sidebarNavs.map((item) => ({ icon: item.icon, label: item.name, onClick: item.onClick! })),
             ]}
+            workbenchContext={<ProjectExplorerSidebar />}
+            workbenchContextHidden={!isExplorerOpen}
             scrollAreaMutable={scrollAreaMutable}
             className="overflow-x-hidden"
         >
