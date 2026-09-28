@@ -13,7 +13,7 @@ import { EEditorCollaborationType } from "@langboard/core/constants";
 import { Utils } from "@langboard/core/utils";
 import { memo, type PointerEvent, useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { getDeadlinePressureLevel, getOverdueDays, isChecklistCompleted } from "@/pages/BoardPage/components/board/BoardColumnCardStatus";
+import { getDeadlinePressureLevel, getOverdueDays, isDeadlineFinished } from "@/pages/BoardPage/components/board/BoardColumnCardStatus";
 
 export function SkeletonBoardCardDeadline() {
     return <Skeleton h={{ initial: "8", lg: "10" }} className="w-1/3" />;
@@ -48,11 +48,11 @@ const BoardCardDeadline = memo(() => {
     const [t] = useTranslation();
     const { registerSectionCancelHandler, registerSectionSaveHandler } = useBoardCardSectionSaveActions();
     const deadline = card.useField("deadline_at");
-    const completed = card.useField("completed") ?? false;
+    const archivedAt = card.useField("archived_at");
     const checklistCompletedCount = card.useField("checklist_completed_count") ?? 0;
     const checklistTotalCount = card.useField("checklist_total_count") ?? 0;
     const { deadlineClock } = useBoard();
-    const isFinished = completed || isChecklistCompleted({ completed: checklistCompletedCount, total: checklistTotalCount });
+    const isFinished = isDeadlineFinished({ archivedAt, checklist: { completed: checklistCompletedCount, total: checklistTotalCount } });
     const isOverdue = getDeadlinePressureLevel({ deadlineAt: deadline, isCompleted: isFinished, now: deadlineClock }) === "overdue";
     const overdueDays = getOverdueDays({ deadlineAt: deadline, now: deadlineClock });
     const [isEditing, setIsEditing] = useState(false);

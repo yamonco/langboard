@@ -9,6 +9,7 @@ import {
     DEADLINE_PRESSURE_WINDOW_MS,
     getDeadlinePressureLevel,
     getOverdueDays,
+    isDeadlineFinished,
     isChecklistCompleted,
 } from "./BoardColumnCardStatus.ts";
 
@@ -50,6 +51,13 @@ describe("board column card status", () => {
         // Board summary counts are clamped before the predicate runs.
         assert.equal(isChecklistCompleted(calculateChecklistProgressFromCounts(9, 8)), true);
         assert.equal(isChecklistCompleted(calculateChecklistProgressFromCounts(0, 0)), false);
+    });
+
+    it("suppresses deadline warnings only for archived or fully checked cards", () => {
+        assert.equal(isDeadlineFinished({ checklist: { completed: 0, total: 0 } }), false);
+        assert.equal(isDeadlineFinished({ checklist: { completed: 1, total: 2 } }), false);
+        assert.equal(isDeadlineFinished({ checklist: { completed: 2, total: 2 } }), true);
+        assert.equal(isDeadlineFinished({ archivedAt: new Date(), checklist: { completed: 0, total: 2 } }), true);
     });
 
     it("removes deadline pressure and aura styling for terminated cards", () => {

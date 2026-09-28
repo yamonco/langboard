@@ -29,6 +29,7 @@ import {
     getDeadlinePressureLevel,
     getOverdueDays,
     isChecklistCompleted,
+    isDeadlineFinished,
     type IBoardCardChecklistProgress,
 } from "@/pages/BoardPage/components/board/BoardColumnCardStatus";
 import BoardTaskMetadataBadges from "@/pages/BoardPage/components/task/BoardTaskMetadataBadges";
@@ -110,6 +111,7 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
     const { model: card } = ModelRegistry.ProjectCard.useContext<IBoardColumnCardContextParams>();
     const title = card.useField("title");
     const deadlineAt = card.useField("deadline_at");
+    const archivedAt = card.useField("archived_at");
     const checklistCompletedCount = card.useField("checklist_completed_count") ?? 0;
     const checklistTotalCount = card.useField("checklist_total_count") ?? 0;
     const checklistProgress = useMemo(
@@ -117,8 +119,7 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
         [checklistCompletedCount, checklistTotalCount]
     );
     const isChecklistTerminated = isChecklistCompleted(checklistProgress);
-    const completed = card.useField("completed") ?? false;
-    const isFinished = completed || isChecklistTerminated;
+    const isFinished = isDeadlineFinished({ archivedAt, checklist: checklistProgress });
     const deadlinePressure = useMemo(
         () => calculateDeadlinePressure({ deadlineAt, isCompleted: isFinished, now: deadlineClock }),
         [deadlineAt, isFinished, deadlineClock]
@@ -138,6 +139,7 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
     const creator = card.useField("creator");
     const hasDescription = card.useField("has_description");
     const isCheckCard = card.useField("is_check_card") ?? false;
+    const completed = card.useField("completed") ?? false;
     const widgetVisibility = useMemo(
         () => getBoardCardWidgetVisibility({ has_description: hasDescription, count_comment: commentCount }),
         [hasDescription, commentCount]

@@ -43,6 +43,14 @@ export const getChecklistBorderDashes = (completed: number, total: number, perim
 export const isChecklistCompleted = (progress: Pick<IBoardCardChecklistProgress, "completed" | "total">): boolean =>
     progress.total > 0 && progress.completed === progress.total;
 
+export const isDeadlineFinished = ({
+    archivedAt,
+    checklist,
+}: {
+    archivedAt?: Date | null;
+    checklist: Pick<IBoardCardChecklistProgress, "completed" | "total">;
+}): boolean => Boolean(archivedAt) || isChecklistCompleted(checklist);
+
 export const getOverdueDays = ({ deadlineAt, now }: { deadlineAt?: Date | null; now: Date }): number => {
     if (!deadlineAt || deadlineAt.getTime() >= now.getTime()) return 0;
     // Compare local calendar dates, not elapsed 24-hour periods (DST can make those differ).
