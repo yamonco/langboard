@@ -9,7 +9,7 @@ export default function BoardRelationsSidebar({ projectUID, cardUID }: { project
     const navigate = usePageNavigateRef();
 
     return (
-        <nav aria-label={t("dashboard.Relations")} className="flex h-full min-w-0 flex-col overflow-hidden">
+        <nav aria-label={t("dashboard.Relations")} data-workbench-context="" className="flex h-full min-w-0 flex-col overflow-hidden">
             <div className="flex shrink-0 items-center justify-between border-b px-3 py-2 text-xs font-semibold uppercase tracking-wide">
                 <span>{t("dashboard.Relations")}</span>
                 <button type="button" className="text-primary hover:underline" onClick={() => navigate(ROUTES.BOARD.GRAPH(projectUID))}>
