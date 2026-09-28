@@ -7,8 +7,6 @@ import Button from "@/components/base/Button";
 import Flex from "@/components/base/Flex";
 import BoardFloatingNavigation from "@/pages/BoardPage/components/board/BoardFloatingNavigation";
 import IconComponent from "@/components/base/IconComponent";
-import Input from "@/components/base/Input";
-import ScrollArea from "@/components/base/ScrollArea";
 import Toast from "@/components/base/Toast";
 import { ROUTES } from "@/core/routing/constants";
 import ChatSidebar from "@/pages/BoardPage/components/chat/ChatSidebar";
@@ -40,7 +38,6 @@ import useGetGraphApprovals from "@/controllers/api/board/graphApprovals/useGetG
 import BoardActivityDialog from "@/pages/BoardPage/components/board/BoardActivityDialog";
 import { cn } from "@/core/utils/ComponentUtils";
 import useCardRelationshipsUpdatedHandlers from "@/controllers/socket/card/useCardRelationshipsUpdatedHandlers";
-import useGetProjects from "@/controllers/api/dashboard/useGetProjects";
 import useRoleActionFilter from "@/core/hooks/useRoleActionFilter";
 import { ProjectRole } from "@/core/models/roles";
 import { ScreenMap } from "@/core/utils/VariantUtils";
@@ -56,9 +53,8 @@ import useBoardGraphApprovalDeletedHandlers from "@/controllers/socket/board/gra
 import useBoardGraphApprovalRequestedHandlers from "@/controllers/socket/board/graphApprovals/useBoardGraphApprovalRequestedHandlers";
 import useBoardGraphApprovalUpdatedHandlers from "@/controllers/socket/board/graphApprovals/useBoardGraphApprovalUpdatedHandlers";
 import { getBoardChatStore } from "@/core/stores/BoardChatStore";
-import { compareProjectActivityPriority } from "@/pages/DashboardPage/components/ProjectActivityPriority";
 import ProjectExplorerSidebar from "@/pages/DashboardPage/components/ProjectExplorerSidebar";
-import { Utils } from "@langboard/core/utils";
+import { closeProject } from "@/pages/DashboardPage/components/OpenCardsStore";
 
 const BoardGraphPage = lazy(() => import("@/pages/BoardPage/BoardGraphPage"));
 
@@ -81,6 +77,7 @@ type TBoardSidePanel = "botScope" | "switchProject";
 
 const BoardProxy = memo((): React.JSX.Element => {
     const { setPageAliasRef } = usePageHeader();
+    const { currentUser } = useAuth();
     const socket = useSocket();
     const navigate = usePageNavigateRef();
     const location = useLocation();
@@ -99,10 +96,16 @@ const BoardProxy = memo((): React.JSX.Element => {
 
         const { handle } = setupApiErrorHandler({
             [EHttpStatus.HTTP_403_FORBIDDEN]: {
-                after: () => navigate(ROUTES.ERROR(EHttpStatus.HTTP_403_FORBIDDEN), { replace: true }),
+                after: () => {
+                    if (currentUser) closeProject(currentUser.uid, projectUID);
+                    navigate(ROUTES.ERROR(EHttpStatus.HTTP_403_FORBIDDEN), { replace: true });
+                },
             },
             [EHttpStatus.HTTP_404_NOT_FOUND]: {
-                after: () => navigate(ROUTES.ERROR(EHttpStatus.HTTP_404_NOT_FOUND), { replace: true }),
+                after: () => {
+                    if (currentUser) closeProject(currentUser.uid, projectUID);
+                    navigate(ROUTES.ERROR(EHttpStatus.HTTP_404_NOT_FOUND), { replace: true });
+                },
             },
             network: {
                 after: () => {
@@ -271,6 +274,7 @@ function BoardProxyDisplay({ pageRoute, isFetching, project }: IBoardProxyDispla
                 topic: ESocketTopic.Board,
                 projectUID: project.uid,
                 callback: () => {
+                    if (currentUser) closeProject(currentUser.uid, project.uid);
                     Toast.Add.error(t("project.errors.Project closed."));
                     navigate(ROUTES.DASHBOARD.PROJECTS.ALL, { replace: true });
                 },
@@ -599,7 +603,6 @@ function BoardProxyDisplay({ pageRoute, isFetching, project }: IBoardProxyDispla
                         hidden: nav.hidden,
                         badge: index === 5 ? pendingGraphApprovalBadge : undefined,
                     })),
-                    { icon: "shuffle", label: t("project.Switch Project"), onClick: toggleSwitchProject, active: isSwitchProjectOpened },
                 ]}
                 workbenchContext={isBotScopeOpened ? <BoardBotScopeSidebar project={project} /> : <ProjectExplorerSidebar currentProject={project} />}
                 workbenchContextHidden={!isContextOpen || isMobile || !!selectCardViewType}
@@ -625,16 +628,7 @@ function BoardProxyDisplay({ pageRoute, isFetching, project }: IBoardProxyDispla
                         )}
                     >
                         {!selectCardViewType && (
-                            <BoardSidePanel
-                                activePanel={activeSidePanel}
-                                currentProjectUID={project.uid}
-                                project={project}
-                                onSelectProject={(selectedProjectUID) => {
-                                    setActiveSidePanel(undefined);
-                                    setBoardViewType("board");
-                                    navigate(ROUTES.BOARD.MAIN(selectedProjectUID), { smooth: true });
-                                }}
-                            />
+                            <BoardSidePanel activePanel={activeSidePanel} project={project} onNavigate={() => setActiveSidePanel(undefined)} />
                         )}
                         <Box className="relative min-w-0 flex-1">
                             <Box
@@ -720,19 +714,17 @@ function BoardMobileChatOverlay({
 
 function BoardSidePanel({
     activePanel,
-    currentProjectUID,
     project,
-    onSelectProject,
+    onNavigate,
 }: {
     activePanel?: TBoardSidePanel;
-    currentProjectUID: string;
     project: Project.TModel;
-    onSelectProject: (projectUID: string) => void;
+    onNavigate: () => void;
 }): React.JSX.Element {
     const isOpened = !!activePanel;
     const isBotScope = activePanel === "botScope";
-    const title = isBotScope ? "Bots" : "Switch Project";
-    const icon = isBotScope ? "bot" : "folder-kanban";
+    const title = isBotScope ? "Bots" : "Explorer";
+    const icon = isBotScope ? "bot" : "panel-left";
     const widthClassName = isBotScope ? "w-auto md:w-80" : "w-auto md:w-72";
 
     return (
@@ -763,7 +755,7 @@ function BoardSidePanel({
                     ) : isBotScope ? (
                         <BoardBotScopeSidebar project={project} />
                     ) : (
-                        <BoardSwitchProjectSidebar currentProjectUID={currentProjectUID} currentProject={project} onSelectProject={onSelectProject} />
+                        <ProjectExplorerSidebar currentProject={project} onNavigate={onNavigate} />
                     )}
                 </Box>
             </Flex>
@@ -783,98 +775,6 @@ function BoardBotScopeSidebar({ project }: { project: Project.TModel }): React.J
         <Box className="h-full">
             <BoardBotScopeList target={{ target_table: "project", target: project }} className="h-full pb-3" />
         </Box>
-    );
-}
-
-function BoardSwitchProjectSidebar({
-    currentProjectUID,
-    currentProject,
-    onSelectProject,
-}: {
-    currentProjectUID: string;
-    currentProject: Project.TModel;
-    onSelectProject: (projectUID: string) => void;
-}): React.JSX.Element {
-    const [t] = useTranslation();
-    const { data, isFetching, isLoading } = useGetProjects();
-    const [searchQuery, setSearchQuery] = useState("");
-    const projects = useMemo(() => {
-        const projectMap = new Map<string, Project.TModel>();
-        [currentProject, ...(data?.projects ?? [])].forEach((project) => {
-            projectMap.set(project.uid, project);
-        });
-        const query = searchQuery.trim().toLowerCase();
-        return [...projectMap.values()]
-            .filter((project) => !query || project.title.toLowerCase().includes(query))
-            .sort(compareProjectActivityPriority);
-    }, [currentProject, data, searchQuery]);
-
-    return (
-        <Flex direction="col" h="full" className="min-h-0">
-            <Box className="shrink-0 border-b p-2">
-                <Input
-                    value={searchQuery}
-                    onChange={(event) => setSearchQuery(event.currentTarget.value)}
-                    placeholder={t("dashboard.Search projects...")}
-                    aria-label={t("dashboard.Search projects")}
-                    leftIcon={<IconComponent icon="search" />}
-                    clearable
-                />
-            </Box>
-            <ScrollArea.Root className="h-full min-h-0">
-                <Flex direction="col" gap="1" p="2">
-                    {(isLoading || isFetching) && projects.length === 0 ? (
-                        <Box className="px-2 py-3 text-sm text-muted-foreground">{t("common.Loading...")}</Box>
-                    ) : projects.length === 0 ? (
-                        <Box className="px-2 py-3 text-sm text-muted-foreground">{t("dashboard.No projects found")}</Box>
-                    ) : (
-                        projects.map((project) => (
-                            <BoardSwitchProjectSidebarItem
-                                key={project.uid}
-                                project={project}
-                                active={project.uid === currentProjectUID}
-                                onClick={() => onSelectProject(project.uid)}
-                            />
-                        ))
-                    )}
-                </Flex>
-            </ScrollArea.Root>
-        </Flex>
-    );
-}
-
-function BoardSwitchProjectSidebarItem({
-    project,
-    active,
-    onClick,
-}: {
-    project: Project.TModel;
-    active: bool;
-    onClick: () => void;
-}): React.JSX.Element {
-    const [t, i18n] = useTranslation();
-    const title = project.useField("title");
-    const projectType = project.useField("project_type");
-    const starred = project.useField("starred");
-    const lastActivityAt = project.useField("last_activity_at");
-    const createdAt = project.useField("created_at");
-
-    return (
-        <Button
-            type="button"
-            variant={active ? "secondary" : "ghost"}
-            className="h-auto justify-start gap-2 rounded-lg px-3 py-2 text-left"
-            onClick={onClick}
-        >
-            <IconComponent icon={starred ? "star" : "folder-kanban"} size="4" />
-            <Box className="min-w-0">
-                <Box className="truncate text-sm font-medium">{title}</Box>
-                <Box className="truncate text-xs text-muted-foreground">
-                    {t(projectType === "Other" ? "common.Other" : `project.types.${projectType}`)} ·{" "}
-                    {Utils.String.formatDateDistance(i18n, t, lastActivityAt ?? createdAt)}
-                </Box>
-            </Box>
-        </Button>
     );
 }
 

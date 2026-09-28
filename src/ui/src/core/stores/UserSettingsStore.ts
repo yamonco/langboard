@@ -1,11 +1,14 @@
 import { useEffect, useState } from "react";
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
+import type { TOpenCardsByUser } from "@/pages/DashboardPage/components/OpenCardsData";
 
 export const NOTIFICATIONS_TIME_RANGE_OPTIONS = ["3d", "7d", "1m", "all"] as const;
 export interface IUserSettings {
     notifications_time_range?: (typeof NOTIFICATIONS_TIME_RANGE_OPTIONS)[number];
     graph_view_modes?: Record<string, "columns" | "network">;
+    open_cards?: TOpenCardsByUser;
+    explorer_open_cards_collapsed?: Record<string, boolean>;
 }
 
 interface IUserSettingsStore {
