@@ -34,6 +34,7 @@ import { EHttpStatus, ESocketTopic } from "@langboard/core/enums";
 import useBoardBotStatusMapHandlers from "@/controllers/socket/board/useBoardBotStatusMapHandlers";
 import { BoardBotScopeList, isBoardBotScopeGraphApprovalOriginType } from "@/pages/BoardPage/components/board/BoardBotScope";
 import useGetProject from "@/controllers/api/board/useGetProject";
+import useGetCards from "@/controllers/api/board/useGetCards";
 import useGetGraphApprovals from "@/controllers/api/board/graphApprovals/useGetGraphApprovals";
 import BoardActivityDialog from "@/pages/BoardPage/components/board/BoardActivityDialog";
 import { cn } from "@/core/utils/ComponentUtils";
@@ -206,7 +207,8 @@ function BoardProxyDisplay({ pageRoute, isFetching, project }: IBoardProxyDispla
     } = useBoardController();
     const isCardPage = !!pageRoute && !["graph", "wiki", "settings"].includes(pageRoute);
     const projectTitle = project.useField("title");
-    const activeCard = ProjectCard.Model.useModel(isCardPage ? pageRoute : "", [pageRoute]);
+    const { data: boardCardsData } = useGetCards({ project_uid: project.uid }, { enabled: isCardPage });
+    const activeCard = boardCardsData && isCardPage ? ProjectCard.Model.getModel(pageRoute) : undefined;
     useGetGraphApprovals(
         {
             project_uid: project.uid,
