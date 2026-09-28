@@ -351,16 +351,6 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
                         )}
                         <Card.Footer className="flex items-end justify-between gap-1.5 pb-4">
                             <Flex items="center">
-                                {cardMemberUIDs.length === 0 && (
-                                    <span
-                                        className={cn(
-                                            "inline-flex items-center rounded-md border border-amber-500/50 px-1.5 py-0.5",
-                                            "text-[11px] font-medium text-amber-700 dark:text-amber-300"
-                                        )}
-                                    >
-                                        {t("card.Unassigned")}
-                                    </span>
-                                )}
                                 {creator && (
                                     <span
                                         title={t("card.Created by {{name}}", {
@@ -399,17 +389,31 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
                                     </span>
                                 )}
                             </Flex>
-                            <UserAvatarList
-                                maxVisible={3}
-                                userOrBots={cardMembers}
-                                scope={{
-                                    projectUID: project.uid,
-                                    cardUID: card.uid,
-                                }}
-                                size="sm"
-                                {...attributes}
-                                className="cursor-default"
-                            />
+                            {cardMemberUIDs.length === 0 ? (
+                                <span
+                                    role="img"
+                                    aria-label={t("card.Unassigned")}
+                                    title={t("card.Unassigned")}
+                                    className={cn(
+                                        "flex size-8 shrink-0 items-center justify-center rounded-full border border-dashed",
+                                        "border-amber-500/70 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                                    )}
+                                >
+                                    <IconComponent icon="user-round-x" size="4" aria-hidden="true" />
+                                </span>
+                            ) : (
+                                <UserAvatarList
+                                    maxVisible={3}
+                                    userOrBots={cardMembers}
+                                    scope={{
+                                        projectUID: project.uid,
+                                        cardUID: card.uid,
+                                    }}
+                                    size="sm"
+                                    {...attributes}
+                                    className="cursor-default"
+                                />
+                            )}
                         </Card.Footer>
                     </Collapsible.Content>
                 </Collapsible.Root>
