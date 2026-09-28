@@ -24,7 +24,7 @@ export default function CardColumnHistory({ card }: { card: ProjectCard.TModel }
 
     useEffect(() => {
         const controller = new AbortController();
-        const url = Utils.String.format(Routing.API.ACTIVITY.CARD_COLUMN_HISTORY, { uid: projectUID, card_uid: card.uid });
+        const url = Utils.String.format(Routing.API.ACTIVITIY.CARD_COLUMN_HISTORY, { uid: projectUID, card_uid: card.uid });
         api.get<{ records: ColumnEvent[] }>(url, { signal: controller.signal, env: { interceptToast: true } as never })
             .then(({ data }) => setEvents(data.records.filter((event) => event.column?.name)))
             .catch(() => {
