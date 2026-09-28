@@ -579,6 +579,17 @@ function BoardProxyDisplay({ pageRoute, isFetching, project }: IBoardProxyDispla
             <DashboardStyledLayout
                 headerNavs={headerNavs}
                 headerTitle={projectTitle}
+                activityRailItems={[
+                    ...headerNavs.map((nav, index) => ({
+                        icon: ["columns-3", "notebook-pen", "network", "history", "settings", "bot"][index],
+                        label: String(nav.name),
+                        onClick: nav.onClick!,
+                        active: nav.active,
+                        hidden: nav.hidden,
+                        badge: index === 5 ? pendingGraphApprovalBadge : undefined,
+                    })),
+                    { icon: "shuffle", label: t("project.Switch Project"), onClick: toggleSwitchProject, active: isSwitchProjectOpened },
+                ]}
                 resizableSidebar={
                     chatResizableSidebar
                         ? {
@@ -596,7 +607,7 @@ function BoardProxyDisplay({ pageRoute, isFetching, project }: IBoardProxyDispla
                         w="full"
                         h="full"
                         className={cn(
-                            "h-[calc(100dvh_-_theme(spacing.16))] min-h-[calc(100dvh_-_theme(spacing.16))]",
+                            "h-[calc(100dvh-2.75rem)] min-h-[calc(100dvh-2.75rem)]",
                             pageRoute === "settings" ? "overflow-y-auto overflow-x-hidden" : "overflow-hidden"
                         )}
                     >
@@ -634,20 +645,22 @@ function BoardProxyDisplay({ pageRoute, isFetching, project }: IBoardProxyDispla
                                     setIsExpanded={setIsCardExpanded}
                                 />
                             )}
-                            {!isCardPage && !selectCardViewType && (
+                            {!isCardPage && !selectCardViewType && (isMobile || boardChat || renderedViewType === "board") && (
                                 <BoardFloatingNavigation
                                     project={project}
                                     currentUser={currentUser}
                                     dockEnabled={renderedViewType === "board"}
-                                    items={floatingNavs.map((nav, index) => ({
-                                        key: index,
-                                        label: nav.name,
-                                        icon: nav.icon,
-                                        badge: nav.badge,
-                                        active: nav.active,
-                                        hidden: nav.hidden,
-                                        onClick: nav.onClick,
-                                    }))}
+                                    items={(isMobile ? floatingNavs : floatingNavs.filter((nav) => nav.icon === "message-circle")).map(
+                                        (nav, index) => ({
+                                            key: index,
+                                            label: nav.name,
+                                            icon: nav.icon,
+                                            badge: nav.badge,
+                                            active: nav.active,
+                                            hidden: nav.hidden,
+                                            onClick: nav.onClick,
+                                        })
+                                    )}
                                 />
                             )}
                             <BoardMobileChatOverlay
@@ -683,7 +696,7 @@ function BoardMobileChatOverlay({
     }
 
     return (
-        <Box className="fixed inset-x-0 bottom-[4.75rem] top-16 z-50 overflow-hidden border-t bg-background shadow-2xl md:hidden">
+        <Box className="fixed inset-x-0 bottom-[4.75rem] top-11 z-50 overflow-hidden border-t bg-background shadow-2xl md:hidden">
             <Button variant="ghost" size="icon-sm" className="absolute right-2 top-2 z-10" onClick={onClose}>
                 <IconComponent icon="x" size="5" />
             </Button>

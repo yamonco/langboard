@@ -11,6 +11,7 @@ import Flex from "@/components/base/Flex";
 import IconComponent from "@/components/base/IconComponent";
 import ScrollArea from "@/components/base/ScrollArea";
 import useScrollToTop from "@/core/hooks/useScrollToTop";
+import ActivityRail, { IActivityRailItem } from "@/components/Layout/ActivityRail";
 
 interface IBaseDashboardStyledLayoutProps {
     children: React.ReactNode;
@@ -20,6 +21,7 @@ interface IBaseDashboardStyledLayoutProps {
     resizableSidebar?: Omit<IResizableSidebarProps, "main">;
     className?: string;
     scrollAreaMutable?: React.ComponentPropsWithoutRef<typeof ScrollArea.Root>["mutable"];
+    activityRailItems?: IActivityRailItem[];
 }
 
 interface IHeaderDashboardStyledLayoutProps extends IBaseDashboardStyledLayoutProps {
@@ -50,7 +52,7 @@ export type TDashboardStyledLayoutProps =
     | IBaseDashboardStyledLayoutProps;
 
 const DashboardStyledLayout = forwardRef<HTMLDivElement, TDashboardStyledLayoutProps>(
-    ({ children, headerNavs, headerTitle, sidebarNavs, resizableSidebar, className, scrollAreaMutable, ...props }, ref) => {
+    ({ children, headerNavs, headerTitle, sidebarNavs, resizableSidebar, activityRailItems, className, scrollAreaMutable, ...props }, ref) => {
         const { scrollableRef, isAtTop, scrollToTop } = useScrollToTop({});
 
         const main = (
@@ -75,16 +77,26 @@ const DashboardStyledLayout = forwardRef<HTMLDivElement, TDashboardStyledLayoutP
         if (sidebarNavs) {
             sidebar = <Sidebar navs={sidebarNavs} main={main} />;
         } else if (resizableSidebar) {
-            sidebar = <ResizableSidebar main={main} {...resizableSidebar} />;
+            sidebar = <ResizableSidebar main={main} {...resizableSidebar} compactHeight={!!activityRailItems} />;
         } else {
             sidebar = main;
         }
 
         return (
             <Flex direction="col" w="full" minH="screen" ref={ref} {...props}>
-                {headerNavs && <Header navs={headerNavs} title={headerTitle} />}
-                <Box w="full" className="min-h-[calc(100vh_-_theme(spacing.16))] overflow-y-auto">
-                    {sidebar}
+                {headerNavs && <Header navs={headerNavs} title={headerTitle} compact={!!activityRailItems} />}
+                <Box
+                    w="full"
+                    className={cn("overflow-y-auto", activityRailItems ? "h-[calc(100dvh-2.75rem)]" : "min-h-[calc(100vh_-_theme(spacing.16))]")}
+                >
+                    {activityRailItems ? (
+                        <div className="flex size-full">
+                            <ActivityRail items={activityRailItems} />
+                            <div className="min-w-0 flex-1">{sidebar}</div>
+                        </div>
+                    ) : (
+                        sidebar
+                    )}
                 </Box>
             </Flex>
         );
