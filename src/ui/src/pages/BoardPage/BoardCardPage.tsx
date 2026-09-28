@@ -278,6 +278,10 @@ const BoardCardPageComponent = ({
                                     event.preventDefault();
                                     return;
                                 }
+                                if ((event.detail.originalEvent.target as Element)?.closest?.("[data-workbench-explorer]")) {
+                                    event.preventDefault();
+                                    return;
+                                }
                                 if (isCardEditingRef.current) {
                                     event.preventDefault();
                                     handleCloseRequest();
