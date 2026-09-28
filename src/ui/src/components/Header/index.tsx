@@ -1,4 +1,5 @@
 import { memo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import CachedImage from "@/components/CachedImage";
 import HedaerNavItems from "@/components/Header/HedaerNavItems";
 import { IHeaderProps } from "@/components/Header/types";
@@ -14,8 +15,10 @@ import { ROUTES } from "@/core/routing/constants";
 import { usePageNavigateRef } from "@/core/hooks/usePageNavigate";
 import HeaderUserMenu from "@/components/Header/HeaderUserMenu";
 import HeaderUserNotification from "@/components/Header/HeaderUserNotification";
+import { PROJECT_QUICK_SWITCHER_EVENT } from "@/pages/DashboardPage/components/ProjectDiscovery";
 
 const Header = memo(({ navs, title, compact }: IHeaderProps) => {
+    const [t] = useTranslation();
     const { currentUser } = useAuth();
     const [isOpened, setIsOpen] = useState(false);
     const navigate = usePageNavigateRef();
@@ -53,12 +56,23 @@ const Header = memo(({ navs, title, compact }: IHeaderProps) => {
                     md: "sm",
                 }}
                 weight="medium"
-                className="hidden md:flex"
+                className={compact ? "min-w-0 flex-1" : "hidden md:flex"}
             >
-                <a onClick={toDashboard} className="flex size-6 cursor-pointer items-center gap-2 text-lg font-semibold md:text-base">
+                <a
+                    onClick={toDashboard}
+                    className={compact ? "hidden size-6 shrink-0 cursor-pointer items-center md:flex" : "flex size-6 cursor-pointer items-center"}
+                >
                     <CachedImage src="/images/logo.png" alt="Logo" size="full" />
                 </a>
-                {!!title && <span className="text-lg font-semibold">{title}</span>}
+                {compact ? (
+                    <span className="flex min-w-0 items-center gap-2 text-sm font-medium">
+                        <span className="hidden shrink-0 font-semibold md:inline">Langboard</span>
+                        {!!title && <IconComponent icon="chevron-right" size="3.5" className="hidden shrink-0 text-muted-foreground md:inline" />}
+                        {!!title && <span className="min-w-0 truncate">{title}</span>}
+                    </span>
+                ) : (
+                    !!title && <span className="text-lg font-semibold">{title}</span>
+                )}
                 {navs.length > 0 && !compact && (
                     <NavigationMenu.Root>
                         <NavigationMenu.List>
@@ -72,7 +86,7 @@ const Header = memo(({ navs, title, compact }: IHeaderProps) => {
                     <Sheet.Title hidden />
                     <Sheet.Description hidden />
                     <Sheet.Trigger asChild>
-                        <Button variant="outline" size="icon" className="shrink-0 md:hidden">
+                        <Button variant="outline" size="icon" className={compact ? "order-first shrink-0 md:hidden" : "shrink-0 md:hidden"}>
                             <IconComponent icon="menu" size="5" />
                             <span className="sr-only">Toggle navigation menu</span>
                         </Button>
@@ -121,12 +135,29 @@ const Header = memo(({ navs, title, compact }: IHeaderProps) => {
                     md: "auto",
                 }}
             >
-                <ThemeSwitcher variant="ghost" hideTriggerIcon buttonClassNames="p-2" />
+                {compact && (
+                    <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        aria-label={t("dashboard.Command palette")}
+                        title={t("dashboard.Command palette")}
+                        className="h-8 shrink-0 gap-2 px-2"
+                        onClick={() => window.dispatchEvent(new Event(PROJECT_QUICK_SWITCHER_EVENT))}
+                    >
+                        <IconComponent icon="search" size="4" />
+                        <span className="hidden lg:inline">{t("dashboard.Search")}</span>
+                        <kbd className="hidden rounded border px-1 font-mono text-[10px] text-muted-foreground lg:inline">⌘K</kbd>
+                    </Button>
+                )}
+                <span className={compact ? "hidden sm:inline-flex" : "inline-flex"}>
+                    <ThemeSwitcher variant="ghost" hideTriggerIcon buttonClassNames="p-2" />
+                </span>
                 {currentUser ? (
                     <>
-                        {separator}
+                        {!compact && separator}
                         <HeaderUserNotification currentUser={currentUser} />
-                        {separator}
+                        {!compact && separator}
                         <HeaderUserMenu currentUser={currentUser} />
                     </>
                 ) : null}

@@ -28,7 +28,7 @@ import { SkeletonBoard } from "@/pages/BoardPage/components/board/Board";
 import useBoardAssignedInternalBotChangedHandlers from "@/controllers/socket/board/useBoardAssignedInternalBotChangedHandlers";
 import useInternalBotUpdatedHandlers from "@/controllers/socket/global/useInternalBotUpdatedHandlers";
 import useSwitchSocketHandlers from "@/core/hooks/useSwitchSocketHandlers";
-import { GraphApprovalRequestModel, InternalBotModel, Project } from "@/core/models";
+import { GraphApprovalRequestModel, InternalBotModel, Project, ProjectCard } from "@/core/models";
 import { EGraphApprovalScopeTable, EGraphApprovalStatus } from "@/core/models/GraphApprovalRequestModel";
 import { EHttpStatus, ESocketTopic } from "@langboard/core/enums";
 import useBoardBotStatusMapHandlers from "@/controllers/socket/board/useBoardBotStatusMapHandlers";
@@ -206,6 +206,7 @@ function BoardProxyDisplay({ pageRoute, isFetching, project }: IBoardProxyDispla
     } = useBoardController();
     const isCardPage = !!pageRoute && !["graph", "wiki", "settings"].includes(pageRoute);
     const projectTitle = project.useField("title");
+    const activeCard = ProjectCard.Model.useModel(isCardPage ? pageRoute : "", [pageRoute]);
     useGetGraphApprovals(
         {
             project_uid: project.uid,
@@ -603,7 +604,17 @@ function BoardProxyDisplay({ pageRoute, isFetching, project }: IBoardProxyDispla
         <>
             <DashboardStyledLayout
                 headerNavs={headerNavs}
-                headerTitle={projectTitle}
+                headerTitle={
+                    <span className="flex min-w-0 items-center gap-1">
+                        <span className="max-w-32 shrink-0 truncate">{projectTitle}</span>
+                        {isCardPage && activeCard && (
+                            <>
+                                <IconComponent icon="chevron-right" size="3" className="shrink-0 text-muted-foreground" />
+                                <span className="min-w-0 truncate">{activeCard.title}</span>
+                            </>
+                        )}
+                    </span>
+                }
                 activityRailItems={[
                     { icon: "panel-left", label: "Explorer", onClick: () => setIsContextOpen((open) => !open), active: isContextOpen },
                     ...headerNavs.map((nav, index) => ({
