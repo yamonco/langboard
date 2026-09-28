@@ -624,6 +624,11 @@ function BoardProxyDisplay({ pageRoute, isFetching, project }: IBoardProxyDispla
                 }
                 activityRailItems={[
                     { icon: "panel-left", label: "Explorer", onClick: () => setIsContextOpen((open) => !open), active: isContextOpen },
+                    {
+                        icon: "list-checks",
+                        label: t("dashboard.My Work"),
+                        onClick: () => navigate(`${ROUTES.DASHBOARD.MY_WORK}?project_uid=${project.uid}`),
+                    },
                     ...headerNavs.map((nav, index) => ({
                         icon: ["columns-3", "notebook-pen", "network", "history", "settings", "bot"][index],
                         label: String(nav.name),

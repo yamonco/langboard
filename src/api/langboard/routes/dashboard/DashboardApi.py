@@ -1,7 +1,10 @@
-from fastapi import Depends, status
+from datetime import timedelta
+
+from fastapi import Depends, Query, status
 from langboard_shared.core.filter import AuthFilter
 from langboard_shared.core.routing import ApiErrorCode, ApiException, AppRouter, JsonResponse
 from langboard_shared.core.schema import OpenApiSchema
+from langboard_shared.core.types import SafeDateTime
 from langboard_shared.domain.models import Card, Checkitem, Project, ProjectColumn, User
 from langboard_shared.domain.services import DomainService
 from langboard_shared.security import Auth
@@ -161,6 +164,57 @@ def get_card_list(
     cards, projects = service.card.get_dashboard_list(user, pagination)
 
     return JsonResponse(content={"cards": cards, "projects": projects})
+
+
+@AppRouter.api.get(
+    "/dashboard/work/my",
+    tags=["Dashboard"],
+    responses=OpenApiSchema()
+    .suc(
+        {
+            "cards": [
+                {
+                    "uid": "string",
+                    "title": "string",
+                    "project_uid": "string",
+                    "project_title": "string",
+                    "project_column_name": "string",
+                    "deadline_at": "string?",
+                    "updated_at": "string",
+                    "reasons": ["string"],
+                }
+            ]
+        }
+    )
+    .auth()
+    .forbidden()
+    .get(),
+)
+@AuthFilter.add("user")
+def get_my_work(
+    project_uid: str | None = None,
+    limit: int = Query(default=50, ge=1, le=50),
+    user: User = Auth.scope("user"),
+    service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    projects, _ = service.project.get_api_list(user)
+    if project_uid is not None:
+        projects = [project for project in projects if project["uid"] == project_uid]
+        if not projects:
+            raise ApiException.NotFound_404(ApiErrorCode.NF2001)
+
+    cards = service.card.get_my_work_cards(
+        user,
+        projects,
+        {"assigned", "mentioned", "due_soon", "overdue", "created"},
+        service.notification.get_mentioned_card_ids(user),
+        SafeDateTime.now() + timedelta(days=7),
+        "updated_at",
+        None,
+        None,
+        limit,
+    )
+    return JsonResponse(content={"cards": cards})
 
 
 @AppRouter.api.get(

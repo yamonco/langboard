@@ -58,6 +58,7 @@ export const ROUTES = {
             UNSTARRED: "/dashboard/projects/unstarred",
         },
         CARDS: "/dashboard/cards",
+        MY_WORK: "/dashboard/my-work",
         TRACKING: "/dashboard/tracking",
     },
     SETTINGS: {
