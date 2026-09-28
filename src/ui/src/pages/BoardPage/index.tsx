@@ -57,6 +57,7 @@ import useBoardGraphApprovalRequestedHandlers from "@/controllers/socket/board/g
 import useBoardGraphApprovalUpdatedHandlers from "@/controllers/socket/board/graphApprovals/useBoardGraphApprovalUpdatedHandlers";
 import { getBoardChatStore } from "@/core/stores/BoardChatStore";
 import { compareProjectActivityPriority } from "@/pages/DashboardPage/components/ProjectActivityPriority";
+import ProjectExplorerSidebar from "@/pages/DashboardPage/components/ProjectExplorerSidebar";
 import { Utils } from "@langboard/core/utils";
 
 const BoardGraphPage = lazy(() => import("@/pages/BoardPage/BoardGraphPage"));
@@ -158,18 +159,27 @@ function BoardProxyDisplay({ pageRoute, isFetching, project }: IBoardProxyDispla
     const [isCardExpanded, setIsCardExpanded] = useState(false);
     const [isActivityDialogOpened, setIsActivityDialogOpened] = useState(false);
     const [activeSidePanel, setActiveSidePanel] = useState<TBoardSidePanel>();
+    const [isContextOpen, setIsContextOpen] = useState(true);
     const [isMobile, setIsMobile] = useState(window.innerWidth < ScreenMap.size.md);
     const isBotScopeOpened = activeSidePanel === "botScope";
-    const isSwitchProjectOpened = activeSidePanel === "switchProject";
+    const isSwitchProjectOpened = isMobile ? activeSidePanel === "switchProject" : isContextOpen && !isBotScopeOpened;
     const openActivityDialog = useCallback(() => {
         setIsActivityDialogOpened(true);
     }, [setIsActivityDialogOpened]);
     const toggleBotScope = useCallback(() => {
         setActiveSidePanel((value) => (value === "botScope" ? undefined : "botScope"));
+        setIsContextOpen(true);
     }, [setActiveSidePanel]);
     const toggleSwitchProject = useCallback(() => {
-        setActiveSidePanel((value) => (value === "switchProject" ? undefined : "switchProject"));
-    }, [setActiveSidePanel]);
+        if (isMobile) {
+            setActiveSidePanel((value) => (value === "switchProject" ? undefined : "switchProject"));
+        } else if (isBotScopeOpened) {
+            setActiveSidePanel(undefined);
+            setIsContextOpen(true);
+        } else {
+            setIsContextOpen((open) => !open);
+        }
+    }, [isMobile, isBotScopeOpened]);
     const {
         boardViewType,
         selectCardViewType,
@@ -580,6 +590,7 @@ function BoardProxyDisplay({ pageRoute, isFetching, project }: IBoardProxyDispla
                 headerNavs={headerNavs}
                 headerTitle={projectTitle}
                 activityRailItems={[
+                    { icon: "panel-left", label: "Explorer", onClick: () => setIsContextOpen((open) => !open), active: isContextOpen },
                     ...headerNavs.map((nav, index) => ({
                         icon: ["columns-3", "notebook-pen", "network", "history", "settings", "bot"][index],
                         label: String(nav.name),
@@ -590,6 +601,8 @@ function BoardProxyDisplay({ pageRoute, isFetching, project }: IBoardProxyDispla
                     })),
                     { icon: "shuffle", label: t("project.Switch Project"), onClick: toggleSwitchProject, active: isSwitchProjectOpened },
                 ]}
+                workbenchContext={isBotScopeOpened ? <BoardBotScopeSidebar project={project} /> : <ProjectExplorerSidebar currentProject={project} />}
+                workbenchContextHidden={!isContextOpen || isMobile || !!selectCardViewType}
                 resizableSidebar={
                     chatResizableSidebar
                         ? {
@@ -728,7 +741,7 @@ function BoardSidePanel({
                 "fixed bottom-[4.75rem] left-2 right-2 z-40 h-[60dvh] max-h-[calc(100dvh-7rem)]",
                 "overflow-hidden rounded-2xl border bg-background shadow-lg",
                 "transition-[opacity,transform,width] duration-200 ease-out",
-                "md:static md:h-full md:max-h-none md:shrink-0 md:rounded-none md:border-y-0 md:border-l-0 md:border-r md:shadow-none",
+                "md:hidden",
                 isOpened
                     ? `translate-y-0 opacity-100 md:translate-y-0 ${widthClassName}`
                     : "pointer-events-none translate-y-4 opacity-0 md:w-0 md:translate-y-0 md:border-r-0"
