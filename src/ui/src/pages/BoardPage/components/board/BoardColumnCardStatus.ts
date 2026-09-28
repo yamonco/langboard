@@ -63,7 +63,15 @@ export const getOverdueDays = ({ deadlineAt, now }: { deadlineAt?: Date | null; 
     return Math.max(0, -getDeadlineCalendarDays({ deadlineAt, now }));
 };
 
-export const getUpcomingDeadlineDays = ({ deadlineAt, now, isCompleted = false }: { deadlineAt?: Date | null; now: Date; isCompleted?: boolean }): number | null => {
+export const getUpcomingDeadlineDays = ({
+    deadlineAt,
+    now,
+    isCompleted = false,
+}: {
+    deadlineAt?: Date | null;
+    now: Date;
+    isCompleted?: boolean;
+}): number | null => {
     if (!deadlineAt || isCompleted || deadlineAt.getTime() <= now.getTime()) return null;
     const days = getDeadlineCalendarDays({ deadlineAt, now });
     return days >= 0 && days <= 3 ? days : null;

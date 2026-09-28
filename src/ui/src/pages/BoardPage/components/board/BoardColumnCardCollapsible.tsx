@@ -277,10 +277,11 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
                 {(checklistProgress.total > 0 || deadlineAt) && (
                     <span className="sr-only">
                         {[
-                            checklistProgress.total > 0 && t("card.Checklist progress: {{completed}} of {{total}} complete", {
-                                completed: checklistProgress.completed,
-                                total: checklistProgress.total,
-                            }),
+                            checklistProgress.total > 0 &&
+                                t("card.Checklist progress: {{completed}} of {{total}} complete", {
+                                    completed: checklistProgress.completed,
+                                    total: checklistProgress.total,
+                                }),
                             deadlineAt && t("card.Deadline {{date}}", { date: Utils.String.formatDateLocale(deadlineAt) }),
                             deadlinePressureLevel === "critical" && t("card.Due within a day"),
                             deadlinePressureLevel === "overdue" && t("card.Overdue"),

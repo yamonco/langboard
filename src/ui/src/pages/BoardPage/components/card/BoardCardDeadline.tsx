@@ -13,7 +13,12 @@ import { EEditorCollaborationType } from "@langboard/core/constants";
 import { Utils } from "@langboard/core/utils";
 import { memo, type PointerEvent, useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { getDeadlinePressureLevel, getOverdueDays, getUpcomingDeadlineDays, isDeadlineFinished } from "@/pages/BoardPage/components/board/BoardColumnCardStatus";
+import {
+    getDeadlinePressureLevel,
+    getOverdueDays,
+    getUpcomingDeadlineDays,
+    isDeadlineFinished,
+} from "@/pages/BoardPage/components/board/BoardColumnCardStatus";
 
 export function SkeletonBoardCardDeadline() {
     return <Skeleton h={{ initial: "8", lg: "10" }} className="w-1/3" />;
@@ -179,7 +184,9 @@ const BoardCardDeadline = memo(() => {
                 >
                     {deadline ? Utils.String.formatDateLocale(deadline) : t("card.No deadline")}
                     {isOverdue && (
-                        <span className="font-semibold">{overdueDays > 0 ? t("card.Overdue by {{days}} days", { days: overdueDays }) : t("card.Overdue")}</span>
+                        <span className="font-semibold">
+                            {overdueDays > 0 ? t("card.Overdue by {{days}} days", { days: overdueDays }) : t("card.Overdue")}
+                        </span>
                     )}
                     {upcomingDays !== null && <span className="font-semibold">{upcomingDays === 0 ? t("card.D-Day") : `D-${upcomingDays}`}</span>}
                 </span>
