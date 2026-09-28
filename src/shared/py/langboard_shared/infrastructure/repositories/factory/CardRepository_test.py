@@ -183,12 +183,20 @@ def test_my_work_page_deduplicates_user_relationships_across_projects(monkeypatc
             columns = [ProjectColumn(project_id=project.id, name="Doing") for project in projects]
             for column in columns:
                 db.insert(column)
+            done_column = ProjectColumn(project_id=projects[0].id, name="DONE")
+            archive_column = ProjectColumn(project_id=projects[0].id, name="Archive", is_archive=True)
+            db.insert(done_column)
+            db.insert(archive_column)
             assigned = Card(project_id=projects[0].id, project_column_id=columns[0].id, title="Assigned")
+            done = Card(project_id=projects[0].id, project_column_id=done_column.id, title="Done")
+            archived = Card(project_id=projects[0].id, project_column_id=archive_column.id, title="Archived")
             mentioned = Card(project_id=projects[1].id, project_column_id=columns[1].id, title="Mentioned")
             foreign = Card(project_id=projects[1].id, project_column_id=columns[1].id, title="Foreign")
-            for card in (assigned, mentioned, foreign):
+            for card in (assigned, done, archived, mentioned, foreign):
                 db.insert(card)
             db.insert(CardAssignedUser(project_assigned_id=assignment.id, card_id=assigned.id, user_id=worker.id))
+            db.insert(CardAssignedUser(project_assigned_id=assignment.id, card_id=done.id, user_id=worker.id))
+            db.insert(CardAssignedUser(project_assigned_id=assignment.id, card_id=archived.id, user_id=worker.id))
             db.insert(
                 UserNotification(
                     notifier_type="user",

@@ -21,7 +21,7 @@ interface IMyWorkCard {
     reasons: string[];
 }
 
-const sections = ["Overdue", "Today", "Upcoming", "Assigned to me", "Mentioned", "Created by me"] as const;
+const sections = ["Overdue", "Today", "Upcoming", "Review / Check", "Assigned to me", "Mentioned", "Created by me"] as const;
 type TSection = (typeof sections)[number];
 
 function sectionFor(card: IMyWorkCard): TSection {
@@ -29,7 +29,10 @@ function sectionFor(card: IMyWorkCard): TSection {
     if (card.reasons.includes("due_soon")) {
         return card.deadline_at && new Date(card.deadline_at).toDateString() === new Date().toDateString() ? "Today" : "Upcoming";
     }
-    if (card.reasons.includes("assigned")) return "Assigned to me";
+    if (card.reasons.includes("assigned")) {
+        if (["check", "review", "검토", "검수"].includes(card.project_column_name.trim().toLowerCase())) return "Review / Check";
+        return "Assigned to me";
+    }
     if (card.reasons.includes("mentioned")) return "Mentioned";
     return "Created by me";
 }
@@ -68,12 +71,18 @@ export default function MyWorkPage() {
         <section className="mx-auto max-w-5xl space-y-5" aria-label={t("dashboard.My Work")}>
             <div className="flex flex-wrap items-center gap-2">
                 <h1 className="mr-auto text-xl font-semibold">{t("dashboard.My Work")}</h1>
-                <Button size="sm" variant={!projectScope ? "secondary" : "outline"} onClick={() => updateScope(projectUID, true)}>
+                <Button
+                    size="sm"
+                    variant={!projectScope ? "secondary" : "outline"}
+                    aria-pressed={!projectScope}
+                    onClick={() => updateScope(projectUID, true)}
+                >
                     {t("dashboard.All projects")}
                 </Button>
                 <Button
                     size="sm"
                     variant={projectScope ? "secondary" : "outline"}
+                    aria-pressed={projectScope}
                     disabled={!projectUID}
                     onClick={() => updateScope(projectUID, false)}
                 >
