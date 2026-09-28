@@ -51,12 +51,22 @@ export const isDeadlineFinished = ({
     checklist: Pick<IBoardCardChecklistProgress, "completed" | "total">;
 }): boolean => Boolean(archivedAt) || isChecklistCompleted(checklist);
 
-export const getOverdueDays = ({ deadlineAt, now }: { deadlineAt?: Date | null; now: Date }): number => {
-    if (!deadlineAt || deadlineAt.getTime() >= now.getTime()) return 0;
+export const getDeadlineCalendarDays = ({ deadlineAt, now }: { deadlineAt: Date; now: Date }): number => {
     // Compare local calendar dates, not elapsed 24-hour periods (DST can make those differ).
     const deadlineDay = Date.UTC(deadlineAt.getFullYear(), deadlineAt.getMonth(), deadlineAt.getDate());
     const currentDay = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
-    return Math.max(0, Math.round((currentDay - deadlineDay) / (24 * 60 * 60 * 1000)));
+    return Math.round((deadlineDay - currentDay) / (24 * 60 * 60 * 1000));
+};
+
+export const getOverdueDays = ({ deadlineAt, now }: { deadlineAt?: Date | null; now: Date }): number => {
+    if (!deadlineAt || deadlineAt.getTime() >= now.getTime()) return 0;
+    return Math.max(0, -getDeadlineCalendarDays({ deadlineAt, now }));
+};
+
+export const getUpcomingDeadlineDays = ({ deadlineAt, now, isCompleted = false }: { deadlineAt?: Date | null; now: Date; isCompleted?: boolean }): number | null => {
+    if (!deadlineAt || isCompleted || deadlineAt.getTime() <= now.getTime()) return null;
+    const days = getDeadlineCalendarDays({ deadlineAt, now });
+    return days >= 0 && days <= 3 ? days : null;
 };
 
 export const calculateDeadlinePressure = ({

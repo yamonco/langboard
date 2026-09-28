@@ -13,7 +13,7 @@ import { EEditorCollaborationType } from "@langboard/core/constants";
 import { Utils } from "@langboard/core/utils";
 import { memo, type PointerEvent, useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { getDeadlinePressureLevel, getOverdueDays, isDeadlineFinished } from "@/pages/BoardPage/components/board/BoardColumnCardStatus";
+import { getDeadlinePressureLevel, getOverdueDays, getUpcomingDeadlineDays, isDeadlineFinished } from "@/pages/BoardPage/components/board/BoardColumnCardStatus";
 
 export function SkeletonBoardCardDeadline() {
     return <Skeleton h={{ initial: "8", lg: "10" }} className="w-1/3" />;
@@ -55,6 +55,7 @@ const BoardCardDeadline = memo(() => {
     const isFinished = isDeadlineFinished({ archivedAt, checklist: { completed: checklistCompletedCount, total: checklistTotalCount } });
     const isOverdue = getDeadlinePressureLevel({ deadlineAt: deadline, isCompleted: isFinished, now: deadlineClock }) === "overdue";
     const overdueDays = getOverdueDays({ deadlineAt: deadline, now: deadlineClock });
+    const upcomingDays = getUpcomingDeadlineDays({ deadlineAt: deadline, now: deadlineClock, isCompleted: isFinished });
     const [isEditing, setIsEditing] = useState(false);
     const [draftDeadline, setDraftDeadline] = useState<Date | undefined>(deadline);
     const canStartEditing = hasRoleAction(ProjectRole.EAction.CardUpdate) && isCardEditing;
@@ -180,6 +181,7 @@ const BoardCardDeadline = memo(() => {
                     {isOverdue && (
                         <span className="font-semibold">{overdueDays > 0 ? t("card.Overdue by {{days}} days", { days: overdueDays }) : t("card.Overdue")}</span>
                     )}
+                    {upcomingDays !== null && <span className="font-semibold">{upcomingDays === 0 ? t("card.D-Day") : `D-${upcomingDays}`}</span>}
                 </span>
             ) : (
                 <Flex items="center">

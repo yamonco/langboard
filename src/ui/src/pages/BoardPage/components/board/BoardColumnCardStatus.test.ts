@@ -9,6 +9,7 @@ import {
     DEADLINE_PRESSURE_WINDOW_MS,
     getDeadlinePressureLevel,
     getOverdueDays,
+    getUpcomingDeadlineDays,
     isDeadlineFinished,
     isChecklistCompleted,
 } from "./BoardColumnCardStatus.ts";
@@ -101,5 +102,16 @@ describe("board column card status", () => {
         assert.equal(getOverdueDays({ deadlineAt: new Date(2026, 8, 29, 8), now }), 0);
         assert.equal(getOverdueDays({ deadlineAt: new Date(2026, 8, 26, 23), now }), 3);
         assert.equal(getOverdueDays({ deadlineAt: new Date(2026, 8, 30, 8), now }), 0);
+    });
+
+    it("shows D-3 through D-Day by local calendar date and hides finished work", () => {
+        const now = new Date(2026, 8, 29, 12);
+        const at = (day: number, hour = 8) => new Date(2026, 8, day, hour);
+        assert.equal(getUpcomingDeadlineDays({ deadlineAt: at(32, 23), now }), 3);
+        assert.equal(getUpcomingDeadlineDays({ deadlineAt: at(30), now }), 1);
+        assert.equal(getUpcomingDeadlineDays({ deadlineAt: at(29, 18), now }), 0);
+        assert.equal(getUpcomingDeadlineDays({ deadlineAt: at(29, 8), now }), null);
+        assert.equal(getUpcomingDeadlineDays({ deadlineAt: at(33), now }), null);
+        assert.equal(getUpcomingDeadlineDays({ deadlineAt: at(30), now, isCompleted: true }), null);
     });
 });

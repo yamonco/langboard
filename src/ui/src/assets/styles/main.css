@@ -130,6 +130,19 @@
     line-height: 1.25rem;
 }
 
+.board-card-due-banner {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.35rem 1rem;
+    background: hsl(38 90% 52% / 0.1);
+    color: hsl(32 80% 38%);
+    font-size: 0.75rem;
+    line-height: 1.25rem;
+}
+
+.dark .board-card-due-banner { color: hsl(42 90% 72%); }
+
 .dark .board-card-overdue-banner { color: hsl(0 95% 78%); }
 
 .board-card-overdue-shake { animation: board-card-overdue-shake 1.8s infinite; }

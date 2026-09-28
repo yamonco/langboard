@@ -27,6 +27,7 @@
   "Deadline {{date}}": "Deadline {{date}}",
   "Due within a day": "Due within a day",
   "Overdue": "Overdue",
+  "D-Day": "D-Day",
   "Overdue by {{days}} days": "Overdue by {{days}} days",
   "Set deadline": "Set deadline",
   "No deadline": "No deadline",

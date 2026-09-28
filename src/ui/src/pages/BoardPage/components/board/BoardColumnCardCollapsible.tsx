@@ -28,6 +28,7 @@ import {
     getChecklistBorderDashes,
     getDeadlinePressureLevel,
     getOverdueDays,
+    getUpcomingDeadlineDays,
     isChecklistCompleted,
     isDeadlineFinished,
     type IBoardCardChecklistProgress,
@@ -129,6 +130,7 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
         [deadlineAt, isFinished, deadlineClock]
     );
     const overdueDays = getOverdueDays({ deadlineAt, now: deadlineClock });
+    const upcomingDays = getUpcomingDeadlineDays({ deadlineAt, now: deadlineClock, isCompleted: isFinished });
     const projectMembers = project.useForeignFieldArray("all_members");
     const cardMemberUIDs = card.useField("member_uids") ?? [];
     const cardMembers = useMemo(
@@ -263,6 +265,12 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
                     <div className="board-card-overdue-banner" aria-label={t("card.Overdue by {{days}} days", { days: overdueDays })}>
                         <IconComponent icon="alarm-clock" size="3.5" aria-hidden="true" />
                         <strong>{overdueDays > 0 ? t("card.Overdue by {{days}} days", { days: overdueDays }) : t("card.Overdue")}</strong>
+                    </div>
+                )}
+                {upcomingDays !== null && (
+                    <div className="board-card-due-banner" aria-label={upcomingDays === 0 ? t("card.D-Day") : `D-${upcomingDays}`}>
+                        <IconComponent icon="clock-3" size="3.5" aria-hidden="true" />
+                        <strong>{upcomingDays === 0 ? t("card.D-Day") : `D-${upcomingDays}`}</strong>
                     </div>
                 )}
                 <BoardCardProgressTrace progress={checklistProgress} />

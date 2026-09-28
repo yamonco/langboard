@@ -104,7 +104,7 @@ export const BoardProvider = memo(({ project, currentUser, children }: IBoardPro
     const queryClient = useQueryClient();
     const [deadlineClock, setDeadlineClock] = useState(() => new Date());
     useEffect(() => {
-        const timer = window.setInterval(() => setDeadlineClock(new Date()), 15 * 60 * 1000);
+        const timer = window.setInterval(() => setDeadlineClock(new Date()), 60 * 1000);
         return () => window.clearInterval(timer);
     }, []);
     const { selectCardViewType } = useBoardController();
