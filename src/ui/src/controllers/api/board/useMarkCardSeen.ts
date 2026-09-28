@@ -9,7 +9,7 @@ export interface IMarkCardSeenForm {
 }
 
 const useMarkCardSeen = (options?: TMutationOptions<IMarkCardSeenForm>) => {
-    const { mutate } = useQueryMutation();
+    const { mutate, queryClient } = useQueryMutation();
 
     const markCardSeen = async (params: IMarkCardSeenForm) => {
         const url = Utils.String.format(Routing.API.BOARD.CARD.MARK_SEEN, {
@@ -28,6 +28,10 @@ const useMarkCardSeen = (options?: TMutationOptions<IMarkCardSeenForm>) => {
     return mutate(["mark-card-seen"], markCardSeen, {
         ...options,
         retry: 0,
+        onSuccess: async (data, variables, onMutateResult, context) => {
+            await queryClient.invalidateQueries({ queryKey: [`get-cards-${variables.project_uid}`] });
+            await options?.onSuccess?.(data, variables, onMutateResult, context);
+        },
     });
 };
 

@@ -23,18 +23,19 @@ export default function ProjectExplorerSidebar({ currentProject, onNavigate }: {
     const navigate = usePageNavigateRef();
     const location = useLocation();
     const [query, setQuery] = useState("");
-    const { data } = useGetProjects();
+    const { data } = useGetProjects({ refetchOnWindowFocus: true });
+    const authorizedProjectUIDs = useMemo(() => new Set(data?.projects.map((project) => project.uid) ?? []), [data]);
+    const visibleOpenCards = openCards.filter((card) => authorizedProjectUIDs.has(card.projectUID));
     const projects = useMemo(() => {
         const all = data?.projects ?? [];
         return currentProject && !all.some((project) => project.uid === currentProject.uid) ? [currentProject, ...all] : all;
     }, [currentProject, data]);
     useEffect(() => {
         if (!data || !userUID) return;
-        const authorizedProjectUIDs = new Set(projects.map((project) => project.uid));
         if (openCards.some((card) => !authorizedProjectUIDs.has(card.projectUID))) {
             retainProjects(userUID, authorizedProjectUIDs);
         }
-    }, [data, openCards, projects, userUID]);
+    }, [data, openCards, authorizedProjectUIDs, userUID]);
     const sections = useMemo(() => buildProjectQuickSwitcherSections(projects), [projects]);
     const currentProjectUID = location.pathname.startsWith("/board/") ? location.pathname.split("/")[2] : undefined;
     const groups = query.trim()
@@ -74,10 +75,10 @@ export default function ProjectExplorerSidebar({ currentProject, onNavigate }: {
                         >
                             <IconComponent icon={openCardsCollapsed ? "chevron-right" : "chevron-down"} size="3" />
                             {t("dashboard.Open cards")}
-                            {openCards.length > 0 && <span className="ml-auto">{openCards.length}</span>}
+                            {visibleOpenCards.length > 0 && <span className="ml-auto">{visibleOpenCards.length}</span>}
                         </button>
                         {!openCardsCollapsed &&
-                            openCards.map((card) => {
+                            visibleOpenCards.map((card) => {
                                 const active = location.pathname === ROUTES.BOARD.CARD(card.projectUID, card.cardUID);
                                 return (
                                     <div

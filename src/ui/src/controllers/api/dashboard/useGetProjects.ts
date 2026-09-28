@@ -48,7 +48,7 @@ const useGetProjects = (options?: TQueryOptions<unknown, IGetProjectsResponse>) 
         ...options,
         retry: 0,
         refetchInterval: Infinity,
-        refetchOnWindowFocus: false,
+        refetchOnWindowFocus: options?.refetchOnWindowFocus ?? false,
     });
     return result;
 };
