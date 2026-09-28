@@ -87,15 +87,13 @@ export function useUnreadChangeNavigation(): void {
                 if (element) {
                     await scrollIntoViewStable(element);
                     highlightElement(element);
+                    return;
                 }
-                return;
             }
-            if (targetType === "description" || targetType === "card") {
-                const element = await waitForElement("[data-card-description]");
-                if (element) {
-                    await scrollIntoViewStable(element);
-                    highlightElement(element);
-                }
+            const element = await waitForElement("[data-card-description]");
+            if (element) {
+                await scrollIntoViewStable(element);
+                highlightElement(element);
             }
         };
 
