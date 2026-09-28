@@ -37,6 +37,7 @@ import useGetProject from "@/controllers/api/board/useGetProject";
 import useGetCards from "@/controllers/api/board/useGetCards";
 import useGetGraphApprovals from "@/controllers/api/board/graphApprovals/useGetGraphApprovals";
 import BoardActivityDialog from "@/pages/BoardPage/components/board/BoardActivityDialog";
+import BoardChangesDialog from "@/pages/BoardPage/components/board/BoardChangesDialog";
 import { cn } from "@/core/utils/ComponentUtils";
 import useCardRelationshipsUpdatedHandlers from "@/controllers/socket/card/useCardRelationshipsUpdatedHandlers";
 import useRoleActionFilter from "@/core/hooks/useRoleActionFilter";
@@ -168,6 +169,7 @@ function BoardProxyDisplay({ pageRoute, isFetching, project }: IBoardProxyDispla
     const navigate = usePageNavigateRef();
     const [isCardExpanded, setIsCardExpanded] = useState(false);
     const [isActivityDialogOpened, setIsActivityDialogOpened] = useState(false);
+    const [isChangesDialogOpened, setIsChangesDialogOpened] = useState(false);
     const [activeSidePanel, setActiveSidePanel] = useState<TBoardSidePanel>();
     const [isContextOpen, setIsContextOpen] = useState(true);
     const [isMobile, setIsMobile] = useState(window.innerWidth < ScreenMap.size.md);
@@ -192,7 +194,7 @@ function BoardProxyDisplay({ pageRoute, isFetching, project }: IBoardProxyDispla
     }, [isMobile, isBotScopeOpened]);
     useEffect(() => {
         const toggleContext = () => toggleSwitchProject();
-        const openChanges = () => setIsActivityDialogOpened(true);
+        const openChanges = () => setIsChangesDialogOpened(true);
         window.addEventListener(WORKBENCH_TOGGLE_CONTEXT_EVENT, toggleContext);
         window.addEventListener(WORKBENCH_OPEN_CHANGES_EVENT, openChanges);
         return () => {
@@ -629,6 +631,12 @@ function BoardProxyDisplay({ pageRoute, isFetching, project }: IBoardProxyDispla
                         label: t("dashboard.My Work"),
                         onClick: () => navigate(`${ROUTES.DASHBOARD.MY_WORK}?project_uid=${project.uid}`),
                     },
+                    {
+                        icon: "circle-dot",
+                        label: t("dashboard.Changes"),
+                        onClick: () => setIsChangesDialogOpened(true),
+                        active: isChangesDialogOpened,
+                    },
                     ...headerNavs.map((nav, index) => ({
                         icon: ["columns-3", "notebook-pen", "network", "history", "settings", "bot"][index],
                         label: String(nav.name),
@@ -731,6 +739,7 @@ function BoardProxyDisplay({ pageRoute, isFetching, project }: IBoardProxyDispla
                 )}
             </DashboardStyledLayout>
             <BoardActivityDialog isOpened={isActivityDialogOpened} setIsOpened={setIsActivityDialogOpened} />
+            <BoardChangesDialog projectUID={project.uid} isOpened={isChangesDialogOpened} setIsOpened={setIsChangesDialogOpened} />
         </>
     );
 }
