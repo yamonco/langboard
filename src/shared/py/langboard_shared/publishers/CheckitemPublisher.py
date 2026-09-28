@@ -254,7 +254,7 @@ class CheckitemPublisher(BaseSocketPublisher):
                 topic=SocketTopic.Dashboard,
                 topic_id=topic_id,
                 event=f"dashboard:card:created:{topic_id}",
-                custom_data={"column_uid": target_column.get_uid()},
+                custom_data={"project_column_uid": target_column.get_uid(), "source_type": None},
             ),
         ]
 

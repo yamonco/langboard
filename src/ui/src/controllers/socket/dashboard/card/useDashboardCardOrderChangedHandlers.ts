@@ -9,6 +9,7 @@ export interface IDashboardCardOrderChangedRawResponse {
     to_column_uid: string;
     project_column_name: string;
     archived_at: string;
+    source_type?: string | null;
 }
 
 export interface IUseDashboardCardOrderChangedHandlersProps extends IBaseUseSocketHandlersProps<{}> {
@@ -28,11 +29,13 @@ const useDashboardCardOrderChangedHandlers = ({ callback, project }: IUseDashboa
                 const columns = ProjectColumn.Model.getModels(
                     (model) => model.project_uid === project.uid && (model.uid === data.from_column_uid || model.uid === data.to_column_uid)
                 );
-                for (let i = 0; i < columns.length; ++i) {
-                    if (columns[i].uid === data.from_column_uid) {
-                        --columns[i].count;
-                    } else if (columns[i].uid === data.to_column_uid) {
-                        ++columns[i].count;
+                if (data.source_type !== "project_wiki") {
+                    for (let i = 0; i < columns.length; ++i) {
+                        if (columns[i].uid === data.from_column_uid) {
+                            --columns[i].count;
+                        } else if (columns[i].uid === data.to_column_uid) {
+                            ++columns[i].count;
+                        }
                     }
                 }
 
