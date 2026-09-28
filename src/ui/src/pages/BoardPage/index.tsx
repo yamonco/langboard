@@ -633,8 +633,23 @@ function BoardProxyDisplay({ pageRoute, isFetching, project }: IBoardProxyDispla
                         badge: index === 5 ? pendingGraphApprovalBadge : undefined,
                     })),
                 ]}
-                workbenchContext={isBotScopeOpened ? <BoardBotScopeSidebar project={project} /> : <ProjectExplorerSidebar currentProject={project} />}
+                workbenchContext={
+                    isBotScopeOpened ? (
+                        <BoardBotScopeSidebar project={project} />
+                    ) : (
+                        <ProjectExplorerSidebar currentProject={project} onNavigate={() => setActiveSidePanel(undefined)} />
+                    )
+                }
                 workbenchContextHidden={!isContextOpen || isMobile || !!selectCardViewType}
+                mobileWorkbenchContext={
+                    isMobile && !selectCardViewType && activeSidePanel
+                        ? {
+                              title: isBotScopeOpened ? "Bots" : "Explorer",
+                              icon: isBotScopeOpened ? "bot" : "panel-left",
+                              onClose: () => setActiveSidePanel(undefined),
+                          }
+                        : undefined
+                }
                 resizableSidebar={
                     chatResizableSidebar
                         ? {
@@ -656,9 +671,6 @@ function BoardProxyDisplay({ pageRoute, isFetching, project }: IBoardProxyDispla
                             pageRoute === "settings" ? "overflow-y-auto overflow-x-hidden" : "overflow-hidden"
                         )}
                     >
-                        {!selectCardViewType && (
-                            <BoardSidePanel activePanel={activeSidePanel} project={project} onNavigate={() => setActiveSidePanel(undefined)} />
-                        )}
                         <Box className="relative min-w-0 flex-1">
                             <Box
                                 className={cn(
@@ -737,57 +749,6 @@ function BoardMobileChatOverlay({
                 <IconComponent icon="x" size="5" />
             </Button>
             {children}
-        </Box>
-    );
-}
-
-function BoardSidePanel({
-    activePanel,
-    project,
-    onNavigate,
-}: {
-    activePanel?: TBoardSidePanel;
-    project: Project.TModel;
-    onNavigate: () => void;
-}): React.JSX.Element {
-    const isOpened = !!activePanel;
-    const isBotScope = activePanel === "botScope";
-    const title = isBotScope ? "Bots" : "Explorer";
-    const icon = isBotScope ? "bot" : "panel-left";
-    const widthClassName = isBotScope ? "w-auto md:w-80" : "w-auto md:w-72";
-
-    return (
-        <Box
-            className={cn(
-                "fixed bottom-[4.75rem] left-2 right-2 z-40 h-[60dvh] max-h-[calc(100dvh-7rem)]",
-                "overflow-hidden rounded-2xl border bg-background shadow-lg",
-                "transition-[opacity,transform,width] duration-200 ease-out",
-                "md:hidden",
-                isOpened
-                    ? `translate-y-0 opacity-100 md:translate-y-0 ${widthClassName}`
-                    : "pointer-events-none translate-y-4 opacity-0 md:w-0 md:translate-y-0 md:border-r-0"
-            )}
-            aria-hidden={!isOpened}
-        >
-            <Flex
-                direction="col"
-                h="full"
-                className={cn(widthClassName, "transition-transform duration-200 ease-out", isOpened ? "translate-x-0" : "-translate-x-4")}
-            >
-                <Flex items="center" gap="2" className="shrink-0 border-b px-4 py-3" weight="semibold">
-                    <IconComponent icon={icon} size="4" />
-                    <span>{title}</span>
-                </Flex>
-                <Box className="min-h-0 flex-1">
-                    {!isOpened ? (
-                        <></>
-                    ) : isBotScope ? (
-                        <BoardBotScopeSidebar project={project} />
-                    ) : (
-                        <ProjectExplorerSidebar currentProject={project} onNavigate={onNavigate} />
-                    )}
-                </Box>
-            </Flex>
         </Box>
     );
 }

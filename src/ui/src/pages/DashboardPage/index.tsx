@@ -13,7 +13,7 @@ import { DashboardProvider } from "@/core/providers/DashboardProvider";
 import { useAuth } from "@/core/providers/AuthProvider";
 import { Project } from "@/core/models";
 import { useTranslation } from "react-i18next";
-import { SkeletonProjecTabs } from "@/pages/DashboardPage/components/ProjectTabs";
+import { SkeletonProjectDiscoveryPage } from "@/pages/DashboardPage/components/ProjectDiscoveryPage";
 import { PROJECT_QUICK_SWITCHER_EVENT } from "@/pages/DashboardPage/components/ProjectDiscovery";
 import ProjectExplorerSidebar from "@/pages/DashboardPage/components/ProjectExplorerSidebar";
 import { WORKBENCH_TOGGLE_CONTEXT_EVENT } from "@/pages/DashboardPage/components/WorkbenchCommands";
@@ -121,10 +121,8 @@ const DashboardProxy = memo((): React.JSX.Element => {
                 case "starred":
                 case "recent":
                 case "unstarred":
-                    pageContent = (
-                        <ProjectPage updateStarredProjects={updateStarredProjects} currentTab={tabName} scrollAreaUpdater={scrollAreaUpdater} />
-                    );
-                    skeletonContent = <SkeletonProjecTabs />;
+                    pageContent = <ProjectPage updateStarredProjects={updateStarredProjects} scrollAreaUpdater={scrollAreaUpdater} />;
+                    skeletonContent = <SkeletonProjectDiscoveryPage />;
                     break;
                 default:
                     return <Navigate to={ROUTES.DASHBOARD.PROJECTS.ALL} />;
