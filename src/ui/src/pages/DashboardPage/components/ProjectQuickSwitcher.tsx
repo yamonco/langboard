@@ -155,22 +155,6 @@ const ProjectQuickSwitcher = memo((): React.JSX.Element => {
                     currentProjectUID={currentProjectUID}
                     onSelect={selectProject}
                 />
-                {cards.length > 0 && (
-                    <Command.Group heading={t("dashboard.Cards")}>
-                        {cards.map((card) => (
-                            <Command.Item
-                                key={`${card.projectUID}:${card.cardUID}`}
-                                value={`card:${card.projectUID}:${card.cardUID}`}
-                                keywords={[card.title, projects.find((project) => project.uid === card.projectUID)?.title ?? ""]}
-                                onSelect={() => selectRoute(ROUTES.BOARD.CARD(card.projectUID, card.cardUID))}
-                                className="gap-3 rounded-lg"
-                            >
-                                <IconComponent icon="file-text" size="4" />
-                                <span className="truncate">{card.title}</span>
-                            </Command.Item>
-                        ))}
-                    </Command.Group>
-                )}
                 <Command.Group heading={t("dashboard.Actions")}>
                     {currentProjectUID && (
                         <Command.Item
@@ -201,6 +185,22 @@ const ProjectQuickSwitcher = memo((): React.JSX.Element => {
                         {t("dashboard.Toggle sidebar")}
                     </Command.Item>
                 </Command.Group>
+                {cards.length > 0 && (
+                    <Command.Group heading={t("dashboard.Cards")}>
+                        {cards.map((card) => (
+                            <Command.Item
+                                key={`${card.projectUID}:${card.cardUID}`}
+                                value={`card:${card.projectUID}:${card.cardUID}`}
+                                keywords={[card.title, projects.find((project) => project.uid === card.projectUID)?.title ?? ""]}
+                                onSelect={() => selectRoute(ROUTES.BOARD.CARD(card.projectUID, card.cardUID))}
+                                className="gap-3 rounded-lg"
+                            >
+                                <IconComponent icon="file-text" size="4" />
+                                <span className="truncate">{card.title}</span>
+                            </Command.Item>
+                        ))}
+                    </Command.Group>
+                )}
                 <Command.Group heading={t("dashboard.Navigation")}>
                     <Command.Item value="navigation:my-work" onSelect={() => selectRoute(ROUTES.DASHBOARD.TRACKING)} className="gap-3 rounded-lg">
                         <IconComponent icon="list-checks" size="4" />
@@ -228,7 +228,7 @@ const ProjectQuickSwitcher = memo((): React.JSX.Element => {
                     )}
                 </Command.Group>
             </Command.List>
-            <Flex items="center" justify="between" className="border-t px-3 py-2 text-xs text-muted-foreground">
+            <Flex items="center" justify="between" className="hidden border-t px-3 py-2 text-xs text-muted-foreground sm:flex">
                 <span>{t("dashboard.Search projects, cards and commands")}</span>
                 <span className="rounded border bg-muted px-1.5 py-0.5 font-mono">⌘K / Ctrl K</span>
             </Flex>
