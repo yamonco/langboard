@@ -33,6 +33,8 @@ def _editor_search_text(column, dialect: str):
 
 
 class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
+    TERMINAL_WORK_COLUMN_NAMES = ("done", "completed", "complete", "완료")
+
     @staticmethod
     def parent_model_cls():
         return ProjectColumn
@@ -379,6 +381,8 @@ class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
             .where(Project.column("id").in_([InfraHelper.convert_id(project) for project in project_uids]))
             .where(Project.column("deleted_at") == None)  # noqa: E711
             .where(Card.column("archived_at") == None)  # noqa: E711
+            .where(ProjectColumn.column("is_archive").is_(False))
+            .where(func.lower(func.trim(ProjectColumn.column("name"))).notin_(self.TERMINAL_WORK_COLUMN_NAMES))
             .where(or_(*conditions))
         )
         if since is not None:

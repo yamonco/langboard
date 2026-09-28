@@ -202,7 +202,13 @@ const ProjectQuickSwitcher = memo((): React.JSX.Element => {
                     </Command.Group>
                 )}
                 <Command.Group heading={t("dashboard.Navigation")}>
-                    <Command.Item value="navigation:my-work" onSelect={() => selectRoute(ROUTES.DASHBOARD.TRACKING)} className="gap-3 rounded-lg">
+                    <Command.Item
+                        value="navigation:my-work"
+                        onSelect={() =>
+                            selectRoute(currentProjectUID ? `${ROUTES.DASHBOARD.MY_WORK}?project_uid=${currentProjectUID}` : ROUTES.DASHBOARD.MY_WORK)
+                        }
+                        className="gap-3 rounded-lg"
+                    >
                         <IconComponent icon="list-checks" size="4" />
                         {t("dashboard.My Work")}
                     </Command.Item>

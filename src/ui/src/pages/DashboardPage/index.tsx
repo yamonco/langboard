@@ -7,6 +7,7 @@ import { ROUTES } from "@/core/routing/constants";
 import ProjectPage from "@/pages/DashboardPage/ProjectPage";
 import CardsPage, { SkeletonCardsPage } from "@/pages/DashboardPage/CardsPage";
 import TrackingPage, { SkeletonTrackingPage } from "@/pages/DashboardPage/TrackingPage";
+import MyWorkPage from "@/pages/DashboardPage/MyWorkPage";
 import { usePageNavigateRef } from "@/core/hooks/usePageNavigate";
 import { Navigate } from "react-router";
 import { DashboardProvider } from "@/core/providers/DashboardProvider";
@@ -115,6 +116,10 @@ const DashboardProxy = memo((): React.JSX.Element => {
             pageContent = <TrackingPage />;
             skeletonContent = <SkeletonTrackingPage />;
             break;
+        case "my-work":
+            pageContent = <MyWorkPage />;
+            skeletonContent = <SkeletonCardsPage />;
+            break;
         case "projects":
             switch (tabName) {
                 case "all":
@@ -135,11 +140,25 @@ const DashboardProxy = memo((): React.JSX.Element => {
     return (
         <DashboardStyledLayout
             headerNavs={headerNavs}
-            headerTitle={pageType === "cards" ? t("dashboard.Cards") : pageType === "tracking" ? t("dashboard.Tracking") : t("dashboard.Projects")}
+            headerTitle={
+                pageType === "cards"
+                    ? t("dashboard.Cards")
+                    : pageType === "tracking"
+                      ? t("dashboard.Tracking")
+                      : pageType === "my-work"
+                        ? t("dashboard.My Work")
+                        : t("dashboard.Projects")
+            }
             activityRailItems={[
                 { icon: "panel-left", label: "Explorer", onClick: () => setIsExplorerOpen((open) => !open), active: isExplorerOpen },
                 { icon: "folder-kanban", label: t("dashboard.Projects"), onClick: headerNavs[0].onClick!, active: pageType === "projects" },
                 { icon: "layout-dashboard", label: t("dashboard.Cards"), onClick: headerNavs[1].onClick!, active: pageType === "cards" },
+                {
+                    icon: "list-checks",
+                    label: t("dashboard.My Work"),
+                    onClick: () => navigate(ROUTES.DASHBOARD.MY_WORK),
+                    active: pageType === "my-work",
+                },
                 { icon: "star", label: t("dashboard.Starred"), onClick: () => window.dispatchEvent(new Event(PROJECT_QUICK_SWITCHER_EVENT)) },
                 { icon: "clock", label: t("dashboard.Tracking"), onClick: headerNavs[3].onClick!, active: pageType === "tracking" },
                 ...sidebarNavs.map((item) => ({ icon: item.icon, label: item.name, onClick: item.onClick! })),

@@ -220,7 +220,8 @@ export default function BoardWorkIsland({ project, dragging }: { project: Projec
                         variant={over ? "default" : current ? "secondary" : "ghost"}
                         disabled={busy}
                         className={cn(
-                            "h-11 min-w-0 shrink-0 gap-1 rounded-xl px-2 transition-[width,background-color,transform] duration-200 md:gap-2 md:rounded-full md:px-3",
+                            "h-11 min-w-0 shrink-0 gap-1 rounded-xl px-2 duration-200 md:gap-2 md:rounded-full md:px-3",
+                            "transition-[width,background-color,transform]",
                             dragging ? "min-w-44 border border-dashed border-primary/60 md:px-4" : "min-w-0",
                             over && "scale-[1.03]"
                         )}
@@ -284,7 +285,7 @@ export default function BoardWorkIsland({ project, dragging }: { project: Projec
                         className="mt-2 w-full justify-start"
                         onClick={() => {
                             setMenuOpen(false);
-                            navigate(ROUTES.DASHBOARD.TRACKING, { smooth: true });
+                            navigate(`${ROUTES.DASHBOARD.MY_WORK}?project_uid=${project.uid}`, { smooth: true });
                         }}
                     >
                         모든 작업 보기

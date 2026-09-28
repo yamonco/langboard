@@ -70,6 +70,7 @@ const API = {
         CARDS: "/dashboard/cards",
         TRACKING: "/dashboard/tracking",
         ACTIVE_WORK: "/dashboard/work/active",
+        MY_WORK: "/dashboard/work/my",
     },
     BOARD: {
         GET: "/board/{uid}",
