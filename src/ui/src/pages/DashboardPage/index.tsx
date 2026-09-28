@@ -137,6 +137,7 @@ const DashboardProxy = memo((): React.JSX.Element => {
     return (
         <DashboardStyledLayout
             headerNavs={headerNavs}
+            headerTitle={pageType === "cards" ? t("dashboard.Cards") : pageType === "tracking" ? t("dashboard.Tracking") : t("dashboard.Projects")}
             activityRailItems={[
                 { icon: "panel-left", label: "Explorer", onClick: () => setIsExplorerOpen((open) => !open), active: isExplorerOpen },
                 { icon: "folder-kanban", label: t("dashboard.Projects"), onClick: headerNavs[0].onClick!, active: pageType === "projects" },

@@ -28,12 +28,13 @@ import { SkeletonBoard } from "@/pages/BoardPage/components/board/Board";
 import useBoardAssignedInternalBotChangedHandlers from "@/controllers/socket/board/useBoardAssignedInternalBotChangedHandlers";
 import useInternalBotUpdatedHandlers from "@/controllers/socket/global/useInternalBotUpdatedHandlers";
 import useSwitchSocketHandlers from "@/core/hooks/useSwitchSocketHandlers";
-import { GraphApprovalRequestModel, InternalBotModel, Project } from "@/core/models";
+import { GraphApprovalRequestModel, InternalBotModel, Project, ProjectCard } from "@/core/models";
 import { EGraphApprovalScopeTable, EGraphApprovalStatus } from "@/core/models/GraphApprovalRequestModel";
 import { EHttpStatus, ESocketTopic } from "@langboard/core/enums";
 import useBoardBotStatusMapHandlers from "@/controllers/socket/board/useBoardBotStatusMapHandlers";
 import { BoardBotScopeList, isBoardBotScopeGraphApprovalOriginType } from "@/pages/BoardPage/components/board/BoardBotScope";
 import useGetProject from "@/controllers/api/board/useGetProject";
+import useGetCards from "@/controllers/api/board/useGetCards";
 import useGetGraphApprovals from "@/controllers/api/board/graphApprovals/useGetGraphApprovals";
 import BoardActivityDialog from "@/pages/BoardPage/components/board/BoardActivityDialog";
 import { cn } from "@/core/utils/ComponentUtils";
@@ -154,6 +155,11 @@ interface IBoardProxyDisplayProps {
     isFetching: bool;
 }
 
+function BoardHeaderCardTitle({ card }: { card: ProjectCard.TModel }) {
+    const title = card.useField("title");
+    return <span className="min-w-0 truncate">{title}</span>;
+}
+
 function BoardProxyDisplay({ pageRoute, isFetching, project }: IBoardProxyDisplayProps): React.JSX.Element {
     const [t] = useTranslation();
     const { setPageAliasRef } = usePageHeader();
@@ -206,6 +212,8 @@ function BoardProxyDisplay({ pageRoute, isFetching, project }: IBoardProxyDispla
     } = useBoardController();
     const isCardPage = !!pageRoute && !["graph", "wiki", "settings"].includes(pageRoute);
     const projectTitle = project.useField("title");
+    const { data: boardCardsData } = useGetCards({ project_uid: project.uid }, { enabled: isCardPage });
+    const activeCard = boardCardsData && isCardPage ? ProjectCard.Model.getModel(pageRoute) : undefined;
     useGetGraphApprovals(
         {
             project_uid: project.uid,
@@ -603,7 +611,17 @@ function BoardProxyDisplay({ pageRoute, isFetching, project }: IBoardProxyDispla
         <>
             <DashboardStyledLayout
                 headerNavs={headerNavs}
-                headerTitle={projectTitle}
+                headerTitle={
+                    <span className="flex min-w-0 items-center gap-1">
+                        <span className="max-w-32 shrink-0 truncate">{projectTitle}</span>
+                        {isCardPage && activeCard && (
+                            <>
+                                <IconComponent icon="chevron-right" size="3" className="shrink-0 text-muted-foreground" />
+                                <BoardHeaderCardTitle card={activeCard} />
+                            </>
+                        )}
+                    </span>
+                }
                 activityRailItems={[
                     { icon: "panel-left", label: "Explorer", onClick: () => setIsContextOpen((open) => !open), active: isContextOpen },
                     ...headerNavs.map((nav, index) => ({
