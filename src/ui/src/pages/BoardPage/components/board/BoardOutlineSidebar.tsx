@@ -17,7 +17,7 @@ export default function BoardOutlineSidebar({
     const card = ProjectCard.Model.useModel(cardUID ?? "", [cardUID]);
 
     return (
-        <nav aria-label={t("dashboard.Outline")} data-workbench-context="" className="flex h-full min-w-0 flex-col overflow-hidden">
+        <nav aria-label={t("dashboard.Outline")} data-workbench-context="" className="flex h-full w-full min-w-0 flex-col overflow-hidden">
             <div className="shrink-0 border-b px-3 py-2 text-xs font-semibold uppercase tracking-wide">{t("dashboard.Outline")}</div>
             <div className="min-h-0 flex-1 overflow-y-auto p-2">
                 {card ? (

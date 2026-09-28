@@ -17,7 +17,7 @@ export default function BoardWikiSidebar({ projectUID, onNavigate }: { projectUI
     };
 
     return (
-        <nav aria-label={t("board.Wiki")} data-workbench-context="" className="flex h-full min-w-0 flex-col overflow-hidden">
+        <nav aria-label={t("board.Wiki")} data-workbench-context="" className="flex h-full w-full min-w-0 flex-col overflow-hidden">
             <div className="flex shrink-0 items-center justify-between border-b px-3 py-2 text-xs font-semibold uppercase tracking-wide">
                 <span>{t("board.Wiki")}</span>
                 <button type="button" className="text-primary hover:underline" onClick={() => open(ROUTES.BOARD.WIKI(projectUID))}>
