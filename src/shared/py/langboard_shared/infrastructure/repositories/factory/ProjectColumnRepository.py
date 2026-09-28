@@ -1,5 +1,5 @@
 from typing import Any
-from sqlalchemy import case, func, select
+from sqlalchemy import case, func, or_, select
 from ....ai import BotScheduleHelper, BotScopeHelper
 from ....core.db import DbSession, SqlBuilder
 from ....core.domain import BaseOrderRepository
@@ -156,7 +156,11 @@ class ProjectColumnRepository(BaseOrderRepository[ProjectColumn, Project]):
         project_ids = [InfraHelper.convert_id(project) for project in projects]
         query = SqlBuilder.select.tables(ProjectColumn, func.count(Card.column("id")).label("count")).outerjoin(  # type: ignore
             Card,
-            (Card.column("project_column_id") == ProjectColumn.column("id")) & (Card.column("deleted_at") == None),  # noqa
+            (Card.column("project_column_id") == ProjectColumn.column("id"))
+            & Card.column("deleted_at").is_(None)
+            & or_(
+                Card.column("source_type").is_(None), Card.column("source_type") != Card.LINKED_RESOURCE_PROJECT_WIKI
+            ),
         )
 
         query = (
