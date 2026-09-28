@@ -75,7 +75,7 @@ export interface IBoardColumnProps {
     updateBoard: () => void;
 }
 
-function BoardColumn({ column, updateBoard }: IBoardColumnProps) {
+function BoardColumn({ column, updateBoard, isDefaultCardColumn }: IBoardColumnProps & { isDefaultCardColumn: boolean }) {
     const { canDragAndDrop } = useBoard();
     const scrollableRef = useRef<HTMLDivElement | null>(null);
     const outerFullHeightRef = useRef<HTMLDivElement | null>(null);
@@ -121,7 +121,7 @@ function BoardColumn({ column, updateBoard }: IBoardColumnProps) {
     }, [canDragAndDrop, column, order]);
 
     return (
-        <BoardAddCardProvider column={column} viewportRef={scrollableRef} toLastPage={() => {}}>
+        <BoardAddCardProvider column={column} viewportRef={scrollableRef} toLastPage={() => {}} isDefaultCardColumn={isDefaultCardColumn}>
             <Card.Root
                 ref={outerFullHeightRef}
                 {...{ [BOARD_COLUMN_TOUCH_DND_ATTR]: column.uid }}

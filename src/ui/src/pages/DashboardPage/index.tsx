@@ -16,10 +16,17 @@ import { useTranslation } from "react-i18next";
 import { SkeletonProjecTabs } from "@/pages/DashboardPage/components/ProjectTabs";
 import { PROJECT_QUICK_SWITCHER_EVENT } from "@/pages/DashboardPage/components/ProjectDiscovery";
 import ProjectExplorerSidebar from "@/pages/DashboardPage/components/ProjectExplorerSidebar";
+import { WORKBENCH_TOGGLE_CONTEXT_EVENT } from "@/pages/DashboardPage/components/WorkbenchCommands";
+import { useEffect } from "react";
 
 const DashboardProxy = memo((): React.JSX.Element => {
     const [t] = useTranslation();
     const [isExplorerOpen, setIsExplorerOpen] = useState(true);
+    useEffect(() => {
+        const toggle = () => setIsExplorerOpen((open) => !open);
+        window.addEventListener(WORKBENCH_TOGGLE_CONTEXT_EVENT, toggle);
+        return () => window.removeEventListener(WORKBENCH_TOGGLE_CONTEXT_EVENT, toggle);
+    }, []);
     const navigate = usePageNavigateRef();
     const [pageType, tabName] = location.pathname.split("/").slice(2);
     const { data, isFetching } = useGetAllStarredProjects();

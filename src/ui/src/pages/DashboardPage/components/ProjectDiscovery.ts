@@ -5,6 +5,29 @@ export const PROJECT_RECENT_WORK_LIMIT = 6;
 export const PROJECT_RELATED_TO_ME_LIMIT = 6;
 export const PROJECT_QUICK_SWITCHER_EVENT = "langboard:open-project-quick-switcher";
 
+export interface ICommandPaletteCard {
+    projectUID: string;
+    cardUID: string;
+    title: string;
+}
+
+export const buildCommandPaletteCards = (
+    openCards: readonly ICommandPaletteCard[],
+    boardCards: readonly ICommandPaletteCard[],
+    authorizedProjectUIDs: ReadonlySet<string>
+): ICommandPaletteCard[] => {
+    const results = openCards.filter((card) => authorizedProjectUIDs.has(card.projectUID));
+    const known = new Set(results.map((card) => `${card.projectUID}:${card.cardUID}`));
+    for (const card of boardCards) {
+        if (!authorizedProjectUIDs.has(card.projectUID)) continue;
+        const key = `${card.projectUID}:${card.cardUID}`;
+        if (known.has(key)) continue;
+        results.push(card);
+        known.add(key);
+    }
+    return results;
+};
+
 export type TProjectListView = "compact" | "cards";
 
 export interface IProjectDiscoverySections<TProject extends IActivityPriorityProject> {

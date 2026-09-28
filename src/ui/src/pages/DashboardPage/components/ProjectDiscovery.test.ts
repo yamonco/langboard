@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+    buildCommandPaletteCards,
     buildProjectDiscoverySections,
     buildProjectQuickSwitcherSections,
     isProjectQuickSwitcherShortcut,
@@ -9,6 +10,26 @@ import {
     projectListViewStorageKey,
     searchProjects,
 } from "./ProjectDiscovery.ts";
+
+test("command palette cards keep open-card order, deduplicate board cards, and exclude inaccessible projects", () => {
+    assert.deepEqual(
+        buildCommandPaletteCards(
+            [
+                { projectUID: "allowed", cardUID: "one", title: "Recent" },
+                { projectUID: "revoked", cardUID: "secret", title: "Stale" },
+            ],
+            [
+                { projectUID: "allowed", cardUID: "one", title: "Board copy" },
+                { projectUID: "allowed", cardUID: "two", title: "Current board" },
+            ],
+            new Set(["allowed"])
+        ),
+        [
+            { projectUID: "allowed", cardUID: "one", title: "Recent" },
+            { projectUID: "allowed", cardUID: "two", title: "Current board" },
+        ]
+    );
+});
 
 interface ITestProject {
     uid: string;

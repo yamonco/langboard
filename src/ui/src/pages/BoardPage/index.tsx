@@ -54,6 +54,7 @@ import useBoardGraphApprovalRequestedHandlers from "@/controllers/socket/board/g
 import useBoardGraphApprovalUpdatedHandlers from "@/controllers/socket/board/graphApprovals/useBoardGraphApprovalUpdatedHandlers";
 import { getBoardChatStore } from "@/core/stores/BoardChatStore";
 import ProjectExplorerSidebar from "@/pages/DashboardPage/components/ProjectExplorerSidebar";
+import { WORKBENCH_OPEN_CHANGES_EVENT, WORKBENCH_TOGGLE_CONTEXT_EVENT } from "@/pages/DashboardPage/components/WorkbenchCommands";
 import { closeProject } from "@/pages/DashboardPage/components/OpenCardsStore";
 
 const BoardGraphPage = lazy(() => import("@/pages/BoardPage/BoardGraphPage"));
@@ -183,6 +184,16 @@ function BoardProxyDisplay({ pageRoute, isFetching, project }: IBoardProxyDispla
             setIsContextOpen((open) => !open);
         }
     }, [isMobile, isBotScopeOpened]);
+    useEffect(() => {
+        const toggleContext = () => toggleSwitchProject();
+        const openChanges = () => setIsActivityDialogOpened(true);
+        window.addEventListener(WORKBENCH_TOGGLE_CONTEXT_EVENT, toggleContext);
+        window.addEventListener(WORKBENCH_OPEN_CHANGES_EVENT, openChanges);
+        return () => {
+            window.removeEventListener(WORKBENCH_TOGGLE_CONTEXT_EVENT, toggleContext);
+            window.removeEventListener(WORKBENCH_OPEN_CHANGES_EVENT, openChanges);
+        };
+    }, [toggleSwitchProject]);
     const {
         boardViewType,
         selectCardViewType,
