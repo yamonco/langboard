@@ -7,7 +7,7 @@ import { closeCard, retainProjects, toggleCardPin, useOpenCards } from "./OpenCa
 import Input from "@/components/base/Input";
 import IconComponent from "@/components/base/IconComponent";
 import useGetProjects from "@/controllers/api/dashboard/useGetProjects";
-import { Project } from "@/core/models";
+import { Project, ProjectCard } from "@/core/models";
 import { usePageNavigateRef } from "@/core/hooks/usePageNavigate";
 import { ROUTES } from "@/core/routing/constants";
 import { cn } from "@/core/utils/ComponentUtils";
@@ -99,6 +99,7 @@ export default function ProjectExplorerSidebar({ currentProject, onNavigate }: {
                                         >
                                             <IconComponent icon="file-text" size="3" className="shrink-0" />
                                             <span className="truncate">{card.title}</span>
+                                            <OpenCardUnreadDot cardUID={card.cardUID} />
                                         </button>
                                         <button
                                             type="button"
@@ -147,6 +148,17 @@ export default function ProjectExplorerSidebar({ currentProject, onNavigate }: {
             </div>
         </nav>
     );
+}
+
+function OpenCardUnreadDot({ cardUID }: { cardUID: string }) {
+    const model = ProjectCard.Model.useModel(cardUID, [cardUID]);
+    return model ? <LiveUnreadDot model={model} /> : null;
+}
+
+function LiveUnreadDot({ model }: { model: ProjectCard.TModel }) {
+    const [t] = useTranslation();
+    const unread = model.useField("has_unread_change");
+    return unread ? <span aria-label={t("board.Unread changes")} className="ml-auto size-1.5 shrink-0 rounded-full bg-primary" /> : null;
 }
 
 function ProjectExplorerItem({ project, active, onClick }: { project: Project.TModel; active: boolean; onClick: () => void }) {
