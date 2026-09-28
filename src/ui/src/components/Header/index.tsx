@@ -31,6 +31,7 @@ const Header = memo(({ navs, title, compact }: IHeaderProps) => {
 
     return (
         <header
+            data-workbench-context=""
             className={
                 compact
                     ? "sticky top-0 z-10 flex h-11 items-center justify-between gap-4 border-b bg-background px-4"
@@ -91,7 +92,7 @@ const Header = memo(({ navs, title, compact }: IHeaderProps) => {
                             <span className="sr-only">Toggle navigation menu</span>
                         </Button>
                     </Sheet.Trigger>
-                    <Sheet.Content side="left" className="flex flex-col justify-between">
+                    <Sheet.Content side="left" data-workbench-context="" className="flex flex-col justify-between">
                         <Flex
                             items="center"
                             position="absolute"

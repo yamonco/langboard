@@ -140,8 +140,9 @@ const DashboardStyledLayout = forwardRef<HTMLDivElement, TDashboardStyledLayoutP
                 {mobileWorkbenchContext && workbenchContext && (
                     <aside
                         aria-label={mobileWorkbenchContext.title}
+                        data-workbench-context=""
                         className={cn(
-                            "fixed bottom-[4.75rem] left-2 right-2 z-40 h-[60dvh] max-h-[calc(100dvh-7rem)]",
+                            "fixed bottom-[4.75rem] left-2 right-2 z-[120] h-[60dvh] max-h-[calc(100dvh-7rem)]",
                             "overflow-hidden rounded-2xl border bg-background shadow-lg md:hidden"
                         )}
                     >
