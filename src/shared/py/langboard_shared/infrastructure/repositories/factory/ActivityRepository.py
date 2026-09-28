@@ -36,7 +36,7 @@ class ActivityRepository(BaseRepository[BaseActivityModel]):
     def get_card_column_history(self, project: Project, card: Card) -> list[ProjectActivity]:
         """Read the complete, ordered status path without paging unrelated activity."""
         query = (
-            select(ProjectActivity)
+            SqlBuilder.select.table(ProjectActivity)
             .where(
                 ProjectActivity.column("project_id") == project.id,
                 ProjectActivity.column("card_id") == card.id,
