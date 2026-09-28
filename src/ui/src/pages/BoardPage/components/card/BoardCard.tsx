@@ -51,6 +51,7 @@ import BoardLinkedWikiCard from "@/pages/BoardPage/components/card/BoardLinkedWi
 import useCardLinkedResourceChangedHandlers from "@/controllers/socket/card/useCardLinkedResourceChangedHandlers";
 import useSwitchSocketHandlers from "@/core/hooks/useSwitchSocketHandlers";
 import { useQueryClient } from "@tanstack/react-query";
+import { closeCard, focusCard } from "@/pages/DashboardPage/components/OpenCardsStore";
 import {
     clampCommentPanelWidth,
     DEFAULT_COMMENT_PANEL_WIDTH,
@@ -102,6 +103,7 @@ const BoardCard = memo(
     }: IBoardCardProps): React.JSX.Element => {
         const { setPageAliasRef } = usePageHeader();
         const { data: cardData, isFetching, error } = useGetCardDetails({ project_uid: projectUID, card_uid: cardUID });
+        const focusedCardRef = useRef("");
         const [t] = useTranslation();
         const socket = useSocket();
         const queryClient = useQueryClient();
@@ -110,6 +112,7 @@ const BoardCard = memo(
             projectUID,
             cardUID,
             callback: () => {
+                closeCard(currentUser.uid, projectUID, cardUID);
                 Toast.Add.error(t("project.errors.Card deleted."));
                 navigate(ROUTES.BOARD.MAIN(projectUID), { replace: true });
             },
@@ -138,15 +141,34 @@ const BoardCard = memo(
 
             const { handle } = setupApiErrorHandler({
                 [EHttpStatus.HTTP_403_FORBIDDEN]: {
-                    after: () => navigate(ROUTES.ERROR(EHttpStatus.HTTP_403_FORBIDDEN), { replace: true }),
+                    after: () => {
+                        closeCard(currentUser.uid, projectUID, cardUID);
+                        navigate(ROUTES.ERROR(EHttpStatus.HTTP_403_FORBIDDEN), { replace: true });
+                    },
                 },
                 [EHttpStatus.HTTP_404_NOT_FOUND]: {
-                    after: () => navigate(ROUTES.ERROR(EHttpStatus.HTTP_404_NOT_FOUND), { replace: true }),
+                    after: () => {
+                        closeCard(currentUser.uid, projectUID, cardUID);
+                        navigate(ROUTES.ERROR(EHttpStatus.HTTP_404_NOT_FOUND), { replace: true });
+                    },
                 },
             });
 
             handle(error);
         }, [error]);
+
+        useEffect(() => {
+            const key = `${currentUser.uid}:${projectUID}:${cardUID}`;
+            if (!cardData?.card || isFetching || focusedCardRef.current === key) {
+                return;
+            }
+            focusedCardRef.current = key;
+            focusCard(currentUser.uid, {
+                projectUID,
+                cardUID,
+                title: cardData.card.linked_resource?.title || cardData.card.title,
+            });
+        }, [cardData, cardUID, currentUser.uid, isFetching, projectUID]);
 
         useEffect(() => {
             setPageAliasRef.current(cardData?.card?.linked_resource?.title || cardData?.card?.title || "");
