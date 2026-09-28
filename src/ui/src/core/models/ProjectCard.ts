@@ -235,6 +235,10 @@ class ProjectCard extends BaseModel<IStore> {
         return this.getValue("last_change_target_type");
     }
 
+    public get last_change_seq(): number | undefined {
+        return this.getValue("last_change_seq");
+    }
+
     public get last_change_target_uid(): string | undefined {
         return this.getValue("last_change_target_uid");
     }
