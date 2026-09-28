@@ -7,7 +7,6 @@ import Skeleton from "@/components/base/Skeleton";
 import type { IGetProjectsResponse } from "@/controllers/api/dashboard/useGetProjects";
 import { useDebounce } from "@/core/hooks/useDebounce";
 import ProjectList, { SkeletonProjectList } from "@/pages/DashboardPage/components/ProjectList";
-import { TProjectTab } from "@/pages/DashboardPage/constants";
 import { Project } from "@/core/models";
 import Button from "@/components/base/Button";
 import Flex from "@/components/base/Flex";
@@ -22,7 +21,7 @@ import {
     type TProjectListView,
 } from "@/pages/DashboardPage/components/ProjectDiscovery";
 
-export function SkeletonProjecTabs() {
+export function SkeletonProjectDiscoveryPage() {
     return (
         <>
             <Box px="2" mt="3">
@@ -39,8 +38,7 @@ export function SkeletonProjecTabs() {
     );
 }
 
-interface IProjectTabsProps {
-    currentTab: TProjectTab;
+interface IProjectDiscoveryPageProps {
     userUID: string;
     projectsData?: IGetProjectsResponse;
     isProjectsFetching: bool;
@@ -57,7 +55,7 @@ function ProjectDiscoveryObserver({ project, onChange }: { project: Project.TMod
     return null;
 }
 
-const ProjectTabs = memo(
+const ProjectDiscoveryPage = memo(
     ({
         userUID,
         projectsData,
@@ -65,7 +63,7 @@ const ProjectTabs = memo(
         isProjectsLoading,
         updateStarredProjects: updateHeaderStarredProjects,
         scrollAreaUpdater,
-    }: IProjectTabsProps): React.JSX.Element => {
+    }: IProjectDiscoveryPageProps): React.JSX.Element => {
         const [projectDiscoveryRevision, updateProjectDiscovery] = useReducer((x) => x + 1, 0);
         const onProjectDiscoveryChanged = useCallback(() => updateProjectDiscovery(), []);
         const [searchQuery, setSearchQuery] = useState("");
@@ -182,4 +180,4 @@ const ProjectTabs = memo(
     }
 );
 
-export default ProjectTabs;
+export default ProjectDiscoveryPage;

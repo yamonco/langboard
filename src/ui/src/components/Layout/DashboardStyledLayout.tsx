@@ -1,4 +1,5 @@
 import { forwardRef } from "react";
+import { useTranslation } from "react-i18next";
 import Header from "@/components/Header";
 import { IHeaderNavItem } from "@/components/Header/types";
 import ResizableSidebar, { IResizableSidebarProps } from "@/components/ResizableSidebar";
@@ -24,6 +25,7 @@ interface IBaseDashboardStyledLayoutProps {
     activityRailItems?: IActivityRailItem[];
     workbenchContext?: React.ReactNode;
     workbenchContextHidden?: boolean;
+    mobileWorkbenchContext?: { title: string; icon: string; onClose: () => void };
 }
 
 interface IHeaderDashboardStyledLayoutProps extends IBaseDashboardStyledLayoutProps {
@@ -64,12 +66,14 @@ const DashboardStyledLayout = forwardRef<HTMLDivElement, TDashboardStyledLayoutP
             activityRailItems,
             workbenchContext,
             workbenchContextHidden,
+            mobileWorkbenchContext,
             className,
             scrollAreaMutable,
             ...props
         },
         ref
     ) => {
+        const [t] = useTranslation();
         const { scrollableRef, isAtTop, scrollToTop } = useScrollToTop({});
 
         const main = (
@@ -133,6 +137,33 @@ const DashboardStyledLayout = forwardRef<HTMLDivElement, TDashboardStyledLayoutP
                         sidebar
                     )}
                 </Box>
+                {mobileWorkbenchContext && workbenchContext && (
+                    <aside
+                        aria-label={mobileWorkbenchContext.title}
+                        className={cn(
+                            "fixed bottom-[4.75rem] left-2 right-2 z-40 h-[60dvh] max-h-[calc(100dvh-7rem)]",
+                            "overflow-hidden rounded-2xl border bg-background shadow-lg md:hidden"
+                        )}
+                    >
+                        <Flex direction="col" h="full">
+                            <Flex items="center" gap="2" className="shrink-0 border-b px-4 py-3" weight="semibold">
+                                <IconComponent icon={mobileWorkbenchContext.icon} size="4" />
+                                <span>{mobileWorkbenchContext.title}</span>
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon-sm"
+                                    className="ml-auto"
+                                    aria-label={t("common.Close")}
+                                    onClick={mobileWorkbenchContext.onClose}
+                                >
+                                    <IconComponent icon="x" size="4" />
+                                </Button>
+                            </Flex>
+                            <Box className="min-h-0 flex-1">{workbenchContext}</Box>
+                        </Flex>
+                    </aside>
+                )}
             </Flex>
         );
     }
