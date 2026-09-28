@@ -351,6 +351,16 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
                         )}
                         <Card.Footer className="flex items-end justify-between gap-1.5 pb-4">
                             <Flex items="center">
+                                {cardMemberUIDs.length === 0 && (
+                                    <span
+                                        className={cn(
+                                            "inline-flex items-center rounded-md border border-amber-500/50 px-1.5 py-0.5",
+                                            "text-[11px] font-medium text-amber-700 dark:text-amber-300"
+                                        )}
+                                    >
+                                        {t("card.Unassigned")}
+                                    </span>
+                                )}
                                 {creator && (
                                     <span
                                         title={t("card.Created by {{name}}", {
