@@ -20,6 +20,7 @@ export interface IResizableSidebarProps {
     floatingHidden?: bool;
     hidden?: bool;
     widthCssVariable?: string;
+    compactHeight?: bool;
 }
 
 function ResizableSidebar({
@@ -34,6 +35,7 @@ function ResizableSidebar({
     floatingHidden,
     hidden,
     widthCssVariable,
+    compactHeight,
 }: IResizableSidebarProps) {
     const [isCollapsed, setIsCollapsed] = useState(defaultCollapsed);
     const [isMobile, setIsMobile] = useState(window.innerWidth < ScreenMap.size.md);
@@ -126,7 +128,10 @@ function ResizableSidebar({
             <Box
                 display={{ initial: "block", md: "flex" }}
                 w="full"
-                className="h-[calc(100vh_-_theme(spacing.16))] transition-all duration-200 ease-in-out"
+                className={cn(
+                    compactHeight ? "h-[calc(100dvh-2.75rem)]" : "h-[calc(100vh_-_theme(spacing.16))]",
+                    "transition-all duration-200 ease-in-out"
+                )}
             >
                 <Box
                     position="relative"

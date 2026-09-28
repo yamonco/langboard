@@ -15,7 +15,7 @@ import { usePageNavigateRef } from "@/core/hooks/usePageNavigate";
 import HeaderUserMenu from "@/components/Header/HeaderUserMenu";
 import HeaderUserNotification from "@/components/Header/HeaderUserNotification";
 
-const Header = memo(({ navs, title }: IHeaderProps) => {
+const Header = memo(({ navs, title, compact }: IHeaderProps) => {
     const { currentUser } = useAuth();
     const [isOpened, setIsOpen] = useState(false);
     const navigate = usePageNavigateRef();
@@ -27,7 +27,13 @@ const Header = memo(({ navs, title }: IHeaderProps) => {
     const separator = <Separator className="h-5" orientation="vertical" />;
 
     return (
-        <header className="sticky top-0 z-10 flex h-16 items-center justify-between gap-4 border-b bg-background px-4 md:px-6">
+        <header
+            className={
+                compact
+                    ? "sticky top-0 z-10 flex h-11 items-center justify-between gap-4 border-b bg-background px-4"
+                    : "sticky top-0 z-10 flex h-16 items-center justify-between gap-4 border-b bg-background px-4 md:px-6"
+            }
+        >
             {!navs.length && (
                 <Flex className="flex md:hidden">
                     <a onClick={toDashboard} className="flex size-6 cursor-pointer items-center gap-2 text-lg font-semibold md:text-base">
@@ -53,7 +59,7 @@ const Header = memo(({ navs, title }: IHeaderProps) => {
                     <CachedImage src="/images/logo.png" alt="Logo" size="full" />
                 </a>
                 {!!title && <span className="text-lg font-semibold">{title}</span>}
-                {navs.length > 0 && (
+                {navs.length > 0 && !compact && (
                     <NavigationMenu.Root>
                         <NavigationMenu.List>
                             <HedaerNavItems navs={navs} />

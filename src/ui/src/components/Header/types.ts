@@ -10,6 +10,7 @@ export interface IHeaderNavItem {
 export interface IHeaderProps {
     navs: IHeaderNavItem[];
     title?: React.ReactNode;
+    compact?: boolean;
 }
 
 interface IBaseHeaderNavItemsProps {

@@ -40,7 +40,7 @@ function Nav({
 }: IFloatingNavProps): React.JSX.Element | null {
     const visibleItems = items.filter((item) => !item.hidden);
 
-    if (visibleItems.length === 0) {
+    if (visibleItems.length === 0 && !trailing) {
         return null;
     }
 

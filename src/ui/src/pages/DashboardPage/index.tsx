@@ -126,7 +126,18 @@ const DashboardProxy = memo((): React.JSX.Element => {
     }
 
     return (
-        <DashboardStyledLayout headerNavs={headerNavs} sidebarNavs={sidebarNavs} scrollAreaMutable={scrollAreaMutable} className="overflow-x-hidden">
+        <DashboardStyledLayout
+            headerNavs={headerNavs}
+            activityRailItems={[
+                { icon: "folder-kanban", label: t("dashboard.Projects"), onClick: headerNavs[0].onClick!, active: pageType === "projects" },
+                { icon: "layout-dashboard", label: t("dashboard.Cards"), onClick: headerNavs[1].onClick!, active: pageType === "cards" },
+                { icon: "star", label: t("dashboard.Starred"), onClick: () => window.dispatchEvent(new Event(PROJECT_QUICK_SWITCHER_EVENT)) },
+                { icon: "clock", label: t("dashboard.Tracking"), onClick: headerNavs[3].onClick!, active: pageType === "tracking" },
+                ...sidebarNavs.map((item) => ({ icon: item.icon, label: item.name, onClick: item.onClick! })),
+            ]}
+            scrollAreaMutable={scrollAreaMutable}
+            className="overflow-x-hidden"
+        >
             {currentUser ? <DashboardProvider currentUser={currentUser}>{pageContent}</DashboardProvider> : skeletonContent}
         </DashboardStyledLayout>
     );
