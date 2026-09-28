@@ -67,18 +67,15 @@ export function useUnreadChangeNavigation(): void {
     const { card, projectUID } = useBoardCard();
     const { setIsCommentPanelOpen } = useBoardCardPanel();
     const { mutate: markSeen } = useMarkCardSeen();
-    const handledRef = useRef<bool>(false);
+    const hasUnreadChange = card.useField("has_unread_change");
+    const handledCardUIDRef = useRef<string | null>(null);
 
     useEffect(() => {
-        if (handledRef.current) {
+        if (!hasUnreadChange || handledCardUIDRef.current === card.uid) {
             return;
         }
-        handledRef.current = true;
-
+        handledCardUIDRef.current = card.uid;
         const model = card as ProjectCard.TModel;
-        if (!model.has_unread_change) {
-            return;
-        }
 
         const targetType = model.last_change_target_type;
         const targetUID = model.last_change_target_uid;
@@ -105,7 +102,7 @@ export function useUnreadChangeNavigation(): void {
         void focus();
         markSeen({ project_uid: projectUID, card_uid: card.uid });
         model.has_unread_change = false;
-    }, [card, markSeen, projectUID, setIsCommentPanelOpen]);
+    }, [card, hasUnreadChange, markSeen, projectUID, setIsCommentPanelOpen]);
 }
 
 export default useUnreadChangeNavigation;
