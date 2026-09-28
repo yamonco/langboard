@@ -13,7 +13,11 @@ export interface IActivityRailItem {
 
 export default function ActivityRail({ items }: { items: IActivityRailItem[] }) {
     return (
-        <nav aria-label="Workspace" className="hidden w-12 shrink-0 flex-col items-center gap-1 overflow-y-auto border-r bg-background py-2 md:flex">
+        <nav
+            aria-label="Workspace"
+            data-workbench-context=""
+            className="hidden w-12 shrink-0 flex-col items-center gap-1 overflow-y-auto border-r bg-background py-2 md:flex"
+        >
             {items
                 .filter((item) => !item.hidden)
                 .map((item) => (

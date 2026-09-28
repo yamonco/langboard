@@ -278,7 +278,9 @@ const BoardCardPageComponent = ({
                                     event.preventDefault();
                                     return;
                                 }
-                                if ((event.detail.originalEvent.target as Element)?.closest?.("[data-workbench-explorer]")) {
+                                if (
+                                    (event.detail.originalEvent.target as Element)?.closest?.("[data-workbench-explorer], [data-workbench-context]")
+                                ) {
                                     event.preventDefault();
                                     return;
                                 }
