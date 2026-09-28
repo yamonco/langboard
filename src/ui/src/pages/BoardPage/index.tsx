@@ -155,6 +155,11 @@ interface IBoardProxyDisplayProps {
     isFetching: bool;
 }
 
+function BoardHeaderCardTitle({ card }: { card: ProjectCard.TModel }) {
+    const title = card.useField("title");
+    return <span className="min-w-0 truncate">{title}</span>;
+}
+
 function BoardProxyDisplay({ pageRoute, isFetching, project }: IBoardProxyDisplayProps): React.JSX.Element {
     const [t] = useTranslation();
     const { setPageAliasRef } = usePageHeader();
@@ -612,7 +617,7 @@ function BoardProxyDisplay({ pageRoute, isFetching, project }: IBoardProxyDispla
                         {isCardPage && activeCard && (
                             <>
                                 <IconComponent icon="chevron-right" size="3" className="shrink-0 text-muted-foreground" />
-                                <span className="min-w-0 truncate">{activeCard.title}</span>
+                                <BoardHeaderCardTitle card={activeCard} />
                             </>
                         )}
                     </span>
