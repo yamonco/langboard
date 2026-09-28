@@ -389,17 +389,31 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
                                     </span>
                                 )}
                             </Flex>
-                            <UserAvatarList
-                                maxVisible={3}
-                                userOrBots={cardMembers}
-                                scope={{
-                                    projectUID: project.uid,
-                                    cardUID: card.uid,
-                                }}
-                                size="sm"
-                                {...attributes}
-                                className="cursor-default"
-                            />
+                            {cardMemberUIDs.length === 0 ? (
+                                <span
+                                    role="img"
+                                    aria-label={t("card.Unassigned")}
+                                    title={t("card.Unassigned")}
+                                    className={cn(
+                                        "flex size-8 shrink-0 items-center justify-center rounded-full border border-dashed",
+                                        "border-amber-500/70 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                                    )}
+                                >
+                                    <IconComponent icon="user-round-x" size="4" aria-hidden="true" />
+                                </span>
+                            ) : (
+                                <UserAvatarList
+                                    maxVisible={3}
+                                    userOrBots={cardMembers}
+                                    scope={{
+                                        projectUID: project.uid,
+                                        cardUID: card.uid,
+                                    }}
+                                    size="sm"
+                                    {...attributes}
+                                    className="cursor-default"
+                                />
+                            )}
                         </Card.Footer>
                     </Collapsible.Content>
                 </Collapsible.Root>
