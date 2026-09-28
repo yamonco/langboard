@@ -715,7 +715,11 @@ function BoardProxyDisplay({ pageRoute, isFetching, project }: IBoardProxyDispla
                             {workbenchContextMode === "relations" ? (
                                 <BoardRelationsSidebar projectUID={project.uid} cardUID={activeCard?.uid} />
                             ) : workbenchContextMode === "outline" ? (
-                                <BoardOutlineSidebar cardUID={activeCard?.uid} onRelations={() => showWorkbenchContext("relations")} />
+                                <BoardOutlineSidebar
+                                    cardUID={activeCard?.uid}
+                                    onRelations={() => showWorkbenchContext("relations")}
+                                    onNavigate={() => isMobile && setActiveSidePanel(undefined)}
+                                />
                             ) : (
                                 <BoardWikiSidebar projectUID={project.uid} onNavigate={() => setActiveSidePanel(undefined)} />
                             )}

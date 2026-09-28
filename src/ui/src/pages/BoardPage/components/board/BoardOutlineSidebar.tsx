@@ -4,7 +4,15 @@ import { WORKBENCH_OUTLINE_EVENT } from "@/pages/DashboardPage/components/Workbe
 
 type TOutlineSection = "description" | "checklists" | "comments" | "attachments";
 
-export default function BoardOutlineSidebar({ cardUID, onRelations }: { cardUID?: string; onRelations: () => void }) {
+export default function BoardOutlineSidebar({
+    cardUID,
+    onRelations,
+    onNavigate,
+}: {
+    cardUID?: string;
+    onRelations: () => void;
+    onNavigate?: () => void;
+}) {
     const [t] = useTranslation();
     const card = ProjectCard.Model.useModel(cardUID ?? "", [cardUID]);
 
@@ -13,7 +21,7 @@ export default function BoardOutlineSidebar({ cardUID, onRelations }: { cardUID?
             <div className="shrink-0 border-b px-3 py-2 text-xs font-semibold uppercase tracking-wide">{t("dashboard.Outline")}</div>
             <div className="min-h-0 flex-1 overflow-y-auto p-2">
                 {card ? (
-                    <CardOutline card={card} onRelations={onRelations} />
+                    <CardOutline card={card} onRelations={onRelations} onNavigate={onNavigate} />
                 ) : (
                     <p className="px-2 py-3 text-sm text-muted-foreground">{t("dashboard.Open a card to see its context")}</p>
                 )}
@@ -22,7 +30,7 @@ export default function BoardOutlineSidebar({ cardUID, onRelations }: { cardUID?
     );
 }
 
-function CardOutline({ card, onRelations }: { card: ProjectCard.TModel; onRelations: () => void }) {
+function CardOutline({ card, onRelations, onNavigate }: { card: ProjectCard.TModel; onRelations: () => void; onNavigate?: () => void }) {
     const [t] = useTranslation();
     const checklistTotal = card.useField("checklist_total_count") ?? 0;
     const checklistCompleted = card.useField("checklist_completed_count") ?? 0;
@@ -37,8 +45,10 @@ function CardOutline({ card, onRelations }: { card: ProjectCard.TModel; onRelati
         { key: "comments", label: t("card.Comments"), count: String(commentCount) },
         ...(attachments.length ? [{ key: "attachments" as const, label: t("card.Attached files"), count: String(attachments.length) }] : []),
     ];
-    const openSection = (section: TOutlineSection, blockUID?: string) =>
+    const openSection = (section: TOutlineSection, blockUID?: string) => {
         window.dispatchEvent(new CustomEvent(WORKBENCH_OUTLINE_EVENT, { detail: { cardUID: card.uid, section, blockUID } }));
+        onNavigate?.();
+    };
 
     return (
         <div className="space-y-1 text-sm">

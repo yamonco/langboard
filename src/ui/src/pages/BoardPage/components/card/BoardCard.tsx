@@ -334,7 +334,12 @@ function BoardTaskCardResult({
                         : [...document.querySelectorAll<HTMLElement>(`[data-card-outline-section="${section}"]`)].find(
                               (element) => element.getBoundingClientRect().width > 0
                           );
-                    target?.scrollIntoView({ behavior: "smooth", block: "start" });
+                    const viewport = target?.closest<HTMLElement>("[data-card-content-viewport]");
+                    if (target && viewport) {
+                        viewport.scrollTop += target.getBoundingClientRect().top - viewport.getBoundingClientRect().top;
+                    } else {
+                        target?.scrollIntoView({ behavior: "auto", block: "start" });
+                    }
                     target?.focus({ preventScroll: true });
                 })
             );
@@ -435,7 +440,7 @@ function BoardTaskCardResult({
                                 </Flex>
                             </Dialog.Header>
                             <Flex gap="3" direction={{ initial: "col-reverse", sm: "row" }} className="min-h-0 flex-1">
-                                <Box ref={contentViewportRef} className="min-h-0 flex-1 overflow-y-auto">
+                                <Box ref={contentViewportRef} data-card-content-viewport="" className="min-h-0 flex-1 overflow-y-auto">
                                     <Flex direction="col" gap="4" className="min-w-0 pb-6 pr-1">
                                         {isCheckCardView ? (
                                             <BoardCardCheckBody key={`board-card-check-body-${card.uid}`} scrollParentRef={contentViewportRef} />
