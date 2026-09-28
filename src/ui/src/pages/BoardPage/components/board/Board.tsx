@@ -244,7 +244,12 @@ function BoardDisplay({ scrollable, scrollableRef }: { scrollable: HTMLDivElemen
         <>
             <BoardCardRelationshipOverlay scrollable={scrollable} />
             {columns.map((column) => (
-                <BoardColumn key={`board-columnr-${column.uid}`} column={column} updateBoard={forceUpdate} />
+                <BoardColumn
+                    key={`board-columnr-${column.uid}`}
+                    column={column}
+                    updateBoard={forceUpdate}
+                    isDefaultCardColumn={column.uid === columns.find((item) => !item.is_archive)?.uid}
+                />
             ))}
             {canDragAndDrop && <BoardColumnAdd />}
         </>
