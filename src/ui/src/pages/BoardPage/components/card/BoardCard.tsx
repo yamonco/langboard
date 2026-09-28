@@ -50,6 +50,7 @@ import BoardTaskMetadataSection from "@/pages/BoardPage/components/task/BoardTas
 import BoardLinkedWikiCard from "@/pages/BoardPage/components/card/BoardLinkedWikiCard";
 import useCardLinkedResourceChangedHandlers from "@/controllers/socket/card/useCardLinkedResourceChangedHandlers";
 import useSwitchSocketHandlers from "@/core/hooks/useSwitchSocketHandlers";
+import CardTimestamps from "@/pages/BoardPage/components/card/CardTimestamps";
 import { useQueryClient } from "@tanstack/react-query";
 import {
     clampCommentPanelWidth,
@@ -352,6 +353,7 @@ function BoardTaskCardResult({
                                     )}
                                     <BoardCardLabelList key={`board-card-label-list-${card.uid}`} />
                                 </Flex>
+                                <CardTimestamps card={card} />
                                 <Flex items="start" gap="1" className="absolute right-0 top-0 !mt-0 pl-3">
                                     {isExpanded && (
                                         <Box className="hidden sm:flex sm:items-center sm:gap-1">

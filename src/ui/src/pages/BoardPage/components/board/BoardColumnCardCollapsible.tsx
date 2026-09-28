@@ -35,6 +35,7 @@ import BoardCardMove from "@/pages/BoardPage/components/board/BoardCardMove";
 import { getBoardCardWidgetVisibility } from "@/pages/BoardPage/components/board/BoardCardWidgetVisibility";
 import useSetCardCompleted from "@/controllers/api/board/useSetCardCompleted";
 import { captureCardOrigin } from "@/pages/BoardPage/components/board/CardAnimation";
+import CardTimestamps from "@/pages/BoardPage/components/card/CardTimestamps";
 
 export interface IBoardColumnCardCollapsibleProps {
     isDragging: bool;
@@ -349,7 +350,7 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
                                 ))}
                             </Card.Content>
                         )}
-                        <Card.Footer className="flex items-end justify-between gap-1.5 pb-4">
+                        <Card.Footer className="flex flex-wrap items-end justify-between gap-1.5 pb-4">
                             <Flex items="center">
                                 {creator && (
                                     <span
@@ -400,6 +401,7 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
                                 {...attributes}
                                 className="cursor-default"
                             />
+                            <CardTimestamps card={card} compact />
                         </Card.Footer>
                     </Collapsible.Content>
                 </Collapsible.Root>
