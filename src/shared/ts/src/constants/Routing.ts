@@ -60,6 +60,7 @@ const API = {
         PROJECT: "/activity/project/{uid}",
         PROJECT_COLUMN: "/activity/project/{uid}/column/{project_column_uid}",
         CARD: "/activity/project/{uid}/card/{card_uid}",
+        CARD_COLUMN_HISTORY: "/activity/project/{uid}/card/{card_uid}/column-history",
         PROJECT_WIKI: "/activity/project/{uid}/wiki/{wiki_uid}",
     },
     DASHBOARD: {

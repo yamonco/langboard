@@ -21,6 +21,7 @@ from ....domain.models import (
     UserActivity,
 )
 from ....domain.models.bases import BaseActivityModel
+from ....domain.models.ProjectActivity import ProjectActivityType
 from ....helpers import InfraHelper
 
 
@@ -32,6 +33,22 @@ _TUserOrBotActivityParam: TypeAlias = User | Bot | SnowflakeID | int | str
 
 
 class ActivityRepository(BaseRepository[BaseActivityModel]):
+    def get_card_column_history(self, project: Project, card: Card) -> list[ProjectActivity]:
+        """Read the complete, ordered status path without paging unrelated activity."""
+        query = (
+            select(ProjectActivity)
+            .where(
+                ProjectActivity.column("project_id") == project.id,
+                ProjectActivity.column("card_id") == card.id,
+                ProjectActivity.column("activity_type").in_(
+                    [ProjectActivityType.CardCreated, ProjectActivityType.CardMoved]
+                ),
+            )
+            .order_by(ProjectActivity.column("created_at"), ProjectActivity.column("id"))
+        )
+        with DbSession.use(readonly=True) as db:
+            return list(db.exec(query).all())
+
     def get_shared_user_activities(
         self,
         viewer: User,
