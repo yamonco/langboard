@@ -11,6 +11,7 @@ import Toast from "@/components/base/Toast";
 import useChangeCardDetails from "@/controllers/api/card/useChangeCardDetails";
 import useGetCardDetails, { IGetCardDetailsResponse } from "@/controllers/api/card/useGetCardDetails";
 import useUnreadChangeNavigation from "@/pages/BoardPage/components/card/useUnreadChangeNavigation";
+import { WORKBENCH_OUTLINE_EVENT } from "@/pages/DashboardPage/components/WorkbenchCommands";
 
 import useReplaceCardContentBlocks from "@/controllers/api/board/useReplaceCardContentBlocks";
 import { extractContentBlocks } from "@/pages/BoardPage/components/card/contentBlockSerializer";
@@ -302,7 +303,7 @@ function BoardTaskCardResult({
     executionReceipts = [],
 }: IBoardCardResultProps): React.JSX.Element {
     const { card, isCardEditing, leaveCardEditMode } = useBoardCard();
-    const { isActionPanelOpen } = useBoardCardPanel();
+    const { isActionPanelOpen, setIsCommentPanelOpen } = useBoardCardPanel();
     const { boardChat } = useBoardController();
     const { cancelSections } = useBoardCardSectionSaveActions();
     const [t] = useTranslation();
@@ -318,6 +319,29 @@ function BoardTaskCardResult({
     const contentViewportRef = useRef<HTMLDivElement | null>(null);
 
     useUnreadChangeNavigation();
+
+    useEffect(() => {
+        const openOutlineSection = (event: Event) => {
+            const { cardUID, section, blockUID } = (event as CustomEvent<{ cardUID: string; section: string; blockUID?: string }>).detail;
+            if (cardUID !== card.uid) return;
+            if (section === "comments") setIsCommentPanelOpen(true);
+            requestAnimationFrame(() =>
+                requestAnimationFrame(() => {
+                    const target = blockUID
+                        ? [...document.querySelectorAll<HTMLElement>("[data-card-block-uid]")].find(
+                              (element) => element.dataset.cardBlockUid === blockUID && element.getBoundingClientRect().width > 0
+                          )
+                        : [...document.querySelectorAll<HTMLElement>(`[data-card-outline-section="${section}"]`)].find(
+                              (element) => element.getBoundingClientRect().width > 0
+                          );
+                    target?.scrollIntoView({ behavior: "smooth", block: "start" });
+                    target?.focus({ preventScroll: true });
+                })
+            );
+        };
+        window.addEventListener(WORKBENCH_OUTLINE_EVENT, openOutlineSection);
+        return () => window.removeEventListener(WORKBENCH_OUTLINE_EVENT, openOutlineSection);
+    }, [card.uid, setIsCommentPanelOpen]);
 
     useEffect(() => {
         return () => {
@@ -427,7 +451,12 @@ function BoardTaskCardResult({
                                                 </Flex>
                                                 <BoardTaskMetadataSection cardUID={card.uid} />
                                                 <BoardCardMobileActions />
-                                                <BoardCardSection title="card.Description" className="relative min-h-56">
+                                                <BoardCardSection
+                                                    title="card.Description"
+                                                    className="relative min-h-56"
+                                                    data-card-outline-section="description"
+                                                    tabIndex={-1}
+                                                >
                                                     <BoardCardDescription
                                                         key={`board-card-description-${card.uid}`}
                                                         scrollParentRef={contentViewportRef}
@@ -469,12 +498,16 @@ function BoardTaskCardResult({
                                                     </BoardCardSection>
                                                 )}
                                                 {checklists.length > 0 && (
-                                                    <BoardCardSection title="card.Checklists">
+                                                    <BoardCardSection title="card.Checklists" data-card-outline-section="checklists" tabIndex={-1}>
                                                         <BoardCardChecklistGroup key={`board-card-checklist-${card.uid}`} />
                                                     </BoardCardSection>
                                                 )}
                                                 {attachments.length > 0 && (
-                                                    <BoardCardSection title="card.Attached files">
+                                                    <BoardCardSection
+                                                        title="card.Attached files"
+                                                        data-card-outline-section="attachments"
+                                                        tabIndex={-1}
+                                                    >
                                                         <BoardCardAttachmentList key={`board-card-attachment-list-${card.uid}`} />
                                                     </BoardCardSection>
                                                 )}
@@ -529,7 +562,7 @@ function BoardCardMobileComments({ scrollableRef }: { scrollableRef?: React.RefO
     }
 
     return (
-        <Box className="lg:hidden">
+        <Box className="lg:hidden" data-card-outline-section="comments" tabIndex={-1}>
             <BoardCardSection title="card.Comments">
                 <BoardCommentList key={`board-card-comment-list-mobile-${card.uid}`} scrollableRef={scrollableRef} />
             </BoardCardSection>
@@ -635,6 +668,8 @@ function BoardCardCommentPanel(): React.JSX.Element {
     return (
         <Box
             ref={panelRef}
+            data-card-outline-section="comments"
+            tabIndex={-1}
             className={cn(
                 "relative hidden min-h-0 shrink-0 overflow-hidden lg:block",
                 isResizing ? "transition-none" : "transition-[width,min-width] duration-300 motion-reduce:transition-none"

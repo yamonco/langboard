@@ -144,7 +144,7 @@ function CardContentBlockList({ blocks }: { blocks: IContentBlock[] }): React.JS
     return (
         <Flex direction="col" gap="3" data-card-content-blocks>
             {ordered.map((block) => (
-                <Box key={block.block_uid} data-card-block-uid={block.block_uid}>
+                <Box key={block.block_uid} data-card-block-uid={block.block_uid} tabIndex={-1}>
                     <BlockDispatch block={block} />
                 </Box>
             ))}

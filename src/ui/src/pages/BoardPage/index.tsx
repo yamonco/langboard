@@ -4,6 +4,7 @@ import { Navigate, useLocation } from "react-router";
 import { DashboardStyledLayout } from "@/components/Layout";
 import Box from "@/components/base/Box";
 import Button from "@/components/base/Button";
+import Skeleton from "@/components/base/Skeleton";
 import Flex from "@/components/base/Flex";
 import BoardFloatingNavigation from "@/pages/BoardPage/components/board/BoardFloatingNavigation";
 import IconComponent from "@/components/base/IconComponent";
@@ -18,7 +19,6 @@ import { usePageNavigateRef } from "@/core/hooks/usePageNavigate";
 import BoardPage from "@/pages/BoardPage/BoardPage";
 import BoardCardPage from "@/pages/BoardPage/BoardCardPage";
 import { IHeaderNavItem } from "@/components/Header/types";
-import BoardWikiPage, { SkeletonBoardWikiPage } from "@/pages/BoardPage/BoardWikiPage";
 import BoardSettingsPage, { SkeletonBoardSettingsPage } from "@/pages/BoardPage/BoardSettingsPage";
 import { TBoardViewType, useBoardController } from "@/core/providers/BoardController";
 import useBoardAssignedUsersUpdatedHandlers from "@/controllers/socket/board/useBoardAssignedUsersUpdatedHandlers";
@@ -60,6 +60,11 @@ import { WORKBENCH_OPEN_CHANGES_EVENT, WORKBENCH_TOGGLE_CONTEXT_EVENT } from "@/
 import { closeProject } from "@/pages/DashboardPage/components/OpenCardsStore";
 
 const BoardGraphPage = lazy(() => import("@/pages/BoardPage/BoardGraphPage"));
+const BoardWikiPage = lazy(() => import("@/pages/BoardPage/BoardWikiPage"));
+const BoardRelationsSidebar = lazy(() => import("@/pages/BoardPage/components/board/BoardRelationsSidebar"));
+const BoardOutlineSidebar = lazy(() => import("@/pages/BoardPage/components/board/BoardOutlineSidebar"));
+const BoardWikiSidebar = lazy(() => import("@/pages/BoardPage/components/board/BoardWikiSidebar"));
+const SkeletonBoardWikiPage = () => <Skeleton className="m-4 h-48 w-[min(36rem,calc(100%-2rem))]" />;
 
 const getCurrentPage = (pageRoute?: string): TBoardViewType => {
     switch (pageRoute) {
@@ -77,6 +82,7 @@ const getCurrentPage = (pageRoute?: string): TBoardViewType => {
 };
 
 type TBoardSidePanel = "botScope" | "switchProject";
+type TWorkbenchContext = "explorer" | "relations" | "outline" | "wiki";
 
 const BoardProxy = memo((): React.JSX.Element => {
     const { setPageAliasRef } = usePageHeader();
@@ -171,6 +177,13 @@ function BoardProxyDisplay({ pageRoute, isFetching, project }: IBoardProxyDispla
     const [isActivityDialogOpened, setIsActivityDialogOpened] = useState(false);
     const [isChangesDialogOpened, setIsChangesDialogOpened] = useState(false);
     const [activeSidePanel, setActiveSidePanel] = useState<TBoardSidePanel>();
+    const [workbenchContextMode, setWorkbenchContextMode] = useState<TWorkbenchContext>("explorer");
+    const workbenchContextTitle = {
+        explorer: "Explorer",
+        relations: t("dashboard.Relations"),
+        outline: t("dashboard.Outline"),
+        wiki: t("board.Wiki"),
+    }[workbenchContextMode];
     const [isContextOpen, setIsContextOpen] = useState(true);
     const [isMobile, setIsMobile] = useState(window.innerWidth < ScreenMap.size.md);
     const isBotScopeOpened = activeSidePanel === "botScope";
@@ -192,6 +205,11 @@ function BoardProxyDisplay({ pageRoute, isFetching, project }: IBoardProxyDispla
             setIsContextOpen((open) => !open);
         }
     }, [isMobile, isBotScopeOpened]);
+    const showWorkbenchContext = (mode: TWorkbenchContext) => {
+        setWorkbenchContextMode(mode);
+        setIsContextOpen(true);
+        setActiveSidePanel(isMobile ? "switchProject" : undefined);
+    };
     useEffect(() => {
         const toggleContext = () => toggleSwitchProject();
         const openChanges = () => setIsChangesDialogOpened(true);
@@ -612,7 +630,24 @@ function BoardProxyDisplay({ pageRoute, isFetching, project }: IBoardProxyDispla
     return (
         <>
             <DashboardStyledLayout
-                headerNavs={headerNavs}
+                headerNavs={[
+                    ...headerNavs,
+                    {
+                        name: t("dashboard.Relations panel"),
+                        onClick: () => showWorkbenchContext("relations"),
+                        active: workbenchContextMode === "relations",
+                    },
+                    {
+                        name: t("dashboard.Outline"),
+                        onClick: () => showWorkbenchContext("outline"),
+                        active: workbenchContextMode === "outline",
+                    },
+                    {
+                        name: t("dashboard.Wiki panel"),
+                        onClick: () => showWorkbenchContext("wiki"),
+                        active: workbenchContextMode === "wiki",
+                    },
+                ]}
                 headerTitle={
                     <span className="flex min-w-0 items-center gap-1">
                         <span className="max-w-32 shrink-0 truncate">{projectTitle}</span>
@@ -625,7 +660,13 @@ function BoardProxyDisplay({ pageRoute, isFetching, project }: IBoardProxyDispla
                     </span>
                 }
                 activityRailItems={[
-                    { icon: "panel-left", label: "Explorer", onClick: () => setIsContextOpen((open) => !open), active: isContextOpen },
+                    {
+                        icon: "panel-left",
+                        label: "Explorer",
+                        onClick: () =>
+                            workbenchContextMode === "explorer" && !isBotScopeOpened ? toggleSwitchProject() : showWorkbenchContext("explorer"),
+                        active: isContextOpen && !isBotScopeOpened && workbenchContextMode === "explorer",
+                    },
                     {
                         icon: "list-checks",
                         label: t("dashboard.My Work"),
@@ -637,28 +678,64 @@ function BoardProxyDisplay({ pageRoute, isFetching, project }: IBoardProxyDispla
                         onClick: () => setIsChangesDialogOpened(true),
                         active: isChangesDialogOpened,
                     },
+                    {
+                        icon: "network",
+                        label: t("dashboard.Relations"),
+                        onClick: () => showWorkbenchContext("relations"),
+                        active: isContextOpen && !isBotScopeOpened && workbenchContextMode === "relations",
+                    },
+                    {
+                        icon: "list-tree",
+                        label: t("dashboard.Outline"),
+                        onClick: () => showWorkbenchContext("outline"),
+                        active: isContextOpen && !isBotScopeOpened && workbenchContextMode === "outline",
+                    },
+                    {
+                        icon: "notebook-pen",
+                        label: t("board.Wiki"),
+                        onClick: () => showWorkbenchContext("wiki"),
+                        active: isContextOpen && !isBotScopeOpened && workbenchContextMode === "wiki",
+                    },
                     ...headerNavs.map((nav, index) => ({
                         icon: ["columns-3", "notebook-pen", "network", "history", "settings", "bot"][index],
                         label: String(nav.name),
                         onClick: nav.onClick!,
                         active: nav.active,
-                        hidden: nav.hidden,
+                        hidden: nav.hidden || index === 1 || index === 2,
                         badge: index === 5 ? pendingGraphApprovalBadge : undefined,
                     })),
                 ]}
                 workbenchContext={
                     isBotScopeOpened ? (
                         <BoardBotScopeSidebar project={project} />
-                    ) : (
+                    ) : workbenchContextMode === "explorer" ? (
                         <ProjectExplorerSidebar currentProject={project} onNavigate={() => setActiveSidePanel(undefined)} />
+                    ) : (
+                        <Suspense fallback={<Skeleton className="m-3 h-24" />}>
+                            {workbenchContextMode === "relations" ? (
+                                <BoardRelationsSidebar projectUID={project.uid} cardUID={activeCard?.uid} />
+                            ) : workbenchContextMode === "outline" ? (
+                                <BoardOutlineSidebar cardUID={activeCard?.uid} onRelations={() => showWorkbenchContext("relations")} />
+                            ) : (
+                                <BoardWikiSidebar projectUID={project.uid} onNavigate={() => setActiveSidePanel(undefined)} />
+                            )}
+                        </Suspense>
                     )
                 }
                 workbenchContextHidden={!isContextOpen || isMobile || !!selectCardViewType}
                 mobileWorkbenchContext={
                     isMobile && !selectCardViewType && activeSidePanel
                         ? {
-                              title: isBotScopeOpened ? "Bots" : "Explorer",
-                              icon: isBotScopeOpened ? "bot" : "panel-left",
+                              title: isBotScopeOpened ? "Bots" : workbenchContextTitle,
+                              icon: isBotScopeOpened
+                                  ? "bot"
+                                  : workbenchContextMode === "explorer"
+                                    ? "panel-left"
+                                    : workbenchContextMode === "relations"
+                                      ? "network"
+                                      : workbenchContextMode === "outline"
+                                        ? "list-tree"
+                                        : "notebook-pen",
                               onClose: () => setActiveSidePanel(undefined),
                           }
                         : undefined
