@@ -34,6 +34,7 @@ class FakeQueryPort:
                 "updated_at": "2026-08-04T11:00:00+09:00",
                 "project_column_uid": "column-1",
                 "project_column_name": "Backlog",
+                "workflow_stage": None,
                 "member_uids": ["assigned"],
                 "active_workers": [
                     {"user_uid": "unassigned", "status": "started", "checkitems": [{"uid": "ci1", "title": "Work"}]}
@@ -147,6 +148,16 @@ class FakeQueryPort:
         return self.source.metadata
 
 
+def test_card_workflow_stage_uses_explicit_mapping_not_column_name() -> None:
+    port = FakeQueryPort()
+    port.source.details["project_column_name"] = "Done"
+    port.source.details["workflow_stage"] = "review"
+    response = get_card_bundle(port, "p1", "c1", CommentPage(), SectionPage())
+    assert response.card is not None
+    assert response.card.workflow["project_column_name"] == "Done"
+    assert response.card.workflow["workflow_stage"] == "review"
+
+
 def test_initial_card_bundle_is_bounded_and_privacy_preserving() -> None:
     """The initial aggregate exposes assigned facts only and emits independent cursors."""
 
@@ -169,6 +180,7 @@ def test_initial_card_bundle_is_bounded_and_privacy_preserving() -> None:
     )
 
     assert response.card is not None
+    assert response.card.workflow["workflow_stage"] is None
     assert response.card.people.total_count == 1
     assert response.card.people.items == [{"uid": "assigned", "username": "member"}]
     assert response.card.people.active_workers[0]["user_uid"] == "unassigned"
@@ -298,6 +310,7 @@ def test_optional_native_sections_are_requested_lazily() -> None:
         "workflow": {
             "project_column_uid": "column-1",
             "project_column_name": "Backlog",
+            "workflow_stage": None,
         },
     }
 

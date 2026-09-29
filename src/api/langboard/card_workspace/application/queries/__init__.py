@@ -82,7 +82,13 @@ def get_card_bundle(
         )
 
     details = source.details
-    core = pick(details, ("uid", "title", "created_at", "updated_at", "can_delete"))
+    core = pick(
+        details,
+        (
+            "uid", "title", "created_at", "updated_at", "can_delete",
+            "last_change_seq", "last_change_target_type", "last_change_at",
+        ),
+    )
     if isinstance(details.get("creator"), dict):
         core["creator"] = public_actor(details["creator"])
     if CardBundleInclude.Description in requested:
@@ -93,7 +99,7 @@ def get_card_bundle(
         core=core,
         workflow=pick(
             details,
-            ("project_column_uid", "project_column_name", "order", "deadline_at", "archived_at"),
+            ("project_column_uid", "project_column_name", "workflow_stage", "order", "deadline_at", "archived_at"),
         ),
     )
     if CardBundleInclude.People in requested:

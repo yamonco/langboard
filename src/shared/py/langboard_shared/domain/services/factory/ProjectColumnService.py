@@ -13,6 +13,7 @@ from .GraphApprovalRequestService import GraphApprovalRequestService
 
 
 class ProjectColumnService(BaseDomainService):
+    WORKFLOW_STAGES = frozenset({"backlog", "ready", "active", "review", "closed", "reference"})
     @staticmethod
     def name() -> str:
         """DO NOT EDIT THIS METHOD"""
@@ -127,6 +128,25 @@ class ProjectColumnService(BaseDomainService):
         self.repo.project_column.update(column)
         ProjectColumnPublisher.description_changed(project, column)
         logging.getLogger(__name__).info("Updated workflow guidance for column %s", column.get_uid())
+        return True
+
+    def change_workflow_stage(
+        self, project: TProjectParam | None, column: TColumnParam | None, workflow_stage: str | None
+    ) -> bool:
+        """Store an explicit meaning; never classify from a mutable column name."""
+        if workflow_stage is not None and workflow_stage not in self.WORKFLOW_STAGES:
+            raise ValueError("Unknown workflow stage")
+        params = InfraHelper.get_records_with_foreign_by_params((Project, project), (ProjectColumn, column))
+        if not params:
+            return False
+        project, column = params
+        if column.is_archive:
+            return False
+        if column.workflow_stage == workflow_stage:
+            return True
+        column.workflow_stage = workflow_stage
+        self.repo.project_column.update(column)
+        ProjectColumnPublisher.workflow_stage_changed(project, column)
         return True
 
     def change_name(

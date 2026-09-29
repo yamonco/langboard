@@ -1,5 +1,6 @@
 import useBoardColumnDeletedHandlers from "@/controllers/socket/board/column/useBoardColumnDeletedHandlers";
 import useBoardColumnDescriptionChangedHandlers from "@/controllers/socket/board/column/useBoardColumnDescriptionChangedHandlers";
+import useBoardColumnWorkflowStageChangedHandlers from "@/controllers/socket/board/column/useBoardColumnWorkflowStageChangedHandlers";
 import useBoardCardCreatedHandlers from "@/controllers/socket/board/useBoardCardCreatedHandlers";
 import { BaseModel, IBaseModel } from "@/core/models/Base";
 import { IModelMap, registerModel, TPickedModel } from "@/core/models/ModelRegistry";
@@ -9,6 +10,7 @@ export interface Interface extends IBaseModel {
     project_uid: string;
     name: string;
     description?: string;
+    workflow_stage?: "backlog" | "ready" | "active" | "review" | "closed" | "reference" | null;
     order: number;
     dock_order?: number | null;
     is_archive: bool;
@@ -32,11 +34,19 @@ class ProjectColumn extends BaseModel<IStore> {
     constructor(model: Record<string, unknown>) {
         super({ ...model, dock_order: null });
 
-        this.subscribeSocketEvents([useBoardCardCreatedHandlers, useBoardColumnDeletedHandlers, useBoardColumnDescriptionChangedHandlers], {
-            projectUID: this.project_uid,
-            columnUID: this.uid,
-            column: this,
-        });
+        this.subscribeSocketEvents(
+            [
+                useBoardCardCreatedHandlers,
+                useBoardColumnDeletedHandlers,
+                useBoardColumnDescriptionChangedHandlers,
+                useBoardColumnWorkflowStageChangedHandlers,
+            ],
+            {
+                projectUID: this.project_uid,
+                columnUID: this.uid,
+                column: this,
+            }
+        );
     }
 
     public get project_uid() {
@@ -62,6 +72,12 @@ class ProjectColumn extends BaseModel<IStore> {
     }
     public set description(value) {
         this.update({ description: value });
+    }
+    public get workflow_stage() {
+        return this.getValue("workflow_stage") ?? null;
+    }
+    public set workflow_stage(value) {
+        this.update({ workflow_stage: value });
     }
     public set order(value) {
         this.update({ order: value });

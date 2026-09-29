@@ -99,6 +99,28 @@ class ProjectColumnPublisher(BaseSocketPublisher):
         )
 
     @staticmethod
+    def workflow_stage_changed(project: Project, column: ProjectColumn) -> None:
+        model = {"uid": column.get_uid(), "workflow_stage": column.workflow_stage}
+        topic_id = project.get_uid()
+        ProjectColumnPublisher.put_dispather(
+            model,
+            [
+                SocketPublishModel(
+                    topic=SocketTopic.Board,
+                    topic_id=topic_id,
+                    event=f"board:column:workflow-stage:changed:{topic_id}",
+                    data_keys=list(model.keys()),
+                ),
+                SocketPublishModel(
+                    topic=SocketTopic.Dashboard,
+                    topic_id=topic_id,
+                    event=f"dashboard:project:column:workflow-stage:changed:{topic_id}",
+                    data_keys=list(model.keys()),
+                ),
+            ],
+        )
+
+    @staticmethod
     def order_changed(project: Project, column: ProjectColumn):
         model = {
             "uid": column.get_uid(),

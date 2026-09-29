@@ -18,7 +18,7 @@ from .Check import (
     ChangeCardCheckitemDeadlineForm,
     ChangeCardCheckitemStatusForm,
 )
-from .Column import ColumnDescriptionForm, ColumnForm, CreateColumnForm
+from .Column import ColumnDescriptionForm, ColumnForm, ColumnWorkflowStageForm, CreateColumnForm
 from .Comment import CreateCardCommentForm, ToggleCardCommentReactionForm
 from .Project import (
     ChangeInternalBotForm,
@@ -47,6 +47,7 @@ __all__ = [
     "ChangeChildOrderForm",
     "ColumnForm",
     "ColumnDescriptionForm",
+    "ColumnWorkflowStageForm",
     "CreateColumnForm",
     "CreateCardForm",
     "UpdateCardLabelsForm",

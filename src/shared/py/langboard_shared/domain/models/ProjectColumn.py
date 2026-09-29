@@ -19,6 +19,8 @@ class ProjectColumn(SoftDeleteModel, table=True):
     order: int = Field(default=0, nullable=False, api_field=ApiField())
     dock_order: int | None = Field(default=None, nullable=True, api_field=ApiField())
     is_archive: bool = Field(default=False, nullable=False, api_field=ApiField())
+    # Explicit board workflow meaning. None means unclassified, never inferred from the display name.
+    workflow_stage: str | None = Field(default=None, nullable=True, api_field=ApiField())
 
     def notification_data(self) -> dict[str, Any]:
         return {}

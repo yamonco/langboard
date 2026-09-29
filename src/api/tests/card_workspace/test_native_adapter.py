@@ -39,7 +39,7 @@ def test_project_identity_returns_real_guidance_without_inventing_legacy_descrip
     """Active destinations include their guidance; absent legacy guidance stays empty."""
     project = SimpleNamespace(get_uid=lambda: "p1", title="Workflow", project_type="Other")
     columns = [
-        {"uid": "doing", "name": "Execution", "order": 2, "description": "Work has started"},
+        {"uid": "doing", "name": "Execution", "order": 2, "description": "Work has started", "workflow_stage": "active"},
         {"uid": "ready", "name": "Queue", "order": 1},
         {"uid": "archive", "name": "Archive", "order": 0, "is_archive": True, "description": "Hidden"},
     ]
@@ -49,8 +49,8 @@ def test_project_identity_returns_real_guidance_without_inventing_legacy_descrip
     )
     result = NativeCardWorkspaceAdapter(object(), service).get_project_identity("p1")
     assert result and result["columns"]["items"] == [
-        {"uid": "ready", "name": "Queue", "order": 1, "description": ""},
-        {"uid": "doing", "name": "Execution", "order": 2, "description": "Work has started"},
+        {"uid": "ready", "name": "Queue", "order": 1, "description": "", "workflow_stage": None},
+        {"uid": "doing", "name": "Execution", "order": 2, "description": "Work has started", "workflow_stage": "active"},
     ]
 
 
@@ -58,7 +58,7 @@ def _service(people: list[dict[str, Any]] | None = None) -> tuple[Any, list[tupl
     calls: list[tuple[str, int, int | None]] = []
     project = SimpleNamespace(id=1)
     card = Card()
-    column = SimpleNamespace(id=2, project_id=1, name="Backlog")
+    column = SimpleNamespace(id=2, project_id=1, name="Backlog", workflow_stage=None)
 
     def checklists(target: Any, limit: int, checkitems_limit: int) -> list[dict[str, Any]]:
         calls.append(("checklists", limit, checkitems_limit))

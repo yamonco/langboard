@@ -1,3 +1,4 @@
+from typing import Literal
 from langboard_shared.core.routing import BaseFormModel, form_model
 from pydantic import Field
 
@@ -20,6 +21,11 @@ class ColumnDescriptionForm(BaseFormModel):
     """Replace column guidance; an empty string explicitly clears it."""
 
     description: str = Field(..., max_length=4096, description="When cards should enter this column")
+
+
+@form_model
+class ColumnWorkflowStageForm(BaseFormModel):
+    workflow_stage: Literal["backlog", "ready", "active", "review", "closed", "reference"] | None
 
 
 @form_model

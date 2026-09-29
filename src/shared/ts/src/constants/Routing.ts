@@ -120,6 +120,7 @@ const API = {
             CREATE: "/board/{uid}/column",
             CHANGE_NAME: "/board/{uid}/column/{project_column_uid}/name",
             CHANGE_DESCRIPTION: "/board/{uid}/column/{project_column_uid}/description",
+            CHANGE_WORKFLOW_STAGE: "/board/{uid}/column/{project_column_uid}/workflow-stage",
             CHANGE_ORDER: "/board/{uid}/column/{project_column_uid}/order",
             DELETE: "/board/{uid}/column/{project_column_uid}",
         },

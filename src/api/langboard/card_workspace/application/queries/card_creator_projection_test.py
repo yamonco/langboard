@@ -16,6 +16,10 @@ def test_card_core_exposes_only_the_public_creator_identity() -> None:
         details={
             "uid": "card",
             "title": "Test",
+            "last_change_seq": 42,
+            "last_change_target_type": "comment",
+            "last_change_at": "2026-09-29T14:00:00Z",
+            "last_change_target_uid": "private-target",
             "creator": {
                 "uid": "author",
                 "type": "user",
@@ -48,3 +52,8 @@ def test_card_core_exposes_only_the_public_creator_identity() -> None:
         "lastname": "Lovelace",
         "username": "ada",
     }
+    core = result.model_dump()["card"]["core"]
+    assert core["last_change_seq"] == 42
+    assert core["last_change_target_type"] == "comment"
+    assert core["last_change_at"] == "2026-09-29T14:00:00Z"
+    assert "last_change_target_uid" not in core

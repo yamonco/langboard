@@ -19,7 +19,7 @@ from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.domain.services import DomainService
 from langboard_shared.filter import RoleFilter
 from langboard_shared.security import Auth, RoleFinder
-from .forms import ChangeRootOrderForm, ColumnDescriptionForm, ColumnForm, CreateColumnForm
+from .forms import ChangeRootOrderForm, ColumnDescriptionForm, ColumnForm, ColumnWorkflowStageForm, CreateColumnForm
 from .forms.Column import ReplaceColumnDockForm
 
 
@@ -161,6 +161,26 @@ def update_project_column_description(
     if not service.project_column.change_description(project_uid, column_uid, form.description):
         raise ApiException.NotFound_404(ApiErrorCode.NF2004)
     return JsonResponse(content={"description": form.description})
+
+
+@AppRouter.schema(form=ColumnWorkflowStageForm, permission=ApiPermission.Edit)
+@AppRouter.api.put(
+    "/board/{project_uid}/column/{column_uid}/workflow-stage",
+    tags=["Board.Column"],
+    description="Set the explicit meaning of a workflow column without renaming or moving cards.",
+    responses=OpenApiSchema().suc({"workflow_stage": "string|null"}).auth().forbidden().err(404, ApiErrorCode.NF2004).get(),
+)
+@RoleFilter.add(ProjectRole, [ProjectRoleAction.Update], RoleFinder.project)
+@AuthFilter.add()
+def update_project_column_workflow_stage(
+    project_uid: str,
+    column_uid: str,
+    form: ColumnWorkflowStageForm,
+    service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    if not service.project_column.change_workflow_stage(project_uid, column_uid, form.workflow_stage):
+        raise ApiException.NotFound_404(ApiErrorCode.NF2004)
+    return JsonResponse(content={"workflow_stage": form.workflow_stage})
 
 
 @AppRouter.api.put(
