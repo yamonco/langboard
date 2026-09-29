@@ -2,6 +2,7 @@
 
 import base64
 import io
+import mimetypes
 from binascii import Error as Base64Error
 from typing import Annotated, Any, Literal
 from fastmcp.exceptions import ValidationError
@@ -92,6 +93,32 @@ def get_card_attachments(project_uid: str, card_uid: str, service: DomainService
     if not params:
         raise ValueError("Card not found")
     return {"attachments": service.card_attachment.get_api_list_by_card(params[1])}
+
+
+@McpTool.add("user", description="Read up to 8 MB of one attachment belonging to a readable card.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+def read_card_attachment(
+    project_uid: str, card_uid: str, attachment_uid: str, user: User, service: DomainService
+) -> dict:
+    params = _get_card_in_project(project_uid, card_uid)
+    if not params:
+        raise ValueError("Card not found in project")
+    _, card = params
+    attachment = service.card_attachment.get_by_id_like(attachment_uid)
+    if attachment is None or attachment.card_id != card.id:
+        raise ValueError("Attachment not found in card")
+    content = Storage.get_file(attachment.file)
+    if content is None:
+        raise ValueError("Attachment content unavailable")
+    if len(content) > 8 * 1024 * 1024:
+        raise ValueError("Attachment exceeds the 8 MB MCP read limit")
+    return {
+        "attachment_uid": attachment.get_uid(),
+        "file_name": attachment.filename,
+        "mime_type": mimetypes.guess_type(attachment.filename)[0] or "application/octet-stream",
+        "size": len(content),
+        "file_data_base64": base64.b64encode(content).decode("ascii"),
+    }
 
 
 def _create_card_in_project(
