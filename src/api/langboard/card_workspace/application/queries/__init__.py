@@ -18,6 +18,7 @@ from ..dtos import (
     CardBundleDto,
     CardBundleResponse,
     ClassificationDto,
+    PeopleDto,
     ProjectCardListResponse,
     ProjectIdentityResponse,
 )
@@ -96,7 +97,13 @@ def get_card_bundle(
         ),
     )
     if CardBundleInclude.People in requested:
-        bundle.people = bounded_items(assigned_people(details), CardBundleSection.People, section_page.limit)
+        assignees = bounded_items(assigned_people(details), CardBundleSection.People, section_page.limit)
+        workers = [
+            {**worker, "checkitems": worker.get("checkitems", [])[:25]}
+            for worker in details.get("active_workers", [])[:25]
+            if isinstance(worker, dict)
+        ]
+        bundle.people = PeopleDto(**assignees.model_dump(), active_workers=workers)
     if CardBundleInclude.Classification in requested:
         labels = [public_label(item) for item in details.get("labels", []) if isinstance(item, dict)]
         relationships = [

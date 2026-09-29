@@ -1,5 +1,5 @@
 from typing import Any
-from pydantic import BaseModel, ConfigDict, SerializerFunctionWrapHandler, model_serializer, model_validator
+from pydantic import BaseModel, ConfigDict, Field, SerializerFunctionWrapHandler, model_serializer, model_validator
 
 
 class BoundedItemsDto(BaseModel):
@@ -11,6 +11,12 @@ class BoundedItemsDto(BaseModel):
     total_count: int
     next_cursor: str | None
     limit: int
+
+
+class PeopleDto(BoundedItemsDto):
+    """Assignees plus timer workers; workers never imply assignment."""
+
+    active_workers: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class BoundedTextDto(BaseModel):
@@ -50,7 +56,7 @@ class CardBundleDto(BaseModel):
 
     core: dict[str, Any]
     workflow: dict[str, Any]
-    people: BoundedItemsDto | None = None
+    people: PeopleDto | None = None
     classification: ClassificationDto | None = None
     checklists: BoundedItemsDto | None = None
     comments: BoundedItemsDto | None = None

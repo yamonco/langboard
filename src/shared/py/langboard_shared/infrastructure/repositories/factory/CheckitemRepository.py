@@ -1,10 +1,10 @@
-from sqlalchemy import case, func
+from sqlalchemy import case, func, select
 from ....core.db import DbSession, SqlBuilder
 from ....core.domain import BaseOrderRepository
 from ....core.schema import TimeBasedPagination
 from ....core.types import SafeDateTime
 from ....core.types.ParamTypes import TCardParam, TChecklistParam, TProjectParam, TUserParam
-from ....domain.models import Card, Checkitem, Checklist, Project, User
+from ....domain.models import Card, Checkitem, CheckitemTimerRecord, Checklist, Project, User
 from ....domain.models.Checkitem import CheckitemStatus
 from ....helpers import InfraHelper
 
@@ -36,6 +36,56 @@ class CheckitemRepository(BaseOrderRepository[Checkitem, Checklist]):
         )
         with DbSession.use(readonly=True) as db:
             return {card_id: (int(total), int(completed or 0)) for card_id, total, completed in db.exec(query).all()}
+
+    def get_active_workers_by_project(
+        self, project: TProjectParam, card: TCardParam | None = None
+    ) -> list[tuple[Checkitem, Checklist, SafeDateTime | None]]:
+        """Fetch active timer owners and latest timer anchors in two bounded queries."""
+        project_id = InfraHelper.convert_id(project)
+        query = (
+            SqlBuilder.select.tables(Checkitem, Checklist)
+            .join(Checklist, Checkitem.column("checklist_id") == Checklist.column("id"))
+            .join(Card, Checklist.column("card_id") == Card.column("id"))
+            .where(Card.column("project_id") == project_id)
+            .where(Card.column("archived_at") == None)  # noqa: E711
+            .where(Checklist.column("is_system") == False)  # noqa: E712
+            .where(Checklist.column("deleted_at") == None)  # noqa: E711
+            .where(Checkitem.column("deleted_at") == None)  # noqa: E711
+            .where(Checkitem.column("is_checked") == False)  # noqa: E712
+            .where(Checkitem.column("user_id").is_not(None))
+            .where(Checkitem.column("status").in_([CheckitemStatus.Started, CheckitemStatus.Paused]))
+            .order_by(Checklist.column("card_id"), Checkitem.column("user_id"), Checkitem.column("order"))
+        )
+        if card is not None:
+            query = query.where(Card.column("id") == InfraHelper.convert_id(card))
+        with DbSession.use(readonly=True) as db:
+            workers = list(db.exec(query).all())
+            if not workers:
+                return []
+            item_ids = [checkitem.id for checkitem, _ in workers]
+            latest = (
+                select(
+                    CheckitemTimerRecord.column("checkitem_id"),
+                    func.max(CheckitemTimerRecord.column("id")).label("latest_id"),
+                )
+                .where(CheckitemTimerRecord.column("checkitem_id").in_(item_ids))
+                .group_by(CheckitemTimerRecord.column("checkitem_id"))
+                .subquery()
+            )
+            timer_query = SqlBuilder.select.table(CheckitemTimerRecord).join(
+                latest, CheckitemTimerRecord.column("id") == latest.c.latest_id
+            )
+            latest_timer = {record.checkitem_id: record for record in db.exec(timer_query).all()}
+        return [
+            (
+                checkitem,
+                checklist,
+                SafeDateTime.fromisoformat(latest_timer[checkitem.id].created_at.isoformat())
+                if checkitem.status == CheckitemStatus.Started and checkitem.id in latest_timer
+                else None,
+            )
+            for checkitem, checklist in workers
+        ]
 
     @staticmethod
     def parent_model_cls():
@@ -149,9 +199,7 @@ class CheckitemRepository(BaseOrderRepository[Checkitem, Checklist]):
             .join(Checklist, Checklist.column("id") == Checkitem.column("checklist_id"))
             .join(Card, Card.column("id") == Checklist.column("card_id"))
             .join(Project, Project.column("id") == Card.column("project_id"))
-            .where(
-                (Checkitem.column("user_id") == user_id) & (Checkitem.column("status") == CheckitemStatus.Started)
-            )
+            .where((Checkitem.column("user_id") == user_id) & (Checkitem.column("status") == CheckitemStatus.Started))
             .order_by(Checkitem.column("updated_at").desc(), Checkitem.column("id").desc())
         )
         with DbSession.use(readonly=True) as db:

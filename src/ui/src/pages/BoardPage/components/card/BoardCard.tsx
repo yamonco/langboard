@@ -53,6 +53,7 @@ import useCardLinkedResourceChangedHandlers from "@/controllers/socket/card/useC
 import useSwitchSocketHandlers from "@/core/hooks/useSwitchSocketHandlers";
 import CardTimestamps from "@/pages/BoardPage/components/card/CardTimestamps";
 import CardColumnHistory from "@/pages/BoardPage/components/card/CardColumnHistory";
+import useBoardChecklistProgressChangedHandlers from "@/controllers/socket/card/checklist/useBoardChecklistProgressChangedHandlers";
 import { useQueryClient } from "@tanstack/react-query";
 import { closeCard, focusCard } from "@/pages/DashboardPage/components/OpenCardsStore";
 import {
@@ -130,11 +131,24 @@ const BoardCard = memo(
                 }),
             [cardUID, projectUID, queryClient]
         );
+        const activeWorkersChangedHandler = useMemo(
+            () =>
+                useBoardChecklistProgressChangedHandlers({
+                    projectUID,
+                    subscriberKey: cardUID,
+                    callback: (event) => {
+                        if (event.card_uid === cardUID) {
+                            queryClient.invalidateQueries({ queryKey: [`get-card-details-${projectUID}-${cardUID}`] });
+                        }
+                    },
+                }),
+            [cardUID, projectUID, queryClient]
+        );
 
         useSwitchSocketHandlers({
             socket,
-            handlers: cardData?.card?.source_type === "project_wiki" ? [linkedResourceChangedHandler] : [],
-            dependencies: [cardData?.card?.source_type, linkedResourceChangedHandler],
+            handlers: cardData?.card?.source_type === "project_wiki" ? [linkedResourceChangedHandler] : [activeWorkersChangedHandler],
+            dependencies: [cardData?.card?.source_type, linkedResourceChangedHandler, activeWorkersChangedHandler],
         });
 
         useEffect(() => {
@@ -190,7 +204,7 @@ const BoardCard = memo(
 
         return (
             <>
-                {!cardData || isFetching ? (
+                {!cardData ? (
                     <SkeletonBoardCard />
                 ) : (
                     <BoardCardProvider key={cardUID} projectUID={projectUID} card={cardData.card} currentUser={currentUser} viewportRef={viewportRef}>
