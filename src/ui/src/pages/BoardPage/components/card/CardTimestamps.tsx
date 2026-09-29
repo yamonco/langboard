@@ -15,33 +15,37 @@ export default function CardTimestamps({ card, compact = false }: { card: Projec
 
     return (
         <span className={`flex min-w-0 flex-wrap gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground/80 ${compact ? "basis-full" : ""}`}>
-            <Tooltip.Root>
-                <Tooltip.Trigger asChild>
-                    <time
-                        dateTime={createdAt.toISOString()}
-                        tabIndex={0}
-                        aria-label={`${t("card.Created")}: ${exact(createdAt)}`}
-                        className={cn(
-                            "inline-flex items-center gap-1 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                            compact && "max-w-0 overflow-hidden opacity-0 transition-all duration-200",
-                            compact && "group-hover/card:max-w-32 group-hover/card:opacity-100",
-                            compact && "group-focus-within/card:max-w-32 group-focus-within/card:opacity-100"
-                        )}
-                    >
-                        <IconComponent icon="calendar-plus" size="3" className="shrink-0 opacity-70" aria-hidden="true" />
-                        {createdDistance}
-                    </time>
-                </Tooltip.Trigger>
-                <Tooltip.Content>
-                    {t("card.Created")}: {exact(createdAt)}
-                </Tooltip.Content>
-            </Tooltip.Root>
+            {!compact && (
+                <Tooltip.Root>
+                    <Tooltip.Trigger asChild>
+                        <time
+                            dateTime={createdAt.toISOString()}
+                            tabIndex={0}
+                            aria-label={`${t("card.Created")}: ${exact(createdAt)}`}
+                            className={cn(
+                                "inline-flex items-center gap-1 rounded-sm focus-visible:outline-none",
+                                "focus-visible:ring-2 focus-visible:ring-ring"
+                            )}
+                        >
+                            <IconComponent icon="calendar-plus" size="3" className="shrink-0 opacity-70" aria-hidden="true" />
+                            {createdDistance}
+                        </time>
+                    </Tooltip.Trigger>
+                    <Tooltip.Content>
+                        {t("card.Created")}: {exact(createdAt)}
+                    </Tooltip.Content>
+                </Tooltip.Root>
+            )}
             <Tooltip.Root>
                 <Tooltip.Trigger asChild>
                     <time
                         dateTime={updatedAt.toISOString()}
                         tabIndex={0}
-                        aria-label={`${t("card.Updated")}: ${exact(updatedAt)}`}
+                        aria-label={
+                            compact
+                                ? `${t("card.Updated")}: ${exact(updatedAt)}; ${t("card.Created")}: ${exact(createdAt)}`
+                                : `${t("card.Updated")}: ${exact(updatedAt)}`
+                        }
                         className="inline-flex items-center gap-1 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
                         <IconComponent icon="pencil-line" size="3" className="shrink-0 opacity-70" aria-hidden="true" />
@@ -49,7 +53,14 @@ export default function CardTimestamps({ card, compact = false }: { card: Projec
                     </time>
                 </Tooltip.Trigger>
                 <Tooltip.Content>
-                    {t("card.Updated")}: {exact(updatedAt)}
+                    {compact && (
+                        <div>
+                            {t("card.Created")}: {exact(createdAt)}
+                        </div>
+                    )}
+                    <div>
+                        {t("card.Updated")}: {exact(updatedAt)}
+                    </div>
                 </Tooltip.Content>
             </Tooltip.Root>
         </span>
