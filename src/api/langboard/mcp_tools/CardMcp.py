@@ -11,6 +11,7 @@ from langboard_shared.core.exceptions.CardDeleteForbidden import CardDeleteForbi
 from langboard_shared.core.storage import Storage, StorageName
 from langboard_shared.core.types import SafeDateTime
 from langboard_shared.domain.models import Bot, Card, CardMetadata, Project, ProjectRole, User
+from langboard_shared.domain.models.Checkitem import CheckitemStatus
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.domain.services.DomainService import DomainService
 from langboard_shared.Env import Env
@@ -982,6 +983,63 @@ def update_card_checkitem(
     checklists = service.checklist.get_api_list_by_card(card_uid, limit=26, checkitems_limit=26)
     return {
         "checklists": bounded_items([public_checklist(item) for item in checklists], CardBundleSection.Checklists, 25)
+    }
+
+
+@McpTool.add("user", description="Start, pause, resume, stop, or complete my checklist work timer.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+def change_card_checkitem_work(
+    project_uid: str,
+    card_uid: str,
+    checkitem_uid: str,
+    action: Literal["start", "pause", "resume", "stop", "complete"],
+    user: User,
+    service: DomainService,
+    replace_active: bool = False,
+) -> dict[str, Any]:
+    """Change only the signed-in user's timer, after card ancestry and owner checks."""
+
+    _, card = _require_task_card(project_uid, card_uid)
+    item = service.checkitem.get_by_id_like(checkitem_uid)
+    checklist = service.checklist.get_by_id_like(item.checklist_id) if item is not None else None
+    if item is None or checklist is None or checklist.card_id != card.id or item.cardified_id:
+        raise ValueError("Checkitem not found in card")
+    if item.user_id and item.user_id != user.id:
+        raise ValueError("Checkitem belongs to another worker")
+
+    target = {
+        "start": CheckitemStatus.Started,
+        "pause": CheckitemStatus.Paused,
+        "resume": CheckitemStatus.Started,
+        "stop": CheckitemStatus.Stopped,
+        "complete": CheckitemStatus.Stopped,
+    }[action]
+    if action == "pause" and item.status != CheckitemStatus.Started:
+        raise ValueError("Only running work can be paused")
+    if action == "resume" and item.status != CheckitemStatus.Paused:
+        raise ValueError("Only paused work can be resumed")
+    if action in {"start", "resume"} and not replace_active:
+        other_active = [
+            work for work in service.checkitem.get_active_work(user)
+            if work["checkitem"]["uid"] != item.get_uid()
+        ]
+        if other_active:
+            raise ValueError("Another work timer is active; set replace_active to pause it")
+    if not service.checkitem.change_status(
+        user, project_uid, card_uid, item, target, from_api=action == "complete"
+    ):
+        raise ValueError("Work timer transition failed")
+    if action == "complete" and item.status == CheckitemStatus.Stopped and not item.is_checked:
+        if not service.checkitem.toggle_checked(user, project_uid, card_uid, item, desired_checked=True):
+            raise ValueError("Work item could not be completed")
+    current = service.checkitem.get_by_id_like(checkitem_uid)
+    if current is None:
+        raise ValueError("Checkitem not found after transition")
+    return {
+        "checkitem_uid": current.get_uid(),
+        "status": current.status.value,
+        "is_checked": current.is_checked,
+        "user_uid": user.get_uid(),
     }
 
 
