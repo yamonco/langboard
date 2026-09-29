@@ -56,6 +56,7 @@ class CardBundleDto(BaseModel):
 
     core: dict[str, Any]
     workflow: dict[str, Any]
+    work_state: dict[str, Any] | None = None
     people: PeopleDto | None = None
     classification: ClassificationDto | None = None
     checklists: BoundedItemsDto | None = None

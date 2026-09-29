@@ -10,6 +10,37 @@ from ....helpers import InfraHelper
 
 
 class CheckitemRepository(BaseOrderRepository[Checkitem, Checklist]):
+    def get_work_state_counts(self, card_ids: list[int]) -> dict[int, tuple[int, int, int, int]]:
+        """Aggregate only authorized card IDs, including archived timer diagnostics."""
+        if not card_ids:
+            return {}
+        query = (
+            SqlBuilder.select.columns(
+                Checklist.column("card_id"),
+                func.count(Checkitem.column("id")),
+                func.sum(case((Checkitem.column("is_checked") == True, 1), else_=0)),  # noqa: E712
+                func.sum(case(
+                    ((Checkitem.column("status") == CheckitemStatus.Started) & Checkitem.column("user_id").is_not(None), 1),
+                    else_=0,
+                )),
+                func.sum(case(
+                    ((Checkitem.column("status") == CheckitemStatus.Paused) & Checkitem.column("user_id").is_not(None), 1),
+                    else_=0,
+                )),
+            )
+            .join(Checklist, Checkitem.column("checklist_id") == Checklist.column("id"))
+            .where(Checklist.column("card_id").in_(card_ids))
+            .where(Checklist.column("is_system") == False)  # noqa: E712
+            .where(Checklist.column("deleted_at").is_(None))
+            .where(Checkitem.column("deleted_at").is_(None))
+            .group_by(Checklist.column("card_id"))
+        )
+        with DbSession.use(readonly=True) as db:
+            return {
+                card_id: (int(total), int(completed or 0), int(started or 0), int(paused or 0))
+                for card_id, total, completed, started, paused in db.exec(query).all()
+            }
+
     def get_board_progress_by_project(
         self, project: TProjectParam, archive_visible_since: SafeDateTime
     ) -> dict[int, tuple[int, int]]:

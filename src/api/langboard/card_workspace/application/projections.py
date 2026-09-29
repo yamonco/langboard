@@ -186,6 +186,8 @@ def public_card_summary(card: dict[str, Any]) -> dict[str, Any]:
     """Project one minimal card list item."""
 
     result = pick(card, _CARD_KEYS + _WORKFLOW_KEYS)
+    if isinstance(card.get("work_state"), dict):
+        result["work_state"] = card["work_state"]
     if "member_uids" in card:
         result["member_uids"] = list(card.get("member_uids") or [])[:25]
     return result

@@ -3,7 +3,7 @@ from typing import Any, Literal, Sequence, cast, overload
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from ....ai import BotScheduleHelper, BotScopeHelper
-from ....core.db import DbSession, EditorContentModel
+from ....core.db import DbSession, EditorContentModel, SqlBuilder
 from ....core.domain import BaseDomainService
 from ....core.domain.BaseDomainService import TMutableValidatorMap
 from ....core.exceptions.CardDeleteForbidden import CardDeleteForbidden
@@ -41,6 +41,7 @@ from ...models import (
     User,
 )
 from ...models.Checkitem import CheckitemStatus
+from ..CardWorkState import project_work_state
 from .CardContentBlockService import CardContentBlockService
 from .CardRelationshipService import CardRelationshipService
 from .CheckitemService import CheckitemService
@@ -122,6 +123,39 @@ class CardService(BaseDomainService):
 
         return [card for card, _ in self.repo.card.get_all_by_project(project)]
 
+    def get_work_states(self, cards: Sequence[Card]) -> dict[int, dict[str, Any]]:
+        """Project a permission-scoped card batch in two queries, never per-card reads.
+
+        Callers must supply cards from their existing authorized query. No hidden
+        related-card data, task metadata or user identities enter this projection.
+        """
+        if not cards:
+            return {}
+        column_ids = {card.project_column_id for card in cards}
+        with DbSession.use(readonly=True) as db:
+            columns = {
+                column.id: column
+                for column in db.exec(
+                    SqlBuilder.select.table(ProjectColumn).where(ProjectColumn.column("id").in_(column_ids))
+                ).all()
+            }
+        counts = self.repo.checkitem.get_work_state_counts([card.id for card in cards])
+        states = {}
+        for card in cards:
+            column = columns.get(card.project_column_id)
+            total, completed, started, paused = counts.get(card.id, (0, 0, 0, 0))
+            states[card.id] = project_work_state(
+                card_uid=card.get_uid(),
+                workflow_stage=column.workflow_stage if column and column.project_id == card.project_id else None,
+                archived=card.archived_at is not None,
+                linked_resource=card.is_linked_resource,
+                total=total,
+                completed=completed,
+                started=started,
+                paused=paused,
+            )
+        return states
+
     def get_details(
         self,
         project: TProjectParam | None,
@@ -139,6 +173,7 @@ class CardService(BaseDomainService):
 
         api_card = card.api_response()
         api_card["project_column_name"] = column.name
+        api_card["work_state"] = self.get_work_states([card])[card.id]
         if card.is_linked_resource:
             api_card.update(
                 {
@@ -226,6 +261,7 @@ class CardService(BaseDomainService):
         user_checklist_card_ids = {checklist.card_id for checklist in raw_checklists if not checklist.is_system}
         checklist_progress_by_card = self.repo.checkitem.get_board_progress_by_project(project, archive_visible_since)
         active_workers_by_card = self.get_active_workers(project)
+        work_states = self.get_work_states([card for card, _ in raw_cards])
 
         user = user_or_bot if isinstance(user_or_bot, User) else None
         seen_map: dict[int, int] = {}
@@ -262,6 +298,7 @@ class CardService(BaseDomainService):
             api_card["checklist_total_count"] = checklist_total
             api_card["checklist_completed_count"] = checklist_completed
             api_card["active_workers"] = active_workers_by_card.get(card.id, [])
+            api_card["work_state"] = work_states[card.id]
             if getattr(card, "is_linked_resource", False):
                 api_card["linked_resource"] = resource_payloads[card.get_uid()]
             if user is not None:
@@ -520,6 +557,7 @@ class CardService(BaseDomainService):
         self, user: User, pagination: TimeBasedPagination
     ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         records = self.repo.card.get_dashboard_list_scroller(user, pagination)
+        work_states = self.get_work_states([card for card, *_ in records])
 
         api_cards = []
         api_projects: dict[int, dict[str, Any]] = {}
@@ -527,6 +565,7 @@ class CardService(BaseDomainService):
         for card, project, column in records:
             api_card = card.api_response()
             api_card["project_column_name"] = column.name
+            api_card["work_state"] = work_states[card.id]
             if card.is_linked_resource:
                 resource_group = linked_resources_by_project.setdefault(project.id, (project, [], []))
                 resource_group[1].append(card)
@@ -552,6 +591,7 @@ class CardService(BaseDomainService):
             return []
 
         records = self.repo.card.get_all_by_project(project)
+        work_states = self.get_work_states([card for card, _ in records])
         resource_payloads = self._get_linked_resource_payloads(
             user_or_bot,
             project,
@@ -563,6 +603,7 @@ class CardService(BaseDomainService):
         for card, column in records:
             api_card = card.api_response()
             api_card["project_column_name"] = column.name
+            api_card["work_state"] = work_states[card.id]
             if card.is_linked_resource:
                 api_card["linked_resource"] = resource_payloads[card.get_uid()]
             blocks = block_service.get_blocks_by_card(card)
@@ -632,6 +673,7 @@ class CardService(BaseDomainService):
             limit,
         )
         cards: list[dict[str, Any]] = []
+        work_states = self.get_work_states([card for card, *_ in records])
         for card, project, column, is_assigned in records:
             reasons = []
             if is_assigned:
@@ -654,6 +696,7 @@ class CardService(BaseDomainService):
                     "deadline_at": card.deadline_at.isoformat() if card.deadline_at else None,
                     "updated_at": card.updated_at.isoformat(),
                     "reasons": reasons,
+                    "work_state": work_states[card.id],
                 }
             )
         return cards
@@ -681,6 +724,7 @@ class CardService(BaseDomainService):
         )
         has_more = len(records) > limit
         page = records[:limit]
+        work_states = self.get_work_states([card for card, *_ in page])
         items = [
             {
                 "card_uid": card.get_uid(),
@@ -691,6 +735,7 @@ class CardService(BaseDomainService):
                 "column_name": column.name,
                 "updated_at": card.updated_at.isoformat(),
                 "deadline_at": card.deadline_at.isoformat() if card.deadline_at else None,
+                "work_state": work_states[card.id],
             }
             for card, project, column, _ in page
         ]
@@ -720,10 +765,12 @@ class CardService(BaseDomainService):
             [card for card, _ in page if card.is_linked_resource],
             include_content=False,
         )
+        work_states = self.get_work_states([card for card, _ in page])
         cards: list[dict[str, Any]] = []
         for card, column in page:
             api_card = card.api_response()
             api_card["project_column_name"] = column.name
+            api_card["work_state"] = work_states[card.id]
             if card.is_linked_resource:
                 api_card["linked_resource"] = resource_payloads[card.get_uid()]
             cards.append(api_card)

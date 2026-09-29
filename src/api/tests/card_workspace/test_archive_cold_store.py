@@ -118,6 +118,13 @@ def test_board_list_passes_one_visibility_cutoff_to_all_hot_path_queries(
         return [(card, 2)]
 
     monkeypatch.setattr(card_service_module.InfraHelper, "get_by_id_like", lambda _model, value: project)
+    # This test isolates the archive visibility cutoff; common work-state SQL
+    # has its own batch contract tests and receives only these visible cards.
+    def project_states(_service: CardService, cards: list[Any]) -> dict[int, dict[str, Any]]:
+        assert cards == [card]
+        return {card.id: {"lifecycle": "active"}}
+
+    monkeypatch.setattr(CardService, "get_work_states", project_states)
     before = SafeDateTime.now()
     result = _service(SimpleNamespace(get_board_list=get_board_list), observed).get_board_list(project)
     after = SafeDateTime.now()
@@ -141,6 +148,7 @@ def test_board_list_passes_one_visibility_cutoff_to_all_hot_path_queries(
             "checklist_total_count": 0,
             "checklist_completed_count": 0,
             "active_workers": [],
+            "work_state": {"lifecycle": "active"},
         }
     ]
 
@@ -418,3 +426,16 @@ def test_hot_queries_share_the_exact_boundary_and_hide_cold_relationship_endpoin
     assert [(int(item.id), int(checklist.card_id), started_at) for item, checklist, started_at in active_workers] == [
         (602, active_id, cutoff)
     ]
+    state_repo = make_repo(CheckitemRepository)
+    assert state_repo.get_work_state_counts([active_id, boundary_id]) == {active_id: (2, 1, 1, 0)}
+    # An explicitly authorized archived card retains a timer diagnostic even
+    # though avatar queries exclude it. No other card is discovered by this read.
+    with engine.begin() as connection:
+        connection.execute(
+            Checkitem.__table__.update().where(Checkitem.__table__.c.id == 604).values(status="started", is_checked=False, user_id=1)
+        )
+    assert state_repo.get_work_state_counts([cold_id]) == {cold_id: (1, 0, 1, 0)}
+    with engine.begin() as connection:
+        connection.execute(Checkitem.__table__.update().where(Checkitem.__table__.c.id == 604).values(user_id=None))
+    assert state_repo.get_work_state_counts([cold_id]) == {cold_id: (1, 0, 0, 0)}
+    assert state_repo.get_work_state_counts([]) == {}

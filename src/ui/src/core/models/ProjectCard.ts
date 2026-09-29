@@ -24,6 +24,7 @@ import { Utils } from "@langboard/core/utils";
 import { ProjectRole } from "@/core/models/roles";
 
 export interface Interface extends IBaseModel {
+    work_state?: IWorkState;
     project_uid: string;
     project_column_uid: string;
     title: string;
@@ -55,6 +56,20 @@ export interface Interface extends IBaseModel {
     last_change_target_uid?: string;
     last_change_at?: Date | null;
     has_unread_change?: bool;
+}
+
+export interface IWorkState {
+    version: number;
+    workflow_stage: "backlog" | "ready" | "active" | "review" | "closed" | "reference" | null;
+    verification_state: "not_required" | "unverified" | "partial" | "verified" | "stale";
+    execution_state: "idle" | "human_active" | "agent_active" | "paused" | "failed" | null;
+    blocker_state: "clear" | "blocked" | "needs_input" | "needs_approval" | null;
+    material_kind: "work" | "reference" | "meeting" | "wiki-like";
+    lifecycle: "active" | "archived";
+    active_queue_eligible: boolean | null;
+    checklist_progress: { total: number; completed: number };
+    reasons: Array<{ code: string; message: string; source_ref: string }>;
+    state_inconsistency: Array<{ code: string; message: string; source_ref: string }>;
 }
 
 export interface IContentBlock {
@@ -105,6 +120,9 @@ export interface IStore extends Interface {
 }
 
 class ProjectCard extends BaseModel<IStore> {
+    public get work_state() {
+        return this.getValue("work_state");
+    }
     public static override get FOREIGN_MODELS() {
         return {
             project_members: User.Model.MODEL_NAME,

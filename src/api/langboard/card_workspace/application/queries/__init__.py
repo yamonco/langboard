@@ -101,6 +101,7 @@ def get_card_bundle(
             details,
             ("project_column_uid", "project_column_name", "workflow_stage", "order", "deadline_at", "archived_at"),
         ),
+        work_state=details.get("work_state"),
     )
     if CardBundleInclude.People in requested:
         assignees = bounded_items(assigned_people(details), CardBundleSection.People, section_page.limit)
