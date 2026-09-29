@@ -469,7 +469,10 @@ function BoardTaskCardResult({
                                                         <ul className="space-y-1 text-sm">
                                                             {linkedWikis.map((wiki) => (
                                                                 <li key={wiki.wiki_uid}>
-                                                                    <a className="text-primary hover:underline" href={ROUTES.BOARD.WIKI_PAGE(projectUID, wiki.wiki_uid)}>
+                                                                    <a
+                                                                        className="text-primary hover:underline"
+                                                                        href={ROUTES.BOARD.WIKI_PAGE(projectUID, wiki.wiki_uid)}
+                                                                    >
                                                                         {wiki.title}
                                                                     </a>
                                                                 </li>
