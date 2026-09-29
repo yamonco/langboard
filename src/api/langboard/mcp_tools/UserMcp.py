@@ -1,11 +1,15 @@
 """Current-user notification and governed project-search MCP tools."""
 
+import base64
+import json
+from binascii import Error as Base64Error
 from datetime import datetime, timedelta, timezone
 from typing import Annotated, Literal
 from langboard_shared.core.types import SafeDateTime
 from langboard_shared.domain.models import ProjectRole, User
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.domain.services import DomainService
+from langboard_shared.helpers import InfraHelper
 from langboard_shared.security import RoleFinder
 from pydantic import Field
 from ..mcp_integration import McpRoleFilter, McpTool
@@ -160,3 +164,50 @@ def get_my_work_cards(
         "cards": cards,
         "returned_count": len(cards),
     }
+
+
+@McpTool.add(
+    "user", description="List current user's assigned cards across readable boards using one bounded card query."
+)
+def list_my_work(
+    user: User,
+    service: DomainService,
+    project_uid: str | None = None,
+    cursor: str | None = None,
+    limit: Annotated[int, Field(ge=1, le=25)] = 20,
+) -> dict:
+    if not 1 <= limit <= 25:
+        raise ValueError("limit must be between 1 and 25")
+    projects, _ = service.project.get_api_list(user)
+    readable = {
+        project["uid"]
+        for project in projects
+        if "*" in project["current_auth_role_actions"]
+        or ProjectRoleAction.Read.value in project["current_auth_role_actions"]
+    }
+    if project_uid is not None:
+        if project_uid not in readable:
+            raise ValueError("Project not found or not readable")
+        readable = {project_uid}
+    before = None
+    if cursor is not None:
+        try:
+            raw = base64.urlsafe_b64decode(cursor + "=" * (-len(cursor) % 4))
+            fields = json.loads(raw)
+            if not isinstance(fields, list) or len(fields) != 3 or not all(isinstance(v, str) for v in fields):
+                raise ValueError
+            timestamp = _parse_time_bound(fields[0])
+            if timestamp is None:
+                raise ValueError
+            before = (timestamp, InfraHelper.convert_id(fields[1]), InfraHelper.convert_id(fields[2]))
+        except (ValueError, TypeError, Base64Error) as exc:
+            raise ValueError("Invalid My Work cursor") from exc
+    if not readable:
+        return {"items": [], "next_cursor": None}
+    items, next_fields = service.card.get_assigned_work_page(user, sorted(readable), limit, before)
+    next_cursor = (
+        base64.urlsafe_b64encode(json.dumps(next_fields, separators=(",", ":")).encode()).decode().rstrip("=")
+        if next_fields
+        else None
+    )
+    return {"items": items, "next_cursor": next_cursor}

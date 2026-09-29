@@ -596,6 +596,46 @@ class CardService(BaseDomainService):
             )
         return cards
 
+    def get_assigned_work_page(
+        self,
+        user: User,
+        project_uids: list[str],
+        limit: int,
+        before: tuple[SafeDateTime, int, int] | None = None,
+    ) -> tuple[list[dict[str, Any]], tuple[str, str, str] | None]:
+        """Read one permission-scoped, assigned-only page without per-card fetches."""
+        records = self.repo.card.get_my_work_page(
+            user,
+            project_uids,
+            {"assigned"},
+            [],
+            SafeDateTime.now(),
+            SafeDateTime.now(),
+            "updated_at",
+            None,
+            None,
+            limit + 1,
+            before=before,
+        )
+        has_more = len(records) > limit
+        page = records[:limit]
+        items = [
+            {
+                "card_uid": card.get_uid(),
+                "title": card.title,
+                "project_uid": project.get_uid(),
+                "project_title": project.title,
+                "column_uid": column.get_uid(),
+                "column_name": column.name,
+                "updated_at": card.updated_at.isoformat(),
+                "deadline_at": card.deadline_at.isoformat() if card.deadline_at else None,
+            }
+            for card, project, column, _ in page
+        ]
+        last = page[-1] if has_more and page else None
+        next_fields = (last[0].updated_at.isoformat(), last[1].get_uid(), last[0].get_uid()) if last else None
+        return items, next_fields
+
     def get_api_page_by_project(
         self,
         project: TProjectParam | None,

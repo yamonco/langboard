@@ -339,6 +339,7 @@ class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
         since: SafeDateTime | None,
         until: SafeDateTime | None,
         limit: int,
+        before: tuple[SafeDateTime, int, int] | None = None,
     ) -> list[tuple[Card, Project, ProjectColumn, bool]]:
         """Return one bounded cross-project page of user-focused, non-archived cards."""
 
@@ -389,7 +390,20 @@ class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
             query = query.where(date_column >= since)
         if until is not None:
             query = query.where(date_column < until)
-        query = query.order_by(Card.column("updated_at").desc(), Card.column("id").desc()).limit(limit)
+        if before is not None:
+            updated_at, project_id, card_id = before
+            query = query.where(
+                (Card.column("updated_at") < updated_at)
+                | ((Card.column("updated_at") == updated_at) & (Project.column("id") < project_id))
+                | (
+                    (Card.column("updated_at") == updated_at)
+                    & (Project.column("id") == project_id)
+                    & (Card.column("id") < card_id)
+                )
+            )
+        query = query.order_by(
+            Card.column("updated_at").desc(), Project.column("id").desc(), Card.column("id").desc()
+        ).limit(limit)
         with DbSession.use(readonly=True) as db:
             return db.exec(query).all()
 

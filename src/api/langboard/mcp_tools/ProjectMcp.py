@@ -141,6 +141,38 @@ def get_project_columns(project_uid: str, service: DomainService) -> list[dict]:
     return service.project_column.get_api_list_by_project(p)
 
 
+def _active_column_order(project_uid: str, service: DomainService) -> list[dict]:
+    project = service.project.get_by_id_like(project_uid)
+    if project is None:
+        raise ValueError("Project not found")
+    return [column for column in service.project_column.get_api_list_by_project(project) if not column["is_archive"]]
+
+
+def _column_target_order(
+    columns: list[dict],
+    *,
+    position: str | None,
+    after_column_uid: str | None,
+    before_column_uid: str | None,
+    moving_uid: str | None = None,
+) -> int:
+    selectors = sum(value is not None for value in (position, after_column_uid, before_column_uid))
+    if selectors > 1 or position not in (None, "leftmost", "rightmost"):
+        raise ValueError("Choose one valid column position")
+    uids = [column["uid"] for column in columns if column["uid"] != moving_uid]
+    if position == "leftmost":
+        return 0
+    if after_column_uid is not None:
+        if after_column_uid not in uids:
+            raise ValueError("After column not found in project")
+        return uids.index(after_column_uid) + 1
+    if before_column_uid is not None:
+        if before_column_uid not in uids:
+            raise ValueError("Before column not found in project")
+        return uids.index(before_column_uid)
+    return len(uids)
+
+
 @McpTool.add(description="Get project labels.")
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
 def get_project_labels(project_uid: str, service: DomainService) -> list[dict]:
@@ -303,11 +335,28 @@ def is_project_assignee(project_uid: str, assignee_uid: str, service: DomainServ
 
 @McpTool.add(description="Create a new column in a project.")
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Update], RoleFinder.project)
-def create_column(project_uid: str, user_or_bot: User | Bot, name: str, service: DomainService) -> dict:
-    column = service.project_column.create(user_or_bot, project_uid, name)
+def create_column(
+    project_uid: str,
+    user_or_bot: User | Bot,
+    name: str,
+    service: DomainService,
+    description: str = "",
+    position: str | None = None,
+    after_column_uid: str | None = None,
+    before_column_uid: str | None = None,
+) -> dict:
+    if not name.strip() or len(name) > 300:
+        raise ValueError("Column name must contain 1-300 characters")
+    columns = _active_column_order(project_uid, service)
+    order = _column_target_order(
+        columns, position=position, after_column_uid=after_column_uid, before_column_uid=before_column_uid
+    )
+    column = service.project_column.create(user_or_bot, project_uid, name.strip(), description=description)
     if not column:
         raise ValueError("Failed to create")
-    return {**column.api_response(), "count": 0}
+    if order < len(columns):
+        service.project_column.change_order(project_uid, column, order)
+    return next(item for item in _active_column_order(project_uid, service) if item["uid"] == column.get_uid())
 
 
 @McpTool.add(description="Change column name.")
@@ -326,15 +375,31 @@ def change_column_name(
 def change_column_order(
     project_uid: str,
     column_uid: str,
-    order: int,
+    order: int | None,
     service: DomainService,
+    position: str | None = None,
+    after_column_uid: str | None = None,
+    before_column_uid: str | None = None,
 ) -> dict:
-    if isinstance(order, bool) or order < 0:
+    columns = _active_column_order(project_uid, service)
+    if column_uid not in {column["uid"] for column in columns}:
+        raise ValueError("Column not found in project")
+    if order is not None and any(value is not None for value in (position, after_column_uid, before_column_uid)):
+        raise ValueError("Choose order or a relative position")
+    if order is None:
+        order = _column_target_order(
+            columns,
+            position=position,
+            after_column_uid=after_column_uid,
+            before_column_uid=before_column_uid,
+            moving_uid=column_uid,
+        )
+    if isinstance(order, bool) or order < 0 or order >= len(columns):
         raise ValueError("Column order must be a non-negative integer")
     result = service.project_column.change_order(project_uid, column_uid, order)
     if not result:
         raise ValueError("Failed")
-    return {"message": "Order changed"}
+    return {"column_uid": column_uid, "columns": _active_column_order(project_uid, service)}
 
 
 @McpTool.add(description="Delete a column from a project.")
