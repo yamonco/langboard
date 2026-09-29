@@ -99,6 +99,7 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
             )
             details["project_members"] = people
             details["member_uids"] = [person["uid"] for person in people]
+            details["active_workers"] = self._service.card.get_active_workers(project, card).get(card.id, [])
         else:
             details["project_members"] = []
             details["member_uids"] = []
