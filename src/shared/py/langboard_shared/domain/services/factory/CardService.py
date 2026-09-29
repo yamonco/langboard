@@ -32,6 +32,7 @@ from ...models import (
     CardBotSchedule,
     CardBotScope,
     CardRelationship,
+    CardVerificationRecord,
     Checkitem,
     Checklist,
     GlobalCardRelationshipType,
@@ -41,6 +42,7 @@ from ...models import (
     User,
 )
 from ...models.Checkitem import CheckitemStatus
+from ..CardVerification import VerificationConflict, VerificationSubmission
 from ..CardWorkState import project_work_state
 from .CardContentBlockService import CardContentBlockService
 from .CardRelationshipService import CardRelationshipService
@@ -124,7 +126,7 @@ class CardService(BaseDomainService):
         return [card for card, _ in self.repo.card.get_all_by_project(project)]
 
     def get_work_states(self, cards: Sequence[Card]) -> dict[int, dict[str, Any]]:
-        """Project a permission-scoped card batch in two queries, never per-card reads.
+        """Project a permission-scoped card batch in three queries, never per-card reads.
 
         Callers must supply cards from their existing authorized query. No hidden
         related-card data, task metadata or user identities enter this projection.
@@ -140,10 +142,12 @@ class CardService(BaseDomainService):
                 ).all()
             }
         counts = self.repo.checkitem.get_work_state_counts([card.id for card in cards])
+        verification_records = self.repo.card_verification.get_latest_by_card_ids([card.id for card in cards])
         states = {}
         for card in cards:
             column = columns.get(card.project_column_id)
             total, completed, started, paused = counts.get(card.id, (0, 0, 0, 0))
+            record = verification_records.get(card.id)
             states[card.id] = project_work_state(
                 card_uid=card.get_uid(),
                 workflow_stage=column.workflow_stage if column and column.project_id == card.project_id else None,
@@ -153,8 +157,84 @@ class CardService(BaseDomainService):
                 completed=completed,
                 started=started,
                 paused=paused,
+                change_seq=card.last_change_seq,
+                verification_record=self._verification_projection(record) if record else None,
             )
         return states
+
+    @staticmethod
+    def _verification_projection(record: CardVerificationRecord) -> dict[str, Any]:
+        return {
+            "uid": record.get_uid(),
+            "source_change_seq": record.source_change_seq,
+            "decision": record.decision,
+            "recorded_at": record.created_at.isoformat(),
+            "recorded_by_user_uid": record.recorded_by_user_id.to_short_code() if record.recorded_by_user_id else None,
+            "recorded_by_bot_uid": record.recorded_by_bot_id.to_short_code() if record.recorded_by_bot_id else None,
+            "evidence": record.evidence,
+            "required_checkitem_uids": record.required_checkitem_uids,
+        }
+
+    def record_verification_evidence(
+        self, actor: User | Bot, project: TProjectParam, card: TCardParam, submission: VerificationSubmission
+    ) -> dict[str, Any] | None:
+        """Append reviewer evidence with a card lock and optimistic record fence.
+
+        Authorization belongs to the native route. This records declared scope,
+        never changes workflow/assignment/timers and never approves a release.
+        """
+        params = InfraHelper.get_records_with_foreign_by_params((Project, project), (Card, card))
+        if not params:
+            return None
+        project, card = params
+        with DbSession.atomic() as db:
+            current = db.exec(
+                SqlBuilder.select.table(Card)
+                .where((Card.column("id") == card.id) & (Card.column("project_id") == project.id))
+                .with_for_update()
+            ).first()
+            if current is None or current.deleted_at is not None or current.archived_at or current.is_linked_resource:
+                return None
+            if current.last_change_seq != submission.expected_change_seq:
+                raise VerificationConflict("Card changed; read current work_state before recording verification")
+            latest = self.repo.card_verification.get_latest_by_card_ids([current.id]).get(current.id)
+            if (latest.get_uid() if latest else None) != submission.expected_record_uid:
+                raise VerificationConflict("Verification changed; read its latest record before replacing it")
+            items = db.exec(
+                SqlBuilder.select.table(Checkitem)
+                .join(Checklist, Checkitem.column("checklist_id") == Checklist.column("id"))
+                .where(Checklist.column("card_id") == current.id)
+                .where(Checklist.column("is_system") == False)  # noqa: E712
+                .where(Checklist.column("deleted_at").is_(None))
+                .where(Checkitem.column("deleted_at").is_(None))
+            ).all()
+            by_uid = {item.get_uid(): item for item in items}
+            referenced = set(submission.required_checkitem_uids) | {
+                entry.checkitem_uid for entry in submission.evidence if entry.checkitem_uid is not None
+            }
+            if not referenced.issubset(by_uid):
+                raise ValueError("Evidence checkitem is not an active user checkitem of this card")
+            if submission.decision == "verified" and any(
+                not by_uid[uid].is_checked for uid in submission.required_checkitem_uids
+            ):
+                raise ValueError("Declared required checkitems are not complete")
+            if not isinstance(actor, (User, Bot)):
+                raise ValueError("Authenticated reviewer is required")
+            record = CardVerificationRecord(
+                card_id=current.id,
+                source_change_seq=current.last_change_seq,
+                decision=submission.decision,
+                recorded_by_user_id=actor.id if isinstance(actor, User) else None,
+                recorded_by_bot_id=actor.id if isinstance(actor, Bot) else None,
+                evidence=[entry.model_dump(mode="json") for entry in submission.evidence],
+                required_checkitem_uids=submission.required_checkitem_uids,
+            )
+            db.insert(record)
+            state = self.get_work_states([current])[current.id]
+        # Evidence is its own record revision, so it must not invalidate its
+        # subject by advancing the card's source cursor.
+        CardPublisher.updated(project, current, None, {"work_state": state})
+        return self._verification_projection(record)
 
     def get_details(
         self,

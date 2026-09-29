@@ -62,6 +62,22 @@ export interface IWorkState {
     version: number;
     workflow_stage: "backlog" | "ready" | "active" | "review" | "closed" | "reference" | null;
     verification_state: "not_required" | "unverified" | "partial" | "verified" | "stale";
+    verification_source_change_seq: number;
+    verification: {
+        uid: string;
+        source_change_seq: number;
+        decision: "unverified" | "partial" | "verified";
+        recorded_at: string;
+        recorded_by_user_uid: string | null;
+        recorded_by_bot_uid: string | null;
+        evidence: Array<{
+            reference: string;
+            source_revision: string;
+            environment: string;
+            checkitem_uid: string | null;
+        }>;
+        required_checkitem_uids: string[];
+    } | null;
     execution_state: "idle" | "human_active" | "agent_active" | "paused" | "failed" | null;
     blocker_state: "clear" | "blocked" | "needs_input" | "needs_approval" | null;
     material_kind: "work" | "reference" | "meeting" | "wiki-like";
@@ -122,6 +138,9 @@ export interface IStore extends Interface {
 class ProjectCard extends BaseModel<IStore> {
     public get work_state() {
         return this.getValue("work_state");
+    }
+    public set work_state(value) {
+        this.update({ work_state: value });
     }
     public static override get FOREIGN_MODELS() {
         return {

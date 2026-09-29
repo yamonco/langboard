@@ -15,6 +15,7 @@ from langboard_shared.core.schema import OpenApiSchema
 from langboard_shared.domain.models import Bot, Card, ProjectColumn, ProjectRole, User
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.domain.services import DomainService
+from langboard_shared.domain.services.CardVerification import VerificationConflict, VerificationSubmission
 from langboard_shared.filter import RoleFilter
 from langboard_shared.security import Auth, RoleFinder
 from pydantic import Field
@@ -72,6 +73,11 @@ class RecordOrchestrationVerificationForm(BaseFormModel):
     checked_at: str | None = Field(default=None, title="Verification timestamp")
     failure: OrchestrationTaskFailureForm | None = Field(default=None, title="Failure details")
     target_column_name: str | None = Field(default=None, title="Column to move the card to")
+
+
+@form_model
+class RecordVerificationEvidenceForm(BaseFormModel, VerificationSubmission):
+    """Strict evidence contract; reviewer identity comes from authentication."""
 
 
 @form_model
@@ -218,6 +224,34 @@ def record_orchestration_verification(
         raise ApiException.NotFound_404(ApiErrorCode.NF2003)
 
     return JsonResponse(content={"metadata": result})
+
+
+@AppRouter.schema(form=RecordVerificationEvidenceForm, permission=ApiPermission.Edit)
+@AppRouter.api.put(
+    "/board/{project_uid}/card/{card_uid}/verification-evidence",
+    tags=["Board.Card"],
+    description="Append revision-bound reviewer evidence without approving gates or moving the card.",
+    responses=OpenApiSchema().suc({"verification": {}}).auth().forbidden().err(404, ApiErrorCode.NF2003).get(),
+)
+@RoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+@AuthFilter.add()
+def record_verification_evidence(
+    project_uid: str,
+    card_uid: str,
+    form: RecordVerificationEvidenceForm,
+    user_or_bot: User | Bot = Auth.scope("all"),
+    service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    submission = VerificationSubmission.model_validate(form.model_dump())
+    try:
+        result = service.card.record_verification_evidence(user_or_bot, project_uid, card_uid, submission)
+    except VerificationConflict:
+        raise ApiException.Conflict_409()
+    except ValueError:
+        raise ApiException.UnprocessableContent_422()
+    if result is None:
+        raise ApiException.NotFound_404(ApiErrorCode.NF2003)
+    return JsonResponse(content={"verification": result})
 
 
 @AppRouter.schema(form=RecordOrchestrationRunForm, permission=ApiPermission.Edit)

@@ -5,14 +5,26 @@ on:
     paths:
       - .github/workflows/check-board-card-status.yaml
       - src/api/langboard/routes/board/BoardApi.py
+      - src/api/langboard/routes/board/BoardOrchestrationApi.py
+      - src/api/langboard/migrations/versions/20260930021000-96a4bd71e203.py
       - src/api/tests/card_workspace/test_archive_cold_store.py
+      - src/api/tests/card_workspace/test_verification_evidence_route.py
+      - src/shared/py/langboard_shared/domain/models/CardVerificationRecord.py
+      - src/shared/py/langboard_shared/domain/services/CardVerification.py
+      - src/shared/py/langboard_shared/domain/services/CardVerification_test.py
+      - src/shared/py/langboard_shared/domain/services/CardWorkState.py
       - src/shared/py/langboard_shared/domain/services/factory/CardService.py
+      - src/shared/py/langboard_shared/domain/services/factory/CardService_verification_test.py
+      - src/shared/py/langboard_shared/domain/services/factory/CardService_work_state_test.py
+      - src/shared/py/langboard_shared/infrastructure/repositories/factory/CardVerificationRepository.py
+      - src/shared/py/langboard_shared/infrastructure/repositories/factory/CardVerificationRepository_test.py
       - src/shared/py/langboard_shared/domain/services/factory/CheckitemService.py
       - src/shared/py/langboard_shared/domain/services/factory/ChecklistService.py
       - src/shared/py/langboard_shared/infrastructure/repositories/factory/CheckitemRepository.py
       - src/shared/py/langboard_shared/publishers/CheckitemPublisher.py
       - src/shared/ts/src/constants/SocketEvents.ts
       - src/ui/src/core/models/ProjectCard.ts
+      - src/ui/src/controllers/socket/card/useCardDetailsChangedHandlers.ts
       - src/ui/src/core/providers/BoardProvider.tsx
       - src/ui/src/controllers/socket/card/checklist/useBoardChecklistProgressChangedHandlers.ts
       - src/ui/src/pages/BoardPage/components/board/BoardColumnCardCollapsible.tsx
@@ -31,7 +43,7 @@ jobs:
         with:
           python-version: "3.12"
       - run: uv sync --frozen
-      - run: uv run --no-sync pytest -q src/api/tests/card_workspace/test_archive_cold_store.py
+      - run: uv run --no-sync pytest -q src/api/tests/card_workspace/test_archive_cold_store.py src/api/tests/card_workspace/test_verification_evidence_route.py src/shared/py/langboard_shared/domain/services/CardVerification_test.py src/shared/py/langboard_shared/domain/services/factory/CardService_verification_test.py src/shared/py/langboard_shared/domain/services/factory/CardService_work_state_test.py src/shared/py/langboard_shared/infrastructure/repositories/factory/CardVerificationRepository_test.py
 
   ui:
     runs-on: ubuntu-latest
@@ -45,7 +57,7 @@ jobs:
       - run: corepack enable
       - run: yarn install --frozen-lockfile
         working-directory: src/ui
-      - run: yarn eslint src/core/models/ProjectCard.ts src/core/providers/BoardProvider.tsx src/controllers/socket/card/checklist/useBoardChecklistProgressChangedHandlers.ts src/pages/BoardPage/components/board/BoardColumnCardCollapsible.tsx src/pages/BoardPage/components/board/BoardColumnCardStatus.ts src/pages/BoardPage/components/board/BoardColumnCardStatus.test.ts --max-warnings 0
+      - run: yarn eslint src/core/models/ProjectCard.ts src/core/providers/BoardProvider.tsx src/controllers/socket/card/useCardDetailsChangedHandlers.ts src/controllers/socket/card/checklist/useBoardChecklistProgressChangedHandlers.ts src/pages/BoardPage/components/board/BoardColumnCardCollapsible.tsx src/pages/BoardPage/components/board/BoardColumnCardStatus.ts src/pages/BoardPage/components/board/BoardColumnCardStatus.test.ts --max-warnings 0
         working-directory: src/ui
       - run: node --experimental-strip-types --test src/pages/BoardPage/components/board/BoardColumnCardStatus.test.ts
         working-directory: src/ui

@@ -14,6 +14,7 @@ from .CardCommentRepository import CardCommentRepository
 from .CardContentBlockRepository import CardContentBlockRepository
 from .CardRelationshipRepository import CardRelationshipRepository
 from .CardRepository import CardRepository
+from .CardVerificationRepository import CardVerificationRepository
 from .ChatHistoryRepository import ChatHistoryRepository
 from .ChatSessionRepository import ChatSessionRepository
 from .ChatTemplateRepository import ChatTemplateRepository
@@ -78,6 +79,7 @@ __all__ = [
     "CardContentBlockRepository",
     "CardRelationshipRepository",
     "CardRepository",
+    "CardVerificationRepository",
     "ChatHistoryRepository",
     "ChatSessionRepository",
     "ChatTemplateRepository",

@@ -148,6 +148,10 @@ class Repository(Factory):
         return self._create_or_get_product(factory.UserCardReadStateRepository)
 
     @property
+    def card_verification(self):
+        return self._create_or_get_product(factory.CardVerificationRepository)
+
+    @property
     def project_assigned_user(self):
         return self._create_or_get_product(factory.ProjectAssignedUserRepository)
 

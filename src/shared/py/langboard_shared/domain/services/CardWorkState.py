@@ -21,6 +21,8 @@ def project_work_state(
     completed: int,
     started: int,
     paused: int,
+    change_seq: int = 0,
+    verification_record: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Interpret native facts equally for every authorized reader.
 
@@ -39,8 +41,25 @@ def project_work_state(
         reasons.append(reason("workflow_unclassified", "Column has no explicit workflow mapping.", "column"))
     material = "wiki-like" if linked_resource else "reference" if stage == "reference" else "work"
     verification = "not_required" if linked_resource else "partial" if completed else "unverified"
-    if not linked_resource:
-        reasons.append(reason("verification_evidence_unavailable", "Checklist progress is not approval evidence.", "verification"))
+    if not linked_resource and verification_record is not None:
+        if verification_record.get("source_change_seq") != change_seq:
+            verification = "stale"
+            reasons.append(
+                reason("verification_stale", "Card changed after the recorded verification.", "verification")
+            )
+        elif verification_record.get("decision") in {"verified", "partial", "unverified"}:
+            verification = verification_record["decision"]
+            reasons.append(
+                reason(
+                    "verification_recorded",
+                    "Current reviewer evidence covers the explicitly declared scope; approval gates are separate.",
+                    "verification",
+                )
+            )
+    elif not linked_resource:
+        reasons.append(
+            reason("verification_evidence_unavailable", "Checklist progress is not approval evidence.", "verification")
+        )
     if started:
         execution = "human_active"
     elif paused:
@@ -49,20 +68,44 @@ def project_work_state(
         execution = "idle"
     else:
         execution = None
-        reasons.append(reason("agent_lifecycle_unavailable", "No authoritative agent lifecycle projection is available.", "execution"))
-    reasons.append(reason("blocker_policy_unavailable", "Dependency, input and approval gates have not been evaluated.", "blockers"))
+        reasons.append(
+            reason(
+                "agent_lifecycle_unavailable", "No authoritative agent lifecycle projection is available.", "execution"
+            )
+        )
+    reasons.append(
+        reason(
+            "blocker_policy_unavailable", "Dependency, input and approval gates have not been evaluated.", "blockers"
+        )
+    )
     if archived:
         reasons.append(reason("archived", "Archived cards are excluded from the active queue.", "lifecycle"))
     if archived and started:
-        inconsistencies.append(reason("archived_with_running_timer", "Archived card still has a running human timer.", "checkitems"))
+        inconsistencies.append(
+            reason("archived_with_running_timer", "Archived card still has a running human timer.", "checkitems")
+        )
     if stage == "closed" and total > completed:
-        inconsistencies.append(reason("closed_with_open_checkitems", "Closed workflow still has unchecked items; no required-acceptance policy is inferred.", "checkitems"))
+        inconsistencies.append(
+            reason(
+                "closed_with_open_checkitems",
+                "Closed workflow still has unchecked items; no required-acceptance policy is inferred.",
+                "checkitems",
+            )
+        )
     if stage == "active" and total > 0 and total == completed:
-        inconsistencies.append(reason("active_with_all_checkitems_completed", "All checkitems are complete while workflow remains active; approval is separate.", "checkitems"))
+        inconsistencies.append(
+            reason(
+                "active_with_all_checkitems_completed",
+                "All checkitems are complete while workflow remains active; approval is separate.",
+                "checkitems",
+            )
+        )
     return {
         "version": 1,
         "workflow_stage": stage,
         "verification_state": verification,
+        "verification_source_change_seq": change_seq,
+        "verification": verification_record,
         "execution_state": execution,
         "blocker_state": None,
         "material_kind": material,

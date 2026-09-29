@@ -21,6 +21,7 @@ from .CardCommentReaction import CardCommentReaction
 from .CardContentBlock import CardContentBlock
 from .CardMetadata import CardMetadata
 from .CardRelationship import CardRelationship
+from .CardVerificationRecord import CardVerificationRecord
 from .ChatGraphApprovalRequest import ChatGraphApprovalRequest
 from .ChatHistory import ChatHistory
 from .ChatSession import ChatSession
@@ -107,6 +108,7 @@ __all__ = [
     "CardContentBlock",
     "CardMetadata",
     "CardRelationship",
+    "CardVerificationRecord",
     "ChatHistory",
     "ChatSession",
     "ChatTemplate",

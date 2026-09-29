@@ -1,6 +1,7 @@
 import { SocketEvents } from "@langboard/core/constants";
 import useSocketHandler, { IBaseUseSocketHandlersProps } from "@/core/helpers/SocketHandler";
 import { ProjectCard } from "@/core/models";
+import type { IWorkState } from "@/core/models/ProjectCard";
 import { IEditorContent } from "@/core/models/Base";
 import { ESocketTopic } from "@langboard/core/enums";
 
@@ -8,6 +9,7 @@ export interface ICardDetailsChangedRawResponse {
     title?: string;
     description?: IEditorContent;
     deadline_at?: string;
+    work_state?: IWorkState;
 }
 
 export interface IUseCardDetailsChangedHandlersProps extends IBaseUseSocketHandlersProps<{}> {

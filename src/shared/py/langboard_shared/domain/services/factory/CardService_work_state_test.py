@@ -5,7 +5,7 @@ from unittest.mock import Mock
 from .CardService import CardService
 
 
-def test_card_batch_uses_two_queries_and_no_actor_or_metadata(monkeypatch):
+def test_card_batch_uses_three_queries_and_no_actor_or_editable_metadata(monkeypatch):
     column = SimpleNamespace(id=3, project_id=1, workflow_stage="review")
     db = SimpleNamespace(exec=Mock(return_value=SimpleNamespace(all=lambda: [column])))
 
@@ -16,16 +16,30 @@ def test_card_batch_uses_two_queries_and_no_actor_or_metadata(monkeypatch):
 
     monkeypatch.setattr(import_module(CardService.__module__).DbSession, "use", use)
     counts = Mock(return_value={2: (2, 2, 1, 0)})
-    service = CardService(lambda _: None, lambda _: None, SimpleNamespace(
-        checkitem=SimpleNamespace(get_work_state_counts=counts),
-    ))
-    cards = [SimpleNamespace(
-        id=2, project_id=1, project_column_id=3, archived_at=None,
-        is_linked_resource=False, get_uid=lambda: "card",
-    )]
+    verifications = Mock(return_value={})
+    service = CardService(
+        lambda _: None,
+        lambda _: None,
+        SimpleNamespace(
+            checkitem=SimpleNamespace(get_work_state_counts=counts),
+            card_verification=SimpleNamespace(get_latest_by_card_ids=verifications),
+        ),
+    )
+    cards = [
+        SimpleNamespace(
+            id=2,
+            project_id=1,
+            project_column_id=3,
+            archived_at=None,
+            is_linked_resource=False,
+            last_change_seq=9,
+            get_uid=lambda: "card",
+        )
+    ]
     result = service.get_work_states(cards)
     db.exec.assert_called_once()
     counts.assert_called_once_with([2])
+    verifications.assert_called_once_with([2])
     assert result[2]["workflow_stage"] == "review"
     assert result[2]["execution_state"] == "human_active"
     assert result[2]["verification_state"] == "partial"
