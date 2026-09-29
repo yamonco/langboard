@@ -27,6 +27,7 @@ import {
     calculateDeadlinePressure,
     getChecklistBorderDashes,
     getDeadlinePressureLevel,
+    getStaleDays,
     getOverdueDays,
     getUpcomingDeadlineDays,
     isChecklistCompleted,
@@ -113,6 +114,7 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
     const title = card.useField("title");
     const deadlineAt = card.useField("deadline_at");
     const archivedAt = card.useField("archived_at");
+    const updatedAt = card.useField("updated_at");
     const checklistCompletedCount = card.useField("checklist_completed_count") ?? 0;
     const checklistTotalCount = card.useField("checklist_total_count") ?? 0;
     const checklistProgress = useMemo(
@@ -121,6 +123,7 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
     );
     const isChecklistTerminated = isChecklistCompleted(checklistProgress);
     const isFinished = isDeadlineFinished({ archivedAt, checklist: checklistProgress });
+    const staleDays = getStaleDays({ updatedAt, now: deadlineClock, isFinished });
     const deadlinePressure = useMemo(
         () => calculateDeadlinePressure({ deadlineAt, isCompleted: isFinished, now: deadlineClock }),
         [deadlineAt, isFinished, deadlineClock]
@@ -307,7 +310,25 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
                                 ))}
                             </Flex>
                         )}
-                        {!compact && <BoardTaskMetadataBadges cardUID={card.uid} compact className="mb-1.5" />}
+                        {!compact && (
+                            <div className="mb-1.5 flex flex-wrap items-center gap-1">
+                                <BoardTaskMetadataBadges cardUID={card.uid} compact />
+                                {staleDays !== null && (
+                                    <span
+                                        title={t("card.Unchanged for {{days}} days", { days: staleDays })}
+                                        aria-label={t("card.Unchanged for {{days}} days", { days: staleDays })}
+                                        className={cn(
+                                            "inline-flex items-center gap-1 rounded-md border border-amber-500/30",
+                                            "bg-amber-500/5 px-1.5 py-0.5 text-[10px] leading-none",
+                                            "text-amber-700/80 dark:text-amber-300/80"
+                                        )}
+                                    >
+                                        <IconComponent icon="clock-3" size="3" aria-hidden="true" />
+                                        {t("card.Stale")} · {staleDays}d
+                                    </span>
+                                )}
+                            </div>
+                        )}
                         {!compact && (
                             <BoardGraphApprovalTargetBadge
                                 projectUID={project.uid}

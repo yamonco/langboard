@@ -122,5 +122,7 @@
   },
   "Mark as done": "Mark as done",
   "Mark as not done": "Mark as not done",
+  "Stale": "Stale",
+  "Unchanged for {{days}} days": "Unchanged for {{days}} days",
   "Fill the body to turn this into a normal card": "Fill the body to turn this into a normal card"
 }
