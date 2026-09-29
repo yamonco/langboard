@@ -56,6 +56,7 @@ from ..card_workspace.domain import (
     require_public_metadata_key,
 )
 from ..card_workspace.infrastructure import NativeCardWorkspaceAdapter
+from ..card_workspace.infrastructure.linked_wikis import change_link, visible_linked_wikis
 from ..mcp_integration import McpRoleFilter, McpTool
 from .ProjectMcp import create_template_project
 
@@ -118,6 +119,86 @@ def read_card_attachment(
         "mime_type": mimetypes.guess_type(attachment.filename)[0] or "application/octet-stream",
         "size": len(content),
         "file_data_base64": base64.b64encode(content).decode("ascii"),
+    }
+
+
+@McpTool.add("user", description="List wikis linked to a card that the current user may read.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+def get_card_linked_wikis(project_uid: str, card_uid: str, user: User, service: DomainService) -> dict:
+    project, card = _require_task_card(project_uid, card_uid)
+    return {"linked_wikis": visible_linked_wikis(project, card, user, service)}
+
+
+@McpTool.add("user", description="Link or unlink a readable project wiki to a card without copying files.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+def update_card_linked_wiki(
+    project_uid: str,
+    card_uid: str,
+    wiki_uid: str,
+    action: Literal["link", "unlink"],
+    user: User,
+    service: DomainService,
+) -> dict:
+    project, card = _require_task_card(project_uid, card_uid)
+    links = change_link(project, card, wiki_uid, action, user, service)
+    return {"wiki_uid": wiki_uid, "linked": any(item["wiki_uid"] == wiki_uid for item in links), "linked_wikis": links}
+
+
+@McpTool.add("user", description="Create a project wiki from a card and link it; preserve original card by default.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+def create_wiki_from_card(
+    project_uid: str,
+    card_uid: str,
+    user: User,
+    service: DomainService,
+    wiki_title: str | None = None,
+    include_description: bool = True,
+    include_comments: bool = False,
+    include_checklists: bool = True,
+    include_attachments_as_references: bool = True,
+    archive_original: bool = False,
+) -> dict:
+    project, card = _require_task_card(project_uid, card_uid)
+    actions = service.project.get_user_role_actions_by_project(user, project)
+    if "*" not in actions and ProjectRoleAction.Update.value not in actions:
+        raise ValueError("Project wiki creation requires project update permission")
+    title = (wiki_title or card.title).strip()
+    if not title or len(title) > 300:
+        raise ValueError("Wiki title must be 1..300 characters")
+    parts = []
+    if include_description and card.description.content:
+        parts.append(card.description.content)
+    if include_comments:
+        comments = service.card_comment.get_api_list_by_card(card)
+        if comments:
+            parts.append("## Comments")
+            parts.extend(f"- {item['content']}" for item in comments)
+    if include_checklists:
+        for checklist in service.checklist.get_api_list_by_card(card):
+            parts.append(f"## {checklist['title']}")
+            for item in checklist.get("checkitems", []):
+                parts.append(f"- [{'x' if item.get('is_checked') else ' '}] {item['title']}")
+    if include_attachments_as_references:
+        attachments = service.card_attachment.get_api_list_by_card(card)
+        if attachments:
+            parts.append("## Card attachments")
+            parts.extend(f"- {item['filename']} (attachment_uid: {item['uid']})" for item in attachments)
+    content = "\n\n".join(parts)
+    if len(content) > 32000:
+        raise ValueError("Wiki content exceeds 32000 characters")
+    result = service.project_wiki.create(user, project, title, EditorContentModel(content=content))
+    if result is None:
+        raise ValueError("Wiki creation failed")
+    wiki, _ = result
+    links = change_link(project, card, wiki.get_uid(), "link", user, service)
+    if archive_original:
+        service.card.archive(user, project, card)
+    return {
+        "wiki_uid": wiki.get_uid(),
+        "title": wiki.title,
+        "linked": any(item["wiki_uid"] == wiki.get_uid() for item in links),
+        "linked_wikis": links,
+        "card_archived": archive_original,
     }
 
 
@@ -491,7 +572,7 @@ def get_card_bundle(
 ) -> CardBundleResponse:
     """Read an agent-friendly card bundle with bounded continuation."""
 
-    return query_card_bundle(
+    result = query_card_bundle(
         _adapter(user_or_bot, service),
         project_uid,
         card_uid,
@@ -499,6 +580,11 @@ def get_card_bundle(
         SectionPage(limit=section_limit, cursor=section_cursor),
         include,
     )
+    if result.card is not None:
+        params = _get_card_in_project(project_uid, card_uid)
+        if params and not params[1].is_linked_resource:
+            result.card.core["linked_wikis"] = visible_linked_wikis(*params, user_or_bot, service)
+    return result
 
 
 @McpTool.add(description="Return a project's stable identity and bounded active workflow columns.")

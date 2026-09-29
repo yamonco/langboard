@@ -45,6 +45,7 @@ from langboard_shared.tasks.webhooks.ExecutionReadinessUow import current_execut
 from ...card_workspace.application import get_card_bundle, validate_card_graph_patch
 from ...card_workspace.domain import CardBundleInclude, CardGraphEdge, CardGraphNewCard, CommentPage, SectionPage
 from ...card_workspace.infrastructure import NativeCardWorkspaceAdapter
+from ...card_workspace.infrastructure.linked_wikis import visible_linked_wikis
 from .ExecutionReceiptApi import receipt_history
 from .forms import (
     AssignUsersForm,
@@ -115,6 +116,7 @@ from .forms import (
                     ),
                 ],
                 "attachments": [CardAttachment],
+                "linked_wikis": [{"wiki_uid": "string", "title": "string"}],
                 "global_relationships": [GlobalCardRelationshipType],
                 "project_columns": [(ProjectColumn, {"schema": {"count": "integer"}})],
                 "project_labels": [ProjectLabel],
@@ -165,6 +167,7 @@ def get_card_details(
             "card": api_card,
             "checklists": checklists,
             "attachments": attachments,
+            "linked_wikis": [] if is_linked_resource else visible_linked_wikis(project, card, user_or_bot, service),
             "global_relationships": global_relationships,
             "project_columns": project_columns,
             "project_labels": project_labels,

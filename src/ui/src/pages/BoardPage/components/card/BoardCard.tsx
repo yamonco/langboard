@@ -196,6 +196,7 @@ const BoardCard = memo(
                     <BoardCardProvider key={cardUID} projectUID={projectUID} card={cardData.card} currentUser={currentUser} viewportRef={viewportRef}>
                         <BoardCardResult
                             executionReceipts={cardData.execution_receipts}
+                            linkedWikis={cardData.linked_wikis}
                             isExpanded={isExpanded}
                             setIsExpanded={setIsExpanded}
                             onClose={onClose}
@@ -281,6 +282,7 @@ export function SkeletonBoardCard(): React.JSX.Element {
 
 interface IBoardCardResultProps {
     executionReceipts?: IGetCardDetailsResponse["execution_receipts"];
+    linkedWikis?: IGetCardDetailsResponse["linked_wikis"];
     isExpanded: bool;
     setIsExpanded?: React.Dispatch<React.SetStateAction<bool>>;
     onClose?: () => void;
@@ -303,8 +305,9 @@ function BoardTaskCardResult({
     onClose,
     onEditModeStateChange,
     executionReceipts = [],
+    linkedWikis = [],
 }: IBoardCardResultProps): React.JSX.Element {
-    const { card, isCardEditing, leaveCardEditMode } = useBoardCard();
+    const { card, projectUID, isCardEditing, leaveCardEditMode } = useBoardCard();
     const { isActionPanelOpen, setIsCommentPanelOpen } = useBoardCardPanel();
     const { boardChat } = useBoardController();
     const { cancelSections } = useBoardCardSectionSaveActions();
@@ -461,6 +464,19 @@ function BoardTaskCardResult({
                                                     </BoardCardSection>
                                                 </Flex>
                                                 <BoardTaskMetadataSection cardUID={card.uid} />
+                                                {linkedWikis.length > 0 && (
+                                                    <BoardCardSection title="wiki.Linked wiki">
+                                                        <ul className="space-y-1 text-sm">
+                                                            {linkedWikis.map((wiki) => (
+                                                                <li key={wiki.wiki_uid}>
+                                                                    <a className="text-primary hover:underline" href={ROUTES.BOARD.WIKI_PAGE(projectUID, wiki.wiki_uid)}>
+                                                                        {wiki.title}
+                                                                    </a>
+                                                                </li>
+                                                            ))}
+                                                        </ul>
+                                                    </BoardCardSection>
+                                                )}
                                                 <BoardCardMobileActions />
                                                 <BoardCardSection
                                                     title="card.Description"
