@@ -1,7 +1,7 @@
 import os
 from unittest.mock import Mock, patch
-
 from sqlalchemy.dialects import postgresql
+
 
 os.environ.setdefault("PROJECT_NAME", "langboard")
 
