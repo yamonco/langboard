@@ -1248,7 +1248,9 @@ class CardService(BaseDomainService):
             execution.watch_card_and_dependents(card.id)
             old_order = card.order
             card.order = order
-            self.repo.card.update_row_order(card, old_column, old_order, order, new_column)
+            self.repo.card.update_row_order(
+                card, old_column, old_order, order, new_column, preserve_shifted_updated_at=True
+            )
             self.repo.card.update(card)
 
             if new_column is not None:
