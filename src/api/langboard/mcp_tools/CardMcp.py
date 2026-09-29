@@ -13,6 +13,7 @@ from langboard_shared.core.types import SafeDateTime
 from langboard_shared.domain.models import Bot, Card, CardMetadata, Project, ProjectRole, User
 from langboard_shared.domain.models.Checkitem import CheckitemStatus
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
+from langboard_shared.domain.services.CardVerification import VerificationEvidence, VerificationSubmission
 from langboard_shared.domain.services.DomainService import DomainService
 from langboard_shared.Env import Env
 from langboard_shared.helpers import InfraHelper
@@ -586,6 +587,34 @@ def get_card_bundle(
         if params and not params[1].is_linked_resource:
             result.card.core["linked_wikis"] = visible_linked_wikis(*params, user_or_bot, service)
     return result
+
+
+@McpTool.add("user", description="Append reviewer evidence for the current card revision; never approve gates or move the card.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+def record_card_verification_evidence(
+    project_uid: str,
+    card_uid: str,
+    expected_change_seq: int,
+    decision: Literal["verified", "partial", "unverified"],
+    evidence: list[VerificationEvidence],
+    user: User,
+    service: DomainService,
+    expected_record_uid: str | None = None,
+    required_checkitem_uids: list[str] | None = None,
+) -> dict[str, Any]:
+    """Bind one explicit evidence receipt to the signed-in reviewer and current source cursor."""
+
+    submission = VerificationSubmission(
+        expected_change_seq=expected_change_seq,
+        expected_record_uid=expected_record_uid,
+        decision=decision,
+        evidence=evidence,
+        required_checkitem_uids=required_checkitem_uids or [],
+    )
+    record = service.card.record_verification_evidence(user, project_uid, card_uid, submission)
+    if record is None:
+        raise ValueError("Card not found in project or unavailable for verification")
+    return {"verification": record}
 
 
 @McpTool.add(description="Return a project's stable identity and bounded active workflow columns.")

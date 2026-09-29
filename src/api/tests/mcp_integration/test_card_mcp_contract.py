@@ -63,6 +63,31 @@ def test_attachment_upload_requires_card_update_permission() -> None:
     assert actions == [ProjectRoleAction.CardUpdate.value]
 
 
+def test_verification_evidence_tool_binds_reviewer_and_hides_identity_from_schema() -> None:
+    from unittest.mock import Mock
+    from langboard_shared.domain.services.CardVerification import VerificationEvidence
+
+    tool = McpTool.get_tool("record_card_verification_evidence")
+    assert tool is not None
+    assert tool["accessible_type"] == "user"
+    assert "user" not in tool["input_schema"]["properties"]
+    assert "service" not in tool["input_schema"]["properties"]
+    assert McpRoleFilter.get_filtered(CardMcp.record_card_verification_evidence)[1] == [
+        ProjectRoleAction.CardUpdate.value
+    ]
+
+    reviewer = object()
+    append = Mock(return_value={"uid": "receipt", "decision": "partial"})
+    service = SimpleNamespace(card=SimpleNamespace(record_verification_evidence=append))
+    evidence = [VerificationEvidence(reference="run:1", source_revision="commit", environment="canary")]
+    result = CardMcp.record_card_verification_evidence(
+        "board", "card", 7, "partial", evidence, reviewer, service
+    )
+    assert result == {"verification": {"uid": "receipt", "decision": "partial"}}
+    assert append.call_args.args[:3] == (reviewer, "board", "card")
+    assert append.call_args.args[3].expected_change_seq == 7
+
+
 def test_plugin_compatibility_tools_preserve_native_contracts(monkeypatch: pytest.MonkeyPatch) -> None:
     """The deployed plugin's four calls remain registered with their original result shapes."""
 
