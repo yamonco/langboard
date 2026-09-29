@@ -8,6 +8,7 @@ import {
     getChecklistBorderDashes,
     DEADLINE_PRESSURE_WINDOW_MS,
     getDeadlinePressureLevel,
+    getStaleDays,
     getOverdueDays,
     getUpcomingDeadlineDays,
     isDeadlineFinished,
@@ -59,6 +60,16 @@ describe("board column card status", () => {
         assert.equal(isDeadlineFinished({ checklist: { completed: 1, total: 2 } }), false);
         assert.equal(isDeadlineFinished({ checklist: { completed: 2, total: 2 } }), true);
         assert.equal(isDeadlineFinished({ archivedAt: new Date(), checklist: { completed: 0, total: 2 } }), true);
+    });
+
+    it("shows stale days only after the configured calendar-day threshold on unfinished cards", () => {
+        const now = new Date(2026, 8, 29, 12);
+        const updatedAt = new Date(2026, 8, 15, 23);
+        assert.equal(getStaleDays({ updatedAt, now }), 14);
+        assert.equal(getStaleDays({ updatedAt, now, thresholdDays: 15 }), null);
+        assert.equal(getStaleDays({ updatedAt, now, isFinished: true }), null);
+        assert.equal(getStaleDays({ updatedAt: new Date(2026, 8, 16), now }), null);
+        assert.equal(getStaleDays({ updatedAt: undefined, now }), null);
     });
 
     it("removes deadline pressure and aura styling for terminated cards", () => {

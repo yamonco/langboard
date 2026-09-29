@@ -7,6 +7,7 @@ export interface IBoardCardChecklistProgress {
 export type TDeadlinePressureLevel = "none" | "near" | "due-soon" | "critical" | "overdue";
 
 export const DEADLINE_PRESSURE_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+export const STALE_AFTER_DAYS = 14;
 
 export const calculateChecklistProgress = (checkitems: ReadonlyArray<{ is_checked?: boolean | null }>): IBoardCardChecklistProgress => {
     const completed = checkitems.filter((checkitem) => checkitem.is_checked).length;
@@ -50,6 +51,22 @@ export const isDeadlineFinished = ({
     archivedAt?: Date | null;
     checklist: Pick<IBoardCardChecklistProgress, "completed" | "total">;
 }): boolean => Boolean(archivedAt) || isChecklistCompleted(checklist);
+
+export const getStaleDays = ({
+    updatedAt,
+    now,
+    isFinished = false,
+    thresholdDays = STALE_AFTER_DAYS,
+}: {
+    updatedAt?: Date | null;
+    now: Date;
+    isFinished?: boolean;
+    thresholdDays?: number;
+}): number | null => {
+    if (!updatedAt || isFinished) return null;
+    const days = getDeadlineCalendarDays({ deadlineAt: updatedAt, now }) * -1;
+    return days >= thresholdDays ? days : null;
+};
 
 export const getDeadlineCalendarDays = ({ deadlineAt, now }: { deadlineAt: Date; now: Date }): number => {
     // Compare local calendar dates, not elapsed 24-hour periods (DST can make those differ).
