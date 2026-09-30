@@ -1,4 +1,6 @@
-import { forwardRef } from "react";
+import { createContext, forwardRef, useContext, useLayoutEffect } from "react";
+import { createPortal } from "react-dom";
+import { useLocation } from "react-router";
 import { useTranslation } from "react-i18next";
 import Header from "@/components/Header";
 import { IHeaderNavItem } from "@/components/Header/types";
@@ -57,7 +59,7 @@ export type TDashboardStyledLayoutProps =
     | IResizableSidebarDashboardStyledLayoutProps
     | IBaseDashboardStyledLayoutProps;
 
-const DashboardStyledLayout = forwardRef<HTMLDivElement, TDashboardStyledLayoutProps>(
+export const DashboardStyledLayoutFrame = forwardRef<HTMLDivElement, TDashboardStyledLayoutProps>(
     (
         {
             children,
@@ -188,5 +190,36 @@ const DashboardStyledLayout = forwardRef<HTMLDivElement, TDashboardStyledLayoutP
         );
     }
 );
+
+export interface IWorkbenchLayoutConfiguration {
+    routeKey: string;
+    props: Omit<TDashboardStyledLayoutProps, "children" | "resizableSidebar" | "workbenchContext">;
+    hasContext: boolean;
+}
+
+export const WorkbenchLayoutContext = createContext<{
+    configure: (configuration: IWorkbenchLayoutConfiguration) => void;
+    sidebarSlot: HTMLDivElement | null;
+} | null>(null);
+
+function RegisteredWorkbenchLayout({ children, resizableSidebar, workbenchContext, ...props }: TDashboardStyledLayoutProps) {
+    const shell = useContext(WorkbenchLayoutContext)!;
+    const { key: routeKey } = useLocation();
+    useLayoutEffect(() => {
+        shell.configure({ routeKey, props, hasContext: !!workbenchContext });
+    }, [shell.configure, routeKey, props, workbenchContext]);
+
+    return (
+        <>
+            {shell.sidebarSlot && workbenchContext && createPortal(workbenchContext, shell.sidebarSlot)}
+            {resizableSidebar ? <ResizableSidebar main={children} {...resizableSidebar} compactHeight /> : children}
+        </>
+    );
+}
+
+const DashboardStyledLayout = forwardRef<HTMLDivElement, TDashboardStyledLayoutProps>((props, ref) => {
+    const shell = useContext(WorkbenchLayoutContext);
+    return shell ? <RegisteredWorkbenchLayout {...props} /> : <DashboardStyledLayoutFrame {...props} ref={ref} />;
+});
 
 export default DashboardStyledLayout;

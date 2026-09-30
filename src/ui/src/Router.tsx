@@ -7,9 +7,11 @@ import useAuthStore from "@/core/stores/AuthStore";
 import SwallowErrorBoundary from "@/components/SwallowErrorBoundary";
 import { EHttpStatus } from "@langboard/core/enums";
 import { IS_OLLAMA_RUNNING } from "@/constants";
+import WorkbenchRouteLayout from "@/components/Layout/WorkbenchRouteLayout";
 
 interface IRouteConfig {
     routes: RouteObject[];
+    workbench?: boolean;
 }
 
 type TRouteModule = { default: IRouteConfig };
@@ -25,7 +27,13 @@ const loadRouteConfigs = async (importers: TRouteImporter[]) => {
     );
 };
 
-const toRoutes = (routeConfigs: IRouteConfig[]) => routeConfigs.flatMap((routeConfig) => routeConfig.routes);
+const toRoutes = (routeConfigs: IRouteConfig[]): RouteObject[] => [
+    ...routeConfigs.filter((config) => !config.workbench).flatMap((config) => config.routes),
+    {
+        element: <WorkbenchRouteLayout />,
+        children: routeConfigs.filter((config) => config.workbench).flatMap((config) => config.routes),
+    },
+];
 
 export interface IRouterProps {
     children: React.ReactNode;

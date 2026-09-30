@@ -1,5 +1,5 @@
 import { memo, useEffect, useRef, useState } from "react";
-import { useLocation } from "react-router";
+import { Link, useLocation } from "react-router";
 import { useTranslation } from "react-i18next";
 import CachedImage from "@/components/CachedImage";
 import HedaerNavItems from "@/components/Header/HedaerNavItems";
@@ -13,7 +13,6 @@ import Separator from "@/components/base/Separator";
 import Sheet from "@/components/base/Sheet";
 import { useAuth } from "@/core/providers/AuthProvider";
 import { ROUTES } from "@/core/routing/constants";
-import { usePageNavigateRef } from "@/core/hooks/usePageNavigate";
 import HeaderUserMenu from "@/components/Header/HeaderUserMenu";
 import HeaderUserNotification from "@/components/Header/HeaderUserNotification";
 import { PROJECT_QUICK_SWITCHER_EVENT } from "@/pages/DashboardPage/components/ProjectDiscovery";
@@ -22,7 +21,6 @@ const Header = memo(({ navs, title, compact, navigationReady = true }: IHeaderPr
     const [t] = useTranslation();
     const { currentUser } = useAuth();
     const [isOpened, setIsOpen] = useState(false);
-    const navigate = usePageNavigateRef();
     const location = useLocation();
     const commandTrigger = useRef<HTMLButtonElement>(null);
 
@@ -31,10 +29,6 @@ const Header = memo(({ navs, title, compact, navigationReady = true }: IHeaderPr
             commandTrigger.current?.focus({ preventScroll: true });
         }
     }, [location.key, location.state, navigationReady]);
-
-    const toDashboard = () => {
-        navigate(ROUTES.DASHBOARD.PROJECTS.ALL, { smooth: true });
-    };
 
     const separator = <Separator className="h-5" orientation="vertical" />;
 
@@ -49,9 +43,14 @@ const Header = memo(({ navs, title, compact, navigationReady = true }: IHeaderPr
         >
             {!navs.length && (
                 <Flex className="flex md:hidden">
-                    <a onClick={toDashboard} className="flex size-6 cursor-pointer items-center gap-2 text-lg font-semibold md:text-base">
+                    <Link
+                        to={ROUTES.DASHBOARD.PROJECTS.ALL}
+                        viewTransition
+                        aria-label={t("common.Go to Dashboard")}
+                        className="flex size-6 cursor-pointer items-center gap-2 text-lg font-semibold md:text-base"
+                    >
                         <CachedImage src="/images/logo.png" alt="Logo" size="full" />
-                    </a>
+                    </Link>
                 </Flex>
             )}
             <Flex
@@ -68,12 +67,14 @@ const Header = memo(({ navs, title, compact, navigationReady = true }: IHeaderPr
                 weight="medium"
                 className={compact ? "min-w-0 flex-1" : "hidden md:flex"}
             >
-                <a
-                    onClick={toDashboard}
+                <Link
+                    to={ROUTES.DASHBOARD.PROJECTS.ALL}
+                    viewTransition
+                    aria-label={t("common.Go to Dashboard")}
                     className={compact ? "hidden size-6 shrink-0 cursor-pointer items-center md:flex" : "flex size-6 cursor-pointer items-center"}
                 >
                     <CachedImage src="/images/logo.png" alt="Logo" size="full" />
-                </a>
+                </Link>
                 {compact ? (
                     <span className="flex min-w-0 items-center gap-2 text-sm font-medium">
                         <span className="hidden shrink-0 font-semibold md:inline">Langboard</span>
@@ -111,9 +112,14 @@ const Header = memo(({ navs, title, compact, navigationReady = true }: IHeaderPr
                             w="full"
                             className="max-w-[calc(100%_-_theme(spacing.16))] truncate sm:max-w-[calc(24rem_-_theme(spacing.16))]"
                         >
-                            <a onClick={toDashboard} className="flex cursor-pointer items-center gap-2 text-lg font-semibold">
+                            <Link
+                                to={ROUTES.DASHBOARD.PROJECTS.ALL}
+                                viewTransition
+                                aria-label={t("common.Go to Dashboard")}
+                                className="flex cursor-pointer items-center gap-2 text-lg font-semibold"
+                            >
                                 <CachedImage src="/images/logo.png" alt="Logo" size="6" />
-                            </a>
+                            </Link>
                             {!!title && (
                                 <>
                                     <IconComponent icon="chevron-right" size="5" />

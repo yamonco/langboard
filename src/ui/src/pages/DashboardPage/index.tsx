@@ -1,4 +1,4 @@
-import { memo, useMemo, useReducer } from "react";
+import { memo, useCallback, useMemo, useReducer, useState } from "react";
 import { IHeaderNavItem } from "@/components/Header/types";
 import { DashboardStyledLayout } from "@/components/Layout";
 import { ISidebarNavItem } from "@/components/Sidebar/types";
@@ -20,16 +20,25 @@ import ProjectExplorerSidebar from "@/pages/DashboardPage/components/ProjectExpl
 import { WORKBENCH_TOGGLE_CONTEXT_EVENT } from "@/pages/DashboardPage/components/WorkbenchCommands";
 import { useEffect } from "react";
 import { useWorkbenchContextOpen } from "@/core/stores/UserSettingsStore";
+import useResizeEvent from "@/core/hooks/useResizeEvent";
+import { ScreenMap } from "@/core/utils/VariantUtils";
 
 const DashboardProxy = memo((): React.JSX.Element => {
     const [t] = useTranslation();
     const { currentUser } = useAuth();
     const [isExplorerOpen, setIsExplorerOpen] = useWorkbenchContextOpen(currentUser?.uid);
+    const [isMobile, setIsMobile] = useState(window.innerWidth < ScreenMap.size.md);
+    const [isMobileExplorerOpen, setIsMobileExplorerOpen] = useState(false);
+    useResizeEvent({ doneCallback: () => setIsMobile(window.innerWidth < ScreenMap.size.md) }, []);
+    const toggleExplorer = useCallback(() => {
+        if (isMobile) setIsMobileExplorerOpen((open) => !open);
+        else setIsExplorerOpen((open) => !open);
+    }, [isMobile, setIsExplorerOpen]);
     useEffect(() => {
-        const toggle = () => setIsExplorerOpen((open) => !open);
+        const toggle = toggleExplorer;
         window.addEventListener(WORKBENCH_TOGGLE_CONTEXT_EVENT, toggle);
         return () => window.removeEventListener(WORKBENCH_TOGGLE_CONTEXT_EVENT, toggle);
-    }, [setIsExplorerOpen]);
+    }, [toggleExplorer]);
     const navigate = usePageNavigateRef();
     const [pageType, tabName] = location.pathname.split("/").slice(2);
     const { data, isFetching } = useGetAllStarredProjects();
@@ -151,7 +160,12 @@ const DashboardProxy = memo((): React.JSX.Element => {
                         : t("dashboard.Projects")
             }
             activityRailItems={[
-                { icon: "panel-left", label: "Explorer", onClick: () => setIsExplorerOpen((open) => !open), active: isExplorerOpen },
+                {
+                    icon: "panel-left",
+                    label: "Explorer",
+                    onClick: toggleExplorer,
+                    active: isMobile ? isMobileExplorerOpen : isExplorerOpen,
+                },
                 { icon: "folder-kanban", label: t("dashboard.Projects"), onClick: headerNavs[0].onClick!, active: pageType === "projects" },
                 { icon: "layout-dashboard", label: t("dashboard.Cards"), onClick: headerNavs[1].onClick!, active: pageType === "cards" },
                 {
@@ -165,7 +179,12 @@ const DashboardProxy = memo((): React.JSX.Element => {
                 ...sidebarNavs.map((item) => ({ icon: item.icon, label: item.name, onClick: item.onClick! })),
             ]}
             workbenchContext={<ProjectExplorerSidebar />}
-            workbenchContextHidden={!isExplorerOpen}
+            workbenchContextHidden={isMobile || !isExplorerOpen}
+            mobileWorkbenchContext={
+                isMobile && isMobileExplorerOpen
+                    ? { title: "Explorer", icon: "panel-left", onClose: () => setIsMobileExplorerOpen(false) }
+                    : undefined
+            }
             scrollAreaMutable={scrollAreaMutable}
             className="overflow-x-hidden"
         >
