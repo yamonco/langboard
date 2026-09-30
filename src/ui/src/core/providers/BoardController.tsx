@@ -70,6 +70,7 @@ export interface IBoardControllerContext {
 }
 
 interface IBoardControllerProps {
+    projectUID?: string;
     children: React.ReactNode;
 }
 
@@ -161,7 +162,7 @@ const parseRelationshipSelections = (value: string): IRelationshipSelectionDraft
     }
 };
 
-export const BoardController = memo(({ children }: IBoardControllerProps): React.ReactNode => {
+export const BoardController = memo(({ children, projectUID }: IBoardControllerProps): React.ReactNode => {
     const { currentUser } = useAuth();
     const [boardViewType, setBoardViewType] = useState<TBoardViewType>("board");
     const [selectCardViewType, setSelectCardViewType] = useState<ProjectCardRelationship.TRelationship>();
@@ -177,6 +178,26 @@ export const BoardController = memo(({ children }: IBoardControllerProps): React
     const disabledCardSelectionUIDsRef = useRef<string[]>([]);
     const cancelCardSelectionCallbackRef = useRef<() => void>(null);
     const chatSidebarRef = useRef<HTMLDivElement>(null);
+    const [controllerProjectUID, setControllerProjectUID] = useState(projectUID);
+    const isProjectChanging = controllerProjectUID !== projectUID;
+
+    useEffect(() => {
+        if (!isProjectChanging) return;
+        setControllerProjectUID(projectUID);
+        setSelectCardViewType(undefined);
+        setSelectedRelationshipCardUIDs([]);
+        setRelationshipSelectionActors({});
+        setRelationshipSelectionSyncState(undefined);
+        setChatResizableSidebar(undefined);
+        setBoardChat(undefined);
+        selectedRelationshipUIDsRef.current = [];
+        relationshipSelectionActorsRef.current = {};
+        currentCardUIDRef.current = null;
+        disabledCardSelectionUIDsRef.current = [];
+        saveCardSelectionCallbackRef.current = null;
+        cancelCardSelectionCallbackRef.current = null;
+    }, [isProjectChanging, projectUID]);
+
     const currentUserName = useMemo(() => {
         if (!currentUser) {
             return "";
@@ -218,7 +239,7 @@ export const BoardController = memo(({ children }: IBoardControllerProps): React
     }, []);
     const { isSynced: isRelationshipSelectionSynced, updateValue: updateRelationshipSelectionValue } = useCollaborativeText({
         defaultValue: selectedRelationshipValue,
-        disabled: !relationshipSelectionSyncState,
+        disabled: isProjectChanging || !relationshipSelectionSyncState,
         collaborationType: EEditorCollaborationType.Card,
         uid: relationshipSelectionSyncState?.uid ?? "relationship-selection-idle",
         section: relationshipSelectionSyncState?.section,
@@ -236,12 +257,18 @@ export const BoardController = memo(({ children }: IBoardControllerProps): React
     }, [relationshipSelectionActors]);
 
     useEffect(() => {
-        if (!relationshipSelectionSyncState || !isRelationshipSelectionSynced) {
+        if (isProjectChanging || !relationshipSelectionSyncState || !isRelationshipSelectionSynced) {
             return;
         }
 
         updateRelationshipSelectionValue(selectedRelationshipValue);
-    }, [isRelationshipSelectionSynced, relationshipSelectionSyncState, selectedRelationshipValue, updateRelationshipSelectionValue]);
+    }, [
+        isProjectChanging,
+        isRelationshipSelectionSynced,
+        relationshipSelectionSyncState,
+        selectedRelationshipValue,
+        updateRelationshipSelectionValue,
+    ]);
 
     const setCardSelection = (cardUID: string, relationshipUID?: string) => {
         if (!relationshipUID) {
