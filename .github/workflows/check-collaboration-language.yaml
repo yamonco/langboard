@@ -1,0 +1,28 @@
+name: Check GitHub Collaboration Language
+
+on:
+  pull_request_target:
+    types: [opened, edited, reopened, synchronize]
+  issue_comment:
+    types: [created, edited]
+  pull_request_review:
+    types: [submitted, edited]
+  pull_request_review_comment:
+    types: [created, edited]
+
+permissions:
+  contents: read
+
+jobs:
+  check-language:
+    if: github.event_name != 'issue_comment' || github.event.issue.pull_request
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - name: Verify language detection and localization exceptions
+        run: python3 -m unittest discover -s .github/scripts -p 'test_*.py'
+      - name: Detect Korean prose in PR collaboration text
+        run: python3 .github/scripts/check_collaboration_language.py

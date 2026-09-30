@@ -24,6 +24,29 @@ For detailed instructions on setting up your local development environment, see 
 
 ## Pull Request Checklist
 
+### GitHub collaboration language
+
+Use English for pull request titles, descriptions, review comments, and automated
+receipts. Langboard project cards, descriptions, and native checklists may use
+Korean. Automation must preserve user supplied requirement titles when quoting
+them, while writing its own labels and explanations in English.
+
+The GitHub collaboration language check detects Korean prose when a pull request,
+comment, or review is created or edited. Pull request titles must be English.
+Intentional localization fixtures, user input examples, and external quotations
+are allowed in descriptions and comments. Put short literal examples in inline
+code, longer fixtures in fenced code blocks, and quoted content in Markdown
+blockquotes. For a longer localized example, wrap only the example with
+`<!-- langboard:localized-example:start -->` and
+`<!-- langboard:localized-example:end -->` on separate lines. Keep the surrounding
+explanation in English. These exceptions are for source material, not general
+collaboration prose.
+
+The check uses default branch code and read-only repository permissions. It reads
+event text as data and does not execute pull request code or modify comments.
+
+### Development checks
+
 - Run `make format`
 - Run `make lint`
 - Run `make unit_tests`
