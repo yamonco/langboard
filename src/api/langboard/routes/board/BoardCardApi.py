@@ -594,7 +594,7 @@ def patch_card_relationships(
 @AppRouter.api.post(
     "/board/{project_uid}/card/{card_uid}/completion",
     tags=["Board.Card"],
-    description="Set a title-only check card's completion state.",
+    description="Set a check card's completion state, including a deadline card without user checklists.",
     responses=(
         OpenApiSchema()
         .suc(

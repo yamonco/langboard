@@ -109,15 +109,12 @@ function BoardColumnWikiCard({ isDragging }: IBoardColumnCardCollapsibleProps) {
 
 function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCollapsibleProps) {
     const { selectCardViewType, selectedRelationshipUIDs, currentCardUIDRef, isDisabledCard } = useBoardController();
-    const { project, columns, filters, cardsMap, globalRelationshipTypes, navigateWithFilters, deadlineClock } = useBoard();
+    const { project, filters, cardsMap, globalRelationshipTypes, navigateWithFilters, deadlineClock } = useBoard();
     const [t] = useTranslation();
     const { model: card } = ModelRegistry.ProjectCard.useContext<IBoardColumnCardContextParams>();
     const title = card.useField("title");
     const deadlineAt = card.useField("deadline_at");
     const archivedAt = card.useField("archived_at");
-    const columnUID = card.useField("project_column_uid");
-    const columnName = card.useField("project_column_name");
-    const workState = card.useField("work_state");
     const updatedAt = card.useField("updated_at");
     const checklistCompletedCount = card.useField("checklist_completed_count") ?? 0;
     const checklistTotalCount = card.useField("checklist_total_count") ?? 0;
@@ -126,11 +123,8 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
         [checklistCompletedCount, checklistTotalCount]
     );
     const isChecklistTerminated = isChecklistCompleted(checklistProgress);
-    const workflowStage =
-        workState?.workflow_stage ??
-        columns.find((column) => column.uid === columnUID)?.workflow_stage ??
-        columns.find((column) => column.name === columnName)?.workflow_stage;
-    const isFinished = isDeadlineWarningSuppressed({ archivedAt, checklist: checklistProgress, workflowStage });
+    const completed = card.useField("completed") ?? false;
+    const isFinished = isDeadlineWarningSuppressed({ archivedAt, checklist: checklistProgress, completed });
     const staleDays = getStaleDays({ updatedAt, now: deadlineClock, isFinished });
     const deadlinePressure = useMemo(
         () => calculateDeadlinePressure({ deadlineAt, isCompleted: isFinished, now: deadlineClock }),
@@ -154,7 +148,6 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
     const creator = card.useField("creator");
     const hasDescription = card.useField("has_description");
     const isCheckCard = card.useField("is_check_card") ?? false;
-    const completed = card.useField("completed") ?? false;
     const widgetVisibility = useMemo(
         () => getBoardCardWidgetVisibility({ has_description: hasDescription, count_comment: commentCount }),
         [hasDescription, commentCount]
@@ -369,7 +362,10 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
                         {isCheckCard && !compact && (
                             <Button
                                 variant="ghost"
-                                className="absolute left-1.5 top-1/2 z-10 -translate-y-1/2 opacity-0 transition-opacity group-hover/card:opacity-100"
+                                className={cn(
+                                    "absolute left-1.5 top-1/2 z-10 -translate-y-1/2 transition-opacity",
+                                    deadlineAt ? "opacity-100" : "opacity-0 group-hover/card:opacity-100"
+                                )}
                                 size="icon-sm"
                                 title={t(completed ? "card.Mark as not done" : "card.Mark as done")}
                                 titleSide="top"

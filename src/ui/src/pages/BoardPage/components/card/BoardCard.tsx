@@ -9,6 +9,7 @@ import ShineBorder from "@/components/base/ShineBorder";
 import Skeleton from "@/components/base/Skeleton";
 import Toast from "@/components/base/Toast";
 import useChangeCardDetails from "@/controllers/api/card/useChangeCardDetails";
+import useSetCardCompleted from "@/controllers/api/board/useSetCardCompleted";
 import useGetCardDetails, { IGetCardDetailsResponse } from "@/controllers/api/card/useGetCardDetails";
 import useUnreadChangeNavigation from "@/pages/BoardPage/components/card/useUnreadChangeNavigation";
 import { WORKBENCH_OUTLINE_EVENT } from "@/pages/DashboardPage/components/WorkbenchCommands";
@@ -329,6 +330,17 @@ function BoardTaskCardResult({
     const attachments = ProjectCardAttachment.Model.useModels((model) => model.card_uid === card.uid);
     const checklists = ProjectChecklist.Model.useModels((model) => model.card_uid === card.uid);
     const description = card.useField("description");
+    const deadlineAt = card.useField("deadline_at");
+    const isCheckCard = card.useField("is_check_card") ?? false;
+    const completed = card.useField("completed") ?? false;
+    const { mutateAsync: setCardCompletedAsync } = useSetCardCompleted({ interceptToast: true });
+    const toggleCompleted = useCallback(() => {
+        const nextCompleted = !completed;
+        card.update({ completed: nextCompleted });
+        setCardCompletedAsync({ project_uid: projectUID, card_uid: card.uid, completed: nextCompleted }).catch(() => {
+            card.update({ completed });
+        });
+    }, [card, completed, projectUID, setCardCompletedAsync]);
     // Check-card view: no body and no user checklist. Comments, members, and deadlines never affect it.
     const isCheckCardView = useMemo(() => {
         const content = typeof description?.content === "string" ? description.content : "";
@@ -409,7 +421,22 @@ function BoardTaskCardResult({
                         )}
                         <Box className="relative flex h-full min-h-0 min-w-0 flex-col overflow-visible">
                             <Dialog.Header className="sticky top-0 z-[100] mb-3 shrink-0 border-b-2 bg-background pb-3 text-left sm:-top-2">
-                                <BoardCardTitle key={`board-card-title-${card.uid}`} className={isExpanded ? "sm:mr-44" : undefined} />
+                                <Flex items="center" gap="2">
+                                    {deadlineAt && isCheckCard && (
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="icon"
+                                            className="shrink-0"
+                                            aria-label={t(completed ? "card.Mark as not done" : "card.Mark as done")}
+                                            title={t(completed ? "card.Mark as not done" : "card.Mark as done")}
+                                            onClick={toggleCompleted}
+                                        >
+                                            <IconComponent icon={completed ? "check" : "circle"} size="5" />
+                                        </Button>
+                                    )}
+                                    <BoardCardTitle key={`board-card-title-${card.uid}`} className={isExpanded ? "sm:mr-44" : undefined} />
+                                </Flex>
                                 <Flex gap="3">
                                     {isExpanded ? (
                                         <Box textSize="sm" className="text-muted">

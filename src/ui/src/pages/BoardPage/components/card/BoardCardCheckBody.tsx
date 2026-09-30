@@ -5,12 +5,13 @@ import IconComponent from "@/components/base/IconComponent";
 import { useBoardCard } from "@/core/providers/BoardCardProvider";
 import { cn } from "@/core/utils/ComponentUtils";
 import BoardCardDescription from "@/pages/BoardPage/components/card/BoardCardDescription";
+import BoardCardDeadline from "@/pages/BoardPage/components/card/BoardCardDeadline";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 
 /**
  * Single-object body for check cards: the short title acts as the whole content.
- * Members, deadline, and the description section header stay hidden; the edit
+ * Members and the description section header stay hidden; the edit
  * button is the explicit way to fill the body and graduate into a normal card.
  */
 function BoardCardCheckBody({ scrollParentRef }: { scrollParentRef: React.RefObject<HTMLDivElement | null> }): React.JSX.Element {
@@ -18,11 +19,13 @@ function BoardCardCheckBody({ scrollParentRef }: { scrollParentRef: React.RefObj
     const [t] = useTranslation();
     const title = card.useField("title");
     const completed = card.useField("completed") ?? false;
+    const deadlineAt = card.useField("deadline_at");
     const bodyText = useMemo(() => title, [title]);
 
     return (
         <Flex direction="col" gap="3" className="min-w-0">
             <Box className={cn("break-all text-2xl font-semibold leading-snug", completed && "line-through opacity-60")}>{bodyText}</Box>
+            {deadlineAt && <BoardCardDeadline />}
             <Box textSize="sm" className="text-muted-foreground">
                 {t("card.Fill the body to turn this into a normal card")}
             </Box>

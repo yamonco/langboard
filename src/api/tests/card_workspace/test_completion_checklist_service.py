@@ -1,4 +1,5 @@
 import os
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from typing import Any
 import pytest
@@ -90,6 +91,24 @@ def test_concurrent_completion_creation_reuses_constraint_winner() -> None:
 
     assert result is winner
     assert lookups == 2
+
+
+def test_deadline_card_with_description_uses_existing_card_checkbox() -> None:
+    card = _card()
+    card.description.content = "Delivery details"
+    service = _service(CardService, SimpleNamespace(checklist=SimpleNamespace(get_all_by_card=lambda *_args, **_kwargs: [])))
+
+    assert service.is_check_card(card) is False
+    card.deadline_at = datetime(2026, 10, 1, tzinfo=timezone.utc)
+    assert service.is_check_card(card) is True
+
+
+def test_deadline_card_with_user_checklist_keeps_checklist_completion() -> None:
+    card = _card()
+    card.deadline_at = datetime(2026, 10, 1, tzinfo=timezone.utc)
+    repository = SimpleNamespace(checklist=SimpleNamespace(get_all_by_card=lambda *_args, **_kwargs: [Checklist(card_id=1, title="Tasks")]))
+
+    assert _service(CardService, repository).is_check_card(card) is False
 
 
 def test_checklist_model_declares_one_active_system_row_constraint() -> None:

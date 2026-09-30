@@ -254,6 +254,9 @@ class CardService(BaseDomainService):
         api_card = card.api_response()
         api_card["project_column_name"] = column.name
         api_card["work_state"] = self.get_work_states([card])[card.id]
+        progress = api_card["work_state"]["checklist_progress"]
+        api_card["checklist_total_count"] = progress["total"]
+        api_card["checklist_completed_count"] = progress["completed"]
         if card.is_linked_resource:
             api_card.update(
                 {
@@ -273,6 +276,9 @@ class CardService(BaseDomainService):
             return api_card
 
         api_card["count_comment"] = self.repo.card_comment.count_by_card(card)
+        api_card["is_check_card"] = self.is_check_card(card)
+        completion = self._get_completion_checklist(card)
+        api_card["completed"] = bool(completion and completion.is_checked)
 
         project_service = self._get_service(ProjectService)
         api_card["project_members"] = project_service.get_api_assigned_user_list(card.project_id)
@@ -364,7 +370,7 @@ class CardService(BaseDomainService):
             else {}
         )
         for card, count_comment in raw_cards:
-            is_check_card = not card.description.content.strip() and card.id not in user_checklist_card_ids
+            is_check_card = (bool(card.deadline_at) or not card.description.content.strip()) and card.id not in user_checklist_card_ids
             api_card = card.board_api_response(
                 count_comment=count_comment,
                 member_uids=members.get(card.id, []),
@@ -944,9 +950,9 @@ class CardService(BaseDomainService):
         return checklists[0] if checklists else None
 
     def is_check_card(self, card: Card) -> bool:
-        """A check card carries no description and no user checklist of its own."""
+        """A deadline card can use its own checkbox when it has no user checklist."""
 
-        if card.description.content.strip():
+        if card.description.content.strip() and not card.deadline_at:
             return False
         return not self.repo.checklist.get_all_by_card(card, limit=1, is_system=False)
 
@@ -1068,7 +1074,7 @@ class CardService(BaseDomainService):
                     users.append(assign_user)
                     self.repo.card_assigned_user.insert(card_assigned_user)
 
-            is_check_card = not card.description.content.strip()
+            is_check_card = bool(deadline_at) or not card.description.content.strip()
             if is_check_card:
                 self.ensure_completion_checklist(card)
 
@@ -1411,11 +1417,11 @@ class CardService(BaseDomainService):
         else:
             self.repo.card.update(card)
 
-        if "description" in old_record:
-            if card.description.content.strip():
-                self.remove_completion_checklist(card)
-            elif self.is_check_card(card):
+        if "description" in old_record or "deadline_at" in old_record:
+            if self.is_check_card(card):
                 self.ensure_completion_checklist(card)
+            else:
+                self.remove_completion_checklist(card)
 
         model: dict[str, Any] = {}
         for key in form:
