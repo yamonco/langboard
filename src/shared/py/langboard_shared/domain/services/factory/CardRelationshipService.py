@@ -154,19 +154,22 @@ class CardRelationshipService(BaseDomainService):
                     )
                     selected_cards.add(related_card_id)
                     proposed_edges.append((related_card_id, type_id))
-                self.repo.card_relationship.delete_all_by_card_and_relation(
-                    card, relation="parent" if is_parent else "child"
-                )
+                proposed_pairs = set(proposed_edges)
+                for old_relationship, _, related_card in old_relationships:
+                    if (related_card.id, old_relationship.relationship_type_id) not in proposed_pairs:
+                        self.repo.card_relationship.delete(old_relationship)
 
                 new_relationships_dict: dict[SnowflakeID, bool] = {}
                 for related_card_id, relationship_type_id in proposed_edges:
+                    new_relationships_dict[related_card_id] = True
+                    if (related_card_id, relationship_type_id) in old_pairs:
+                        continue
                     new_relationship = CardRelationship(
                         relationship_type_id=relationship_type_id,
                         card_id_parent=related_card_id if is_parent else card.id,
                         card_id_child=card.id if is_parent else related_card_id,
                     )
                     self.repo.card_relationship.insert(new_relationship)
-                    new_relationships_dict[related_card_id] = True
 
                 new_relationships = self.get_api_list_by_card(card)
 

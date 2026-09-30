@@ -151,6 +151,10 @@ def graph_service(monkeypatch: pytest.MonkeyPatch):
             def get_all_related_card_ids(self, project, requested):
                 return [card_id for card_id in requested if card_id in cards]
 
+            def delete(self, edge):
+                with DbSession.use(readonly=False) as db:
+                    db.exec(text("DELETE FROM card_relationship WHERE id = :id"), params={"id": edge.id})
+
             def delete_all_by_card_and_relation(self, card, relation):
                 field = "card_id_child" if relation == "parent" else "card_id_parent"
                 with DbSession.use(readonly=False) as db:
@@ -387,3 +391,26 @@ def test_graph_removal_is_applied_before_block_cycle_validation(graph_service):
     )
     with engine.connect() as connection:
         assert connection.execute(text("SELECT COUNT(*) FROM card_relationship WHERE id=100")).scalar_one() == 0
+
+
+def test_direct_edit_preserves_unchanged_relationship_identity(graph_service):
+    service, cards, engine = graph_service
+    with engine.begin() as connection:
+        original_id = connection.execute(text(
+            "INSERT INTO card_relationship (card_id_parent, card_id_child, relationship_type_id) "
+            "VALUES (10, 20, 2) RETURNING id"
+        )).scalar_one()
+    service.update(object(), "project", cards[10].get_uid(), False, [
+        (cards[20].get_uid(), SnowflakeID(2).to_short_code()),
+        (cards[30].get_uid(), SnowflakeID(3).to_short_code()),
+    ])
+    with engine.connect() as connection:
+        assert connection.execute(text(
+            "SELECT id FROM card_relationship WHERE card_id_parent=10 AND card_id_child=20"
+        )).scalar_one() == original_id
+        assert connection.execute(text("SELECT count(*) FROM card_relationship")).scalar_one() == 2
+    service.update(object(), "project", cards[10].get_uid(), False, [
+        (cards[20].get_uid(), SnowflakeID(2).to_short_code()),
+    ])
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT id FROM card_relationship")).scalar_one() == original_id
