@@ -1,3 +1,4 @@
+import CardMetadataPreview from "@/pages/BoardPage/components/card/CardMetadataPreview";
 import { ProjectCard } from "@/core/models";
 import Tooltip from "@/components/base/Tooltip";
 import { useTranslation } from "react-i18next";
@@ -11,6 +12,17 @@ export default function CardTimestamps({ card, compact = false }: { card: Projec
     const createdDistance = useUpdateDateDistance(createdAt);
     const updatedDistance = useUpdateDateDistance(updatedAt);
     const exact = (date: Date) => date.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "medium" });
+
+    if (compact) {
+        return (
+            <span className="flex basis-full text-[11px] text-muted-foreground/80">
+                <CardMetadataPreview card={card}>
+                    <IconComponent icon="pencil-line" size="3" className="shrink-0 opacity-70" aria-hidden="true" />
+                    <time dateTime={updatedAt.toISOString()}>{updatedDistance}</time>
+                </CardMetadataPreview>
+            </span>
+        );
+    }
 
     return (
         <span className={`flex min-w-0 flex-wrap gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground/80 ${compact ? "basis-full" : ""}`}>

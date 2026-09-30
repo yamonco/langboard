@@ -119,5 +119,9 @@
   },
   "Mark as done": "Mark as done",
   "Mark as not done": "Mark as not done",
-  "Fill the body to turn this into a normal card": "Fill the body to turn this into a normal card"
+  "Fill the body to turn this into a normal card": "Fill the body to turn this into a normal card",
+  "Preview card details": "Preview card details",
+  "Card details": "Card details",
+  "Creator": "Creator",
+  "Column": "Column"
 }
