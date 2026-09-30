@@ -1,14 +1,16 @@
 from secrets import token_urlsafe
 from fastapi import status
 from langboard_shared.core.caching import Cache
+from langboard_shared.core.filter import AuthFilter
 from langboard_shared.core.routing import ApiErrorCode, ApiException, AppRouter, JsonResponse
 from langboard_shared.core.schema import OpenApiSchema
 from langboard_shared.core.security import AuthSecurity, OidcClient
 from langboard_shared.core.types import SafeDateTime
 from langboard_shared.core.utils.String import generate_random_string
-from langboard_shared.domain.models import IdentityProvider
+from langboard_shared.domain.models import IdentityProvider, User
 from langboard_shared.domain.services import DomainService
 from langboard_shared.Env import Env
+from langboard_shared.security import Auth
 
 
 @AppRouter.api.get(
@@ -30,6 +32,29 @@ def oidc_login(redirect: str | None = None) -> JsonResponse:
 
     authorize_url = OidcClient.build_authorize_url(state=state, nonce=nonce)
     return JsonResponse(content={"authorize_url": authorize_url, "state": state})
+
+
+@AppRouter.api.get(
+    "/auth/oidc/link/login",
+    tags=["Auth.OIDC"],
+    responses=OpenApiSchema().suc({"authorize_url": "string", "state": "string"}).get(),
+)
+@AuthFilter.add("user")
+def oidc_link_login(user: User = Auth.scope("user")) -> JsonResponse:
+    """Start a dual-authenticated link to the currently signed-in Langboard account."""
+    if not OidcClient.is_enabled():
+        raise ApiException.NotFound_404()
+    if not user.activated_at or user.deleted_at:
+        raise ApiException.Unauthorized_401(ApiErrorCode.AU1004)
+
+    state = token_urlsafe(24)
+    nonce = token_urlsafe(24)
+    Cache.set(
+        f"oidc-state:{state}",
+        {"nonce": nonce, "link_user_id": str(user.id), "redirect": "/account/profile"},
+        60 * 10,
+    )
+    return JsonResponse(content={"authorize_url": OidcClient.build_authorize_url(state=state, nonce=nonce), "state": state})
 
 
 @AppRouter.api.get(
@@ -57,6 +82,7 @@ def oidc_callback(
 
     nonce = str(cached_state.get("nonce", ""))
     redirect = str(cached_state.get("redirect", "")).strip() or None
+    link_user_id = str(cached_state.get("link_user_id", "")).strip()
 
     try:
         token_payload = OidcClient.exchange_code(code)
@@ -104,7 +130,17 @@ def oidc_callback(
             subject,
             issuer,
         )
-        if not user and Env.OIDC_AUTO_LINK_BY_EMAIL:
+        if link_user_id:
+            linking_user = service.user.get_by_id_like(link_user_id)
+            if not linking_user or not linking_user.activated_at or linking_user.deleted_at:
+                raise RuntimeError("Langboard account is no longer active")
+            if user and user.id != linking_user.id:
+                raise RuntimeError("OIDC identity belongs to another Langboard account")
+            current_link = service.identity_link.get_by_user_provider(linking_user, IdentityProvider.Oidc)
+            if current_link and (current_link.external_id != subject or current_link.issuer != issuer):
+                raise RuntimeError("Langboard account has a different OIDC identity")
+            user = linking_user
+        elif not user and Env.OIDC_AUTO_LINK_BY_EMAIL:
             user, _ = service.user.get_by_email(email)
         if not user:
             existing_user, _ = service.user.get_by_email(email)
@@ -126,15 +162,15 @@ def oidc_callback(
             }
             user, _ = service.user.create(form)
         else:
+            if not user.activated_at or user.deleted_at:
+                raise RuntimeError("Langboard account is not active")
             update_form = {}
-            if firstname and firstname != user.firstname:
+            if not link_user_id and firstname and firstname != user.firstname:
                 update_form["firstname"] = firstname
-            if lastname and lastname != user.lastname:
+            if not link_user_id and lastname and lastname != user.lastname:
                 update_form["lastname"] = lastname
             if update_form:
                 service.user.update(user, update_form)
-            if not user.activated_at:
-                service.user.activate(user)
 
         service.identity_link.upsert_user_link(
             user=user,

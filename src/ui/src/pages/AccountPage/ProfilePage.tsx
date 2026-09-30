@@ -1,6 +1,7 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import AvatarUploader from "@/components/AvatarUploader";
+import Button from "@/components/base/Button";
 import FormErrorMessage from "@/components/FormErrorMessage";
 import Box from "@/components/base/Box";
 import Flex from "@/components/base/Flex";
@@ -10,6 +11,8 @@ import Label from "@/components/base/Label";
 import SubmitButton from "@/components/base/SubmitButton";
 import Toast from "@/components/base/Toast";
 import useUpdateProfile from "@/controllers/api/account/useUpdateProfile";
+import useGetAuthProvider from "@/controllers/api/auth/useGetAuthProvider";
+import { api } from "@/core/helpers/Api";
 import useForm from "@/core/hooks/form/useForm";
 import { Utils } from "@langboard/core/utils";
 import { useAccountSetting } from "@/core/providers/AccountSettingProvider";
@@ -20,6 +23,8 @@ function ProfilePage(): React.JSX.Element {
     const { currentUser, updatedUser } = useAccountSetting();
     const [t] = useTranslation();
     const { mutate } = useUpdateProfile();
+    const { data: authProvider } = useGetAuthProvider();
+    const [isLinkingOidc, setIsLinkingOidc] = useState(false);
     const dataTransferRef = useRef(new DataTransfer());
     const isAvatarDeletedRef = useRef(false);
     const { errors, isValidating, handleSubmit, formRef, focusComponentRef } = useForm({
@@ -150,6 +155,28 @@ function ProfilePage(): React.JSX.Element {
                     </SubmitButton>
                 </Flex>
             </Form.Root>
+            {authProvider?.oidc_enabled && (
+                <Flex justify="center" mt="8">
+                    <Button
+                        type="button"
+                        variant="outline"
+                        disabled={isLinkingOidc}
+                        onClick={async () => {
+                            setIsLinkingOidc(true);
+                            try {
+                                const { data } = await api.get<{ authorize_url: string }>("/auth/oidc/link/login");
+                                if (!data.authorize_url) throw new Error("OIDC authorization URL is missing");
+                                window.location.assign(data.authorize_url);
+                            } catch {
+                                setIsLinkingOidc(false);
+                                Toast.Add.error("Could not connect company SSO. Please try again.");
+                            }
+                        }}
+                    >
+                        Connect company SSO
+                    </Button>
+                </Flex>
+            )}
         </>
     );
 }

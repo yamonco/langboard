@@ -347,7 +347,7 @@ class Env:
 
     @property
     def OIDC_AUTO_LINK_BY_EMAIL(self) -> bool:
-        return self.__get_from_cache("OIDC_AUTO_LINK_BY_EMAIL", "true").lower() == "true"
+        return self.__get_from_cache("OIDC_AUTO_LINK_BY_EMAIL", "false").lower() == "true"
 
     @property
     def OIDC_AUTO_PROVISION(self) -> bool:

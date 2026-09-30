@@ -64,6 +64,14 @@ class IdentityLinkService(BaseDomainService):
         normalized_issuer = issuer.strip().rstrip("/") if issuer else ""
         external_link = self.get_by_provider_external_id(provider_enum, external_id, normalized_issuer)
 
+        if provider_enum == IdentityProvider.Oidc:
+            if external_link and external_link.user_id != user_id:
+                raise ValueError("OIDC identity is already linked to another user")
+            if current_link and (
+                current_link.external_id != external_id or current_link.issuer != normalized_issuer
+            ):
+                raise ValueError("User is already linked to another OIDC identity")
+
         if external_link and current_link and external_link.id != current_link.id:
             # Keep a single record per user/provider pair.
             self.repo.user_identity_link.delete(current_link, purge=True)
