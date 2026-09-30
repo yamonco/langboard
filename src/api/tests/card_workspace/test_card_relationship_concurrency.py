@@ -200,6 +200,7 @@ def graph_service(monkeypatch: pytest.MonkeyPatch):
         monkeypatch.setattr(service, "get_api_list_by_card", lambda *_: [])
         monkeypatch.setattr(service, "_mark_card_changed_for_unread", lambda *_: None)
         monkeypatch.setattr(service, "dispatch_updated", lambda *_args, **_kwargs: None)
+        monkeypatch.setattr(service, "_get_service", lambda *_: SimpleNamespace(publish_work_states=lambda *_: None))
         yield service, cards, engine
     finally:
         engine.dispose()

@@ -81,6 +81,16 @@ export interface IWorkState {
     } | null;
     execution_state: "idle" | "human_active" | "agent_active" | "paused" | "failed" | null;
     blocker_state: "clear" | "blocked" | "needs_input" | "needs_approval" | null;
+    dependency_state?: {
+        state: "clear" | "blocked" | null;
+        direct_blockers: Array<{
+            relationship_uid: string;
+            card_uid: string | null;
+            title: string | null;
+            accessible: boolean;
+            code: string;
+        }> | null;
+    };
     material_kind: "work" | "reference" | "meeting" | "wiki-like";
     lifecycle: "active" | "archived";
     active_queue_eligible: boolean | null;

@@ -23,6 +23,7 @@ def project_work_state(
     paused: int,
     change_seq: int = 0,
     verification_record: dict[str, Any] | None = None,
+    direct_blockers: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Interpret native facts equally for every authorized reader.
 
@@ -73,9 +74,27 @@ def project_work_state(
                 "agent_lifecycle_unavailable", "No authoritative agent lifecycle projection is available.", "execution"
             )
         )
+    if direct_blockers is not None:
+        for blocker in direct_blockers:
+            visible = blocker.get("accessible") is True and blocker.get("card_uid") is not None
+            reasons.append(
+                {
+                    "code": "dependency_unfinished" if visible else "dependency_unavailable",
+                    "message": "Prerequisite is not closed."
+                    if visible
+                    else "An inaccessible prerequisite prevents execution.",
+                    "source_ref": f"card:{blocker['card_uid']}" if visible else f"card:{card_uid}/blockers",
+                }
+            )
+        if not direct_blockers:
+            reasons.append(reason("dependencies_clear", "No unsatisfied blocks prerequisites.", "blockers"))
     reasons.append(
         reason(
-            "blocker_policy_unavailable", "Dependency, input and approval gates have not been evaluated.", "blockers"
+            "blocker_policy_unavailable",
+            "Input and approval gates have not been evaluated."
+            if direct_blockers is not None
+            else "Dependency, input and approval gates have not been evaluated.",
+            "blockers",
         )
     )
     if archived:
@@ -107,10 +126,16 @@ def project_work_state(
         "verification_source_change_seq": change_seq,
         "verification": verification_record,
         "execution_state": execution,
-        "blocker_state": None,
+        "blocker_state": "blocked" if direct_blockers else None,
+        "dependency_state": {
+            "state": "blocked" if direct_blockers else "clear" if direct_blockers is not None else None,
+            "direct_blockers": direct_blockers,
+        },
         "material_kind": material,
         "lifecycle": "archived" if archived else "active",
-        "active_queue_eligible": False if archived or stage in {"closed", "reference"} or linked_resource else None,
+        "active_queue_eligible": False
+        if archived or stage in {"closed", "reference"} or linked_resource or direct_blockers
+        else None,
         "checklist_progress": {"total": total, "completed": completed},
         "reasons": reasons,
         "state_inconsistency": inconsistencies,

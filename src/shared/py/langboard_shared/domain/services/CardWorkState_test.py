@@ -3,11 +3,19 @@ from .CardWorkState import project_work_state
 
 
 def state(**changes):
-    return project_work_state(**{
-        "card_uid": "card", "workflow_stage": None, "archived": False,
-        "linked_resource": False, "total": 0, "completed": 0, "started": 0, "paused": 0,
-        **changes,
-    })
+    return project_work_state(
+        **{
+            "card_uid": "card",
+            "workflow_stage": None,
+            "archived": False,
+            "linked_resource": False,
+            "total": 0,
+            "completed": 0,
+            "started": 0,
+            "paused": 0,
+            **changes,
+        }
+    )
 
 
 @pytest.mark.parametrize("stage", [None, "Done", "Check", "Study", "회의록"])
@@ -58,3 +66,19 @@ def test_closed_open_checkitems_are_diagnosed_without_correcting_workflow():
     result = state(workflow_stage="closed", total=2, completed=1)
     assert result["workflow_stage"] == "closed"
     assert result["state_inconsistency"][0]["code"] == "closed_with_open_checkitems"
+
+
+def test_known_dependency_blocks_queue_but_does_not_infer_approval():
+    result = state(direct_blockers=[{"accessible": True, "card_uid": "parent"}])
+    assert result["blocker_state"] == "blocked"
+    assert result["active_queue_eligible"] is False
+    assert result["verification_state"] == "unverified"
+    assert any(reason["source_ref"] == "card:parent" for reason in result["reasons"])
+
+
+def test_clear_dependencies_do_not_infer_clear_input_or_approval_gates():
+    result = state(direct_blockers=[])
+    assert result["dependency_state"]["state"] == "clear"
+    assert result["blocker_state"] is None
+    assert result["active_queue_eligible"] is None
+    assert any(reason["code"] == "blocker_policy_unavailable" for reason in result["reasons"])

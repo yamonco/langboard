@@ -7,16 +7,19 @@ from typing import Iterator, NamedTuple
 from uuid import uuid4
 from sqlalchemy import select, text
 from ...core.db import DbSession
+from ...domain.services.DependencyPolicy import BLOCKING_RELATION_JOINS, UNSATISFIED_PREREQUISITE
 
 
 WORK_EVENT = "io.langboard.work.ready.v1"
 
-_READY_EXPRESSION = """
+_READY_EXPRESSION = f"""
     EXISTS (
         SELECT 1 FROM card c
         JOIN project_execution_binding b ON b.project_id = c.project_id
         JOIN project_column target ON target.id = c.project_column_id
         JOIN webhook_setting w ON w.id = b.webhook_id
+        JOIN global_card_relationship_type bound_type ON bound_type.id = b.prerequisite_relationship_type_id
+          AND bound_type.machine_semantic = 'blocks' AND bound_type.is_active
         WHERE c.id = :card_id AND b.is_enabled
           AND b.prerequisite_relationship_type_id IS NOT NULL
           AND b.events::jsonb ? 'io.langboard.work.ready.v1'
@@ -24,18 +27,11 @@ _READY_EXPRESSION = """
           AND w.events::jsonb ? 'io.langboard.work.ready.v1'
           AND c.deleted_at IS NULL AND c.archived_at IS NULL AND c.source_type IS NULL
           AND b.column_semantic_ids ->> (c.project_column_id::text) = 'ready'
-          AND target.deleted_at IS NULL AND NOT target.is_archive
+          AND target.deleted_at IS NULL AND NOT target.is_archive AND target.project_id = c.project_id
           AND NOT EXISTS (
               SELECT 1 FROM card_relationship r
-              LEFT JOIN card prerequisite ON prerequisite.id = r.card_id_parent
-              WHERE r.card_id_child = c.id
-                AND r.relationship_type_id = b.prerequisite_relationship_type_id
-                AND (
-                    prerequisite.id IS NULL OR prerequisite.deleted_at IS NOT NULL
-                    OR prerequisite.archived_at IS NOT NULL
-                    OR b.column_semantic_ids ->> (prerequisite.project_column_id::text)
-                       IS DISTINCT FROM 'terminal'
-                )
+              {BLOCKING_RELATION_JOINS}
+              WHERE r.card_id_child = c.id AND {UNSATISFIED_PREREQUISITE}
           )
     )
 """

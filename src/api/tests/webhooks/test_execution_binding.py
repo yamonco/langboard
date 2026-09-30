@@ -19,7 +19,7 @@ def test_enabled_binding_checks_board_scope_and_explicit_webhook(monkeypatch: py
     records = {
         (ProjectColumn, "ready"): SimpleNamespace(project_id=1, is_archive=False),
         (ProjectColumn, "done"): SimpleNamespace(project_id=1, is_archive=False),
-        (GlobalCardRelationshipType, "prerequisite"): object(),
+        (GlobalCardRelationshipType, "prerequisite"): SimpleNamespace(machine_semantic="blocks", is_active=True),
         (WebhookSetting, "hook"): SimpleNamespace(events=["io.langboard.work.ready.v1"], secret_id="key"),
     }
     monkeypatch.setattr(
@@ -66,12 +66,21 @@ def test_live_binding_rechecks_webhook_and_signing_secret(monkeypatch: pytest.Mo
         (Project, 1): SimpleNamespace(id=1),
         (ProjectColumn, "ready"): SimpleNamespace(id=2, project_id=1, is_archive=False, deleted_at=None),
         (ProjectColumn, "done"): SimpleNamespace(id=3, project_id=1, is_archive=False, deleted_at=None),
-        (GlobalCardRelationshipType, "prerequisite"): SimpleNamespace(id=8),
+        (GlobalCardRelationshipType, "prerequisite"): SimpleNamespace(id=8, machine_semantic="blocks", is_active=True),
         (WebhookSetting, "hook"): SimpleNamespace(id=7, events=[event], secret_id="key"),
     }
-    monkeypatch.setattr(ExecutionBindingPolicy.InfraHelper, "get_by_id_like", lambda model, uid: records.get((model, uid)))
+    monkeypatch.setattr(
+        ExecutionBindingPolicy.InfraHelper, "get_by_id_like", lambda model, uid: records.get((model, uid))
+    )
     monkeypatch.setattr(ExecutionBindingPolicy.KeyVault, "get_key", lambda key: "secret")
     assert ExecutionBindingPolicy.binding_invalid_reasons(binding, event) == []
+    relation = records[(GlobalCardRelationshipType, "prerequisite")]
+    relation.machine_semantic = "contains"
+    assert "relationship_type_not_blocking" in ExecutionBindingPolicy.binding_invalid_reasons(binding, event)
+    relation.machine_semantic = "blocks"
+    relation.is_active = False
+    assert "relationship_type_not_blocking" in ExecutionBindingPolicy.binding_invalid_reasons(binding, event)
+    relation.is_active = True
     records.pop((WebhookSetting, "hook"))
     assert "webhook_missing" in ExecutionBindingPolicy.binding_invalid_reasons(binding, event)
     records[(WebhookSetting, "hook")] = SimpleNamespace(id=7, events=[], secret_id="key")
@@ -87,10 +96,17 @@ async def test_invalid_execution_binding_never_schedules_delivery(monkeypatch: p
 
     queued = []
     monkeypatch.setattr(WebhookTask, "webhook_delivery_task", lambda *args: queued.append(args))
-    model = WebhookModel(event="io.langboard.work.ready.v1", data={
-        "project_uid": "p", "card_uid": "c", "execution_generation": 1,
-        "title": "Task", "card_url": "/board/p/c", "source_revision": "r",
-    })
+    model = WebhookModel(
+        event="io.langboard.work.ready.v1",
+        data={
+            "project_uid": "p",
+            "card_uid": "c",
+            "execution_generation": 1,
+            "title": "Task",
+            "card_url": "/board/p/c",
+            "source_revision": "r",
+        },
+    )
     await WebhookTask.run_webhook(model)
     assert queued == []
 
@@ -107,10 +123,17 @@ async def test_deleted_binding_target_cannot_deliver_queued_event(monkeypatch: p
 
     monkeypatch.setattr(WebhookTask, "_get_webhook_setting", lambda uid: None)
     monkeypatch.setattr(WebhookTask, "post_signed_webhook", fake_post)
-    model = WebhookModel(event="io.langboard.work.ready.v1", data={
-        "project_uid": "p", "card_uid": "c", "execution_generation": 1,
-        "title": "Task", "card_url": "/board/p/c", "source_revision": "r",
-    })
+    model = WebhookModel(
+        event="io.langboard.work.ready.v1",
+        data={
+            "project_uid": "p",
+            "card_uid": "c",
+            "execution_generation": 1,
+            "title": "Task",
+            "card_url": "/board/p/c",
+            "source_revision": "r",
+        },
+    )
     await WebhookTask.deliver_webhook(model, "deleted-hook")
     assert posted == []
 
@@ -132,3 +155,23 @@ async def test_legacy_fanout_delivery_posts_signed_webhook(monkeypatch: pytest.M
     model = WebhookModel(event="card_created", data={"card_uid": "c"})
     await WebhookTask.deliver_webhook(model, "hook-1")
     assert posted == [(model, "hook-1", setting)]
+
+
+@pytest.mark.parametrize("semantic,active", [("contains", True), ("references", True), (None, True), ("blocks", False)])
+def test_enabled_binding_rejects_nonblocking_or_inactive_type(monkeypatch, semantic, active):
+    project = SimpleNamespace(id=1)
+    records = {
+        (ProjectColumn, "ready"): SimpleNamespace(project_id=1, is_archive=False),
+        (ProjectColumn, "terminal"): SimpleNamespace(project_id=1, is_archive=False),
+        (GlobalCardRelationshipType, "type"): SimpleNamespace(machine_semantic=semantic, is_active=active),
+    }
+    monkeypatch.setattr(BoardSettingApi.InfraHelper, "get_by_id_like", lambda model, uid: records.get((model, uid)))
+    form = UpdateProjectExecutionBindingForm(
+        is_enabled=True,
+        column_semantics={"ready": "ready", "terminal": "terminal"},
+        prerequisite_relationship_type_uid="type",
+        webhook_uid="hook",
+        events=["io.langboard.work.ready.v1"],
+    )
+    with pytest.raises(ValueError, match="active blocks"):
+        BoardSettingApi._validate_execution_binding(project, form)

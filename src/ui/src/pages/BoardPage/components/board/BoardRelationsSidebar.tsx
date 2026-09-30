@@ -33,6 +33,8 @@ function RelationsTree({ card, projectUID }: { card: ProjectCard.TModel; project
     const [t] = useTranslation();
     const navigate = usePageNavigateRef();
     const relationships = card.useForeignFieldArray("relationships");
+    const workState = card.useField("work_state");
+    const blockers = workState?.dependency_state?.direct_blockers ?? [];
     const semanticOf = (relationship: (typeof relationships)[number]) =>
         relationship.machine_semantic ?? GlobalRelationshipType.Model.getModel(relationship.relationship_type_uid)?.machine_semantic;
     const sections = [
@@ -55,6 +57,27 @@ function RelationsTree({ card, projectUID }: { card: ProjectCard.TModel; project
             <p className="truncate px-2 font-medium" title={card.title}>
                 {card.title}
             </p>
+            {blockers.length > 0 && (
+                <section aria-label="막힌 이유">
+                    <h2 className="px-2 py-1 text-xs font-medium text-muted-foreground">막힌 이유 · {blockers.length}</h2>
+                    {blockers.map((blocker) =>
+                        blocker.accessible && blocker.card_uid ? (
+                            <button
+                                key={blocker.relationship_uid}
+                                type="button"
+                                className="block w-full truncate rounded px-2 py-1 text-left hover:bg-muted"
+                                onClick={() => navigate(ROUTES.BOARD.CARD(projectUID, blocker.card_uid!))}
+                            >
+                                {blocker.title}
+                            </button>
+                        ) : (
+                            <p key={blocker.relationship_uid} className="px-2 py-1 text-muted-foreground">
+                                접근할 수 없는 선행조건
+                            </p>
+                        )
+                    )}
+                </section>
+            )}
             {sections.map(({ key, label, Icon, items }) => (
                 <section key={key}>
                     <h2 className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-muted-foreground">

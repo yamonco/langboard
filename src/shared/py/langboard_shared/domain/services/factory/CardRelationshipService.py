@@ -172,6 +172,12 @@ class CardRelationshipService(BaseDomainService):
 
                 self._mark_card_changed_for_unread(card, "relationship")
 
+        from .CardService import CardService
+
+        affected_ids = [card.id] if is_parent else [
+            card.id, *[related.id for _, _, related in old_relationships], *new_relationships_dict.keys()
+        ]
+        self._get_service(CardService).publish_work_states(project, affected_ids)
         self.dispatch_updated(
             user_or_bot,
             project,
@@ -359,6 +365,9 @@ class CardRelationshipService(BaseDomainService):
             card for card in [*existing_cards.values(), *cards_to_create.values()] if card.id in affected_ids
         ]
         if dispatch_effects:
+            from .CardService import CardService
+
+            self._get_service(CardService).publish_work_states(project, [card.id for card in affected_cards])
             for card in {card.id: card for card in affected_cards}.values():
                 relationships = self.get_api_list_by_card(card)
                 CardRelationshipPublisher.updated(project, card, relationships)

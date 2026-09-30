@@ -85,6 +85,8 @@ def _validate_execution_binding(project: Project, form: UpdateProjectExecutionBi
     relation_type = InfraHelper.get_by_id_like(GlobalCardRelationshipType, form.prerequisite_relationship_type_uid)
     if relation_type is None:
         raise ValueError("Unknown prerequisite relationship type")
+    if relation_type.machine_semantic != "blocks" or not relation_type.is_active:
+        raise ValueError("Execution prerequisite relationship type must be active blocks")
     webhook = InfraHelper.get_by_id_like(WebhookSetting, form.webhook_uid)
     if webhook is None or not set(form.events) <= set(webhook.events or []):
         raise ValueError("Webhook must explicitly allow every execution event")

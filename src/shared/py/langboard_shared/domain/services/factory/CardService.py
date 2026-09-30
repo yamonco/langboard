@@ -44,6 +44,7 @@ from ...models import (
 from ...models.Checkitem import CheckitemStatus
 from ..CardVerification import VerificationConflict, VerificationSubmission
 from ..CardWorkState import project_work_state
+from ..DependencyPolicy import dependency_blockers
 from .CardContentBlockService import CardContentBlockService
 from .CardRelationshipService import CardRelationshipService
 from .CheckitemService import CheckitemService
@@ -143,7 +144,7 @@ class CardService(BaseDomainService):
         return [card for card, _ in self.repo.card.get_all_by_project(project)]
 
     def get_work_states(self, cards: Sequence[Card]) -> dict[int, dict[str, Any]]:
-        """Project a permission-scoped card batch in three queries, never per-card reads.
+        """Project a permission-scoped card batch with bounded queries, never per-card reads.
 
         Callers must supply cards from their existing authorized query. No hidden
         related-card data, task metadata or user identities enter this projection.
@@ -160,6 +161,7 @@ class CardService(BaseDomainService):
             }
         counts = self.repo.checkitem.get_work_state_counts([card.id for card in cards])
         verification_records = self.repo.card_verification.get_latest_by_card_ids([card.id for card in cards])
+        blockers = dependency_blockers([card.id for card in cards])
         states = {}
         for card in cards:
             column = columns.get(card.project_column_id)
@@ -176,8 +178,31 @@ class CardService(BaseDomainService):
                 paused=paused,
                 change_seq=card.last_change_seq,
                 verification_record=self._verification_projection(record) if record else None,
+                direct_blockers=blockers.get(int(card.id), []),
             )
         return states
+
+    def publish_work_states(self, project: Project, card_ids: Sequence[SnowflakeID]) -> None:
+        """Refresh authorized card projections after dependency mutations."""
+        if not card_ids:
+            return
+        with DbSession.use(readonly=False) as db:
+            cards = db.exec(
+                SqlBuilder.select.table(Card)
+                .where(Card.column("id").in_(set(card_ids)))
+                .where(Card.column("project_id") == project.id)
+                .where(Card.column("deleted_at").is_(None))
+            ).all()
+        states = self.get_work_states(cards)
+        for card in cards:
+            CardPublisher.updated(project, card, None, {"work_state": states[card.id]})
+
+    def _dependency_children(self, card: Card) -> list[SnowflakeID]:
+        return [
+            child.id for _, relation_type, child in
+            self.repo.card_relationship.get_all_by_card_and_relation(card, relation="child")
+            if relation_type.machine_semantic == "blocks" and child.project_id == card.project_id
+        ]
 
     @staticmethod
     def _verification_projection(record: CardVerificationRecord) -> dict[str, Any]:
@@ -1511,6 +1536,8 @@ class CardService(BaseDomainService):
                 self.repo.card.update(card)
 
         CardPublisher.order_changed(project, card, old_column, cast(ProjectColumn, new_column))
+        if new_column is not None:
+            self.publish_work_states(project, [card.id, *self._dependency_children(card)])
 
         if new_column and not card.is_linked_resource:
             CardBotTask.enqueue_card_moved_webhook(
@@ -1694,6 +1721,7 @@ class CardService(BaseDomainService):
     def _delete_card(self, user_or_bot: TUserOrBot, project: Project, card: Card) -> bool:
         """Delete only the board-side card and its dependent work records."""
 
+        dependency_children = self._dependency_children(card)
         started_checkitems = self.repo.checkitem.get_all_started_checkitem_by_card(card)
 
         checkitem_service = self._get_service(CheckitemService)
@@ -1730,6 +1758,7 @@ class CardService(BaseDomainService):
             self.repo.card.reoder_after_delete(card.project_column_id, card.order)
 
         CardPublisher.deleted(project, card)
+        self.publish_work_states(project, dependency_children)
         if not is_linked_resource:
             CardActivityTask.card_deleted(user_or_bot, project, card)
             CardBotTask.card_deleted(user_or_bot, project, card)

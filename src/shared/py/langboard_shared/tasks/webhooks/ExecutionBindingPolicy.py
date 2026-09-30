@@ -80,6 +80,8 @@ def binding_invalid_reasons(binding: ProjectExecutionBinding | None, event: str)
     )
     if relation is None:
         reasons.append("relationship_type_invalid")
+    elif relation.machine_semantic != "blocks" or not relation.is_active:
+        reasons.append("relationship_type_not_blocking")
     elif relation.id != binding.prerequisite_relationship_type_id:
         reasons.append("internal_binding_mismatch")
     return reasons

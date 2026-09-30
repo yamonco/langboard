@@ -45,7 +45,7 @@ def test_application_uow_emits_only_ready_edges_and_freezes_payload(monkeypatch:
     try:
         with engine.begin() as connection:
             for statement in (
-                "CREATE TABLE project_column (id bigint PRIMARY KEY, deleted_at timestamptz, is_archive boolean NOT NULL)",
+                "CREATE TABLE project_column (id bigint PRIMARY KEY, deleted_at timestamptz, is_archive boolean NOT NULL, workflow_stage text, project_id bigint)",
                 "CREATE TABLE webhook_setting (id bigint PRIMARY KEY, secret_id bigint, events jsonb NOT NULL)",
                 # Baseline binding shape as the public main history leaves it;
                 # the install migration adds the semantic id columns on top.
@@ -56,6 +56,7 @@ def test_application_uow_emits_only_ready_edges_and_freezes_payload(monkeypatch:
                 "CREATE TABLE card (id bigint PRIMARY KEY, project_id bigint, project_column_id bigint, "
                 "deleted_at timestamptz, archived_at timestamptz, source_type text, title text, updated_at timestamptz)",
                 "CREATE TABLE card_relationship (card_id_parent bigint, card_id_child bigint, relationship_type_id bigint)",
+                "CREATE TABLE global_card_relationship_type (id bigint PRIMARY KEY, machine_semantic text, is_active boolean)",
                 "CREATE TABLE project_label (id bigint PRIMARY KEY, name text)",
                 "CREATE TABLE card_assigned_project_label (card_id bigint, project_label_id bigint)",
                 "CREATE TABLE card_assigned_user (card_id bigint, user_id bigint)",
@@ -63,8 +64,9 @@ def test_application_uow_emits_only_ready_edges_and_freezes_payload(monkeypatch:
                 connection.execute(text(statement))
             with Operations.context(MigrationContext.configure(connection)):
                 migration.upgrade()
+            connection.execute(text("INSERT INTO global_card_relationship_type VALUES (30, 'blocks', true)"))
             connection.execute(
-                text("INSERT INTO project_column VALUES (20, NULL, false), (21, NULL, false), (22, NULL, false)")
+                text("INSERT INTO project_column VALUES (20, NULL, false, NULL, 7), (21, NULL, false, NULL, 7), (22, NULL, false, NULL, 7)")
             )
             connection.execute(
                 text("INSERT INTO webhook_setting VALUES (40, 50, CAST(:events AS jsonb))"),
@@ -195,7 +197,7 @@ def test_ready_content_edit_drains_latest_content_and_only_readiness_edges_super
     try:
         with engine.begin() as connection:
             for statement in (
-                "CREATE TABLE project_column (id bigint PRIMARY KEY, deleted_at timestamptz, is_archive boolean NOT NULL)",
+                "CREATE TABLE project_column (id bigint PRIMARY KEY, deleted_at timestamptz, is_archive boolean NOT NULL, workflow_stage text, project_id bigint)",
                 "CREATE TABLE webhook_setting (id bigint PRIMARY KEY, secret_id bigint, events jsonb NOT NULL)",
                 # Baseline binding shape as the public main history leaves it;
                 # the install migration adds the semantic id columns on top.
@@ -206,6 +208,7 @@ def test_ready_content_edit_drains_latest_content_and_only_readiness_edges_super
                 "CREATE TABLE card (id bigint PRIMARY KEY, project_id bigint, project_column_id bigint, "
                 "deleted_at timestamptz, archived_at timestamptz, source_type text, title text, updated_at timestamptz)",
                 "CREATE TABLE card_relationship (card_id_parent bigint, card_id_child bigint, relationship_type_id bigint)",
+                "CREATE TABLE global_card_relationship_type (id bigint PRIMARY KEY, machine_semantic text, is_active boolean)",
                 "CREATE TABLE project_label (id bigint PRIMARY KEY, name text)",
                 "CREATE TABLE card_assigned_project_label (card_id bigint, project_label_id bigint)",
                 "CREATE TABLE card_assigned_user (card_id bigint, user_id bigint)",
@@ -213,8 +216,9 @@ def test_ready_content_edit_drains_latest_content_and_only_readiness_edges_super
                 connection.execute(text(statement))
             with Operations.context(MigrationContext.configure(connection)):
                 migration.upgrade()
+            connection.execute(text("INSERT INTO global_card_relationship_type VALUES (30, 'blocks', true)"))
             connection.execute(
-                text("INSERT INTO project_column VALUES (20, NULL, false), (21, NULL, false), (22, NULL, false)")
+                text("INSERT INTO project_column VALUES (20, NULL, false, NULL, 7), (21, NULL, false, NULL, 7), (22, NULL, false, NULL, 7)")
             )
             connection.execute(
                 text("INSERT INTO webhook_setting VALUES (40, 50, CAST(:events AS jsonb))"),

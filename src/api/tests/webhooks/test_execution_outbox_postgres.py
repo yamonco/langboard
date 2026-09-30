@@ -190,7 +190,8 @@ def test_delivery_lifecycle_reaches_terminal_states_and_recovers(monkeypatch: py
     try:
         with engine.begin() as connection:
             for statement in (
-                "CREATE TABLE project_column (id bigint PRIMARY KEY, deleted_at timestamptz, is_archive boolean NOT NULL)",
+                "CREATE TABLE project_column (id bigint PRIMARY KEY, deleted_at timestamptz, is_archive boolean NOT NULL, workflow_stage text, project_id bigint)",
+                "CREATE TABLE global_card_relationship_type (id bigint PRIMARY KEY, machine_semantic text, is_active boolean)",
                 "CREATE TABLE webhook_setting (id bigint PRIMARY KEY, secret_id bigint, events jsonb NOT NULL)",
                 "CREATE TABLE project_execution_binding (id bigint PRIMARY KEY, project_id bigint UNIQUE, "
                 "updated_at timestamptz NOT NULL, is_enabled boolean NOT NULL, "
@@ -211,7 +212,8 @@ def test_delivery_lifecycle_reaches_terminal_states_and_recovers(monkeypatch: py
                 "CONSTRAINT uq_execution_outbox_card_generation UNIQUE(card_id, execution_generation))",
             ):
                 connection.execute(text(statement))
-            connection.execute(text("INSERT INTO project_column VALUES (20, NULL, false)"))
+            connection.execute(text("INSERT INTO project_column VALUES (20, NULL, false, NULL, 7)"))
+            connection.execute(text("INSERT INTO global_card_relationship_type VALUES (30, 'blocks', true)"))
             connection.execute(
                 text("INSERT INTO webhook_setting VALUES (40, 50, CAST(:events AS jsonb))"),
                 {"events": '["io.langboard.work.ready.v1"]'},
