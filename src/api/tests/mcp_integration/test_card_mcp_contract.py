@@ -638,10 +638,10 @@ def test_native_move_rejects_column_from_another_project(
 
 
 def test_graph_cycle_rejection_is_validation_error_not_unknown_mutation() -> None:
-    from langboard.card_workspace.domain.value_objects import CardGraphEdge
-    from fastmcp.exceptions import ValidationError
-    from langboard_shared.core.exceptions.RelationshipCycle import RelationshipCycle
     from unittest.mock import Mock
+    from fastmcp.exceptions import ValidationError
+    from langboard.card_workspace.domain.value_objects import CardGraphEdge
+    from langboard_shared.core.exceptions.RelationshipCycle import RelationshipCycle
 
     apply = Mock(side_effect=RelationshipCycle("Relationship would create a blocks cycle"))
     service = SimpleNamespace(card_relationship=SimpleNamespace(apply_graph_patch=apply))
