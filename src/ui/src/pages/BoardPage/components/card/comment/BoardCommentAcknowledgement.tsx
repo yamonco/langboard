@@ -5,13 +5,15 @@ import Popover from "@/components/base/Popover";
 import useAcknowledgeCardComment from "@/controllers/api/card/comment/useAcknowledgeCardComment";
 import { ProjectCardComment } from "@/core/models";
 import { useBoardCard } from "@/core/providers/BoardCardProvider";
+import { useBoard } from "@/core/providers/BoardProvider";
 import setupApiErrorHandler from "@/core/helpers/setupApiErrorHandler";
 
 export default function BoardCommentAcknowledgement({ comment }: { comment: ProjectCardComment.TModel }) {
     const [t] = useTranslation();
     const { projectUID, card, currentUser } = useBoardCard();
+    const { project } = useBoard();
     const uids = [...new Set(comment.useField("acknowledged_user_uids") ?? [])];
-    const members = card.useForeignFieldArray("project_members");
+    const members = project.useForeignFieldArray("all_members");
     const acknowledged = uids.includes(currentUser.uid);
     const { mutate, isPending } = useAcknowledgeCardComment();
     const [open, setOpen] = useState(false);
