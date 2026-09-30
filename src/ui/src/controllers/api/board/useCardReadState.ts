@@ -7,11 +7,11 @@ export interface ICardReader {
 }
 export const cardReadStateKey = (projectUID: string, cardUID: string) => ["card-read-state", projectUID, cardUID];
 
-export default function useCardReadState(projectUID: string, cardUID: string) {
+export default function useCardReadState(projectUID: string, cardUID: string, version = 0) {
     const { query, mutate, queryClient } = useQueryMutation();
     const path = `/board/${encodeURIComponent(projectUID)}/card/${encodeURIComponent(cardUID)}`;
     const readers = query(
-        cardReadStateKey(projectUID, cardUID),
+        [...cardReadStateKey(projectUID, cardUID), version],
         async () => {
             const response = await api.get<{ readers: ICardReader[] }>(`${path}/read-state`);
             return response.data.readers;

@@ -10,7 +10,8 @@ import setupApiErrorHandler from "@/core/helpers/setupApiErrorHandler";
 export default function BoardCommentSeen({ comment }: { comment: ProjectCardComment.TModel }) {
     const [t] = useTranslation();
     const { projectUID, card, currentUser } = useBoardCard();
-    const { readers, unread } = useCardReadState(projectUID, card.uid);
+    const version = card.useField("read_state_version");
+    const { readers, unread } = useCardReadState(projectUID, card.uid, version);
     const members = card.useForeignFieldArray("project_members");
     const updatedAt = comment.useField("updated_at");
     const seen = (readers.data ?? []).filter((reader) => new Date(reader.seen_at).getTime() >= new Date(updatedAt).getTime());

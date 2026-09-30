@@ -1,5 +1,3 @@
-import { useQueryMutation } from "@/core/helpers/QueryMutation";
-import { cardReadStateKey } from "@/controllers/api/board/useCardReadState";
 import { SocketEvents } from "@langboard/core/constants";
 import useSocketHandler, { IBaseUseSocketHandlersProps } from "@/core/helpers/SocketHandler";
 import { ProjectCard } from "@/core/models";
@@ -22,7 +20,6 @@ export interface IUseCardDetailsChangedHandlersProps extends IBaseUseSocketHandl
 }
 
 const useCardDetailsChangedHandlers = ({ callback, projectUID, cardUID }: IUseCardDetailsChangedHandlersProps) => {
-    const { queryClient } = useQueryMutation();
     return useSocketHandler<{}, ICardDetailsChangedRawResponse>({
         topic: ESocketTopic.Board,
         topicId: projectUID,
@@ -32,9 +29,9 @@ const useCardDetailsChangedHandlers = ({ callback, projectUID, cardUID }: IUseCa
             params: { uid: cardUID },
             callback,
             responseConverter: (data) => {
-                if (data.read_state_changed) void queryClient.invalidateQueries({ queryKey: cardReadStateKey(projectUID, cardUID) });
                 const card = ProjectCard.Model.getModel(cardUID);
                 if (card) {
+                    if (data.read_state_changed) card.read_state_version = (card.read_state_version ?? 0) + 1;
                     if (data.title !== undefined) card.title = data.title;
                     if (data.description !== undefined) card.description = data.description;
                     if (data.deadline_at !== undefined) card.deadline_at = data.deadline_at ?? undefined;
