@@ -40,6 +40,7 @@ import { getBoardCardWidgetVisibility } from "@/pages/BoardPage/components/board
 import useSetCardCompleted from "@/controllers/api/board/useSetCardCompleted";
 import { captureCardOrigin } from "@/pages/BoardPage/components/board/CardAnimation";
 import CardTimestamps from "@/pages/BoardPage/components/card/CardTimestamps";
+import BoardActiveWorkerAvatar from "@/pages/BoardPage/components/board/BoardActiveWorkerAvatar";
 
 export interface IBoardColumnCardCollapsibleProps {
     isDragging: bool;
@@ -136,9 +137,11 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
     const upcomingDays = getUpcomingDeadlineDays({ deadlineAt, now: deadlineClock, isCompleted: isFinished });
     const projectMembers = project.useForeignFieldArray("all_members");
     const cardMemberUIDs = card.useField("member_uids") ?? [];
+    const activeWorkers = card.useField("active_workers") ?? [];
+    const workerByUID = useMemo(() => new Map(activeWorkers.map((worker) => [worker.user_uid, worker])), [activeWorkers]);
     const cardMembers = useMemo(
-        () => projectMembers.filter((member) => member.isValidUser() && cardMemberUIDs.includes(member.uid)),
-        [projectMembers, cardMemberUIDs]
+        () => projectMembers.filter((member) => member.isValidUser() && (cardMemberUIDs.includes(member.uid) || workerByUID.has(member.uid))),
+        [projectMembers, cardMemberUIDs, workerByUID]
     );
     const commentCount = card.useField("count_comment");
     const creator = card.useField("creator");
@@ -432,7 +435,7 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
                                     </span>
                                 )}
                             </Flex>
-                            {cardMemberUIDs.length === 0 ? (
+                            {cardMembers.length === 0 ? (
                                 <span
                                     role="img"
                                     aria-label={t("card.Unassigned")}
@@ -453,6 +456,14 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
                                         cardUID: card.uid,
                                     }}
                                     size="sm"
+                                    renderAvatar={(member, avatar) => (
+                                        <BoardActiveWorkerAvatar
+                                            avatar={avatar}
+                                            worker={workerByUID.get(member.uid)}
+                                            startedLabel={t("card.Active work")}
+                                            pausedLabel={t("card.Paused work")}
+                                        />
+                                    )}
                                     {...attributes}
                                     className="cursor-default"
                                 />

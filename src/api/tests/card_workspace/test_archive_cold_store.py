@@ -23,6 +23,7 @@ from langboard_shared.domain.models import (  # noqa: E402
     CardComment,
     CardRelationship,
     Checkitem,
+    CheckitemTimerRecord,
     Checklist,
     GlobalCardRelationshipType,
     Project,
@@ -98,7 +99,8 @@ def _service(card_repository: Any, calls: dict[str, Any] | None = None) -> CardS
             get_board_progress_by_project=lambda _project, cutoff: (
                 calls.__setitem__("progress", cutoff),
                 {},
-            )[1]
+            )[1],
+            get_active_workers_by_project=lambda _project, _card=None: [],
         ),
     )
     return CardService(lambda _service: None, lambda _name: None, repository)
@@ -138,6 +140,7 @@ def test_board_list_passes_one_visibility_cutoff_to_all_hot_path_queries(
             "is_check_card": True,
             "checklist_total_count": 0,
             "checklist_completed_count": 0,
+            "active_workers": [],
         }
     ]
 
@@ -222,6 +225,7 @@ def test_hot_queries_share_the_exact_boundary_and_hide_cold_relationship_endpoin
         CardAssignedProjectLabel.__table__,
         Checklist.__table__,
         Checkitem.__table__,
+        CheckitemTimerRecord.__table__,
     ]
     User.metadata.create_all(engine, tables=tables)
     cutoff = SafeDateTime.fromisoformat("2026-09-10T12:00:00+00:00")
@@ -356,8 +360,8 @@ def test_hot_queries_share_the_exact_boundary_and_hide_cold_relationship_endpoin
                     "title": "Open",
                     "order": 1,
                     "is_checked": False,
-                    "status": "stopped",
-                    "accumulated_seconds": 0,
+                    "status": "started",
+                    "accumulated_seconds": 5,
                 },
                 {
                     "id": 603,
@@ -379,6 +383,11 @@ def test_hot_queries_share_the_exact_boundary_and_hide_cold_relationship_endpoin
                 },
             ],
         )
+        connection.execute(
+            CheckitemTimerRecord.__table__.insert(),
+            {"id": 701, "checkitem_id": 602, "status": "started", "created_at": cutoff},
+        )
+        connection.execute(Checkitem.__table__.update().where(Checkitem.__table__.c.id == 602).values(user_id=1))
 
     @contextmanager
     def use_database(*, readonly: bool):
@@ -398,6 +407,7 @@ def test_hot_queries_share_the_exact_boundary_and_hide_cold_relationship_endpoin
     labels = make_repo(ProjectLabelRepository).get_all_card_labels_by_project(project, cutoff)
     checklists = make_repo(ChecklistRepository).get_all_by_project(project, cutoff)
     progress = make_repo(CheckitemRepository).get_board_progress_by_project(project, cutoff)
+    active_workers = make_repo(CheckitemRepository).get_active_workers_by_project(project)
 
     assert {card.id for card, _ in cards} == {active_id, boundary_id}
     assert {assignment.card_id for _, assignment in members} == {active_id, boundary_id}
@@ -405,3 +415,6 @@ def test_hot_queries_share_the_exact_boundary_and_hide_cold_relationship_endpoin
     assert {assignment.card_id for _, assignment in labels} == {active_id, boundary_id}
     assert {checklist.card_id for checklist in checklists} == {active_id, boundary_id}
     assert progress == {active_id: (2, 1)}
+    assert [(int(item.id), int(checklist.card_id), started_at) for item, checklist, started_at in active_workers] == [
+        (602, active_id, cutoff)
+    ]

@@ -19,6 +19,8 @@
   "Select members...": "Select members...",
   "Members": "Members",
   "Unassigned": "Unassigned",
+  "Active work": "Working now",
+  "Paused work": "Work paused",
   "Created by {{name}}": "Created by {{name}}",
   "Created": "Created",
   "Updated": "Updated",

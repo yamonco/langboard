@@ -8,13 +8,14 @@ interface IProgressChangedPayload {
 
 interface IProps extends IBaseUseSocketHandlersProps<IProgressChangedPayload> {
     projectUID: string;
+    subscriberKey?: string;
 }
 
-const useBoardChecklistProgressChangedHandlers = ({ callback, projectUID }: IProps) =>
+const useBoardChecklistProgressChangedHandlers = ({ callback, projectUID, subscriberKey }: IProps) =>
     useSocketHandler<IProgressChangedPayload>({
         topic: ESocketTopic.Board,
         topicId: projectUID,
-        eventKey: `board-card-checklist-progress-changed-${projectUID}`,
+        eventKey: `board-card-checklist-progress-changed-${projectUID}${subscriberKey ? `-${subscriberKey}` : ""}`,
         onProps: {
             name: SocketEvents.SERVER.BOARD.CARD.CHECKLIST.PROGRESS_CHANGED,
             params: { uid: projectUID },

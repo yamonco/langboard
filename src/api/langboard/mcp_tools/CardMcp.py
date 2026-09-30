@@ -2,6 +2,7 @@
 
 import base64
 import io
+import mimetypes
 from binascii import Error as Base64Error
 from typing import Annotated, Any, Literal
 from fastmcp.exceptions import ValidationError
@@ -10,6 +11,7 @@ from langboard_shared.core.exceptions.CardDeleteForbidden import CardDeleteForbi
 from langboard_shared.core.storage import Storage, StorageName
 from langboard_shared.core.types import SafeDateTime
 from langboard_shared.domain.models import Bot, Card, CardMetadata, Project, ProjectRole, User
+from langboard_shared.domain.models.Checkitem import CheckitemStatus
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.domain.services.DomainService import DomainService
 from langboard_shared.Env import Env
@@ -55,6 +57,7 @@ from ..card_workspace.domain import (
     require_public_metadata_key,
 )
 from ..card_workspace.infrastructure import NativeCardWorkspaceAdapter
+from ..card_workspace.infrastructure.linked_wikis import change_link, visible_linked_wikis
 from ..mcp_integration import McpRoleFilter, McpTool
 from .ProjectMcp import create_template_project
 
@@ -92,6 +95,112 @@ def get_card_attachments(project_uid: str, card_uid: str, service: DomainService
     if not params:
         raise ValueError("Card not found")
     return {"attachments": service.card_attachment.get_api_list_by_card(params[1])}
+
+
+@McpTool.add("user", description="Read up to 8 MB of one attachment belonging to a readable card.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+def read_card_attachment(
+    project_uid: str, card_uid: str, attachment_uid: str, user: User, service: DomainService
+) -> dict:
+    params = _get_card_in_project(project_uid, card_uid)
+    if not params:
+        raise ValueError("Card not found in project")
+    _, card = params
+    attachment = service.card_attachment.get_by_id_like(attachment_uid)
+    if attachment is None or attachment.card_id != card.id:
+        raise ValueError("Attachment not found in card")
+    content = Storage.get_file(attachment.file)
+    if content is None:
+        raise ValueError("Attachment content unavailable")
+    if len(content) > 8 * 1024 * 1024:
+        raise ValueError("Attachment exceeds the 8 MB MCP read limit")
+    return {
+        "attachment_uid": attachment.get_uid(),
+        "file_name": attachment.filename,
+        "mime_type": mimetypes.guess_type(attachment.filename)[0] or "application/octet-stream",
+        "size": len(content),
+        "file_data_base64": base64.b64encode(content).decode("ascii"),
+    }
+
+
+@McpTool.add("user", description="List wikis linked to a card that the current user may read.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+def get_card_linked_wikis(project_uid: str, card_uid: str, user: User, service: DomainService) -> dict:
+    project, card = _require_task_card(project_uid, card_uid)
+    return {"linked_wikis": visible_linked_wikis(project, card, user, service)}
+
+
+@McpTool.add("user", description="Link or unlink a readable project wiki to a card without copying files.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+def update_card_linked_wiki(
+    project_uid: str,
+    card_uid: str,
+    wiki_uid: str,
+    action: Literal["link", "unlink"],
+    user: User,
+    service: DomainService,
+) -> dict:
+    project, card = _require_task_card(project_uid, card_uid)
+    links = change_link(project, card, wiki_uid, action, user, service)
+    return {"wiki_uid": wiki_uid, "linked": any(item["wiki_uid"] == wiki_uid for item in links), "linked_wikis": links}
+
+
+@McpTool.add("user", description="Create a project wiki from a card and link it; preserve original card by default.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+def create_wiki_from_card(
+    project_uid: str,
+    card_uid: str,
+    user: User,
+    service: DomainService,
+    wiki_title: str | None = None,
+    include_description: bool = True,
+    include_comments: bool = False,
+    include_checklists: bool = True,
+    include_attachments_as_references: bool = True,
+    archive_original: bool = False,
+) -> dict:
+    project, card = _require_task_card(project_uid, card_uid)
+    actions = service.project.get_user_role_actions_by_project(user, project)
+    if "*" not in actions and ProjectRoleAction.Update.value not in actions:
+        raise ValueError("Project wiki creation requires project update permission")
+    title = (wiki_title or card.title).strip()
+    if not title or len(title) > 300:
+        raise ValueError("Wiki title must be 1..300 characters")
+    parts = []
+    if include_description and card.description.content:
+        parts.append(card.description.content)
+    if include_comments:
+        comments = service.card_comment.get_api_list_by_card(card)
+        if comments:
+            parts.append("## Comments")
+            parts.extend(f"- {item['content']}" for item in comments)
+    if include_checklists:
+        for checklist in service.checklist.get_api_list_by_card(card):
+            parts.append(f"## {checklist['title']}")
+            for item in checklist.get("checkitems", []):
+                parts.append(f"- [{'x' if item.get('is_checked') else ' '}] {item['title']}")
+    if include_attachments_as_references:
+        attachments = service.card_attachment.get_api_list_by_card(card)
+        if attachments:
+            parts.append("## Card attachments")
+            parts.extend(f"- {item['name']} (attachment_uid: {item['uid']})" for item in attachments)
+    content = "\n\n".join(parts)
+    if len(content) > 32000:
+        raise ValueError("Wiki content exceeds 32000 characters")
+    result = service.project_wiki.create(user, project, title, EditorContentModel(content=content))
+    if result is None:
+        raise ValueError("Wiki creation failed")
+    wiki, _ = result
+    links = change_link(project, card, wiki.get_uid(), "link", user, service)
+    if archive_original:
+        service.card.archive(user, project, card)
+    return {
+        "wiki_uid": wiki.get_uid(),
+        "title": wiki.title,
+        "linked": any(item["wiki_uid"] == wiki.get_uid() for item in links),
+        "linked_wikis": links,
+        "card_archived": archive_original,
+    }
 
 
 def _create_card_in_project(
@@ -464,7 +573,7 @@ def get_card_bundle(
 ) -> CardBundleResponse:
     """Read an agent-friendly card bundle with bounded continuation."""
 
-    return query_card_bundle(
+    result = query_card_bundle(
         _adapter(user_or_bot, service),
         project_uid,
         card_uid,
@@ -472,6 +581,11 @@ def get_card_bundle(
         SectionPage(limit=section_limit, cursor=section_cursor),
         include,
     )
+    if result.card is not None:
+        params = _get_card_in_project(project_uid, card_uid)
+        if params and not params[1].is_linked_resource:
+            result.card.core["linked_wikis"] = visible_linked_wikis(*params, user_or_bot, service)
+    return result
 
 
 @McpTool.add(description="Return a project's stable identity and bounded active workflow columns.")
@@ -869,6 +983,60 @@ def update_card_checkitem(
     checklists = service.checklist.get_api_list_by_card(card_uid, limit=26, checkitems_limit=26)
     return {
         "checklists": bounded_items([public_checklist(item) for item in checklists], CardBundleSection.Checklists, 25)
+    }
+
+
+@McpTool.add("user", description="Start, pause, resume, stop, or complete my checklist work timer.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+def change_card_checkitem_work(
+    project_uid: str,
+    card_uid: str,
+    checkitem_uid: str,
+    action: Literal["start", "pause", "resume", "stop", "complete"],
+    user: User,
+    service: DomainService,
+    replace_active: bool = False,
+) -> dict[str, Any]:
+    """Change only the signed-in user's timer, after card ancestry and owner checks."""
+
+    _, card = _require_task_card(project_uid, card_uid)
+    item = service.checkitem.get_by_id_like(checkitem_uid)
+    checklist = service.checklist.get_by_id_like(item.checklist_id) if item is not None else None
+    if item is None or checklist is None or checklist.card_id != card.id or item.cardified_id:
+        raise ValueError("Checkitem not found in card")
+    if item.user_id and item.user_id != user.id:
+        raise ValueError("Checkitem belongs to another worker")
+
+    target = {
+        "start": CheckitemStatus.Started,
+        "pause": CheckitemStatus.Paused,
+        "resume": CheckitemStatus.Started,
+        "stop": CheckitemStatus.Stopped,
+        "complete": CheckitemStatus.Stopped,
+    }[action]
+    if action == "pause" and item.status != CheckitemStatus.Started:
+        raise ValueError("Only running work can be paused")
+    if action == "resume" and item.status != CheckitemStatus.Paused:
+        raise ValueError("Only paused work can be resumed")
+    if action in {"start", "resume"} and not replace_active:
+        other_active = [
+            work for work in service.checkitem.get_active_work(user) if work["checkitem"]["uid"] != item.get_uid()
+        ]
+        if other_active:
+            raise ValueError("Another work timer is active; set replace_active to pause it")
+    if not service.checkitem.change_status(user, project_uid, card_uid, item, target, from_api=action == "complete"):
+        raise ValueError("Work timer transition failed")
+    if action == "complete" and item.status == CheckitemStatus.Stopped and not item.is_checked:
+        if not service.checkitem.toggle_checked(user, project_uid, card_uid, item, desired_checked=True):
+            raise ValueError("Work item could not be completed")
+    current = service.checkitem.get_by_id_like(checkitem_uid)
+    if current is None:
+        raise ValueError("Checkitem not found after transition")
+    return {
+        "checkitem_uid": current.get_uid(),
+        "status": current.status.value,
+        "is_checked": current.is_checked,
+        "user_uid": user.get_uid(),
     }
 
 

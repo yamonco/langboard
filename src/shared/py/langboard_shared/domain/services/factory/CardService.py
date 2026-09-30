@@ -149,6 +149,7 @@ class CardService(BaseDomainService):
         api_card["labels"] = project_label_service.get_api_list_by_card(card)
 
         api_card["member_uids"] = self.get_api_assigned_user_list(card, only_uids=True)
+        api_card["active_workers"] = self.get_active_workers(project, card).get(card.id, [])
 
         card_relationship_service = self._get_service(CardRelationshipService)
         api_card["relationships"] = card_relationship_service.get_api_list_by_card(card)
@@ -206,6 +207,7 @@ class CardService(BaseDomainService):
         }
         user_checklist_card_ids = {checklist.card_id for checklist in raw_checklists if not checklist.is_system}
         checklist_progress_by_card = self.repo.checkitem.get_board_progress_by_project(project, archive_visible_since)
+        active_workers_by_card = self.get_active_workers(project)
 
         user = user_or_bot if isinstance(user_or_bot, User) else None
         seen_map: dict[int, int] = {}
@@ -241,6 +243,7 @@ class CardService(BaseDomainService):
             checklist_total, checklist_completed = checklist_progress_by_card.get(card.id, (0, 0))
             api_card["checklist_total_count"] = checklist_total
             api_card["checklist_completed_count"] = checklist_completed
+            api_card["active_workers"] = active_workers_by_card.get(card.id, [])
             if getattr(card, "is_linked_resource", False):
                 api_card["linked_resource"] = resource_payloads[card.get_uid()]
             if user is not None:
@@ -255,6 +258,47 @@ class CardService(BaseDomainService):
             cards.append(api_card)
 
         return cards
+
+    def get_active_workers(self, project: Project, card: Card | None = None) -> dict[int, list[dict[str, Any]]]:
+        """Project one avatar per timer owner without changing card assignment."""
+        grouped: dict[int, dict[str, dict[str, Any]]] = {}
+        now = SafeDateTime.now()
+        for checkitem, checklist, started_at in self.repo.checkitem.get_active_workers_by_project(project, card):
+            if checkitem.user_id is None:
+                continue
+            user_uid = checkitem.user_id.to_short_code()
+            worker = grouped.setdefault(checklist.card_id, {}).setdefault(
+                user_uid,
+                {"user_uid": user_uid, "status": "paused", "started_at": None, "elapsed_seconds": 0, "checkitems": []},
+            )
+            elapsed = checkitem.accumulated_seconds
+            if started_at is not None:
+                elapsed += max(0, int((now - started_at).total_seconds()))
+            worker["elapsed_seconds"] += elapsed
+            worker["checkitems"].append(
+                {
+                    "uid": checkitem.get_uid(),
+                    "title": checkitem.title,
+                    "status": checkitem.status.value,
+                    "started_at": started_at.isoformat() if started_at is not None else None,
+                    "elapsed_seconds": elapsed,
+                    "sampled_at": now.isoformat(),
+                }
+            )
+            if checkitem.status == CheckitemStatus.Started:
+                worker["status"] = "started"
+                if (
+                    worker["started_at"] is None
+                    or started_at is not None
+                    and started_at.isoformat() < worker["started_at"]
+                ):
+                    worker["started_at"] = started_at.isoformat() if started_at is not None else None
+        for workers in grouped.values():
+            for worker in workers.values():
+                first = worker["checkitems"][0]
+                worker["checkitem_uid"] = first["uid"]
+                worker["title"] = first["title"]
+        return {card_id: list(workers.values()) for card_id, workers in grouped.items()}
 
     def _card_creator_projection(self, card: Card, creator: User | Bot | None) -> dict[str, Any] | None:
         """Return only display-safe author data for the dense board list."""
@@ -595,6 +639,46 @@ class CardService(BaseDomainService):
                 }
             )
         return cards
+
+    def get_assigned_work_page(
+        self,
+        user: User,
+        project_uids: list[str],
+        limit: int,
+        before: tuple[SafeDateTime, int, int] | None = None,
+    ) -> tuple[list[dict[str, Any]], tuple[str, str, str] | None]:
+        """Read one permission-scoped, assigned-only page without per-card fetches."""
+        records = self.repo.card.get_my_work_page(
+            user,
+            project_uids,
+            {"assigned"},
+            [],
+            SafeDateTime.now(),
+            SafeDateTime.now(),
+            "updated_at",
+            None,
+            None,
+            limit + 1,
+            before=before,
+        )
+        has_more = len(records) > limit
+        page = records[:limit]
+        items = [
+            {
+                "card_uid": card.get_uid(),
+                "title": card.title,
+                "project_uid": project.get_uid(),
+                "project_title": project.title,
+                "column_uid": column.get_uid(),
+                "column_name": column.name,
+                "updated_at": card.updated_at.isoformat(),
+                "deadline_at": card.deadline_at.isoformat() if card.deadline_at else None,
+            }
+            for card, project, column, _ in page
+        ]
+        last = page[-1] if has_more and page else None
+        next_fields = (last[0].updated_at.isoformat(), last[1].get_uid(), last[0].get_uid()) if last else None
+        return items, next_fields
 
     def get_api_page_by_project(
         self,

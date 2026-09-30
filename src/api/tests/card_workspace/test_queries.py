@@ -35,6 +35,9 @@ class FakeQueryPort:
                 "project_column_uid": "column-1",
                 "project_column_name": "Backlog",
                 "member_uids": ["assigned"],
+                "active_workers": [
+                    {"user_uid": "unassigned", "status": "started", "checkitems": [{"uid": "ci1", "title": "Work"}]}
+                ],
                 "project_members": [
                     {"uid": "assigned", "username": "member", "email": "member@example.com"},
                     {"uid": "unassigned", "username": "directory", "email": "directory@example.com"},
@@ -168,6 +171,7 @@ def test_initial_card_bundle_is_bounded_and_privacy_preserving() -> None:
     assert response.card is not None
     assert response.card.people.total_count == 1
     assert response.card.people.items == [{"uid": "assigned", "username": "member"}]
+    assert response.card.people.active_workers[0]["user_uid"] == "unassigned"
     assert len(response.card.classification.labels.items) == 10
     assert response.card.classification.labels.next_cursor
     assert response.card.core["description"]["total_chars"] == 8_050
@@ -259,9 +263,7 @@ def test_section_continuation_rejects_changed_projection() -> None:
 
 def test_content_blocks_share_the_bundle_source_and_page_independently() -> None:
     port = FakeQueryPort()
-    first = get_card_bundle(
-        port, "p1", "c1", CommentPage(), SectionPage(limit=25), [CardBundleInclude.ContentBlocks]
-    )
+    first = get_card_bundle(port, "p1", "c1", CommentPage(), SectionPage(limit=25), [CardBundleInclude.ContentBlocks])
 
     assert first.card is not None
     assert first.card.content_blocks is not None

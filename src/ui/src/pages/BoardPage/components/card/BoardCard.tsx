@@ -53,6 +53,7 @@ import useCardLinkedResourceChangedHandlers from "@/controllers/socket/card/useC
 import useSwitchSocketHandlers from "@/core/hooks/useSwitchSocketHandlers";
 import CardTimestamps from "@/pages/BoardPage/components/card/CardTimestamps";
 import CardColumnHistory from "@/pages/BoardPage/components/card/CardColumnHistory";
+import useBoardChecklistProgressChangedHandlers from "@/controllers/socket/card/checklist/useBoardChecklistProgressChangedHandlers";
 import { useQueryClient } from "@tanstack/react-query";
 import { closeCard, focusCard } from "@/pages/DashboardPage/components/OpenCardsStore";
 import {
@@ -130,11 +131,24 @@ const BoardCard = memo(
                 }),
             [cardUID, projectUID, queryClient]
         );
+        const activeWorkersChangedHandler = useMemo(
+            () =>
+                useBoardChecklistProgressChangedHandlers({
+                    projectUID,
+                    subscriberKey: cardUID,
+                    callback: (event) => {
+                        if (event.card_uid === cardUID) {
+                            queryClient.invalidateQueries({ queryKey: [`get-card-details-${projectUID}-${cardUID}`] });
+                        }
+                    },
+                }),
+            [cardUID, projectUID, queryClient]
+        );
 
         useSwitchSocketHandlers({
             socket,
-            handlers: cardData?.card?.source_type === "project_wiki" ? [linkedResourceChangedHandler] : [],
-            dependencies: [cardData?.card?.source_type, linkedResourceChangedHandler],
+            handlers: cardData?.card?.source_type === "project_wiki" ? [linkedResourceChangedHandler] : [activeWorkersChangedHandler],
+            dependencies: [cardData?.card?.source_type, linkedResourceChangedHandler, activeWorkersChangedHandler],
         });
 
         useEffect(() => {
@@ -190,12 +204,13 @@ const BoardCard = memo(
 
         return (
             <>
-                {!cardData || isFetching ? (
+                {!cardData ? (
                     <SkeletonBoardCard />
                 ) : (
                     <BoardCardProvider key={cardUID} projectUID={projectUID} card={cardData.card} currentUser={currentUser} viewportRef={viewportRef}>
                         <BoardCardResult
                             executionReceipts={cardData.execution_receipts}
+                            linkedWikis={cardData.linked_wikis}
                             isExpanded={isExpanded}
                             setIsExpanded={setIsExpanded}
                             onClose={onClose}
@@ -281,6 +296,7 @@ export function SkeletonBoardCard(): React.JSX.Element {
 
 interface IBoardCardResultProps {
     executionReceipts?: IGetCardDetailsResponse["execution_receipts"];
+    linkedWikis?: IGetCardDetailsResponse["linked_wikis"];
     isExpanded: bool;
     setIsExpanded?: React.Dispatch<React.SetStateAction<bool>>;
     onClose?: () => void;
@@ -303,8 +319,9 @@ function BoardTaskCardResult({
     onClose,
     onEditModeStateChange,
     executionReceipts = [],
+    linkedWikis = [],
 }: IBoardCardResultProps): React.JSX.Element {
-    const { card, isCardEditing, leaveCardEditMode } = useBoardCard();
+    const { card, projectUID, isCardEditing, leaveCardEditMode } = useBoardCard();
     const { isActionPanelOpen, setIsCommentPanelOpen } = useBoardCardPanel();
     const { boardChat } = useBoardController();
     const { cancelSections } = useBoardCardSectionSaveActions();
@@ -461,6 +478,22 @@ function BoardTaskCardResult({
                                                     </BoardCardSection>
                                                 </Flex>
                                                 <BoardTaskMetadataSection cardUID={card.uid} />
+                                                {linkedWikis.length > 0 && (
+                                                    <BoardCardSection title="wiki.Linked wiki">
+                                                        <ul className="space-y-1 text-sm">
+                                                            {linkedWikis.map((wiki) => (
+                                                                <li key={wiki.wiki_uid}>
+                                                                    <a
+                                                                        className="text-primary hover:underline"
+                                                                        href={ROUTES.BOARD.WIKI_PAGE(projectUID, wiki.wiki_uid)}
+                                                                    >
+                                                                        {wiki.title}
+                                                                    </a>
+                                                                </li>
+                                                            ))}
+                                                        </ul>
+                                                    </BoardCardSection>
+                                                )}
                                                 <BoardCardMobileActions />
                                                 <BoardCardSection
                                                     title="card.Description"

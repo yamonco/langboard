@@ -69,6 +69,22 @@ export interface IContentBlock {
 export interface IStore extends Interface {
     count_comment: number;
     member_uids: string[];
+    active_workers?: Array<{
+        user_uid: string;
+        status: "started" | "paused";
+        started_at: string | null;
+        elapsed_seconds: number;
+        checkitem_uid: string;
+        title: string;
+        checkitems: Array<{
+            uid: string;
+            title: string;
+            status: "started" | "paused";
+            started_at: string | null;
+            elapsed_seconds: number;
+            sampled_at: string;
+        }>;
+    }>;
     project_column_name: string;
     content_blocks?: IContentBlock[];
     description_content_source?: "blocks" | "description";

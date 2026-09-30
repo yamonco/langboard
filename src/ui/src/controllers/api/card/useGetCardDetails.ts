@@ -21,6 +21,7 @@ export interface IGetCardDetailsForm {
 export interface IGetCardDetailsResponse {
     card: ProjectCard.TModel;
     attachments: ProjectCardAttachment.TModel[];
+    linked_wikis: { wiki_uid: string; title: string }[];
     checklists: ProjectChecklist.TModel[];
     global_relationships: GlobalRelationshipType.TModel[];
     project_columns: ProjectColumn.TModel[];
@@ -63,6 +64,7 @@ const useGetCardDetails = (params: IGetCardDetailsForm, options?: TQueryOptions<
         return {
             card: ProjectCard.Model.fromOne(res.data.card),
             attachments: ProjectCardAttachment.Model.fromArray(res.data.attachments, true),
+            linked_wikis: res.data.linked_wikis ?? [],
             checklists,
             global_relationships: GlobalRelationshipType.Model.fromArray(res.data.global_relationships, true),
             project_columns: ProjectColumn.Model.fromArray(res.data.project_columns, true),
