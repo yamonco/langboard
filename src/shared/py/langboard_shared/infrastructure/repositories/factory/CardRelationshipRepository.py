@@ -83,8 +83,8 @@ class CardRelationshipRepository(BaseRepository[CardRelationship]):
             relationships = result.all()
         return relationships
 
-    def get_graph_snapshot(self, project: TProjectParam) -> list[tuple[int, int, int]]:
-        """Return only relationship and endpoint IDs needed for graph validation."""
+    def get_graph_snapshot(self, project: TProjectParam) -> list[tuple[int, int, int, int]]:
+        """Return relationship, endpoint and type IDs from the current transaction."""
 
         project_id = InfraHelper.convert_id(project)
         query = (
@@ -92,6 +92,7 @@ class CardRelationshipRepository(BaseRepository[CardRelationship]):
                 CardRelationship.column("id"),
                 CardRelationship.column("card_id_parent"),
                 CardRelationship.column("card_id_child"),
+                CardRelationship.column("relationship_type_id"),
             )
             .join(Card, CardRelationship.column("card_id_parent") == Card.column("id"))
             .where(Card.column("project_id") == project_id)
