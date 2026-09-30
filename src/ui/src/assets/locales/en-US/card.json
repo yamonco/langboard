@@ -1,4 +1,11 @@
 {
+  "Acknowledge": "Acknowledge",
+  "Acknowledged": "Acknowledged",
+  "Acknowledge comment": "Acknowledge comment",
+  "Withdraw acknowledgement": "Withdraw acknowledgement",
+  "Acknowledged by count_one": "Acknowledged by {{count}}",
+  "Acknowledged by count_other": "Acknowledged by {{count}}",
+  "Explicit acknowledgements": "Explicit acknowledgements",
   "Show title": "Show title",
   "Hide title": "Hide title",
   "Type": "Type",

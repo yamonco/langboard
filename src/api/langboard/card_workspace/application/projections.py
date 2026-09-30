@@ -98,6 +98,9 @@ def public_comment(comment: dict[str, Any]) -> dict[str, Any]:
         if isinstance(comment.get(actor_type), dict):
             result[actor_type] = public_actor(comment[actor_type])
     reactions = comment.get("reactions")
+    acknowledged = list(dict.fromkeys(comment.get("acknowledged_user_uids") or []))
+    result["acknowledged_user_uids"] = acknowledged[:100]
+    result["acknowledgement_count"] = len(acknowledged)
     if isinstance(reactions, dict):
         result["reactions"] = {
             reaction_type: [str(actor_uid) for actor_uid in actor_uids[:100]]

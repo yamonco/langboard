@@ -19,7 +19,7 @@ from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.domain.services import DomainService
 from langboard_shared.filter import RoleFilter
 from langboard_shared.security import Auth, RoleFinder
-from .forms import CreateCardCommentForm, ToggleCardCommentReactionForm
+from .forms import CreateCardCommentForm, ToggleCardCommentReactionForm, SetCardCommentAcknowledgementForm
 
 
 @AppRouter.schema(form=CreateCardCommentForm, permission=ApiPermission.Create)
@@ -180,3 +180,26 @@ def toggle_reaction_card_comment(
         raise ApiException.NotFound_404(ApiErrorCode.NF2012)
 
     return JsonResponse(content={"is_reacted": result})
+
+
+@AppRouter.schema(form=SetCardCommentAcknowledgementForm, permission=ApiPermission.Edit)
+@AppRouter.api.post(
+    "/board/{project_uid}/card/{card_uid}/comment/{comment_uid}/acknowledgement",
+    tags=["Board.Card.Comment"],
+    description="Set the signed-in user's explicit comment acknowledgement.",
+    responses=OpenApiSchema().auth().forbidden().err(404, ApiErrorCode.NF2012).get(),
+)
+@RoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+@AuthFilter.add()
+def set_comment_acknowledged(
+    project_uid: str,
+    card_uid: str,
+    comment_uid: str,
+    form: SetCardCommentAcknowledgementForm,
+    user: User = Auth.scope("user"),
+    service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    result = service.card_comment.set_acknowledged(user, project_uid, card_uid, comment_uid, form.acknowledged)
+    if result is None:
+        raise ApiException.NotFound_404(ApiErrorCode.NF2012)
+    return JsonResponse(content=result)

@@ -4,6 +4,8 @@ from ...core.types import SnowflakeID
 from .bases import BaseReactionModel
 from .CardComment import CardComment
 
+COMMENT_ACKNOWLEDGEMENT = "acknowledged"
+
 
 class CardCommentReaction(BaseReactionModel, table=True):
     comment_id: SnowflakeID = SnowflakeIDField(foreign_key=CardComment, nullable=False, index=True)

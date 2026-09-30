@@ -8,7 +8,7 @@ export interface ICardCommentReactedRawResponse {
     comment_uid: string;
     user_uid?: string;
     bot_uid?: string;
-    reaction: TReactionEmoji;
+    reaction: TReactionEmoji | "acknowledged";
     is_reacted: bool;
 }
 
@@ -33,6 +33,15 @@ const useCardCommentReactedHandlers = ({ callback, projectUID, cardUID }: IUseCa
                 }
 
                 const reaction = data.reaction;
+                if (reaction === "acknowledged") {
+                    const uid = data.user_uid;
+                    if (uid) {
+                        comment.acknowledged_user_uids = data.is_reacted
+                            ? [...comment.acknowledged_user_uids, uid]
+                            : comment.acknowledged_user_uids.filter((item) => item !== uid);
+                    }
+                    return {};
+                }
                 const reactions = { ...comment.reactions };
                 let targetReactions = [...(reactions[reaction] ?? [])];
                 const targetUID = data.user_uid || data.bot_uid;
