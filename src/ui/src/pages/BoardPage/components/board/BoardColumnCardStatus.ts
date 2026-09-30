@@ -25,6 +25,24 @@ export const calculateChecklistProgressFromCounts = (completedCount = 0, totalCo
     return { completed, total, ratio: total ? completed / total : 0 };
 };
 
+export const getChecklistBorderDashes = (completed: number, total: number, perimeter: number) => {
+    const count = Math.max(0, Math.floor(total));
+    const done = Math.min(count, Math.max(0, Math.floor(completed)));
+    const gap = count > 1 && perimeter > 0 ? Math.min(0.25, (6 * count) / perimeter) : 0;
+    const segment = 1 - gap;
+    return {
+        track: `${segment} ${gap}`,
+        value: Array.from({ length: done }, (_, index) => (index === done - 1 ? `${segment} ${count - done + gap}` : `${segment} ${gap}`)).join(" "),
+    };
+};
+
+/**
+ * Terminated-state predicate: a card counts as finished work only when it has
+ * at least one checklist item and every item is completed.
+ */
+export const isChecklistCompleted = (progress: Pick<IBoardCardChecklistProgress, "completed" | "total">): boolean =>
+    progress.total > 0 && progress.completed === progress.total;
+
 export const calculateDeadlinePressure = ({
     deadlineAt,
     isCompleted = false,

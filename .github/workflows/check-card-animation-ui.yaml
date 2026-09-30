@@ -10,6 +10,7 @@ on:
       - src/ui/src/pages/BoardPage/index.tsx
       - src/ui/src/pages/BoardPage/components/board/BoardColumnCardCollapsible.tsx
       - src/ui/src/pages/BoardPage/components/board/CardAnimation.*
+      - src/ui/src/pages/BoardPage/components/board/CardViewerDeepLink.*
   workflow_dispatch:
 
 jobs:
@@ -25,7 +26,7 @@ jobs:
       - run: corepack enable
       - run: yarn install --frozen-lockfile
         working-directory: src/ui
-      - run: yarn eslint src/components/base/Dialog/index.tsx src/pages/BoardPage/BoardCardPage.tsx src/pages/BoardPage/index.tsx src/pages/BoardPage/components/board/BoardColumnCardCollapsible.tsx src/pages/BoardPage/components/board/CardAnimation.ts src/pages/BoardPage/components/board/CardAnimation.test.ts --max-warnings 0
+      - run: yarn eslint src/components/base/Dialog/index.tsx src/pages/BoardPage/BoardCardPage.tsx src/pages/BoardPage/index.tsx src/pages/BoardPage/components/board/BoardColumnCardCollapsible.tsx src/pages/BoardPage/components/board/CardAnimation.ts src/pages/BoardPage/components/board/CardAnimation.test.ts src/pages/BoardPage/components/board/CardViewerDeepLink.fixture.tsx src/pages/BoardPage/components/board/CardViewerDeepLinkLateChunk.fixture.tsx src/pages/BoardPage/components/board/CardViewerDeepLink.spec.ts --max-warnings 0
         working-directory: src/ui
       - run: node --experimental-strip-types --test src/pages/BoardPage/components/board/CardAnimation.test.ts
         working-directory: src/ui

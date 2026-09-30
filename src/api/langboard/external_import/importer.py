@@ -123,7 +123,7 @@ class ExternalWorkImporter:
                     lineage = existing[key]
                     if lineage.effects_dispatched_at is None:
                         self._dispatch_and_checkpoint(
-                            kind, record, targets[key], project, actor, targets, principals, lineage
+                            [(kind, record, targets[key], lineage)], project, actor, targets, principals
                         )
             else:
                 for chunk in batched(records, 25):
@@ -176,7 +176,7 @@ class ExternalWorkImporter:
             raise
         for kind, record, target, lineage in created:
             existing[(kind, record.source_id)] = lineage
-            self._dispatch_and_checkpoint(kind, record, target, project, actor, targets, principals, lineage)
+        self._dispatch_and_checkpoint(created, project, actor, targets, principals)
 
     @staticmethod
     def _upload_attachment(
@@ -514,33 +514,36 @@ class ExternalWorkImporter:
 
     def _dispatch_and_checkpoint(
         self,
-        kind: str,
-        record: BaseModel,
-        target: Any,
+        records: list[tuple[str, BaseModel, Any, ExternalImportRecord]],
         project: Project,
         actor: User,
         targets: dict[tuple[str, str], Any],
         principals: dict[str, tuple[User, ProjectAssignedUser]],
-        lineage: ExternalImportRecord,
     ) -> None:
-        try:
-            self._effect_dispatcher(kind, record, target, project, actor, targets, principals)
-        except Exception as exc:
-            self._checkpoint_effects(lineage, error=str(exc))
-            raise
-        self._checkpoint_effects(lineage)
+        dispatched = []
+        for kind, record, target, lineage in records:
+            try:
+                self._effect_dispatcher(kind, record, target, project, actor, targets, principals)
+            except Exception as exc:
+                self._checkpoint_effects(dispatched)
+                self._checkpoint_effects([lineage], error=str(exc))
+                raise
+            dispatched.append(lineage)
+        self._checkpoint_effects(dispatched)
 
     @staticmethod
-    def _checkpoint_effects(lineage: ExternalImportRecord, error: str | None = None) -> None:
+    def _checkpoint_effects(lineages: list[ExternalImportRecord], error: str | None = None) -> None:
+        if not lineages:
+            return
         with DbSession.use(readonly=False) as db:
             updated = db.exec(
                 SqlBuilder.update.table(ExternalImportRecord)
-                .where(ExternalImportRecord.id == lineage.id)
+                .where(ExternalImportRecord.id.in_([lineage.id for lineage in lineages]))
                 .values(
                     effects_attempts=ExternalImportRecord.effects_attempts + 1,
                     effects_error=error[:4000] if error else None,
                     effects_dispatched_at=SafeDateTime.now() if error is None else None,
                 )
             )
-            if updated != 1:
+            if updated != len(lineages):
                 raise ExternalImportError("import lineage disappeared before side-effect checkpoint")

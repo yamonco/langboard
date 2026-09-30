@@ -14,8 +14,12 @@ import { Navigate, useParams } from "react-router";
 import { useBoardController } from "@/core/providers/BoardController";
 import {
     CARD_ANIMATION_DURATION_MS,
+    clearCardOpenAnimationSession,
     closedTransform,
+    isRectCenterInside,
+    markCardOpenAnimationPlayed,
     prefersReducedMotion,
+    shouldPlayCardOpenAnimation,
     takeCardOrigin,
     type CardRect,
 } from "@/pages/BoardPage/components/board/CardAnimation";
@@ -70,7 +74,17 @@ const BoardCardPageComponent = ({
         if (sourceRect && targetRect.width > 0 && targetRect.height > 0) {
             content.style.setProperty("--card-origin-transform", closedTransform(sourceRect, targetRect));
         }
-        content.dataset.cardViewerReady = "true";
+        // Mount-once gate: deep-link entry animates only the first mount of a
+        // viewer session, so remounts (Suspense fallback swaps, provider
+        // re-keys) cannot replay the entry animation. Never downgrade an
+        // element that already started its animation.
+        if (content.dataset.cardViewerReady !== "true") {
+            const animateOpen = shouldPlayCardOpenAnimation(projectUID, cardUID, !!sourceRect);
+            if (animateOpen) {
+                markCardOpenAnimationPlayed(projectUID, cardUID);
+            }
+            content.dataset.cardViewerReady = animateOpen ? "true" : "false";
+        }
     }, [projectUID, cardUID, currentUser]);
 
     useEffect(
@@ -83,10 +97,12 @@ const BoardCardPageComponent = ({
     );
 
     const finishClose = () => {
-        if (!projectUID || finishedCloseRef.current) {
+        if (!projectUID || !cardUID || finishedCloseRef.current) {
             return;
         }
         finishedCloseRef.current = true;
+        // The next open of this card is a fresh viewer session and animates again.
+        clearCardOpenAnimationSession(projectUID, cardUID);
         if (closeTimerRef.current !== null) {
             window.clearTimeout(closeTimerRef.current);
             closeTimerRef.current = null;
@@ -112,7 +128,16 @@ const BoardCardPageComponent = ({
         const content = contentRef.current;
         const sourceRect = source?.getBoundingClientRect();
         const targetRect = content?.getBoundingClientRect();
-        if (sourceRect && targetRect && sourceRect.width > 0 && targetRect.width > 0 && targetRect.height > 0) {
+        const windowRect = { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
+        const boardRect = document.getElementById("board-scrollport")?.getBoundingClientRect();
+        if (
+            sourceRect &&
+            targetRect &&
+            isRectCenterInside(sourceRect, windowRect) &&
+            (!boardRect || isRectCenterInside(sourceRect, boardRect)) &&
+            targetRect.width > 0 &&
+            targetRect.height > 0
+        ) {
             content?.style.setProperty("--card-origin-transform", closedTransform(sourceRect, targetRect));
         } else {
             content?.style.removeProperty("--card-origin-transform");
@@ -182,6 +207,14 @@ const BoardCardPageComponent = ({
                             data-card-viewer=""
                             data-card-viewer-closing={isClosing ? "true" : undefined}
                             disableMotionAnimation
+                            onAnimationStart={(event) => {
+                                if (event.target === event.currentTarget && event.animationName === "card-viewer-open") {
+                                    // Freeze the entry animation to this element: an app-root
+                                    // Suspense fallback swap hides the subtree and CSS restarts
+                                    // animations when visibility is restored.
+                                    event.currentTarget.dataset.cardViewerOpened = "true";
+                                }
+                            }}
                             onAnimationEnd={(event) => {
                                 if (isClosing && event.target === event.currentTarget && event.animationName === "card-viewer-close") {
                                     finishClose();

@@ -8,7 +8,7 @@ from pathlib import Path
 from uuid import uuid4
 import pytest
 from pydantic import SecretStr
-from sqlalchemy import create_engine, select, text
+from sqlalchemy import create_engine, event, select, text
 
 
 os.environ.setdefault("PROJECT_NAME", "langboard")
@@ -192,9 +192,21 @@ def test_imported_card_shares_native_creation_invariants(
             lambda *_args: pytest.fail("historical attachment dispatched a live bot"),
         )
         importer = ExternalWorkImporter(attachments_root)
-        first = importer.import_bundle(
-            bundle, project_uid=project_id.to_short_code(), actor_uid=actor_id.to_short_code()
-        )
+        commits = 0
+
+        def count_commit(_connection) -> None:
+            nonlocal commits
+            commits += 1
+
+        event.listen(engine, "commit", count_commit)
+        try:
+            first = importer.import_bundle(
+                bundle, project_uid=project_id.to_short_code(), actor_uid=actor_id.to_short_code()
+            )
+        finally:
+            event.remove(engine, "commit", count_commit)
+        if extra_card_count:
+            assert commits < 40, "111-record import must checkpoint effects by chunk, not by record"
         second = importer.import_bundle(
             bundle, project_uid=project_id.to_short_code(), actor_uid=actor_id.to_short_code()
         )

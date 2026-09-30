@@ -16,14 +16,14 @@ from langboard_shared.domain.models.ProjectRole import ProjectRoleAction  # noqa
 from langboard_shared.domain.services.factory.CardService import CardService  # noqa: E402
 
 
-def test_card_partial_edit_schema_requires_only_card_identity() -> None:
-    """Partial detail fields remain optional while an explicit identity is always required."""
+def test_card_partial_edit_schema_excludes_unguarded_description_write() -> None:
+    """Title and deadline remain optional; body edits require the revision-bound tools."""
 
     schema = McpTool.get_tool("change_card_details")["input_schema"]
 
     assert schema["required"] == ["project_uid", "card_uid"]
     assert schema["properties"]["title"]["default"] is None
-    assert schema["properties"]["description"]["default"] is None
+    assert "description" not in schema["properties"]
     assert schema["properties"]["deadline_at"]["default"] is None
 
 

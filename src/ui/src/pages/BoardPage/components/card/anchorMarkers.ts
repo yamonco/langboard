@@ -1,4 +1,9 @@
-import type { IAnchorMarkerPosition } from "./BoardCardDescription";
+export interface IAnchorMarkerPosition {
+    commentUID: string;
+    quote: string;
+    commentPreview: string;
+    top: number;
+}
 
 export function areAnchorMarkersEqual(previous: IAnchorMarkerPosition[], next: IAnchorMarkerPosition[]): boolean {
     if (previous === next || previous.length !== next.length) {
