@@ -5,6 +5,7 @@ import type { TOpenCardsByUser } from "@/pages/DashboardPage/components/OpenCard
 
 export const NOTIFICATIONS_TIME_RANGE_OPTIONS = ["3d", "7d", "1m", "all"] as const;
 export interface IUserSettings {
+    column_card_sorts?: Record<string, string>;
     notifications_time_range?: (typeof NOTIFICATIONS_TIME_RANGE_OPTIONS)[number];
     graph_view_modes?: Record<string, "columns" | "network">;
     open_cards?: TOpenCardsByUser;

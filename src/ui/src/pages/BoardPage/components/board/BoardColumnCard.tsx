@@ -1,5 +1,6 @@
 "use client";
 
+import useColumnCardSort from "./useColumnCardSort";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import invariant from "tiny-invariant";
@@ -48,6 +49,7 @@ const outerStyles: { [Key in TRowState["type"]]?: string } = {
 
 function BoardColumnCard({ card, hierarchyDepth = 0, grouped = false }: { card: ProjectCard.TModel; hierarchyDepth?: number; grouped?: boolean }) {
     const { canDragCards } = useBoard();
+    const { mode } = useColumnCardSort(card.project_uid, card.project_column_uid);
     const outerRef = useRef<HTMLDivElement | null>(null);
     const innerRef = useRef<HTMLDivElement | null>(null);
     const [state, setState] = useState<TRowState>(ROW_IDLE);
@@ -56,7 +58,7 @@ function BoardColumnCard({ card, hierarchyDepth = 0, grouped = false }: { card: 
     useBoardMemberDrop(innerRef, card);
 
     useEffect(() => {
-        if (!canDragCards) {
+        if (!canDragCards || mode !== "manual") {
             return;
         }
 
@@ -81,7 +83,7 @@ function BoardColumnCard({ card, hierarchyDepth = 0, grouped = false }: { card: 
                 });
             },
         });
-    }, [canDragCards, card, order, columnUID]);
+    }, [canDragCards, mode, card, order, columnUID]);
 
     return (
         <>

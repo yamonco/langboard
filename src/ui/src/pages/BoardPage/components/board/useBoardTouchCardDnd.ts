@@ -265,6 +265,7 @@ function useBoardTouchCardDnd({ enabled, scrollableRef, columns, rowsMap, change
                 return;
             }
 
+            if (dropTarget.closest("[data-board-column-sort]")?.getAttribute("data-board-column-sort") !== "manual") return;
             const targetCardElement = dropTarget.closest(`[${BOARD_CARD_TOUCH_DND_ATTR}]`);
 
             if (targetCardElement instanceof HTMLElement) {
@@ -366,6 +367,7 @@ function useBoardTouchCardDnd({ enabled, scrollableRef, columns, rowsMap, change
                 return;
             }
 
+            if (target.closest("[data-board-column-sort]")?.getAttribute("data-board-column-sort") !== "manual") return;
             const sourceElement = target.closest(`[${BOARD_CARD_TOUCH_DND_ATTR}]`);
             if (!(sourceElement instanceof HTMLElement)) {
                 return;

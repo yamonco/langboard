@@ -1,3 +1,5 @@
+import useColumnCardSort from "./useColumnCardSort";
+import { COLUMN_CARD_SORT_MODES } from "./columnCardSort";
 import Box from "@/components/base/Box";
 import DropdownMenu from "@/components/base/DropdownMenu";
 import Toast from "@/components/base/Toast";
@@ -23,6 +25,8 @@ export interface IBoardColumnMoreMenuProps {
 
 const BoardColumnMoreMenu = memo(({ column, onRenameStart }: IBoardColumnMoreMenuProps) => {
     const { project, currentUser, hasRoleAction } = useBoard();
+    const [t] = useTranslation();
+    const { mode, setMode } = useColumnCardSort(project.uid, column.uid);
     const canEdit = hasRoleAction(ProjectRole.EAction.Update) && !column.is_archive;
     const isAdmin = currentUser.useField("is_admin");
     const canPin = (isAdmin || hasRoleAction(ProjectRole.EAction.Update)) && !column.is_archive;
@@ -45,6 +49,22 @@ const BoardColumnMoreMenu = memo(({ column, onRenameStart }: IBoardColumnMoreMen
             triggerProps={{ className: "size-7", ...{ [DISABLE_DRAGGING_ATTR]: "" } }}
             contentProps={{ className: "w-min p-0", onCloseAutoFocus: handleCloseAutoFocus, ...{ [DISABLE_DRAGGING_ATTR]: "" } }}
         >
+            <DropdownMenu.Sub>
+                <DropdownMenu.SubTrigger>{t("board.Sort cards")}</DropdownMenu.SubTrigger>
+                <DropdownMenu.SubContent>
+                    <DropdownMenu.RadioGroup value={mode} onValueChange={(value) => setMode(value as typeof mode)}>
+                        {COLUMN_CARD_SORT_MODES.map((value) => (
+                            <DropdownMenu.RadioItem key={value} value={value}>
+                                {t(`board.cardSort.${value}`)}
+                            </DropdownMenu.RadioItem>
+                        ))}
+                    </DropdownMenu.RadioGroup>
+                    <DropdownMenu.Separator />
+                    <div className="max-w-56 px-2 py-1 text-xs text-muted-foreground">
+                        {t("board.Manual order is preserved; switch to Manual to drag cards")}
+                    </div>
+                </DropdownMenu.SubContent>
+            </DropdownMenu.Sub>
             <NotificationSetting.SpecificScopedPopover
                 type="column"
                 currentUser={currentUser}
