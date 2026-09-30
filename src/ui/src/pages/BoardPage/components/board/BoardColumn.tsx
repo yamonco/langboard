@@ -1,11 +1,13 @@
 "use client";
 
+import useColumnCardSort from "./useColumnCardSort";
+import { sortColumnCards } from "./columnCardSort";
 import { memo, type RefObject, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import invariant from "tiny-invariant";
 import BoardColumnCard, { BoardColumnCardShadow, SkeletonBoardColumnCard } from "@/pages/BoardPage/components/board/BoardColumnCard";
 import { useBoard } from "@/core/providers/BoardProvider";
-import { ProjectColumn } from "@/core/models";
+import { ProjectCard, ProjectColumn } from "@/core/models";
 import { BoardAddCardProvider } from "@/core/providers/BoardAddCardProvider";
 import Box from "@/components/base/Box";
 import Card from "@/components/base/Card";
@@ -77,6 +79,7 @@ export interface IBoardColumnProps {
 
 function BoardColumn({ column, updateBoard, isDefaultCardColumn }: IBoardColumnProps & { isDefaultCardColumn: boolean }) {
     const { canDragAndDrop } = useBoard();
+    const { mode } = useColumnCardSort(column.project_uid, column.uid);
     const scrollableRef = useRef<HTMLDivElement | null>(null);
     const outerFullHeightRef = useRef<HTMLDivElement | null>(null);
     const headerRef = useRef<HTMLDivElement | null>(null);
@@ -98,6 +101,7 @@ function BoardColumn({ column, updateBoard, isDefaultCardColumn }: IBoardColumnP
 
         return columnRowDndHelpers.column({
             canDrag: canDragAndDrop,
+            canDropRows: mode === "manual",
             column,
             symbolSet: BOARD_DND_SYMBOL_SET,
             draggable: header,
@@ -118,12 +122,13 @@ function BoardColumn({ column, updateBoard, isDefaultCardColumn }: IBoardColumnP
                 container.appendChild(preview);
             },
         });
-    }, [canDragAndDrop, column, order]);
+    }, [canDragAndDrop, mode, column, order]);
 
     return (
         <BoardAddCardProvider column={column} viewportRef={scrollableRef} toLastPage={() => {}} isDefaultCardColumn={isDefaultCardColumn}>
             <Card.Root
                 ref={outerFullHeightRef}
+                data-board-column-sort={mode}
                 {...{ [BOARD_COLUMN_TOUCH_DND_ATTR]: column.uid }}
                 className={cn(
                     BOARD_COLUMN_MAX_HEIGHT_CLASS_NAMES,
@@ -171,8 +176,11 @@ interface IBoardColumnCardListProps extends IBoardColumnProps {
 
 const BoardColumnCardList = memo(({ column, updateBoard, scrollableRef, onCardCountChange }: IBoardColumnCardListProps) => {
     const { project, socket, filters, filterCard, shouldShowArchivedCard, filterCardMember, filterCardLabels, filterCardRelationships } = useBoard();
+    const { mode } = useColumnCardSort(project.uid, column.uid);
+    const [sortRevision, refreshSort] = useReducer((x) => x + 1, 0);
     const updater = useReducer((x) => x + 1, 0);
-    const [_, forceUpdate] = updater;
+    const [updated, forceUpdate] = updater;
+    const sortCards = ProjectCard.Model.useModels((card) => card.project_column_uid === column.uid, [column.uid, updated]);
     const cardCreatedHandlers = useMemo(
         () =>
             useBoardCardCreatedHandlers({
@@ -214,7 +222,7 @@ const BoardColumnCardList = memo(({ column, updateBoard, scrollableRef, onCardCo
                 filterCardRelationships(model)
             );
         },
-        rowDependencies: [filters, filterCard, filterCardMember, filterCardLabels, filterCardRelationships],
+        rowDependencies: [filters, sortRevision, filterCard, filterCardMember, filterCardLabels, filterCardRelationships],
         columnUID: column.uid,
         socket,
         updater,
@@ -225,7 +233,7 @@ const BoardColumnCardList = memo(({ column, updateBoard, scrollableRef, onCardCo
         onCardCountChange(columnCards.length);
     }, [columnCards.length, onCardCountChange]);
 
-    const hierarchyGroups = useMemo(() => buildBoardColumnCardHierarchy(columnCards), [columnCards]);
+    const hierarchyGroups = useMemo(() => buildBoardColumnCardHierarchy(sortColumnCards(columnCards, mode)), [columnCards, mode, sortRevision]);
     const cardGroupIndices = useMemo(() => {
         const indices = new Map<string, number[]>();
         hierarchyGroups.forEach((group, index) => {
@@ -314,6 +322,7 @@ const BoardColumnCardList = memo(({ column, updateBoard, scrollableRef, onCardCo
 
     return (
         <Box className="relative w-full flex-shrink-0" style={{ height: `${totalSize}px` }}>
+            {mode !== "manual" && sortCards.map((card) => <CardSortSubscription key={card.uid} card={card} refresh={refreshSort} />)}
             {virtualItems.map((virtualRow) => {
                 const group = hierarchyGroups[virtualRow.index];
                 if (!group) {
@@ -346,5 +355,13 @@ const BoardColumnCardList = memo(({ column, updateBoard, scrollableRef, onCardCo
         </Box>
     );
 });
+
+function CardSortSubscription({ card, refresh }: { card: ProjectCard.TModel; refresh: () => void }) {
+    card.useField("updated_at", refresh);
+    card.useField("created_at", refresh);
+    card.useField("deadline_at", refresh);
+    card.useField("member_uids", refresh);
+    return null;
+}
 
 export default BoardColumn;

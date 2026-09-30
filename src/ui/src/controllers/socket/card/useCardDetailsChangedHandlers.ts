@@ -6,9 +6,10 @@ import { IEditorContent } from "@/core/models/Base";
 import { ESocketTopic } from "@langboard/core/enums";
 
 export interface ICardDetailsChangedRawResponse {
+    updated_at?: string;
     title?: string;
     description?: IEditorContent;
-    deadline_at?: string;
+    deadline_at?: string | null;
     work_state?: IWorkState;
 }
 
@@ -29,9 +30,11 @@ const useCardDetailsChangedHandlers = ({ callback, projectUID, cardUID }: IUseCa
             responseConverter: (data) => {
                 const card = ProjectCard.Model.getModel(cardUID);
                 if (card) {
-                    Object.entries(data).forEach(([key, value]) => {
-                        card[key] = value as (string & IEditorContent) | (Date & string & IEditorContent);
-                    });
+                    if (data.title !== undefined) card.title = data.title;
+                    if (data.description !== undefined) card.description = data.description;
+                    if (data.deadline_at !== undefined) card.deadline_at = data.deadline_at ?? undefined;
+                    if (data.work_state !== undefined) card.work_state = data.work_state;
+                    if (data.updated_at !== undefined) card.updated_at = data.updated_at;
                 }
                 return {};
             },

@@ -64,5 +64,16 @@
   "Select parent cards": "Select parent cards",
   "Select child cards": "Select child cards",
   "{count} selected": "{{count}} selected",
-  "Unread changes": "Unread changes"
+  "Unread changes": "Unread changes",
+  "Sort cards": "Sort cards",
+  "Manual order is preserved; switch to Manual to drag cards": "Personal view only. Switch to Manual to drag cards.",
+  "cardSort": {
+    "manual": "Manual",
+    "created_newest": "Newest created",
+    "created_oldest": "Oldest created",
+    "updated_newest": "Recently updated",
+    "updated_oldest": "Least recently updated",
+    "deadline": "Deadline first",
+    "unassigned": "Unassigned first"
+  }
 }
