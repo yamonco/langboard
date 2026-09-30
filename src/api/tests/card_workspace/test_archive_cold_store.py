@@ -55,6 +55,7 @@ class FakeCard:
         self.id = card_id
         self._uid = uid
         self.archived_at = archived_at
+        self.deadline_at = None
         self.description = SimpleNamespace(content="")
         self.is_linked_resource = False
 
