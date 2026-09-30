@@ -6,6 +6,7 @@ import { IEditorContent } from "@/core/models/Base";
 import { ESocketTopic } from "@langboard/core/enums";
 
 export interface ICardDetailsChangedRawResponse {
+    read_state_changed?: boolean;
     updated_at?: string;
     title?: string;
     description?: IEditorContent;
@@ -30,6 +31,7 @@ const useCardDetailsChangedHandlers = ({ callback, projectUID, cardUID }: IUseCa
             responseConverter: (data) => {
                 const card = ProjectCard.Model.getModel(cardUID);
                 if (card) {
+                    if (data.read_state_changed) card.read_state_version = (card.read_state_version ?? 0) + 1;
                     if (data.title !== undefined) card.title = data.title;
                     if (data.description !== undefined) card.description = data.description;
                     if (data.deadline_at !== undefined) card.deadline_at = data.deadline_at ?? undefined;

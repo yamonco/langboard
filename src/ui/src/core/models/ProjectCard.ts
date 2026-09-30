@@ -24,6 +24,7 @@ import { Utils } from "@langboard/core/utils";
 import { ProjectRole } from "@/core/models/roles";
 
 export interface Interface extends IBaseModel {
+    read_state_version?: number;
     work_state?: IWorkState;
     project_uid: string;
     project_column_uid: string;
@@ -136,6 +137,12 @@ export interface IStore extends Interface {
 }
 
 class ProjectCard extends BaseModel<IStore> {
+    public get read_state_version(): number {
+        return this.getValue("read_state_version") ?? 0;
+    }
+    public set read_state_version(value: number) {
+        this.update({ read_state_version: value });
+    }
     public get work_state() {
         return this.getValue("work_state");
     }

@@ -106,14 +106,30 @@ class CardService(BaseDomainService):
         self.repo.card.update(card)
         CardPublisher.metadata_changed(card)
 
-    def mark_card_seen(self, user: User, card: TCardParam | None) -> dict[str, Any] | None:
-        """Advance one user's read cursor after a card was actually shown."""
-
-        card = InfraHelper.get_by_id_like(Card, card)
-        if not card:
+    def get_card_read_state(self, project: TProjectParam, card: TCardParam) -> dict[str, Any] | None:
+        records = InfraHelper.get_records_with_foreign_by_params((Project, project), (Card, card))
+        if not records:
             return None
-        self.repo.user_card_read_state.upsert_seen(user, card, card.last_change_seq)
-        return {"card_uid": card.get_uid(), "seen_change_seq": card.last_change_seq}
+        project, card = records
+        if card.project_id != project.id:
+            return None
+        return {"card_uid": card.get_uid(), "readers": self.repo.user_card_read_state.get_readers(card)}
+
+    def mark_card_seen(self, user: User, card: TCardParam | None, project: TProjectParam) -> dict[str, Any] | None:
+        return self.set_card_read_state(user, project, card, True)
+
+    def set_card_read_state(self, user: User, project: TProjectParam, card: TCardParam | None, seen: bool) -> dict[str, Any] | None:
+        if not isinstance(user, User):
+            return None
+        records = InfraHelper.get_records_with_foreign_by_params((Project, project), (Card, card))
+        if not records:
+            return None
+        project, card = records
+        if card.project_id != project.id:
+            return None
+        state = self.repo.user_card_read_state.set_read_state(user, card, seen)
+        CardPublisher.read_state_changed(card)
+        return {"card_uid": card.get_uid(), "seen_change_seq": state.seen_change_seq}
 
     def get_by_id_like(self, card: TCardParam | None) -> Card | None:
         card = InfraHelper.get_by_id_like(Card, card)
@@ -390,7 +406,7 @@ class CardService(BaseDomainService):
                 api_card["linked_resource"] = resource_payloads[card.get_uid()]
             if user is not None:
                 cursor = max(seen_map.get(card.id, 0), baseline_seq)
-                api_card["has_unread_change"] = card.last_change_seq > cursor
+                api_card["has_unread_change"] = seen_map.get(card.id, 0) < 0 or card.last_change_seq > cursor
                 api_card["latest_change"] = {
                     "seq": card.last_change_seq,
                     "target_type": card.last_change_target_type,
