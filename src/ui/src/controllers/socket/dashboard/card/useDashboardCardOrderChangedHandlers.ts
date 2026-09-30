@@ -29,7 +29,7 @@ const useDashboardCardOrderChangedHandlers = ({ callback, project }: IUseDashboa
                 const columns = ProjectColumn.Model.getModels(
                     (model) => model.project_uid === project.uid && (model.uid === data.from_column_uid || model.uid === data.to_column_uid)
                 );
-                if (data.source_type !== "project_wiki") {
+                if (data.source_type !== "project_wiki" && data.from_column_uid !== data.to_column_uid) {
                     for (let i = 0; i < columns.length; ++i) {
                         if (columns[i].uid === data.from_column_uid) {
                             --columns[i].count;
