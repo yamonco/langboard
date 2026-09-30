@@ -2,6 +2,7 @@ from datetime import datetime
 from fastapi import status
 from langboard_shared.core.db import EditorContentModel
 from langboard_shared.core.exceptions.CardDeleteForbidden import CardDeleteForbidden
+from langboard_shared.core.exceptions.RelationshipCycle import RelationshipCycle
 from langboard_shared.core.filter import AuthFilter
 from langboard_shared.core.routing import (
     ApiErrorCode,
@@ -527,7 +528,12 @@ def update_card_relationships(
     user_or_bot: User | Bot = Auth.scope("all"),
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
-    result = service.card_relationship.update(user_or_bot, project_uid, card_uid, form.is_parent, form.relationships)
+    try:
+        result = service.card_relationship.update(
+            user_or_bot, project_uid, card_uid, form.is_parent, form.relationships
+        )
+    except RelationshipCycle as exc:
+        raise ApiException.BadRequest_400(ApiErrorCode.VA0000) from exc
     if result is None:
         raise ApiException.NotFound_404(ApiErrorCode.NF2003)
 
@@ -565,7 +571,10 @@ def patch_card_relationships(
         [CardGraphEdge(item.parent_ref, item.child_ref, item.relationship_type_uid) for item in form.add_edges],
         form.remove_relationship_uids,
     )
-    result = service.card_relationship.apply_graph_patch(user_or_bot, *patch)
+    try:
+        result = service.card_relationship.apply_graph_patch(user_or_bot, *patch)
+    except RelationshipCycle as exc:
+        raise ApiException.BadRequest_400(ApiErrorCode.VA0000) from exc
     if result is None:
         raise ValueError("Anchor card not found in project")
     return JsonResponse(content=result)

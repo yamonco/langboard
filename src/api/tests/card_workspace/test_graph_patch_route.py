@@ -31,3 +31,25 @@ def test_graph_patch_route_uses_native_owner_without_workspace_adapter(monkeypat
     with pytest.raises(ValueError, match="at least one change"):
         patch_card_relationships("project", "root", PatchCardGraphForm(), actor, service)
     assert apply.call_count == 1
+
+
+@pytest.mark.parametrize("operation", ["patch", "replace"])
+def test_known_block_cycle_returns_bad_request_for_both_rest_paths(operation):
+    from langboard.routes.board.BoardCardApi import update_card_relationships
+    from langboard.routes.board.forms import UpdateCardRelationshipsForm
+    from langboard_shared.core.exceptions.RelationshipCycle import RelationshipCycle
+    from langboard_shared.core.routing import ApiException
+
+    reject = Mock(side_effect=RelationshipCycle("Relationship would create a blocks cycle"))
+    service = SimpleNamespace(card_relationship=SimpleNamespace(apply_graph_patch=reject, update=reject))
+    with pytest.raises(ApiException.BadRequest_400) as failure:
+        if operation == "patch":
+            form = PatchCardGraphForm(
+                add_edges=[{"parent_ref": "root", "child_ref": "child", "relationship_type_uid": "blocks"}]
+            )
+            patch_card_relationships("project", "root", form, object(), service)
+        else:
+            form = UpdateCardRelationshipsForm(is_parent=False, relationships=[("child", "blocks")])
+            update_card_relationships("project", "root", form, object(), service)
+    assert failure.value.status_code == 400
+    assert reject.call_count == 1
