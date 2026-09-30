@@ -344,6 +344,7 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
                             className={cn(
                                 "break-all leading-tight",
                                 compact && "text-sm font-medium text-muted-foreground",
+                                isCheckCard && deadlineAt && !compact && "pl-7",
                                 completed && "line-through opacity-60"
                             )}
                         >
