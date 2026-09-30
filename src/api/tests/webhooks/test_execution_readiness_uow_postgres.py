@@ -158,6 +158,18 @@ def test_application_uow_emits_only_ready_edges_and_freezes_payload(monkeypatch:
         current = current_execution(100)
         assert (current.is_ready, current.generation) == (False, 2)
         assert len(enqueued) == 3
+        # Explicit workflow overrides the legacy terminal lane and is execution relevant.
+        with execution_readiness_uow() as execution:
+            execution.watch_project(7)
+            execution.db.exec(text("UPDATE project_column SET workflow_stage = 'active' WHERE id = 21"))
+        assert current_execution(102).is_ready is False
+        with execution_readiness_uow() as execution:
+            execution.watch_project(7)
+            execution.db.exec(text("UPDATE project_column SET workflow_stage = 'closed' WHERE id = 21"))
+            assert len(enqueued) == 3
+        current = current_execution(102)
+        assert (current.is_ready, current.generation) == (True, 2)
+        assert len(enqueued) == 4
     finally:
         engine.dispose()
         with admin.begin() as connection:

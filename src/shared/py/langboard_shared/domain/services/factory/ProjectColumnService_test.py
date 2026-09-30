@@ -32,3 +32,43 @@ def test_description_change_is_scoped_bounded_and_replay_safe(monkeypatch: pytes
     monkeypatch.setattr(InfraHelper, "get_records_with_foreign_by_params", lambda *_: None)
     assert service.change_description("different-project", "c", "No") is False
     assert update.call_count == 2
+
+
+def test_workflow_edit_fences_readiness_and_publishes_after_commit(monkeypatch):
+    from contextlib import contextmanager
+    from importlib import import_module
+
+    module = import_module(ProjectColumnService.__module__)
+    column = SimpleNamespace(id=2, project_id=1, workflow_stage="active", is_archive=False)
+    project = SimpleNamespace(id=1)
+    events = []
+    execution = SimpleNamespace(
+        db=SimpleNamespace(exec=Mock(return_value=SimpleNamespace(first=lambda: column))),
+        before={3: False, 4: False},
+        watch_project=lambda project_id: events.append(("watch", project_id)),
+    )
+
+    @contextmanager
+    def uow():
+        yield execution
+        events.append("commit")
+
+    monkeypatch.setattr(module, "execution_readiness_uow", uow)
+    monkeypatch.setattr(module.InfraHelper, "get_records_with_foreign_by_params", lambda *_: (project, column))
+    monkeypatch.setattr(module.ProjectColumnPublisher, "workflow_stage_changed", lambda *_: events.append("column"))
+    service = ProjectColumnService(
+        lambda _: None, lambda _: None,
+        SimpleNamespace(project_column=SimpleNamespace(update=lambda item: events.append(("update", item.workflow_stage)))),
+    )
+    monkeypatch.setattr(service, "_get_service", lambda _: SimpleNamespace(
+        publish_work_states=lambda actual_project, ids: events.append(("states", actual_project.id, ids))
+    ))
+    assert service.change_workflow_stage("p", "c", "closed") is True
+    assert events == [("watch", 1), ("update", "closed"), "commit", "column", ("states", 1, [3, 4])]
+    events.clear()
+    assert service.change_workflow_stage("p", "c", "closed") is True
+    assert events == ["commit"]
+    column.project_id = 9
+    events.clear()
+    assert service.change_workflow_stage("p", "c", "active") is False
+    assert events == []

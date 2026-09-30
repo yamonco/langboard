@@ -1,6 +1,7 @@
 import logging
 from typing import Any
 from ....ai import BotScheduleHelper, BotScopeHelper
+from ....core.db import SqlBuilder
 from ....core.domain import BaseDomainService
 from ....core.types import SafeDateTime, SnowflakeID
 from ....core.types.ParamTypes import TColumnParam, TProjectParam, TUserOrBot
@@ -8,6 +9,7 @@ from ....helpers import InfraHelper
 from ....publishers import ProjectColumnPublisher
 from ....tasks.activities import ProjectColumnActivityTask
 from ....tasks.bots import ProjectColumnBotTask
+from ....tasks.webhooks.ExecutionReadinessUow import execution_readiness_uow
 from ...models import Project, ProjectColumn, ProjectColumnBotSchedule, ProjectColumnBotScope
 from .GraphApprovalRequestService import GraphApprovalRequestService
 
@@ -140,13 +142,29 @@ class ProjectColumnService(BaseDomainService):
         if not params:
             return False
         project, column = params
-        if column.is_archive:
+        if column.project_id != project.id:
             return False
-        if column.workflow_stage == workflow_stage:
-            return True
-        column.workflow_stage = workflow_stage
-        self.repo.project_column.update(column)
+        with execution_readiness_uow() as execution:
+            column = execution.db.exec(
+                SqlBuilder.select.table(ProjectColumn)
+                .where(ProjectColumn.column("id") == column.id)
+                .where(ProjectColumn.column("project_id") == project.id)
+                .with_for_update()
+            ).first()
+            if column is None or column.is_archive:
+                return False
+            if column.workflow_stage == workflow_stage:
+                return True
+            # ponytail: rare workflow edits fence the project; scope to the column
+            # and blocks dependents if large-board latency makes this costly.
+            execution.watch_project(project.id)
+            column.workflow_stage = workflow_stage
+            self.repo.project_column.update(column)
+            affected_ids = list(execution.before)
         ProjectColumnPublisher.workflow_stage_changed(project, column)
+        from .CardService import CardService
+
+        self._get_service(CardService).publish_work_states(project, affected_ids)
         return True
 
     def change_name(
