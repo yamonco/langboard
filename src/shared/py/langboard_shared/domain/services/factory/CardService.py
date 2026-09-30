@@ -34,6 +34,7 @@ from ...models import (
     CardRelationship,
     Checkitem,
     Checklist,
+    GlobalCardRelationshipType,
     Project,
     ProjectColumn,
     ProjectWiki,
@@ -53,6 +54,22 @@ from .ProjectWikiService import ProjectWikiService
 class CardService(BaseDomainService):
     CONTEXT_DESCRIPTION_MAX_LENGTH = 1200
     LINKED_RESOURCE_PREVIEW_MAX_LENGTH = 240
+
+    @staticmethod
+    def _contains_relationship_type() -> GlobalCardRelationshipType:
+        """Choose a system containment type instead of relying on query order."""
+
+        relation_type = next(
+            (
+                candidate
+                for candidate in InfraHelper.get_all(GlobalCardRelationshipType)
+                if candidate.is_system_default and candidate.machine_semantic == "contains" and candidate.is_active
+            ),
+            None,
+        )
+        if relation_type is None:
+            raise ValueError("System contains relationship type is missing")
+        return relation_type
 
     UNREAD_TARGET_DESCRIPTION = "description"
     UNREAD_TARGET_COMMENT = "comment"
@@ -182,13 +199,14 @@ class CardService(BaseDomainService):
 
         raw_relationships = self.repo.card_relationship.get_all_by_project(project, archive_visible_since)
         relationships: dict[int, list[dict[str, Any]]] = {}
-        for relationship, _ in raw_relationships:
+        for relationship, relation_type in raw_relationships:
             if relationship.card_id_parent not in relationships:
                 relationships[relationship.card_id_parent] = []
             if relationship.card_id_child not in relationships:
                 relationships[relationship.card_id_child] = []
-            relationships[relationship.card_id_parent].append(relationship.api_response())
-            relationships[relationship.card_id_child].append(relationship.api_response())
+            projection = CardRelationshipService.public_relationship(relationship, relation_type)
+            relationships[relationship.card_id_parent].append(projection)
+            relationships[relationship.card_id_child].append(projection)
 
         raw_labels = self.repo.project_label.get_all_card_labels_by_project(project, archive_visible_since)
         labels: dict[int, list[dict[str, Any]]] = {}
@@ -1002,17 +1020,15 @@ class CardService(BaseDomainService):
             self.repo.card.insert(child)
             execution.watch_new(child.id)
 
-            # Link parent → child with the first global relationship type
-            global_types = self.repo.card_relationship.get_global_relationship_types_map([])
-            if global_types:
-                relationship_type_id = next(iter(global_types.values())).id
-                self.repo.card_relationship.insert(
-                    CardRelationship(
-                        card_id_parent=card.id,
-                        card_id_child=child.id,
-                        relationship_type_id=relationship_type_id,
-                    )
+            # A child is contained by its parent; an arbitrary first type could block execution.
+            contains_type = self._contains_relationship_type()
+            self.repo.card_relationship.insert(
+                CardRelationship(
+                    card_id_parent=card.id,
+                    card_id_child=child.id,
+                    relationship_type_id=contains_type.id,
                 )
+            )
 
             # Replace the selection with a link in the parent body
             full_markdown = card.description.content or ""

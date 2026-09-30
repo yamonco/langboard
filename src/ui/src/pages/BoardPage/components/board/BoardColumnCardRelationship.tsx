@@ -9,6 +9,7 @@ import { ProjectCard, ProjectCardRelationship, ProjectColumn } from "@/core/mode
 import { ModelRegistry } from "@/core/models/ModelRegistry";
 import { useBoard } from "@/core/providers/BoardProvider";
 import { cn } from "@/core/utils/ComponentUtils";
+import RelationshipTypePicker from "@/pages/BoardPage/components/board/RelationshipTypePicker";
 import {
     BOARD_CARD_RELATIONSHIP_DND_TYPE,
     BOARD_CARD_TOUCH_DND_ATTR,
@@ -416,23 +417,12 @@ const BoardColumnCardRelationshipButton = memo(({ type, attributes, compact, has
                         })}
                     </Dialog.Description>
                     <Flex direction="col" gap="1" mt="3" className="overflow-hidden rounded-md border">
-                        {globalRelationshipTypes.map((relationshipType) => {
-                            const relationshipName = isParent ? relationshipType.parent_name : relationshipType.child_name;
-                            return (
-                                <Button
-                                    key={relationshipType.uid}
-                                    type="button"
-                                    variant="ghost"
-                                    className={cn(
-                                        "justify-start rounded-none border-b last:border-b-0",
-                                        selectedRelationshipUID === relationshipType.uid && "bg-accent text-accent-foreground"
-                                    )}
-                                    onClick={() => setSelectedRelationshipUID(relationshipType.uid)}
-                                >
-                                    {relationshipName}
-                                </Button>
-                            );
-                        })}
+                        <RelationshipTypePicker
+                            types={globalRelationshipTypes}
+                            selectedUid={selectedRelationshipUID}
+                            isParent={isParent}
+                            onSelect={setSelectedRelationshipUID}
+                        />
                     </Flex>
                     <Dialog.Footer>
                         <Button type="button" variant="secondary" disabled={isSaving} onClick={closeDialog}>

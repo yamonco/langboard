@@ -68,9 +68,7 @@ def test_plugin_compatibility_tools_preserve_native_contracts(monkeypatch: pytes
 
     for name in ("create_project_board", "create_card_in_leftmost_column", "get_card", "get_card_attachments"):
         assert McpTool.get_tool(name) is not None
-    assert McpRoleFilter.get_filtered(CardMcp.create_card_in_leftmost_column)[1] == [
-        ProjectRoleAction.CardUpdate.value
-    ]
+    assert McpRoleFilter.get_filtered(CardMcp.create_card_in_leftmost_column)[1] == [ProjectRoleAction.CardUpdate.value]
     for read in (CardMcp.get_card, CardMcp.get_card_attachments):
         assert McpRoleFilter.get_filtered(read)[1] == [ProjectRoleAction.Read.value]
 
@@ -637,3 +635,18 @@ def test_native_move_rejects_column_from_another_project(
     )
 
     assert CardService.change_order(SimpleNamespace(), object(), project, card, 0, foreign_column) is None
+
+
+def test_graph_cycle_rejection_is_validation_error_not_unknown_mutation() -> None:
+    from unittest.mock import Mock
+    from fastmcp.exceptions import ValidationError
+    from langboard.card_workspace.domain.value_objects import CardGraphEdge
+    from langboard_shared.core.exceptions.RelationshipCycle import RelationshipCycle
+
+    apply = Mock(side_effect=RelationshipCycle("Relationship would create a blocks cycle"))
+    service = SimpleNamespace(card_relationship=SimpleNamespace(apply_graph_patch=apply))
+    with pytest.raises(ValidationError, match="CARD_GRAPH_CYCLE.*No graph changes saved"):
+        CardMcp.apply_card_graph_patch(
+            "project", "root", [], [CardGraphEdge("root", "existing", "blocks")], [], object(), service
+        )
+    assert apply.call_count == 1

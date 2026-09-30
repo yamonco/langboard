@@ -2,6 +2,8 @@ import { useTranslation } from "react-i18next";
 import { GlobalRelationshipType, ProjectCard } from "@/core/models";
 import { usePageNavigateRef } from "@/core/hooks/usePageNavigate";
 import { ROUTES } from "@/core/routing/constants";
+import { RELATIONSHIP_GROUPS } from "@/pages/BoardPage/components/board/RelationshipTypePicker";
+import { Link2 } from "lucide-react";
 
 export default function BoardRelationsSidebar({ projectUID, cardUID }: { projectUID: string; cardUID?: string }) {
     const [t] = useTranslation();
@@ -31,25 +33,35 @@ function RelationsTree({ card, projectUID }: { card: ProjectCard.TModel; project
     const [t] = useTranslation();
     const navigate = usePageNavigateRef();
     const relationships = card.useForeignFieldArray("relationships");
-    const parents = relationships.filter((relationship) => relationship.child_card_uid === card.uid);
-    const children = relationships.filter((relationship) => relationship.parent_card_uid === card.uid);
+    const semanticOf = (relationship: (typeof relationships)[number]) =>
+        relationship.machine_semantic ?? GlobalRelationshipType.Model.getModel(relationship.relationship_type_uid)?.machine_semantic;
+    const sections = [
+        ...RELATIONSHIP_GROUPS.map((group) => ({
+            key: group.semantic,
+            label: group.label,
+            Icon: group.Icon,
+            items: relationships.filter((relationship) => semanticOf(relationship) === group.semantic),
+        })),
+        {
+            key: "legacy",
+            label: "기존 미분류 관계",
+            Icon: Link2,
+            items: relationships.filter((relationship) => !semanticOf(relationship)),
+        },
+    ].filter((group) => group.items.length);
 
     return (
         <div className="space-y-3 text-sm">
             <p className="truncate px-2 font-medium" title={card.title}>
                 {card.title}
             </p>
-            {(
-                [
-                    [t("dashboard.Parents"), parents, true],
-                    [t("dashboard.Children"), children, false],
-                ] as const
-            ).map(([label, items, isParent]) => (
-                <section key={label}>
-                    <h2 className="px-2 py-1 text-xs font-medium text-muted-foreground">
-                        {label} · {items.length}
+            {sections.map(({ key, label, Icon, items }) => (
+                <section key={key}>
+                    <h2 className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-muted-foreground">
+                        <Icon size={14} aria-hidden="true" /> {label} · {items.length}
                     </h2>
                     {items.map((relationship) => {
+                        const isParent = relationship.child_card_uid === card.uid;
                         const targetUID = isParent ? relationship.parent_card_uid : relationship.child_card_uid;
                         const target = ProjectCard.Model.getModel(targetUID);
                         if (!target || target.project_uid !== projectUID) return null;

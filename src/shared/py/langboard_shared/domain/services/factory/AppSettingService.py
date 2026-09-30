@@ -96,6 +96,8 @@ class AppSettingService(BaseDomainService):
         global_relationship = InfraHelper.get_by_id_like(GlobalCardRelationshipType, global_relationship)
         if not global_relationship:
             return False
+        if global_relationship.is_system_default:
+            raise ValueError("System relationship types cannot be deleted")
 
         self.repo.global_card_relationship_type.delete(global_relationship)
 
@@ -104,10 +106,14 @@ class AppSettingService(BaseDomainService):
         return True
 
     def delete_selected_global_relationships(self, relationships: Sequence[TGlobalCardRelationshipTypeParam]) -> bool:
-        self.repo.global_card_relationship_type.delete(relationships)
-
         if isinstance(relationships, str):
             relationships = [relationships]
+        for relationship in relationships:
+            record = InfraHelper.get_by_id_like(GlobalCardRelationshipType, relationship)
+            if record and record.is_system_default:
+                raise ValueError("System relationship types cannot be deleted")
+        self.repo.global_card_relationship_type.delete(relationships)
+
         uids = [InfraHelper.convert_uid(r) for r in relationships]
         AppSettingPublisher.selected_global_relationships_deleted(uids)
 
