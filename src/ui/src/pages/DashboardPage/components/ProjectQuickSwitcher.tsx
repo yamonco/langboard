@@ -1,6 +1,8 @@
 import { memo, useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router";
 import { useTranslation } from "react-i18next";
+import useSearchWikis from "@/controllers/api/wiki/useSearchWikis";
+import { useDebounce } from "@/core/hooks/useDebounce";
 import Box from "@/components/base/Box";
 import Command from "@/components/base/Command";
 import Flex from "@/components/base/Flex";
@@ -77,11 +79,14 @@ const ProjectQuickSwitcher = memo((): React.JSX.Element => {
     const navigate = usePageNavigateRef();
     const location = useLocation();
     const [opened, setOpened] = useState(false);
+    const [searchText, setSearchText] = useState("");
+    const wikiQuery = useDebounce(searchText.trim(), 300);
     const { data, isFetching, isLoading } = useGetProjects({ enabled: opened });
     const projects = data?.projects ?? [];
     const openCards = useOpenCards(currentUser?.uid);
     const sections = useMemo(() => buildProjectQuickSwitcherSections(projects), [projects]);
     const currentProjectUID = location.pathname.startsWith("/board/") ? location.pathname.split("/")[2] : undefined;
+    const wikiSearch = useSearchWikis(currentProjectUID, wikiQuery, opened);
     const boardCards = ProjectCard.Model.useModels(
         (card) => opened && card.project_uid === currentProjectUID && card.source_type !== "project_wiki",
         [opened, currentProjectUID]
@@ -125,10 +130,21 @@ const ProjectQuickSwitcher = memo((): React.JSX.Element => {
     };
 
     return (
-        <Command.Dialog open={opened} onOpenChange={setOpened}>
+        <Command.Dialog
+            open={opened}
+            onOpenChange={(open) => {
+                setOpened(open);
+                if (!open) setSearchText("");
+            }}
+        >
             <BaseDialog.Title className="sr-only">{t("dashboard.Command palette")}</BaseDialog.Title>
             <BaseDialog.Description className="sr-only">{t("dashboard.Search projects, cards and commands")}</BaseDialog.Description>
-            <Command.Input placeholder={t("dashboard.Search projects, cards and commands")} aria-label={t("dashboard.Command palette")} />
+            <Command.Input
+                value={searchText}
+                onValueChange={setSearchText}
+                placeholder={t("dashboard.Search projects, cards and commands")}
+                aria-label={t("dashboard.Command palette")}
+            />
             <Command.List className="max-h-[min(70dvh,28rem)]">
                 <Command.Empty>{isLoading || isFetching ? t("common.Loading...") : t("dashboard.No commands found")}</Command.Empty>
                 <ProjectQuickSwitcherGroup
@@ -201,6 +217,28 @@ const ProjectQuickSwitcher = memo((): React.JSX.Element => {
                         ))}
                     </Command.Group>
                 )}
+                {opened && searchText.trim() === wikiQuery && wikiSearch.data?.items.length ? (
+                    <Command.Group heading={t("board.Wiki")}>
+                        {wikiSearch.data.items.map((wiki) => (
+                            <Command.Item
+                                key={wiki.wiki_uid}
+                                value={`wiki:${wiki.wiki_uid}`}
+                                keywords={[wiki.title, wikiQuery]}
+                                onSelect={() => selectRoute(ROUTES.BOARD.WIKI_PAGE(currentProjectUID!, wiki.wiki_uid))}
+                                className="gap-3 rounded-lg"
+                            >
+                                <IconComponent icon="notebook-pen" size="4" />
+                                <span className="min-w-0 flex-1">
+                                    <span className="block truncate">{wiki.title}</span>
+                                    {wiki.snippet && <span className="block truncate text-xs text-muted-foreground">{wiki.snippet}</span>}
+                                </span>
+                            </Command.Item>
+                        ))}
+                        {wikiSearch.data.next_cursor && (
+                            <div className="px-2 py-1 text-xs text-muted-foreground">{t("dashboard.Refine your search for more wiki results")}</div>
+                        )}
+                    </Command.Group>
+                ) : null}
                 <Command.Group heading={t("dashboard.Navigation")}>
                     <Command.Item
                         value="navigation:my-work"

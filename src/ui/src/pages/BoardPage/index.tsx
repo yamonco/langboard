@@ -55,6 +55,7 @@ import useBoardGraphApprovalDeletedHandlers from "@/controllers/socket/board/gra
 import useBoardGraphApprovalRequestedHandlers from "@/controllers/socket/board/graphApprovals/useBoardGraphApprovalRequestedHandlers";
 import useBoardGraphApprovalUpdatedHandlers from "@/controllers/socket/board/graphApprovals/useBoardGraphApprovalUpdatedHandlers";
 import { getBoardChatStore } from "@/core/stores/BoardChatStore";
+import { useWorkbenchContextOpen } from "@/core/stores/UserSettingsStore";
 import ProjectExplorerSidebar from "@/pages/DashboardPage/components/ProjectExplorerSidebar";
 import { WORKBENCH_OPEN_CHANGES_EVENT, WORKBENCH_TOGGLE_CONTEXT_EVENT } from "@/pages/DashboardPage/components/WorkbenchCommands";
 import { closeProject } from "@/pages/DashboardPage/components/OpenCardsStore";
@@ -184,7 +185,7 @@ function BoardProxyDisplay({ pageRoute, isFetching, project }: IBoardProxyDispla
         outline: t("dashboard.Outline"),
         wiki: t("board.Wiki"),
     }[workbenchContextMode];
-    const [isContextOpen, setIsContextOpen] = useState(true);
+    const [isContextOpen, setIsContextOpen] = useWorkbenchContextOpen(currentUser?.uid);
     const [isMobile, setIsMobile] = useState(window.innerWidth < ScreenMap.size.md);
     const isBotScopeOpened = activeSidePanel === "botScope";
     const isSwitchProjectOpened = isMobile ? activeSidePanel === "switchProject" : isContextOpen && !isBotScopeOpened;
@@ -193,8 +194,8 @@ function BoardProxyDisplay({ pageRoute, isFetching, project }: IBoardProxyDispla
     }, [setIsActivityDialogOpened]);
     const toggleBotScope = useCallback(() => {
         setActiveSidePanel((value) => (value === "botScope" ? undefined : "botScope"));
-        setIsContextOpen(true);
-    }, [setActiveSidePanel]);
+        if (!isMobile) setIsContextOpen(true);
+    }, [isMobile, setIsContextOpen]);
     const toggleSwitchProject = useCallback(() => {
         if (isMobile) {
             setActiveSidePanel((value) => (value === "switchProject" ? undefined : "switchProject"));
@@ -204,10 +205,10 @@ function BoardProxyDisplay({ pageRoute, isFetching, project }: IBoardProxyDispla
         } else {
             setIsContextOpen((open) => !open);
         }
-    }, [isMobile, isBotScopeOpened]);
+    }, [isMobile, isBotScopeOpened, setIsContextOpen]);
     const showWorkbenchContext = (mode: TWorkbenchContext) => {
         setWorkbenchContextMode(mode);
-        setIsContextOpen(true);
+        if (!isMobile) setIsContextOpen(true);
         setActiveSidePanel(isMobile ? "switchProject" : undefined);
     };
     useEffect(() => {

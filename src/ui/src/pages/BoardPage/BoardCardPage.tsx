@@ -237,13 +237,22 @@ const BoardCardPageComponent = ({
                                 !isExpanded &&
                                     cn(
                                         "h-[calc(100dvh-theme(spacing.6))] max-h-[calc(100dvh-theme(spacing.6))]",
-                                        "w-[calc(100vw-theme(spacing.4))] max-w-[calc(100vw-theme(spacing.4))] overflow-visible bg-transparent",
+                                        "overflow-visible bg-transparent",
                                         "sm:h-[calc(100dvh-theme(spacing.8))] sm:max-h-[calc(100dvh-theme(spacing.8))]",
-                                        "sm:w-[calc(100vw-theme(spacing.12))] sm:max-w-[calc(100vw-theme(spacing.12))]",
-                                        "lg:w-[min(calc(100vw-theme(spacing.12)),theme(screens.xl))]",
-                                        "lg:max-w-[min(calc(100vw-theme(spacing.12)),theme(screens.xl))]",
-                                        "2xl:w-[min(calc(100vw-theme(spacing.16)),theme(screens.2xl))]",
-                                        "2xl:max-w-[min(calc(100vw-theme(spacing.16)),theme(screens.2xl))]"
+                                        embedded
+                                            ? cn(
+                                                  "w-[calc(100%-theme(spacing.4))] max-w-[calc(100%-theme(spacing.4))]",
+                                                  "sm:w-[calc(100%-theme(spacing.12))] sm:max-w-[calc(100%-theme(spacing.12))]",
+                                                  "2xl:max-w-screen-2xl lg:max-w-screen-xl"
+                                              )
+                                            : cn(
+                                                  "w-[calc(100vw-theme(spacing.4))] max-w-[calc(100vw-theme(spacing.4))]",
+                                                  "sm:w-[calc(100vw-theme(spacing.12))] sm:max-w-[calc(100vw-theme(spacing.12))]",
+                                                  "lg:w-[min(calc(100vw-theme(spacing.12)),theme(screens.xl))]",
+                                                  "lg:max-w-[min(calc(100vw-theme(spacing.12)),theme(screens.xl))]",
+                                                  "2xl:w-[min(calc(100vw-theme(spacing.16)),theme(screens.2xl))]",
+                                                  "2xl:max-w-[min(calc(100vw-theme(spacing.16)),theme(screens.2xl))]"
+                                              )
                                     ),
                                 !isExpanded && CARD_WINDOW_HEIGHT_CLASS,
                                 shouldHideForCardSelection && "pointer-events-none -z-[9998] opacity-0"
@@ -268,6 +277,7 @@ const BoardCardPageComponent = ({
                                       )
                             }
                             viewportClassName={!isExpanded ? "!py-0" : undefined}
+                            viewportAsTable={!embedded}
                             aria-describedby=""
                             withCloseButton={false}
                             nonModalOverlay

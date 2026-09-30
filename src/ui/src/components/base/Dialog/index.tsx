@@ -56,6 +56,7 @@ interface IContentProps extends React.ComponentPropsWithoutRef<typeof DialogPrim
     overlayContentClassName?: string;
     contentWrapperClassName?: string;
     viewportClassName?: string;
+    viewportAsTable?: bool;
     nonModalOverlay?: bool;
     disablePortal?: bool;
     disableMotionAnimation?: bool;
@@ -81,6 +82,7 @@ const Content = React.forwardRef<React.ComponentRef<typeof DialogPrimitive.Conte
             overlayContentClassName,
             contentWrapperClassName,
             viewportClassName,
+            viewportAsTable = true,
             nonModalOverlay,
             disablePortal,
             disableMotionAnimation,
@@ -139,7 +141,7 @@ const Content = React.forwardRef<React.ComponentRef<typeof DialogPrimitive.Conte
                 viewportClassName={cn("max-h-screen sm:py-2 [&>div]:h-full", viewportClassName)}
                 viewportId={viewportId}
                 viewportRef={viewportRef}
-                viewportAsTable
+                viewportAsTable={viewportAsTable}
             >
                 <motion.div
                     initial={disableMotionAnimation ? false : { opacity: 0, scale: 0.95 }}

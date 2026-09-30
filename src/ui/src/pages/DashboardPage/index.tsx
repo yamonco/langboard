@@ -1,4 +1,4 @@
-import { memo, useMemo, useReducer, useState } from "react";
+import { memo, useMemo, useReducer } from "react";
 import { IHeaderNavItem } from "@/components/Header/types";
 import { DashboardStyledLayout } from "@/components/Layout";
 import { ISidebarNavItem } from "@/components/Sidebar/types";
@@ -19,22 +19,23 @@ import { PROJECT_QUICK_SWITCHER_EVENT } from "@/pages/DashboardPage/components/P
 import ProjectExplorerSidebar from "@/pages/DashboardPage/components/ProjectExplorerSidebar";
 import { WORKBENCH_TOGGLE_CONTEXT_EVENT } from "@/pages/DashboardPage/components/WorkbenchCommands";
 import { useEffect } from "react";
+import { useWorkbenchContextOpen } from "@/core/stores/UserSettingsStore";
 
 const DashboardProxy = memo((): React.JSX.Element => {
     const [t] = useTranslation();
-    const [isExplorerOpen, setIsExplorerOpen] = useState(true);
+    const { currentUser } = useAuth();
+    const [isExplorerOpen, setIsExplorerOpen] = useWorkbenchContextOpen(currentUser?.uid);
     useEffect(() => {
         const toggle = () => setIsExplorerOpen((open) => !open);
         window.addEventListener(WORKBENCH_TOGGLE_CONTEXT_EVENT, toggle);
         return () => window.removeEventListener(WORKBENCH_TOGGLE_CONTEXT_EVENT, toggle);
-    }, []);
+    }, [setIsExplorerOpen]);
     const navigate = usePageNavigateRef();
     const [pageType, tabName] = location.pathname.split("/").slice(2);
     const { data, isFetching } = useGetAllStarredProjects();
     const scrollAreaUpdater = useReducer((x) => x + 1, 0);
     const [updatedStarredProjects, updateStarredProjects] = useReducer((x) => x + 1, 0);
     const [scrollAreaMutable] = scrollAreaUpdater;
-    const { currentUser } = useAuth();
     const starredProjects = Project.Model.useModels((model) => model.starred, [data, isFetching, updatedStarredProjects]);
 
     const headerNavs = useMemo<IHeaderNavItem[]>(() => {

@@ -18,6 +18,7 @@ export default function ProjectExplorerSidebar({ currentProject, onNavigate }: {
     const { currentUser } = useAuth();
     const userUID = currentUser?.uid;
     const openCards = useOpenCards(userUID);
+    const wikiHintDismissed = useUserSettings("wiki_hint_dismissed");
     const collapsedByUser = useUserSettings("explorer_open_cards_collapsed");
     const openCardsCollapsed = !!(userUID && collapsedByUser?.[userUID]);
     const navigate = usePageNavigateRef();
@@ -60,6 +61,57 @@ export default function ProjectExplorerSidebar({ currentProject, onNavigate }: {
                 />
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
+                {currentProject && !query.trim() && (
+                    <section className="mb-3" aria-label={currentProject.title}>
+                        <h2 className="px-2 py-1 text-xs font-medium text-muted-foreground">{currentProject.title}</h2>
+                        {userUID && !wikiHintDismissed?.[userUID] && (
+                            <div className="mb-1 flex items-start gap-1 rounded-md bg-muted/50 px-2 py-1.5 text-xs text-muted-foreground">
+                                <span className="flex-1">{t("dashboard.Project documents are in Wiki")}</span>
+                                <button
+                                    type="button"
+                                    aria-label={t("common.Close")}
+                                    onClick={() =>
+                                        getUserSettingsStore().updateSettingsByKey("wiki_hint_dismissed", {
+                                            ...wikiHintDismissed,
+                                            [userUID]: true,
+                                        })
+                                    }
+                                    className="rounded p-0.5 hover:bg-accent"
+                                >
+                                    <IconComponent icon="x" size="3" />
+                                </button>
+                            </div>
+                        )}
+                        {(
+                            [
+                                { name: t("board.Board"), icon: "columns-3", route: ROUTES.BOARD.MAIN(currentProject.uid) },
+                                { name: t("board.Wiki"), icon: "notebook-pen", route: ROUTES.BOARD.WIKI(currentProject.uid) },
+                            ] as const
+                        ).map((item) => (
+                            <button
+                                key={item.route}
+                                type="button"
+                                aria-current={
+                                    location.pathname === item.route ||
+                                    (item.icon === "notebook-pen" && location.pathname.startsWith(`${item.route}/`))
+                                        ? "page"
+                                        : undefined
+                                }
+                                className={cn(
+                                    "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted",
+                                    "aria-[current=page]:bg-muted aria-[current=page]:text-primary"
+                                )}
+                                onClick={() => {
+                                    navigate(item.route);
+                                    onNavigate?.();
+                                }}
+                            >
+                                <IconComponent icon={item.icon} size="4" />
+                                <span>{item.name}</span>
+                            </button>
+                        ))}
+                    </section>
+                )}
                 {!query.trim() && userUID && (
                     <section className="mb-3" aria-label={t("dashboard.Open cards")}>
                         <button
