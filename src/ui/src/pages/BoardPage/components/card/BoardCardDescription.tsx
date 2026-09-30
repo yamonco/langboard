@@ -2,6 +2,7 @@ import Box from "@/components/base/Box";
 import Button from "@/components/base/Button";
 import IconComponent from "@/components/base/IconComponent";
 import Skeleton from "@/components/base/Skeleton";
+import Toast from "@/components/base/Toast";
 import type { TEditor } from "@/components/Editor/editor-kit";
 import { PlateEditor } from "@/components/Editor/plate-editor";
 import { sanitizeEditorContent } from "@/components/Editor/utils";
@@ -15,7 +16,6 @@ import { EEditorType } from "@langboard/core/constants";
 import { AIChatPlugin, AIPlugin } from "@platejs/ai/react";
 import { memo, type PointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Utils } from "@langboard/core/utils";
 import { VirtualizedDescriptionContent } from "@/pages/BoardPage/components/card/description/VirtualizedDescriptionContent";
 import { buildDescriptionChunks } from "@/pages/BoardPage/components/card/description/descriptionChunks";
 import { areAnchorMarkersEqual, type IAnchorMarkerPosition } from "@/pages/BoardPage/components/card/anchorMarkers";
@@ -92,7 +92,6 @@ const BoardCardDescription = memo(({ scrollParentRef }: IBoardCardDescriptionPro
     const [anchorMarkers, setAnchorMarkers] = useState<IAnchorMarkerPosition[]>([]);
     const [anchorCommentSnapshots, setAnchorCommentSnapshots] = useState<Record<string, IAnchorCommentSnapshot>>({});
     const pointerDownPositionRef = useRef<{ x: number; y: number } | null>(null);
-    const descriptionSelectAllRef = useRef(false);
     const { registerSectionCancelHandler, registerSectionSaveHandler } = useBoardCardSectionSaveActions();
     const canEdit = hasRoleAction(ProjectRole.EAction.CardUpdate);
     const canStartEditing = canEdit && isCardEditing;
@@ -170,60 +169,14 @@ const BoardCardDescription = memo(({ scrollParentRef }: IBoardCardDescriptionPro
         }
     }, [isCardEditing, isEditing, stopEditing]);
 
-    useEffect(() => {
-        if (isEditing) {
-            return;
+    const handleCopyDescription = async () => {
+        try {
+            await navigator.clipboard.writeText(description?.content ?? "");
+            Toast.Add.success(t("common.Copied."));
+        } catch {
+            Toast.Add.error(t("editor.errors.upload.unknown"));
         }
-
-        const containsSelectionNode = (node: Node | null) => node !== null && !!descriptionRef.current?.contains(node);
-        const handleSelectAll = (event: KeyboardEvent) => {
-            if (event.key !== "a" || !(event.metaKey || event.ctrlKey)) {
-                return;
-            }
-
-            const root = descriptionRef.current;
-            const selection = window.getSelection();
-            if (root && selection && (containsSelectionNode(selection.anchorNode) || containsSelectionNode(selection.focusNode))) {
-                event.preventDefault();
-                descriptionSelectAllRef.current = true;
-                selection.selectAllChildren(root);
-            }
-        };
-
-        const handleCopy = (event: ClipboardEvent) => {
-            const descriptionElement = descriptionRef.current;
-            const selection = window.getSelection();
-            const selectedText = selection?.toString();
-
-            if (!descriptionElement || !selection || !selectedText || !event.clipboardData) {
-                return;
-            }
-
-            if (!containsSelectionNode(selection.anchorNode) && !containsSelectionNode(selection.focusNode)) {
-                return;
-            }
-
-            const markdownContent = description?.content;
-            const range = selection.rangeCount === 1 ? selection.getRangeAt(0) : null;
-            const isWholeDescription =
-                range?.startContainer === descriptionElement &&
-                range.startOffset === 0 &&
-                range.endContainer === descriptionElement &&
-                range.endOffset === descriptionElement.childNodes.length;
-            const shouldCopyMarkdown = Utils.Type.isString(markdownContent) && descriptionSelectAllRef.current && isWholeDescription;
-            descriptionSelectAllRef.current = false;
-
-            event.clipboardData.setData("text/plain", shouldCopyMarkdown ? markdownContent : selectedText);
-            event.preventDefault();
-        };
-
-        document.addEventListener("keydown", handleSelectAll, true);
-        document.addEventListener("copy", handleCopy, true);
-        return () => {
-            document.removeEventListener("keydown", handleSelectAll, true);
-            document.removeEventListener("copy", handleCopy, true);
-        };
-    }, [description, isEditing]);
+    };
 
     const handlePointerDown = useCallback(
         (e: PointerEvent<HTMLDivElement>) => {
@@ -231,7 +184,6 @@ const BoardCardDescription = memo(({ scrollParentRef }: IBoardCardDescriptionPro
                 return;
             }
 
-            descriptionSelectAllRef.current = false;
             pointerDownPositionRef.current = {
                 x: e.clientX,
                 y: e.clientY,
@@ -345,100 +297,116 @@ const BoardCardDescription = memo(({ scrollParentRef }: IBoardCardDescriptionPro
     useEffect(() => registerSectionCancelHandler("description", handleCancel), [handleCancel, registerSectionCancelHandler]);
 
     return (
-        <Box
-            ref={descriptionRef}
-            data-card-description
-            className={cn("relative", canStartEditing && !isEditing && "cursor-text rounded-md transition-colors hover:bg-accent/20")}
-            onPointerDown={handlePointerDown}
-            onPointerUp={handlePointerUp}
-        >
-            {comments.map((comment) => (
-                <AnchorCommentSubscription key={comment.uid} comment={comment} onChange={updateAnchorCommentSnapshot} />
-            ))}
-            {anchorComposer && (
-                <Button
-                    size="sm"
-                    className="absolute z-30 h-8 gap-1 rounded-full shadow-lg"
-                    style={{ left: anchorComposer.left, top: anchorComposer.top }}
-                    onPointerDown={(event) => {
-                        event.preventDefault();
-                        event.stopPropagation();
-                    }}
-                    onClick={() => {
-                        anchoredCommentRef.current(anchorComposer.anchor);
-                        setAnchorComposer(null);
-                        window.getSelection()?.removeAllRanges();
-                    }}
-                >
-                    <IconComponent icon="message-square" size="4" />
-                    {t("card.Comment on selection")}
-                </Button>
-            )}
-            {anchorMarkers.map((marker) => (
-                <button
-                    key={marker.commentUID}
-                    type="button"
-                    className={cn(
-                        "group absolute right-1 z-20 flex size-5 items-center justify-center rounded-full border border-brand/40",
-                        "bg-brand/15 text-brand shadow-sm transition-transform hover:scale-110"
-                    )}
-                    style={{ top: marker.top }}
-                    title={marker.quote}
-                    aria-label={t("card.Open anchored comment")}
-                    onPointerDown={(event) => event.stopPropagation()}
-                    onClick={() => openAnchoredComment(marker.commentUID)}
-                >
-                    <IconComponent icon="message-square" size="3" />
-                    <span
-                        className={cn(
-                            "pointer-events-none absolute right-6 top-1/2 hidden w-64 -translate-y-1/2 rounded-lg border",
-                            "bg-popover p-2 text-left text-popover-foreground shadow-xl group-hover:block group-focus-visible:block"
-                        )}
+        <Box>
+            {!isEditing && (
+                <Box className="mb-2 flex justify-end">
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 gap-1 text-muted-foreground"
+                        disabled={!description?.content}
+                        onClick={handleCopyDescription}
                     >
-                        <span className="block truncate text-[11px] font-medium text-brand">“{marker.quote}”</span>
-                        <span className="mt-1 line-clamp-3 block text-xs leading-5 text-muted-foreground">
-                            {marker.commentPreview || t("card.Open anchored comment")}
-                        </span>
-                    </span>
-                </button>
-            ))}
-            {!isEditing && contentBlocks.length ? (
-                <CardContentBlockList blocks={contentBlocks} />
-            ) : isEditing ? (
-                <PlateEditor
-                    value={description}
-                    mentionables={mentionables}
-                    linkables={cards}
-                    currentUser={currentUser}
-                    containerClassName="overflow-y-visible"
-                    className="h-full min-h-[calc(theme(spacing.56)_-_theme(spacing.8))] px-6 py-3"
-                    readOnly={false}
-                    editorType={EEditorType.CardDescription}
-                    form={{
-                        project_uid: projectUID,
-                        card_uid: card.uid,
-                    }}
-                    placeholder={t("card.No description")}
-                    setValue={() => {}}
-                    authoritativeCollaborativeValue={description?.content ?? ""}
-                    onCollaborativeValueReady={handleCollaborativeValueReady}
-                    onCollaborativeValueResetReady={handleCollaborativeValueResetReady}
-                    serializeOnChange={false}
-                    focusOnReady
-                    focusOnReadyEdge="startEditor"
-                    editorRef={editorRef}
-                />
-            ) : (
-                <VirtualizedDescriptionContent
-                    chunks={chunks}
-                    currentUser={currentUser}
-                    mentionables={mentionables}
-                    cards={cards}
-                    projectUID={projectUID}
-                    cardUID={card.uid}
-                    scrollParentRef={scrollParentRef}
-                />
+                        <IconComponent icon="copy" size="3.5" />
+                        {t("common.Copy")}
+                    </Button>
+                </Box>
             )}
+            <Box
+                ref={descriptionRef}
+                data-card-description
+                className={cn("relative", canStartEditing && !isEditing && "cursor-text rounded-md transition-colors hover:bg-accent/20")}
+                onPointerDown={handlePointerDown}
+                onPointerUp={handlePointerUp}
+            >
+                {comments.map((comment) => (
+                    <AnchorCommentSubscription key={comment.uid} comment={comment} onChange={updateAnchorCommentSnapshot} />
+                ))}
+                {anchorComposer && (
+                    <Button
+                        size="sm"
+                        className="absolute z-30 h-8 gap-1 rounded-full shadow-lg"
+                        style={{ left: anchorComposer.left, top: anchorComposer.top }}
+                        onPointerDown={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                        }}
+                        onClick={() => {
+                            anchoredCommentRef.current(anchorComposer.anchor);
+                            setAnchorComposer(null);
+                            window.getSelection()?.removeAllRanges();
+                        }}
+                    >
+                        <IconComponent icon="message-square" size="4" />
+                        {t("card.Comment on selection")}
+                    </Button>
+                )}
+                {anchorMarkers.map((marker) => (
+                    <button
+                        key={marker.commentUID}
+                        type="button"
+                        className={cn(
+                            "group absolute right-1 z-20 flex size-5 items-center justify-center rounded-full border border-brand/40",
+                            "bg-brand/15 text-brand shadow-sm transition-transform hover:scale-110"
+                        )}
+                        style={{ top: marker.top }}
+                        title={marker.quote}
+                        aria-label={t("card.Open anchored comment")}
+                        onPointerDown={(event) => event.stopPropagation()}
+                        onClick={() => openAnchoredComment(marker.commentUID)}
+                    >
+                        <IconComponent icon="message-square" size="3" />
+                        <span
+                            className={cn(
+                                "pointer-events-none absolute right-6 top-1/2 hidden w-64 -translate-y-1/2 rounded-lg border",
+                                "bg-popover p-2 text-left text-popover-foreground shadow-xl group-hover:block group-focus-visible:block"
+                            )}
+                        >
+                            <span className="block truncate text-[11px] font-medium text-brand">“{marker.quote}”</span>
+                            <span className="mt-1 line-clamp-3 block text-xs leading-5 text-muted-foreground">
+                                {marker.commentPreview || t("card.Open anchored comment")}
+                            </span>
+                        </span>
+                    </button>
+                ))}
+                {!isEditing && contentBlocks.length ? (
+                    <CardContentBlockList blocks={contentBlocks} />
+                ) : isEditing ? (
+                    <PlateEditor
+                        value={description}
+                        mentionables={mentionables}
+                        linkables={cards}
+                        currentUser={currentUser}
+                        containerClassName="overflow-y-visible"
+                        className="h-full min-h-[calc(theme(spacing.56)_-_theme(spacing.8))] px-6 py-3"
+                        readOnly={false}
+                        editorType={EEditorType.CardDescription}
+                        form={{
+                            project_uid: projectUID,
+                            card_uid: card.uid,
+                        }}
+                        placeholder={t("card.No description")}
+                        setValue={() => {}}
+                        authoritativeCollaborativeValue={description?.content ?? ""}
+                        onCollaborativeValueReady={handleCollaborativeValueReady}
+                        onCollaborativeValueResetReady={handleCollaborativeValueResetReady}
+                        serializeOnChange={false}
+                        focusOnReady
+                        focusOnReadyEdge="startEditor"
+                        editorRef={editorRef}
+                    />
+                ) : (
+                    <VirtualizedDescriptionContent
+                        chunks={chunks}
+                        currentUser={currentUser}
+                        mentionables={mentionables}
+                        cards={cards}
+                        projectUID={projectUID}
+                        cardUID={card.uid}
+                        scrollParentRef={scrollParentRef}
+                    />
+                )}
+            </Box>
         </Box>
     );
 });
