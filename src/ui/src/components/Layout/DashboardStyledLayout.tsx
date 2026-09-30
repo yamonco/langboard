@@ -107,7 +107,23 @@ const DashboardStyledLayout = forwardRef<HTMLDivElement, TDashboardStyledLayoutP
 
         return (
             <Flex direction="col" w="full" minH="screen" ref={ref} {...props}>
-                {headerNavs && <Header navs={headerNavs} title={headerTitle} compact={!!activityRailItems} />}
+                {headerNavs && (
+                    <Header
+                        navs={
+                            activityRailItems
+                                ? activityRailItems
+                                      .filter((item) => !item.hidden)
+                                      .map((item) => ({
+                                          name: item.label,
+                                          onClick: item.onClick,
+                                          active: item.active,
+                                      }))
+                                : headerNavs
+                        }
+                        title={headerTitle}
+                        compact={!!activityRailItems}
+                    />
+                )}
                 <Box
                     w="full"
                     className={cn("overflow-y-auto", activityRailItems ? "h-[calc(100dvh-2.75rem)]" : "min-h-[calc(100vh_-_theme(spacing.16))]")}
