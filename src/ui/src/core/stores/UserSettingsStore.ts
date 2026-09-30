@@ -9,6 +9,7 @@ export interface IUserSettings {
     graph_view_modes?: Record<string, "columns" | "network">;
     open_cards?: TOpenCardsByUser;
     explorer_open_cards_collapsed?: Record<string, boolean>;
+    wiki_hint_dismissed?: Record<string, boolean>;
     workbench_context_open?: Record<string, boolean>;
 }
 

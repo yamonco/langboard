@@ -1,4 +1,4 @@
-from fastapi import File, UploadFile, status
+from fastapi import File, Query, UploadFile, status
 from langboard_shared.core.db import EditorContentModel
 from langboard_shared.core.filter import AuthFilter
 from langboard_shared.core.routing import (
@@ -24,6 +24,7 @@ from langboard_shared.domain.services import DomainService
 from langboard_shared.filter import RoleFilter
 from langboard_shared.helpers import InfraHelper
 from langboard_shared.security import Auth, RoleFinder
+from ...wiki_workspace.infrastructure import NativeWikiRepository
 from .forms import (
     AssigneesForm,
     ChangeChildOrderForm,
@@ -31,6 +32,20 @@ from .forms import (
     ChangeWikiPublicForm,
     WikiForm,
 )
+
+
+@AppRouter.schema(permission=ApiPermission.Read)
+@AppRouter.api.get("/board/{project_uid}/wikis/search", tags=["Board.Wiki"], description="Search readable wiki summaries.")
+@RoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+@AuthFilter.add()
+def search_project_wikis(
+    project_uid: str,
+    query: str = Query(min_length=2, max_length=1000),
+    cursor: str | None = None,
+    user: User = Auth.scope("user"),
+    service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    return JsonResponse(content=NativeWikiRepository(user, service).list_wikis(project_uid, query, cursor, 20))
 
 
 @AppRouter.schema(permission=ApiPermission.Read)
