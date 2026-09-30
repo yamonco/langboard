@@ -183,7 +183,7 @@ def create_wiki_from_card(
         attachments = service.card_attachment.get_api_list_by_card(card)
         if attachments:
             parts.append("## Card attachments")
-            parts.extend(f"- {item['filename']} (attachment_uid: {item['uid']})" for item in attachments)
+            parts.extend(f"- {item['name']} (attachment_uid: {item['uid']})" for item in attachments)
     content = "\n\n".join(parts)
     if len(content) > 32000:
         raise ValueError("Wiki content exceeds 32000 characters")
@@ -1020,14 +1020,11 @@ def change_card_checkitem_work(
         raise ValueError("Only paused work can be resumed")
     if action in {"start", "resume"} and not replace_active:
         other_active = [
-            work for work in service.checkitem.get_active_work(user)
-            if work["checkitem"]["uid"] != item.get_uid()
+            work for work in service.checkitem.get_active_work(user) if work["checkitem"]["uid"] != item.get_uid()
         ]
         if other_active:
             raise ValueError("Another work timer is active; set replace_active to pause it")
-    if not service.checkitem.change_status(
-        user, project_uid, card_uid, item, target, from_api=action == "complete"
-    ):
+    if not service.checkitem.change_status(user, project_uid, card_uid, item, target, from_api=action == "complete"):
         raise ValueError("Work timer transition failed")
     if action == "complete" and item.status == CheckitemStatus.Stopped and not item.is_checked:
         if not service.checkitem.toggle_checked(user, project_uid, card_uid, item, desired_checked=True):
