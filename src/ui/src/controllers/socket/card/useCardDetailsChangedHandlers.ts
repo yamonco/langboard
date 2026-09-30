@@ -6,6 +6,7 @@ import { IEditorContent } from "@/core/models/Base";
 import { ESocketTopic } from "@langboard/core/enums";
 
 export interface ICardDetailsChangedRawResponse {
+    updated_at?: string;
     title?: string;
     description?: IEditorContent;
     deadline_at?: string;

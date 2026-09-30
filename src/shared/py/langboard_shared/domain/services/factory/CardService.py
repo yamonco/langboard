@@ -104,6 +104,7 @@ class CardService(BaseDomainService):
         card.last_change_target_id = target_id
         card.last_change_at = SafeDateTime.now()
         self.repo.card.update(card)
+        CardPublisher.metadata_changed(card)
 
     def mark_card_seen(self, user: User, card: TCardParam | None) -> dict[str, Any] | None:
         """Advance one user's read cursor after a card was actually shown."""

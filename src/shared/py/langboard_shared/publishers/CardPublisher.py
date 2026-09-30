@@ -8,6 +8,19 @@ from ..domain.models import Card, Checkitem, Project, ProjectColumn, ProjectLabe
 @staticclass
 class CardPublisher(BaseSocketPublisher):
     @staticmethod
+    def metadata_changed(card: Card):
+        """Publish persisted timestamps after nested card mutations."""
+        CardPublisher.put_dispather(
+            {"updated_at": card.updated_at.isoformat()},
+            SocketPublishModel(
+                topic=SocketTopic.Board,
+                topic_id=card.project_id.to_short_code(),
+                event=f"board:card:details:changed:{card.get_uid()}",
+                data_keys="updated_at",
+            ),
+        )
+
+    @staticmethod
     def linked_resource_changed(project: Project, card: Card):
         """Invalidate a linked card without publishing protected source data."""
 
@@ -61,6 +74,7 @@ class CardPublisher(BaseSocketPublisher):
         checkitem_cardified_from: Checkitem | None,
         model: dict[str, Any],
     ):
+        model = {**model, "updated_at": card.updated_at.isoformat()}
         topic_id = project.get_uid()
         card_uid = card.get_uid()
         publish_models = [
@@ -111,6 +125,7 @@ class CardPublisher(BaseSocketPublisher):
             "uid": card.get_uid(),
             "order": card.order,
             "archived_at": card.archived_at,
+            "updated_at": card.updated_at.isoformat(),
         }
 
         old_column_uid = old_column.get_uid()
@@ -130,7 +145,7 @@ class CardPublisher(BaseSocketPublisher):
                         topic=SocketTopic.Board,
                         topic_id=topic_id,
                         event=f"board:card:order:changed:{new_column_uid}",
-                        data_keys=["uid", "order", "archived_at"],
+                        data_keys=["uid", "order", "archived_at", "updated_at"],
                         custom_data={
                             "move_type": "to_column",
                             "column_uid": new_column_uid,
@@ -149,7 +164,7 @@ class CardPublisher(BaseSocketPublisher):
                         topic=SocketTopic.BoardCard,
                         topic_id=card_uid,
                         event=f"board:card:order:changed:{card_uid}",
-                        data_keys=["to_column_uid", "project_column_name", "archived_at"],
+                        data_keys=["to_column_uid", "project_column_name", "archived_at", "updated_at"],
                     ),
                     SocketPublishModel(
                         topic=SocketTopic.Dashboard,
@@ -170,7 +185,7 @@ class CardPublisher(BaseSocketPublisher):
                     topic=SocketTopic.Board,
                     topic_id=topic_id,
                     event=f"board:card:order:changed:{old_column_uid}",
-                    data_keys=["uid", "order"],
+                    data_keys=["uid", "order", "updated_at"],
                     custom_data={
                         "move_type": "in_column",
                         "column_uid": old_column_uid,
