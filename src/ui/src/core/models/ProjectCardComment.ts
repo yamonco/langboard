@@ -16,7 +16,6 @@ export interface IStore extends Interface {
     user?: User.Interface;
     bot?: BotModel.Interface;
     reactions: Partial<Record<TReactionEmoji, string[]>>;
-    acknowledged_user_uids?: string[];
 }
 
 class ProjectCardComment extends BaseModel<IStore> {
@@ -80,12 +79,6 @@ class ProjectCardComment extends BaseModel<IStore> {
     }
     public set reactions(value) {
         this.update({ reactions: value });
-    }
-    public get acknowledged_user_uids(): string[] {
-        return this.getValue("acknowledged_user_uids") ?? [];
-    }
-    public set acknowledged_user_uids(value: string[]) {
-        this.update({ acknowledged_user_uids: [...new Set(value)] });
     }
 }
 

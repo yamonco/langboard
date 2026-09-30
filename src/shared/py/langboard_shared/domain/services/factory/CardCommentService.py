@@ -1,5 +1,5 @@
 from typing import Any
-from ....core.db import DbSession, EditorContentModel, SqlBuilder
+from ....core.db import EditorContentModel
 from ....core.domain import BaseDomainService
 from ....core.types import SafeDateTime
 from ....core.types.ParamTypes import TCardParam, TCommentParam, TProjectParam, TUserOrBot
@@ -9,8 +9,6 @@ from ....tasks.activities import CardCommentActivityTask
 from ....tasks.bots import CardCommentBotTask
 from ...models import Bot, Card, CardComment, CardCommentReaction, Project, User
 from ...models.CardComment import CardCommentAnchorModel
-from ...models.CardCommentReaction import COMMENT_ACKNOWLEDGEMENT
-from ...models.bases import REACTION_TYPES
 from .CardService import CardService
 from .NotificationService import NotificationService
 from .ReactionService import ReactionService
@@ -108,40 +106,8 @@ class CardCommentService(BaseDomainService):
             api_comment["user"] = user.api_response()
         else:
             api_comment["bot"] = bot.api_response()
-        reactions = dict(reaction or {})
-        api_comment["acknowledged_user_uids"] = list(dict.fromkeys(reactions.pop(COMMENT_ACKNOWLEDGEMENT, [])))
-        api_comment["reactions"] = reactions
+        api_comment["reactions"] = reaction or {}
         return api_comment
-
-    def set_acknowledged(
-        self, user: User, project: TProjectParam, card: TCardParam, comment: TCommentParam, acknowledged: bool
-    ) -> dict[str, Any] | None:
-        """An explicit, idempotent acknowledgement, independent of emoji reactions."""
-        if not isinstance(user, User):
-            return None
-        params = InfraHelper.get_records_with_foreign_by_params((Project, project), (Card, card), (CardComment, comment))
-        if not params:
-            return None
-        project, card, comment = params
-        if card.project_id != project.id or comment.card_id != card.id:
-            return None
-        with DbSession.atomic() as db:
-            current = db.exec(
-                SqlBuilder.select.table(CardComment)
-                .where(CardComment.column("id") == comment.id)
-                .where(CardComment.column("deleted_at").is_(None))
-                .with_for_update()
-            ).first()
-            if current is None:
-                return None
-            existing = self.repo.reaction.get_one(user, CardCommentReaction, comment.id, COMMENT_ACKNOWLEDGEMENT)
-            changed = bool(existing) != acknowledged
-            if changed:
-                self.repo.reaction.toggle(user, CardCommentReaction, comment.id, acknowledged, COMMENT_ACKNOWLEDGEMENT, existing)
-        if changed:
-            CardCommentPublisher.reacted(user, project, card, comment, COMMENT_ACKNOWLEDGEMENT, acknowledged)
-        result = self.get_as_api(card, comment)
-        return {"acknowledged_user_uids": result["acknowledged_user_uids"]} if result else None
 
     def create(
         self,
@@ -275,8 +241,6 @@ class CardCommentService(BaseDomainService):
         comment: TCommentParam | None,
         reaction: str,
     ) -> bool | None:
-        if reaction not in REACTION_TYPES:
-            return None
         params = InfraHelper.get_records_with_foreign_by_params(
             (Project, project), (Card, card), (CardComment, comment)
         )
