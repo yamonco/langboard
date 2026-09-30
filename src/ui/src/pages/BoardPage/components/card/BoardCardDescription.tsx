@@ -1,13 +1,11 @@
 import Box from "@/components/base/Box";
 import Button from "@/components/base/Button";
-import Flex from "@/components/base/Flex";
 import IconComponent from "@/components/base/IconComponent";
 import Skeleton from "@/components/base/Skeleton";
 import type { TEditor } from "@/components/Editor/editor-kit";
 import { PlateEditor } from "@/components/Editor/plate-editor";
 import { sanitizeEditorContent } from "@/components/Editor/utils";
 import { BotModel, ProjectCard, ProjectCardComment } from "@/core/models";
-import type { TUserLikeModel } from "@/core/models/ModelRegistry";
 import { ProjectRole } from "@/core/models/roles";
 import { useBoardCard, useBoardCardPanel } from "@/core/providers/BoardCardProvider";
 import { cn } from "@/core/utils/ComponentUtils";
@@ -20,7 +18,7 @@ import { useTranslation } from "react-i18next";
 import { Utils } from "@langboard/core/utils";
 import { VirtualizedDescriptionContent } from "@/pages/BoardPage/components/card/description/VirtualizedDescriptionContent";
 import { buildDescriptionChunks } from "@/pages/BoardPage/components/card/description/descriptionChunks";
-import { areAnchorMarkersEqual } from "@/pages/BoardPage/components/card/anchorMarkers";
+import { areAnchorMarkersEqual, type IAnchorMarkerPosition } from "@/pages/BoardPage/components/card/anchorMarkers";
 import {
     captureCardCommentAnchor,
     normalizeAnchorPreview,
@@ -32,13 +30,6 @@ import CardContentBlockList from "@/pages/BoardPage/components/card/CardContentB
 interface IAnchorComposerPosition {
     anchor: ICardCommentAnchor;
     left: number;
-    top: number;
-}
-
-interface IAnchorMarkerPosition {
-    commentUID: string;
-    quote: string;
-    commentPreview: string;
     top: number;
 }
 
@@ -184,15 +175,18 @@ const BoardCardDescription = memo(({ scrollParentRef }: IBoardCardDescriptionPro
             return;
         }
 
-        const containsSelectionNode = (node: Node | null) => node !== null && descriptionElement.contains(node);
+        const containsSelectionNode = (node: Node | null) => node !== null && !!descriptionRef.current?.contains(node);
         const handleSelectAll = (event: KeyboardEvent) => {
             if (event.key !== "a" || !(event.metaKey || event.ctrlKey)) {
                 return;
             }
 
+            const root = descriptionRef.current;
             const selection = window.getSelection();
-            if (containsSelectionNode(selection?.anchorNode ?? null) || containsSelectionNode(selection?.focusNode ?? null)) {
+            if (root && selection && (containsSelectionNode(selection.anchorNode) || containsSelectionNode(selection.focusNode))) {
+                event.preventDefault();
                 descriptionSelectAllRef.current = true;
+                selection.selectAllChildren(root);
             }
         };
 
@@ -210,7 +204,13 @@ const BoardCardDescription = memo(({ scrollParentRef }: IBoardCardDescriptionPro
             }
 
             const markdownContent = description?.content;
-            const shouldCopyMarkdown = Utils.Type.isString(markdownContent) && descriptionSelectAllRef.current;
+            const range = selection.rangeCount === 1 ? selection.getRangeAt(0) : null;
+            const isWholeDescription =
+                range?.startContainer === descriptionElement &&
+                range.startOffset === 0 &&
+                range.endContainer === descriptionElement &&
+                range.endOffset === descriptionElement.childNodes.length;
+            const shouldCopyMarkdown = Utils.Type.isString(markdownContent) && descriptionSelectAllRef.current && isWholeDescription;
             descriptionSelectAllRef.current = false;
 
             event.clipboardData.setData("text/plain", shouldCopyMarkdown ? markdownContent : selectedText);
