@@ -1536,6 +1536,18 @@ class CardService(BaseDomainService):
                 card.last_change_at = SafeDateTime.now()
                 self.repo.card.update(card)
 
+        self.notify_order_changed(user_or_bot, project, card, old_column, new_column)
+
+        return True
+
+    def notify_order_changed(
+        self,
+        user_or_bot: TUserOrBot,
+        project: Project,
+        card: Card,
+        old_column: ProjectColumn,
+        new_column: ProjectColumn | None,
+    ) -> None:
         CardPublisher.order_changed(project, card, old_column, cast(ProjectColumn, new_column))
         if new_column is not None:
             self.publish_work_states(project, [card.id, *self._dependency_children(card)])
@@ -1546,8 +1558,6 @@ class CardService(BaseDomainService):
             )
             CardActivityTask.card_moved(user_or_bot, project, card, old_column)
             CardBotTask.card_moved(user_or_bot, project, card, old_column, False)
-
-        return True
 
     def assign_self(self, user: User, project: TProjectParam, card: TCardParam) -> dict[str, Any]:
         """Assign the authenticated project member additively; never infer an identity."""

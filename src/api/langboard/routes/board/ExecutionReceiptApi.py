@@ -1,5 +1,6 @@
 """Native, idempotent execution receipts for a board card generation."""
 
+from collections.abc import Callable
 from datetime import datetime
 from hashlib import sha256
 from json import dumps
@@ -18,11 +19,13 @@ from langboard_shared.core.routing import (
     form_model,
 )
 from langboard_shared.core.schema import OpenApiSchema
-from langboard_shared.domain.models import Card, Project, ProjectRole
+from langboard_shared.domain.models import Bot, Card, Project, ProjectColumn, ProjectRole, User
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
+from langboard_shared.domain.services import DomainService
 from langboard_shared.filter import RoleFilter
 from langboard_shared.helpers import InfraHelper
-from langboard_shared.security import RoleFinder
+from langboard_shared.infrastructure.repositories import Repository
+from langboard_shared.security import Auth, RoleFinder
 from langboard_shared.tasks.webhooks.ExecutionReadinessUow import current_execution, execution_readiness_uow
 from pydantic import Field, field_validator
 from sqlalchemy import select, text
@@ -117,9 +120,7 @@ def _reconcile_machine_checklist(db: DbSession, card_id: int, generation: int, p
     pr_urls = {artifact["url"] for artifact in payload["artifacts"] if artifact["type"] == "pull_request"}
     reviewable = payload["status"] in {"review_ready", "completed", "success"}
     for evidence in payload["checklist_evidence"]:
-        checked = reviewable and evidence["kind"] == "pr_submitted" and bool(
-            pr_urls.intersection(evidence["refs"])
-        )
+        checked = reviewable and evidence["kind"] == "pr_submitted" and bool(pr_urls.intersection(evidence["refs"]))
         db.exec(
             text("""
                 INSERT INTO execution_checklist_projection(
@@ -142,7 +143,19 @@ def _reconcile_machine_checklist(db: DbSession, card_id: int, generation: int, p
         )
 
 
-def _move_to_review(db: DbSession, card_id: int, project_id: int) -> bool:
+def _review_move_notification(
+    actor: User | Bot, project_id: int, card_id: int, old_column_id: int, new_column_id: int
+) -> Callable[[], None] | None:
+    records = InfraHelper.get_records_with_foreign_by_params((Project, project_id), (Card, card_id))
+    old_column = InfraHelper.get_by_id_like(ProjectColumn, old_column_id)
+    new_column = InfraHelper.get_by_id_like(ProjectColumn, new_column_id)
+    if not records or old_column is None or new_column is None:
+        return None
+    project, card = records
+    return lambda: DomainService().card.notify_order_changed(actor, project, card, old_column, new_column)
+
+
+def _move_to_review(db: DbSession, card_id: int, project_id: int, actor: User | Bot) -> bool:
     row = db.exec(
         select(text("is_enabled"), text("column_semantic_ids"))
         .select_from(text("project_execution_binding"))
@@ -159,9 +172,7 @@ def _move_to_review(db: DbSession, card_id: int, project_id: int) -> bool:
         return False
     target_id = review_ids[0]
     source = db.exec(
-        select(text("project_column_id"))
-        .select_from(text("card"))
-        .where(text("id = :card_id")),
+        select(text("project_column_id"), text('"order"')).select_from(text("card")).where(text("id = :card_id")),
         params={"card_id": card_id},
     ).first()
     if source is None or row[1].get(str(source[0])) not in {"ready", "active"}:
@@ -174,16 +185,27 @@ def _move_to_review(db: DbSession, card_id: int, project_id: int) -> bool:
     ).first()
     if target is None:
         return False
+    next_order = db.exec(
+        select(text('COALESCE(MAX("order"), -1) + 1'))
+        .select_from(text("card"))
+        .where(text("project_column_id = :target_id AND deleted_at IS NULL")),
+        params={"target_id": target_id},
+    ).first()[0]
+    Repository().card.update_row_order(
+        card_id, source[0], source[1], next_order, target_id, preserve_shifted_updated_at=True
+    )
     db.exec(
         text("""
             UPDATE card SET project_column_id = :target_id,
-                "order" = (SELECT COALESCE(MAX("order"), -1) + 1 FROM card
-                           WHERE project_column_id = :target_id AND deleted_at IS NULL),
+                "order" = :next_order,
                 updated_at = now()
             WHERE id = :card_id AND project_column_id <> :target_id
         """),
-        params={"card_id": card_id, "target_id": target_id},
+        params={"card_id": card_id, "target_id": target_id, "next_order": next_order},
     )
+    notification = _review_move_notification(actor, project_id, card_id, source[0], target_id)
+    if notification is not None:
+        db.after_commit(notification)
     return True
 
 
@@ -194,7 +216,7 @@ def _move_to_review(db: DbSession, card_id: int, project_id: int) -> bool:
     description="Store one receipt per execution generation, separately from the user card description.",
     responses=OpenApiSchema().suc({"receipt": "object", "created": "boolean"}).auth().forbidden().get(),
 )
-@RoleFilter.add(ProjectRole, [ProjectRoleAction.Update], RoleFinder.project)
+@RoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
 @AuthFilter.add()
 def put_execution_receipt(
     project_uid: str,
@@ -202,6 +224,7 @@ def put_execution_receipt(
     generation: int,
     form: PutExecutionReceiptForm,
     idempotency_key: str = Header(..., alias="Idempotency-Key"),
+    user_or_bot: User | Bot = Auth.scope("all"),  # noqa: B008 - FastAPI authentication dependency
 ) -> JsonResponse:
     records = InfraHelper.get_records_with_foreign_by_params((Project, project_uid), (Card, card_uid))
     if not records:
@@ -218,10 +241,12 @@ def put_execution_receipt(
     # The same report can be retried with a new transport timestamp. Identity
     # and semantic content stay fixed; preserve the first occurred_at in storage.
     semantic = {key: value for key, value in payload.items() if key != "occurred_at"}
-    content_hash = sha256(dumps(semantic, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode()).hexdigest()
+    content_hash = sha256(
+        dumps(semantic, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode()
+    ).hexdigest()
     with execution_readiness_uow() as execution:
         db = execution.db
-        execution.watch(card.id)
+        execution.watch([card.id])
         current = current_execution(card.id, db)
         if current is None or current[2] != generation:
             raise ApiException.Conflict_409()
@@ -253,7 +278,7 @@ def put_execution_receipt(
             raise ApiException.Conflict_409()
         _reconcile_machine_checklist(db, card.id, generation, saved[2])
         if created and payload["status"] in {"review_ready", "completed", "success"}:
-            _move_to_review(db, card.id, project.id)
+            _move_to_review(db, card.id, project.id, user_or_bot)
     return JsonResponse(content={"receipt": saved[2], "created": created, "generation": generation})
 
 
