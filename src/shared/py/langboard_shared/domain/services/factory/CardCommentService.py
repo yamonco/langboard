@@ -9,6 +9,7 @@ from ....tasks.activities import CardCommentActivityTask
 from ....tasks.bots import CardCommentBotTask
 from ...models import Bot, Card, CardComment, CardCommentReaction, Project, User
 from ...models.CardComment import CardCommentAnchorModel
+from ...models.bases import REACTION_TYPES
 from .CardService import CardService
 from .NotificationService import NotificationService
 from .ReactionService import ReactionService
@@ -106,7 +107,7 @@ class CardCommentService(BaseDomainService):
             api_comment["user"] = user.api_response()
         else:
             api_comment["bot"] = bot.api_response()
-        api_comment["reactions"] = reaction or {}
+        api_comment["reactions"] = {kind: uids for kind, uids in (reaction or {}).items() if kind in REACTION_TYPES}
         return api_comment
 
     def create(
@@ -241,6 +242,8 @@ class CardCommentService(BaseDomainService):
         comment: TCommentParam | None,
         reaction: str,
     ) -> bool | None:
+        if reaction not in REACTION_TYPES:
+            raise ValueError("Unsupported comment reaction")
         params = InfraHelper.get_records_with_foreign_by_params(
             (Project, project), (Card, card), (CardComment, comment)
         )

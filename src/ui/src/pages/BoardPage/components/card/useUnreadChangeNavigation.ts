@@ -71,7 +71,7 @@ export function useUnreadChangeNavigation(): void {
     const handledCardUIDRef = useRef<string | null>(null);
 
     useEffect(() => {
-        if (!hasUnreadChange || handledCardUIDRef.current === card.uid) {
+        if (handledCardUIDRef.current === card.uid) {
             return;
         }
         handledCardUIDRef.current = card.uid;
@@ -97,9 +97,10 @@ export function useUnreadChangeNavigation(): void {
             }
         };
 
-        void focus();
+        if (hasUnreadChange) void focus();
         markSeen({ project_uid: projectUID, card_uid: card.uid });
-        model.has_unread_change = false;
+        // Keep an explicit unread click intact for the rest of this visit.
+        // The server response invalidates the board and reader projections.
     }, [card, hasUnreadChange, markSeen, projectUID, setIsCommentPanelOpen]);
 }
 

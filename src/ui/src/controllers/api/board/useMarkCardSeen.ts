@@ -1,3 +1,5 @@
+import { cardReadStateKey } from "./useCardReadState";
+import { ProjectCard } from "@/core/models";
 import { Routing } from "@langboard/core/constants";
 import { api } from "@/core/helpers/Api";
 import { TMutationOptions, useQueryMutation } from "@/core/helpers/QueryMutation";
@@ -29,7 +31,10 @@ const useMarkCardSeen = (options?: TMutationOptions<IMarkCardSeenForm>) => {
         ...options,
         retry: 0,
         onSuccess: async (data, variables, onMutateResult, context) => {
+            const card = ProjectCard.Model.getModel(variables.card_uid);
+            if (card) card.has_unread_change = false;
             await queryClient.invalidateQueries({ queryKey: [`get-cards-${variables.project_uid}`] });
+            await queryClient.invalidateQueries({ queryKey: cardReadStateKey(variables.project_uid, variables.card_uid) });
             await options?.onSuccess?.(data, variables, onMutateResult, context);
         },
     });

@@ -8,6 +8,15 @@ from ..domain.models import Card, Checkitem, Project, ProjectColumn, ProjectLabe
 @staticclass
 class CardPublisher(BaseSocketPublisher):
     @staticmethod
+    def read_state_changed(card: Card):
+        """Invalidate read receipts without changing content timestamps."""
+        CardPublisher.put_dispather(
+            {"read_state_changed": True},
+            SocketPublishModel(topic=SocketTopic.Board, topic_id=card.project_id.to_short_code(),
+                               event=f"board:card:details:changed:{card.get_uid()}", data_keys="read_state_changed"),
+        )
+
+    @staticmethod
     def metadata_changed(card: Card):
         """Publish persisted timestamps after nested card mutations."""
         CardPublisher.put_dispather(
