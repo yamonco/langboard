@@ -170,7 +170,8 @@ class CardService(BaseDomainService):
             states[card.id] = project_work_state(
                 card_uid=card.get_uid(),
                 workflow_stage=column.workflow_stage if column and column.project_id == card.project_id else None,
-                archived=card.archived_at is not None,
+                archived=card.archived_at is not None
+                or bool(column and column.project_id == card.project_id and column.is_archive),
                 linked_resource=card.is_linked_resource,
                 total=total,
                 completed=completed,

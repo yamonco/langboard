@@ -6,7 +6,7 @@ from .CardService import CardService
 
 
 def test_card_batch_uses_bounded_queries_and_no_actor_or_editable_metadata(monkeypatch):
-    column = SimpleNamespace(id=3, project_id=1, workflow_stage="review")
+    column = SimpleNamespace(id=3, project_id=1, workflow_stage="review", is_archive=False)
     db = SimpleNamespace(exec=Mock(return_value=SimpleNamespace(all=lambda: [column])))
 
     @contextmanager
@@ -46,9 +46,17 @@ def test_card_batch_uses_bounded_queries_and_no_actor_or_editable_metadata(monke
     assert result[2]["workflow_stage"] == "review"
     assert result[2]["execution_state"] == "human_active"
     assert result[2]["verification_state"] == "partial"
-    # A malformed foreign column cannot supply another project's semantic.
+    # Older archive rows may lack archived_at; the owned column remains authoritative.
+    column.is_archive = True
+    archived = service.get_work_states(cards)[2]
+    assert archived["lifecycle"] == "archived"
+    assert archived["active_queue_eligible"] is False
+    assert any(reason["code"] == "archived_with_running_timer" for reason in archived["state_inconsistency"])
+    # A malformed foreign column cannot supply another project's semantic or lifecycle.
     column.project_id = 9
-    assert service.get_work_states(cards)[2]["workflow_stage"] is None
+    foreign = service.get_work_states(cards)[2]
+    assert foreign["workflow_stage"] is None
+    assert foreign["lifecycle"] == "active"
 
 
 def test_empty_authorized_batch_does_not_query():
