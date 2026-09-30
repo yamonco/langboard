@@ -60,7 +60,11 @@ export default function CardMetadataPreview({ card, children }: { card: ProjectC
                         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     )}
                     onPointerDown={(event) => event.stopPropagation()}
-                    onClick={(event) => event.stopPropagation()}
+                    onClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        setOpen(true);
+                    }}
                     onPointerEnter={(event) => {
                         if (event.pointerType === "mouse") setOpen(true);
                     }}
