@@ -223,11 +223,12 @@ class ProjectColumnService(BaseDomainService):
             return False
 
         archive_column = self.repo.project_column.get_or_create_archive_if_not_exists(project)
-        count_cards_in_archive = self.repo.project_column.count_cards(project, archive_column)
+        count_cards_in_source = self.repo.project_column.count_cards(project, column)
+        count_work_cards_in_source = self.repo.project_column.count_cards(project, column, exclude_linked_wikis=True)
 
         current_time = SafeDateTime.now()
 
-        self.repo.card.move_all_by_column(column, archive_column, count_cards_in_archive, is_archive=True)
+        self.repo.card.move_all_by_column(column, archive_column, count_cards_in_source, is_archive=True)
 
         BotScopeHelper.delete_by_scope(ProjectColumnBotScope, column)
         BotScheduleHelper.unschedule_by_scope(ProjectColumnBotSchedule, column)
@@ -242,7 +243,9 @@ class ProjectColumnService(BaseDomainService):
         if dock_snapshot is None:
             return False
 
-        ProjectColumnPublisher.deleted(project, column, archive_column, current_time, count_cards_in_archive)
+        ProjectColumnPublisher.deleted(
+            project, column, archive_column, current_time, count_cards_in_source, count_work_cards_in_source
+        )
         ProjectColumnPublisher.dock_changed(project, dock_snapshot)
         ProjectColumnActivityTask.project_column_deleted(user_or_bot, project, column)
         ProjectColumnBotTask.project_column_deleted(user_or_bot, project, column)

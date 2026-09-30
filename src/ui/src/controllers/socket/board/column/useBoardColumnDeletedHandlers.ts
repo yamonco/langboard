@@ -10,6 +10,7 @@ export interface IBoardColumnDeletedRawResponse {
     archive_column_name: string;
     archived_at: string;
     count_all_cards_in_column: number;
+    count_work_cards_in_column?: number;
 }
 
 export interface IUseBoardColumnDeletedHandlersProps extends IBaseUseSocketHandlersProps<{}> {
@@ -31,6 +32,7 @@ const useBoardColumnDeletedHandlers = ({ callback, column }: IUseBoardColumnDele
                     name: data.archive_column_name,
                     archivedAt: new Date(data.archived_at),
                     sourceCount: data.count_all_cards_in_column,
+                    sourceWorkCount: data.count_work_cards_in_column,
                 });
 
                 return {};

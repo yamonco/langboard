@@ -152,6 +152,7 @@ class ProjectColumnPublisher(BaseSocketPublisher):
         archive_column: ProjectColumn,
         archived_at: SafeDateTime,
         count_all_cards_in_column: int,
+        count_work_cards_in_column: int,
     ):
         column_uid = column.get_uid()
         model = {
@@ -160,6 +161,7 @@ class ProjectColumnPublisher(BaseSocketPublisher):
             "archive_column_name": archive_column.name,
             "archived_at": archived_at,
             "count_all_cards_in_column": count_all_cards_in_column,
+            "count_work_cards_in_column": count_work_cards_in_column,
         }
 
         topic_id = project.get_uid()

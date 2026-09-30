@@ -68,6 +68,38 @@ def test_read_snapshot_does_not_publish_or_replace(monkeypatch: pytest.MonkeyPat
     publish.assert_not_called()
 
 
+def test_delete_separates_source_order_count_from_work_count(monkeypatch: pytest.MonkeyPatch):
+    module = import_module(ProjectColumnService.__module__)
+    project = SimpleNamespace(id=1)
+    column = SimpleNamespace(id=2, is_archive=False, get_uid=lambda: "source")
+    archive = SimpleNamespace(id=3)
+    monkeypatch.setattr(module.InfraHelper, "get_records_with_foreign_by_params", lambda *args: (project, column))
+    for helper, method in [(module.BotScopeHelper, "delete_by_scope"), (module.BotScheduleHelper, "unschedule_by_scope")]:
+        monkeypatch.setattr(helper, method, Mock())
+    monkeypatch.setattr(module.ProjectColumnActivityTask, "project_column_deleted", Mock())
+    monkeypatch.setattr(module.ProjectColumnBotTask, "project_column_deleted", Mock())
+    published = Mock()
+    monkeypatch.setattr(module.ProjectColumnPublisher, "deleted", published)
+    monkeypatch.setattr(module.ProjectColumnPublisher, "dock_changed", Mock())
+    counts = Mock(side_effect=[5, 2])
+    move = Mock()
+    service = SimpleNamespace(
+        repo=SimpleNamespace(
+            project_column=SimpleNamespace(
+                get_or_create_archive_if_not_exists=Mock(return_value=archive),
+                count_cards=counts,
+                delete_with_dock_snapshot=Mock(return_value={"column_uids": [], "revision": 1}),
+            ),
+            card=SimpleNamespace(move_all_by_column=move),
+        ),
+        _get_service=lambda *args: SimpleNamespace(cancel_pending_by_scope=Mock()),
+    )
+    assert ProjectColumnService.delete(service, object(), project, column)
+    assert counts.call_args_list == [((project, column), {}), ((project, column), {"exclude_linked_wikis": True})]
+    move.assert_called_once_with(column, archive, 5, is_archive=True)
+    assert published.call_args.args[-2:] == (5, 2)
+
+
 @pytest.mark.parametrize("result", [None, {"column_uids": ["column-a"], "revision": 1}])
 def test_publish_committed_configuration_only(monkeypatch: pytest.MonkeyPatch, result):
     module = import_module(ProjectColumnService.__module__)

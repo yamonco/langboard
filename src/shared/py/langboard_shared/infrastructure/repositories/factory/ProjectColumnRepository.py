@@ -254,12 +254,16 @@ class ProjectColumnRepository(BaseOrderRepository[ProjectColumn, Project]):
 
         return schedules
 
-    def count_cards(self, project: TProjectParam, column: TColumnParam) -> int:
+    def count_cards(self, project: TProjectParam, column: TColumnParam, *, exclude_linked_wikis: bool = False) -> int:
         project_id = InfraHelper.convert_id(project)
         column_id = InfraHelper.convert_id(column)
         sql_query = SqlBuilder.select.count(Card, Card.id).where(  # type: ignore
             (Card.column("project_id") == project_id) & (Card.column("project_column_id") == column_id)
-        )
+        ).where(Card.column("deleted_at").is_(None))
+        if exclude_linked_wikis:
+            sql_query = sql_query.where(
+                or_(Card.column("source_type").is_(None), Card.column("source_type") != Card.LINKED_RESOURCE_PROJECT_WIKI)
+            )
         count = 0
         with DbSession.use(readonly=True) as db:
             result = db.exec(sql_query)

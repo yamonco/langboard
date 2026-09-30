@@ -463,7 +463,7 @@ class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
         self,
         source_column: TColumnParam,
         dest_column: TColumnParam,
-        count_cards_in_dest_column: int,
+        count_cards_in_source_column: int,
         is_archive: bool = False,
     ):
         source_column_id = InfraHelper.convert_id(source_column)
@@ -473,8 +473,9 @@ class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
         with DbSession.use(readonly=False) as db:
             db.exec(
                 SqlBuilder.update.table(Card)
-                .values({Card.order: Card.order + count_cards_in_dest_column})
+                .values({Card.order: Card.order + count_cards_in_source_column})
                 .where(Card.column("project_column_id") == dest_column_id)
+                .where(Card.column("deleted_at").is_(None))
             )
 
             ordered_cards_cte = (
@@ -483,6 +484,7 @@ class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
                     (func.row_number().over(order_by=Card.column("order")) - 1).label("new_order"),
                 )
                 .where(Card.column("project_column_id") == source_column_id)
+                .where(Card.column("deleted_at").is_(None))
                 .cte("ordered_cards")
             )
 
