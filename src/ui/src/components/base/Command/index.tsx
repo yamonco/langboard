@@ -23,9 +23,19 @@ Root.displayName = Primitive.displayName;
 export interface CommandDialogProps extends DialogProps {}
 
 const Dialog = ({ children, ...props }: CommandDialogProps) => {
+    const contentRef = React.useRef<HTMLDivElement>(null);
     return (
         <BaseDialog.Root {...props}>
-            <BaseDialog.Content className="w-[calc(100vw-1rem)] max-w-lg overflow-hidden p-0 shadow-lg sm:w-full">
+            <BaseDialog.Content
+                ref={contentRef}
+                className="w-[calc(100vw-1rem)] max-w-lg overflow-hidden p-0 shadow-lg sm:w-full"
+                onOpenAutoFocus={(event) => {
+                    const input = contentRef.current?.querySelector<HTMLInputElement>("[cmdk-input]");
+                    if (!input) return;
+                    event.preventDefault();
+                    input.focus();
+                }}
+            >
                 <Root className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group]:not([hidden])_~[cmdk-group]]:pt-0 [&_[cmdk-group]]:px-2 [&_[cmdk-input-wrapper]_svg]:h-5 [&_[cmdk-input-wrapper]_svg]:w-5 [&_[cmdk-input]]:h-12 [&_[cmdk-item]]:px-2 [&_[cmdk-item]]:py-3 [&_[cmdk-item]_svg]:h-5 [&_[cmdk-item]_svg]:w-5">
                     {children}
                 </Root>

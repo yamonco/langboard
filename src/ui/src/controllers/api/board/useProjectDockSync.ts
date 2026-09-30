@@ -9,6 +9,7 @@ export default function useProjectDockSync(projectUID: string) {
     useEffect(() => {
         let alive = true;
         let subscribed = false;
+        let hasSubscribed = false;
         const refresh = () => {
             void refreshProjectColumnDock(projectUID).catch((error) => {
                 if (alive) setupApiErrorHandler({}).handle(error);
@@ -21,11 +22,11 @@ export default function useProjectDockSync(projectUID: string) {
             key,
             notifier: (topicID, isSubscribed) => {
                 if (topicID !== projectUID || !alive) return;
-                if (isSubscribed && !subscribed) refresh();
+                if (isSubscribed && !subscribed && hasSubscribed) refresh();
+                if (isSubscribed) hasSubscribed = true;
                 subscribed = isSubscribed;
             },
         });
-        refresh();
         return () => {
             alive = false;
             socket.unsubscribeTopicNotifier({ topic: ESocketTopic.Board, topicId: projectUID, key });
