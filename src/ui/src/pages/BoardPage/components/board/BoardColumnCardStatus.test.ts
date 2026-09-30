@@ -12,10 +12,19 @@ import {
     getOverdueDays,
     getUpcomingDeadlineDays,
     isDeadlineFinished,
+    isDeadlineWarningSuppressed,
     isChecklistCompleted,
 } from "./BoardColumnCardStatus.ts";
 
 describe("board column card status", () => {
+    it("suppresses deadline warning for card completion, all checkitems, or archive", () => {
+        const checklist = { completed: 0, total: 0 };
+        assert.equal(isDeadlineFinished({ checklist }), false);
+        assert.equal(isDeadlineWarningSuppressed({ checklist, completed: true }), true);
+        assert.equal(isDeadlineWarningSuppressed({ checklist, completed: false }), false);
+        assert.equal(isDeadlineWarningSuppressed({ checklist, archivedAt: new Date() }), true);
+        assert.equal(isDeadlineWarningSuppressed({ checklist: { total: 2, completed: 2 } }), true);
+    });
     it("calculates checklist completion and hides progress without items", () => {
         assert.deepEqual(calculateChecklistProgress([]), { completed: 0, total: 0, ratio: 0 });
         assert.deepEqual(calculateChecklistProgress([{ is_checked: true }, { is_checked: false }]), {

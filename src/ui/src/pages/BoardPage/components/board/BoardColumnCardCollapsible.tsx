@@ -31,7 +31,7 @@ import {
     getOverdueDays,
     getUpcomingDeadlineDays,
     isChecklistCompleted,
-    isDeadlineFinished,
+    isDeadlineWarningSuppressed,
     type IBoardCardChecklistProgress,
 } from "@/pages/BoardPage/components/board/BoardColumnCardStatus";
 import BoardTaskMetadataBadges from "@/pages/BoardPage/components/task/BoardTaskMetadataBadges";
@@ -123,7 +123,8 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
         [checklistCompletedCount, checklistTotalCount]
     );
     const isChecklistTerminated = isChecklistCompleted(checklistProgress);
-    const isFinished = isDeadlineFinished({ archivedAt, checklist: checklistProgress });
+    const completed = card.useField("completed") ?? false;
+    const isFinished = isDeadlineWarningSuppressed({ archivedAt, checklist: checklistProgress, completed });
     const staleDays = getStaleDays({ updatedAt, now: deadlineClock, isFinished });
     const deadlinePressure = useMemo(
         () => calculateDeadlinePressure({ deadlineAt, isCompleted: isFinished, now: deadlineClock }),
@@ -147,7 +148,6 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
     const creator = card.useField("creator");
     const hasDescription = card.useField("has_description");
     const isCheckCard = card.useField("is_check_card") ?? false;
-    const completed = card.useField("completed") ?? false;
     const widgetVisibility = useMemo(
         () => getBoardCardWidgetVisibility({ has_description: hasDescription, count_comment: commentCount }),
         [hasDescription, commentCount]
@@ -344,6 +344,7 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
                             className={cn(
                                 "break-all leading-tight",
                                 compact && "text-sm font-medium text-muted-foreground",
+                                isCheckCard && !compact && "pl-7",
                                 completed && "line-through opacity-60"
                             )}
                         >
@@ -362,7 +363,10 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
                         {isCheckCard && !compact && (
                             <Button
                                 variant="ghost"
-                                className="absolute left-1.5 top-1/2 z-10 -translate-y-1/2 opacity-0 transition-opacity group-hover/card:opacity-100"
+                                className={cn(
+                                    "absolute left-1.5 top-1/2 z-10 -translate-y-1/2 transition-opacity",
+                                    deadlineAt ? "opacity-100" : "opacity-0 group-hover/card:opacity-100"
+                                )}
                                 size="icon-sm"
                                 title={t(completed ? "card.Mark as not done" : "card.Mark as done")}
                                 titleSide="top"

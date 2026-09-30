@@ -17,7 +17,7 @@ import {
     getDeadlinePressureLevel,
     getOverdueDays,
     getUpcomingDeadlineDays,
-    isDeadlineFinished,
+    isDeadlineWarningSuppressed,
 } from "@/pages/BoardPage/components/board/BoardColumnCardStatus";
 
 export function SkeletonBoardCardDeadline() {
@@ -57,7 +57,12 @@ const BoardCardDeadline = memo(() => {
     const checklistCompletedCount = card.useField("checklist_completed_count") ?? 0;
     const checklistTotalCount = card.useField("checklist_total_count") ?? 0;
     const { deadlineClock } = useBoard();
-    const isFinished = isDeadlineFinished({ archivedAt, checklist: { completed: checklistCompletedCount, total: checklistTotalCount } });
+    const completed = card.useField("completed") ?? false;
+    const isFinished = isDeadlineWarningSuppressed({
+        archivedAt,
+        checklist: { completed: checklistCompletedCount, total: checklistTotalCount },
+        completed,
+    });
     const isOverdue = getDeadlinePressureLevel({ deadlineAt: deadline, isCompleted: isFinished, now: deadlineClock }) === "overdue";
     const overdueDays = getOverdueDays({ deadlineAt: deadline, now: deadlineClock });
     const upcomingDays = getUpcomingDeadlineDays({ deadlineAt: deadline, now: deadlineClock, isCompleted: isFinished });
