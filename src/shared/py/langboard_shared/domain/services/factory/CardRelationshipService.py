@@ -2,6 +2,7 @@ from typing import Any
 from sqlalchemy import select
 from ....core.db import DbSession, EditorContentModel
 from ....core.domain import BaseDomainService
+from ....core.exceptions.RelationshipCycle import RelationshipCycle
 from ....core.types import SnowflakeID
 from ....core.types.ParamTypes import TCardParam, TProjectParam, TUserOrBot
 from ....helpers import InfraHelper
@@ -382,7 +383,7 @@ class CardRelationshipService(BaseDomainService):
         if semantic != "blocks":
             return
         if cls._edge_would_create_cycle(blocker_edges, parent, child):
-            raise ValueError("Relationship would create a blocks cycle")
+            raise RelationshipCycle("Relationship would create a blocks cycle")
         blocker_edges.add((parent, child))
 
     @staticmethod
