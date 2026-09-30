@@ -21,6 +21,8 @@ interface IBaseDashboardStyledLayoutProps {
     sidebarNavs?: ISidebarNavItem[];
     resizableSidebar?: Omit<IResizableSidebarProps, "main">;
     className?: string;
+    inert?: bool;
+    "aria-busy"?: React.AriaAttributes["aria-busy"];
     scrollAreaMutable?: React.ComponentPropsWithoutRef<typeof ScrollArea.Root>["mutable"];
     activityRailItems?: IActivityRailItem[];
     workbenchContext?: React.ReactNode;
