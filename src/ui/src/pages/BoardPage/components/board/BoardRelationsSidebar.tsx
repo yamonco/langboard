@@ -4,6 +4,7 @@ import { usePageNavigateRef } from "@/core/hooks/usePageNavigate";
 import { ROUTES } from "@/core/routing/constants";
 import { RELATIONSHIP_GROUPS } from "@/pages/BoardPage/components/board/RelationshipTypePicker";
 import { Link2 } from "lucide-react";
+import { hasContainmentCycle } from "./BoardColumnCardHierarchy";
 
 export default function BoardRelationsSidebar({ projectUID, cardUID }: { projectUID: string; cardUID?: string }) {
     const [t] = useTranslation();
@@ -35,6 +36,7 @@ function RelationsTree({ card, projectUID }: { card: ProjectCard.TModel; project
     const relationships = card.useForeignFieldArray("relationships");
     const workState = card.useField("work_state");
     const blockers = workState?.dependency_state?.direct_blockers ?? [];
+    const containsCycle = hasContainmentCycle(ProjectCard.Model.getModels((candidate) => candidate.project_uid === projectUID), card.uid);
     const semanticOf = (relationship: (typeof relationships)[number]) =>
         relationship.machine_semantic ?? GlobalRelationshipType.Model.getModel(relationship.relationship_type_uid)?.machine_semantic;
     const sections = [
@@ -57,6 +59,11 @@ function RelationsTree({ card, projectUID }: { card: ProjectCard.TModel; project
             <p className="truncate px-2 font-medium" title={card.title}>
                 {card.title}
             </p>
+            {containsCycle && (
+                <p role="status" className="px-2 text-xs text-muted-foreground">
+                    포함 관계 순환이 있습니다. 트리 표시를 제한하며 실행을 차단하지 않습니다.
+                </p>
+            )}
             {blockers.length > 0 && (
                 <section aria-label="막힌 이유">
                     <h2 className="px-2 py-1 text-xs font-medium text-muted-foreground">막힌 이유 · {blockers.length}</h2>

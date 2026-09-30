@@ -322,7 +322,7 @@ const BoardColumnCardList = memo(({ column, updateBoard, scrollableRef, onCardCo
 
     return (
         <Box className="relative w-full flex-shrink-0" style={{ height: `${totalSize}px` }}>
-            {mode !== "manual" && sortCards.map((card) => <CardSortSubscription key={card.uid} card={card} refresh={refreshSort} />)}
+            {sortCards.map((card) => <CardSortSubscription key={card.uid} card={card} refresh={refreshSort} />)}
             {virtualItems.map((virtualRow) => {
                 const group = hierarchyGroups[virtualRow.index];
                 if (!group) {
@@ -337,6 +337,11 @@ const BoardColumnCardList = memo(({ column, updateBoard, scrollableRef, onCardCo
                         className="absolute left-0 top-0 w-full pb-2"
                         style={{ transform: `translateY(${virtualRow.start}px)` }}
                     >
+                        {group.hasContainmentCycle && (
+                            <p role="status" className="px-2 py-1 text-xs text-muted-foreground">
+                                포함 관계가 순환하여 트리를 한 번씩만 표시합니다. 실행 차단은 별도입니다.
+                            </p>
+                        )}
                         {group.descendants.length ? (
                             <Box className="rounded-2xl border border-border/70 bg-secondary/30 p-1.5 shadow-sm">
                                 <BoardColumnCard card={group.root} />
@@ -357,6 +362,8 @@ const BoardColumnCardList = memo(({ column, updateBoard, scrollableRef, onCardCo
 });
 
 function CardSortSubscription({ card, refresh }: { card: ProjectCard.TModel; refresh: () => void }) {
+    const relationships = card.useForeignFieldArray("relationships");
+    useEffect(refresh, [relationships, refresh]);
     card.useField("updated_at", refresh);
     card.useField("created_at", refresh);
     card.useField("deadline_at", refresh);

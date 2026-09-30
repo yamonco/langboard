@@ -20,6 +20,7 @@ import {
     buildCardRelationshipIndex,
     canCreateCardRelationship,
     isRelationshipRenderedInHierarchy,
+    relationshipSemantic,
     TCardRelationshipIndex,
 } from "@/pages/BoardPage/components/board/BoardColumnCardHierarchy";
 import { draggable } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
@@ -162,7 +163,7 @@ const BoardColumnCardRelationshipButton = memo(({ type, attributes, compact, has
             filterCardMember(related) &&
             filterCardLabels(related) &&
             filterCardRelationships(related);
-        return !isRelationshipRenderedInHierarchy(card, related, visible);
+        return !isRelationshipRenderedInHierarchy(card, related, visible, relationshipSemantic(edge));
     }).length;
     const buttonRef = useRef<HTMLButtonElement | null>(null);
     const relationshipIndexRef = useRef<TCardRelationshipIndex | undefined>(undefined);
@@ -278,14 +279,19 @@ const BoardColumnCardRelationshipButton = memo(({ type, attributes, compact, has
     };
 
     const saveRelationship = async () => {
-        if (!targetCardUID || !selectedRelationshipUID || !canCreateCardRelationship(cards, card.uid, targetCardUID, type)) {
+        const selectedType = globalRelationshipTypes.find((candidate) => candidate.uid === selectedRelationshipUID);
+        if (
+            !targetCardUID || !selectedRelationshipUID ||
+            !canCreateCardRelationship(cards, card.uid, targetCardUID, type, undefined, selectedType?.machine_semantic)
+        ) {
             return;
         }
 
-        const existingRelationships = relationships.map(
-            (relationship) =>
+        const existingRelationships = relationships
+            .filter((relationship) => (isParent ? relationship.child_card_uid : relationship.parent_card_uid) === card.uid)
+            .map((relationship) =>
                 [isParent ? relationship.parent_card_uid : relationship.child_card_uid, relationship.relationship_type_uid] satisfies [string, string]
-        );
+            );
         setIsSaving(true);
         const promise = updateCardRelationships({
             project_uid: project.uid,
