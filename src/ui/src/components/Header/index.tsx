@@ -1,4 +1,5 @@
-import { memo, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
+import { useLocation } from "react-router";
 import { useTranslation } from "react-i18next";
 import CachedImage from "@/components/CachedImage";
 import HedaerNavItems from "@/components/Header/HedaerNavItems";
@@ -17,11 +18,19 @@ import HeaderUserMenu from "@/components/Header/HeaderUserMenu";
 import HeaderUserNotification from "@/components/Header/HeaderUserNotification";
 import { PROJECT_QUICK_SWITCHER_EVENT } from "@/pages/DashboardPage/components/ProjectDiscovery";
 
-const Header = memo(({ navs, title, compact }: IHeaderProps) => {
+const Header = memo(({ navs, title, compact, navigationReady = true }: IHeaderProps) => {
     const [t] = useTranslation();
     const { currentUser } = useAuth();
     const [isOpened, setIsOpen] = useState(false);
     const navigate = usePageNavigateRef();
+    const location = useLocation();
+    const commandTrigger = useRef<HTMLButtonElement>(null);
+
+    useEffect(() => {
+        if (navigationReady && location.state?.commandPaletteFocus === true) {
+            commandTrigger.current?.focus({ preventScroll: true });
+        }
+    }, [location.key, location.state, navigationReady]);
 
     const toDashboard = () => {
         navigate(ROUTES.DASHBOARD.PROJECTS.ALL, { smooth: true });
@@ -138,6 +147,8 @@ const Header = memo(({ navs, title, compact }: IHeaderProps) => {
             >
                 {compact && (
                     <Button
+                        ref={commandTrigger}
+                        data-command-palette-trigger
                         type="button"
                         variant="outline"
                         size="sm"

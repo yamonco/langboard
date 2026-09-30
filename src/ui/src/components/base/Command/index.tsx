@@ -20,14 +20,17 @@ const Root = React.forwardRef<React.ComponentRef<typeof Primitive>, React.Compon
 );
 Root.displayName = Primitive.displayName;
 
-export interface CommandDialogProps extends DialogProps {}
+export interface CommandDialogProps extends DialogProps {
+    onCloseAutoFocus?: React.ComponentPropsWithoutRef<typeof BaseDialog.Content>["onCloseAutoFocus"];
+}
 
-const Dialog = ({ children, ...props }: CommandDialogProps) => {
+const Dialog = ({ children, onCloseAutoFocus, ...props }: CommandDialogProps) => {
     const contentRef = React.useRef<HTMLDivElement>(null);
     return (
         <BaseDialog.Root {...props}>
             <BaseDialog.Content
                 ref={contentRef}
+                onCloseAutoFocus={onCloseAutoFocus}
                 className="w-[calc(100vw-1rem)] max-w-lg overflow-hidden p-0 shadow-lg sm:w-full"
                 onOpenAutoFocus={(event) => {
                     const input = contentRef.current?.querySelector<HTMLInputElement>("[cmdk-input]");

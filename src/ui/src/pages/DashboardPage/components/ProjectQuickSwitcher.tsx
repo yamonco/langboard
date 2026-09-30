@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router";
 import { useTranslation } from "react-i18next";
 import useSearchWikis from "@/controllers/api/wiki/useSearchWikis";
@@ -79,6 +79,9 @@ const ProjectQuickSwitcher = memo((): React.JSX.Element => {
     const navigate = usePageNavigateRef();
     const location = useLocation();
     const [opened, setOpened] = useState(false);
+    const projectNavigation = useRef(false);
+    const actionSelected = useRef(false);
+    const returnFocus = useRef<HTMLElement | null>(null);
     const [searchText, setSearchText] = useState("");
     const wikiQuery = useDebounce(searchText.trim(), 300);
     const { data, isFetching, isLoading } = useGetProjects({ enabled: opened });
@@ -105,26 +108,39 @@ const ProjectQuickSwitcher = memo((): React.JSX.Element => {
             if (event.defaultPrevented || (event.target instanceof HTMLElement && event.target.isContentEditable)) return;
             if (!isProjectQuickSwitcherShortcut(event)) return;
             event.preventDefault();
+            if (!opened) {
+                returnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+                actionSelected.current = false;
+            }
             setOpened((current) => !current);
         };
-        const open = () => setOpened(true);
+        const open = () => {
+            if (!opened) {
+                returnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+                actionSelected.current = false;
+            }
+            setOpened(true);
+        };
         window.addEventListener("keydown", onKeyDown);
         window.addEventListener(PROJECT_QUICK_SWITCHER_EVENT, open);
         return () => {
             window.removeEventListener("keydown", onKeyDown);
             window.removeEventListener(PROJECT_QUICK_SWITCHER_EVENT, open);
         };
-    }, []);
+    }, [opened]);
 
     const selectProject = (projectUID: string) => {
+        projectNavigation.current = true;
         setOpened(false);
-        navigate(ROUTES.BOARD.MAIN(projectUID));
+        navigate(ROUTES.BOARD.MAIN(projectUID), { state: { commandPaletteFocus: true } });
     };
     const selectRoute = (route: string) => {
+        actionSelected.current = true;
         setOpened(false);
         navigate(route);
     };
     const selectCommand = (eventName: string) => {
+        actionSelected.current = true;
         setOpened(false);
         window.dispatchEvent(new Event(eventName));
     };
@@ -132,6 +148,17 @@ const ProjectQuickSwitcher = memo((): React.JSX.Element => {
     return (
         <Command.Dialog
             open={opened}
+            onCloseAutoFocus={(event) => {
+                event.preventDefault();
+                if (actionSelected.current) return;
+                const previous = returnFocus.current;
+                if (!projectNavigation.current && previous?.isConnected && previous !== document.body) {
+                    previous.focus({ preventScroll: true });
+                    return;
+                }
+                projectNavigation.current = false;
+                document.querySelector<HTMLButtonElement>("[data-command-palette-trigger]")?.focus({ preventScroll: true });
+            }}
             onOpenChange={(open) => {
                 setOpened(open);
                 if (!open) setSearchText("");

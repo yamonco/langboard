@@ -122,6 +122,7 @@ const DashboardStyledLayout = forwardRef<HTMLDivElement, TDashboardStyledLayoutP
                         }
                         title={headerTitle}
                         compact={!!activityRailItems}
+                        navigationReady={!props.inert}
                     />
                 )}
                 <Box
