@@ -13,6 +13,7 @@ import { cn } from "@/core/utils/ComponentUtils";
 import { BOARD_COLUMN_TOUCH_DND_ATTR, BOARD_DND_SYMBOL_SET } from "@/pages/BoardPage/components/board/BoardConstants";
 import { draggedBoardCard } from "@/pages/BoardPage/components/board/BoardGestureData";
 import useProjectDockSync from "@/controllers/api/board/useProjectDockSync";
+import BoardWorkIsland from "@/pages/BoardPage/components/board/BoardWorkIsland";
 
 function acceptsCard(data: Record<string | symbol, unknown>, projectUID: string): boolean {
     return window.matchMedia("(min-width: 768px) and (pointer: fine)").matches && !!draggedBoardCard(data, BOARD_DND_SYMBOL_SET.row, projectUID);
@@ -60,22 +61,24 @@ export default function BoardFloatingNavigation({
             )}
             trailing={
                 dockEnabled && (
-                    <div className="hidden min-w-0 items-center md:flex">
+                    <div className="flex min-w-0 items-center">
+                        <span role="separator" aria-orientation="vertical" className="mx-1 h-6 w-px shrink-0 bg-border" />
+                        <BoardWorkIsland project={project} dragging={dragging} />
                         {pinned.length > 0 && (
-                            <>
+                            <div className="hidden min-w-0 items-center md:flex">
                                 <span role="separator" aria-orientation="vertical" className="mx-1 h-6 w-px shrink-0 bg-border" />
                                 <div className="flex min-w-0 max-w-[35vw] gap-1 overflow-x-auto">
                                     {pinned.map((column) => (
                                         <DockTarget key={column.uid} column={column} canDrop={canDrop} dragging={dragging} />
                                     ))}
                                 </div>
-                            </>
+                            </div>
                         )}
                         {archive && (
-                            <>
+                            <div className="hidden items-center md:flex">
                                 <span role="separator" aria-orientation="vertical" className="mx-1 h-6 w-px shrink-0 bg-border" />
                                 <DockTarget column={archive} canDrop={canDrop} dragging={dragging} />
-                            </>
+                            </div>
                         )}
                     </div>
                 )

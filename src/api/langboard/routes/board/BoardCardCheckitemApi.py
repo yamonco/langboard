@@ -126,7 +126,15 @@ def change_checkitem_order_or_move_checklist(
     "/board/{project_uid}/card/{card_uid}/checkitem/{checkitem_uid}/status",
     tags=["Board.Card.Checkitem"],
     description="Change checkitem status.",
-    responses=OpenApiSchema().auth().forbidden().err(403, ApiErrorCode.PE2003).err(404, ApiErrorCode.NF2011).get(),
+    responses=(
+        OpenApiSchema()
+        .auth()
+        .forbidden()
+        .err(403, ApiErrorCode.PE2003)
+        .err(409, ApiErrorCode.EX2002)
+        .err(404, ApiErrorCode.NF2011)
+        .get()
+    ),
 )
 @RoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
 @AuthFilter.add("user")
@@ -144,6 +152,15 @@ def change_checkitem_status(
 
     if checkitem.user_id and checkitem.user_id != user.id:
         raise ApiException.Forbidden_403(ApiErrorCode.PE2003)
+
+    if form.status.value == "started":
+        other_active = [
+            work
+            for work in service.checkitem.get_active_work(user)
+            if work["checkitem"]["uid"] != checkitem.get_uid()
+        ]
+        if other_active and not form.replace_active:
+            raise ApiException.Conflict_409(ApiErrorCode.EX2002)
 
     result = service.checkitem.change_status(user, project_uid, card_uid, checkitem, form.status, from_api=True)
     if not result:

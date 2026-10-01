@@ -164,6 +164,41 @@ def get_card_list(
 
 
 @AppRouter.api.get(
+    "/dashboard/work/active",
+    tags=["Dashboard"],
+    responses=OpenApiSchema()
+    .suc(
+        {
+            "active_work": [
+                {
+                    "checkitem": (
+                        Checkitem,
+                        {
+                            "schema": {
+                                "card_uid": "string",
+                                "timer_started_at": "string",
+                            }
+                        },
+                    ),
+                    "card": Card,
+                    "project": Project,
+                }
+            ]
+        }
+    )
+    .auth()
+    .forbidden()
+    .get(),
+)
+@AuthFilter.add("user")
+def get_active_work(
+    user: User = Auth.scope("user"),
+    service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    return JsonResponse(content={"active_work": service.checkitem.get_active_work(user)})
+
+
+@AppRouter.api.get(
     "/dashboard/tracking",
     tags=["Dashboard"],
     responses=(
