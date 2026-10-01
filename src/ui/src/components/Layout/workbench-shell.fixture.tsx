@@ -1,4 +1,4 @@
-import { createContext, useContext, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { createMemoryRouter, Link, RouterProvider, useLocation } from "react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -11,8 +11,11 @@ const PageContext = createContext("missing context");
 function SidebarContent() {
     return <p>{useContext(PageContext)}</p>;
 }
+let pageMounts = 0;
 function Page({ name }: { name: string }) {
     const location = useLocation();
+    const [mountNumber, setMountNumber] = useState(0);
+    useEffect(() => setMountNumber(++pageMounts), []);
     const isMobile = window.innerWidth < 768;
     const [contextOpen, setContextOpen] = useState(false);
     return (
@@ -30,11 +33,14 @@ function Page({ name }: { name: string }) {
                 }
             >
                 <h1>{name}</h1>
+                <output data-testid="page-mounts">{mountNumber}</output>
                 <p>{location.pathname}</p>
-                <Link to="/dashboard/projects/all">Open Dashboard</Link>
-                <Link to="/board/fixture">Open Board</Link>
-                <Link to="/board/fixture/card">Open Card</Link>
-                <Link to="/board/fixture/wiki">Open Wiki</Link>
+                <nav className="flex flex-wrap gap-2">
+                    <Link to="/dashboard/projects/all">Open Dashboard</Link>
+                    <Link to="/board/fixture">Open Board</Link>
+                    <Link to="/board/fixture/card">Open Card</Link>
+                    <Link to="/board/fixture/wiki">Open Wiki</Link>
+                </nav>
             </DashboardStyledLayout>
         </PageContext.Provider>
     );

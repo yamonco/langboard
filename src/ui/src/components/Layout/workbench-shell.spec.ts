@@ -36,3 +36,10 @@ test("mobile drawer actions are keyboard reachable and open context content", as
     await expect(page.getByText("Sidebar Dashboard", { exact: true })).toHaveCount(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
 });
+
+// Initial page registration must not move the outlet into a new React subtree.
+test("initial shell registration mounts the page once", async ({ page }) => {
+    await page.goto("/src/components/Layout/workbench-shell.fixture.html");
+    await expect(page.getByRole("heading", { name: "Dashboard", exact: true })).toBeVisible();
+    await expect(page.getByTestId("page-mounts")).toHaveText("1");
+});

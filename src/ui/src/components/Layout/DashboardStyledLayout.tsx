@@ -27,6 +27,7 @@ interface IBaseDashboardStyledLayoutProps {
     "aria-busy"?: React.AriaAttributes["aria-busy"];
     scrollAreaMutable?: React.ComponentPropsWithoutRef<typeof ScrollArea.Root>["mutable"];
     activityRailItems?: IActivityRailItem[];
+    workbench?: boolean;
     workbenchContext?: React.ReactNode;
     workbenchContextHidden?: boolean;
     mobileWorkbenchContext?: { title: string; icon: string; onClose: () => void };
@@ -68,6 +69,7 @@ export const DashboardStyledLayoutFrame = forwardRef<HTMLDivElement, TDashboardS
             sidebarNavs,
             resizableSidebar,
             activityRailItems,
+            workbench,
             workbenchContext,
             workbenchContextHidden,
             mobileWorkbenchContext,
@@ -78,6 +80,7 @@ export const DashboardStyledLayoutFrame = forwardRef<HTMLDivElement, TDashboardS
         ref
     ) => {
         const [t] = useTranslation();
+        const hasWorkbench = workbench || !!activityRailItems;
         const { scrollableRef, isAtTop, scrollToTop } = useScrollToTop({});
 
         const main = (
@@ -102,7 +105,7 @@ export const DashboardStyledLayoutFrame = forwardRef<HTMLDivElement, TDashboardS
         if (sidebarNavs) {
             sidebar = <Sidebar navs={sidebarNavs} main={main} />;
         } else if (resizableSidebar) {
-            sidebar = <ResizableSidebar main={main} {...resizableSidebar} compactHeight={!!activityRailItems} />;
+            sidebar = <ResizableSidebar main={main} {...resizableSidebar} compactHeight={hasWorkbench} />;
         } else {
             sidebar = main;
         }
@@ -123,35 +126,31 @@ export const DashboardStyledLayoutFrame = forwardRef<HTMLDivElement, TDashboardS
                                 : headerNavs
                         }
                         title={headerTitle}
-                        compact={!!activityRailItems}
+                        compact={hasWorkbench}
                         navigationReady={!props.inert}
                     />
                 )}
                 <Box
                     w="full"
-                    className={cn("overflow-y-auto", activityRailItems ? "h-[calc(100dvh-2.75rem)]" : "min-h-[calc(100vh_-_theme(spacing.16))]")}
+                    className={cn("overflow-y-auto", hasWorkbench ? "h-[calc(100dvh-2.75rem)]" : "min-h-[calc(100vh_-_theme(spacing.16))]")}
                 >
-                    {activityRailItems ? (
+                    {hasWorkbench ? (
                         <div className="flex size-full">
-                            <ActivityRail items={activityRailItems} />
+                            {activityRailItems && <ActivityRail items={activityRailItems} />}
                             <div className="min-w-0 flex-1">
-                                {workbenchContext ? (
-                                    <ResizableSidebar
-                                        main={<div className="min-w-0 flex-1">{sidebar}</div>}
-                                        initialWidth={280}
-                                        collapsableWidth={220}
-                                        minWidth={220}
-                                        maxWidth={420}
-                                        compactHeight
-                                        floatingHidden
-                                        showCollapseButton={false}
-                                        hidden={workbenchContextHidden}
-                                    >
-                                        {workbenchContextHidden ? null : workbenchContext}
-                                    </ResizableSidebar>
-                                ) : (
-                                    sidebar
-                                )}
+                                <ResizableSidebar
+                                    main={<div className="min-w-0 flex-1">{sidebar}</div>}
+                                    initialWidth={280}
+                                    collapsableWidth={220}
+                                    minWidth={220}
+                                    maxWidth={420}
+                                    compactHeight
+                                    floatingHidden
+                                    showCollapseButton={false}
+                                    hidden={!workbenchContext || workbenchContextHidden}
+                                >
+                                    {workbenchContextHidden ? null : workbenchContext}
+                                </ResizableSidebar>
                             </div>
                         </div>
                     ) : (
