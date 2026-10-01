@@ -263,6 +263,24 @@ class ActivityService(BaseDomainService):
 
         return api_activities, count_new_records, project, card
 
+    def get_card_column_history(self, project: TProjectParam, card: TCardParam) -> list[dict[str, Any]]:
+        params = InfraHelper.get_records_with_foreign_by_params((Project, project), (Card, card))
+        if not params:
+            return []
+        resolved_project, resolved_card = params
+        if resolved_card.project_id != resolved_project.id:
+            return []
+        return [
+            {
+                "uid": activity.get_uid(),
+                "activity_type": activity.activity_type.value,
+                "created_at": activity.api_response()["created_at"],
+                "column": activity.activity_history.get("column"),
+                "recorder": activity.activity_history.get("recorder"),
+            }
+            for activity in self.repo.activity.get_card_column_history(resolved_project, resolved_card)
+        ]
+
     @overload
     def get_api_list_by_wiki(
         self,
