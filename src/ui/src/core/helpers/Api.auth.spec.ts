@@ -193,3 +193,11 @@ for (const status of [200, 401]) {
         expect(requests).toBe(1);
     });
 }
+
+test("expired cookie refresh terminates once and rejects the original request", async ({ page }) => {
+    await page.goto("/src/core/helpers/auth-refresh.fixture.html");
+    await page.getByRole("button", { name: "Run expired refresh" }).click();
+    await expect(page.locator("#result")).toContainText(/"refreshes": 1/);
+    const result = JSON.parse((await page.locator("#result").textContent())!);
+    expect(result).toEqual({ reads: 1, refreshes: 1, rejected: true, status: 422, signedOut: true, sessionChanges: 1 });
+});

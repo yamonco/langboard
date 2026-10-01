@@ -85,6 +85,8 @@ api.interceptors.response.use(
     async (error) => {
         if (axios.isCancel(error)) throw error;
         if (isPreviousSession(error.config)) throw new axios.CanceledError("Session changed");
+        // A failed cookie refresh is terminal; it must never refresh itself.
+        if (error.config?.url?.endsWith(Routing.API.AUTH.REFRESH)) throw error;
         const interceptToast = error.config?.env?.interceptToast;
         const { handleAsync } = setupApiErrorHandler({
             code: {
@@ -125,7 +127,7 @@ api.interceptors.response.use(
                     const originalConfig: AxiosRequestConfig = e.config!;
                     const isRefreshed = await refresh();
                     if (!isRefreshed) {
-                        return;
+                        throw e;
                     }
                     originalConfig.headers!.Authorization = `Bearer ${authStore.getToken()}`;
                     return await api(originalConfig);
