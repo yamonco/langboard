@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router";
 import { useTranslation } from "react-i18next";
 import useSearchWikis from "@/controllers/api/wiki/useSearchWikis";
@@ -31,24 +31,20 @@ interface IProjectQuickSwitcherGroupProps {
     projects: Project.TModel[];
 }
 
-const ProjectQuickSwitcherGroup = ({ currentProjectUID, heading, onSelect, projects }: IProjectQuickSwitcherGroupProps) => {
+const ProjectQuickSwitcherGroup = memo(({ currentProjectUID, heading, onSelect, projects }: IProjectQuickSwitcherGroupProps) => {
     if (!projects.length) return null;
 
     return (
         <Command.Group heading={heading}>
             {projects.map((project) => (
-                <ProjectQuickSwitcherItem
-                    key={project.uid}
-                    project={project}
-                    active={project.uid === currentProjectUID}
-                    onSelect={() => onSelect(project.uid)}
-                />
+                <ProjectQuickSwitcherItem key={project.uid} project={project} active={project.uid === currentProjectUID} onSelect={onSelect} />
             ))}
         </Command.Group>
     );
-};
+});
+ProjectQuickSwitcherGroup.displayName = "Dashboard.ProjectQuickSwitcherGroup";
 
-const ProjectQuickSwitcherItem = ({ project, active, onSelect }: { project: Project.TModel; active: bool; onSelect: () => void }) => {
+const ProjectQuickSwitcherItem = memo(({ project, active, onSelect }: { project: Project.TModel; active: bool; onSelect: (uid: string) => void }) => {
     const [t, i18n] = useTranslation();
     const title = project.useField("title");
     const projectType = project.useField("project_type");
@@ -58,7 +54,7 @@ const ProjectQuickSwitcherItem = ({ project, active, onSelect }: { project: Proj
     const activityAt = lastActivityAt ?? createdAt;
 
     return (
-        <Command.Item value={project.uid} keywords={[title, projectType]} onSelect={onSelect} className="gap-3 rounded-lg py-2.5">
+        <Command.Item value={project.uid} keywords={[title, projectType]} onSelect={() => onSelect(project.uid)} className="gap-3 rounded-lg py-2.5">
             <Flex items="center" justify="center" className="size-8 shrink-0 rounded-lg bg-secondary">
                 <IconComponent icon={starred ? "star" : "folder-kanban"} size="4" />
             </Flex>
@@ -71,11 +67,49 @@ const ProjectQuickSwitcherItem = ({ project, active, onSelect }: { project: Proj
             {active ? <IconComponent icon="check" size="4" className="shrink-0 text-primary" /> : null}
         </Command.Item>
     );
-};
+});
+ProjectQuickSwitcherItem.displayName = "Dashboard.ProjectQuickSwitcherItem";
+
+const ProjectQuickSwitcherCards = memo(
+    ({ currentProjectUID, projects, onSelect }: { currentProjectUID?: string; projects: Project.TModel[]; onSelect: (route: string) => void }) => {
+        const [t] = useTranslation();
+        const { currentUser } = useAuth();
+        const openCards = useOpenCards(currentUser?.uid);
+        const boardCards = ProjectCard.Model.useModels((card) => card.project_uid === currentProjectUID && card.source_type !== "project_wiki");
+        const projectTitles = useMemo(() => new Map(projects.map((project) => [project.uid, project.title])), [projects]);
+        const cards = useMemo(
+            () =>
+                buildCommandPaletteCards(
+                    openCards,
+                    boardCards.map((card) => ({ projectUID: card.project_uid, cardUID: card.uid, title: card.title })),
+                    new Set(projectTitles.keys())
+                ),
+            [openCards, boardCards, projectTitles]
+        );
+
+        if (!cards.length) return null;
+        return (
+            <Command.Group heading={t("dashboard.Cards")}>
+                {cards.map((card) => (
+                    <Command.Item
+                        key={`${card.projectUID}:${card.cardUID}`}
+                        value={`card:${card.projectUID}:${card.cardUID}`}
+                        keywords={[card.title, projectTitles.get(card.projectUID) ?? ""]}
+                        onSelect={() => onSelect(ROUTES.BOARD.CARD(card.projectUID, card.cardUID))}
+                        className="gap-3 rounded-lg"
+                    >
+                        <IconComponent icon="file-text" size="4" />
+                        <span className="truncate">{card.title}</span>
+                    </Command.Item>
+                ))}
+            </Command.Group>
+        );
+    }
+);
+ProjectQuickSwitcherCards.displayName = "Dashboard.ProjectQuickSwitcherCards";
 
 const ProjectQuickSwitcher = memo((): React.JSX.Element => {
     const [t] = useTranslation();
-    const { currentUser } = useAuth();
     const navigate = usePageNavigateRef();
     const location = useLocation();
     const [opened, setOpened] = useState(false);
@@ -86,22 +120,9 @@ const ProjectQuickSwitcher = memo((): React.JSX.Element => {
     const wikiQuery = useDebounce(searchText.trim(), 300);
     const { data, isFetching, isLoading } = useGetProjects({ enabled: opened });
     const projects = data?.projects ?? [];
-    const openCards = useOpenCards(currentUser?.uid);
     const sections = useMemo(() => buildProjectQuickSwitcherSections(projects), [projects]);
     const currentProjectUID = location.pathname.startsWith("/board/") ? location.pathname.split("/")[2] : undefined;
     const wikiSearch = useSearchWikis(currentProjectUID, wikiQuery, opened);
-    const boardCards = ProjectCard.Model.useModels(
-        (card) => opened && card.project_uid === currentProjectUID && card.source_type !== "project_wiki",
-        [opened, currentProjectUID]
-    );
-    const cards = useMemo(() => {
-        const authorized = new Set(projects.map((project) => project.uid));
-        return buildCommandPaletteCards(
-            openCards,
-            boardCards.map((card) => ({ projectUID: card.project_uid, cardUID: card.uid, title: card.title })),
-            authorized
-        );
-    }, [openCards, boardCards, projects]);
 
     useEffect(() => {
         const onKeyDown = (event: KeyboardEvent) => {
@@ -129,16 +150,22 @@ const ProjectQuickSwitcher = memo((): React.JSX.Element => {
         };
     }, [opened]);
 
-    const selectProject = (projectUID: string) => {
-        projectNavigation.current = true;
-        setOpened(false);
-        navigate(ROUTES.BOARD.MAIN(projectUID), { state: { commandPaletteFocus: true } });
-    };
-    const selectRoute = (route: string) => {
-        actionSelected.current = true;
-        setOpened(false);
-        navigate(route);
-    };
+    const selectProject = useCallback(
+        (projectUID: string) => {
+            projectNavigation.current = true;
+            setOpened(false);
+            navigate(ROUTES.BOARD.MAIN(projectUID), { state: { commandPaletteFocus: true } });
+        },
+        [navigate]
+    );
+    const selectRoute = useCallback(
+        (route: string) => {
+            actionSelected.current = true;
+            setOpened(false);
+            navigate(route);
+        },
+        [navigate]
+    );
     const selectCommand = (eventName: string) => {
         actionSelected.current = eventName;
         setOpened(false);
@@ -233,22 +260,12 @@ const ProjectQuickSwitcher = memo((): React.JSX.Element => {
                         {t("dashboard.Toggle sidebar")}
                     </Command.Item>
                 </Command.Group>
-                {cards.length > 0 && (
-                    <Command.Group heading={t("dashboard.Cards")}>
-                        {cards.map((card) => (
-                            <Command.Item
-                                key={`${card.projectUID}:${card.cardUID}`}
-                                value={`card:${card.projectUID}:${card.cardUID}`}
-                                keywords={[card.title, projects.find((project) => project.uid === card.projectUID)?.title ?? ""]}
-                                onSelect={() => selectRoute(ROUTES.BOARD.CARD(card.projectUID, card.cardUID))}
-                                className="gap-3 rounded-lg"
-                            >
-                                <IconComponent icon="file-text" size="4" />
-                                <span className="truncate">{card.title}</span>
-                            </Command.Item>
-                        ))}
-                    </Command.Group>
-                )}
+                <ProjectQuickSwitcherCards
+                    key={currentProjectUID ?? "dashboard"}
+                    currentProjectUID={currentProjectUID}
+                    projects={projects}
+                    onSelect={selectRoute}
+                />
                 {opened && searchText.trim() === wikiQuery && wikiSearch.data?.items.length ? (
                     <Command.Group heading={t("board.Wiki")}>
                         {wikiSearch.data.items.map((wiki) => (
