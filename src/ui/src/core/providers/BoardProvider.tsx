@@ -29,6 +29,7 @@ import useBoardCardMetadataDeletedHandlers from "@/controllers/socket/metadata/u
 import useBoardCardMetadataUpdatedHandlers from "@/controllers/socket/metadata/useBoardCardMetadataUpdatedHandlers";
 import useCardLinkedResourceChangedHandlers from "@/controllers/socket/card/useCardLinkedResourceChangedHandlers";
 import useBoardChecklistProgressChangedHandlers from "@/controllers/socket/card/checklist/useBoardChecklistProgressChangedHandlers";
+import { matchesCardCreator } from "@/core/utils/CardCreatorFilter";
 import { useQueryClient } from "@tanstack/react-query";
 
 const DEFAULT_ARCHIVE_CARD_VISIBLE_DAYS = 3;
@@ -37,12 +38,13 @@ const DAY_IN_MS = 24 * 60 * 60 * 1000;
 export interface IFilterMap extends ISearchFilterMap {
     keyword?: string[];
     members?: string[];
+    creators?: string[];
     labels?: string[];
     parents?: string[];
     children?: string[];
 }
 
-export const BOARD_FILTER_KEYS = ["keyword", "members", "labels", "parents", "children"] as (keyof IFilterMap)[];
+export const BOARD_FILTER_KEYS = ["keyword", "members", "creators", "labels", "parents", "children"] as (keyof IFilterMap)[];
 
 export interface IBoardContext {
     socket: ISocketContext;
@@ -59,6 +61,7 @@ export interface IBoardContext {
     filterLabel: (label: ProjectLabel.TModel) => bool;
     filterCard: (card: ProjectCard.TModel) => bool;
     shouldShowArchivedCard: (card: ProjectCard.TModel) => bool;
+    filterCardCreator: (card: ProjectCard.TModel) => bool;
     filterCardMember: (card: ProjectCard.TModel) => bool;
     filterCardLabels: (card: ProjectCard.TModel) => bool;
     filterCardRelationships: (card: ProjectCard.TModel) => bool;
@@ -88,6 +91,7 @@ const initialContext = {
     filterLabel: () => true,
     filterCard: () => true,
     shouldShowArchivedCard: () => true,
+    filterCardCreator: () => true,
     filterCardMember: () => true,
     filterCardLabels: () => true,
     filterCardRelationships: () => true,
@@ -335,6 +339,8 @@ export const BoardProvider = memo(({ project, currentUser, children }: IBoardPro
         return Date.now() - card.archived_at.getTime() <= visibleDays * DAY_IN_MS;
     };
 
+    const filterCardCreator = (card: ProjectCard.TModel) => matchesCardCreator(card.creator, filters.creators, currentUser.uid);
+
     const filterCardMember = (card: ProjectCard.TModel) => {
         if (!filters.members?.length) {
             return true;
@@ -416,6 +422,7 @@ export const BoardProvider = memo(({ project, currentUser, children }: IBoardPro
                 filterLabel,
                 filterCard,
                 shouldShowArchivedCard,
+                filterCardCreator,
                 filterCardMember,
                 filterCardLabels,
                 filterCardRelationships,

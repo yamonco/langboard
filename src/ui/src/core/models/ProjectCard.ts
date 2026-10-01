@@ -243,6 +243,10 @@ class ProjectCard extends BaseModel<IStore> {
         return this.getValue("title");
     }
 
+    public get creator() {
+        return this.getValue("creator");
+    }
+
     public get source_type() {
         return this.getValue("source_type");
     }

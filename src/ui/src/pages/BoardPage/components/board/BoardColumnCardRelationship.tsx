@@ -149,6 +149,7 @@ const BoardColumnCardRelationshipButton = memo(({ type, attributes, compact, has
         shouldShowArchivedCard,
         filterCard,
         filterCardMember,
+        filterCardCreator,
         filterCardLabels,
         filterCardRelationships,
     } = useBoard();
@@ -161,6 +162,7 @@ const BoardColumnCardRelationshipButton = memo(({ type, attributes, compact, has
             shouldShowArchivedCard(related) &&
             filterCard(related) &&
             filterCardMember(related) &&
+            filterCardCreator(related) &&
             filterCardLabels(related) &&
             filterCardRelationships(related);
         return !isRelationshipRenderedInHierarchy(card, related, visible, relationshipSemantic(edge));
@@ -281,7 +283,8 @@ const BoardColumnCardRelationshipButton = memo(({ type, attributes, compact, has
     const saveRelationship = async () => {
         const selectedType = globalRelationshipTypes.find((candidate) => candidate.uid === selectedRelationshipUID);
         if (
-            !targetCardUID || !selectedRelationshipUID ||
+            !targetCardUID ||
+            !selectedRelationshipUID ||
             !canCreateCardRelationship(cards, card.uid, targetCardUID, type, undefined, selectedType?.machine_semantic)
         ) {
             return;
@@ -289,8 +292,12 @@ const BoardColumnCardRelationshipButton = memo(({ type, attributes, compact, has
 
         const existingRelationships = relationships
             .filter((relationship) => (isParent ? relationship.child_card_uid : relationship.parent_card_uid) === card.uid)
-            .map((relationship) =>
-                [isParent ? relationship.parent_card_uid : relationship.child_card_uid, relationship.relationship_type_uid] satisfies [string, string]
+            .map(
+                (relationship) =>
+                    [isParent ? relationship.parent_card_uid : relationship.child_card_uid, relationship.relationship_type_uid] satisfies [
+                        string,
+                        string,
+                    ]
             );
         setIsSaving(true);
         const promise = updateCardRelationships({

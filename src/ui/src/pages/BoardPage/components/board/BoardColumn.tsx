@@ -175,7 +175,17 @@ interface IBoardColumnCardListProps extends IBoardColumnProps {
 }
 
 const BoardColumnCardList = memo(({ column, updateBoard, scrollableRef, onCardCountChange }: IBoardColumnCardListProps) => {
-    const { project, socket, filters, filterCard, shouldShowArchivedCard, filterCardMember, filterCardLabels, filterCardRelationships } = useBoard();
+    const {
+        project,
+        socket,
+        filters,
+        filterCard,
+        shouldShowArchivedCard,
+        filterCardMember,
+        filterCardCreator,
+        filterCardLabels,
+        filterCardRelationships,
+    } = useBoard();
     const { mode } = useColumnCardSort(project.uid, column.uid);
     const [sortRevision, refreshSort] = useReducer((x) => x + 1, 0);
     const updater = useReducer((x) => x + 1, 0);
@@ -218,11 +228,12 @@ const BoardColumnCardList = memo(({ column, updateBoard, scrollableRef, onCardCo
                 (!column.is_archive || shouldShowArchivedCard(model)) &&
                 filterCard(model) &&
                 filterCardMember(model) &&
+                filterCardCreator(model) &&
                 filterCardLabels(model) &&
                 filterCardRelationships(model)
             );
         },
-        rowDependencies: [filters, sortRevision, filterCard, filterCardMember, filterCardLabels, filterCardRelationships],
+        rowDependencies: [filters, sortRevision, filterCard, filterCardMember, filterCardCreator, filterCardLabels, filterCardRelationships],
         columnUID: column.uid,
         socket,
         updater,
@@ -322,7 +333,9 @@ const BoardColumnCardList = memo(({ column, updateBoard, scrollableRef, onCardCo
 
     return (
         <Box className="relative w-full flex-shrink-0" style={{ height: `${totalSize}px` }}>
-            {sortCards.map((card) => <CardSortSubscription key={card.uid} card={card} refresh={refreshSort} />)}
+            {sortCards.map((card) => (
+                <CardSortSubscription key={card.uid} card={card} refresh={refreshSort} />
+            ))}
             {virtualItems.map((virtualRow) => {
                 const group = hierarchyGroups[virtualRow.index];
                 if (!group) {

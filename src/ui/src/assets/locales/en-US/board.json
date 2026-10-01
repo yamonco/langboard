@@ -44,6 +44,10 @@
     "Clear": "Clear",
     "Keyword": "Keyword",
     "Members": "Members",
+    "Assignee": "Assignee",
+    "Creator": "Creator",
+    "Created by me": "Created by me",
+    "Select creators": "Select creators",
     "Labels": "Labels",
     "relationships": {
       "parents": "Parents of",
