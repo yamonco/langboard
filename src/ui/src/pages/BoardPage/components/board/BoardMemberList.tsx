@@ -29,6 +29,7 @@ const BoardMemberList = memo(({ isSelectCardView }: IBoardMemberListProps) => {
     const currentUserUID = currentUser.useField("uid");
     const canEditMembers = canEdit || ownerUID === currentUserUID;
     const groups = currentUser.useForeignFieldArray("user_groups");
+    const [isMemberPickerOpen, setIsMemberPickerOpen] = useState(false);
     const [candidateSearchInput, setCandidateSearchInput] = useState("");
     const [candidateSearchQuery, setCandidateSearchQuery] = useState("");
     const [memberCandidates, setMemberCandidates] = useState<User.TModel[]>([]);
@@ -98,56 +99,19 @@ const BoardMemberList = memo(({ isSelectCardView }: IBoardMemberListProps) => {
     }, [candidateSearchInput, normalizeCandidateSearch]);
 
     useEffect(() => {
-        const updateSearchFromEditor = () => {
-            window.setTimeout(() => {
-                const textbox = document.querySelector<HTMLElement>("[data-member-invite-popover='true'] [role='textbox']");
-                const search = textbox?.textContent ?? "";
-                updateCandidateSearchInput(search);
-            }, 0);
-        };
-        let observer: MutationObserver | undefined;
-        const observerInterval = window.setInterval(() => {
-            const textbox = document.querySelector<HTMLElement>("[data-member-invite-popover='true'] [role='textbox']");
-            updateSearchFromEditor();
-
-            if (!textbox || observer) {
-                return;
-            }
-
-            observer = new MutationObserver(updateSearchFromEditor);
-            observer.observe(textbox, {
-                childList: true,
-                characterData: true,
-                subtree: true,
-            });
-            updateSearchFromEditor();
-        }, 50);
-
-        document.addEventListener("input", updateSearchFromEditor, true);
-        document.addEventListener("keyup", updateSearchFromEditor, true);
-        document.addEventListener("compositionend", updateSearchFromEditor, true);
-
-        return () => {
-            observer?.disconnect();
-            window.clearInterval(observerInterval);
-            document.removeEventListener("input", updateSearchFromEditor, true);
-            document.removeEventListener("keyup", updateSearchFromEditor, true);
-            document.removeEventListener("compositionend", updateSearchFromEditor, true);
-        };
-    }, [updateCandidateSearchInput]);
-
-    useEffect(() => {
-        if (!canEditMembers || candidateSearchQuery.length < 2 || isCandidateSearchPlaceholder(candidateSearchQuery)) {
+        if (!isMemberPickerOpen || !canEditMembers || candidateSearchQuery.length < 2 || isCandidateSearchPlaceholder(candidateSearchQuery)) {
             setMemberCandidates([]);
             return;
         }
 
         let cancelled = false;
+        const controller = new AbortController();
         const url = Utils.String.format(Routing.API.BOARD.MEMBER_CANDIDATES, {
             uid: project.uid,
         });
 
         api.get(url, {
+            signal: controller.signal,
             params: {
                 query: candidateSearchQuery,
             },
@@ -167,8 +131,9 @@ const BoardMemberList = memo(({ isSelectCardView }: IBoardMemberListProps) => {
 
         return () => {
             cancelled = true;
+            controller.abort();
         };
-    }, [canEditMembers, candidateSearchQuery, isCandidateSearchPlaceholder, project]);
+    }, [isMemberPickerOpen, canEditMembers, candidateSearchQuery, isCandidateSearchPlaceholder, project]);
 
     const save = (items: (string | User.TModel)[]) => {
         const mergedItems = hiddenCurrentUserAssignee ? [...items, hiddenCurrentUserAssignee] : items;
@@ -203,6 +168,10 @@ const BoardMemberList = memo(({ isSelectCardView }: IBoardMemberListProps) => {
 
     return (
         <MultiSelectAssignee.Popover
+            onOpenChange={(open) => {
+                setIsMemberPickerOpen(open);
+                if (!open) setCandidateSearchInput("");
+            }}
             popoverButtonProps={{
                 size: "icon",
                 className: cn("size-8 xs:size-10", isSelectCardView ? "hidden" : ""),

@@ -170,7 +170,12 @@ export const SelectEditorInput = React.forwardRef<HTMLDivElement, React.Componen
     const updateSearch = React.useCallback(
         (target?: HTMLElement | null) => {
             window.setTimeout(() => {
-                const search = target?.textContent ?? editor.api.string([]);
+                const search = target
+                    ? Array.from(target.querySelectorAll("[data-slate-string]"))
+                          .filter((node) => !node.closest('[contenteditable="false"]'))
+                          .map((node) => node.textContent ?? "")
+                          .join("")
+                    : editor.api.string([]);
                 setSearch(search);
                 onSearchChange?.(search);
             }, 0);
