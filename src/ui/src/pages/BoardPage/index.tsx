@@ -761,15 +761,15 @@ function BoardProxyDisplay({ pageRoute, isFetching, isProjectLoading, project }:
                           }
                         : undefined
                 }
-                resizableSidebar={
-                    chatResizableSidebar
-                        ? {
-                              ...chatResizableSidebar,
-                              floatingHidden: true,
-                              hidden: isMobile || !!selectCardViewType || !!chatResizableSidebar.hidden,
-                          }
-                        : undefined
-                }
+                resizableSidebar={{
+                    // Keep the workspace mounted while the socket resolves chat availability.
+                    children: null,
+                    initialWidth: 280,
+                    collapsableWidth: 210,
+                    ...chatResizableSidebar,
+                    floatingHidden: true,
+                    hidden: isMobile || !!selectCardViewType || !chatResizableSidebar || !!chatResizableSidebar.hidden,
+                }}
                 className="!p-0"
             >
                 {!isProjectLoading && currentUser && project ? (

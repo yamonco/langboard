@@ -10,7 +10,12 @@ export interface IMarkCardSeenForm {
     card_uid: string;
 }
 
-const useMarkCardSeen = (options?: TMutationOptions<IMarkCardSeenForm>) => {
+export interface IMarkCardSeenResponse {
+    card_uid: string;
+    seen_change_seq: number;
+}
+
+const useMarkCardSeen = (options?: TMutationOptions<IMarkCardSeenForm, IMarkCardSeenResponse>) => {
     const { mutate, queryClient } = useQueryMutation();
 
     const markCardSeen = async (params: IMarkCardSeenForm) => {
@@ -18,7 +23,7 @@ const useMarkCardSeen = (options?: TMutationOptions<IMarkCardSeenForm>) => {
             uid: params.project_uid,
             card_uid: params.card_uid,
         });
-        const res = await api.post(url, undefined, {
+        const res = await api.post<IMarkCardSeenResponse>(url, undefined, {
             env: {
                 interceptToast: options?.interceptToast,
             } as never,
@@ -27,13 +32,23 @@ const useMarkCardSeen = (options?: TMutationOptions<IMarkCardSeenForm>) => {
         return res.data;
     };
 
-    return mutate(["mark-card-seen"], markCardSeen, {
+    return mutate<IMarkCardSeenForm, IMarkCardSeenResponse>(["mark-card-seen"], markCardSeen, {
         ...options,
         retry: 0,
         onSuccess: async (data, variables, onMutateResult, context) => {
             const card = ProjectCard.Model.getModel(variables.card_uid);
-            if (card) card.has_unread_change = false;
-            await queryClient.invalidateQueries({ queryKey: [`get-cards-${variables.project_uid}`] });
+            const alreadySeen =
+                card?.project_uid === variables.project_uid &&
+                !card.has_unread_change &&
+                data?.card_uid === variables.card_uid &&
+                card.last_change_seq != null &&
+                card.last_change_seq === data.seen_change_seq;
+            // An unchanged read receipt only refreshes the reader projection. New or
+            // unread changes still require the authoritative board snapshot.
+            if (!alreadySeen) {
+                if (card) card.has_unread_change = false;
+                await queryClient.invalidateQueries({ queryKey: [`get-cards-${variables.project_uid}`] });
+            }
             await queryClient.invalidateQueries({ queryKey: cardReadStateKey(variables.project_uid, variables.card_uid) });
             await options?.onSuccess?.(data, variables, onMutateResult, context);
         },
