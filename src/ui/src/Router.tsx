@@ -2,7 +2,7 @@ import { createBrowserRouter, Navigate, RouteObject } from "react-router";
 import { RouterProvider } from "react-router/dom";
 import SuspenseComponent from "@/components/base/SuspenseComponent";
 import { ROUTES } from "@/core/routing/constants";
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo } from "react";
 import useAuthStore from "@/core/stores/AuthStore";
 import SwallowErrorBoundary from "@/components/SwallowErrorBoundary";
 import { EHttpStatus } from "@langboard/core/enums";
@@ -15,17 +15,9 @@ interface IRouteConfig {
 }
 
 type TRouteModule = { default: IRouteConfig };
-type TRouteImporter = () => Promise<TRouteModule>;
-
-const pages = Object.values(import.meta.glob<TRouteModule>("./pages/**/Route.tsx"));
-
-const loadRouteConfigs = async (importers: TRouteImporter[]) => {
-    return Promise.all(
-        importers.map(async (importPage) => {
-            return (await importPage()).default;
-        })
-    );
-};
+// Route declarations are small; their page components remain lazy. Bootstrap
+// must not wait for every unrelated route chunk before authentication starts.
+const pages = Object.values(import.meta.glob<TRouteModule>("./pages/**/Route.tsx", { eager: true }));
 
 const toRoutes = (routeConfigs: IRouteConfig[]): RouteObject[] => [
     ...routeConfigs.filter((config) => !config.workbench).flatMap((config) => config.routes),
@@ -35,37 +27,18 @@ const toRoutes = (routeConfigs: IRouteConfig[]): RouteObject[] => [
     },
 ];
 
+const routes = toRoutes(pages.map((page) => page.default));
+
 export interface IRouterProps {
     children: React.ReactNode;
 }
 
 const Router = memo(({ children }: IRouterProps) => {
-    const [routes, setRoutes] = useState<RouteObject[] | null>(null);
-
     useEffect(() => {
-        let isDisposed = false;
-
-        void loadRouteConfigs(pages).then((loadedConfigs) => {
-            if (isDisposed) {
-                return;
-            }
-
-            setRoutes(toRoutes(loadedConfigs));
-            useAuthStore.setState(() => ({
-                pageLoaded: true,
-            }));
-        });
-
-        return () => {
-            isDisposed = true;
-        };
+        useAuthStore.setState(() => ({ pageLoaded: true }));
     }, []);
 
     const router = useMemo(() => {
-        if (!routes) {
-            return null;
-        }
-
         const routeList: RouteObject[] = [
             ...(!IS_OLLAMA_RUNNING
                 ? [
@@ -95,11 +68,7 @@ const Router = memo(({ children }: IRouterProps) => {
                 children: routeList,
             },
         ]);
-    }, [children, routes]);
-
-    if (!router) {
-        return null;
-    }
+    }, [children]);
 
     return <RouterProvider router={router} />;
 });

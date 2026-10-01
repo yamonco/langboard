@@ -16,11 +16,8 @@ Object.keys(jsons).forEach((jsonPath) => {
 });
 Object.entries(tempLocales).forEach(([lang, nsLoaders]) => {
     locales[lang] = async () => {
-        const nsData: Record<string, ResourceKey> = {};
-        for (const [ns, loader] of Object.entries(nsLoaders)) {
-            nsData[ns] = (await loader()).default;
-        }
-        return nsData;
+        const entries = await Promise.all(Object.entries(nsLoaders).map(async ([ns, loader]) => [ns, (await loader()).default]));
+        return Object.fromEntries(entries);
     };
 });
 
