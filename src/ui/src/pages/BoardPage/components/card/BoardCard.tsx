@@ -107,7 +107,7 @@ const BoardCard = memo(
         onEditModeStateChange,
     }: IBoardCardProps): React.JSX.Element => {
         const { setPageAliasRef } = usePageHeader();
-        const { data: cardData, isFetching, error } = useGetCardDetails({ project_uid: projectUID, card_uid: cardUID });
+        const { data: cardData, isFetching, error, refetch } = useGetCardDetails({ project_uid: projectUID, card_uid: cardUID });
         const focusedCardRef = useRef("");
         const [t] = useTranslation();
         const socket = useSocket();
@@ -205,8 +205,34 @@ const BoardCard = memo(
 
         return (
             <>
+                {error && (
+                    <Box role="alert" className="shrink-0 rounded-xl border bg-background p-4">
+                        {!cardData ? (
+                            <Dialog.Title className="text-base font-semibold">{t("card.Could not load card")}</Dialog.Title>
+                        ) : (
+                            <p className="text-sm text-muted-foreground">{t("card.Could not refresh card")}</p>
+                        )}
+                        <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="mt-2"
+                            disabled={isFetching}
+                            onClick={() => {
+                                if (!isFetching) void refetch();
+                            }}
+                        >
+                            {t("common.Retry")}
+                        </Button>
+                    </Box>
+                )}
+                {!cardData && (
+                    <Button type="button" size="sm" variant="outline" className="shrink-0 self-end" onClick={onClose}>
+                        {t("common.Close")}
+                    </Button>
+                )}
                 {!cardData ? (
-                    <SkeletonBoardCard />
+                    !error && <SkeletonBoardCard />
                 ) : (
                     <BoardCardProvider key={cardUID} projectUID={projectUID} card={cardData.card} currentUser={currentUser} viewportRef={viewportRef}>
                         <BoardCardResult
