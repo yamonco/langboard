@@ -37,8 +37,8 @@ import { BoardBotScopeList, isBoardBotScopeGraphApprovalOriginType } from "@/pag
 import useGetProject from "@/controllers/api/board/useGetProject";
 import useGetCards from "@/controllers/api/board/useGetCards";
 import useGetGraphApprovals from "@/controllers/api/board/graphApprovals/useGetGraphApprovals";
-import BoardActivityDialog from "@/pages/BoardPage/components/board/BoardActivityDialog";
-import BoardChangesDialog from "@/pages/BoardPage/components/board/BoardChangesDialog";
+import ActivityList from "@/components/ActivityList";
+
 import { cn } from "@/core/utils/ComponentUtils";
 import useCardRelationshipsUpdatedHandlers from "@/controllers/socket/card/useCardRelationshipsUpdatedHandlers";
 import useRoleActionFilter from "@/core/hooks/useRoleActionFilter";
@@ -63,6 +63,8 @@ import { closeProject } from "@/pages/DashboardPage/components/OpenCardsStore";
 
 const BoardGraphPage = lazy(() => import("@/pages/BoardPage/BoardGraphPage"));
 const BoardWikiPage = lazy(() => import("@/pages/BoardPage/BoardWikiPage"));
+const BoardChangesSidebar = lazy(() => import("@/pages/BoardPage/components/board/BoardChangesSidebar"));
+const MyWorkSidebar = lazy(() => import("@/pages/DashboardPage/MyWorkPage"));
 const BoardRelationsSidebar = lazy(() => import("@/pages/BoardPage/components/board/BoardRelationsSidebar"));
 const BoardOutlineSidebar = lazy(() => import("@/pages/BoardPage/components/board/BoardOutlineSidebar"));
 const BoardWikiSidebar = lazy(() => import("@/pages/BoardPage/components/board/BoardWikiSidebar"));
@@ -84,7 +86,7 @@ const getCurrentPage = (pageRoute?: string): TBoardViewType => {
 };
 
 type TBoardSidePanel = "botScope" | "switchProject";
-type TWorkbenchContext = "explorer" | "relations" | "outline" | "wiki";
+type TWorkbenchContext = "explorer" | "my-work" | "changes" | "activity" | "relations" | "outline" | "wiki";
 
 const BoardProxy = memo((): React.JSX.Element => {
     const { setPageAliasRef } = usePageHeader();
@@ -179,12 +181,13 @@ function BoardProxyDisplay({ pageRoute, isFetching, isProjectLoading, project }:
     const { currentUser } = useAuth();
     const navigate = usePageNavigateRef();
     const [isCardExpanded, setIsCardExpanded] = useState(false);
-    const [isActivityDialogOpened, setIsActivityDialogOpened] = useState(false);
-    const [isChangesDialogOpened, setIsChangesDialogOpened] = useState(false);
     const [activeSidePanel, setActiveSidePanel] = useState<TBoardSidePanel>();
     const [workbenchContextMode, setWorkbenchContextMode] = useState<TWorkbenchContext>("explorer");
     const workbenchContextTitle = {
         explorer: "Explorer",
+        "my-work": t("dashboard.My Work"),
+        changes: t("dashboard.Changes"),
+        activity: t("board.Activity"),
         relations: t("dashboard.Relations"),
         outline: t("dashboard.Outline"),
         wiki: t("board.Wiki"),
@@ -192,10 +195,8 @@ function BoardProxyDisplay({ pageRoute, isFetching, isProjectLoading, project }:
     const [isContextOpen, setIsContextOpen] = useWorkbenchContextOpen(currentUser?.uid);
     const [isMobile, setIsMobile] = useState(window.innerWidth < ScreenMap.size.md);
     const isBotScopeOpened = activeSidePanel === "botScope";
+    const isWorkbenchContextVisible = !isBotScopeOpened && (isMobile ? activeSidePanel === "switchProject" : isContextOpen);
     const isSwitchProjectOpened = isMobile ? activeSidePanel === "switchProject" : isContextOpen && !isBotScopeOpened;
-    const openActivityDialog = useCallback(() => {
-        setIsActivityDialogOpened(true);
-    }, [setIsActivityDialogOpened]);
     const toggleBotScope = useCallback(() => {
         setActiveSidePanel((value) => (value === "botScope" ? undefined : "botScope"));
         if (!isMobile) setIsContextOpen(true);
@@ -210,21 +211,24 @@ function BoardProxyDisplay({ pageRoute, isFetching, isProjectLoading, project }:
             setIsContextOpen((open) => !open);
         }
     }, [isMobile, isBotScopeOpened, setIsContextOpen]);
-    const showWorkbenchContext = (mode: TWorkbenchContext) => {
-        setWorkbenchContextMode(mode);
-        if (!isMobile) setIsContextOpen(true);
-        setActiveSidePanel(isMobile ? "switchProject" : undefined);
-    };
+    const showWorkbenchContext = useCallback(
+        (mode: TWorkbenchContext) => {
+            setWorkbenchContextMode(mode);
+            if (!isMobile) setIsContextOpen(true);
+            setActiveSidePanel(isMobile ? "switchProject" : undefined);
+        },
+        [isMobile, setIsContextOpen]
+    );
     useEffect(() => {
         const toggleContext = () => toggleSwitchProject();
-        const openChanges = () => setIsChangesDialogOpened(true);
+        const openChanges = () => showWorkbenchContext("changes");
         window.addEventListener(WORKBENCH_TOGGLE_CONTEXT_EVENT, toggleContext);
         window.addEventListener(WORKBENCH_OPEN_CHANGES_EVENT, openChanges);
         return () => {
             window.removeEventListener(WORKBENCH_TOGGLE_CONTEXT_EVENT, toggleContext);
             window.removeEventListener(WORKBENCH_OPEN_CHANGES_EVENT, openChanges);
         };
-    }, [toggleSwitchProject]);
+    }, [toggleSwitchProject, showWorkbenchContext]);
     const {
         boardViewType,
         selectCardViewType,
@@ -534,8 +538,8 @@ function BoardProxyDisplay({ pageRoute, isFetching, isProjectLoading, project }:
         },
         {
             name: t("board.Activity"),
-            onClick: openActivityDialog,
-            active: isActivityDialogOpened,
+            onClick: () => showWorkbenchContext("activity"),
+            active: workbenchContextMode === "activity" && isWorkbenchContextVisible,
             hidden: !!selectCardViewType,
         },
         {
@@ -671,38 +675,38 @@ function BoardProxyDisplay({ pageRoute, isFetching, isProjectLoading, project }:
                     {
                         icon: "panel-left",
                         label: "Explorer",
-                        onClick: () =>
-                            workbenchContextMode === "explorer" && !isBotScopeOpened ? toggleSwitchProject() : showWorkbenchContext("explorer"),
-                        active: isContextOpen && !isBotScopeOpened && workbenchContextMode === "explorer",
+                        onClick: () => showWorkbenchContext("explorer"),
+                        active: isWorkbenchContextVisible && workbenchContextMode === "explorer",
                     },
                     {
                         icon: "list-checks",
                         label: t("dashboard.My Work"),
-                        onClick: () => navigate(`${ROUTES.DASHBOARD.MY_WORK}?project_uid=${project.uid}`),
+                        onClick: () => showWorkbenchContext("my-work"),
+                        active: isWorkbenchContextVisible && workbenchContextMode === "my-work",
                     },
                     {
                         icon: "circle-dot",
                         label: t("dashboard.Changes"),
-                        onClick: () => setIsChangesDialogOpened(true),
-                        active: isChangesDialogOpened,
+                        onClick: () => showWorkbenchContext("changes"),
+                        active: isWorkbenchContextVisible && workbenchContextMode === "changes",
                     },
                     {
                         icon: "network",
                         label: t("dashboard.Relations"),
                         onClick: () => showWorkbenchContext("relations"),
-                        active: isContextOpen && !isBotScopeOpened && workbenchContextMode === "relations",
+                        active: isWorkbenchContextVisible && workbenchContextMode === "relations",
                     },
                     {
                         icon: "list-tree",
                         label: t("dashboard.Outline"),
                         onClick: () => showWorkbenchContext("outline"),
-                        active: isContextOpen && !isBotScopeOpened && workbenchContextMode === "outline",
+                        active: isWorkbenchContextVisible && workbenchContextMode === "outline",
                     },
                     {
                         icon: "notebook-pen",
                         label: t("board.Wiki"),
                         onClick: () => showWorkbenchContext("wiki"),
-                        active: isContextOpen && !isBotScopeOpened && workbenchContextMode === "wiki",
+                        active: isWorkbenchContextVisible && workbenchContextMode === "wiki",
                     },
                     ...headerNavs.map((nav, index) => ({
                         icon: ["columns-3", "notebook-pen", "network", "history", "settings", "bot"][index],
@@ -720,7 +724,19 @@ function BoardProxyDisplay({ pageRoute, isFetching, isProjectLoading, project }:
                         <ProjectExplorerSidebar currentProject={project} onNavigate={() => setActiveSidePanel(undefined)} />
                     ) : (
                         <Suspense fallback={<Skeleton className="m-3 h-24" />}>
-                            {workbenchContextMode === "relations" ? (
+                            {workbenchContextMode === "my-work" ? (
+                                <div className="h-full overflow-y-auto">
+                                    <MyWorkSidebar compact projectUID={project.uid} onNavigate={() => isMobile && setActiveSidePanel(undefined)} />
+                                </div>
+                            ) : workbenchContextMode === "changes" ? (
+                                <BoardChangesSidebar projectUID={project.uid} onNavigate={() => isMobile && setActiveSidePanel(undefined)} />
+                            ) : workbenchContextMode === "activity" && currentUser ? (
+                                <ActivityList
+                                    form={{ listType: "ActivityModel", type: "project", project_uid: project.uid }}
+                                    currentUser={currentUser}
+                                    outerClassName="h-full px-3"
+                                />
+                            ) : workbenchContextMode === "relations" ? (
                                 <BoardRelationsSidebar projectUID={project.uid} cardUID={activeCard?.uid} />
                             ) : workbenchContextMode === "outline" ? (
                                 <BoardOutlineSidebar
@@ -741,13 +757,15 @@ function BoardProxyDisplay({ pageRoute, isFetching, isProjectLoading, project }:
                               title: isBotScopeOpened ? "Bots" : workbenchContextTitle,
                               icon: isBotScopeOpened
                                   ? "bot"
-                                  : workbenchContextMode === "explorer"
-                                    ? "panel-left"
-                                    : workbenchContextMode === "relations"
-                                      ? "network"
-                                      : workbenchContextMode === "outline"
-                                        ? "list-tree"
-                                        : "notebook-pen",
+                                  : {
+                                        explorer: "panel-left",
+                                        "my-work": "list-checks",
+                                        changes: "circle-dot",
+                                        activity: "history",
+                                        relations: "network",
+                                        outline: "list-tree",
+                                        wiki: "notebook-pen",
+                                    }[workbenchContextMode],
                               onClose: () => setActiveSidePanel(undefined),
                           }
                         : undefined
@@ -827,12 +845,6 @@ function BoardProxyDisplay({ pageRoute, isFetching, isProjectLoading, project }:
                     <SkeletonComponent />
                 )}
             </DashboardStyledLayout>
-            <BoardActivityDialog isOpened={!isProjectLoading && isActivityDialogOpened} setIsOpened={setIsActivityDialogOpened} />
-            <BoardChangesDialog
-                projectUID={project.uid}
-                isOpened={!isProjectLoading && isChangesDialogOpened}
-                setIsOpened={setIsChangesDialogOpened}
-            />
         </>
     );
 }

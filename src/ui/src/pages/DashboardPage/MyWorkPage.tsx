@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "react-router";
 import { useTranslation } from "react-i18next";
@@ -37,12 +38,26 @@ function sectionFor(card: IMyWorkCard): TSection {
     return "Created by me";
 }
 
-export default function MyWorkPage() {
+export default function MyWorkPage({
+    projectUID: contextProjectUID,
+    compact = false,
+    onNavigate,
+}: {
+    projectUID?: string;
+    compact?: boolean;
+    onNavigate?: () => void;
+} = {}) {
     const [t] = useTranslation();
     const navigate = usePageNavigateRef();
     const [searchParams, setSearchParams] = useSearchParams();
-    const projectUID = searchParams.get("project_uid");
-    const projectScope = !!projectUID && searchParams.get("scope") !== "all";
+    const [panelProjectUID, setPanelProjectUID] = useState(contextProjectUID ?? null);
+    const [panelAll, setPanelAll] = useState(!contextProjectUID);
+    useEffect(() => {
+        setPanelProjectUID(contextProjectUID ?? null);
+        setPanelAll(!contextProjectUID);
+    }, [contextProjectUID]);
+    const projectUID = compact ? panelProjectUID : searchParams.get("project_uid");
+    const projectScope = !!projectUID && (compact ? !panelAll : searchParams.get("scope") !== "all");
     const { data: projectsData } = useGetProjects();
     const { data, isPending, isFetching, isError, refetch } = useQuery({
         queryKey: ["dashboard-my-work", projectScope ? projectUID : null],
@@ -58,6 +73,11 @@ export default function MyWorkPage() {
     });
 
     const updateScope = (nextProjectUID: string | null, all: boolean) => {
+        if (compact) {
+            setPanelProjectUID(nextProjectUID);
+            setPanelAll(all);
+            return;
+        }
         const next = new URLSearchParams();
         if (nextProjectUID) next.set("project_uid", nextProjectUID);
         if (all) next.set("scope", "all");
@@ -68,9 +88,9 @@ export default function MyWorkPage() {
     for (const card of data ?? []) grouped.get(sectionFor(card))!.push(card);
 
     return (
-        <section className="mx-auto max-w-5xl space-y-5" aria-label={t("dashboard.My Work")}>
+        <section className={cn("mx-auto min-w-0 space-y-5", compact ? "p-3" : "max-w-5xl")} aria-label={t("dashboard.My Work")}>
             <div className="flex flex-wrap items-center gap-2">
-                <h1 className="mr-auto text-xl font-semibold">{t("dashboard.My Work")}</h1>
+                <h1 className={cn("mr-auto font-semibold", compact ? "w-full text-sm" : "text-xl")}>{t("dashboard.My Work")}</h1>
                 <Button
                     size="sm"
                     variant={!projectScope ? "secondary" : "outline"}
@@ -131,13 +151,24 @@ export default function MyWorkPage() {
                                             key={card.uid}
                                             type="button"
                                             className={cn(
-                                                "flex w-full items-center gap-3 px-3 py-2 text-left",
+                                                "flex w-full gap-2 px-3 py-2 text-left",
+                                                compact ? "flex-col items-start" : "items-center",
                                                 "hover:bg-muted focus-visible:outline-primary"
                                             )}
-                                            onClick={() => navigate(ROUTES.BOARD.CARD(card.project_uid, card.uid))}
+                                            onClick={() => {
+                                                navigate(ROUTES.BOARD.CARD(card.project_uid, card.uid));
+                                                onNavigate?.();
+                                            }}
                                         >
-                                            <span className="min-w-0 flex-1 truncate font-medium">{card.title}</span>
-                                            <span className="hidden max-w-44 truncate text-xs text-muted-foreground sm:inline">
+                                            <span className={cn("min-w-0 font-medium", compact ? "w-full break-words text-sm" : "flex-1 truncate")}>
+                                                {card.title}
+                                            </span>
+                                            <span
+                                                className={cn(
+                                                    "max-w-full truncate text-xs text-muted-foreground",
+                                                    !compact && "hidden max-w-44 sm:inline"
+                                                )}
+                                            >
                                                 {card.project_title} · {card.project_column_name}
                                             </span>
                                             <span className="shrink-0 text-xs text-muted-foreground">

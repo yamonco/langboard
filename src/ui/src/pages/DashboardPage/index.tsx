@@ -29,6 +29,15 @@ const DashboardProxy = memo((): React.JSX.Element => {
     const [isExplorerOpen, setIsExplorerOpen] = useWorkbenchContextOpen(currentUser?.uid);
     const [isMobile, setIsMobile] = useState(window.innerWidth < ScreenMap.size.md);
     const [isMobileExplorerOpen, setIsMobileExplorerOpen] = useState(false);
+    const [contextMode, setContextMode] = useState<"explorer" | "my-work">("explorer");
+    const showContext = useCallback(
+        (mode: "explorer" | "my-work") => {
+            setContextMode(mode);
+            if (isMobile) setIsMobileExplorerOpen(true);
+            else setIsExplorerOpen(true);
+        },
+        [isMobile, setIsExplorerOpen]
+    );
     useResizeEvent({ doneCallback: () => setIsMobile(window.innerWidth < ScreenMap.size.md) }, []);
     const toggleExplorer = useCallback(() => {
         if (isMobile) setIsMobileExplorerOpen((open) => !open);
@@ -163,26 +172,38 @@ const DashboardProxy = memo((): React.JSX.Element => {
                 {
                     icon: "panel-left",
                     label: "Explorer",
-                    onClick: toggleExplorer,
-                    active: isMobile ? isMobileExplorerOpen : isExplorerOpen,
+                    onClick: () => showContext("explorer"),
+                    active: contextMode === "explorer" && (isMobile ? isMobileExplorerOpen : isExplorerOpen),
                 },
                 { icon: "folder-kanban", label: t("dashboard.Projects"), onClick: headerNavs[0].onClick!, active: pageType === "projects" },
                 { icon: "layout-dashboard", label: t("dashboard.Cards"), onClick: headerNavs[1].onClick!, active: pageType === "cards" },
                 {
                     icon: "list-checks",
                     label: t("dashboard.My Work"),
-                    onClick: () => navigate(ROUTES.DASHBOARD.MY_WORK),
-                    active: pageType === "my-work",
+                    onClick: () => showContext("my-work"),
+                    active: contextMode === "my-work" && (isMobile ? isMobileExplorerOpen : isExplorerOpen),
                 },
                 { icon: "star", label: t("dashboard.Starred"), onClick: () => window.dispatchEvent(new Event(PROJECT_QUICK_SWITCHER_EVENT)) },
                 { icon: "clock", label: t("dashboard.Tracking"), onClick: headerNavs[3].onClick!, active: pageType === "tracking" },
                 ...sidebarNavs.map((item) => ({ icon: item.icon, label: item.name, onClick: item.onClick! })),
             ]}
-            workbenchContext={<ProjectExplorerSidebar />}
+            workbenchContext={
+                contextMode === "my-work" ? (
+                    <div className="h-full overflow-y-auto">
+                        <MyWorkPage compact onNavigate={() => isMobile && setIsMobileExplorerOpen(false)} />
+                    </div>
+                ) : (
+                    <ProjectExplorerSidebar onNavigate={() => isMobile && setIsMobileExplorerOpen(false)} />
+                )
+            }
             workbenchContextHidden={isMobile || !isExplorerOpen}
             mobileWorkbenchContext={
                 isMobile && isMobileExplorerOpen
-                    ? { title: "Explorer", icon: "panel-left", onClose: () => setIsMobileExplorerOpen(false) }
+                    ? {
+                          title: contextMode === "my-work" ? t("dashboard.My Work") : "Explorer",
+                          icon: contextMode === "my-work" ? "list-checks" : "panel-left",
+                          onClose: () => setIsMobileExplorerOpen(false),
+                      }
                     : undefined
             }
             scrollAreaMutable={scrollAreaMutable}
