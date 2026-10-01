@@ -435,13 +435,17 @@ class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
             return list(db.exec(query).all())
 
     def count_by_project(self, project: TProjectParam) -> int:
-        """Count cards in one project without materializing them."""
+        """Count the same live cards and columns returned by project pagination."""
 
         project_id = InfraHelper.convert_id(project)
         with DbSession.use(readonly=True) as db:
             return (
                 db.exec(
-                    SqlBuilder.select.count(Card, Card.column("id")).where(Card.column("project_id") == project_id)
+                    SqlBuilder.select.count(Card, Card.column("id"))
+                    .join(ProjectColumn, Card.column("project_column_id") == ProjectColumn.column("id"))
+                    .where(Card.column("project_id") == project_id)
+                    .where(Card.column("deleted_at").is_(None))
+                    .where(ProjectColumn.column("deleted_at").is_(None))
                 ).first()
                 or 0
             )
