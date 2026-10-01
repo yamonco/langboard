@@ -113,9 +113,15 @@ class GraphApprovalRequestRepository(BaseRepository[GraphApprovalRequest]):
         records.sort(key=lambda item: (item[0].created_at, item[0].id), reverse=True)
         return records[:limit]
 
-    def count_pending_by_project(self, project_id: int) -> int:
+    def count_pending_by_project(self, project_id: int, *, board_scope_only: bool = False) -> int:
         count = 0
         for detail_class in self.__get_model_classes():
+            if board_scope_only and detail_class.get_request_type() not in (
+                GraphApprovalOriginType.Trigger,
+                GraphApprovalOriginType.Schedule,
+                GraphApprovalOriginType.ManualScopeRun,
+            ):
+                continue
             query = (
                 SqlBuilder.select.count(GraphApprovalRequest, GraphApprovalRequest.column("id"))
                 .join(
@@ -123,7 +129,14 @@ class GraphApprovalRequestRepository(BaseRepository[GraphApprovalRequest]):
                     detail_class.column("approval_request_id") == GraphApprovalRequest.column("id"),
                 )
                 .where(GraphApprovalRequest.column("status") == GraphApprovalStatus.Pending.value)
-                .where(self.__project_scope_condition(detail_class, project_id))
+                .where(
+                    and_(
+                        detail_class.column("scope_table") == Project.__tablename__,
+                        detail_class.column("scope_id") == project_id,
+                    )
+                    if board_scope_only
+                    else self.__project_scope_condition(detail_class, project_id)
+                )
             )
             with DbSession.use(readonly=True) as db:
                 count += db.exec(query).first() or 0

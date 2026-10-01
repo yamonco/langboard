@@ -29,14 +29,13 @@ import { SkeletonBoard } from "@/pages/BoardPage/components/board/Board";
 import useBoardAssignedInternalBotChangedHandlers from "@/controllers/socket/board/useBoardAssignedInternalBotChangedHandlers";
 import useInternalBotUpdatedHandlers from "@/controllers/socket/global/useInternalBotUpdatedHandlers";
 import useSwitchSocketHandlers from "@/core/hooks/useSwitchSocketHandlers";
-import { GraphApprovalRequestModel, InternalBotModel, Project, ProjectCard } from "@/core/models";
-import { EGraphApprovalScopeTable, EGraphApprovalStatus } from "@/core/models/GraphApprovalRequestModel";
+import { InternalBotModel, Project, ProjectCard } from "@/core/models";
 import { EHttpStatus, ESocketTopic } from "@langboard/core/enums";
 import useBoardBotStatusMapHandlers from "@/controllers/socket/board/useBoardBotStatusMapHandlers";
-import { BoardBotScopeList, isBoardBotScopeGraphApprovalOriginType } from "@/pages/BoardPage/components/board/BoardBotScope";
+import { BoardBotScopeList } from "@/pages/BoardPage/components/board/BoardBotScope";
 import useGetProject from "@/controllers/api/board/useGetProject";
 import useGetCards from "@/controllers/api/board/useGetCards";
-import useGetGraphApprovals from "@/controllers/api/board/graphApprovals/useGetGraphApprovals";
+import useGetGraphApprovalCount from "@/controllers/api/board/graphApprovals/useGetGraphApprovalCount";
 import ActivityList from "@/components/ActivityList";
 
 import { cn } from "@/core/utils/ComponentUtils";
@@ -243,30 +242,15 @@ function BoardProxyDisplay({ pageRoute, isFetching, isProjectLoading, project }:
     const projectTitle = project.useField("title");
     const { data: boardCardsData } = useGetCards({ project_uid: project.uid }, { enabled: isCardPage && !isProjectLoading });
     const activeCard = boardCardsData && isCardPage ? ProjectCard.Model.getModel(pageRoute) : undefined;
-    useGetGraphApprovals(
-        {
-            project_uid: project.uid,
-            status: EGraphApprovalStatus.Pending,
-            limit: 100,
-        },
-        {
-            interceptToast: false,
-            enabled: !isProjectLoading,
-        }
-    );
-    const graphApprovalRequestedHandlers = useBoardGraphApprovalRequestedHandlers({ projectUID: project.uid });
-    const graphApprovalUpdatedHandlers = useBoardGraphApprovalUpdatedHandlers({ projectUID: project.uid });
-    const graphApprovalDeletedHandlers = useBoardGraphApprovalDeletedHandlers({ projectUID: project.uid });
-    const pendingGraphApprovals = GraphApprovalRequestModel.Model.useModels(
-        (approval) =>
-            approval.project_uid === project.uid &&
-            approval.status === EGraphApprovalStatus.Pending &&
-            isBoardBotScopeGraphApprovalOriginType(approval.origin_type) &&
-            approval.scope_table === EGraphApprovalScopeTable.Project &&
-            approval.scope_uid === project.uid,
-        [project]
-    );
-    const pendingGraphApprovalCount = pendingGraphApprovals.length;
+    const { data: approvalCountData, refetch: refetchApprovalCount } = useGetGraphApprovalCount(project.uid, {
+        interceptToast: false,
+        enabled: !isProjectLoading,
+    });
+    const refreshApprovalCount = useCallback(() => void refetchApprovalCount(), [refetchApprovalCount]);
+    const graphApprovalRequestedHandlers = useBoardGraphApprovalRequestedHandlers({ projectUID: project.uid, callback: refreshApprovalCount });
+    const graphApprovalUpdatedHandlers = useBoardGraphApprovalUpdatedHandlers({ projectUID: project.uid, callback: refreshApprovalCount });
+    const graphApprovalDeletedHandlers = useBoardGraphApprovalDeletedHandlers({ projectUID: project.uid, callback: refreshApprovalCount });
+    const pendingGraphApprovalCount = approvalCountData?.count ?? 0;
     const pendingGraphApprovalBadge = pendingGraphApprovalCount > 99 ? "99+" : pendingGraphApprovalCount || undefined;
     const isBoardChatAvailableHandlers = useMemo(
         () =>
