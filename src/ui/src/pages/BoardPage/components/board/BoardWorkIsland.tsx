@@ -11,6 +11,8 @@ import Popover from "@/components/base/Popover";
 import Toast from "@/components/base/Toast";
 import useChangeCardCheckitemStatus from "@/controllers/api/card/checkitem/useChangeCardCheckitemStatus";
 import { api } from "@/core/helpers/Api";
+import { useQueryMutation } from "@/core/helpers/QueryMutation";
+import { useAuth } from "@/core/providers/AuthProvider";
 import setupApiErrorHandler from "@/core/helpers/setupApiErrorHandler";
 import { Project, ProjectCard, ProjectCheckitem } from "@/core/models";
 import { cn } from "@/core/utils/ComponentUtils";
@@ -59,45 +61,45 @@ export default function BoardWorkIsland({ project, dragging }: { project: Projec
     const targetRef = useRef<HTMLButtonElement>(null);
     const navigate = usePageNavigateRef();
     const [over, setOver] = useState(false);
-    const [activeWork, setActiveWork] = useState<IActiveWork[]>([]);
+    const { currentUser } = useAuth();
+    const { query } = useQueryMutation();
     const [candidateCard, setCandidateCard] = useState<ProjectCard.TModel>();
     const [candidates, setCandidates] = useState<ICardCheckitem[]>([]);
     const [conflictTarget, setConflictTarget] = useState<ICardCheckitem>();
     const [busy, setBusy] = useState(false);
     const [menuOpen, setMenuOpen] = useState(false);
-    const [loadingWork, setLoadingWork] = useState(false);
-    const [workError, setWorkError] = useState(false);
     const [now, setNow] = useState(Date.now());
     const { mutateAsync: changeStatus } = useChangeCardCheckitemStatus({ interceptToast: true });
 
-    const refreshActiveWork = useCallback(async () => {
-        setLoadingWork(true);
-        try {
+    const {
+        data: activeWork = [],
+        isFetching: loadingWork,
+        isError: workError,
+        refetch,
+    } = query(
+        ["get-active-work", currentUser?.uid],
+        async () => {
             const res = await api.get<{ active_work: IActiveWork[] }>(Routing.API.DASHBOARD.ACTIVE_WORK, {
                 env: { interceptToast: true } as never,
             });
-            setActiveWork(res.data.active_work ?? []);
-            setWorkError(false);
-        } catch {
-            setWorkError(true);
-        } finally {
-            setLoadingWork(false);
+            return res.data.active_work ?? [];
+        },
+        {
+            enabled: !!currentUser,
+            retry: 0,
+            staleTime: 15_000,
+            refetchInterval: 15_000,
+            refetchOnWindowFocus: true,
         }
-    }, []);
+    );
+    const refreshActiveWork = useCallback(() => refetch({ cancelRefetch: false }), [refetch]);
 
     useEffect(() => {
-        void refreshActiveWork();
         const refreshVisible = () => {
             if (!document.hidden) void refreshActiveWork();
         };
         window.addEventListener("focus", refreshVisible);
-        document.addEventListener("visibilitychange", refreshVisible);
-        const interval = window.setInterval(refreshVisible, 15_000);
-        return () => {
-            window.removeEventListener("focus", refreshVisible);
-            document.removeEventListener("visibilitychange", refreshVisible);
-            window.clearInterval(interval);
-        };
+        return () => window.removeEventListener("focus", refreshVisible);
     }, [refreshActiveWork]);
 
     useEffect(() => {
