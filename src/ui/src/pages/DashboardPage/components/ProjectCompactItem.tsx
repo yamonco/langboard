@@ -1,5 +1,6 @@
 import { memo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { cn } from "@/core/utils/ComponentUtils";
 import Box from "@/components/base/Box";
 import Button from "@/components/base/Button";
 import Flex from "@/components/base/Flex";
@@ -15,10 +16,11 @@ import { projectTypeLabel } from "@/pages/DashboardPage/components/ProjectTypeCo
 
 interface IProjectCompactItemProps {
     project: Project.TModel;
+    dense?: boolean;
     updateStarredProjects: React.DispatchWithoutAction;
 }
 
-const ProjectCompactItem = memo(({ project, updateStarredProjects }: IProjectCompactItemProps): React.JSX.Element => {
+const ProjectCompactItem = memo(({ project, updateStarredProjects, dense }: IProjectCompactItemProps): React.JSX.Element => {
     const [t, i18n] = useTranslation();
     const navigate = usePageNavigateRef();
     const [isUpdating, setIsUpdating] = useState(false);
@@ -31,16 +33,19 @@ const ProjectCompactItem = memo(({ project, updateStarredProjects }: IProjectCom
         <ModelRegistry.Project.Provider model={project}>
             <ContextMenu.Root>
                 <ContextMenu.Trigger asChild>
-                    <Flex items="center" className="group rounded-xl border border-transparent pr-2 hover:border-border hover:bg-accent/70">
+                    <Flex items="center" className="group min-w-0 rounded-xl border border-transparent pr-2 hover:border-border hover:bg-accent/70">
                         <Button
                             variant="ghost"
-                            className="flex h-auto min-w-0 flex-1 justify-start gap-3 rounded-xl px-3 py-2.5 text-left hover:bg-transparent"
+                            className={cn(
+                                "flex h-auto min-w-0 flex-1 justify-start gap-3 rounded-xl px-3 text-left hover:bg-transparent",
+                                dense ? "py-1.5" : "py-2.5"
+                            )}
                             onClick={() => navigate(ROUTES.BOARD.MAIN(project.uid))}
                         >
                             <Flex
                                 items="center"
                                 justify="center"
-                                className="relative size-9 shrink-0 rounded-lg bg-secondary text-secondary-foreground"
+                                className={cn("relative shrink-0 rounded-lg bg-secondary text-secondary-foreground", dense ? "size-7" : "size-9")}
                             >
                                 <IconComponent icon="folder-kanban" size="4" />
                                 {boardHasUnread ? (
@@ -52,11 +57,13 @@ const ProjectCompactItem = memo(({ project, updateStarredProjects }: IProjectCom
                                 ) : null}
                             </Flex>
                             <Box className="min-w-0 flex-1">
-                                <Box className="truncate text-sm font-semibold">{title}</Box>
+                                <Box className="truncate text-sm font-semibold" title={title}>
+                                    {title}
+                                </Box>
                                 <Flex items="center" gap="1.5" className="mt-0.5 min-w-0 text-xs text-muted-foreground">
                                     <span className="truncate">{projectTypeLabel(t, projectType)}</span>
                                     <span aria-hidden="true">·</span>
-                                    <span className="shrink-0">{Utils.String.formatDateDistance(i18n, t, activityAt)}</span>
+                                    <span className="min-w-0 truncate">{Utils.String.formatDateDistance(i18n, t, activityAt)}</span>
                                 </Flex>
                             </Box>
                         </Button>

@@ -145,11 +145,30 @@ const ProjectDiscoveryPage = memo(
                     </Button>
                 </Flex>
                 <Box>
-                    <ProjectCompactList title={t("dashboard.Favorites")} projects={discoverySections.favorites} updateStarredProjects={updateStars} />
+                    <div className="grid min-w-0 gap-x-4 md:grid-cols-2">
+                        <ProjectCompactList
+                            title={t("dashboard.Favorites")}
+                            projects={discoverySections.favorites}
+                            updateStarredProjects={updateStars}
+                            initialVisibleCount={4}
+                            listClassName="xl:grid-cols-2"
+                            dense
+                        />
+                        <ProjectCompactList
+                            title={t("dashboard.Recent work")}
+                            projects={debouncedSearchQuery ? [] : discoverySections.recent}
+                            updateStarredProjects={updateStars}
+                            initialVisibleCount={4}
+                            listClassName="xl:grid-cols-2"
+                            dense
+                        />
+                    </div>
                     <ProjectCompactList
                         title={t("dashboard.Related to me")}
                         projects={discoverySections.related}
                         updateStarredProjects={updateStars}
+                        listClassName="md:grid-cols-2"
+                        dense
                     />
                     {(isProjectsLoading || isProjectsFetching) && currentProjects.length === 0 ? (
                         <SkeletonProjectList />
@@ -157,11 +176,6 @@ const ProjectDiscoveryPage = memo(
                         <h2 className="py-3 text-center text-lg text-accent-foreground">{t("dashboard.No projects found")}</h2>
                     ) : (
                         <>
-                            <ProjectCompactList
-                                title={t("dashboard.Recent work")}
-                                projects={debouncedSearchQuery ? [] : discoverySections.recent}
-                                updateStarredProjects={updateStars}
-                            />
                             {projectListView === "cards" ? (
                                 <ProjectList projects={currentProjects} updateStarredProjects={updateStars} scrollAreaUpdater={scrollAreaUpdater} />
                             ) : (
