@@ -57,7 +57,11 @@ import useBoardGraphApprovalUpdatedHandlers from "@/controllers/socket/board/gra
 import { getBoardChatStore } from "@/core/stores/BoardChatStore";
 import { useWorkbenchContextOpen } from "@/core/stores/UserSettingsStore";
 import ProjectExplorerSidebar from "@/pages/DashboardPage/components/ProjectExplorerSidebar";
-import { WORKBENCH_OPEN_CHANGES_EVENT, WORKBENCH_TOGGLE_CONTEXT_EVENT } from "@/pages/DashboardPage/components/WorkbenchCommands";
+import {
+    WORKBENCH_OPEN_CHANGES_EVENT,
+    WORKBENCH_OPEN_MY_WORK_EVENT,
+    WORKBENCH_TOGGLE_CONTEXT_EVENT,
+} from "@/pages/DashboardPage/components/WorkbenchCommands";
 import { closeProject } from "@/pages/DashboardPage/components/OpenCardsStore";
 
 const BoardGraphPage = lazy(() => import("@/pages/BoardPage/BoardGraphPage"));
@@ -221,11 +225,14 @@ function BoardProxyDisplay({ pageRoute, isFetching, isProjectLoading, project }:
     useEffect(() => {
         const toggleContext = () => toggleSwitchProject();
         const openChanges = () => showWorkbenchContext("changes");
+        const openMyWork = () => showWorkbenchContext("my-work");
         window.addEventListener(WORKBENCH_TOGGLE_CONTEXT_EVENT, toggleContext);
         window.addEventListener(WORKBENCH_OPEN_CHANGES_EVENT, openChanges);
+        window.addEventListener(WORKBENCH_OPEN_MY_WORK_EVENT, openMyWork);
         return () => {
             window.removeEventListener(WORKBENCH_TOGGLE_CONTEXT_EVENT, toggleContext);
             window.removeEventListener(WORKBENCH_OPEN_CHANGES_EVENT, openChanges);
+            window.removeEventListener(WORKBENCH_OPEN_MY_WORK_EVENT, openMyWork);
         };
     }, [toggleSwitchProject, showWorkbenchContext]);
     const {

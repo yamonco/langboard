@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "react-router";
 import { useTranslation } from "react-i18next";
@@ -48,6 +48,10 @@ export default function MyWorkPage({
     onNavigate?: () => void;
 } = {}) {
     const [t] = useTranslation();
+    const panelRef = useRef<HTMLElement>(null);
+    useEffect(() => {
+        if (compact) panelRef.current?.focus({ preventScroll: true });
+    }, [compact]);
     const navigate = usePageNavigateRef();
     const [searchParams, setSearchParams] = useSearchParams();
     const [panelProjectUID, setPanelProjectUID] = useState(contextProjectUID ?? null);
@@ -88,7 +92,13 @@ export default function MyWorkPage({
     for (const card of data ?? []) grouped.get(sectionFor(card))!.push(card);
 
     return (
-        <section className={cn("mx-auto min-w-0 space-y-5", compact ? "p-3" : "max-w-5xl")} aria-label={t("dashboard.My Work")}>
+        <section
+            ref={panelRef}
+            data-my-work-context={compact ? "" : undefined}
+            tabIndex={compact ? -1 : undefined}
+            className={cn("mx-auto min-w-0 space-y-5", compact ? "p-3" : "max-w-5xl")}
+            aria-label={t("dashboard.My Work")}
+        >
             <div className="flex flex-wrap items-center gap-2">
                 <h1 className={cn("mr-auto font-semibold", compact ? "w-full text-sm" : "text-xl")}>{t("dashboard.My Work")}</h1>
                 <Button

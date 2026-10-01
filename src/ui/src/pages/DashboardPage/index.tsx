@@ -17,7 +17,7 @@ import { useTranslation } from "react-i18next";
 import { SkeletonProjectDiscoveryPage } from "@/pages/DashboardPage/components/ProjectDiscoveryPage";
 import { PROJECT_QUICK_SWITCHER_EVENT } from "@/pages/DashboardPage/components/ProjectDiscovery";
 import ProjectExplorerSidebar from "@/pages/DashboardPage/components/ProjectExplorerSidebar";
-import { WORKBENCH_TOGGLE_CONTEXT_EVENT } from "@/pages/DashboardPage/components/WorkbenchCommands";
+import { WORKBENCH_OPEN_MY_WORK_EVENT, WORKBENCH_TOGGLE_CONTEXT_EVENT } from "@/pages/DashboardPage/components/WorkbenchCommands";
 import { useEffect } from "react";
 import { useWorkbenchContextOpen } from "@/core/stores/UserSettingsStore";
 import useResizeEvent from "@/core/hooks/useResizeEvent";
@@ -45,9 +45,14 @@ const DashboardProxy = memo((): React.JSX.Element => {
     }, [isMobile, setIsExplorerOpen]);
     useEffect(() => {
         const toggle = toggleExplorer;
+        const openMyWork = () => showContext("my-work");
         window.addEventListener(WORKBENCH_TOGGLE_CONTEXT_EVENT, toggle);
-        return () => window.removeEventListener(WORKBENCH_TOGGLE_CONTEXT_EVENT, toggle);
-    }, [toggleExplorer]);
+        window.addEventListener(WORKBENCH_OPEN_MY_WORK_EVENT, openMyWork);
+        return () => {
+            window.removeEventListener(WORKBENCH_TOGGLE_CONTEXT_EVENT, toggle);
+            window.removeEventListener(WORKBENCH_OPEN_MY_WORK_EVENT, openMyWork);
+        };
+    }, [toggleExplorer, showContext]);
     const navigate = usePageNavigateRef();
     const [pageType, tabName] = location.pathname.split("/").slice(2);
     const { data, isFetching } = useGetAllStarredProjects();

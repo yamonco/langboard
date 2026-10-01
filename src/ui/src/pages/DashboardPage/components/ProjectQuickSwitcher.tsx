@@ -13,7 +13,7 @@ import useGetProjects from "@/controllers/api/dashboard/useGetProjects";
 import { Project, ProjectCard } from "@/core/models";
 import { useAuth } from "@/core/providers/AuthProvider";
 import { useOpenCards } from "@/pages/DashboardPage/components/OpenCardsStore";
-import { WORKBENCH_OPEN_CHANGES_EVENT, WORKBENCH_TOGGLE_CONTEXT_EVENT } from "./WorkbenchCommands";
+import { WORKBENCH_OPEN_CHANGES_EVENT, WORKBENCH_OPEN_MY_WORK_EVENT, WORKBENCH_TOGGLE_CONTEXT_EVENT } from "./WorkbenchCommands";
 import { usePageNavigateRef } from "@/core/hooks/usePageNavigate";
 import { ROUTES } from "@/core/routing/constants";
 import { Utils } from "@langboard/core/utils";
@@ -80,7 +80,7 @@ const ProjectQuickSwitcher = memo((): React.JSX.Element => {
     const location = useLocation();
     const [opened, setOpened] = useState(false);
     const projectNavigation = useRef(false);
-    const actionSelected = useRef(false);
+    const actionSelected = useRef<boolean | string>(false);
     const returnFocus = useRef<HTMLElement | null>(null);
     const [searchText, setSearchText] = useState("");
     const wikiQuery = useDebounce(searchText.trim(), 300);
@@ -140,7 +140,7 @@ const ProjectQuickSwitcher = memo((): React.JSX.Element => {
         navigate(route);
     };
     const selectCommand = (eventName: string) => {
-        actionSelected.current = true;
+        actionSelected.current = eventName;
         setOpened(false);
         window.dispatchEvent(new Event(eventName));
     };
@@ -150,7 +150,12 @@ const ProjectQuickSwitcher = memo((): React.JSX.Element => {
             open={opened}
             onCloseAutoFocus={(event) => {
                 event.preventDefault();
-                if (actionSelected.current) return;
+                if (actionSelected.current) {
+                    if (actionSelected.current === WORKBENCH_OPEN_MY_WORK_EVENT) {
+                        document.querySelector<HTMLElement>("[data-my-work-context]")?.focus({ preventScroll: true });
+                    }
+                    return;
+                }
                 const previous = returnFocus.current;
                 if (!projectNavigation.current && previous?.isConnected && previous !== document.body) {
                     previous.focus({ preventScroll: true });
@@ -270,7 +275,9 @@ const ProjectQuickSwitcher = memo((): React.JSX.Element => {
                     <Command.Item
                         value="navigation:my-work"
                         onSelect={() =>
-                            selectRoute(currentProjectUID ? `${ROUTES.DASHBOARD.MY_WORK}?project_uid=${currentProjectUID}` : ROUTES.DASHBOARD.MY_WORK)
+                            currentProjectUID || location.pathname.startsWith("/dashboard/")
+                                ? selectCommand(WORKBENCH_OPEN_MY_WORK_EVENT)
+                                : selectRoute(ROUTES.DASHBOARD.MY_WORK)
                         }
                         className="gap-3 rounded-lg"
                     >
