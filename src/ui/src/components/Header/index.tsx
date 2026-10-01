@@ -17,12 +17,14 @@ import HeaderUserMenu from "@/components/Header/HeaderUserMenu";
 import HeaderUserNotification from "@/components/Header/HeaderUserNotification";
 import { PROJECT_QUICK_SWITCHER_EVENT } from "@/pages/DashboardPage/components/ProjectDiscovery";
 
-const Header = memo(({ navs, title, compact, navigationReady = true }: IHeaderProps) => {
+const Header = memo(({ navs, title, compact, navigationReady = true, mobileNavigationTriggerRef, mobileContextRef }: IHeaderProps) => {
     const [t] = useTranslation();
     const { currentUser } = useAuth();
     const [isOpened, setIsOpen] = useState(false);
     const location = useLocation();
     const commandTrigger = useRef<HTMLButtonElement>(null);
+    const mobileSelection = useRef(false);
+    const mobileMenuPath = useRef(location.pathname);
 
     useEffect(() => {
         if (navigationReady && location.state?.commandPaletteFocus === true) {
@@ -93,16 +95,45 @@ const Header = memo(({ navs, title, compact, navigationReady = true }: IHeaderPr
                 )}
             </Flex>
             {navs.length > 0 && (
-                <Sheet.Root open={isOpened} onOpenChange={setIsOpen}>
+                <Sheet.Root
+                    open={isOpened}
+                    onOpenChange={(open) => {
+                        if (open) {
+                            mobileSelection.current = false;
+                            mobileMenuPath.current = location.pathname;
+                        }
+                        setIsOpen(open);
+                    }}
+                >
                     <Sheet.Title hidden />
                     <Sheet.Description hidden />
                     <Sheet.Trigger asChild>
-                        <Button variant="outline" size="icon" className={compact ? "order-first shrink-0 md:hidden" : "shrink-0 md:hidden"}>
+                        <Button
+                            ref={mobileNavigationTriggerRef}
+                            data-mobile-navigation-trigger
+                            variant="outline"
+                            size="icon"
+                            className={compact ? "order-first shrink-0 md:hidden" : "shrink-0 md:hidden"}
+                        >
                             <IconComponent icon="menu" size="5" />
                             <span className="sr-only">Toggle navigation menu</span>
                         </Button>
                     </Sheet.Trigger>
-                    <Sheet.Content side="left" data-workbench-context="" className="flex flex-col justify-between">
+                    <Sheet.Content
+                        side="left"
+                        data-workbench-context=""
+                        className="flex flex-col justify-between"
+                        onCloseAutoFocus={(event) => {
+                            // A mode selection enters the context panel; cancellation and route
+                            // navigation retain the drawer's normal trigger restoration.
+                            const panel = mobileContextRef?.current;
+                            if (mobileSelection.current && mobileMenuPath.current === location.pathname && panel && !panel.closest("[inert]")) {
+                                event.preventDefault();
+                                panel.focus({ preventScroll: true });
+                            }
+                            mobileSelection.current = false;
+                        }}
+                    >
                         <Flex
                             items="center"
                             position="absolute"
@@ -117,6 +148,7 @@ const Header = memo(({ navs, title, compact, navigationReady = true }: IHeaderPr
                                 viewTransition
                                 aria-label={t("common.Go to Dashboard")}
                                 className="flex cursor-pointer items-center gap-2 text-lg font-semibold"
+                                onClick={() => setIsOpen(false)}
                             >
                                 <CachedImage src="/images/logo.png" alt="Logo" size="6" />
                             </Link>
@@ -131,7 +163,10 @@ const Header = memo(({ navs, title, compact, navigationReady = true }: IHeaderPr
                             <HedaerNavItems
                                 isMobile
                                 navs={navs}
-                                setIsOpen={setIsOpen}
+                                setIsOpen={(open) => {
+                                    mobileSelection.current = !open;
+                                    setIsOpen(open);
+                                }}
                                 activatedClass=""
                                 deactivatedClass="text-muted-foreground"
                                 shardClass="hover:text-foreground"

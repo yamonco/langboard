@@ -172,6 +172,15 @@ interface IBoardProxyDisplayProps {
     isProjectLoading: bool;
 }
 
+function BoardHeaderProjectTitle({ project }: { project: Project.TModel }) {
+    const title = project.useField("title");
+    const { setPageAliasRef } = usePageHeader();
+    useEffect(() => {
+        setPageAliasRef.current(title);
+    }, [title, setPageAliasRef]);
+    return <span className="max-w-32 shrink-0 truncate">{title}</span>;
+}
+
 function BoardHeaderCardTitle({ card }: { card: ProjectCard.TModel }) {
     const title = card.useField("title");
     return <span className="min-w-0 truncate">{title}</span>;
@@ -179,7 +188,6 @@ function BoardHeaderCardTitle({ card }: { card: ProjectCard.TModel }) {
 
 function BoardProxyDisplay({ pageRoute, isFetching, isProjectLoading, project }: IBoardProxyDisplayProps): React.JSX.Element {
     const [t] = useTranslation();
-    const { setPageAliasRef } = usePageHeader();
     const socket = useSocket();
     const { currentUser } = useAuth();
     const navigate = usePageNavigateRef();
@@ -246,7 +254,6 @@ function BoardProxyDisplay({ pageRoute, isFetching, isProjectLoading, project }:
         setBoardChat,
     } = useBoardController();
     const isCardPage = !!pageRoute && !["graph", "wiki", "settings"].includes(pageRoute);
-    const projectTitle = project.useField("title");
     const { data: boardCardsData } = useGetCards({ project_uid: project.uid }, { enabled: isCardPage && !isProjectLoading });
     const activeCard = boardCardsData && isCardPage ? ProjectCard.Model.getModel(pageRoute) : undefined;
     const { data: approvalCountData, refetch: refetchApprovalCount } = useGetGraphApprovalCount(project.uid, {
@@ -475,10 +482,6 @@ function BoardProxyDisplay({ pageRoute, isFetching, isProjectLoading, project }:
     }, [isFetching, subscribedTopics]);
 
     useEffect(() => {
-        setPageAliasRef.current(projectTitle);
-    }, [projectTitle]);
-
-    useEffect(() => {
         setBoardViewType(getCurrentPage(pageRoute));
     }, [pageRoute]);
 
@@ -653,11 +656,11 @@ function BoardProxyDisplay({ pageRoute, isFetching, isProjectLoading, project }:
                 ]}
                 headerTitle={
                     <span className="flex min-w-0 items-center gap-1">
-                        <span className="max-w-32 shrink-0 truncate">{projectTitle}</span>
+                        <BoardHeaderProjectTitle key={project.uid} project={project} />
                         {isCardPage && activeCard && (
                             <>
                                 <IconComponent icon="chevron-right" size="3" className="shrink-0 text-muted-foreground" />
-                                <BoardHeaderCardTitle card={activeCard} />
+                                <BoardHeaderCardTitle key={activeCard.uid} card={activeCard} />
                             </>
                         )}
                     </span>
@@ -723,6 +726,8 @@ function BoardProxyDisplay({ pageRoute, isFetching, isProjectLoading, project }:
                                 <BoardChangesSidebar projectUID={project.uid} onNavigate={() => isMobile && setActiveSidePanel(undefined)} />
                             ) : workbenchContextMode === "activity" && currentUser ? (
                                 <ActivityList
+                                    key={project.uid}
+                                    className="h-full"
                                     form={{ listType: "ActivityModel", type: "project", project_uid: project.uid }}
                                     currentUser={currentUser}
                                     outerClassName="h-full px-3"
@@ -792,7 +797,7 @@ function BoardProxyDisplay({ pageRoute, isFetching, isProjectLoading, project }:
                                         "pointer-events-none absolute inset-0 -z-[9999] overflow-hidden"
                                 )}
                             >
-                                <PageComponent project={project} currentUser={currentUser} />
+                                <PageComponent key={project.uid} project={project} currentUser={currentUser} />
                             </Box>
                             {isCardPage && (
                                 <BoardCardPage
@@ -806,6 +811,7 @@ function BoardProxyDisplay({ pageRoute, isFetching, isProjectLoading, project }:
                             )}
                             {!isCardPage && !selectCardViewType && (isMobile || boardChat || renderedViewType === "board") && (
                                 <BoardFloatingNavigation
+                                    key={project.uid}
                                     project={project}
                                     currentUser={currentUser}
                                     dockEnabled={renderedViewType === "board"}

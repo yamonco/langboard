@@ -1,4 +1,4 @@
-import { createContext, forwardRef, useContext, useLayoutEffect } from "react";
+import { createContext, forwardRef, useContext, useLayoutEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useLocation } from "react-router";
 import { useTranslation } from "react-i18next";
@@ -80,6 +80,13 @@ export const DashboardStyledLayoutFrame = forwardRef<HTMLDivElement, TDashboardS
         ref
     ) => {
         const [t] = useTranslation();
+        const mobileNavigationTrigger = useRef<HTMLButtonElement>(null);
+        const mobileContext = useRef<HTMLElement>(null);
+        const closeMobileContext = () => {
+            mobileWorkbenchContext?.onClose();
+            // Restore only explicit dismissal. Route changes keep their destination focus.
+            mobileNavigationTrigger.current?.focus({ preventScroll: true });
+        };
         const hasWorkbench = workbench || !!activityRailItems;
         const { scrollableRef, isAtTop, scrollToTop } = useScrollToTop({});
 
@@ -128,6 +135,8 @@ export const DashboardStyledLayoutFrame = forwardRef<HTMLDivElement, TDashboardS
                         title={headerTitle}
                         compact={hasWorkbench}
                         navigationReady={!props.inert}
+                        mobileNavigationTriggerRef={mobileNavigationTrigger}
+                        mobileContextRef={mobileContext}
                     />
                 )}
                 <Box
@@ -160,6 +169,16 @@ export const DashboardStyledLayoutFrame = forwardRef<HTMLDivElement, TDashboardS
                 {mobileWorkbenchContext && workbenchContext && (
                     <aside
                         aria-label={mobileWorkbenchContext.title}
+                        ref={mobileContext}
+                        tabIndex={-1}
+                        onKeyDown={(event) => {
+                            if (event.key !== "Escape" || event.defaultPrevented) return;
+                            // Nested menus/dialogs own their first Escape.
+                            if (event.target instanceof HTMLElement && event.target.closest("[role=menu], [role=listbox], [role=dialog]")) return;
+                            event.preventDefault();
+                            event.stopPropagation();
+                            closeMobileContext();
+                        }}
                         data-workbench-context=""
                         className={cn(
                             "fixed bottom-[4.75rem] left-2 right-2 z-[120] h-[60dvh] max-h-[calc(100dvh-7rem)]",
@@ -176,7 +195,7 @@ export const DashboardStyledLayoutFrame = forwardRef<HTMLDivElement, TDashboardS
                                     size="icon-sm"
                                     className="ml-auto"
                                     aria-label={t("common.Close")}
-                                    onClick={mobileWorkbenchContext.onClose}
+                                    onClick={closeMobileContext}
                                 >
                                     <IconComponent icon="x" size="4" />
                                 </Button>

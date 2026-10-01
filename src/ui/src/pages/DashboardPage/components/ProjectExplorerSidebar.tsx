@@ -190,7 +190,7 @@ export default function ProjectExplorerSidebar({ currentProject, onNavigate }: {
                                     project={project}
                                     active={currentProjectUID === project.uid}
                                     onClick={() => {
-                                        navigate(ROUTES.BOARD.MAIN(project.uid));
+                                        navigate(ROUTES.BOARD.MAIN(project.uid), { state: { commandPaletteFocus: true } });
                                         onNavigate?.();
                                     }}
                                 />

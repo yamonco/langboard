@@ -205,6 +205,23 @@ const BoardCardPageComponent = ({
                         <Dialog.Content
                             ref={contentRef}
                             data-card-viewer=""
+                            onCloseAutoFocus={(event) => {
+                                // Route/card switches keep destination focus. Explicit dismissal
+                                // returns to a visible card opener, or the workspace navigation.
+                                event.preventDefault();
+                                if (!finishedCloseRef.current || window.location.pathname !== ROUTES.BOARD.MAIN(projectUID!)) return;
+                                if (document.querySelector("[data-card-viewer]")) return;
+                                const source = document.getElementById(`board-card-${cardUID}`);
+                                const sourceRect = source?.getBoundingClientRect();
+                                const boardRect = document.getElementById("board-scrollport")?.getBoundingClientRect();
+                                const visible = sourceRect && boardRect && isRectCenterInside(sourceRect, boardRect);
+                                const mobileTrigger = document.querySelector<HTMLButtonElement>("[data-mobile-navigation-trigger]");
+                                const fallback = mobileTrigger?.getBoundingClientRect().width
+                                    ? mobileTrigger
+                                    : document.querySelector<HTMLButtonElement>("[data-command-palette-trigger]");
+                                const opener = visible ? source?.querySelector<HTMLButtonElement>("[data-board-card-open]") : undefined;
+                                (opener ?? fallback)?.focus({ preventScroll: true });
+                            }}
                             data-card-viewer-closing={isClosing ? "true" : undefined}
                             disableMotionAnimation
                             onAnimationStart={(event) => {
@@ -289,7 +306,9 @@ const BoardCardPageComponent = ({
                                     return;
                                 }
                                 if (
-                                    (event.detail.originalEvent.target as Element)?.closest?.("[data-workbench-explorer], [data-workbench-context]")
+                                    (event.detail.originalEvent.target as Element)?.closest?.(
+                                        "[data-workbench-explorer], [data-workbench-context], [data-command-palette], [data-command-palette-trigger]"
+                                    )
                                 ) {
                                     event.preventDefault();
                                     return;
