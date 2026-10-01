@@ -87,6 +87,21 @@ export const DashboardStyledLayoutFrame = forwardRef<HTMLDivElement, TDashboardS
             // Restore only explicit dismissal. Route changes keep their destination focus.
             mobileNavigationTrigger.current?.focus({ preventScroll: true });
         };
+        useLayoutEffect(() => {
+            const panel = mobileContext.current;
+            if (!panel || !mobileWorkbenchContext) return;
+            // Page-owned portal events bypass the shell's React ancestors.
+            // Native bubbling still reaches the physical panel after child handlers.
+            const handleEscape = (event: KeyboardEvent) => {
+                if (event.key !== "Escape" || event.defaultPrevented) return;
+                if (event.target instanceof HTMLElement && event.target.closest("[role=menu], [role=listbox], [role=dialog]")) return;
+                event.preventDefault();
+                event.stopPropagation();
+                closeMobileContext();
+            };
+            panel.addEventListener("keydown", handleEscape);
+            return () => panel.removeEventListener("keydown", handleEscape);
+        }, [mobileWorkbenchContext]);
         const hasWorkbench = workbench || !!activityRailItems;
         const { scrollableRef, isAtTop, scrollToTop } = useScrollToTop({});
 
@@ -171,14 +186,6 @@ export const DashboardStyledLayoutFrame = forwardRef<HTMLDivElement, TDashboardS
                         aria-label={mobileWorkbenchContext.title}
                         ref={mobileContext}
                         tabIndex={-1}
-                        onKeyDown={(event) => {
-                            if (event.key !== "Escape" || event.defaultPrevented) return;
-                            // Nested menus/dialogs own their first Escape.
-                            if (event.target instanceof HTMLElement && event.target.closest("[role=menu], [role=listbox], [role=dialog]")) return;
-                            event.preventDefault();
-                            event.stopPropagation();
-                            closeMobileContext();
-                        }}
                         data-workbench-context=""
                         className={cn(
                             "fixed bottom-[4.75rem] left-2 right-2 z-[120] h-[60dvh] max-h-[calc(100dvh-7rem)]",

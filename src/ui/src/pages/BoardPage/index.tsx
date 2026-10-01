@@ -207,7 +207,6 @@ function BoardProxyDisplay({ pageRoute, isFetching, isProjectLoading, project }:
     const [isMobile, setIsMobile] = useState(window.innerWidth < ScreenMap.size.md);
     const isBotScopeOpened = activeSidePanel === "botScope";
     const isWorkbenchContextVisible = !isBotScopeOpened && (isMobile ? activeSidePanel === "switchProject" : isContextOpen);
-    const isSwitchProjectOpened = isMobile ? activeSidePanel === "switchProject" : isContextOpen && !isBotScopeOpened;
     const toggleBotScope = useCallback(() => {
         setActiveSidePanel((value) => (value === "botScope" ? undefined : "botScope"));
         if (!isMobile) setIsContextOpen(true);
@@ -577,32 +576,6 @@ function BoardProxyDisplay({ pageRoute, isFetching, isProjectLoading, project }:
                   } satisfies IBoardFloatingNavItem,
               ]
             : []),
-        {
-            name: t("board.Board"),
-            icon: "columns-3",
-            active: boardViewType === "board" || boardViewType === "card",
-            hidden: !!selectCardViewType,
-            onClick: () => {
-                setActiveSidePanel(undefined);
-                setBoardViewType("board");
-                navigate(ROUTES.BOARD.MAIN(project.uid), { smooth: true });
-            },
-        },
-        {
-            name: t("settings.Bots"),
-            icon: "bot",
-            badge: pendingGraphApprovalBadge,
-            onClick: toggleBotScope,
-            active: isBotScopeOpened,
-            hidden: !!selectCardViewType && !!currentUser && currentUser.is_admin,
-        },
-        {
-            name: t("project.Switch Project"),
-            icon: "shuffle",
-            active: isSwitchProjectOpened,
-            hidden: !!selectCardViewType,
-            onClick: toggleSwitchProject,
-        },
     ];
 
     let PageComponent;
@@ -815,17 +788,15 @@ function BoardProxyDisplay({ pageRoute, isFetching, isProjectLoading, project }:
                                     project={project}
                                     currentUser={currentUser}
                                     dockEnabled={renderedViewType === "board"}
-                                    items={(isMobile ? floatingNavs : floatingNavs.filter((nav) => nav.icon === "message-circle")).map(
-                                        (nav, index) => ({
-                                            key: index,
-                                            label: nav.name,
-                                            icon: nav.icon,
-                                            badge: nav.badge,
-                                            active: nav.active,
-                                            hidden: nav.hidden,
-                                            onClick: nav.onClick,
-                                        })
-                                    )}
+                                    items={floatingNavs.map((nav, index) => ({
+                                        key: index,
+                                        label: nav.name,
+                                        icon: nav.icon,
+                                        badge: nav.badge,
+                                        active: nav.active,
+                                        hidden: nav.hidden,
+                                        onClick: nav.onClick,
+                                    }))}
                                 />
                             )}
                             <BoardMobileChatOverlay

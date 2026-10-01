@@ -92,3 +92,21 @@ test("project navigation focuses the existing palette trigger after the new conf
     await expect(page.getByRole("heading", { name: "Board", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Command palette", exact: true })).toBeFocused();
 });
+
+test("Escape from page-owned portaled controls dismisses the physical mobile panel", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/src/components/Layout/workbench-shell.fixture.html");
+    const trigger = page.getByRole("button", { name: "Toggle navigation menu", exact: true });
+    await trigger.press("Enter");
+    await page.getByRole("dialog").getByRole("button", { name: "Explorer", exact: true }).press("Enter");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    const panel = page.getByRole("complementary", { name: "Explorer", exact: true });
+    await expect(panel).toBeFocused();
+    await panel.press("Tab");
+    await page.keyboard.press("Tab");
+    await expect(panel.getByRole("button", { name: "Nested menu", exact: true })).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(panel).toHaveCount(0);
+    await expect(trigger).toBeFocused();
+    await expect(page.getByRole("heading", { name: "Dashboard", exact: true })).toBeVisible();
+});
