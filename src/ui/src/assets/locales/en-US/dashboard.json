@@ -41,6 +41,7 @@
   "Current project": "Current project",
   "Choose project": "Choose project",
   "Loading work": "Loading work...",
+  "Could not load projects": "Could not load projects.",
   "Could not load work": "Could not load work.",
   "No work found": "No work found in this scope.",
   "Showing recent work": "Showing {{count}} recent work items (up to 50)",

@@ -43,6 +43,8 @@ interface IProjectDiscoveryPageProps {
     projectsData?: IGetProjectsResponse;
     isProjectsFetching: bool;
     isProjectsLoading: bool;
+    hasProjectsError?: bool;
+    onRetryProjects?: () => Promise<unknown>;
     updateStarredProjects: React.DispatchWithoutAction;
     scrollAreaUpdater: [number, React.DispatchWithoutAction];
 }
@@ -61,6 +63,8 @@ const ProjectDiscoveryPage = memo(
         projectsData,
         isProjectsFetching,
         isProjectsLoading,
+        hasProjectsError = false,
+        onRetryProjects,
         updateStarredProjects: updateHeaderStarredProjects,
         scrollAreaUpdater,
     }: IProjectDiscoveryPageProps): React.JSX.Element => {
@@ -144,6 +148,14 @@ const ProjectDiscoveryPage = memo(
                         <IconComponent icon="layout-grid" size="4" />
                     </Button>
                 </Flex>
+                {hasProjectsError && (
+                    <Flex role="alert" items="center" justify="center" gap="2" px="2" py="3">
+                        <span className="text-sm text-muted-foreground">{t("dashboard.Could not load projects")}</span>
+                        <Button type="button" size="sm" variant="outline" disabled={isProjectsFetching} onClick={() => void onRetryProjects?.()}>
+                            {t("dashboard.Retry")}
+                        </Button>
+                    </Flex>
+                )}
                 <Box>
                     <div className="grid min-w-0 gap-x-4 md:grid-cols-2">
                         <ProjectCompactList
@@ -172,7 +184,7 @@ const ProjectDiscoveryPage = memo(
                     />
                     {(isProjectsLoading || isProjectsFetching) && currentProjects.length === 0 ? (
                         <SkeletonProjectList />
-                    ) : currentProjects.length === 0 ? (
+                    ) : currentProjects.length === 0 && hasProjectsError ? null : currentProjects.length === 0 ? (
                         <h2 className="py-3 text-center text-lg text-accent-foreground">{t("dashboard.No projects found")}</h2>
                     ) : (
                         <>

@@ -89,6 +89,8 @@ const ProjectPage = memo(({ updateStarredProjects, scrollAreaUpdater }: IProject
             projectsData={data}
             isProjectsFetching={isFetching}
             isProjectsLoading={isLoading}
+            hasProjectsError={!!error}
+            onRetryProjects={reloadProjects}
             updateStarredProjects={updateStarredProjects}
             scrollAreaUpdater={scrollAreaUpdater}
         />
