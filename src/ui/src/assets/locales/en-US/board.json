@@ -58,7 +58,15 @@
     "Select members": "Select members",
     "Select labels": "Select labels",
     "Select cards": "Select cards",
-    "Clear selections": "Clear selections"
+    "Clear selections": "Clear selections",
+    "Status": "Status",
+    "Relationships": "Relationships",
+    "Categories": "Filter categories",
+    "Select a category": "Select a category",
+    "Back to categories": "Back to categories",
+    "Applied filters": "Applied filters",
+    "Remove filter": "Remove filter",
+    "Combination guidance": "Selections in one category match any; different categories match together. Parent and child relationships match either."
   },
   "Add column": "Add column",
   "Add a card": "Add a card",
