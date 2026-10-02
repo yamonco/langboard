@@ -17,6 +17,7 @@ from ..dtos import (
     CardBundleContinuationDto,
     CardBundleDto,
     CardBundleResponse,
+    CardExecutionDto,
     ClassificationDto,
     ProjectCardListResponse,
     ProjectIdentityResponse,
@@ -112,6 +113,10 @@ def get_card_bundle(
     if CardBundleInclude.ContentBlocks in requested:
         blocks = port.get_card_content_blocks(project_uid, card_uid) or []
         bundle.content_blocks = bounded_items(blocks, CardBundleSection.Checklists, section_page.limit)
+    if CardBundleInclude.Execution in requested:
+        execution = port.get_card_execution(project_uid, card_uid)
+        if execution is not None:
+            bundle.execution = CardExecutionDto(is_ready=execution.is_ready, generation=execution.generation)
     if comment_projection is not None:
         bundle.comments = comment_projection
     if CardBundleInclude.Attachments in requested:

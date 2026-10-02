@@ -43,6 +43,15 @@ class AutomationDto(BaseModel):
     bot_schedules: BoundedItemsDto
 
 
+class CardExecutionDto(BaseModel):
+    """Execution readiness state maintained by the database recheck gate."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    is_ready: bool
+    generation: int
+
+
 class CardBundleDto(BaseModel):
     """Agent-facing native card aggregate."""
 
@@ -58,6 +67,7 @@ class CardBundleDto(BaseModel):
     metadata: BoundedItemsDto | None = None
     automation: AutomationDto | None = None
     content_blocks: BoundedItemsDto | None = None
+    execution: CardExecutionDto | None = None
 
     @model_serializer(mode="wrap")
     def serialize_selected_sections(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:

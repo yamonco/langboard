@@ -38,6 +38,14 @@ class ProjectCardPageSource:
     next_cursor_fields: tuple[str, str] | None
 
 
+@dataclass(frozen=True)
+class CardExecutionSource:
+    """Persisted execution readiness of one card without provider-specific types."""
+
+    is_ready: bool
+    generation: int
+
+
 class CardWorkspaceQueryPort(Protocol):
     """Read capabilities required by card workspace queries."""
 
@@ -48,6 +56,9 @@ class CardWorkspaceQueryPort(Protocol):
         requested_sections: frozenset[str],
     ) -> CardBundleSource | None:
         """Load bounded native facts, fetching optional sections only when requested."""
+
+    def get_card_execution(self, project_uid: str, card_uid: str) -> CardExecutionSource | None:
+        """Load the execution readiness persisted by the database recheck gate."""
 
     def get_comment_page(
         self,
