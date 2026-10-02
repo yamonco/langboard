@@ -11,6 +11,8 @@ import Select from "@/components/base/Select";
 import Toast from "@/components/base/Toast";
 import {
     IProjectTemplate,
+    ITemplateBotChoice,
+    useGetTemplateBots,
     ITemplateColumn,
     useSaveProjectTemplate,
     useGetProjectTemplates,
@@ -35,8 +37,13 @@ function ProjectTemplatesPage() {
         name: string;
         description: string;
         global_label_uids: string[];
+        internal_bot_uids?: string[];
         columns: ITemplateColumn[];
     } | null>(null);
+    const [bots, setBots] = useState<ITemplateBotChoice[]>([]);
+    const [botsLoaded, setBotsLoaded] = useState(false);
+    const [botsChanged, setBotsChanged] = useState(false);
+    const { mutateAsync: getBots } = useGetTemplateBots();
     const [labels, setLabels] = useState<IGlobalLabel[]>([]);
     const { mutateAsync: getLabels } = useGetGlobalLabels();
     const [language, setLanguage] = useState("en");
@@ -46,6 +53,12 @@ function ProjectTemplatesPage() {
 
     useEffect(() => {
         setPageAliasRef.current(t("settings.Project templates"));
+        getBots({})
+            .then((items) => {
+                setBots(items);
+                setBotsLoaded(true);
+            })
+            .catch(() => setBotsLoaded(false));
         getLabels({})
             .then(setLabels)
             .catch(() => setError(true));
@@ -74,6 +87,7 @@ function ProjectTemplatesPage() {
     };
 
     const edit = (template?: IProjectTemplate) => {
+        setBotsChanged(false);
         setError(false);
         setLanguage("en");
         setNewLanguage("");
@@ -84,6 +98,7 @@ function ProjectTemplatesPage() {
                       name: template.name,
                       description: template.description ?? "",
                       global_label_uids: [...(template.global_label_uids ?? [])],
+                      internal_bot_uids: template.internal_bot_selections?.map((bot) => bot.internal_bot_uid).filter((uid): uid is string => !!uid),
                       columns: (
                           template.column_definitions ??
                           template.columns.map((name, index) => ({
@@ -104,7 +119,7 @@ function ProjectTemplatesPage() {
     const persist = async () => {
         if (!draft) return;
         try {
-            const result = await saveTemplate(draft);
+            const result = await saveTemplate({ ...draft, internal_bot_uids: botsChanged ? draft.internal_bot_uids : undefined });
             setTemplates((items) => [...items.filter((item) => item.uid !== result.uid), result]);
             setSelected(result.name);
             setDraft(null);
@@ -168,6 +183,55 @@ function ProjectTemplatesPage() {
                         value={draft.description}
                         onChange={(event) => setDraft({ ...draft, description: event.target.value })}
                     />
+                    <fieldset className="space-y-3 rounded-lg border p-3" disabled={!botsLoaded}>
+                        <legend className="px-1 text-sm">{t("settings.Default bots")}</legend>
+                        <p className="text-sm text-muted-foreground">{t("settings.Template bot defaults description")}</p>
+                        {!botsLoaded && <p role="status">{t("settings.Template bots unavailable")}</p>}
+                        {["project_chat", "editor_chat", "editor_copilot"].map((role) => {
+                            const selectedBot = (draft.internal_bot_uids ?? []).find(
+                                (uid) =>
+                                    bots.some((bot) => bot.uid === uid && bot.bot_type === role) ||
+                                    selectedTemplate?.internal_bot_selections?.some((bot) => bot.internal_bot_uid === uid && bot.bot_type === role)
+                            );
+                            return (
+                                <label key={role} className="grid gap-1 text-sm sm:grid-cols-2 sm:items-center">
+                                    {t(`settings.Template bot role ${role}`)}
+                                    <select
+                                        className="h-9 min-w-0 rounded-md border bg-background px-3"
+                                        value={selectedBot ?? ""}
+                                        onChange={(event) => {
+                                            const roleUids = new Set([
+                                                ...bots.filter((bot) => bot.bot_type === role).map((bot) => bot.uid),
+                                                ...(selectedTemplate?.internal_bot_selections ?? [])
+                                                    .filter((bot) => bot.bot_type === role)
+                                                    .map((bot) => bot.internal_bot_uid),
+                                            ]);
+                                            setBotsChanged(true);
+                                            const selections = (draft.internal_bot_uids ?? []).filter((uid) => !roleUids.has(uid));
+                                            setDraft({
+                                                ...draft,
+                                                internal_bot_uids: event.target.value ? [...selections, event.target.value] : selections,
+                                            });
+                                        }}
+                                    >
+                                        <option value="">{t("settings.Use solution default")}</option>
+                                        {selectedBot && !bots.some((bot) => bot.uid === selectedBot) && (
+                                            <option value={selectedBot} disabled>
+                                                {t("settings.Unavailable bot")}
+                                            </option>
+                                        )}
+                                        {bots
+                                            .filter((bot) => bot.bot_type === role)
+                                            .map((bot) => (
+                                                <option key={bot.uid} value={bot.uid}>
+                                                    {bot.display_name}
+                                                </option>
+                                            ))}
+                                    </select>
+                                </label>
+                            );
+                        })}
+                    </fieldset>
                     <fieldset className="space-y-2 rounded-lg border p-3">
                         <legend className="px-1 text-sm">{t("settings.Default labels")}</legend>
                         {labels.map((label) => (

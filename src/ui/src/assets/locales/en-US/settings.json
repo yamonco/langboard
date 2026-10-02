@@ -276,5 +276,13 @@
   "Move up": "Move up",
   "Add column": "Add column",
   "Template description": "Template description",
-  "Default labels": "Default labels"
+  "Default labels": "Default labels",
+  "Default bots": "Default bots",
+  "Template bot defaults description": "Unselected roles use solution defaults. Existing prompts and automation scopes are preserved.",
+  "Template bots unavailable": "Bot choices could not be loaded. Existing selections are preserved.",
+  "Template bot role project_chat": "Project chat",
+  "Template bot role editor_chat": "Editor chat",
+  "Template bot role editor_copilot": "Editor copilot",
+  "Use solution default": "Use solution default",
+  "Unavailable bot": "Unavailable bot"
 }

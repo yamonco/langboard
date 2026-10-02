@@ -276,5 +276,13 @@
   "Move up": "上移",
   "Add column": "添加列",
   "Template description": "模板描述",
-  "Default labels": "默认标签"
+  "Default labels": "默认标签",
+  "Default bots": "默认机器人",
+  "Template bot defaults description": "未选择的角色使用系统默认值。保留现有提示词和自动化作用域。",
+  "Template bots unavailable": "无法加载机器人。保留现有选择。",
+  "Template bot role project_chat": "项目聊天",
+  "Template bot role editor_chat": "编辑器聊天",
+  "Template bot role editor_copilot": "编辑器副驾驶",
+  "Use solution default": "使用系统默认值",
+  "Unavailable bot": "不可用的机器人"
 }

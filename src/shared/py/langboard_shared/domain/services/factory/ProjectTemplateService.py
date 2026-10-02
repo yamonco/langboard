@@ -106,6 +106,7 @@ class ProjectTemplateService(BaseDomainService):
         *,
         description: str | None = None,
         global_label_uids: list[str] | None = None,
+        internal_bot_uids: list[str] | None = None,
     ) -> ProjectTemplate | None:
         """Edit the existing structural SSOT without replacing automation snapshots."""
         template = InfraHelper.get_by_id_like(ProjectTemplate, uid) if uid else None
@@ -127,6 +128,25 @@ class ProjectTemplateService(BaseDomainService):
             for label_uid in global_label_uids:
                 if not InfraHelper.get_by_id_like(GlobalLabel, label_uid):
                     raise ValueError("Unknown global label")
+        bot_snapshots = None
+        if internal_bot_uids is not None:
+            if len(internal_bot_uids) > 3 or len(set(internal_bot_uids)) != len(internal_bot_uids):
+                raise ValueError("Invalid template bots")
+            bot_snapshots = []
+            existing_snapshots = {item.get("bot_type"): item for item in template.internal_bots} if template else {}
+            selected_types = set()
+            for bot_uid in internal_bot_uids:
+                bot = InfraHelper.get_by_id_like(InternalBot, bot_uid)
+                if not bot or bot.bot_type.value in selected_types:
+                    raise ValueError("Unknown or duplicate template bot role")
+                selected_types.add(bot.bot_type.value)
+                bot_snapshots.append(
+                    {
+                        **existing_snapshots.get(bot.bot_type.value, {"prompt": "", "use_default_prompt": True}),
+                        "internal_bot_uid": bot.get_uid(),
+                        "bot_type": bot.bot_type.value,
+                    }
+                )
         definitions = []
         for column in columns:
             column_name = column["name"].strip()
@@ -170,6 +190,8 @@ class ProjectTemplateService(BaseDomainService):
                 template.description = description
             if global_label_uids is not None:
                 template.global_label_uids = list(global_label_uids)
+            if bot_snapshots is not None:
+                template.internal_bots = bot_snapshots
             self.repo.project_template.update(template)
         else:
             template = ProjectTemplate(
@@ -177,6 +199,7 @@ class ProjectTemplateService(BaseDomainService):
                 columns=definitions,
                 description=description or "",
                 global_label_uids=list(global_label_uids or []),
+                internal_bots=bot_snapshots or [],
             )
             self.repo.project_template.insert(template)
         return template

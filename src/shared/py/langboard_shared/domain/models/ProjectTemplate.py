@@ -46,6 +46,9 @@ class ProjectTemplate(BaseDbModel, table=True):
             "columns": [column["name"] for column in definitions],
             "column_descriptions": [column.get("description", "") for column in definitions],
             "column_definitions": definitions,
+            "internal_bot_selections": [
+                {key: snapshot.get(key) for key in ("internal_bot_uid", "bot_type")} for snapshot in self.internal_bots
+            ],
         }
 
     def notification_data(self) -> dict[str, Any]:

@@ -276,5 +276,13 @@
   "Move up": "위로 이동",
   "Add column": "칼럼 추가",
   "Template description": "템플릿 설명",
-  "Default labels": "기본 포함 라벨"
+  "Default labels": "기본 포함 라벨",
+  "Default bots": "기본 봇",
+  "Template bot defaults description": "선택하지 않은 역할은 솔루션 기본값을 사용합니다. 기존 프롬프트와 자동화 스코프는 보존합니다.",
+  "Template bots unavailable": "봇 목록을 불러오지 못했습니다. 기존 선택은 보존합니다.",
+  "Template bot role project_chat": "프로젝트 채팅",
+  "Template bot role editor_chat": "편집기 채팅",
+  "Template bot role editor_copilot": "편집기 코파일럿",
+  "Use solution default": "솔루션 기본값 사용",
+  "Unavailable bot": "사용할 수 없는 봇"
 }

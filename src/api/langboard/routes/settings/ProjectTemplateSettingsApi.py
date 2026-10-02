@@ -36,6 +36,7 @@ def _save_structure(form: SaveProjectTemplateForm, service: DomainService, uid: 
             uid,
             description=form.description,
             global_label_uids=form.global_label_uids,
+            internal_bot_uids=form.internal_bot_uids,
         )
     except (ValueError, IntegrityError) as exc:
         raise ApiException.BadRequest_400(ApiErrorCode.VA0000) from exc
@@ -58,3 +59,13 @@ def update_project_template(
     template_uid: str, form: SaveProjectTemplateForm, service: DomainService = DomainService.scope()
 ) -> JsonResponse:
     return _save_structure(form, service, template_uid)
+
+
+@AppRouter.api.get("/settings/project-template-bots", tags=["AppSettings.ProjectTemplate"])
+@AuthFilter.add("admin")
+def get_project_template_bots(service: DomainService = DomainService.scope()) -> JsonResponse:
+    """Return selection identities only, excluding credentials and prompts."""
+    bots = service.internal_bot.get_api_list(is_setting=False)
+    return JsonResponse(
+        content={"bots": [{key: bot[key] for key in ("uid", "bot_type", "display_name")} for bot in bots]}
+    )

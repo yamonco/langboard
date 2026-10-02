@@ -10,6 +10,7 @@ export interface ITemplateColumn {
 }
 export interface IProjectTemplate {
     uid: string;
+    internal_bot_selections?: { internal_bot_uid: string | null; bot_type: string }[];
     name: string;
     description?: string;
     global_label_uids?: string[];
@@ -50,12 +51,36 @@ export const useSaveProjectTemplate = () => {
     const { mutate } = useQueryMutation();
     return mutate(
         ["save-project-template"],
-        async ({ uid, ...form }: { uid?: string; name: string; description?: string; global_label_uids?: string[]; columns: ITemplateColumn[] }) => {
+        async ({
+            uid,
+            ...form
+        }: {
+            uid?: string;
+            name: string;
+            description?: string;
+            global_label_uids?: string[];
+            internal_bot_uids?: string[];
+            columns: ITemplateColumn[];
+        }) => {
             const response = uid
                 ? await api.put<{ template: IProjectTemplate }>(`/settings/project-templates/${uid}`, form)
                 : await api.post<{ template: IProjectTemplate }>("/settings/project-templates", form);
             return response.data.template;
         },
+        { retry: 0 }
+    );
+};
+
+export interface ITemplateBotChoice {
+    uid: string;
+    bot_type: string;
+    display_name: string;
+}
+export const useGetTemplateBots = () => {
+    const { mutate } = useQueryMutation();
+    return mutate(
+        ["get-project-template-bots"],
+        async () => (await api.get<{ bots: ITemplateBotChoice[] }>("/settings/project-template-bots")).data.bots,
         { retry: 0 }
     );
 };

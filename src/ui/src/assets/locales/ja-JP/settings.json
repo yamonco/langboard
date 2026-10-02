@@ -276,5 +276,13 @@
   "Move up": "上へ移動",
   "Add column": "列を追加",
   "Template description": "テンプレートの説明",
-  "Default labels": "既定のラベル"
+  "Default labels": "既定のラベル",
+  "Default bots": "既定のボット",
+  "Template bot defaults description": "未選択の役割はソリューションの既定値を使用します。既存のプロンプトと自動化スコープは保持されます。",
+  "Template bots unavailable": "ボットを読み込めませんでした。既存の選択は保持されます。",
+  "Template bot role project_chat": "プロジェクトチャット",
+  "Template bot role editor_chat": "エディターチャット",
+  "Template bot role editor_copilot": "エディターコパイロット",
+  "Use solution default": "ソリューションの既定値を使用",
+  "Unavailable bot": "利用できないボット"
 }
