@@ -16,6 +16,7 @@ from .GraphApprovalRequestService import GraphApprovalRequestService
 
 class ProjectColumnService(BaseDomainService):
     WORKFLOW_STAGES = frozenset({"backlog", "ready", "active", "review", "closed", "reference"})
+
     @staticmethod
     def name() -> str:
         """DO NOT EDIT THIS METHOD"""
@@ -27,10 +28,19 @@ class ProjectColumnService(BaseDomainService):
 
     def get_api_list_by_project(self, projects: TProjectParam | list[TProjectParam]) -> list[dict[str, Any]]:
         raw_columns = self.repo.project_column.get_all_by_project(projects)
+        incomplete_counts = self.repo.project_column.get_incomplete_work_counts(projects)
 
         columns = []
         for raw_column, count in raw_columns:
-            columns.append({**raw_column.api_response(), "count": count})
+            if getattr(raw_column, "deleted_at", None) is not None:
+                continue
+            columns.append(
+                {
+                    **raw_column.api_response(),
+                    "count": count,
+                    "incomplete_count": incomplete_counts.get(raw_column.id, 0),
+                }
+            )
 
         return columns
 

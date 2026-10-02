@@ -1,12 +1,22 @@
 from typing import Any
-from sqlalchemy import case, func, or_, select
+from sqlalchemy import case, exists, func, or_, select
 from ....ai import BotScheduleHelper, BotScopeHelper
 from ....core.db import DbSession, SqlBuilder
 from ....core.domain import BaseOrderRepository
+from ....core.types import SnowflakeID
 from ....core.types.ParamTypes import TColumnParam, TProjectParam
-from ....domain.models import Card, Project, ProjectColumn, ProjectColumnBotSchedule, ProjectColumnBotScope
+from ....domain.models import (
+    Card,
+    Checkitem,
+    Checklist,
+    Project,
+    ProjectColumn,
+    ProjectColumnBotSchedule,
+    ProjectColumnBotScope,
+)
 from ....domain.models.ProjectColumn import ProjectColumnDockConflict
 from ....helpers import InfraHelper
+from .CardRepository import CardRepository
 
 
 class ProjectColumnRepository(BaseOrderRepository[ProjectColumn, Project]):
@@ -188,6 +198,44 @@ class ProjectColumnRepository(BaseOrderRepository[ProjectColumn, Project]):
 
         return raw_columns
 
+    def get_incomplete_work_counts(self, projects: TProjectParam | list[TProjectParam]) -> dict[SnowflakeID, int]:
+        """Batch unfinished work counts without loading card bodies or changing physical column counts."""
+        if not isinstance(projects, list):
+            projects = [projects]
+        project_ids = [InfraHelper.convert_id(project) for project in projects]
+        if not project_ids:
+            return {}
+        live_items = (
+            select(Checkitem.id)
+            .join(Checklist, Checklist.id == Checkitem.checklist_id)
+            .where(Checklist.card_id == Card.id, Checklist.deleted_at.is_(None), Checkitem.deleted_at.is_(None))
+            .correlate(Card)
+        )
+        all_items_complete = exists(live_items) & ~exists(live_items.where(Checkitem.is_checked.is_(False)))
+        eligible = (
+            (Card.project_column_id == ProjectColumn.id)
+            & (Card.project_id == ProjectColumn.project_id)
+            & Card.deleted_at.is_(None)
+            & Card.archived_at.is_(None)
+            & or_(Card.source_type.is_(None), Card.source_type != Card.LINKED_RESOURCE_PROJECT_WIKI)
+            & ~all_items_complete
+            & ProjectColumn.is_archive.is_(False)
+            & or_(
+                ProjectColumn.workflow_stage.not_in(("closed", "reference")),
+                ProjectColumn.workflow_stage.is_(None)
+                & func.lower(func.trim(ProjectColumn.name)).not_in(CardRepository.TERMINAL_WORK_COLUMN_NAMES),
+            )
+        )
+        query = (
+            select(ProjectColumn.id, func.count(Card.id))
+            .outerjoin(Card, eligible)
+            .where(ProjectColumn.project_id.in_(project_ids), ProjectColumn.deleted_at.is_(None))
+            .group_by(ProjectColumn.id)
+        )
+        # Activity events follow committed writes; read the primary for current counts.
+        with DbSession.use(readonly=False) as db:
+            return {column_id: count for column_id, count in db.exec(query).all()}
+
     def get_or_create_archive_if_not_exists(self, project: TProjectParam) -> ProjectColumn:
         project_id = InfraHelper.convert_id(project)
         archive_column = None
@@ -257,12 +305,19 @@ class ProjectColumnRepository(BaseOrderRepository[ProjectColumn, Project]):
     def count_cards(self, project: TProjectParam, column: TColumnParam, *, exclude_linked_wikis: bool = False) -> int:
         project_id = InfraHelper.convert_id(project)
         column_id = InfraHelper.convert_id(column)
-        sql_query = SqlBuilder.select.count(Card, Card.id).where(  # type: ignore
-            (Card.column("project_id") == project_id) & (Card.column("project_column_id") == column_id)
-        ).where(Card.column("deleted_at").is_(None))
+        sql_query = (
+            SqlBuilder.select.count(Card, Card.id)
+            .where(  # type: ignore
+                (Card.column("project_id") == project_id) & (Card.column("project_column_id") == column_id)
+            )
+            .where(Card.column("deleted_at").is_(None))
+        )
         if exclude_linked_wikis:
             sql_query = sql_query.where(
-                or_(Card.column("source_type").is_(None), Card.column("source_type") != Card.LINKED_RESOURCE_PROJECT_WIKI)
+                or_(
+                    Card.column("source_type").is_(None),
+                    Card.column("source_type") != Card.LINKED_RESOURCE_PROJECT_WIKI,
+                )
             )
         count = 0
         with DbSession.use(readonly=True) as db:

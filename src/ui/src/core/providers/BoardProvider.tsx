@@ -32,6 +32,8 @@ import useBoardChecklistProgressChangedHandlers from "@/controllers/socket/card/
 import { matchesCardCreator } from "@/core/utils/CardCreatorFilter";
 import { useQueryClient } from "@tanstack/react-query";
 
+import { matchesWorkload } from "@/pages/DashboardPage/components/ProjectWorkload";
+
 const DEFAULT_ARCHIVE_CARD_VISIBLE_DAYS = 3;
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
 
@@ -42,9 +44,11 @@ export interface IFilterMap extends ISearchFilterMap {
     labels?: string[];
     parents?: string[];
     children?: string[];
+    columns?: string[];
+    unfinished?: string[];
 }
 
-export const BOARD_FILTER_KEYS = ["keyword", "members", "creators", "labels", "parents", "children"] as (keyof IFilterMap)[];
+export const BOARD_FILTER_KEYS = ["keyword", "members", "creators", "labels", "parents", "children", "columns", "unfinished"] as (keyof IFilterMap)[];
 
 export interface IBoardContext {
     socket: ISocketContext;
@@ -272,6 +276,15 @@ export const BoardProvider = memo(({ project, currentUser, children }: IBoardPro
     };
 
     const filterCard = (card: ProjectCard.TModel) => {
+        if (filters.columns?.length && !filters.columns.includes(card.project_column_uid)) return false;
+        if (
+            filters.unfinished?.includes("yes") &&
+            !matchesWorkload(
+                card,
+                columns.find((column) => column.uid === card.project_column_uid)
+            )
+        )
+            return false;
         const keyword = filters.keyword?.join(",");
         if (!keyword) {
             return true;

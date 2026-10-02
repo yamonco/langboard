@@ -1,4 +1,4 @@
-import { memo, useMemo, useReducer, useState } from "react";
+import { memo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { projectTypeLabel } from "@/pages/DashboardPage/components/ProjectTypeCopy";
 import Card from "@/components/base/Card";
@@ -6,14 +6,11 @@ import Flex from "@/components/base/Flex";
 import Skeleton from "@/components/base/Skeleton";
 import { ROUTES } from "@/core/routing/constants";
 import { Utils } from "@langboard/core/utils";
-import { Project, ProjectColumn } from "@/core/models";
-import { useDashboard } from "@/core/providers/DashboardProvider";
-import ProjectItemColumn from "@/pages/DashboardPage/components/ProjectItemColumn";
+import { Project } from "@/core/models";
+import ProjectWorkloadBadges from "./ProjectWorkloadBadges";
 import ProjectItemStarButton from "@/pages/DashboardPage/components/ProjectItemStarButton";
 import { ModelRegistry } from "@/core/models/ModelRegistry";
 import { cn } from "@/core/utils/ComponentUtils";
-import useDashboardProjectUIColumnOrderChangedHandlers from "@/controllers/socket/dashboard/project/useDashboardProjectUIColumnOrderChangedHandlers";
-import useSwitchSocketHandlers from "@/core/hooks/useSwitchSocketHandlers";
 import { usePageNavigateRef } from "@/core/hooks/usePageNavigate";
 
 export const SkeletonProjectItem = memo(() => {
@@ -58,25 +55,10 @@ export interface IProjectItemProps extends React.ComponentPropsWithoutRef<typeof
 const ProjectItem = memo(({ project, updateStarredProjects, ...props }: IProjectItemProps): React.JSX.Element => {
     const [t] = useTranslation();
     const navigate = usePageNavigateRef();
-    const { socket } = useDashboard();
     const [isUpdating, setIsUpdating] = useState(false);
     const title = project.useField("title");
     const projectType = project.useField("project_type");
     const boardHasUnread = project.useField("board_has_unread_change") ?? false;
-    const flatColumns = ProjectColumn.Model.useModels((model) => model.project_uid === project.uid);
-    const [updated, forceUpdate] = useReducer((x) => x + 1, 0);
-    const columns = useMemo(() => flatColumns.sort((a, b) => a.order - b.order), [flatColumns, updated]);
-    const handlers = useMemo(
-        () =>
-            useDashboardProjectUIColumnOrderChangedHandlers({
-                projectUID: project.uid,
-                callback: () => {
-                    forceUpdate();
-                },
-            }),
-        [forceUpdate]
-    );
-    useSwitchSocketHandlers({ socket, handlers, dependencies: [handlers] });
 
     const toBoard = () => {
         if (!project) {
@@ -105,9 +87,7 @@ const ProjectItem = memo(({ project, updateStarredProjects, ...props }: IProject
                 </Card.Header>
                 <Card.Content></Card.Content>
                 <Card.Footer className="flex items-center gap-1.5">
-                    {columns.map((column) => (
-                        <ProjectItemColumn key={column.uid} column={column} />
-                    ))}
+                    <ProjectWorkloadBadges projectUID={project.uid} />
                 </Card.Footer>
             </ModelRegistry.Project.Provider>
         </Card.Root>

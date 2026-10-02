@@ -22,7 +22,7 @@ export function SkeletonBoardFilter() {
 }
 
 function BoardFilter() {
-    const { project, cards, currentUser, filters, filterCard, filterMember, filterLabel, navigateWithFilters } = useBoard();
+    const { project, columns, cards, currentUser, filters, filterCard, filterMember, filterLabel, navigateWithFilters } = useBoard();
     const [t] = useTranslation();
     const labels = project.useForeignFieldArray("labels");
     const creators = useMemo(() => {
@@ -95,6 +95,19 @@ function BoardFilter() {
             <Popover.Content align="end" className="max-w-[calc(var(--radix-popper-available-width)_-_theme(spacing.4))]">
                 <ScrollArea.Root>
                     <Flex direction="col" gap="4" className="max-h-[calc(100vh_-_theme(spacing.40))]">
+                        <Flex direction="col">
+                            <Label>{t("dashboard.Unfinished by status")}</Label>
+                            <BoardFilterItem name="unfinished" value="yes">
+                                {t("dashboard.Unfinished cards")}
+                            </BoardFilterItem>
+                            {columns
+                                .filter((column) => !column.is_archive)
+                                .map((column) => (
+                                    <BoardFilterItem key={column.uid} name="columns" value={column.uid}>
+                                        {column.name}
+                                    </BoardFilterItem>
+                                ))}
+                        </Flex>
                         <Label display="block">
                             <span>{t("board.filters.Keyword")}</span>
                             <Input

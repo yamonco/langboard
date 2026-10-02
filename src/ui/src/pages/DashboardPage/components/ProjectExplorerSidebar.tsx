@@ -13,6 +13,8 @@ import { ROUTES } from "@/core/routing/constants";
 import { cn } from "@/core/utils/ComponentUtils";
 import { buildProjectQuickSwitcherSections, searchProjects } from "@/pages/DashboardPage/components/ProjectDiscovery";
 
+import ProjectWorkloadBadges from "./ProjectWorkloadBadges";
+
 export default function ProjectExplorerSidebar({ currentProject, onNavigate }: { currentProject?: Project.TModel; onNavigate?: () => void }) {
     const [t] = useTranslation();
     const { currentUser } = useAuth();
@@ -189,6 +191,7 @@ export default function ProjectExplorerSidebar({ currentProject, onNavigate }: {
                                     key={project.uid}
                                     project={project}
                                     active={currentProjectUID === project.uid}
+                                    onNavigate={onNavigate}
                                     onClick={() => {
                                         navigate(ROUTES.BOARD.MAIN(project.uid), { state: { commandPaletteFocus: true } });
                                         onNavigate?.();
@@ -214,21 +217,34 @@ function LiveUnreadDot({ model }: { model: ProjectCard.TModel }) {
     return unread ? <span aria-label={t("board.Unread changes")} className="ml-auto size-1.5 shrink-0 rounded-full bg-primary" /> : null;
 }
 
-function ProjectExplorerItem({ project, active, onClick }: { project: Project.TModel; active: boolean; onClick: () => void }) {
+function ProjectExplorerItem({
+    project,
+    active,
+    onClick,
+    onNavigate,
+}: {
+    project: Project.TModel;
+    active: boolean;
+    onClick: () => void;
+    onNavigate?: () => void;
+}) {
     const title = project.useField("title");
     const starred = project.useField("starred");
     return (
-        <button
-            type="button"
-            onClick={onClick}
-            aria-current={active ? "page" : undefined}
-            className={cn(
-                "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted",
-                "aria-[current=page]:bg-muted aria-[current=page]:text-primary"
-            )}
-        >
-            <IconComponent icon={starred ? "star" : "folder-kanban"} size="4" />
-            <span className="truncate">{title}</span>
-        </button>
+        <div className="flex min-w-0 items-center gap-1" style={{ containerType: "inline-size", containerName: "project-workload" }}>
+            <button
+                type="button"
+                onClick={onClick}
+                aria-current={active ? "page" : undefined}
+                className={cn(
+                    "flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted",
+                    "aria-[current=page]:bg-muted aria-[current=page]:text-primary"
+                )}
+            >
+                <IconComponent icon={starred ? "star" : "folder-kanban"} size="4" />
+                <span className="truncate">{title}</span>
+            </button>
+            <ProjectWorkloadBadges projectUID={project.uid} compact onNavigate={onNavigate} />
+        </div>
     );
 }

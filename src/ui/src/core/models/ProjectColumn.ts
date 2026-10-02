@@ -18,6 +18,7 @@ export interface Interface extends IBaseModel {
 
 export interface IStore extends Interface {
     count: number;
+    incomplete_count?: number;
 }
 
 class ProjectColumn extends BaseModel<IStore> {
@@ -85,6 +86,13 @@ class ProjectColumn extends BaseModel<IStore> {
 
     public get count() {
         return this.getValue("count");
+    }
+
+    public get incomplete_count() {
+        return this.getValue("incomplete_count");
+    }
+    public set incomplete_count(value) {
+        this.update({ incomplete_count: value });
     }
 
     public get dock_order() {

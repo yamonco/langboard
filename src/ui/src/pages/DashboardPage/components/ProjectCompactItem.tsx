@@ -14,6 +14,8 @@ import ProjectItemStarButton from "@/pages/DashboardPage/components/ProjectItemS
 import ContextMenu from "@/components/base/ContextMenu";
 import { projectTypeLabel } from "@/pages/DashboardPage/components/ProjectTypeCopy";
 
+import ProjectWorkloadBadges from "./ProjectWorkloadBadges";
+
 interface IProjectCompactItemProps {
     project: Project.TModel;
     dense?: boolean;
@@ -33,7 +35,11 @@ const ProjectCompactItem = memo(({ project, updateStarredProjects, dense }: IPro
         <ModelRegistry.Project.Provider model={project}>
             <ContextMenu.Root>
                 <ContextMenu.Trigger asChild>
-                    <Flex items="center" className="group min-w-0 rounded-xl border border-transparent pr-2 hover:border-border hover:bg-accent/70">
+                    <Flex
+                        items="center"
+                        style={{ containerType: "inline-size", containerName: "project-workload" }}
+                        className="group min-w-0 rounded-xl border border-transparent pr-2 hover:border-border hover:bg-accent/70"
+                    >
                         <Button
                             variant="ghost"
                             className={cn(
@@ -67,6 +73,7 @@ const ProjectCompactItem = memo(({ project, updateStarredProjects, dense }: IPro
                                 </Flex>
                             </Box>
                         </Button>
+                        <ProjectWorkloadBadges projectUID={project.uid} compact />
                         <ProjectItemStarButton
                             compact
                             isUpdating={isUpdating}

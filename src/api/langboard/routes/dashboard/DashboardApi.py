@@ -71,7 +71,7 @@ def get_starred_projects(
                         },
                     ),
                 ],
-                "columns": [(ProjectColumn, {"schema": {"count": "integer"}})],
+                "columns": [(ProjectColumn, {"schema": {"count": "integer", "incomplete_count": "integer"}})],
             }
         )
         .auth()

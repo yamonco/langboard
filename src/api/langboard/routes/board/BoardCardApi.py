@@ -119,7 +119,7 @@ from .forms import (
                 "attachments": [CardAttachment],
                 "linked_wikis": [{"wiki_uid": "string", "title": "string"}],
                 "global_relationships": [GlobalCardRelationshipType],
-                "project_columns": [(ProjectColumn, {"schema": {"count": "integer"}})],
+                "project_columns": [(ProjectColumn, {"schema": {"count": "integer", "incomplete_count": "integer"}})],
                 "project_labels": [ProjectLabel],
                 "bot_scopes": [CardBotScope],
             }
