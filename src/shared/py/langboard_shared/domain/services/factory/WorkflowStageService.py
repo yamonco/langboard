@@ -10,8 +10,9 @@ class WorkflowStageService(BaseDomainService):
         return "workflow_stage"
 
     def get_api_list(self) -> list[dict]:
+        usage = self.repo.workflow_stage.get_column_usage()
         return [
-            stage.api_response()
+            {**stage.api_response(), "used_column_count": usage.get(stage.key, 0)}
             for stage in sorted(InfraHelper.get_all(WorkflowStageDefinition), key=lambda s: (s.order, s.key))
         ]
 

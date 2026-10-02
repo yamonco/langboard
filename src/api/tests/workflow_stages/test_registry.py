@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import pytest
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, select, text
 
 
 os.environ.setdefault("PROJECT_NAME", "langboard")
@@ -30,6 +30,10 @@ def migration():
 def registry(monkeypatch):
     engine = create_engine("sqlite://")
     WorkflowStageDefinition.__table__.create(engine)
+    with engine.begin() as connection:
+        connection.execute(
+            text("CREATE TABLE project_column (id BIGINT, workflow_stage TEXT, deleted_at TEXT, is_archive BOOLEAN)")
+        )
     monkeypatch.setattr(DbEngine, "get_main_engine", lambda: engine)
     monkeypatch.setattr(DbEngine, "get_readonly_engine", lambda: engine)
     repo = WorkflowStageRepository(lambda _: None, lambda _: None)
@@ -39,12 +43,19 @@ def registry(monkeypatch):
 
 
 def form(**changes):
-    return SaveWorkflowStageForm(key="released", name="Released", description="Accepted delivery", **changes).model_dump()
+    return SaveWorkflowStageForm(
+        key="released", name="Released", description="Accepted delivery", **changes
+    ).model_dump()
 
 
 def test_create_update_deactivate_preserve_key_and_translations(registry):
     service, _ = registry
-    fields = form(translations={"ko": {"name": "출시", "description": "인수 완료"}}, counts_as_completed=True, active_queue_policy="exclude", entry_effects=["stop_running_timers"])
+    fields = form(
+        translations={"ko": {"name": "출시", "description": "인수 완료"}},
+        counts_as_completed=True,
+        active_queue_policy="exclude",
+        entry_effects=["stop_running_timers"],
+    )
     stage = service.save(fields)
     uid = stage.get_uid()
     saved = service.get_api_list()[0]
@@ -61,7 +72,17 @@ def test_create_update_deactivate_preserve_key_and_translations(registry):
     assert saved["translations"]["ko"]["name"] == "출시"
 
 
-@pytest.mark.parametrize("changes", [{"key":"renamed"}, {"entry_effects":["webhook"]}, {"active_queue_policy":"maybe"}, {"overdue_policy":"erase"}, {"is_builtin":True}, {"translations":{"../ko":{"name":"Bad"}}}])
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"key": "renamed"},
+        {"entry_effects": ["webhook"]},
+        {"active_queue_policy": "maybe"},
+        {"overdue_policy": "erase"},
+        {"is_builtin": True},
+        {"translations": {"../ko": {"name": "Bad"}}},
+    ],
+)
 def test_invalid_update_has_no_write(registry, changes):
     service, _ = registry
     fields = form()
@@ -90,9 +111,9 @@ def test_migration_installs_six_translated_policies_without_entry_effects():
             module.upgrade()
         rows = connection.execute(select(WorkflowStageDefinition.__table__)).mappings().all()
         assert len(rows) == 6
-        assert {row["key"] for row in rows} == {"backlog","ready","active","review","closed","reference"}
+        assert {row["key"] for row in rows} == {"backlog", "ready", "active", "review", "closed", "reference"}
         for row in rows:
-            assert set(row["translations"]) == {"en","ko","ja","zh"}
+            assert set(row["translations"]) == {"en", "ko", "ja", "zh"}
             assert row["entry_effects"] == []
             assert row["counts_as_completed"] == (row["key"] == "closed")
         assert next(row for row in rows if row["key"] == "closed")["overdue_policy"] == "suppress"
@@ -101,9 +122,9 @@ def test_migration_installs_six_translated_policies_without_entry_effects():
 
 def test_seed_retries_id_collisions_before_insert(monkeypatch):
     module = migration()
-    identifiers = iter([1,1,2,2,3,4,5,6])
+    identifiers = iter([1, 1, 2, 2, 3, 4, 5, 6])
     monkeypatch.setattr(module, "SnowflakeID", lambda: next(identifiers))
-    assert [row["id"] for row in module.builtin_rows()] == [1,2,3,4,5,6]
+    assert [row["id"] for row in module.builtin_rows()] == [1, 2, 3, 4, 5, 6]
     monkeypatch.setattr(module, "SnowflakeID", lambda: 1)
     with pytest.raises(RuntimeError):
         module.builtin_rows()
@@ -113,7 +134,25 @@ def test_registry_routes_require_specific_admin_role():
     from langboard.routes.settings import WorkflowStageSettingsApi as api
     from langboard_shared.core.filter import AuthFilter
     from langboard_shared.filter import RoleFilter
-    for endpoint, action in [(api.get_workflow_stages,"workflow_stage_read"),(api.create_workflow_stage,"workflow_stage_create"),(api.update_workflow_stage,"workflow_stage_update"),(api.deactivate_workflow_stage,"workflow_stage_deactivate")]:
+
+    for endpoint, action in [
+        (api.get_workflow_stages, "workflow_stage_read"),
+        (api.create_workflow_stage, "workflow_stage_create"),
+        (api.update_workflow_stage, "workflow_stage_update"),
+        (api.deactivate_workflow_stage, "workflow_stage_deactivate"),
+    ]:
         assert AuthFilter.get_filtered(endpoint) == "admin"
         _, actions, _, admin_bypass = RoleFilter.get_filtered(endpoint)
         assert actions == [action] and admin_bypass is False
+
+
+def test_column_usage_counts_explicit_non_deleted_non_archive_bindings(registry):
+    service, engine = registry
+    service.save(form())
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO project_column VALUES (1, 'released', NULL, FALSE), (2, 'released', 'deleted', FALSE), (3, 'released', NULL, TRUE), (4, NULL, NULL, FALSE)"
+            )
+        )
+    assert service.get_api_list()[0]["used_column_count"] == 1

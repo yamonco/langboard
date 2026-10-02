@@ -27,6 +27,7 @@ import { AuthUser } from "@/core/models";
 import useRoleActionFilter from "@/core/hooks/useRoleActionFilter";
 import { ApiKeyRole, McpRole, SettingRole } from "@/core/models/roles";
 import useGetOllamaHealth from "@/controllers/api/settings/ollama/useGetOllamaHealth";
+import WorkflowStagesPage from "@/pages/SettingsPage/WorkflowStagesPage";
 import GlobalLabelsPage from "@/pages/SettingsPage/GlobalLabelsPage";
 import ProjectTemplatesPage from "@/pages/SettingsPage/ProjectTemplatesPage";
 
@@ -178,6 +179,12 @@ function SettingsProxyDisplay({ currentUser, isOllamaAvailable }: { currentUser:
     const headerNavs: Record<string, IHeaderNavItem> = {};
 
     const sidebarNavs: Record<string, ISidebarNavItem> = {
+        [ROUTES.SETTINGS.WORKFLOW_STAGES]: {
+            icon: "list-tree",
+            name: t("settings.Workflow stages"),
+            onClick: () => navigate(ROUTES.SETTINGS.WORKFLOW_STAGES, { smooth: true }),
+            hidden: !currentUser.is_admin || !hasSettingRoleAction(...SettingRole.CATEGORIZED_MAP.WorkflowStage),
+        },
         [ROUTES.SETTINGS.GLOBAL_LABELS]: {
             icon: "tags",
             name: t("settings.Global labels"),
@@ -281,6 +288,9 @@ function SettingsProxyDisplay({ currentUser, isOllamaAvailable }: { currentUser:
 
     let pageContent;
     switch (pathname) {
+        case ROUTES.SETTINGS.WORKFLOW_STAGES:
+            pageContent = <WorkflowStagesPage currentUser={currentUser} />;
+            break;
         case ROUTES.SETTINGS.GLOBAL_LABELS:
             pageContent = <GlobalLabelsPage currentUser={currentUser} />;
             break;
@@ -322,6 +332,11 @@ function SettingsProxyDisplay({ currentUser, isOllamaAvailable }: { currentUser:
     useEffect(() => {
         const foundAvailableRoute = Object.entries(sidebarNavs).find(([_, nav]) => !nav.hidden)?.[0];
         switch (pathname) {
+            case ROUTES.SETTINGS.WORKFLOW_STAGES:
+                if (!currentUser.is_admin || !hasSettingRoleAction(...SettingRole.CATEGORIZED_MAP.WorkflowStage)) {
+                    navigate(foundAvailableRoute ?? ROUTES.DASHBOARD.PROJECTS.ALL, { replace: true });
+                }
+                break;
             case ROUTES.SETTINGS.GLOBAL_LABELS:
                 if (!currentUser.is_admin || !hasSettingRoleAction(...SettingRole.CATEGORIZED_MAP.GlobalLabel)) {
                     navigate(foundAvailableRoute ?? ROUTES.DASHBOARD.PROJECTS.ALL, { replace: true });
