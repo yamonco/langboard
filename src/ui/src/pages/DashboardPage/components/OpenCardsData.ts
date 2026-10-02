@@ -41,3 +41,16 @@ export const retainProjectCards = (cards: IOpenCard[], projectUIDs: Set<string>)
 
 export const toggleOpenCardPin = (cards: IOpenCard[], projectUID: string, cardUID: string): IOpenCard[] =>
     sortOpenCards(cards.map((item) => (item.projectUID === projectUID && item.cardUID === cardUID ? { ...item, pinned: !item.pinned } : item)));
+
+// Recent views stay chronological even when the stored open-card list has pins.
+export const recentOpenCards = (cards: IOpenCard[]): IOpenCard[] => {
+    const seen = new Set<string>();
+    return [...cards]
+        .sort((a, b) => b.lastFocusedAt.localeCompare(a.lastFocusedAt))
+        .filter((card) => {
+            const key = `${card.projectUID}:${card.cardUID}`;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
+};
