@@ -4,6 +4,9 @@ import Tooltip from "@/components/base/Tooltip";
 import { IModelMap, TPickedModel } from "@/core/models/ModelRegistry";
 import { Utils } from "@langboard/core/utils";
 import { memo } from "react";
+import { ProjectLabel } from "@/core/models";
+import { useTranslation } from "react-i18next";
+import { globalLabelDisplay } from "@/core/utils/LabelDisplay";
 
 interface ILabelModel {
     name: string;
@@ -72,10 +75,23 @@ export interface ILabelModelBadgeProps {
     model: TLabelModel<TLabelModelName>;
 }
 
-export const LabelModelBadge = memo(({ model }: ILabelModelBadgeProps) => {
+const BasicLabelModelBadge = memo(({ model }: ILabelModelBadgeProps) => {
     const name = model.useField("name");
     const color = model.useField("color");
     const description = model.useField("description");
 
     return <LabelBadge name={name} color={color} description={description} />;
 });
+
+const GlobalProjectLabelBadge = ({ model }: { model: ProjectLabel.TModel }) => {
+    const name = model.useField("name");
+    const color = model.useField("color");
+    const description = model.useField("description");
+    const display = model.useField("global_display");
+    const { i18n } = useTranslation();
+    return <LabelBadge {...globalLabelDisplay(name, description, display, i18n.language)} color={color} />;
+};
+
+export const LabelModelBadge = memo(({ model }: ILabelModelBadgeProps) =>
+    model instanceof ProjectLabel.Model ? <GlobalProjectLabelBadge model={model} /> : <BasicLabelModelBadge model={model} />
+);

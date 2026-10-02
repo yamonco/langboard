@@ -8,6 +8,7 @@ import SubmitButton from "@/components/base/SubmitButton";
 import Toast from "@/components/base/Toast";
 import useUpdateCardLabels from "@/controllers/api/card/useUpdateCardLabels";
 import setupApiErrorHandler from "@/core/helpers/setupApiErrorHandler";
+import { useBoardGlobalLabels } from "@/controllers/api/board/settings/useBoardGlobalLabels";
 import { ProjectRole } from "@/core/models/roles";
 import { useBoardCard } from "@/core/providers/BoardCardProvider";
 import { parseCollaborativeStringList } from "@/core/utils/CollaborativeSelectionUtils";
@@ -32,6 +33,8 @@ const BoardCardActionSetLabel = memo(({ buttonClassName }: IBoardCardActionSetLa
     const [t] = useTranslation();
     const [isOpened, setIsOpened] = useState(false);
     const [isValidating, setIsValidating] = useState(false);
+    const canUseGlobal = hasRoleAction(ProjectRole.EAction.Update);
+    const { catalog, useGlobal } = useBoardGlobalLabels(projectUID, isOpened && canUseGlobal);
     const { mutateAsync: updateCardLabelsMutateAsync } = useUpdateCardLabels({ interceptToast: true });
     const currentCardLabelUIDs = labels.map((label) => label.uid);
     const defaultSelectedLabelUIDs = JSON.stringify(currentCardLabelUIDs);
@@ -102,11 +105,19 @@ const BoardCardActionSetLabel = memo(({ buttonClassName }: IBoardCardActionSetLa
 
         setIsValidating(true);
 
-        const promise = updateCardLabelsMutateAsync({
-            project_uid: projectUID,
-            card_uid: card.uid,
-            labels: selectedLabelUIDs,
-        });
+        const promise = (async () => {
+            const resolved: string[] = [];
+            const replacements = new Map<string, string>();
+            for (const uid of selectedLabelUIDs) {
+                const localUID = uid.startsWith("global:") ? await useGlobal.mutateAsync(uid.slice(7)) : uid;
+                resolved.push(localUID);
+                if (localUID !== uid) {
+                    replacements.set(uid, localUID);
+                    updateValue(JSON.stringify([...new Set(selectedLabelUIDs.map((selected) => replacements.get(selected) ?? selected))]));
+                }
+            }
+            return updateCardLabelsMutateAsync({ project_uid: projectUID, card_uid: card.uid, labels: [...new Set(resolved)] });
+        })();
 
         Toast.Add.promise(promise, {
             loading: t("common.Updating..."),
@@ -118,11 +129,11 @@ const BoardCardActionSetLabel = memo(({ buttonClassName }: IBoardCardActionSetLa
                 return messageRef.message;
             },
             success: () => {
+                setIsOpened(false);
                 return t("successes.Labels updated successfully.");
             },
             finally: () => {
                 setIsValidating(false);
-                setIsOpened(false);
             },
         });
     };
@@ -155,6 +166,9 @@ const BoardCardActionSetLabel = memo(({ buttonClassName }: IBoardCardActionSetLa
                     {t("card.Select labels to attach or remove, then save.")}
                 </Box>
                 <BoardCardActionLabelList
+                    globalLabels={canUseGlobal ? (catalog.data ?? []) : []}
+                    globalLoading={canUseGlobal && catalog.isLoading}
+                    globalError={canUseGlobal && catalog.isError}
                     disabled={isWaitingForSync || isValidating}
                     remoteLabelStates={remoteLabelStates}
                     selectedLabelUIDs={selectedLabelUIDs}

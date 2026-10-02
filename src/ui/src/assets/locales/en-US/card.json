@@ -140,5 +140,7 @@
   "Labels": "Labels",
   "Select labels to attach or remove, then save.": "Select labels to attach or remove, then save.",
   "Search labels": "Search labels",
-  "No matching labels": "No matching labels"
+  "No matching labels": "No matching labels",
+  "Global labels": "Global labels",
+  "Global labels unavailable": "Global labels could not be loaded. Close and reopen to retry."
 }
