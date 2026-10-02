@@ -1,3 +1,4 @@
+import "@/core/injection";
 import { useState } from "react";
 import { createRoot } from "react-dom/client";
 import { createMemoryRouter, RouterProvider, useLocation } from "react-router";

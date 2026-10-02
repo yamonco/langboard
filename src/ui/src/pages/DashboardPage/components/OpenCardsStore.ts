@@ -23,3 +23,11 @@ export const retainProjects = (userUID: string, projectUIDs: Set<string>): void 
 
 export const toggleCardPin = (userUID: string, projectUID: string, cardUID: string): void =>
     changeOpenCards(userUID, (cards) => toggleOpenCardPin(cards, projectUID, cardUID));
+
+export const removeUnavailableCards = (userUID: string, checked: Set<string>, available: Set<string>): void =>
+    changeOpenCards(userUID, (cards) =>
+        cards.filter((card) => {
+            const key = `${card.projectUID}:${card.cardUID}`;
+            return !checked.has(key) || available.has(key);
+        })
+    );

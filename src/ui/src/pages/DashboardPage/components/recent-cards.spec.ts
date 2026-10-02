@@ -26,3 +26,44 @@ for (const width of [1280, 700, 390]) {
         await expect(recent.getByRole("button", { name: /^Card \d+$/ })).toHaveCount(10);
     });
 }
+
+test("offline deletion and permission loss remove only confirmed unavailable history", async ({ page }) => {
+    let status = 200;
+    let calls = 0;
+    await page.route("**/board/fixture/cards/available", async (route) => {
+        if (route.request().method() === "OPTIONS") {
+            await route.fulfill({
+                status: 204,
+                headers: {
+                    "Access-Control-Allow-Origin": "http://127.0.0.1:4188",
+                    "Access-Control-Allow-Credentials": "true",
+                    "Access-Control-Allow-Methods": "POST, OPTIONS",
+                    "Access-Control-Allow-Headers": "content-type, content-encoding, authorization",
+                },
+            });
+            return;
+        }
+        calls++;
+        const uids = route.request().postDataJSON().card_uids as string[];
+        await route.fulfill({
+            status,
+            headers: { "Access-Control-Allow-Origin": "http://127.0.0.1:4188", "Access-Control-Allow-Credentials": "true" },
+            contentType: "application/json",
+            body: JSON.stringify({ card_uids: uids.filter((uid) => uid !== "13") }),
+        });
+    });
+    await page.goto("/src/pages/DashboardPage/components/recent-cards.fixture.html");
+    const recent = page.getByRole("region", { name: "Recent cards", exact: true });
+    await expect.poll(() => calls).toBeGreaterThan(0);
+    await expect(recent.getByRole("button", { name: "Card 13", exact: true })).toHaveCount(0);
+    await expect(recent.getByRole("button", { name: "Card 12", exact: true })).toBeVisible();
+    await expect(recent.getByRole("button", { name: "Show older cards (3)", exact: true })).toBeVisible();
+    status = 503;
+    const previous = calls;
+    await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+    await expect.poll(() => calls).toBeGreaterThan(previous);
+    await expect(recent.getByRole("button", { name: "Card 12", exact: true })).toBeVisible();
+    status = 403;
+    await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+    await expect(recent.getByRole("button", { name: /^Card \d+$/ })).toHaveCount(0);
+});

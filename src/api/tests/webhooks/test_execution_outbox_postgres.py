@@ -212,6 +212,9 @@ def test_delivery_lifecycle_reaches_terminal_states_and_recovers(monkeypatch: py
                 "CONSTRAINT uq_execution_outbox_card_generation UNIQUE(card_id, execution_generation))",
             ):
                 connection.execute(text(statement))
+            from langboard_shared.domain.models import WorkflowStageDefinition
+
+            WorkflowStageDefinition.__table__.create(connection)
             connection.execute(text("INSERT INTO project_column VALUES (20, NULL, false, NULL, 7)"))
             connection.execute(text("INSERT INTO global_card_relationship_type VALUES (30, 'blocks', true)"))
             connection.execute(

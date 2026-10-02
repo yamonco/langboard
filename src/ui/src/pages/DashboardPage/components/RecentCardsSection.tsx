@@ -10,6 +10,7 @@ import { useSocketOutsideProvider } from "@/core/providers/SocketProvider";
 import { SocketEvents } from "@langboard/core/constants";
 import { ESocketTopic } from "@langboard/core/enums";
 import { closeCard, toggleCardPin } from "./OpenCardsStore";
+import useValidateRecentCards from "./useValidateRecentCards";
 import type { IOpenCard } from "./OpenCardsData";
 
 export default function RecentCardsSection({
@@ -29,6 +30,7 @@ export default function RecentCardsSection({
     onExpand: () => void;
     onNavigate?: () => void;
 }) {
+    useValidateRecentCards(userUID, visibleOpenCards);
     const [t] = useTranslation();
     const navigate = usePageNavigateRef();
     const location = useLocation();

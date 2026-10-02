@@ -137,6 +137,10 @@ class CardService(BaseDomainService):
         card = InfraHelper.get_by_id_like(Card, card)
         return card
 
+    def get_existing_uids(self, project: TProjectParam, card_uids: list[str]) -> list[str]:
+        """Return only current cards in the already authorized project, without content."""
+        return self.repo.card.get_existing_uids(project, card_uids)
+
     def get_by_project(self, project: TProjectParam | None) -> list[Card]:
         project = InfraHelper.get_by_id_like(Project, project)
         if not project:

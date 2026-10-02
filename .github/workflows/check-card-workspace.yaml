@@ -49,3 +49,4 @@ jobs:
       - run: uv run --no-sync pytest -q src/api/tests/card_workspace/test_commands.py src/api/tests/card_workspace/test_queries.py src/api/tests/card_workspace/test_completion_checklist_service.py src/api/tests/card_workspace/test_graph_patch_route.py src/api/tests/card_workspace/test_card_relationship_concurrency.py src/api/tests/mcp_integration/test_card_mcp_contract.py src/api/tests/mcp_integration/test_card_workspace_transport.py
       - run: uv run --no-sync pytest -q src/api/tests/card_workspace/test_checklist_projection.py src/api/tests/card_workspace/test_native_adapter.py -k checklist_projection
       - run: uv run --no-sync pytest -q src/api/tests/card_workspace/test_linked_wikis.py
+      - run: uv run --no-sync pytest -q src/api/tests/card_workspace/test_recent_card_availability.py src/shared/py/langboard_shared/infrastructure/repositories/factory/CardRepository_test.py

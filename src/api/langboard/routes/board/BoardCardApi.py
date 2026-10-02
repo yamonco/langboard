@@ -47,6 +47,7 @@ from ...card_workspace.application import get_card_bundle, validate_card_graph_p
 from ...card_workspace.domain import CardBundleInclude, CardGraphEdge, CardGraphNewCard, CommentPage, SectionPage
 from ...card_workspace.infrastructure import NativeCardWorkspaceAdapter
 from ...card_workspace.infrastructure.linked_wikis import visible_linked_wikis
+from ..dashboard.DashboardForm import RecentCardsAvailabilityForm
 from .ExecutionReceiptApi import receipt_history
 from .forms import (
     AssignUsersForm,
@@ -60,6 +61,21 @@ from .forms import (
     UpdateCardLabelsForm,
     UpdateCardRelationshipsForm,
 )
+
+
+@AppRouter.api.post(
+    "/board/{project_uid}/cards/available",
+    tags=["Board.Card"],
+    responses=OpenApiSchema().suc({"card_uids": "string[]"}).auth().forbidden().get(),
+)
+@RoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+@AuthFilter.add("user")
+def get_available_recent_cards(
+    project_uid: str,
+    form: RecentCardsAvailabilityForm,
+    service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    return JsonResponse(content={"card_uids": service.card.get_existing_uids(project_uid, form.card_uids)})
 
 
 @AppRouter.schema(permission=ApiPermission.Read)

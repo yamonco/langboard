@@ -24,6 +24,7 @@ from ....domain.models import (
     ProjectColumn,
     User,
     UserNotification,
+    WorkflowStageDefinition,
 )
 from ....domain.models.BaseBotModel import BotPlatform, BotPlatformRunningType
 from ....domain.models.UserNotification import NotificationType
@@ -165,6 +166,7 @@ def test_my_work_page_deduplicates_user_relationships_across_projects(monkeypatc
         CardAssignedUser,
         ProjectAssignedUser,
         UserNotification,
+        WorkflowStageDefinition,
     ):
         model.__table__.create(engine)
     monkeypatch.setattr(DbEngine, "get_main_engine", lambda: engine)
@@ -183,7 +185,7 @@ def test_my_work_page_deduplicates_user_relationships_across_projects(monkeypatc
             columns = [ProjectColumn(project_id=project.id, name="Doing") for project in projects]
             for column in columns:
                 db.insert(column)
-            done_column = ProjectColumn(project_id=projects[0].id, name="DONE")
+            done_column = ProjectColumn(project_id=projects[0].id, name="DONE", workflow_stage="closed")
             archive_column = ProjectColumn(project_id=projects[0].id, name="Archive", is_archive=True)
             db.insert(done_column)
             db.insert(archive_column)
@@ -216,6 +218,8 @@ def test_my_work_page_deduplicates_user_relationships_across_projects(monkeypatc
                     record_list=[("card", foreign.id)],
                 )
             )
+        with DbSession.use(readonly=False) as db:
+            db.insert(WorkflowStageDefinition(key="closed", name="Closed", counts_as_completed=True))
         repository = CardRepository(lambda _: None, lambda _: None)
         now = SafeDateTime.now()
         records = repository.get_my_work_page(
@@ -300,5 +304,41 @@ def test_board_creators_resolve_visible_user_and_bot_authors_without_hiding_rece
         assert creators[cards["recent_archive"].id].id == author.id
         assert creators[cards["bot"].id].id == bot.id
         assert cards["old_archive"].id not in creators
+    finally:
+        engine.dispose()
+
+
+def test_recent_availability_excludes_missing_deleted_and_foreign_project_cards(monkeypatch):
+    engine = create_engine("sqlite://")
+    for model in (User, Project, ProjectColumn, Card):
+        model.__table__.create(engine)
+    monkeypatch.setattr(DbEngine, "get_main_engine", lambda: engine)
+    monkeypatch.setattr(DbEngine, "get_readonly_engine", lambda: engine)
+    try:
+        with DbSession.use(readonly=False) as db:
+            owner = User(firstname="Test", lastname="Owner", email="recent@example.invalid", password="test-only")
+            db.insert(owner)
+            project = Project(owner_id=owner.id, title="Current")
+            other = Project(owner_id=owner.id, title="Foreign")
+            db.insert(project)
+            db.insert(other)
+            column = ProjectColumn(project_id=project.id, name="Todo")
+            db.insert(column)
+            valid = Card(project_id=project.id, project_column_id=column.id, title="Current")
+            removed = Card(project_id=project.id, project_column_id=column.id, title="Deleted")
+            foreign = Card(project_id=other.id, project_column_id=column.id, title="Foreign")
+            for card in (valid, removed, foreign):
+                db.insert(card)
+            removed_uid = removed.get_uid()
+            db.delete(removed)
+        repo = CardRepository(lambda _: None, lambda _: None)
+        assert repo.get_existing_uids(project, [valid.get_uid(), removed_uid, foreign.get_uid()]) == [valid.get_uid()]
+        assert repo.get_existing_uids(project, []) == []
+        with pytest.raises(ValueError):
+            repo.get_existing_uids(project, [valid.get_uid()] * 201)
+        with DbSession.use(readonly=False) as db:
+            project.deleted_at = SafeDateTime.now()
+            db.update(project)
+        assert repo.get_existing_uids(project, [valid.get_uid()]) == []
     finally:
         engine.dispose()

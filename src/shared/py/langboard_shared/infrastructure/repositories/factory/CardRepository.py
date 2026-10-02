@@ -49,6 +49,23 @@ class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
     def get_by_id_like(self, card: TCardParam | None) -> Card | None:
         return InfraHelper.get_by_id_like(Card, card)
 
+    def get_existing_uids(self, project: TProjectParam, card_uids: Sequence[str]) -> list[str]:
+        if not card_uids:
+            return []
+        if len(card_uids) > 200:
+            raise ValueError("At most 200 recent cards may be checked")
+        project_id = InfraHelper.convert_id(project)
+        card_ids = [InfraHelper.convert_id(uid) for uid in card_uids]
+        with DbSession.use(readonly=True) as db:
+            cards = db.exec(
+                SqlBuilder.select.table(Card)
+                .join(Project, Project.column("id") == Card.column("project_id"))
+                .where(Project.column("deleted_at") == None)  # noqa: E711
+                .where(Card.column("project_id") == project_id)
+                .where(Card.column("id").in_(card_ids))
+            ).all()
+        return [card.get_uid() for card in cards]
+
     def update_description_if_current(self, card: Card, expected_content: str) -> bool:
         """Lock and compare the primary row before updating only its description."""
 
@@ -371,7 +388,9 @@ class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
             )
         if "overdue" in purposes:
             conditions.append(
-                mine & Card.column("deadline_at").is_not(None) & (Card.column("deadline_at") < now)
+                mine
+                & Card.column("deadline_at").is_not(None)
+                & (Card.column("deadline_at") < now)
                 & or_(WorkflowStageDefinition.id.is_(None), WorkflowStageDefinition.overdue_policy != "suppress")
             )
 
