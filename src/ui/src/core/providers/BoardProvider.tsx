@@ -131,6 +131,7 @@ export const BoardProvider = memo(({ project, currentUser, children }: IBoardPro
     const currentUserRoleActions = project.useField("current_auth_role_actions");
     const archiveVisibleDays = project.useField("archive_visible_days");
     const { hasRoleAction } = useRoleActionFilter(currentUserRoleActions);
+    const [, refreshColumnFilters] = useReducer((value: number) => value + 1, 0);
     const columns = ProjectColumn.Model.useModels((model) => model.project_uid === project.uid);
     const cards = ProjectCard.Model.useModels((model) => model.project_uid === project.uid);
     const cardUIDs = useMemo(() => cards.map((card) => card.uid), [cards]);
@@ -444,6 +445,9 @@ export const BoardProvider = memo(({ project, currentUser, children }: IBoardPro
                 deadlineClock,
             }}
         >
+            {columns.map((column) => (
+                <ColumnFilterSubscription key={column.uid} column={column} refresh={refreshColumnFilters} />
+            ))}
             {children}
         </BoardContext.Provider>
     );
@@ -456,3 +460,11 @@ export const useBoard = () => {
     }
     return context;
 };
+
+/** Reevaluate every board filter consumer when column classification changes. */
+function ColumnFilterSubscription({ column, refresh }: { column: ProjectColumn.TModel; refresh: () => void }) {
+    column.useField("workflow_stage", refresh);
+    column.useField("is_archive", refresh);
+    column.useField("name", refresh);
+    return null;
+}

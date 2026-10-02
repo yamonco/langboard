@@ -68,3 +68,6 @@ jobs:
         working-directory: src/ui
       - run: yarn playwright test -c playwright.locale-format.config.ts
         working-directory: src/ui
+
+      - run: yarn playwright test -c playwright.workflow-filter-refresh.config.ts
+        working-directory: src/ui
