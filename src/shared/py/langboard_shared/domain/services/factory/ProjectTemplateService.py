@@ -26,6 +26,11 @@ SI_COLUMN_DESCRIPTIONS = [
     "Implementation is ready for review or acceptance. Do not infer approval from assignment.",
     "Completed and accepted work. Move here only when completion is explicitly confirmed.",
 ]
+SI_WORKFLOW_STAGES = ["backlog", "ready", "active", "review", "closed"]
+SI_COLUMN_DEFINITIONS = [
+    {"name": name, "workflow_stage": stage, "description": description}
+    for name, stage, description in zip(SI_COLUMNS, SI_WORKFLOW_STAGES, SI_COLUMN_DESCRIPTIONS, strict=True)
+]
 SI_EMAIL_NOTIFICATION_POLICY = {
     "is_enabled": True,
     "notify_all_members": True,
@@ -52,14 +57,19 @@ class ProjectTemplateService(BaseDomainService):
             if not template.email_notification_policy:
                 template.email_notification_policy = SI_EMAIL_NOTIFICATION_POLICY
                 self.repo.project_template.update(template)
-            if not template.column_descriptions and template.columns == SI_COLUMNS:
-                template.column_descriptions = SI_COLUMN_DESCRIPTIONS
+            if template.columns == SI_COLUMNS:
+                definitions = template.column_definitions()
+                for index, definition in enumerate(definitions):
+                    definition["workflow_stage"] = SI_WORKFLOW_STAGES[index]
+                    if not template.column_descriptions:
+                        definition["description"] = SI_COLUMN_DESCRIPTIONS[index]
+                template.columns = definitions
+                template.column_descriptions = []
                 self.repo.project_template.update(template)
             return template
         template = ProjectTemplate(
             name="SI",
-            columns=SI_COLUMNS,
-            column_descriptions=SI_COLUMN_DESCRIPTIONS,
+            columns=[dict(column) for column in SI_COLUMN_DEFINITIONS],
             email_notification_policy=SI_EMAIL_NOTIFICATION_POLICY,
             is_builtin=True,
             is_default=True,
@@ -115,8 +125,10 @@ class ProjectTemplateService(BaseDomainService):
         ]
         template = ProjectTemplate(
             name=clean_name,
-            columns=[column.name for column in columns],
-            column_descriptions=[column.description for column in columns],
+            columns=[
+                {"name": column.name, "workflow_stage": column.workflow_stage, "description": column.description}
+                for column in columns
+            ],
             internal_bots=internal_bots,
             project_bot_scopes=project_scopes,
             column_bot_scopes=column_scopes,
@@ -145,13 +157,13 @@ class ProjectTemplateService(BaseDomainService):
         project = project_service.create(user, title, description, project_type)
         columns: list[ProjectColumn] = []
         try:
-            for index, column_name in enumerate(template.columns):
-                column_description = (
-                    template.column_descriptions[index] if index < len(template.column_descriptions) else ""
-                )
-                column = column_service.create(user, project, column_name, description=column_description)
+            for definition in template.column_definitions():
+                fields = {"description": definition.get("description", "")}
+                if definition.get("workflow_stage") is not None:
+                    fields["workflow_stage"] = definition["workflow_stage"]
+                column = column_service.create(user, project, definition["name"], **fields)
                 if not column:
-                    raise RuntimeError(f"Failed to create project column: {column_name}")
+                    raise RuntimeError(f"Failed to create project column: {definition['name']}")
                 columns.append(column)
             archive = self.repo.project_column.get_or_create_archive_if_not_exists(project)
             for order, column in enumerate(columns):

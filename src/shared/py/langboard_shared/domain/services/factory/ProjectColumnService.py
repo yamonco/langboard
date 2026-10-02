@@ -129,11 +129,14 @@ class ProjectColumnService(BaseDomainService):
         description: str = "",
         *,
         dispatch_effects: bool = True,
+        workflow_stage: str | None = None,
         order_override: int | None = None,
     ) -> ProjectColumn | None:
         """Create a workflow column with optional guidance, preserving legacy name-only callers."""
         if len(description) > 4096:
             raise ValueError("Column description must not exceed 4096 characters")
+        if workflow_stage is not None and workflow_stage not in self.WORKFLOW_STAGES:
+            raise ValueError("Unknown workflow stage")
         project = InfraHelper.get_by_id_like(Project, project)
         if not project:
             return None
@@ -142,6 +145,7 @@ class ProjectColumnService(BaseDomainService):
             project_id=project.id,
             name=name,
             description=description,
+            workflow_stage=workflow_stage,
             order=order_override if order_override is not None else self.repo.project_column.get_next_order(project),
         )
 

@@ -60,9 +60,9 @@ def test_builtin_si_is_the_initial_default_without_duplicate_archive() -> None:
     template = _service(repository).ensure_builtin()
 
     assert template.name == "SI"
-    assert template.columns == ["Backlog", "Ready", "In Progress", "Review", "Done"]
-    assert template.column_descriptions == SI_COLUMN_DESCRIPTIONS
-    assert "Archive" not in template.columns
+    assert template.api_response()["columns"] == ["Backlog", "Ready", "In Progress", "Review", "Done"]
+    assert template.api_response()["column_descriptions"] == SI_COLUMN_DESCRIPTIONS
+    assert "Archive" not in template.api_response()["columns"]
     assert template.is_default is True
     assert template.email_notification_policy == SI_EMAIL_NOTIFICATION_POLICY
     assert _service(repository).ensure_builtin() is template
@@ -84,9 +84,9 @@ def test_builtin_si_backfills_only_legacy_empty_guidance() -> None:
     templates.items.append(legacy)
     repository = SimpleNamespace(project_template=templates)
 
-    assert _service(repository).ensure_builtin().column_descriptions == SI_COLUMN_DESCRIPTIONS
-    legacy.column_descriptions = ["Keep custom"]
-    assert _service(repository).ensure_builtin().column_descriptions == ["Keep custom"]
+    assert _service(repository).ensure_builtin().api_response()["column_descriptions"] == SI_COLUMN_DESCRIPTIONS
+    legacy.columns[0]["description"] = "Keep custom"
+    assert _service(repository).ensure_builtin().column_definitions()[0]["description"] == "Keep custom"
 
 
 def test_builtin_si_name_cannot_be_claimed_by_a_project_copy() -> None:
@@ -110,9 +110,15 @@ def test_copy_snapshot_preserves_order_and_bot_settings_but_not_cards_or_schedul
     templates = TemplateRepository()
     project = SimpleNamespace(id=7)
     columns = [
-        SimpleNamespace(id=2, name="Done", description="Accepted work", order=2, is_archive=False),
-        SimpleNamespace(id=9, name="Archive", description="Archive only", order=3, is_archive=True),
-        SimpleNamespace(id=1, name="Backlog", description="Uncommitted work", order=0, is_archive=False),
+        SimpleNamespace(
+            id=2, name="Done", description="Accepted work", workflow_stage="closed", order=2, is_archive=False
+        ),
+        SimpleNamespace(
+            id=9, name="Archive", description="Archive only", workflow_stage=None, order=3, is_archive=True
+        ),
+        SimpleNamespace(
+            id=1, name="Backlog", description="Uncommitted work", workflow_stage="backlog", order=0, is_archive=False
+        ),
     ]
     bot_type = SimpleNamespace(value="project_chat")
     internal_bot = SimpleNamespace(bot_type=bot_type, get_uid=lambda: "internal-bot-uid")
@@ -130,8 +136,10 @@ def test_copy_snapshot_preserves_order_and_bot_settings_but_not_cards_or_schedul
 
     template = _service(repository).copy_from_project(project, "Support")
 
-    assert template.columns == ["Backlog", "Done"]
-    assert template.column_descriptions == ["Uncommitted work", "Accepted work"]
+    assert template.api_response()["columns"] == ["Backlog", "Done"]
+    assert template.api_response()["column_descriptions"] == ["Uncommitted work", "Accepted work"]
+    assert [item["workflow_stage"] for item in template.column_definitions()] == ["backlog", "closed"]
+    assert template.column_descriptions == []
     assert template.internal_bots == [
         {
             "internal_bot_uid": "internal-bot-uid",
