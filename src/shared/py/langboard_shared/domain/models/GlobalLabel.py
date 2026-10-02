@@ -9,6 +9,7 @@ class GlobalLabel(BaseDbModel, table=True):
     name: str = Field(nullable=False, unique=True, api_field=ApiField())
     color: str = Field(nullable=False, api_field=ApiField())
     description: str = Field(default="", nullable=False, api_field=ApiField())
+    emoji: str = Field(default="", nullable=False, api_field=ApiField())
 
     translations: dict[str, dict[str, str]] = Field(
         default_factory=dict, nullable=False, sa_type=JSON, api_field=ApiField()

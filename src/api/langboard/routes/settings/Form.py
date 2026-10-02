@@ -339,6 +339,7 @@ class DeleteSelectedNotificationScheduleRulesForm(BaseFormModel):
 
 @form_model
 class SaveGlobalLabelForm(BaseFormModel):
+    emoji: str | None = Field(default=None, max_length=32)
     translations: dict[str, dict[str, str]] = Field(default_factory=dict)
     name: str = Field(min_length=1, max_length=100)
     color: str = Field(pattern=r"^#[0-9a-fA-F]{6}$")

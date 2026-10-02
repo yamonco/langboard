@@ -47,6 +47,7 @@ def get_project_label_catalog(
             "name": label.name,
             "color": label.color,
             "description": label.description,
+            "emoji": label.emoji,
             "source": "global",
         }
         for label in sorted(InfraHelper.get_all(GlobalLabel), key=lambda label: label.name.casefold())

@@ -242,5 +242,7 @@
   "Add language": "Add language",
   "Discard unsaved changes?": "Discard unsaved changes?",
   "Label description": "Label description",
-  "Label saved": "Label saved"
+  "Label saved": "Label saved",
+  "Emoji (optional)": "Emoji (optional)",
+  "Color hex code": "Color hex code"
 }

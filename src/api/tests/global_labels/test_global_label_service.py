@@ -74,3 +74,29 @@ def test_form_rejects_whitespace_and_translation_field_types():
         SaveGlobalLabelForm(name=" ", color="#112233")
     with pytest.raises(ValueError):
         SaveGlobalLabelForm(name="Label", color="#112233", translations={"ko": {"name": []}})
+
+
+def test_global_emoji_is_separate_optional_and_preserved_when_omitted(labels):
+    service, items = labels
+    label = service.save("Contract", "#112233", "Development contract", emoji="📜")
+    assert label.name == "Contract"
+    assert label.emoji == "📜"
+    service.save("Contract", "#112233", "Updated", label.get_uid())
+    assert label.emoji == "📜"
+    service.save("Contract", "#112233", "Updated", label.get_uid(), emoji="")
+    assert label.emoji == ""
+    assert len(items) == 1
+
+
+@pytest.mark.parametrize("emoji", ["🛡️", "👨‍👩‍👧‍👦", "👍🏽", "🇰🇷", "1️⃣"])
+def test_composed_global_emojis(labels, emoji):
+    service, _ = labels
+    assert service.save("Label", "#112233", "", emoji=emoji).emoji == emoji
+
+
+@pytest.mark.parametrize("emoji", ["letters", "일반 문자", "🐛" * 33])
+def test_invalid_emoji_never_writes(labels, emoji):
+    service, items = labels
+    with pytest.raises(ValueError, match="emoji"):
+        service.save("Label", "#112233", "", emoji=emoji)
+    assert not items

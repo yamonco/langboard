@@ -16,6 +16,7 @@ const blank = (): TGlobalLabelInput => ({
     name: "",
     color: "#4A90E2",
     description: "",
+    emoji: "",
     translations: Object.fromEntries(Object.keys(LANGUAGES).map((key) => [key, { name: "", description: "" }])),
 });
 
@@ -113,7 +114,10 @@ export default function GlobalLabelsPage({ currentUser }: { currentUser: AuthUse
                                 ].join(" ")}
                             >
                                 <span className="size-3 shrink-0 rounded-full" style={{ backgroundColor: label.color }} />
-                                <span className="truncate">{label.translations[locale]?.name || label.name}</span>
+                                <span className="truncate">
+                                    {label.emoji && `${label.emoji} `}
+                                    {label.translations[locale]?.name || label.name}
+                                </span>
                             </button>
                         ))
                     )}
@@ -127,6 +131,7 @@ export default function GlobalLabelsPage({ currentUser }: { currentUser: AuthUse
                 >
                     <div className="flex flex-wrap items-center gap-2">
                         <span className="rounded-full border px-3 py-1 text-sm" style={{ color: draft.color }}>
+                            {draft.emoji && `${draft.emoji} `}
                             {text?.name || draft.name || t("settings.Label preview")}
                         </span>
                         <span className="text-xs text-muted-foreground">{t("settings.English is the default and fallback language.")}</span>
@@ -165,12 +170,27 @@ export default function GlobalLabelsPage({ currentUser }: { currentUser: AuthUse
                             onChange={(e) => edit("description", e.target.value)}
                         />
                     </label>
+                    <label className="block space-y-1.5 text-sm">
+                        <span>{t("settings.Emoji (optional)")}</span>
+                        <Input
+                            aria-label={t("settings.Emoji (optional)")}
+                            value={draft.emoji ?? ""}
+                            maxLength={32}
+                            placeholder="🏷️"
+                            disabled={!canSave}
+                            className="w-24 text-center text-lg"
+                            onChange={(event) => {
+                                setDraft((item) => ({ ...item, emoji: event.target.value }));
+                                setDirty(true);
+                            }}
+                        />
+                    </label>
                     <label className="flex items-center gap-3 text-sm">
                         <span>{t("settings.Color")}</span>
                         <input
                             type="color"
                             aria-label={t("settings.Color")}
-                            value={draft.color}
+                            value={/^#[0-9a-fA-F]{6}$/.test(draft.color) ? draft.color : "#4A90E2"}
                             disabled={!canSave}
                             onChange={(e) => {
                                 setDraft((item) => ({ ...item, color: e.target.value }));
@@ -178,7 +198,17 @@ export default function GlobalLabelsPage({ currentUser }: { currentUser: AuthUse
                             }}
                             className="h-9 w-12 cursor-pointer rounded border bg-transparent"
                         />
-                        <span className="text-xs text-muted-foreground">{draft.color.toUpperCase()}</span>
+                        <Input
+                            aria-label={t("settings.Color hex code")}
+                            value={draft.color}
+                            maxLength={7}
+                            disabled={!canSave}
+                            className="w-28 font-mono text-xs uppercase"
+                            onChange={(event) => {
+                                setDraft((item) => ({ ...item, color: event.target.value }));
+                                setDirty(true);
+                            }}
+                        />
                     </label>
                     {canSave && (
                         <div className="flex flex-wrap gap-2">
@@ -212,7 +242,7 @@ export default function GlobalLabelsPage({ currentUser }: { currentUser: AuthUse
                         </div>
                     )}
                     <div className="flex justify-end border-t pt-4">
-                        <Button type="submit" disabled={!canSave || saving || !draft.name.trim() || !dirty}>
+                        <Button type="submit" disabled={!canSave || saving || !draft.name.trim() || !/^#[0-9a-fA-F]{6}$/.test(draft.color) || !dirty}>
                             {saving ? t("common.Saving...") : t("common.Save")}
                         </Button>
                     </div>
