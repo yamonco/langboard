@@ -35,7 +35,7 @@
   "Include archive": "Include archive",
   "No related cards in this view.": "No related cards in this view. Show unlinked cards or include the archive to explore more.",
   "Graph could not be loaded.": "Graph could not be loaded.",
-  "{cards} cards, {relationships} relationships": "{{cards}} cards, {{relationships}} relationships",
+  "{cards} cards, {relationships} relationships": "{{cards, number}} cards, {{relationships, number}} relationships",
   "Wiki": "Wiki",
   "Activity": "Activity",
   "Settings": "Settings",
@@ -103,7 +103,6 @@
   "Pause existing work and switch": "Pause existing work and switch",
   "Unclassified": "Unclassified",
   "Normal overdue rules": "Normal overdue rules",
-  "Workflow stage: {{stage}}": "Workflow stage: {{stage}}",
   "Containment cycles limit the tree display and do not block execution.": "Containment cycles limit the tree display and do not block execution.",
   "Containment cycles display each card once. Execution blocking is separate.": "Containment cycles display each card once. Execution blocking is separate.",
   "Blockers": "Blockers",
@@ -115,5 +114,6 @@
   "Execution dependencies": "Execution dependencies",
   "Start after prerequisite work is complete": "Start after prerequisite work is complete",
   "References": "References",
-  "Link designs, evidence and related work": "Link designs, evidence and related work"
+  "Link designs, evidence and related work": "Link designs, evidence and related work",
+  "Workflow stage display": "Workflow stage: {{stage}}"
 }

@@ -22,6 +22,11 @@ const structure = (value) => {
     assert(value && typeof value === "object", "resource values must be strings, arrays or objects");
     return Object.fromEntries(Object.entries(value).map(([key, child]) => [key, structure(child)]));
 };
+for (const file of canonicalFiles) {
+    for (const key of Object.keys(flatten(await read(DEFAULT_LOCALE, file)))) {
+        assert(!key.includes(":"), `${DEFAULT_LOCALE}/${file}/${key}: ':' is reserved as the i18next namespace separator`);
+    }
+}
 const report = {};
 for (const locale of SUPPORTED_LOCALES.filter((locale) => locale !== DEFAULT_LOCALE)) {
     const files = (await readdir(new URL(`${locale}/`, root))).filter((file) => file.endsWith(".json")).sort();

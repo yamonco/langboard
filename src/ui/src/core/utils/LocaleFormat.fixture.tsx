@@ -92,6 +92,13 @@ function Fixture() {
                 <MarkdownThinkBlock>Fixture content</MarkdownThinkBlock>
             </div>
             <output data-testid="relative">{distance}</output>
+            <output data-testid="workflow-stage-label">{t("board.Workflow stage display", { stage: "User stage" })}</output>
+            <output data-testid="graph-counts">
+                {t("board.{cards} cards, {relationships} relationships", { cards: 1234, relationships: 2345 })}
+            </output>
+            <output data-testid="checklist-counts">{t("card.Checklist progress", { completed: 1234, total: 2345 })}</output>
+            <output data-testid="stale-one">{t("card.Unchanged for {{days}} days", { days: 1, count: 1 })}</output>
+            <output data-testid="stale-many">{t("card.Unchanged for {{days}} days", { days: 1234, count: 1234 })}</output>
             <output data-testid="overdue-one">{t("card.Overdue by {{count}} day", { count: 1 })}</output>
             <output data-testid="overdue-other">{t("card.Overdue by {{count}} day", { count: 2 })}</output>
             <output data-testid="duration">{formatTimerDuration({ hours: 1, minutes: 2, seconds: 3 }, language.language)}</output>

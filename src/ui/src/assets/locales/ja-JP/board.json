@@ -35,7 +35,7 @@
   "Include archive": "アーカイブを含める",
   "No related cards in this view.": "この表示には関連するカードがありません。未接続のカードを表示するか、アーカイブを含めてさらに確認してください。",
   "Graph could not be loaded.": "グラフを読み込めませんでした。",
-  "{cards} cards, {relationships} relationships": "カード {{cards}} 件、関係 {{relationships}} 件",
+  "{cards} cards, {relationships} relationships": "カード {{cards, number}} 件、関係 {{relationships, number}} 件",
   "Wiki": "ウィキ",
   "Activity": "アクティビティ",
   "Settings": "設定",
@@ -103,7 +103,6 @@
   "Pause existing work and switch": "現在の作業を一時停止して切り替え",
   "Unclassified": "未分類",
   "Normal overdue rules": "通常の期限超過ルール",
-  "Workflow stage: {{stage}}": "ワークフローステージ: {{stage}}",
   "Containment cycles limit the tree display and do not block execution.": "包含関係に循環があります。ツリー表示を制限しますが、実行はブロックしません。",
   "Containment cycles display each card once. Execution blocking is separate.": "包含関係が循環しているため各カードを一度だけ表示します。実行のブロックは別です。",
   "Blockers": "ブロックの理由",
@@ -115,5 +114,6 @@
   "Execution dependencies": "実行の依存関係",
   "Start after prerequisite work is complete": "前提作業の完了後に開始",
   "References": "参照",
-  "Link designs, evidence and related work": "設計・根拠・関連作業を接続"
+  "Link designs, evidence and related work": "設計・根拠・関連作業を接続",
+  "Workflow stage display": "ワークフローステージ: {{stage}}"
 }

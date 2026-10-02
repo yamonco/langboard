@@ -304,7 +304,7 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
                     <span className="sr-only">
                         {[
                             checklistProgress.total > 0 &&
-                                t("card.Checklist progress: {{completed}} of {{total}} complete", {
+                                t("card.Checklist progress", {
                                     completed: checklistProgress.completed,
                                     total: checklistProgress.total,
                                 }),
@@ -338,8 +338,8 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
                                 <BoardTaskMetadataBadges cardUID={card.uid} compact />
                                 {staleDays !== null && (
                                     <span
-                                        title={t("card.Unchanged for {{days}} days", { days: staleDays })}
-                                        aria-label={t("card.Unchanged for {{days}} days", { days: staleDays })}
+                                        title={t("card.Unchanged for {{days}} days", { days: staleDays, count: staleDays })}
+                                        aria-label={t("card.Unchanged for {{days}} days", { days: staleDays, count: staleDays })}
                                         className={cn(
                                             "inline-flex items-center gap-1 rounded-md border border-amber-500/30",
                                             "bg-amber-500/5 px-1.5 py-0.5 text-[10px] leading-none",
@@ -347,7 +347,7 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
                                         )}
                                     >
                                         <IconComponent icon="clock-3" size="3" aria-hidden="true" />
-                                        {t("card.Stale")} · {t("card.{{days, number}} days", { days: staleDays })}
+                                        {t("card.Stale")} · {t("card.{{days, number}} days", { days: staleDays, count: staleDays })}
                                     </span>
                                 )}
                             </div>

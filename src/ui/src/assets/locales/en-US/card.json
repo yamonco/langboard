@@ -27,7 +27,6 @@
   "Created": "Created",
   "Updated": "Updated",
   "Deadline": "Deadline",
-  "Checklist progress: {{completed}} of {{total}} complete": "Checklist progress: {{completed}} of {{total}} complete",
   "Deadline {{date}}": "Deadline {{date}}",
   "Due within a day": "Due within a day",
   "Overdue": "Overdue",
@@ -127,7 +126,7 @@
   "Mark as done": "Mark as done",
   "Mark as not done": "Mark as not done",
   "Stale": "Stale",
-  "Unchanged for {{days}} days": "Unchanged for {{days}} days",
+  "Unchanged for {{days}} days": "Unchanged for {{days, number}} days",
   "Fill the body to turn this into a normal card": "Fill the body to turn this into a normal card",
   "Preview card details": "Preview card details",
   "Card details": "Card details",
@@ -157,5 +156,10 @@
   "{{engine}} source": "{{engine}} source",
   "New checkitem": "New checkitem",
   "Add deadline": "Add deadline",
-  "Remove deadline": "Remove deadline"
+  "Remove deadline": "Remove deadline",
+  "Unchanged for {{days}} days_other": "Unchanged for {{days, number}} days",
+  "Unchanged for {{days}} days_one": "Unchanged for {{days, number}} day",
+  "{{days, number}} days_other": "{{days, number}} days",
+  "{{days, number}} days_one": "{{days, number}} day",
+  "Checklist progress": "Checklist progress: {{completed, number}} of {{total, number}} complete"
 }

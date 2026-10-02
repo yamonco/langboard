@@ -154,7 +154,7 @@ function BoardColumnDescription({ column }: { column: ProjectColumn.TModel }) {
                     <>
                         <p className="whitespace-pre-wrap break-words text-sm">{displayDescription || t("project.No column description")}</p>
                         <p className="text-xs text-muted-foreground">
-                            {t("board.Workflow stage: {{stage}}", {
+                            {t("board.Workflow stage display", {
                                 stage: selectedStage
                                     ? localized(selectedStage)?.name || selectedStage.name
                                     : (workflowStage ?? t("board.Unclassified")),

@@ -1,3 +1,4 @@
+import { formatNumber } from "@/core/utils/LocaleFormat";
 import { useEffect } from "react";
 import { useLocation } from "react-router";
 import { useTranslation } from "react-i18next";
@@ -31,7 +32,7 @@ export default function RecentCardsSection({
     onNavigate?: () => void;
 }) {
     useValidateRecentCards(userUID, visibleOpenCards);
-    const [t] = useTranslation();
+    const [t, i18n] = useTranslation();
     const navigate = usePageNavigateRef();
     const location = useLocation();
     const displayedCards = showOlderCards ? visibleOpenCards : visibleOpenCards.slice(0, 10);
@@ -64,7 +65,7 @@ export default function RecentCardsSection({
             >
                 <IconComponent icon={openCardsCollapsed ? "chevron-right" : "chevron-down"} size="3" />
                 {t("dashboard.Recent cards")}
-                {visibleOpenCards.length > 0 && <span className="ml-auto">{visibleOpenCards.length}</span>}
+                {visibleOpenCards.length > 0 && <span className="ml-auto">{formatNumber(visibleOpenCards.length, i18n.language)}</span>}
             </button>
             {!openCardsCollapsed && (
                 <div className="min-h-0 overflow-y-auto" data-recent-card-list="">

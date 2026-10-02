@@ -35,7 +35,7 @@
   "Include archive": "包含归档",
   "No related cards in this view.": "此视图中没有相关卡片。显示未关联卡片或包含归档以查看更多内容。",
   "Graph could not be loaded.": "无法加载关系图。",
-  "{cards} cards, {relationships} relationships": "{{cards}} 张卡片，{{relationships}} 个关联",
+  "{cards} cards, {relationships} relationships": "{{cards, number}} 张卡片，{{relationships, number}} 个关联",
   "Wiki": "维基",
   "Activity": "活动",
   "Settings": "设置",
@@ -103,7 +103,6 @@
   "Pause existing work and switch": "暂停当前工作并切换",
   "Unclassified": "未分类",
   "Normal overdue rules": "常规逾期规则",
-  "Workflow stage: {{stage}}": "工作流阶段：{{stage}}",
   "Containment cycles limit the tree display and do not block execution.": "包含关系存在循环。将限制树形显示，但不会阻止执行。",
   "Containment cycles display each card once. Execution blocking is separate.": "包含关系存在循环，每张卡片仅显示一次。执行阻塞单独处理。",
   "Blockers": "阻塞原因",
@@ -115,5 +114,6 @@
   "Execution dependencies": "执行依赖",
   "Start after prerequisite work is complete": "前置工作完成后开始",
   "References": "参考",
-  "Link designs, evidence and related work": "关联设计、证据和相关工作"
+  "Link designs, evidence and related work": "关联设计、证据和相关工作",
+  "Workflow stage display": "工作流阶段：{{stage}}"
 }

@@ -1,3 +1,4 @@
+import { formatNumber } from "@/core/utils/LocaleFormat";
 import "@xyflow/react/dist/style.css";
 
 import { Background, Controls, Edge, Handle, MarkerType, MiniMap, Node, NodeProps, Position, ReactFlow, ReactFlowInstance } from "@xyflow/react";
@@ -62,7 +63,7 @@ function GraphLane({ data }: NodeProps<Node<{ name: string; count: number }, "la
 const nodeTypes = { card: GraphCard, lane: GraphLane };
 
 const BoardGraphPage = ({ project }: IBoardRelatedPageProps): React.JSX.Element => {
-    const [t] = useTranslation();
+    const [t, i18n] = useTranslation();
     const { resolvedTheme } = useTheme();
     const navigate = usePageNavigateRef();
     const { currentUser } = useAuth();
@@ -224,7 +225,7 @@ const BoardGraphPage = ({ project }: IBoardRelatedPageProps): React.JSX.Element 
                             onClick={() => (view === "columns" ? showColumn(x) : setFocusColumn({ uid: column.uid }))}
                         >
                             {column.name}
-                            <span className="text-xs text-muted-foreground">{laneCards.length}</span>
+                            <span className="text-xs text-muted-foreground">{formatNumber(laneCards.length, i18n.language)}</span>
                         </Button>
                     ))}
                 </nav>

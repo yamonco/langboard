@@ -27,7 +27,6 @@
   "Created": "作成日時",
   "Updated": "更新日時",
   "Deadline": "期限",
-  "Checklist progress: {{completed}} of {{total}} complete": "チェックリストの進捗：{{total}} 件中 {{completed}} 件完了",
   "Deadline {{date}}": "期限 {{date}}",
   "Due within a day": "1日以内に期限到来",
   "Overdue": "期限超過",
@@ -127,7 +126,7 @@
   "Mark as done": "完了にする",
   "Mark as not done": "未完了にする",
   "Stale": "長期間変更なし",
-  "Unchanged for {{days}} days": "{{days}} 日間変更なし",
+  "Unchanged for {{days}} days": "{{days, number}} 日間変更なし",
   "Fill the body to turn this into a normal card": "本文を入力して通常のカードに変換",
   "Preview card details": "カードの詳細をプレビュー",
   "Card details": "カードの詳細",
@@ -157,5 +156,10 @@
   "{{engine}} source": "{{engine}} ソース",
   "New checkitem": "新しいチェックリスト項目",
   "Add deadline": "期限を追加",
-  "Remove deadline": "期限を削除"
+  "Remove deadline": "期限を削除",
+  "Unchanged for {{days}} days_other": "{{days, number}} 日間変更なし",
+  "Unchanged for {{days}} days_one": "{{days, number}} 日間変更なし",
+  "{{days, number}} days_other": "{{days, number}}日",
+  "{{days, number}} days_one": "{{days, number}}日",
+  "Checklist progress": "チェックリストの進捗：{{total, number}} 件中 {{completed, number}} 件完了"
 }

@@ -35,7 +35,7 @@
   "Include archive": "보관함 포함",
   "No related cards in this view.": "이 보기에는 관련 카드가 없습니다. 연결되지 않은 카드를 표시하거나 보관함을 포함하여 더 살펴보세요.",
   "Graph could not be loaded.": "그래프를 불러올 수 없습니다.",
-  "{cards} cards, {relationships} relationships": "카드 {{cards}}개, 관계 {{relationships}}개",
+  "{cards} cards, {relationships} relationships": "카드 {{cards, number}}개, 관계 {{relationships, number}}개",
   "Wiki": "위키",
   "Activity": "활동",
   "Settings": "설정",
@@ -103,7 +103,6 @@
   "Pause existing work and switch": "기존 작업 일시정지 후 전환",
   "Unclassified": "미분류",
   "Normal overdue rules": "일반 마감 초과 규칙",
-  "Workflow stage: {{stage}}": "워크플로우 단계: {{stage}}",
   "Containment cycles limit the tree display and do not block execution.": "포함 관계 순환이 있습니다. 트리 표시를 제한하며 실행을 차단하지 않습니다.",
   "Containment cycles display each card once. Execution blocking is separate.": "포함 관계가 순환하여 트리를 한 번씩만 표시합니다. 실행 차단은 별도입니다.",
   "Blockers": "막힌 이유",
@@ -115,5 +114,6 @@
   "Execution dependencies": "실행 의존성",
   "Start after prerequisite work is complete": "선행 작업 완료 후 시작",
   "References": "참고",
-  "Link designs, evidence and related work": "설계·근거·관련 작업 연결"
+  "Link designs, evidence and related work": "설계·근거·관련 작업 연결",
+  "Workflow stage display": "워크플로우 단계: {{stage}}"
 }

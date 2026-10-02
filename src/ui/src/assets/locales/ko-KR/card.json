@@ -27,7 +27,6 @@
   "Created": "생성일",
   "Updated": "수정일",
   "Deadline": "마감일",
-  "Checklist progress: {{completed}} of {{total}} complete": "체크리스트 진행률: {{total}}개 중 {{completed}}개 완료",
   "Deadline {{date}}": "마감일 {{date}}",
   "Due within a day": "하루 이내 마감",
   "Overdue": "기한 초과",
@@ -127,7 +126,7 @@
   "Mark as done": "완료로 표시",
   "Mark as not done": "미완료로 표시",
   "Stale": "장기 미변경",
-  "Unchanged for {{days}} days": "{{days}}일 동안 변경 없음",
+  "Unchanged for {{days}} days": "{{days, number}}일 동안 변경 없음",
   "Fill the body to turn this into a normal card": "본문을 작성하여 일반 카드로 전환하세요",
   "Preview card details": "카드 상세 정보 미리 보기",
   "Card details": "카드 상세 정보",
@@ -157,5 +156,10 @@
   "{{engine}} source": "{{engine}} 소스",
   "New checkitem": "새 체크리스트 항목",
   "Add deadline": "Deadline 추가",
-  "Remove deadline": "Deadline 제거"
+  "Remove deadline": "Deadline 제거",
+  "Unchanged for {{days}} days_other": "{{days, number}}일 동안 변경 없음",
+  "Unchanged for {{days}} days_one": "{{days, number}}일 동안 변경 없음",
+  "{{days, number}} days_other": "{{days, number}}일",
+  "{{days, number}} days_one": "{{days, number}}일",
+  "Checklist progress": "체크리스트 진행률: {{total, number}}개 중 {{completed, number}}개 완료"
 }

@@ -27,7 +27,6 @@
   "Created": "创建时间",
   "Updated": "更新时间",
   "Deadline": "截止日期",
-  "Checklist progress: {{completed}} of {{total}} complete": "检查清单进度：共 {{total}} 项，已完成 {{completed}} 项",
   "Deadline {{date}}": "截止日期 {{date}}",
   "Due within a day": "一天内到期",
   "Overdue": "已逾期",
@@ -127,7 +126,7 @@
   "Mark as done": "标记为已完成",
   "Mark as not done": "标记为未完成",
   "Stale": "长期未更新",
-  "Unchanged for {{days}} days": "{{days}} 天未更改",
+  "Unchanged for {{days}} days": "{{days, number}} 天未更改",
   "Fill the body to turn this into a normal card": "填写正文以转换为普通卡片",
   "Preview card details": "预览卡片详情",
   "Card details": "卡片详情",
@@ -157,5 +156,10 @@
   "{{engine}} source": "{{engine}} 源代码",
   "New checkitem": "新检查项",
   "Add deadline": "添加截止时间",
-  "Remove deadline": "移除截止时间"
+  "Remove deadline": "移除截止时间",
+  "Unchanged for {{days}} days_other": "{{days, number}} 天未更改",
+  "Unchanged for {{days}} days_one": "{{days, number}} 天未更改",
+  "{{days, number}} days_other": "{{days, number}}天",
+  "{{days, number}} days_one": "{{days, number}}天",
+  "Checklist progress": "检查清单进度：共 {{total, number}} 项，已完成 {{completed, number}} 项"
 }

@@ -131,3 +131,24 @@ test("code language choices translate and search without rewriting source", asyn
         await expect(editor.locator("pre code")).toHaveText("const user = 1;");
     }
 });
+
+test("board counts and stale days use locale interpolation and singular grammar", async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem("lang", "en-US"));
+    await page.goto("/src/core/utils/LocaleFormat.fixture.html");
+    for (const [locale, stageLabel] of [
+        ["ko-KR", "워크플로우 단계: User stage"],
+        ["ja-JP", "ワークフローステージ: User stage"],
+        ["zh-CN", "工作流阶段：User stage"],
+        ["en-US", "Workflow stage: User stage"],
+    ]) {
+        await page.getByRole("button", { name: locale, exact: true }).click();
+        await expect(page.getByTestId("workflow-stage-label")).toHaveText(stageLabel);
+        await expect(page.getByTestId("graph-counts")).toContainText("1,234");
+        await expect(page.getByTestId("graph-counts")).toContainText("2,345");
+        await expect(page.getByTestId("checklist-counts")).toContainText("1,234");
+        await expect(page.getByTestId("checklist-counts")).toContainText("2,345");
+        await expect(page.getByTestId("stale-many")).toContainText("1,234");
+    }
+    await expect(page.getByTestId("stale-one")).toHaveText("Unchanged for 1 day");
+    await expect(page.getByTestId("stale-many")).toHaveText("Unchanged for 1,234 days");
+});
