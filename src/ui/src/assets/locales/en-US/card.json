@@ -142,5 +142,8 @@
   "Search labels": "Search labels",
   "No matching labels": "No matching labels",
   "Global labels": "Global labels",
-  "Global labels unavailable": "Global labels could not be loaded. Close and reopen to retry."
+  "Global labels unavailable": "Global labels could not be loaded. Close and reopen to retry.",
+  "Overdue by {{count}} day_one": "Overdue by {{count, number}} day",
+  "Overdue by {{count}} day_other": "Overdue by {{count, number}} days",
+  "D-{{count}}": "D-{{count}}"
 }

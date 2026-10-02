@@ -14,3 +14,23 @@ export function formatDateDistance(date: Date, locale: unknown, now: number = Da
     const value = Math.trunc(delta / divisor);
     return new Intl.RelativeTimeFormat(normalizeLocale(locale), { numeric: "always" }).format(value === 0 ? 0 : value, unit);
 }
+
+export function formatNumber(value: number, locale: unknown, options: Intl.NumberFormatOptions = {}) {
+    return new Intl.NumberFormat(normalizeLocale(locale), options).format(value);
+}
+
+/** Preserve the timer's existing approximate year/month conversion and 100-hour compactness limit. */
+export function formatTimerDuration(
+    duration: { years?: number; months?: number; days?: number; hours?: number; minutes?: number; seconds?: number },
+    locale: unknown
+) {
+    const hours = (duration.hours ?? 0) + (duration.years ?? 0) * 365 * 24 + (duration.months ?? 0) * 30 * 24 + (duration.days ?? 0) * 24;
+    const parts: string[] = [];
+    const unit = (value: number, name: string) => formatNumber(value, locale, { style: "unit", unit: name, unitDisplay: "narrow" });
+    if (hours > 0) parts.push(unit(hours, "hour"));
+    if (hours < 100) {
+        if (duration.minutes) parts.push(unit(duration.minutes, "minute"));
+        if (duration.seconds) parts.push(unit(duration.seconds, "second"));
+    }
+    return parts.length ? parts.join(" ") : unit(0, "second");
+}

@@ -1,3 +1,4 @@
+import { formatNumber } from "@/core/utils/LocaleFormat";
 import Button from "@/components/base/Button";
 import { useCollaborativeText } from "@/components/Collaborative/useCollaborativeText";
 import DateTimePicker from "@/components/base/DateTimePicker";
@@ -50,7 +51,7 @@ const parseDeadline = (value: string) => {
 
 const BoardCardDeadline = memo(() => {
     const { card, hasRoleAction, isCardEditing } = useBoardCard();
-    const [t] = useTranslation();
+    const [t, i18n] = useTranslation();
     const { registerSectionCancelHandler, registerSectionSaveHandler } = useBoardCardSectionSaveActions();
     const deadline = card.useField("deadline_at");
     const archivedAt = card.useField("archived_at");
@@ -192,10 +193,16 @@ const BoardCardDeadline = memo(() => {
                     {deadline ? Utils.String.formatDateLocale(deadline) : t("card.No deadline")}
                     {isOverdue && (
                         <span className="font-semibold">
-                            {overdueDays > 0 ? t("card.Overdue by {{days}} days", { days: overdueDays }) : t("card.Overdue")}
+                            {overdueDays > 0
+                                ? t("card.Overdue by {{count}} day", { count: overdueDays, formatParams: { count: { lng: i18n.language } } })
+                                : t("card.Overdue")}
                         </span>
                     )}
-                    {upcomingDays !== null && <span className="font-semibold">{upcomingDays === 0 ? t("card.D-Day") : `D-${upcomingDays}`}</span>}
+                    {upcomingDays !== null && (
+                        <span className="font-semibold">
+                            {upcomingDays === 0 ? t("card.D-Day") : t("card.D-{{count}}", { count: formatNumber(upcomingDays, i18n.language) })}
+                        </span>
+                    )}
                 </span>
             ) : (
                 <Flex items="center">

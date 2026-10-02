@@ -1,4 +1,4 @@
-import { formatDateTime } from "@/core/utils/LocaleFormat";
+import { formatDateTime, formatNumber } from "@/core/utils/LocaleFormat";
 import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { ProjectCard, ProjectColumn, User } from "@/core/models";
@@ -46,7 +46,7 @@ export default function CardMetadataPreview({ card, children }: { card: ProjectC
                 </span>
             )),
         ]);
-    if (commentCount !== undefined) rows.push([t("card.Comments"), commentCount]);
+    if (commentCount !== undefined) rows.push([t("card.Comments"), formatNumber(commentCount, i18n.language)]);
     if (deadlineAt) rows.push([t("card.Deadline"), exact(deadlineAt)]);
     if (column) rows.push([t("card.Column"), <ColumnName column={column} />]);
 

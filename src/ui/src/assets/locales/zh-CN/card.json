@@ -142,5 +142,8 @@
   "Search labels": "搜索标签",
   "No matching labels": "没有匹配的标签",
   "Global labels": "全局标签",
-  "Global labels unavailable": "无法加载全局标签。请关闭后重新打开以重试。"
+  "Global labels unavailable": "无法加载全局标签。请关闭后重新打开以重试。",
+  "Overdue by {{count}} day_one": "已逾期{{count, number}}天",
+  "Overdue by {{count}} day_other": "已逾期{{count, number}}天",
+  "D-{{count}}": "D-{{count}}"
 }

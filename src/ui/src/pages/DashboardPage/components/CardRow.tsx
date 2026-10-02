@@ -68,6 +68,7 @@ function CardRow({ card, ...props }: ICardRowProps): React.JSX.Element | null {
 }
 
 function CardRowTimeTaken() {
+    useTranslation();
     const { model: card } = ModelRegistry.ProjectCard.useContext();
     const createdAt = card.useField("created_at");
     const archivedAt = card.useField("archived_at");

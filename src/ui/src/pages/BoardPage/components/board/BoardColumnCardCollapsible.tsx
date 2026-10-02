@@ -1,3 +1,4 @@
+import { formatNumber } from "@/core/utils/LocaleFormat";
 import Button from "@/components/base/Button";
 import Avatar from "@/components/base/Avatar";
 import Card from "@/components/base/Card";
@@ -110,7 +111,7 @@ function BoardColumnWikiCard({ isDragging }: IBoardColumnCardCollapsibleProps) {
 function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCollapsibleProps) {
     const { selectCardViewType, selectedRelationshipUIDs, currentCardUIDRef, isDisabledCard } = useBoardController();
     const { project, filters, cardsMap, globalRelationshipTypes, navigateWithFilters, deadlineClock } = useBoard();
-    const [t] = useTranslation();
+    const [t, i18n] = useTranslation();
     const { model: card } = ModelRegistry.ProjectCard.useContext<IBoardColumnCardContextParams>();
     const title = card.useField("title");
     const deadlineAt = card.useField("deadline_at");
@@ -273,15 +274,29 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
                 onClick={openCard}
             >
                 {deadlinePressureLevel === "overdue" && (
-                    <div className="board-card-overdue-banner" aria-label={t("card.Overdue by {{days}} days", { days: overdueDays })}>
+                    <div
+                        className="board-card-overdue-banner"
+                        aria-label={t("card.Overdue by {{count}} day", { count: overdueDays, formatParams: { count: { lng: i18n.language } } })}
+                    >
                         <IconComponent icon="alarm-clock" size="3.5" aria-hidden="true" />
-                        <strong>{overdueDays > 0 ? t("card.Overdue by {{days}} days", { days: overdueDays }) : t("card.Overdue")}</strong>
+                        <strong>
+                            {overdueDays > 0
+                                ? t("card.Overdue by {{count}} day", { count: overdueDays, formatParams: { count: { lng: i18n.language } } })
+                                : t("card.Overdue")}
+                        </strong>
                     </div>
                 )}
                 {upcomingDays !== null && (
-                    <div className="board-card-due-banner" aria-label={upcomingDays === 0 ? t("card.D-Day") : `D-${upcomingDays}`}>
+                    <div
+                        className="board-card-due-banner"
+                        aria-label={
+                            upcomingDays === 0 ? t("card.D-Day") : t("card.D-{{count}}", { count: formatNumber(upcomingDays, i18n.language) })
+                        }
+                    >
                         <IconComponent icon="clock-3" size="3.5" aria-hidden="true" />
-                        <strong>{upcomingDays === 0 ? t("card.D-Day") : `D-${upcomingDays}`}</strong>
+                        <strong>
+                            {upcomingDays === 0 ? t("card.D-Day") : t("card.D-{{count}}", { count: formatNumber(upcomingDays, i18n.language) })}
+                        </strong>
                     </div>
                 )}
                 <BoardCardProgressTrace progress={checklistProgress} />

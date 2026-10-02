@@ -142,5 +142,8 @@
   "Search labels": "ラベルを検索",
   "No matching labels": "一致するラベルなし",
   "Global labels": "グローバルラベル",
-  "Global labels unavailable": "グローバルラベルを読み込めませんでした。閉じてから再度開いてお試しください。"
+  "Global labels unavailable": "グローバルラベルを読み込めませんでした。閉じてから再度開いてお試しください。",
+  "Overdue by {{count}} day_one": "{{count, number}}日超過",
+  "Overdue by {{count}} day_other": "{{count, number}}日超過",
+  "D-{{count}}": "D-{{count}}"
 }

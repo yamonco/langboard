@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { formatDateDistance, formatDateTime } from "./LocaleFormat.ts";
+import { formatDateDistance, formatDateTime, formatNumber, formatTimerDuration } from "./LocaleFormat.ts";
 import { SUPPORTED_LOCALES } from "./LocalePolicy.ts";
 
 const now = Date.parse("2026-10-03T12:00:00Z");
@@ -26,4 +26,18 @@ test("invalid locale falls back to English without changing timezone policy", ()
     assert.equal(formatDateTime(date, "zh-Hant"), formatDateTime(date, "en-US"));
     assert.equal(formatDateDistance(date, "invalid", now), formatDateDistance(date, "en-US", now));
     assert.notEqual(formatDateTime(date, "en-US", { timeZone: "UTC" }), formatDateTime(date, "en-US", { timeZone: "Asia/Seoul" }));
+});
+
+test("localized count and duration preserve zero, mixed units and 100-hour compactness", () => {
+    for (const locale of SUPPORTED_LOCALES) {
+        const unit = (value: number, name: string) =>
+            new Intl.NumberFormat(locale, { style: "unit", unit: name, unitDisplay: "narrow" }).format(value);
+        assert.equal(formatNumber(12345, locale), new Intl.NumberFormat(locale).format(12345));
+        assert.equal(formatTimerDuration({}, locale), unit(0, "second"));
+        assert.equal(
+            formatTimerDuration({ hours: 1, minutes: 2, seconds: 3 }, locale),
+            [unit(1, "hour"), unit(2, "minute"), unit(3, "second")].join(" ")
+        );
+        assert.equal(formatTimerDuration({ days: 4, hours: 4, minutes: 2 }, locale), unit(100, "hour"));
+    }
 });
