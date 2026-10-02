@@ -13,10 +13,10 @@ from ....domain.models import (
     ProjectColumn,
     ProjectColumnBotSchedule,
     ProjectColumnBotScope,
+    WorkflowStageDefinition,
 )
 from ....domain.models.ProjectColumn import ProjectColumnDockConflict
 from ....helpers import InfraHelper
-from .CardRepository import CardRepository
 
 
 class ProjectColumnRepository(BaseOrderRepository[ProjectColumn, Project]):
@@ -220,16 +220,14 @@ class ProjectColumnRepository(BaseOrderRepository[ProjectColumn, Project]):
             & (Card.project_id == ProjectColumn.project_id)
             & Card.deleted_at.is_(None)
             & Card.archived_at.is_(None)
-            & or_(Card.source_type.is_(None), Card.source_type != Card.LINKED_RESOURCE_PROJECT_WIKI)
+            & Card.source_type.is_(None)
             & ProjectColumn.is_archive.is_(False)
-            & or_(
-                ProjectColumn.workflow_stage.not_in(("closed", "reference")),
-                ProjectColumn.workflow_stage.is_(None)
-                & func.lower(func.trim(ProjectColumn.name)).not_in(CardRepository.TERMINAL_WORK_COLUMN_NAMES),
-            )
+            & or_(WorkflowStageDefinition.id.is_(None), WorkflowStageDefinition.counts_as_completed.is_(False))
+            & or_(WorkflowStageDefinition.id.is_(None), WorkflowStageDefinition.key != "reference")
         )
         query = (
             select(ProjectColumn.id, func.count(Card.id), func.count(case((~all_items_complete, Card.id))))
+            .outerjoin(WorkflowStageDefinition, WorkflowStageDefinition.key == ProjectColumn.workflow_stage)
             .outerjoin(Card, eligible)
             .where(ProjectColumn.project_id.in_(project_ids), ProjectColumn.deleted_at.is_(None))
             .group_by(ProjectColumn.id)
@@ -275,6 +273,7 @@ class ProjectColumnRepository(BaseOrderRepository[ProjectColumn, Project]):
 
         scopes = BotScopeHelper.get_list(
             ProjectColumnBotScope,
+    WorkflowStageDefinition,
             lambda q: q.join(
                 ProjectColumn,
                 ProjectColumn.column("id") == ProjectColumnBotScope.column("project_column_id"),

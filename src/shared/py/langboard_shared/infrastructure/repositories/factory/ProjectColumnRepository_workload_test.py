@@ -4,13 +4,13 @@ from sqlalchemy import create_engine, event
 from ....core.db import DbSession
 from ....core.db.DbEngine import DbEngine
 from ....core.types import SafeDateTime
-from ....domain.models import Card, Checkitem, Checklist, Project, ProjectColumn, User
+from ....domain.models import Card, Checkitem, Checklist, Project, ProjectColumn, User, WorkflowStageDefinition
 from .ProjectColumnRepository import ProjectColumnRepository
 
 
 def test_workload_counts_scope_completion_and_changed_state(monkeypatch):
     engine = create_engine("sqlite://")
-    for model in (User, Project, ProjectColumn, Card, Checklist, Checkitem):
+    for model in (User, Project, ProjectColumn, Card, Checklist, Checkitem, WorkflowStageDefinition):
         model.__table__.create(engine)
     monkeypatch.setattr(DbEngine, "get_main_engine", lambda: engine)
     monkeypatch.setattr(DbEngine, "get_readonly_engine", lambda: engine)
@@ -21,6 +21,8 @@ def test_workload_counts_scope_completion_and_changed_state(monkeypatch):
         foreign = Project(owner_id=owner.id, title="Not requested")
         db.insert(project)
         db.insert(foreign)
+        for key, complete, policy in [("active", False, "include"), ("closed", True, "exclude"), ("reference", False, "exclude")]:
+            db.insert(WorkflowStageDefinition(key=key, name=key, counts_as_completed=complete, active_queue_policy=policy))
         active = ProjectColumn(project_id=project.id, name="Done", workflow_stage="active")
         closed = ProjectColumn(project_id=project.id, name="Not named Done", workflow_stage="closed")
         archive = ProjectColumn(project_id=project.id, name="Archive", is_archive=True)
@@ -80,13 +82,14 @@ def test_workload_counts_scope_completion_and_changed_state(monkeypatch):
     assert statements == []
     counts = repository.get_incomplete_work_counts([project])
     assert len(statements) == 1  # batched by authorized scope, never per project/card
-    assert counts == {active.id: 5, closed.id: 0, archive.id: 0, legacy_done.id: 0, reference.id: 0, empty.id: 0}
+    assert counts == {active.id: 5, closed.id: 0, archive.id: 0, legacy_done.id: 1, reference.id: 0, empty.id: 0}
     assert foreign_column.id not in counts and deleted_column.id not in counts
     statements.clear()
     work_counts = repository.get_work_counts([project])
     assert len(statements) == 1
     assert work_counts[active.id] == {"open_count": 6, "incomplete_count": 5}
-    assert all(work_counts[value.id]["open_count"] == 0 for value in (closed, archive, legacy_done, reference, empty))
+    assert work_counts[legacy_done.id] == {"open_count": 1, "incomplete_count": 1}
+    assert all(work_counts[value.id]["open_count"] == 0 for value in (closed, archive, reference, empty))
     event.remove(engine, "before_cursor_execute", record)
     with DbSession.use(readonly=False) as db:
         unchecked.is_checked = True

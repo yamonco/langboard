@@ -17,6 +17,7 @@ from ....domain.models import (
     ProjectColumn,
     ProjectRole,
     User,
+    WorkflowStageDefinition,
 )
 from ....helpers import InfraHelper
 
@@ -33,8 +34,6 @@ def _editor_search_text(column, dialect: str):
 
 
 class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
-    TERMINAL_WORK_COLUMN_NAMES = ("done", "completed", "complete", "완료")
-
     @staticmethod
     def parent_model_cls():
         return ProjectColumn
@@ -367,7 +366,10 @@ class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
                 & (Card.column("deadline_at") <= due_before)
             )
         if "overdue" in purposes:
-            conditions.append(mine & Card.column("deadline_at").is_not(None) & (Card.column("deadline_at") < now))
+            conditions.append(
+                mine & Card.column("deadline_at").is_not(None) & (Card.column("deadline_at") < now)
+                & or_(WorkflowStageDefinition.id.is_(None), WorkflowStageDefinition.overdue_policy != "suppress")
+            )
 
         if date_field not in {"created_at", "updated_at"}:
             raise ValueError("date_field must be created_at or updated_at")
@@ -383,7 +385,11 @@ class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
             .where(Project.column("deleted_at") == None)  # noqa: E711
             .where(Card.column("archived_at") == None)  # noqa: E711
             .where(ProjectColumn.column("is_archive").is_(False))
-            .where(func.lower(func.trim(ProjectColumn.column("name"))).notin_(self.TERMINAL_WORK_COLUMN_NAMES))
+            .outerjoin(WorkflowStageDefinition, WorkflowStageDefinition.key == ProjectColumn.workflow_stage)
+            .where(ProjectColumn.project_id == Card.project_id)
+            .where(Card.source_type.is_(None))
+            .where(or_(WorkflowStageDefinition.id.is_(None), WorkflowStageDefinition.counts_as_completed.is_(False)))
+            .where(or_(WorkflowStageDefinition.id.is_(None), WorkflowStageDefinition.active_queue_policy != "exclude"))
             .where(or_(*conditions))
         )
         if since is not None:
