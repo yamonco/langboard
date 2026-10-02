@@ -60,6 +60,7 @@ import ProjectExplorerSidebar from "@/pages/DashboardPage/components/ProjectExpl
 import {
     WORKBENCH_OPEN_CHANGES_EVENT,
     WORKBENCH_OPEN_MY_WORK_EVENT,
+    WORKBENCH_OPEN_RELATIONS_EVENT,
     WORKBENCH_TOGGLE_CONTEXT_EVENT,
 } from "@/pages/DashboardPage/components/WorkbenchCommands";
 import { closeProject } from "@/pages/DashboardPage/components/OpenCardsStore";
@@ -233,13 +234,16 @@ function BoardProxyDisplay({ pageRoute, isFetching, isProjectLoading, project }:
         const toggleContext = () => toggleSwitchProject();
         const openChanges = () => showWorkbenchContext("changes");
         const openMyWork = () => showWorkbenchContext("my-work");
+        const openRelations = () => showWorkbenchContext("relations");
         window.addEventListener(WORKBENCH_TOGGLE_CONTEXT_EVENT, toggleContext);
         window.addEventListener(WORKBENCH_OPEN_CHANGES_EVENT, openChanges);
         window.addEventListener(WORKBENCH_OPEN_MY_WORK_EVENT, openMyWork);
+        window.addEventListener(WORKBENCH_OPEN_RELATIONS_EVENT, openRelations);
         return () => {
             window.removeEventListener(WORKBENCH_TOGGLE_CONTEXT_EVENT, toggleContext);
             window.removeEventListener(WORKBENCH_OPEN_CHANGES_EVENT, openChanges);
             window.removeEventListener(WORKBENCH_OPEN_MY_WORK_EVENT, openMyWork);
+            window.removeEventListener(WORKBENCH_OPEN_RELATIONS_EVENT, openRelations);
         };
     }, [toggleSwitchProject, showWorkbenchContext]);
     const {
@@ -691,33 +695,45 @@ function BoardProxyDisplay({ pageRoute, isFetching, isProjectLoading, project }:
                     ) : workbenchContextMode === "explorer" ? (
                         <ProjectExplorerSidebar currentProject={project} onNavigate={() => setActiveSidePanel(undefined)} />
                     ) : (
-                        <Suspense fallback={<Skeleton className="m-3 h-24" />}>
-                            {workbenchContextMode === "my-work" ? (
-                                <div className="h-full overflow-y-auto">
-                                    <MyWorkSidebar compact projectUID={project.uid} onNavigate={() => isMobile && setActiveSidePanel(undefined)} />
-                                </div>
-                            ) : workbenchContextMode === "changes" ? (
-                                <BoardChangesSidebar projectUID={project.uid} onNavigate={() => isMobile && setActiveSidePanel(undefined)} />
-                            ) : workbenchContextMode === "activity" && currentUser ? (
-                                <ActivityList
-                                    key={project.uid}
-                                    className="h-full"
-                                    form={{ listType: "ActivityModel", type: "project", project_uid: project.uid }}
-                                    currentUser={currentUser}
-                                    outerClassName="h-full px-3"
-                                />
-                            ) : workbenchContextMode === "relations" ? (
-                                <BoardRelationsSidebar projectUID={project.uid} cardUID={activeCard?.uid} />
-                            ) : workbenchContextMode === "outline" ? (
-                                <BoardOutlineSidebar
-                                    cardUID={activeCard?.uid}
-                                    onRelations={() => showWorkbenchContext("relations")}
-                                    onNavigate={() => isMobile && setActiveSidePanel(undefined)}
-                                />
-                            ) : (
-                                <BoardWikiSidebar projectUID={project.uid} onNavigate={() => setActiveSidePanel(undefined)} />
-                            )}
-                        </Suspense>
+                        <div
+                            data-workbench-command-context={workbenchContextMode}
+                            tabIndex={-1}
+                            role="region"
+                            aria-label={workbenchContextTitle}
+                            className="h-full outline-none"
+                        >
+                            <Suspense fallback={<Skeleton className="m-3 h-24" />}>
+                                {workbenchContextMode === "my-work" ? (
+                                    <div className="h-full overflow-y-auto">
+                                        <MyWorkSidebar
+                                            compact
+                                            projectUID={project.uid}
+                                            onNavigate={() => isMobile && setActiveSidePanel(undefined)}
+                                        />
+                                    </div>
+                                ) : workbenchContextMode === "changes" ? (
+                                    <BoardChangesSidebar projectUID={project.uid} onNavigate={() => isMobile && setActiveSidePanel(undefined)} />
+                                ) : workbenchContextMode === "activity" && currentUser ? (
+                                    <ActivityList
+                                        key={project.uid}
+                                        className="h-full"
+                                        form={{ listType: "ActivityModel", type: "project", project_uid: project.uid }}
+                                        currentUser={currentUser}
+                                        outerClassName="h-full px-3"
+                                    />
+                                ) : workbenchContextMode === "relations" ? (
+                                    <BoardRelationsSidebar projectUID={project.uid} cardUID={activeCard?.uid} />
+                                ) : workbenchContextMode === "outline" ? (
+                                    <BoardOutlineSidebar
+                                        cardUID={activeCard?.uid}
+                                        onRelations={() => showWorkbenchContext("relations")}
+                                        onNavigate={() => isMobile && setActiveSidePanel(undefined)}
+                                    />
+                                ) : (
+                                    <BoardWikiSidebar projectUID={project.uid} onNavigate={() => setActiveSidePanel(undefined)} />
+                                )}
+                            </Suspense>
+                        </div>
                     )
                 }
                 workbenchContextHidden={!isContextOpen || isMobile || !!selectCardViewType}

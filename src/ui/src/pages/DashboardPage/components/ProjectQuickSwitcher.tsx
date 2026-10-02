@@ -13,7 +13,12 @@ import useGetProjects from "@/controllers/api/dashboard/useGetProjects";
 import { Project, ProjectCard } from "@/core/models";
 import { useAuth } from "@/core/providers/AuthProvider";
 import { useOpenCards } from "@/pages/DashboardPage/components/OpenCardsStore";
-import { WORKBENCH_OPEN_CHANGES_EVENT, WORKBENCH_OPEN_MY_WORK_EVENT, WORKBENCH_TOGGLE_CONTEXT_EVENT } from "./WorkbenchCommands";
+import {
+    WORKBENCH_OPEN_CHANGES_EVENT,
+    WORKBENCH_OPEN_MY_WORK_EVENT,
+    WORKBENCH_OPEN_RELATIONS_EVENT,
+    WORKBENCH_TOGGLE_CONTEXT_EVENT,
+} from "./WorkbenchCommands";
 import { usePageNavigateRef } from "@/core/hooks/usePageNavigate";
 import { ROUTES } from "@/core/routing/constants";
 import { Utils } from "@langboard/core/utils";
@@ -178,8 +183,20 @@ const ProjectQuickSwitcher = memo((): React.JSX.Element => {
             onCloseAutoFocus={(event) => {
                 event.preventDefault();
                 if (actionSelected.current) {
-                    if (actionSelected.current === WORKBENCH_OPEN_MY_WORK_EVENT) {
-                        document.querySelector<HTMLElement>("[data-my-work-context]")?.focus({ preventScroll: true });
+                    const mode = {
+                        [WORKBENCH_OPEN_MY_WORK_EVENT]: "my-work",
+                        [WORKBENCH_OPEN_CHANGES_EVENT]: "changes",
+                        [WORKBENCH_OPEN_RELATIONS_EVENT]: "relations",
+                    }[String(actionSelected.current)];
+                    if (mode) {
+                        // The target exists outside lazy panel content. Ignore hidden desktop/mobile copies.
+                        const targets = document.querySelectorAll<HTMLElement>(
+                            `[data-workbench-command-context="${mode}"]${mode === "my-work" ? ", [data-my-work-context]" : ""}`
+                        );
+                        const target = Array.from(targets).find((item) => item.clientWidth > 0 && item.clientHeight > 0);
+                        // Mobile entry starts before the Close button, matching drawer navigation.
+                        const focusTarget = target?.closest<HTMLElement>("aside[aria-label][tabindex='-1']") ?? target;
+                        focusTarget?.focus({ preventScroll: true });
                     }
                     return;
                 }
@@ -313,7 +330,7 @@ const ProjectQuickSwitcher = memo((): React.JSX.Element => {
                             </Command.Item>
                             <Command.Item
                                 value="navigation:relations"
-                                onSelect={() => selectRoute(ROUTES.BOARD.GRAPH(currentProjectUID))}
+                                onSelect={() => selectCommand(WORKBENCH_OPEN_RELATIONS_EVENT)}
                                 className="gap-3 rounded-lg"
                             >
                                 <IconComponent icon="network" size="4" />
