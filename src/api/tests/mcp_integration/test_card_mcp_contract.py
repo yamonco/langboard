@@ -645,7 +645,7 @@ def test_native_move_rejects_column_from_another_project(
 
     module = importlib.import_module("langboard_shared.domain.services.factory.CardService")
     project = SimpleNamespace(id=1)
-    card = SimpleNamespace(project_id=1, project_column_id=10)
+    card = SimpleNamespace(id=11, project_id=1, project_column_id=10, deleted_at=None)
     old_column = SimpleNamespace(id=10, project_id=1)
     foreign_column = SimpleNamespace(id=20, project_id=2)
     monkeypatch.setattr(
@@ -659,7 +659,23 @@ def test_native_move_rejects_column_from_another_project(
         lambda model, value: old_column if value == 10 else foreign_column,
     )
 
+    from contextlib import contextmanager
+
+    statements = []
+
+    @contextmanager
+    def readiness_uow():
+        def query(statement):
+            statements.append(statement)
+            return SimpleNamespace(first=lambda: card)
+
+        yield SimpleNamespace(db=SimpleNamespace(exec=query))
+
+    monkeypatch.setattr(module, "execution_readiness_uow", readiness_uow)
     assert CardService.change_order(SimpleNamespace(), object(), project, card, 0, foreign_column) is None
+    assert len(statements) == 1
+    assert statements[0]._for_update_arg is not None
+    assert "card.project_id" in str(statements[0])
 
 
 def test_graph_cycle_rejection_is_validation_error_not_unknown_mutation() -> None:

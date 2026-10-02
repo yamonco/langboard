@@ -21,7 +21,7 @@ class ProjectColumn(SoftDeleteModel, table=True):
     is_archive: bool = Field(default=False, nullable=False, api_field=ApiField())
     # Explicit board workflow meaning. None means unclassified, never inferred from the display name.
     translations: dict[str, dict[str, str]] = Field(
-        default_factory=dict, nullable=False, sa_type=JSON, api_field=ApiField()
+        default_factory=dict, nullable=False, sa_type=JSON, sa_column_kwargs={"server_default": "{}"}, api_field=ApiField()
     )
     workflow_stage: str | None = Field(default=None, nullable=True, api_field=ApiField())
 
