@@ -51,6 +51,7 @@ from .forms import (
     UpdateProjectExecutionBindingForm,
     UpdateProjectLabelDetailsForm,
     UpdateRolesForm,
+    UseGlobalProjectLabelForm,
 )
 
 
@@ -450,6 +451,37 @@ def update_project_user_roles(
         raise ApiException.NotFound_404(ApiErrorCode.NF2006)
 
     return JsonResponse()
+
+
+@AppRouter.api.get(
+    "/board/{project_uid}/settings/global-labels",
+    tags=["Board.Settings"],
+    description="Read existing global label definitions for board selection.",
+)
+@RoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+@AuthFilter.add()
+def get_board_global_labels(project_uid: str, service: DomainService = DomainService.scope()) -> JsonResponse:
+    return JsonResponse(content={"labels": service.global_label.get_api_list()})
+
+
+@AppRouter.schema(form=UseGlobalProjectLabelForm, permission=ApiPermission.Edit)
+@AppRouter.api.post(
+    "/board/{project_uid}/settings/global-labels/use",
+    tags=["Board.Settings"],
+    description="Reuse an existing global definition, preferring existing local labels.",
+)
+@RoleFilter.add(ProjectRole, [ProjectRoleAction.Update], RoleFinder.project)
+@AuthFilter.add()
+def use_board_global_label(
+    project_uid: str,
+    form: UseGlobalProjectLabelForm,
+    user_or_bot: User | Bot = Auth.scope("all"),
+    service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    result = service.project_label.use_global(user_or_bot, project_uid, form.global_label_uid)
+    if not result:
+        raise ApiException.NotFound_404(ApiErrorCode.NF2001)
+    return JsonResponse(content=result)
 
 
 @AppRouter.schema(form=CreateProjectLabelForm, permission=ApiPermission.Create)

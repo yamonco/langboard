@@ -35,7 +35,7 @@ from .Project import (
     UpdateProjectExecutionBindingForm,
     UpdateRolesForm,
 )
-from .ProjectLabel import CreateProjectLabelForm, UpdateProjectLabelDetailsForm
+from .ProjectLabel import CreateProjectLabelForm, UpdateProjectLabelDetailsForm, UseGlobalProjectLabelForm
 from .Shared import AssigneesForm, AssignUsersForm, ChangeChildOrderForm, ChangeRootOrderForm
 from .Wiki import ChangeWikiDetailsForm, ChangeWikiPublicForm, WikiForm
 
@@ -66,6 +66,7 @@ __all__ = [
     "UpdateProjectExecutionBindingForm",
     "UpdateRolesForm",
     "CreateProjectLabelForm",
+    "UseGlobalProjectLabelForm",
     "UpdateProjectLabelDetailsForm",
     "ProjectInvitationForm",
     "ChatHistoryPagination",

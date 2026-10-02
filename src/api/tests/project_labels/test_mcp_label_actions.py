@@ -48,17 +48,29 @@ def test_global_catalog_is_read_only_and_local_labels_come_first(monkeypatch):
     assert not created
 
 
-def test_global_selection_reuses_local_match_and_never_mutates_global(monkeypatch):
-    svc, created = service([{"uid": "local", "name": "Request", "color": "#112233", "description": "Local"}])
-    global_label = GlobalLabel(name="Request", color="#445566", description="Global")
-    monkeypatch.setattr(LabelMcp.InfraHelper, "get_by_id_like", lambda model, uid: global_label)
-    assert LabelMcp.use_global_project_label("p", global_label.get_uid(), object(), svc)["label"]["uid"] == "local"
-    assert not created
-    svc, created = service()
-    assert LabelMcp.use_global_project_label("p", global_label.get_uid(), object(), svc)["created"]
-    assert not LabelMcp.use_global_project_label("p", global_label.get_uid(), object(), svc)["created"]
-    assert len(created) == 1
-    assert global_label.description == "Global"
+def test_global_selection_uses_the_shared_service_and_keeps_display_metadata():
+    svc, _ = service()
+    result = {
+        "label": {
+            "uid": "local",
+            "name": "Request",
+            "global_label_uid": "global",
+            "global_display": {"emoji": "🏷️", "translations": {"ko": {"name": "요청"}}},
+        },
+        "created": True,
+        "global_label_uid": "global",
+    }
+    calls = []
+    svc.project_label.use_global = lambda *args: (calls.append(args) or result)
+    actor = object()
+    response = LabelMcp.use_global_project_label("p", "global", actor, svc)
+    assert response["label"]["emoji"] == "🏷️"
+    assert response["label"]["global_label_uid"] == "global"
+    assert "global_display" not in response["label"]
+    assert calls == [(actor, "p", "global")]
+    svc.project_label.use_global = lambda *args: None
+    with pytest.raises(ValueError, match="not found"):
+        LabelMcp.use_global_project_label("p", "missing", actor, svc)
 
 
 def test_attach_detach_preserve_unrelated_labels_and_are_idempotent(monkeypatch):

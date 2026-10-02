@@ -1,4 +1,7 @@
+from copy import deepcopy
 from typing import Any, Literal
+from sqlalchemy import select
+from ....core.db import DbSession
 from ....core.domain import BaseDomainService
 from ....core.domain.BaseDomainService import TMutableValidatorMap
 from ....core.types.ParamTypes import TCardParam, TProjectLabelParam, TProjectParam, TUserOrBot
@@ -7,7 +10,7 @@ from ....helpers import InfraHelper
 from ....publishers import ProjectLabelPublisher
 from ....tasks.activities import ProjectLabelActivityTask
 from ....tasks.bots import ProjectLabelBotTask
-from ...models import Card, Project, ProjectLabel
+from ...models import Card, GlobalLabel, Project, ProjectLabel
 
 
 class ProjectLabelService(BaseDomainService):
@@ -68,6 +71,45 @@ class ProjectLabelService(BaseDomainService):
 
         return label, label.api_response()
 
+    def use_global(
+        self, user_or_bot: TUserOrBot, project: TProjectParam, global_label_uid: str
+    ) -> dict[str, Any] | None:
+        """Reuse a local name first, otherwise retain a frozen global display definition."""
+        project = InfraHelper.get_by_id_like(Project, project)
+        global_label = InfraHelper.get_by_id_like(GlobalLabel, global_label_uid)
+        if not project or not global_label:
+            return None
+        with DbSession.atomic() as db:
+            if (
+                db.exec(
+                    select(Project.column("id")).where(Project.column("id") == project.id).with_for_update()
+                ).first()
+                is None
+            ):
+                return None
+            labels = self.repo.project_label.get_all_by_project(project)
+            name = global_label.name.strip().casefold()
+            existing = next(
+                (label for label in labels if label.global_label_id is None and label.name.strip().casefold() == name),
+                None,
+            )
+            existing = existing or next((label for label in labels if label.global_label_id == global_label.id), None)
+            existing = existing or next((label for label in labels if label.name.strip().casefold() == name), None)
+            if existing:
+                return {"label": existing.api_response(), "created": False, "global_label_uid": global_label.get_uid()}
+            label = ProjectLabel(
+                project_id=project.id,
+                global_label_id=global_label.id,
+                global_display={"emoji": global_label.emoji, "translations": deepcopy(global_label.translations)},
+                name=global_label.name,
+                color=global_label.color,
+                description=global_label.description,
+                order=self.repo.project_label.get_next_order(project),
+            )
+            self.repo.project_label.insert(label)
+            db.after_commit(lambda: self.dispatch_created(user_or_bot, project, label))
+            return {"label": label.api_response(), "created": True, "global_label_uid": global_label.get_uid()}
+
     def dispatch_created(
         self, user_or_bot: TUserOrBot, project: Project, label: ProjectLabel, *, include_bot: bool = True
     ) -> None:
@@ -94,9 +136,10 @@ class ProjectLabelService(BaseDomainService):
         if not old_record:
             return True
 
+        label.global_display = None
         self.repo.project_label.update(label)
 
-        model: dict[str, Any] = {}
+        model: dict[str, Any] = {"global_display": None}
         for key in validators:
             if key not in form or key not in old_record:
                 continue

@@ -93,19 +93,11 @@ def create_local_project_label(
 def use_global_project_label(
     project_uid: str, global_label_uid: str, user_or_bot: User | Bot, service: DomainService
 ) -> dict[str, Any]:
-    project = _project(service, project_uid)
-    global_label = InfraHelper.get_by_id_like(GlobalLabel, global_label_uid)
-    if not global_label:
-        raise ValueError("Global label not found")
-    existing = _local_named(service, project, global_label.name.strip())
-    if existing:
-        return {"label": public_label(existing), "created": False, "global_label_uid": global_label_uid}
-    result = service.project_label.create(
-        user_or_bot, project, global_label.name, global_label.color, global_label.description
-    )
+    _project(service, project_uid)
+    result = service.project_label.use_global(user_or_bot, project_uid, global_label_uid)
     if not result:
-        raise RuntimeError("Global label reuse failed")
-    return {"label": public_label(result[1]), "created": True, "global_label_uid": global_label_uid}
+        raise ValueError("Global label or project not found")
+    return {**result, "label": public_label(result["label"])}
 
 
 @McpTool.add(description="Attach/detach an existing local label while preserving other card labels.")

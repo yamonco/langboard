@@ -19,7 +19,7 @@ from .dtos import BoundedItemsDto, BoundedTextDto
 _ACTOR_KEYS = ("uid", "type", "firstname", "lastname", "username", "name", "bot_uname", "avatar")
 _CARD_KEYS = ("uid", "title", "created_at", "updated_at", "can_delete")
 _WORKFLOW_KEYS = ("project_column_uid", "project_column_name", "order", "deadline_at", "archived_at")
-_LABEL_KEYS = ("uid", "name", "color", "description", "order")
+_LABEL_KEYS = ("uid", "name", "color", "description", "order", "global_label_uid")
 _RELATIONSHIP_KEYS = (
     "uid",
     "relationship_type_uid",
@@ -124,7 +124,10 @@ def public_attachment(attachment: dict[str, Any]) -> dict[str, Any]:
 def public_label(label: dict[str, Any]) -> dict[str, Any]:
     """Project one project-defined card label."""
 
-    return pick(label, _LABEL_KEYS)
+    result = pick(label, _LABEL_KEYS)
+    if label.get("global_label_uid") and label.get("global_display"):
+        result["emoji"] = label["global_display"].get("emoji", "")
+    return result
 
 
 def public_relationship(relationship: dict[str, Any]) -> dict[str, Any]:
