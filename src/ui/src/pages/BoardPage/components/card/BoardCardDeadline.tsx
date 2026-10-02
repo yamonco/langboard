@@ -1,4 +1,5 @@
 import { formatNumber } from "@/core/utils/LocaleFormat";
+import BoardCardInlineDeadline from "@/pages/BoardPage/components/card/BoardCardInlineDeadline";
 import Button from "@/components/base/Button";
 import { useCollaborativeText } from "@/components/Collaborative/useCollaborativeText";
 import DateTimePicker from "@/components/base/DateTimePicker";
@@ -49,7 +50,7 @@ const parseDeadline = (value: string) => {
     return nextValue;
 };
 
-const BoardCardDeadline = memo(() => {
+const BoardCardDeadlineDraft = memo(() => {
     const { card, hasRoleAction, isCardEditing } = useBoardCard();
     const [t, i18n] = useTranslation();
     const { registerSectionCancelHandler, registerSectionSaveHandler } = useBoardCardSectionSaveActions();
@@ -247,6 +248,11 @@ const BoardCardDeadline = memo(() => {
             )}
         </>
     );
+});
+
+const BoardCardDeadline = memo(() => {
+    const { isCardEditing } = useBoardCard();
+    return isCardEditing ? <BoardCardDeadlineDraft /> : <BoardCardInlineDeadline />;
 });
 
 export default BoardCardDeadline;

@@ -155,5 +155,7 @@
   "YouTube video": "YouTube视频",
   "{{days, number}} days": "{{days, number}}天",
   "{{engine}} source": "{{engine}} 源代码",
-  "New checkitem": "新检查项"
+  "New checkitem": "新检查项",
+  "Add deadline": "添加截止时间",
+  "Remove deadline": "移除截止时间"
 }

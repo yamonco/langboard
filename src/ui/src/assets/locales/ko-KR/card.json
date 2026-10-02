@@ -155,5 +155,7 @@
   "YouTube video": "YouTube 동영상",
   "{{days, number}} days": "{{days, number}}일",
   "{{engine}} source": "{{engine}} 소스",
-  "New checkitem": "새 체크리스트 항목"
+  "New checkitem": "새 체크리스트 항목",
+  "Add deadline": "Deadline 추가",
+  "Remove deadline": "Deadline 제거"
 }

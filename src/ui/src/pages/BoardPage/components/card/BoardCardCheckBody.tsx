@@ -19,13 +19,12 @@ function BoardCardCheckBody({ scrollParentRef }: { scrollParentRef: React.RefObj
     const [t] = useTranslation();
     const title = card.useField("title");
     const completed = card.useField("completed") ?? false;
-    const deadlineAt = card.useField("deadline_at");
     const bodyText = useMemo(() => title, [title]);
 
     return (
         <Flex direction="col" gap="3" className="min-w-0">
             <Box className={cn("break-all text-2xl font-semibold leading-snug", completed && "line-through opacity-60")}>{bodyText}</Box>
-            {deadlineAt && <BoardCardDeadline />}
+            <BoardCardDeadline />
             <Box textSize="sm" className="text-muted-foreground">
                 {t("card.Fill the body to turn this into a normal card")}
             </Box>
