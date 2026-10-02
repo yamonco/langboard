@@ -8,9 +8,6 @@ instead of silently making those cards executable.
 from typing import Any
 
 
-WORKFLOW_STAGES = frozenset({"backlog", "ready", "active", "review", "closed", "reference"})
-
-
 def project_work_state(
     *,
     card_uid: str,
@@ -24,6 +21,7 @@ def project_work_state(
     change_seq: int = 0,
     verification_record: dict[str, Any] | None = None,
     direct_blockers: list[dict[str, Any]] | None = None,
+    workflow_policy: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Interpret native facts equally for every authorized reader.
 
@@ -31,13 +29,19 @@ def project_work_state(
     ``partial`` therefore means checklist progress only, never final approval.
     Null axes mean the authoritative policy/lifecycle is not yet integrated.
     """
-    stage = workflow_stage if workflow_stage in WORKFLOW_STAGES else None
+    policy = workflow_policy if workflow_policy and workflow_policy.get("key") == workflow_stage else None
+    stage = workflow_stage if policy else None
+    completed_work = bool(policy["counts_as_completed"]) if policy else None
+    queue_policy = policy["active_queue_policy"] if policy else None
+    overdue_policy = policy["overdue_policy"] if policy else None
     reasons: list[dict[str, str]] = []
     inconsistencies: list[dict[str, str]] = []
 
     def reason(code: str, message: str, source: str) -> dict[str, str]:
         return {"code": code, "message": message, "source_ref": f"card:{card_uid}/{source}"}
 
+    if workflow_stage and policy is None:
+        reasons.append(reason("workflow_policy_unavailable", "Workflow registry definition is unavailable.", "column"))
     if stage is None:
         reasons.append(reason("workflow_unclassified", "Column has no explicit workflow mapping.", "column"))
     material = "wiki-like" if linked_resource else "reference" if stage == "reference" else "work"
@@ -103,7 +107,7 @@ def project_work_state(
         inconsistencies.append(
             reason("archived_with_running_timer", "Archived card still has a running human timer.", "checkitems")
         )
-    if stage == "closed" and total > completed:
+    if completed_work and total > completed:
         inconsistencies.append(
             reason(
                 "closed_with_open_checkitems",
@@ -122,6 +126,14 @@ def project_work_state(
     return {
         "version": 1,
         "workflow_stage": stage,
+        "completed": completed_work,
+        "active_queue_policy": queue_policy,
+        "overdue_policy": overdue_policy,
+        "overdue_suppressed": True
+        if archived or linked_resource
+        else bool(completed_work or overdue_policy == "suppress")
+        if policy
+        else None,
         "verification_state": verification,
         "verification_source_change_seq": change_seq,
         "verification": verification_record,
@@ -134,7 +146,7 @@ def project_work_state(
         "material_kind": material,
         "lifecycle": "archived" if archived else "active",
         "active_queue_eligible": False
-        if archived or stage in {"closed", "reference"} or linked_resource or direct_blockers
+        if archived or completed_work or queue_policy == "exclude" or linked_resource or direct_blockers
         else None,
         "checklist_progress": {"total": total, "completed": completed},
         "reasons": reasons,

@@ -3,6 +3,17 @@ from .CardWorkState import project_work_state
 
 
 def state(**changes):
+    stage = changes.get("workflow_stage")
+    if stage in {"backlog", "ready", "active", "review", "closed", "reference"}:
+        changes.setdefault(
+            "workflow_policy",
+            {
+                "key": stage,
+                "counts_as_completed": stage == "closed",
+                "active_queue_policy": "exclude" if stage in {"closed", "reference"} else "conditional",
+                "overdue_policy": "suppress" if stage == "closed" else "normal",
+            },
+        )
     return project_work_state(
         **{
             "card_uid": "card",
@@ -82,3 +93,52 @@ def test_clear_dependencies_do_not_infer_clear_input_or_approval_gates():
     assert result["blocker_state"] is None
     assert result["active_queue_eligible"] is None
     assert any(reason["code"] == "blocker_policy_unavailable" for reason in result["reasons"])
+
+
+@pytest.mark.parametrize("stage", ["released", "closed"])
+def test_registry_completion_is_independent_of_verification_and_unchecked_items(stage):
+    policy = {"key": stage, "counts_as_completed": True, "active_queue_policy": "exclude", "overdue_policy": "suppress"}
+    result = state(workflow_stage=stage, workflow_policy=policy, total=3, completed=1)
+    assert result["workflow_stage"] == stage
+    assert result["completed"] is True
+    assert result["verification_state"] == "partial"
+    assert result["active_queue_eligible"] is False
+    assert result["overdue_suppressed"] is True
+    assert result["state_inconsistency"][0]["code"] == "closed_with_open_checkitems"
+
+
+def test_registry_policy_change_reinterprets_closed_without_guessing_or_approval():
+    policy = {
+        "key": "closed",
+        "counts_as_completed": False,
+        "active_queue_policy": "include",
+        "overdue_policy": "normal",
+    }
+    result = state(workflow_stage="closed", workflow_policy=policy)
+    assert result["completed"] is False
+    assert result["overdue_suppressed"] is False
+    assert result["active_queue_eligible"] is None  # Input/approval gates remain unknown.
+    assert result["verification_state"] == "unverified"
+    policy["active_queue_policy"] = "exclude"
+    assert state(workflow_stage="closed", workflow_policy=policy)["active_queue_eligible"] is False
+
+
+def test_foreign_policy_cannot_classify_unknown_key():
+    policy = {
+        "key": "released",
+        "counts_as_completed": True,
+        "active_queue_policy": "exclude",
+        "overdue_policy": "suppress",
+    }
+    result = state(workflow_stage="Other", workflow_policy=policy)
+    assert result["workflow_stage"] is None and result["completed"] is None
+    assert result["active_queue_eligible"] is None
+
+
+def test_missing_registry_policy_stays_unknown_even_for_former_builtin_key():
+    result = state(workflow_stage="closed", workflow_policy=None)
+    assert result["completed"] is None
+    assert result["active_queue_policy"] is None
+    assert result["overdue_suppressed"] is None
+    assert result["active_queue_eligible"] is None
+    assert any(reason["code"] == "workflow_policy_unavailable" for reason in result["reasons"])

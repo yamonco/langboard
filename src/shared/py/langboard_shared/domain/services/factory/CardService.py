@@ -159,17 +159,30 @@ class CardService(BaseDomainService):
                     SqlBuilder.select.table(ProjectColumn).where(ProjectColumn.column("id").in_(column_ids))
                 ).all()
             }
+        policies = self.repo.workflow_stage.get_by_keys(
+            {column.workflow_stage for column in columns.values() if column.workflow_stage}
+        )
         counts = self.repo.checkitem.get_work_state_counts([card.id for card in cards])
         verification_records = self.repo.card_verification.get_latest_by_card_ids([card.id for card in cards])
         blockers = dependency_blockers([card.id for card in cards])
         states = {}
         for card in cards:
             column = columns.get(card.project_column_id)
+            stage = column.workflow_stage if column and column.project_id == card.project_id else None
+            policy = policies.get(stage)
             total, completed, started, paused = counts.get(card.id, (0, 0, 0, 0))
             record = verification_records.get(card.id)
             states[card.id] = project_work_state(
                 card_uid=card.get_uid(),
-                workflow_stage=column.workflow_stage if column and column.project_id == card.project_id else None,
+                workflow_stage=stage,
+                workflow_policy={
+                    "key": policy.key,
+                    "counts_as_completed": policy.counts_as_completed,
+                    "active_queue_policy": policy.active_queue_policy,
+                    "overdue_policy": policy.overdue_policy,
+                }
+                if policy
+                else None,
                 archived=card.archived_at is not None
                 or bool(column and column.project_id == card.project_id and column.is_archive),
                 linked_resource=card.is_linked_resource,
