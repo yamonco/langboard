@@ -3,6 +3,7 @@ import { api } from "@/core/helpers/Api";
 import { TQueryOptions, useQueryMutation } from "@/core/helpers/QueryMutation";
 import { Project, ProjectBotSchedule, ProjectBotScope } from "@/core/models";
 import { Utils } from "@langboard/core/utils";
+import setupApiErrorHandler from "@/core/helpers/setupApiErrorHandler";
 import refreshProjectColumnDock from "@/controllers/api/board/refreshProjectColumnDock";
 
 export interface IGetProjectForm {
@@ -29,7 +30,8 @@ const useGetProject = (form: IGetProjectForm, options?: TQueryOptions<unknown, I
 
         ProjectBotScope.Model.fromArray(res.data.project_bot_scopes, true);
         ProjectBotSchedule.Model.fromArray(res.data.project_bot_schedules, true);
-        await refreshProjectColumnDock(form.uid);
+        // Dock enrichment must not delay the authorized board or turn its failure into a board failure.
+        void refreshProjectColumnDock(form.uid).catch((error) => setupApiErrorHandler({}).handle(error));
 
         return {
             project,
