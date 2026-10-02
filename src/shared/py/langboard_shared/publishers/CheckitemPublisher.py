@@ -31,6 +31,18 @@ class CheckitemPublisher(BaseSocketPublisher):
         )
 
     @staticmethod
+    def workflow_effects_applied(project: Project, card: Card, checkitems: list[dict[str, Any]]) -> None:
+        """One committed batch summary; clients refresh board/card projections."""
+        CheckitemPublisher.put_dispather(
+            {"card_uid": card.get_uid(), "checkitems": checkitems},
+            SocketPublishModel(
+                topic=SocketTopic.Board, topic_id=project.get_uid(),
+                event=f"board:card:checklist:progress:changed:{project.get_uid()}",
+                data_keys=["card_uid", "checkitems"],
+            ),
+        )
+
+    @staticmethod
     def created(card: Card, checklist: Checklist, checkitem: Checkitem):
         topic_id = card.get_uid()
         model = {

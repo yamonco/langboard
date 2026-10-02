@@ -1,4 +1,6 @@
+from datetime import timezone
 from typing import Any, cast, overload
+from ....core.db import DbSession, SqlBuilder
 from ....core.domain import BaseDomainService
 from ....core.schema import TimeBasedPagination
 from ....core.types import SafeDateTime
@@ -283,7 +285,9 @@ class CheckitemService(BaseDomainService):
                     return False
                 checkitem.user_id = user_or_bot.id
             if isinstance(user_or_bot, User):
-                for started_checkitem, started_card, started_project in self.repo.checkitem.get_started_work_by_user(user_or_bot):
+                for started_checkitem, started_card, started_project in self.repo.checkitem.get_started_work_by_user(
+                    user_or_bot
+                ):
                     if started_checkitem.id == checkitem.id:
                         continue
                     self.change_status(
@@ -325,6 +329,87 @@ class CheckitemService(BaseDomainService):
             CardCheckitemBotTask.card_checkitem_timer_stopped(user_or_bot, project, card, checkitem)
 
         return True
+
+    def complete_unchecked_by_card(
+        self,
+        user_or_bot: TUserOrBot,
+        project: Project,
+        card: Card,
+        publish_summary: bool = True,
+        complete: bool = True,
+    ) -> dict[str, int]:
+        """Apply native entry effects without inverse toggles or per-item tasks."""
+        if card.project_id != project.id or card.is_linked_resource or card.deleted_at is not None:
+            raise ValueError("Workflow effect card is not active work in this project")
+        changed, completed, stopped = [], 0, 0
+        now = SafeDateTime.now()
+        with DbSession.atomic() as db:
+            # The movement boundary already locks the card. Standalone calls use
+            # the same lock so two retries cannot duplicate timer facts.
+            current = db.exec(
+                SqlBuilder.select.table(Card).where(Card.column("id") == card.id).with_for_update()
+            ).first()
+            if current is None or current.deleted_at is not None or current.project_id != project.id:
+                raise ValueError("Workflow effect card is missing")
+            items = db.exec(
+                SqlBuilder.select.table(Checkitem)
+                .join(Checklist, Checkitem.column("checklist_id") == Checklist.column("id"))
+                .where(Checklist.column("card_id") == card.id)
+                .where(Checklist.column("deleted_at").is_(None))
+                .where(Checkitem.column("deleted_at").is_(None))
+                .where(Checkitem.column("cardified_id").is_(None))
+                .order_by(Checkitem.column("id"))
+                .with_for_update(of=Checkitem)
+            ).all()
+            running = [item for item in items if item.status != CheckitemStatus.Stopped]
+            arcs = self.repo.checkitem_timer_record.get_arc_map_by_checkitems(running)
+            for item in items:
+                item_changed = False
+                if complete and not item.is_checked:
+                    item.is_checked = True
+                    completed += 1
+                    item_changed = True
+                if item.status != CheckitemStatus.Stopped:
+                    last = arcs.get(item.id, {}).get("last")
+                    if last is None or last.status != item.status:
+                        raise ValueError("Running checkitem has no matching timer fact")
+                    if item.status == CheckitemStatus.Started:
+                        started_at = (
+                            last.created_at if last.created_at.tzinfo else last.created_at.replace(tzinfo=timezone.utc)
+                        )
+                        item.accumulated_seconds += max(0, int((now - started_at).total_seconds()))
+                    item.status = CheckitemStatus.Stopped
+                    db.insert(
+                        CheckitemTimerRecord(checkitem_id=item.id, status=CheckitemStatus.Stopped, created_at=now)
+                    )
+                    stopped += 1
+                    item_changed = True
+                if item_changed:
+                    db.update(item)
+                    changed.append(
+                        {
+                            "uid": item.get_uid(),
+                            "is_checked": item.is_checked,
+                            "status": item.status.value,
+                            "accumulated_seconds": item.accumulated_seconds,
+                            "timer_started_at": None,
+                        }
+                    )
+            completion_changed = False
+            if complete:
+                for checklist in db.exec(
+                    SqlBuilder.select.table(Checklist)
+                    .where(Checklist.column("card_id") == card.id)
+                    .where(Checklist.column("deleted_at").is_(None))
+                    .where(Checklist.column("is_system") == True)  # noqa: E712
+                ).all():
+                    if not checklist.is_checked:
+                        checklist.is_checked = True
+                        db.update(checklist)
+                        completion_changed = True
+            if (changed or completion_changed) and publish_summary:
+                db.after_commit(lambda: CheckitemPublisher.workflow_effects_applied(project, card, changed))
+        return {"completed": completed, "stopped": stopped}
 
     def toggle_checked(
         self,

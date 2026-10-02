@@ -53,6 +53,7 @@ from .NotificationService import NotificationService
 from .ProjectLabelService import ProjectLabelService
 from .ProjectService import ProjectService
 from .ProjectWikiService import ProjectWikiService
+from .WorkflowStagePolicyService import WorkflowStagePolicyService
 
 
 class CardService(BaseDomainService):
@@ -1509,48 +1510,42 @@ class CardService(BaseDomainService):
             return None
         project, card = params
 
-        old_column = None
-        old_column = InfraHelper.get_by_id_like(ProjectColumn, card.project_column_id)
-        if not old_column or old_column.project_id != project.id:
-            return None
-
-        if new_column:
-            new_column = InfraHelper.get_by_id_like(ProjectColumn, new_column)
-            if not new_column or new_column.project_id != card.project_id:
-                return None
-
-            # A linked resource has no archived board-side state. Dropping it on
-            # the archive column unlinks the card while preserving its Wiki.
-            if card.is_linked_resource and new_column.is_archive:
-                if not self.can_delete(user_or_bot, card):
-                    raise CardDeleteForbidden("Only the original card author or an administrator can delete this card")
-                return self._delete_card(user_or_bot, project, card)
-
-            card.project_column_id = new_column.id
-
-            if new_column.is_archive:
-                card.archived_at = SafeDateTime.now()
-            else:
-                card.archived_at = None
-
         with execution_readiness_uow() as execution:
+            card = execution.db.exec(
+                SqlBuilder.select.table(Card)
+                .where(Card.column("id") == card.id)
+                .where(Card.column("project_id") == project.id)
+                .with_for_update()
+            ).first()
+            if card is None or card.deleted_at is not None:
+                return None
+            old_column = InfraHelper.get_by_id_like(ProjectColumn, card.project_column_id)
+            if not old_column or old_column.project_id != project.id:
+                return None
+            if new_column:
+                new_column = InfraHelper.get_by_id_like(ProjectColumn, new_column)
+                if not new_column or new_column.project_id != project.id or new_column.deleted_at is not None:
+                    return None
+                if card.is_linked_resource and new_column.is_archive:
+                    if not self.can_delete(user_or_bot, card):
+                        raise CardDeleteForbidden("Only the original card author or an administrator can delete this card")
+                    return self._delete_card(user_or_bot, project, card)
             execution.watch_card_and_dependents(card.id)
             old_order = card.order
+            if new_column:
+                card.project_column_id = new_column.id
+                card.archived_at = SafeDateTime.now() if new_column.is_archive else None
             card.order = order
-            self.repo.card.update_row_order(
-                card, old_column, old_order, order, new_column, preserve_shifted_updated_at=True
-            )
+            self.repo.card.update_row_order(card, old_column, old_order, order, new_column, preserve_shifted_updated_at=True)
             self.repo.card.update(card)
-
+            self._get_service(WorkflowStagePolicyService).apply_transition(user_or_bot, project, card, old_column, new_column)
             if new_column is not None:
                 card.last_change_seq = self.next_change_seq()
                 card.last_change_target_type = self.UNREAD_TARGET_CARD
                 card.last_change_target_id = None
                 card.last_change_at = SafeDateTime.now()
                 self.repo.card.update(card)
-
-        self.notify_order_changed(user_or_bot, project, card, old_column, new_column)
-
+            execution.db.after_commit(lambda: self.notify_order_changed(user_or_bot, project, card, old_column, new_column))
         return True
 
     def notify_order_changed(

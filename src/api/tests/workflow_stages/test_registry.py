@@ -34,6 +34,9 @@ def registry(monkeypatch):
         connection.execute(
             text("CREATE TABLE project_column (id BIGINT, workflow_stage TEXT, deleted_at TEXT, is_archive BOOLEAN)")
         )
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE card(id BIGINT, project_column_id BIGINT)"))
+        connection.execute(text("CREATE TABLE card_relationship(card_id_parent BIGINT, card_id_child BIGINT)"))
     monkeypatch.setattr(DbEngine, "get_main_engine", lambda: engine)
     monkeypatch.setattr(DbEngine, "get_readonly_engine", lambda: engine)
     repo = WorkflowStageRepository(lambda _: None, lambda _: None)
