@@ -57,6 +57,15 @@ for (const width of [1280, 390])
         await page.getByLabel("Machine key", { exact: true }).fill("released");
         await page.getByLabel("Stage name", { exact: true }).fill("Released");
         await page.getByLabel("Stage description", { exact: true }).fill("Accepted delivery");
+        await page.getByRole("button", { name: "Color", exact: true }).click();
+        const picker = page.locator("[data-radix-popper-content-wrapper]").last();
+        await expect(picker.locator(".react-colorful")).toBeVisible();
+        await picker.locator("input").fill("#FF9500");
+        await expect(picker.locator("input")).toHaveValue("#FF9500");
+        await picker.getByRole("button", { name: "Save", exact: true }).click();
+        await expect(page.getByLabel("Color hex code", { exact: true })).toHaveValue("#FF9500");
+        expect(saves).toBe(0);
+        await page.getByLabel("Color hex code", { exact: true }).fill("#8B5CF6");
         await page.getByLabel("Count as completed", { exact: true }).check();
         await page.getByLabel("Active queue", { exact: true }).selectOption("exclude");
         await page.getByLabel("Hide overdue", { exact: true }).check();
@@ -79,6 +88,7 @@ for (const width of [1280, 390])
         await page.reload();
         await page.getByRole("button", { name: /^Released/ }).click();
         await expect(page.getByLabel("Stop running timers", { exact: true })).toBeChecked();
+        await expect(page.getByLabel("Color hex code", { exact: true })).toHaveValue("#8B5CF6");
         await expect(page.getByLabel("Active queue", { exact: true })).toHaveValue("exclude");
         await page.getByRole("button", { name: "한국어", exact: true }).click();
         await expect(page.getByLabel("Stage name", { exact: true })).toHaveValue("출시");

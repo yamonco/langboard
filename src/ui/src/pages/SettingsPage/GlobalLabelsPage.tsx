@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@/components/base/Button";
 import Input from "@/components/base/Input";
+import ColorPicker from "@/components/base/ColorPicker";
 import Textarea from "@/components/base/Textarea";
 import IconComponent from "@/components/base/IconComponent";
 import Toast from "@/components/base/Toast";
@@ -187,16 +188,18 @@ export default function GlobalLabelsPage({ currentUser }: { currentUser: AuthUse
                     </label>
                     <label className="flex items-center gap-3 text-sm">
                         <span>{t("settings.Color")}</span>
-                        <input
-                            type="color"
+                        <ColorPicker
+                            type="button"
                             aria-label={t("settings.Color")}
                             value={/^#[0-9a-fA-F]{6}$/.test(draft.color) ? draft.color : "#4A90E2"}
-                            disabled={!canSave}
-                            onChange={(e) => {
-                                setDraft((item) => ({ ...item, color: e.target.value }));
+                            isValidating={!canSave || saving}
+                            popoverContentAlign="start"
+                            onSave={(color, close) => {
+                                if (!/^#[0-9a-fA-F]{6}$/.test(color)) return;
+                                setDraft((item) => ({ ...item, color }));
                                 setDirty(true);
+                                close();
                             }}
-                            className="h-9 w-12 cursor-pointer rounded border bg-transparent"
                         />
                         <Input
                             aria-label={t("settings.Color hex code")}

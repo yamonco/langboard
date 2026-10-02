@@ -21,6 +21,13 @@ for (const width of [1280, 390])
         await page.getByLabel("Label name", { exact: true }).fill("Request");
         await page.getByLabel("Label description", { exact: true }).fill("English guidance");
         await page.getByLabel("Emoji (optional)", { exact: true }).fill("🐛");
+        await page.getByRole("button", { name: "Color", exact: true }).click();
+        const picker = page.locator("[data-radix-popper-content-wrapper]").last();
+        await expect(picker.locator(".react-colorful")).toBeVisible();
+        await picker.locator("input").fill("#FF9500");
+        await picker.getByRole("button", { name: "Save", exact: true }).click();
+        await expect(page.getByLabel("Color hex code", { exact: true })).toHaveValue("#FF9500");
+        await expect(page.getByRole("navigation").getByRole("button")).toHaveCount(0);
         await page.getByLabel("Color hex code", { exact: true }).fill("#8B5CF6");
         await page.getByRole("button", { name: "한국어", exact: true }).click();
         await page.getByLabel("Label name", { exact: true }).fill("요청");

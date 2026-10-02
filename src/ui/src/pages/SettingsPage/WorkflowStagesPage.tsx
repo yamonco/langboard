@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@/components/base/Button";
 import Input from "@/components/base/Input";
+import ColorPicker from "@/components/base/ColorPicker";
 import Textarea from "@/components/base/Textarea";
 import Sheet from "@/components/base/Sheet";
 import Toast from "@/components/base/Toast";
@@ -33,6 +34,7 @@ export default function WorkflowStagesPage({ currentUser }: { currentUser: AuthU
     const [stages, setStages] = useState<IWorkflowStage[]>([]);
     const [draft, setDraft] = useState<TWorkflowInput>(blank);
     const [opened, setOpened] = useState(false);
+    const [pickerContainer, setPickerContainer] = useState<HTMLDivElement | null>(null);
     const [dirty, setDirty] = useState(false);
     const [error, setError] = useState(false);
     const [language, setLanguage] = useState("en");
@@ -182,7 +184,7 @@ export default function WorkflowStagesPage({ currentUser }: { currentUser: AuthU
                     if (!value) setDirty(false);
                 }}
             >
-                <Sheet.Content side="right" className="w-full overflow-y-auto sm:max-w-xl">
+                <Sheet.Content ref={setPickerContainer} side="right" className="w-full overflow-y-auto sm:max-w-xl">
                     <Sheet.Header>
                         <Sheet.Title>{draft.uid ? draft.name : t("settings.New stage")}</Sheet.Title>
                         <Sheet.Description>{t("settings.Machine keys remain fixed after creation.")}</Sheet.Description>
@@ -266,15 +268,33 @@ export default function WorkflowStagesPage({ currentUser }: { currentUser: AuthU
                         </div>
                         <p className="text-xs text-muted-foreground">{t("settings.English is the default and fallback language.")}</p>
                         <div className="grid grid-cols-2 gap-3">
-                            <label className="space-y-1 text-sm">
-                                {t("settings.Color hex code")}
-                                <Input
-                                    value={draft.color}
-                                    pattern="#[0-9a-fA-F]{6}"
-                                    disabled={!canSave || busy}
-                                    onChange={(event) => edit({ color: event.target.value })}
-                                />
-                            </label>
+                            <div className="space-y-1 text-sm">
+                                <span>{t("settings.Color")}</span>
+                                <div className="flex items-center gap-2">
+                                    <ColorPicker
+                                        portalContainer={pickerContainer}
+                                        type="button"
+                                        aria-label={t("settings.Color")}
+                                        value={/^#[0-9a-fA-F]{6}$/.test(draft.color) ? draft.color : "#64748B"}
+                                        isValidating={!canSave || busy}
+                                        popoverContentAlign="start"
+                                        onSave={(color, close) => {
+                                            if (!/^#[0-9a-fA-F]{6}$/.test(color)) return;
+                                            edit({ color });
+                                            close();
+                                        }}
+                                    />
+                                    <Input
+                                        aria-label={t("settings.Color hex code")}
+                                        value={draft.color}
+                                        maxLength={7}
+                                        pattern="#[0-9a-fA-F]{6}"
+                                        disabled={!canSave || busy}
+                                        className="w-28 font-mono text-xs uppercase"
+                                        onChange={(event) => edit({ color: event.target.value })}
+                                    />
+                                </div>
+                            </div>
                             <label className="space-y-1 text-sm">
                                 {t("settings.Order")}
                                 <Input
