@@ -1,0 +1,68 @@
+{
+  "project": {
+    "read": "조회",
+    "update": "수정",
+    "card_write": "카드 생성",
+    "card_update": "카드 수정",
+    "card_delete": "카드 삭제"
+  },
+  "setting": {
+    "user_read": "조회",
+    "user_create": "생성",
+    "user_update": "수정",
+    "user_delete": "삭제",
+    "bot_read": "조회",
+    "bot_create": "생성",
+    "bot_update": "수정",
+    "bot_delete": "삭제",
+    "internal_bot_read": "조회",
+    "internal_bot_create": "생성",
+    "internal_bot_update": "수정",
+    "internal_bot_delete": "삭제",
+    "global_relationship_read": "조회",
+    "global_relationship_create": "생성",
+    "global_relationship_update": "수정",
+    "global_relationship_delete": "삭제",
+    "api_comfort_tool_read": "조회",
+    "api_comfort_tool_create": "생성",
+    "api_comfort_tool_update": "수정",
+    "api_comfort_tool_delete": "삭제",
+    "webhook_read": "조회",
+    "webhook_create": "생성",
+    "webhook_update": "수정",
+    "webhook_delete": "삭제",
+    "notification_schedule_read": "조회",
+    "notification_schedule_create": "생성",
+    "notification_schedule_update": "수정",
+    "notification_schedule_delete": "삭제",
+    "ollama_read": "조회"
+  },
+  "setting_categories": {
+    "user": "사용자 관리",
+    "bot": "봇 관리",
+    "internal_bot": "내부 봇 관리",
+    "global_relationship": "전역 관계 관리",
+    "api_comfort_tool": "API 편의 도구 관리",
+    "webhook": "웹훅 관리",
+    "notification_schedule": "알림 일정 관리",
+    "ollama": "Ollama 관리"
+  },
+  "action_types": {
+    "read": "모든 조회 권한",
+    "create": "모든 생성 권한",
+    "update": "모든 수정 권한",
+    "delete": "모든 삭제 권한"
+  },
+  "api_key": {
+    "read": "조회",
+    "create": "생성",
+    "update": "수정",
+    "delete": "삭제"
+  },
+  "mcp": {
+    "read": "조회",
+    "create": "생성",
+    "update": "수정",
+    "delete": "삭제"
+  }
+}

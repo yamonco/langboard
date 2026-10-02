@@ -17,7 +17,8 @@ for (const [cached, expected] of [
         expect(state.document).toBe(expected);
         expect(state.cached).toBe(expected);
         expect(state.close).toBe(closeLabels[expected]);
-        expect(state.fallbackExample).toBe("Board");
+        expect(state.fallbackExample).toBe("English fallback");
+        expect(state.board).toBe({ "en-US": "Board", "ko-KR": "보드", "ja-JP": "ボード", "zh-CN": "看板" }[expected]);
         expect(state.availableTools).toBe(
             { "en-US": "Available Tools (3)", "ko-KR": "사용 가능한 도구 (3)", "ja-JP": "利用可能なツール (3)", "zh-CN": "可用工具 (3)" }[expected]
         );
@@ -38,7 +39,8 @@ test("language changes keep document/cache canonical and load translated resourc
         expect(state.language).toBe(expected);
         expect(state.cached).toBe(expected);
         expect(state.close).toBe(closeLabels[expected]);
-        expect(state.fallbackExample).toBe("Board");
+        expect(state.fallbackExample).toBe("English fallback");
+        expect(state.board).toBe({ "en-US": "Board", "ko-KR": "보드", "ja-JP": "ボード", "zh-CN": "看板" }[expected]);
         expect(state.availableTools).toBe(
             { "en-US": "Available Tools (3)", "ko-KR": "사용 가능한 도구 (3)", "ja-JP": "利用可能なツール (3)", "zh-CN": "可用工具 (3)" }[expected]
         );

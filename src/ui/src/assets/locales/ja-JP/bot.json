@@ -1,0 +1,154 @@
+{
+  "Scope bot": "スコープボット",
+  "Schedules": "スケジュール",
+  "Triggers": "トリガー",
+  "Using default scope branch": "既定のスコープ分岐を使用中",
+  "Apply default scope branch": "既定のスコープ分岐を適用",
+  "Custom": "カスタム",
+  "Switch to Custom": "カスタムに切り替え",
+  "Add bot defaults": "ボットの既定値を追加",
+  "Replace bot defaults": "ボットの既定値を置き換え",
+  "Logs": "ログ",
+  "No logs found": "ログがありません",
+  "Scoped": "スコープ設定済み",
+  "Scheduled": "予約済み",
+  "Onboarding": "初期設定",
+  "Frozen": "凍結済み",
+  "Freeze": "凍結",
+  "Unfreeze": "凍結解除",
+  "Human input required": "ユーザーの入力が必要",
+  "Editor approval requested": "エディターの承認を要求済み",
+  "Approval request": "承認要求",
+  "Pending approvals": "承認待ち",
+  "{count} pending approvals": "承認待ち {{count}} 件",
+  "{count} more in Bots": "ボットにさらに {{count}} 件",
+  "Approve": "承認",
+  "Reject": "却下",
+  "Tell graph what to do instead": "代わりに実行する内容をグラフに指示...",
+  "Submitted instruction": "送信された指示",
+  "Resuming...": "再開中...",
+  "Resolved by": "{{user}} が解決",
+  "approvalStatuses": {
+    "approved": "承認済み",
+    "rejected": "却下済み",
+    "expired": "期限切れ",
+    "cancelled": "キャンセル済み",
+    "resolved": "解決済み"
+  },
+  "approvalOriginTypes": {
+    "chat": "チャット",
+    "editor": "エディター",
+    "trigger": "トリガー",
+    "schedule": "スケジュール",
+    "manual_scope_run": "手動実行"
+  },
+  "approvalPermissions": {
+    "read": "読み取り",
+    "create": "作成",
+    "edit": "編集",
+    "delete": "削除"
+  },
+  "Search bots": "ボットを検索",
+  "Search bots...": "ボットを検索...",
+  "Select running type": "実行タイプを選択",
+  "platforms": {
+    "default": "既定",
+    "langflow": "LangFlow",
+    "n8n": "N8N"
+  },
+  "platformRunningTypes": {
+    "default": "既定",
+    "endpoint": "エンドポイント"
+  },
+  "target_tables": {
+    "project": "プロジェクト",
+    "project_column": "プロジェクト列",
+    "card": "カード",
+    "project_wiki": "プロジェクト Wiki"
+  },
+  "schedules": {
+    "Schedule": "スケジュール",
+    "Set start time": "開始時刻を設定",
+    "Set end time": "終了時刻を設定",
+    "Reschedule": "スケジュールを変更",
+    "Unschedule": "スケジュールを解除",
+    "Scheduling...": "スケジュール設定中...",
+    "Rescheduling...": "スケジュール変更中...",
+    "cronRunningTypes": {
+      "infinite": "無期限",
+      "duration": "期間",
+      "reserved": "予約実行",
+      "onetime": "一度のみ"
+    },
+    "cronStatus": {
+      "pending": "待機中",
+      "started": "実行中",
+      "stopped": "停止済み"
+    },
+    "cronHeaders": {
+      "Interval": "間隔",
+      "Type": "タイプ",
+      "Status": "状態",
+      "Start at": "開始時刻",
+      "End at": "終了時刻",
+      "Execute at": "実行時刻",
+      "Manage": "管理"
+    },
+    "errors": {
+      "Cron start time is required.": "Cron の開始時刻が必要です。",
+      "Cron end time is required.": "Cron の終了時刻が必要です。"
+    }
+  },
+  "logs": {
+    "types": {
+      "info": "情報",
+      "success": "成功",
+      "error": "エラー"
+    }
+  },
+  "agent": {
+    "Agent settings": "エージェント設定",
+    "Select a provider": "プロバイダーを選択",
+    "System prompt": "システムプロンプト",
+    "Comfort tools": "便利ツール",
+    "Base tools": "基本ツール",
+    "Select comfort tool(s) to use": "使用する便利ツールを選択",
+    "Add comfort tool description": "{{tool}} の説明を追加",
+    "Select API(s) to use": "使用する API を選択",
+    "Action suggestion help": "ボットを保存せず、現在のプロンプトからツールを提案します。",
+    "Add actions from prompt": "プロンプトからアクションを追加",
+    "Apply action": "適用",
+    "Applied": "適用済み",
+    "Review action": "確認",
+    "Bot creation assistant": "ボット作成アシスタント",
+    "Draft only": "下書きのみ",
+    "Describe the bot to create": "作成するボットを説明...",
+    "Create draft": "下書きを作成",
+    "Bot draft applied": "{{name}} に下書きを適用しました。",
+    "actionSuggestionSources": {
+      "comfort_tool": "便利",
+      "api": "API",
+      "mcp_tool": "MCP ツール",
+      "mcp_tool_group": "MCP グループ"
+    },
+    "actionSuggestionRisks": {
+      "low": "低リスク",
+      "medium": "データを変更",
+      "high": "高リスク"
+    },
+    "errors": {
+      "missing": {
+        "agent_llm": "エージェントのプロバイダーが必要です。",
+        "api_key": "API キーが必要です。",
+        "api_version": "API バージョンが必要です。",
+        "azure_endpoint": "エンドポイントが必要です。",
+        "azure_deployment": "デプロイ名が必要です。",
+        "aws_access_key_id": "アクセスキー ID が必要です。",
+        "aws_secret_access_key": "シークレットアクセスキーが必要です。",
+        "model_name": "モデルが必要です。",
+        "model_id": "モデルが必要です。",
+        "region_name": "リージョンが必要です。"
+      }
+    }
+  }
+}

@@ -1,0 +1,154 @@
+{
+  "Scope bot": "범위 봇",
+  "Schedules": "일정",
+  "Triggers": "트리거",
+  "Using default scope branch": "기본 범위 분기 사용 중",
+  "Apply default scope branch": "기본 범위 분기 적용",
+  "Custom": "사용자 지정",
+  "Switch to Custom": "사용자 지정으로 전환",
+  "Add bot defaults": "봇 기본값 추가",
+  "Replace bot defaults": "봇 기본값 교체",
+  "Logs": "로그",
+  "No logs found": "로그가 없습니다",
+  "Scoped": "범위 지정됨",
+  "Scheduled": "예약됨",
+  "Onboarding": "초기 설정",
+  "Frozen": "동결됨",
+  "Freeze": "동결",
+  "Unfreeze": "동결 해제",
+  "Human input required": "사용자 입력 필요",
+  "Editor approval requested": "편집기 승인 요청됨",
+  "Approval request": "승인 요청",
+  "Pending approvals": "대기 중인 승인",
+  "{count} pending approvals": "승인 {{count}}건 대기 중",
+  "{count} more in Bots": "봇에 {{count}}건 더 있음",
+  "Approve": "승인",
+  "Reject": "거부",
+  "Tell graph what to do instead": "그래프에 대신 수행할 작업을 알려주세요...",
+  "Submitted instruction": "제출된 지시",
+  "Resuming...": "재개 중...",
+  "Resolved by": "{{user}} 님이 해결함",
+  "approvalStatuses": {
+    "approved": "승인됨",
+    "rejected": "거부됨",
+    "expired": "만료됨",
+    "cancelled": "취소됨",
+    "resolved": "해결됨"
+  },
+  "approvalOriginTypes": {
+    "chat": "채팅",
+    "editor": "편집기",
+    "trigger": "트리거",
+    "schedule": "일정",
+    "manual_scope_run": "수동 실행"
+  },
+  "approvalPermissions": {
+    "read": "읽기",
+    "create": "생성",
+    "edit": "편집",
+    "delete": "삭제"
+  },
+  "Search bots": "봇 검색",
+  "Search bots...": "봇 검색...",
+  "Select running type": "실행 유형 선택",
+  "platforms": {
+    "default": "기본값",
+    "langflow": "LangFlow",
+    "n8n": "N8N"
+  },
+  "platformRunningTypes": {
+    "default": "기본값",
+    "endpoint": "엔드포인트"
+  },
+  "target_tables": {
+    "project": "프로젝트",
+    "project_column": "프로젝트 열",
+    "card": "카드",
+    "project_wiki": "프로젝트 위키"
+  },
+  "schedules": {
+    "Schedule": "일정",
+    "Set start time": "시작 시간 설정",
+    "Set end time": "종료 시간 설정",
+    "Reschedule": "일정 변경",
+    "Unschedule": "일정 취소",
+    "Scheduling...": "일정 등록 중...",
+    "Rescheduling...": "일정 변경 중...",
+    "cronRunningTypes": {
+      "infinite": "무기한",
+      "duration": "기간",
+      "reserved": "예약 실행",
+      "onetime": "한 번"
+    },
+    "cronStatus": {
+      "pending": "대기 중",
+      "started": "실행 중",
+      "stopped": "중지됨"
+    },
+    "cronHeaders": {
+      "Interval": "간격",
+      "Type": "유형",
+      "Status": "상태",
+      "Start at": "시작 시간",
+      "End at": "종료 시간",
+      "Execute at": "실행 시간",
+      "Manage": "관리"
+    },
+    "errors": {
+      "Cron start time is required.": "Cron 시작 시간이 필요합니다.",
+      "Cron end time is required.": "Cron 종료 시간이 필요합니다."
+    }
+  },
+  "logs": {
+    "types": {
+      "info": "정보",
+      "success": "성공",
+      "error": "오류"
+    }
+  },
+  "agent": {
+    "Agent settings": "에이전트 설정",
+    "Select a provider": "제공자 선택",
+    "System prompt": "시스템 프롬프트",
+    "Comfort tools": "편의 도구",
+    "Base tools": "기본 도구",
+    "Select comfort tool(s) to use": "사용할 편의 도구 선택",
+    "Add comfort tool description": "{{tool}} 설명 추가",
+    "Select API(s) to use": "사용할 API 선택",
+    "Action suggestion help": "봇을 저장하지 않고 현재 프롬프트를 바탕으로 도구를 제안합니다.",
+    "Add actions from prompt": "프롬프트에서 작업 추가",
+    "Apply action": "적용",
+    "Applied": "적용됨",
+    "Review action": "검토",
+    "Bot creation assistant": "봇 생성 도우미",
+    "Draft only": "초안만 생성",
+    "Describe the bot to create": "생성할 봇을 설명하세요...",
+    "Create draft": "초안 생성",
+    "Bot draft applied": "{{name}}에 초안이 적용되었습니다.",
+    "actionSuggestionSources": {
+      "comfort_tool": "편의",
+      "api": "API",
+      "mcp_tool": "MCP 도구",
+      "mcp_tool_group": "MCP 그룹"
+    },
+    "actionSuggestionRisks": {
+      "low": "낮은 위험",
+      "medium": "데이터 변경",
+      "high": "높은 위험"
+    },
+    "errors": {
+      "missing": {
+        "agent_llm": "에이전트 제공자가 필요합니다.",
+        "api_key": "API 키가 필요합니다.",
+        "api_version": "API 버전이 필요합니다.",
+        "azure_endpoint": "엔드포인트가 필요합니다.",
+        "azure_deployment": "배포 이름이 필요합니다.",
+        "aws_access_key_id": "액세스 키 ID가 필요합니다.",
+        "aws_secret_access_key": "비밀 액세스 키가 필요합니다.",
+        "model_name": "모델이 필요합니다.",
+        "model_id": "모델이 필요합니다.",
+        "region_name": "리전이 필요합니다."
+      }
+    }
+  }
+}

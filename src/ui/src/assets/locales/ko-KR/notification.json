@@ -1,0 +1,143 @@
+{
+  "Notifications": "알림",
+  "{count} notifications received": "알림 {{count}}개 수신",
+  "Only show unread": "읽지 않은 알림만 표시",
+  "You have a new notification.": "새 알림이 있습니다.",
+  "Read all notifications": "모든 알림 읽음으로 표시",
+  "Delete all notifications": "모든 알림 삭제",
+  "Read notification": "알림 읽음으로 표시",
+  "Delete notification": "알림 삭제",
+  "No notifications received.": "받은 알림이 없습니다.",
+  "timeRanges": {
+    "3d": "최근 3일",
+    "7d": "최근 7일",
+    "1m": "최근 한 달",
+    "all": "전체"
+  },
+  "titles": {
+    "project_invited": "<Who/> <Span>님이 프로젝트에 초대했습니다.</Span>",
+    "mentioned_in_card": "<Who/> <Span>님이 카드에서 사용자님을 언급했습니다.</Span>",
+    "mentioned_in_comment": "<Who/> <Span>님이 댓글에서 사용자님을 언급했습니다.</Span>",
+    "mentioned_in_wiki": "<Who/> <Span>님이 위키에서 사용자님을 언급했습니다.</Span>",
+    "assigned_to_card": "<Who/> <Span>님이 사용자님을 카드 담당자로 지정했습니다.</Span>",
+    "reacted_to_comment": "<Who/> <Span>님이 사용자님의 댓글에 반응했습니다.</Span>",
+    "notified_from_checklist": "<Who/> <Span>님이 체크리스트에서 사용자님에게 알림을 보냈습니다.</Span>",
+    "scheduled_rule": "<Span>예약 알림 규칙의 조건이 충족되었습니다.</Span>"
+  },
+  "subtitles": {
+    "project_invited": "{{records.project.title}}",
+    "mentioned_in_card": "{{records.project.title}}의 {{records.card.title}}",
+    "mentioned_in_comment": "{{records.project.title}}의 {{records.card.title}}",
+    "mentioned_in_wiki": "{{records.project.title}}의 {{records.wiki.title}}",
+    "assigned_to_card": "{{records.project.title}}의 {{records.card.title}}",
+    "reacted_to_comment": "{{records.project.title}}의 {{records.card.title}}",
+    "notified_from_checklist": "{{records.project.title}}의 {{records.card.title}}",
+    "scheduled_rule": "{{records.project.title}}의 {{message_vars.rule_name}}"
+  },
+  "ruleTitles": {
+    "project": {
+      "created_at": {
+        "older_than_days": "<Span>프로젝트 생성 후 {{message_vars.days_delta}}일이 넘었습니다.</Span>"
+      },
+      "updated_at": {
+        "older_than_days": "<Span>프로젝트가 {{message_vars.days_delta}}일 넘게 비활성 상태입니다.</Span>"
+      }
+    },
+    "card": {
+      "deadline_at": {
+        "within_next_days": "<Span>카드 마감일이 다가오고 있습니다.</Span>",
+        "overdue": "<Span>카드 마감일이 지났습니다.</Span>"
+      },
+      "created_at": {
+        "older_than_days": "<Span>카드 생성 후 {{message_vars.days_delta}}일이 넘었습니다.</Span>"
+      },
+      "archived_at": {
+        "is_empty": "<Span>카드가 보관되지 않았습니다.</Span>",
+        "is_not_empty": "<Span>카드가 보관되었습니다.</Span>"
+      }
+    },
+    "checkitem": {
+      "status": {
+        "equals": "<Span>체크 항목 상태가 {{message_vars.value}}와 일치합니다.</Span>"
+      },
+      "is_checked": {
+        "equals": "<Span>체크 항목의 체크 상태가 {{message_vars.value}}와 일치합니다.</Span>"
+      },
+      "deadline_at": {
+        "within_next_days": "<Span>체크 항목 마감일이 다가오고 있습니다.</Span>",
+        "overdue": "<Span>체크 항목 마감일이 지났습니다.</Span>"
+      },
+      "created_at": {
+        "older_than_days": "<Span>체크 항목 생성 후 {{message_vars.days_delta}}일이 넘었습니다.</Span>"
+      },
+      "accumulated_seconds": {
+        "greater_than_seconds": "<Span>체크 항목 타이머가 {{message_vars.value}}초를 초과했습니다.</Span>"
+      }
+    }
+  },
+  "ruleSubtitles": {
+    "project": {
+      "created_at": {
+        "older_than_days": "{{records.project.title}}이(가) {{message_vars.days_delta}}일 전에 생성되었습니다."
+      },
+      "updated_at": {
+        "older_than_days": "{{records.project.title}}이(가) {{message_vars.days_delta}}일 동안 수정되지 않았습니다."
+      }
+    },
+    "card": {
+      "deadline_at": {
+        "within_next_days": "{{records.card.title}}의 마감일까지 {{message_vars.days_delta}}일 남았습니다.",
+        "overdue": "{{records.card.title}}의 마감일이 지난 지 {{message_vars.days_delta}}일 되었습니다."
+      },
+      "created_at": {
+        "older_than_days": "{{records.card.title}}이(가) {{message_vars.days_delta}}일 전에 생성되었습니다."
+      },
+      "archived_at": {
+        "is_empty": "{{records.card.title}}이(가) 보관되지 않았습니다.",
+        "is_not_empty": "{{records.card.title}}이(가) 보관되었습니다."
+      }
+    },
+    "checkitem": {
+      "status": {
+        "equals": "{{records.checkitem.title}}의 상태는 {{message_vars.value}}입니다."
+      },
+      "is_checked": {
+        "equals": "{{records.checkitem.title}}의 체크 상태는 {{message_vars.value}}입니다."
+      },
+      "deadline_at": {
+        "within_next_days": "{{records.checkitem.title}}의 마감일까지 {{message_vars.days_delta}}일 남았습니다.",
+        "overdue": "{{records.checkitem.title}}의 마감일이 지난 지 {{message_vars.days_delta}}일 되었습니다."
+      },
+      "created_at": {
+        "older_than_days": "{{records.checkitem.title}}이(가) {{message_vars.days_delta}}일 전에 생성되었습니다."
+      },
+      "accumulated_seconds": {
+        "greater_than_seconds": "{{records.checkitem.title}}의 기록 시간이 {{message_vars.value}}초를 초과했습니다."
+      }
+    }
+  },
+  "settings": {
+    "Notification settings": "알림 설정",
+    "channels": {
+      "web": "웹",
+      "email": "이메일",
+      "mobile": "모바일",
+      "iot": "IoT"
+    },
+    "typeKeyMap": {
+      "project": "프로젝트",
+      "column": "열",
+      "card": "카드",
+      "wiki": "위키"
+    },
+    "types": {
+      "mentioned_in_card": "카드에서 언급됨",
+      "mentioned_in_comment": "댓글에서 언급됨",
+      "mentioned_in_wiki": "위키에서 언급됨",
+      "assigned_to_card": "카드 담당자로 지정됨",
+      "reacted_to_comment": "댓글에 반응 추가됨",
+      "notified_from_checklist": "체크리스트에서 알림 받음",
+      "scheduled_rule": "예약 규칙"
+    }
+  }
+}

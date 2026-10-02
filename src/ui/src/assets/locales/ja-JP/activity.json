@@ -1,0 +1,216 @@
+{
+  "{count} New Activities": "新しいアクティビティ {{count}} 件",
+  "No activities": "アクティビティなし",
+  "changes": {
+    "title": "タイトル",
+    "deadline_at": "期限",
+    "name": "名前",
+    "color": "色",
+    "project_type": "プロジェクトタイプ",
+    "archive_visible_days": "アーカイブの表示日数",
+    "description": "説明",
+    "ai_description": "AI 要約",
+    "content": "内容",
+    "is_disabled": "有効化",
+    "No deadline": "期限なし",
+    "No description": "説明なし",
+    "No AI summary": "AI 要約なし",
+    "No content": "内容なし"
+  },
+  "user": {
+    "activated": {
+      "default": "<Recorder/>が有効になりました。",
+      "user": "あなたが有効になりました。"
+    },
+    "declined_project_invitation": {
+      "default": "<Recorder/>がプロジェクトへの招待を辞退しました。",
+      "user": "あなたがプロジェクトへの招待を辞退しました。"
+    }
+  },
+  "project": {
+    "project_created": {
+      "default": "<Recorder/>がプロジェクトを作成しました。",
+      "user": "あなたがプロジェクト <Project/> を作成しました。"
+    },
+    "project_updated": {
+      "default": "<Recorder/>がプロジェクトを更新しました。",
+      "user": "あなたがプロジェクト <Project/> を更新しました。"
+    },
+    "project_assigned_users_updated": {
+      "default": "<Recorder/>がプロジェクトの担当ユーザーを更新しました。",
+      "user": "あなたがプロジェクト <Project/> でプロジェクトの担当ユーザーを更新しました。"
+    },
+    "project_email_notification_policy_updated": {
+      "default": "<Recorder/>がプロジェクトのメール受信者を更新しました。",
+      "user": "あなたがプロジェクト <Project/> でプロジェクトのメール受信者を更新しました。"
+    },
+    "project_invited_user_accepted": {
+      "default": "<Recorder/>がプロジェクトへの招待を承諾しました。",
+      "user": "あなたがプロジェクトへの招待を承諾しました。"
+    },
+    "project_deleted": {
+      "default": "<Recorder/>がプロジェクト <Project/> を削除しました。",
+      "user": "あなたがプロジェクト <Project/> を削除しました。"
+    },
+    "project_column_created": {
+      "default": "<Recorder/>が列 <Column/> を作成しました。",
+      "user": "あなたがプロジェクト <Project/> で列 <Column/> を作成しました。"
+    },
+    "project_column_name_changed": {
+      "default": "<Recorder/>が列 <Column/> の名前を変更しました。",
+      "user": "あなたがプロジェクト <Project/> で列 <Column/> の名前を変更しました。"
+    },
+    "project_column_deleted": {
+      "default": "<Recorder/>が列 <Column/> を削除しました。",
+      "user": "あなたがプロジェクト <Project/> で列 <Column/> を削除しました。"
+    },
+    "project_label_created": {
+      "default": "<Recorder/>がラベル <Label/> を作成しました。",
+      "user": "あなたがプロジェクト <Project/> でラベル <Label/> を作成しました。"
+    },
+    "project_label_updated": {
+      "default": "<Recorder/>がラベル <Label/> を更新しました。",
+      "user": "あなたがプロジェクト <Project/> でラベル <Label/> を更新しました。"
+    },
+    "project_label_deleted": {
+      "default": "<Recorder/>がラベル <Label/> を削除しました。",
+      "user": "あなたがプロジェクト <Project/> でラベル <Label/> を削除しました。"
+    },
+    "card_created": {
+      "default": "<Recorder/>が列 <Column/> にカード <Card/> を作成しました。",
+      "user": "あなたがプロジェクト <Project/> で列 <Column/> にカード <Card/> を作成しました。"
+    },
+    "card_updated": {
+      "default": "<Recorder/>がカード <Card/> を更新しました。",
+      "user": "あなたがプロジェクト <Project/> でカード <Card/> を更新しました。"
+    },
+    "card_moved": {
+      "default": "<Recorder/>がカード <Card/> を列 <FromColumn/> から列 <Column/> に移動しました。",
+      "user": "あなたがプロジェクト <Project/> でカード <Card/> を列 <FromColumn/> から列 <Column/> に移動しました。"
+    },
+    "card_assigned_users_updated": {
+      "default": "<Recorder/>がカード <Card/> の担当ユーザーを更新しました。",
+      "user": "あなたがプロジェクト <Project/> でカード <Card/> の担当ユーザーを更新しました。"
+    },
+    "card_labels_updated": {
+      "default": "<Recorder/>がカード <Card/> のラベルを更新しました。",
+      "user": "あなたがプロジェクト <Project/> でカード <Card/> のラベルを更新しました。"
+    },
+    "card_deleted": {
+      "default": "<Recorder/>がカード <Card/> を削除しました。",
+      "user": "あなたがプロジェクト <Project/> でカード <Card/> を削除しました。"
+    },
+    "card_attachment_uploaded": {
+      "default": "<Recorder/>がカード <Card/> に添付ファイル <Attachment/> をアップロードしました。",
+      "user": "あなたがプロジェクト <Project/> でカード <Card/> に添付ファイル <Attachment/> をアップロードしました。"
+    },
+    "card_attachment_name_changed": {
+      "default": "<Recorder/>がカード <Card/> の添付ファイル <Attachment/> の名前を変更しました。",
+      "user": "あなたがプロジェクト <Project/> でカード <Card/> の添付ファイル <Attachment/> の名前を変更しました。"
+    },
+    "card_attachment_deleted": {
+      "default": "<Recorder/>がカード <Card/> から添付ファイル <Attachment/> を削除しました。",
+      "user": "あなたがプロジェクト <Project/> でカード <Card/> から添付ファイル <Attachment/> を削除しました。"
+    },
+    "card_comment_added": {
+      "default": "<Recorder/>がカード <Card/> にコメントを追加しました。",
+      "user": "あなたがプロジェクト <Project/> でカード <Card/> にコメントを追加しました。"
+    },
+    "card_comment_updated": {
+      "default": "<Recorder/>がカード <Card/> のコメントを更新しました。",
+      "user": "あなたがプロジェクト <Project/> でカード <Card/> のコメントを更新しました。"
+    },
+    "card_comment_deleted": {
+      "default": "<Recorder/>がカード <Card/> のコメントを削除しました。",
+      "user": "あなたがプロジェクト <Project/> でカード <Card/> のコメントを削除しました。"
+    },
+    "card_comment_reacted": {
+      "default": "<Recorder/>がカード <Card/> のコメントにリアクションを追加しました。",
+      "user": "あなたがプロジェクト <Project/> でカード <Card/> のコメントにリアクションを追加しました。"
+    },
+    "card_comment_unreacted": {
+      "default": "<Recorder/>がカード <Card/> のコメントのリアクションを解除しました。",
+      "user": "あなたがプロジェクト <Project/> でカード <Card/> のコメントのリアクションを解除しました。"
+    },
+    "card_relationships_updated": {
+      "default": "<Recorder/>がカード <Card/> の関連を更新しました。",
+      "user": "あなたがプロジェクト <Project/> でカード <Card/> の関連を更新しました。"
+    },
+    "card_checklist_created": {
+      "default": "<Recorder/>がカード <Card/> にチェックリスト <Checklist/> を作成しました。",
+      "user": "あなたがプロジェクト <Project/> でカード <Card/> にチェックリスト <Checklist/> を作成しました。"
+    },
+    "card_checklist_title_changed": {
+      "default": "<Recorder/>がカード <Card/> のチェックリスト <Checklist/> のタイトルを変更しました。",
+      "user": "あなたがプロジェクト <Project/> でカード <Card/> のチェックリスト <Checklist/> のタイトルを変更しました。"
+    },
+    "card_checklist_checked": {
+      "default": "<Recorder/>がカード <Card/> のチェック項目 <Checkitem/> をチェックしました。",
+      "user": "あなたがプロジェクト <Project/> でカード <Card/> のチェック項目 <Checkitem/> をチェックしました。"
+    },
+    "card_checklist_unchecked": {
+      "default": "<Recorder/>がカード <Card/> のチェック項目 <Checkitem/> のチェックを解除しました。",
+      "user": "あなたがプロジェクト <Project/> でカード <Card/> のチェック項目 <Checkitem/> のチェックを解除しました。"
+    },
+    "card_checklist_deleted": {
+      "default": "<Recorder/>がカード <Card/> からチェックリスト <Checklist/> を削除しました。",
+      "user": "あなたがプロジェクト <Project/> でカード <Card/> からチェックリスト <Checklist/> を削除しました。"
+    },
+    "card_checkitem_created": {
+      "default": "<Recorder/>がカード <Card/> のチェックリスト <Checklist/> にチェック項目 <Checkitem/> を作成しました。",
+      "user": "あなたがプロジェクト <Project/> でカード <Card/> のチェックリスト <Checklist/> にチェック項目 <Checkitem/> を作成しました。"
+    },
+    "card_checkitem_title_changed": {
+      "default": "<Recorder/>がカード <Card/> のチェック項目 <Checkitem/> のタイトルを変更しました。",
+      "user": "あなたがプロジェクト <Project/> でカード <Card/> のチェック項目 <Checkitem/> のタイトルを変更しました。"
+    },
+    "card_checkitem_timer_started": {
+      "default": "<Recorder/>がカード <Card/> のチェック項目 <Checkitem/> のタイマーを開始しました。",
+      "user": "あなたがプロジェクト <Project/> でカード <Card/> のチェック項目 <Checkitem/> のタイマーを開始しました。"
+    },
+    "card_checkitem_timer_paused": {
+      "default": "<Recorder/>がカード <Card/> のチェック項目 <Checkitem/> のタイマーを一時停止しました。",
+      "user": "あなたがプロジェクト <Project/> でカード <Card/> のチェック項目 <Checkitem/> のタイマーを一時停止しました。"
+    },
+    "card_checkitem_timer_stopped": {
+      "default": "<Recorder/>がカード <Card/> のチェック項目 <Checkitem/> のタイマーを停止しました。",
+      "user": "あなたがプロジェクト <Project/> でカード <Card/> のチェック項目 <Checkitem/> のタイマーを停止しました。"
+    },
+    "card_checkitem_checked": {
+      "default": "<Recorder/>がカード <Card/> のチェック項目 <Checkitem/> をチェックしました。",
+      "user": "あなたがプロジェクト <Project/> でカード <Card/> のチェック項目 <Checkitem/> をチェックしました。"
+    },
+    "card_checkitem_unchecked": {
+      "default": "<Recorder/>がカード <Card/> のチェック項目 <Checkitem/> のチェックを解除しました。",
+      "user": "あなたがプロジェクト <Project/> でカード <Card/> のチェック項目 <Checkitem/> のチェックを解除しました。"
+    },
+    "card_checkitem_cardified": {
+      "default": "<Recorder/>がカード <Card/> のチェック項目 <Checkitem/> をカード <CardifiedCard/> に変換しました。",
+      "user": "あなたがプロジェクト <Project/> でカード <Card/> のチェック項目 <Checkitem/> をカード <CardifiedCard/> に変換しました。"
+    },
+    "card_checkitem_deleted": {
+      "default": "<Recorder/>がカード <Card/> からチェック項目 <Checkitem/> を削除しました。",
+      "user": "あなたがプロジェクト <Project/> でカード <Card/> からチェック項目 <Checkitem/> を削除しました。"
+    },
+    "wiki_created": {
+      "default": "<Recorder/>がWiki <Wiki/> を作成しました。",
+      "user": "あなたがプロジェクト <Project/> でWiki <Wiki/> を作成しました。"
+    },
+    "wiki_updated": {
+      "default": "<Recorder/>がWiki <Wiki/> を更新しました。",
+      "user": "あなたがプロジェクト <Project/> でWiki <Wiki/> を更新しました。"
+    },
+    "wiki_publicity_changed": {
+      "default": "<Recorder/>がWiki <Wiki/> の公開状態を変更しました。",
+      "user": "あなたがプロジェクト <Project/> でWiki <Wiki/> の公開状態を変更しました。"
+    },
+    "wiki_assignees_updated": {
+      "default": "<Recorder/>がWiki <Wiki/> の担当者を更新しました。",
+      "user": "あなたがプロジェクト <Project/> でWiki <Wiki/> の担当者を更新しました。"
+    },
+    "wiki_deleted": {
+      "default": "<Recorder/>がWiki <Wiki/> を削除しました。",
+      "user": "あなたがプロジェクト <Project/> でWiki <Wiki/> を削除しました。"
+    }
+  }
+}

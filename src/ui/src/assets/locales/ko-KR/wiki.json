@@ -1,0 +1,23 @@
+{
+  "Private": "비공개",
+  "Public": "공개",
+  "Toggle reorder mode": "순서 변경 모드 전환",
+  "Toggle delete mode": "삭제 모드 전환",
+  "New wiki page": "새 위키 페이지",
+  "Wiki page has been deleted.": "위키 페이지가 삭제되었습니다.",
+  "No content": "내용 없음",
+  "Select members and bots...": "멤버와 봇 선택...",
+  "Start your first wiki": "첫 위키 시작하기",
+  "Add your first wiki page to keep everything in one place.": "첫 위키 페이지를 추가하여 모든 정보를 한곳에 모아보세요.",
+  "Linked wiki": "연결된 위키",
+  "Show on board": "보드에 표시",
+  "View on board": "보드에서 보기",
+  "Linked card created": "연결된 카드가 생성되었습니다.",
+  "Linked card already exists": "기존에 연결된 카드를 열었습니다.",
+  "Restricted wiki": "접근 제한 위키",
+  "Source unavailable": "원본을 사용할 수 없음",
+  "Open original": "원본 열기",
+  "Remove from board": "보드에서 제거",
+  "Remove linked card question": "이 연결된 카드를 보드에서 제거하시겠습니까? 원본 위키는 변경되지 않습니다.",
+  "Linked card removed": "연결된 카드가 보드에서 제거되었습니다."
+}

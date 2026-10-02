@@ -1,0 +1,23 @@
+{
+  "Private": "非公開",
+  "Public": "公開",
+  "Toggle reorder mode": "並べ替えモードを切り替え",
+  "Toggle delete mode": "削除モードを切り替え",
+  "New wiki page": "新しいウィキページ",
+  "Wiki page has been deleted.": "ウィキページを削除しました。",
+  "No content": "内容なし",
+  "Select members and bots...": "メンバーとボットを選択...",
+  "Start your first wiki": "最初のウィキを作成",
+  "Add your first wiki page to keep everything in one place.": "最初のウィキページを追加して、情報を一か所にまとめましょう。",
+  "Linked wiki": "リンクされたウィキ",
+  "Show on board": "ボードに表示",
+  "View on board": "ボードで表示",
+  "Linked card created": "リンクされたカードを作成しました。",
+  "Linked card already exists": "既存のリンクされたカードを開きました。",
+  "Restricted wiki": "アクセス制限付きウィキ",
+  "Source unavailable": "ソースを利用できません",
+  "Open original": "元のページを開く",
+  "Remove from board": "ボードから削除",
+  "Remove linked card question": "このリンクされたカードをボードから削除しますか？元のウィキは変更されません。",
+  "Linked card removed": "リンクされたカードをボードから削除しました。"
+}

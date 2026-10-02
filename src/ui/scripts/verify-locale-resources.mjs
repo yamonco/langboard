@@ -15,7 +15,13 @@ const flatten = (object, prefix = "") =>
         })
     );
 const tokens = (value) => [...value.matchAll(/\{\{[^}]+\}\}|<\/?[A-Za-z0-9][^>]*>/g)].map(([token]) => token).sort();
-const read = async (locale, file) => flatten(JSON.parse(await readFile(new URL(`${locale}/${file}`, root), "utf8")));
+const read = async (locale, file) => JSON.parse(await readFile(new URL(`${locale}/${file}`, root), "utf8"));
+const structure = (value) => {
+    if (typeof value === "string") return "string";
+    if (Array.isArray(value)) return value.map(structure);
+    assert(value && typeof value === "object", "resource values must be strings, arrays or objects");
+    return Object.fromEntries(Object.entries(value).map(([key, child]) => [key, structure(child)]));
+};
 const report = {};
 for (const locale of SUPPORTED_LOCALES.filter((locale) => locale !== DEFAULT_LOCALE)) {
     const files = (await readdir(new URL(`${locale}/`, root))).filter((file) => file.endsWith(".json")).sort();
@@ -23,8 +29,11 @@ for (const locale of SUPPORTED_LOCALES.filter((locale) => locale !== DEFAULT_LOC
     let values = 0;
     for (const file of files) {
         assert(canonicalFiles.includes(file), `${locale}/${file}: unknown namespace`);
-        const source = await read(DEFAULT_LOCALE, file);
-        const translated = await read(locale, file);
+        const sourceTree = await read(DEFAULT_LOCALE, file);
+        const translatedTree = await read(locale, file);
+        assert.deepEqual(structure(translatedTree), structure(sourceTree), `${locale}/${file}: structure mismatch`);
+        const source = flatten(sourceTree);
+        const translated = flatten(translatedTree);
         assert.deepEqual(Object.keys(translated).sort(), Object.keys(source).sort(), `${locale}/${file}: key mismatch`);
         for (const [key, value] of Object.entries(translated)) {
             assert(value.trim(), `${locale}/${file}/${key}: empty value`);

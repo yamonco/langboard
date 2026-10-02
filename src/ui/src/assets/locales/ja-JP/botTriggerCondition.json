@@ -1,0 +1,87 @@
+{
+  "project": {
+    "Category": "プロジェクト",
+    "conditions": {
+      "project_updated": "更新済み",
+      "project_deleted": "削除済み"
+    }
+  },
+  "project_label": {
+    "Category": "プロジェクトラベル",
+    "conditions": {
+      "project_label_created": "作成済み",
+      "project_label_updated": "更新済み",
+      "project_label_deleted": "削除済み"
+    }
+  },
+  "project_wiki": {
+    "Category": "プロジェクト Wiki",
+    "conditions": {
+      "project_wiki_created": "作成済み",
+      "project_wiki_updated": "更新済み",
+      "project_wiki_publicity_changed": "公開状態を変更",
+      "project_wiki_deleted": "削除済み"
+    }
+  },
+  "project_column": {
+    "Category": "プロジェクト列",
+    "conditions": {
+      "project_column_created": "作成済み",
+      "project_column_name_changed": "名前を変更",
+      "project_column_deleted": "削除済み"
+    }
+  },
+  "card": {
+    "Category": "カード",
+    "conditions": {
+      "card_created": "作成済み",
+      "card_updated": "更新済み",
+      "card_moved": "移動済み",
+      "card_labels_updated": "ラベルを更新",
+      "card_relationships_updated": "関連を更新",
+      "card_deleted": "削除済み"
+    }
+  },
+  "card_attachment": {
+    "Category": "カードの添付ファイル",
+    "conditions": {
+      "card_attachment_uploaded": "アップロード済み",
+      "card_attachment_name_changed": "名前を変更",
+      "card_attachment_deleted": "削除済み"
+    }
+  },
+  "card_comment": {
+    "Category": "カードのコメント",
+    "conditions": {
+      "card_comment_added": "追加済み",
+      "card_comment_updated": "更新済み",
+      "card_comment_deleted": "削除済み",
+      "card_comment_reacted": "リアクションを追加",
+      "card_comment_unreacted": "リアクションを解除"
+    }
+  },
+  "card_checklist": {
+    "Category": "カードのチェックリスト",
+    "conditions": {
+      "card_checklist_created": "作成済み",
+      "card_checklist_title_changed": "タイトルを変更",
+      "card_checklist_checked": "チェック済み",
+      "card_checklist_unchecked": "チェック解除済み",
+      "card_checklist_deleted": "削除済み"
+    }
+  },
+  "card_checkitem": {
+    "Category": "カードのチェック項目",
+    "conditions": {
+      "card_checkitem_created": "作成済み",
+      "card_checkitem_title_changed": "タイトルを変更",
+      "card_checkitem_timer_started": "タイマーを開始",
+      "card_checkitem_timer_paused": "タイマーを一時停止",
+      "card_checkitem_timer_stopped": "タイマーを停止",
+      "card_checkitem_checked": "チェック済み",
+      "card_checkitem_unchecked": "チェック解除済み",
+      "card_checkitem_cardified": "カードに変換済み",
+      "card_checkitem_deleted": "削除済み"
+    }
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "Private": "私有",
+  "Public": "公开",
+  "Toggle reorder mode": "切换排序模式",
+  "Toggle delete mode": "切换删除模式",
+  "New wiki page": "新建维基页面",
+  "Wiki page has been deleted.": "维基页面已删除。",
+  "No content": "无内容",
+  "Select members and bots...": "选择成员和机器人...",
+  "Start your first wiki": "开始创建第一个维基",
+  "Add your first wiki page to keep everything in one place.": "添加第一个维基页面，将所有信息集中在一处。",
+  "Linked wiki": "关联的维基",
+  "Show on board": "在看板上显示",
+  "View on board": "在看板上查看",
+  "Linked card created": "已创建关联卡片。",
+  "Linked card already exists": "已打开现有的关联卡片。",
+  "Restricted wiki": "受限维基",
+  "Source unavailable": "源内容不可用",
+  "Open original": "打开原始页面",
+  "Remove from board": "从看板中移除",
+  "Remove linked card question": "要从看板中移除此关联卡片吗？原始维基不会更改。",
+  "Linked card removed": "已从看板中移除关联卡片。"
+}

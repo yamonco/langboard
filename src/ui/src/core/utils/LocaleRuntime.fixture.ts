@@ -16,7 +16,8 @@ function render() {
         languageLabel: i18n.t("myAccount.Language"),
         emailLabel: i18n.t("user.Email"),
         deleteApiKey: i18n.t("ask.Are you sure you want to delete this API key?"),
-        fallbackExample: i18n.t("board.Board"),
+        fallbackExample: i18n.t("fixtureFallback.English fallback"),
+        board: i18n.t("board.Board"),
         availableTools: i18n.t("mcp.Available Tools ({count})", { count: 3 }),
         fallback: i18n.options.fallbackLng,
         supported: i18n.options.supportedLngs,
@@ -31,5 +32,9 @@ for (const language of ["en-US", "ko-KR", "ja-JP", "zh-CN", "zh-Hant"]) {
     };
     root.append(button);
 }
-if (i18n.isInitialized) render();
-else i18n.on("initialized", render);
+function initializeFixture() {
+    i18n.addResourceBundle("en-US", "translation", { fixtureFallback: { "English fallback": "English fallback" } }, true, true);
+    render();
+}
+if (i18n.isInitialized) initializeFixture();
+else i18n.on("initialized", initializeFixture);

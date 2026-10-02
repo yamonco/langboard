@@ -1,0 +1,216 @@
+{
+  "{count} New Activities": "{{count}}개의 새 활동",
+  "No activities": "활동 없음",
+  "changes": {
+    "title": "제목",
+    "deadline_at": "마감일",
+    "name": "이름",
+    "color": "색상",
+    "project_type": "프로젝트 유형",
+    "archive_visible_days": "보관함 표시 일수",
+    "description": "설명",
+    "ai_description": "AI 요약",
+    "content": "내용",
+    "is_disabled": "활성화",
+    "No deadline": "마감일 없음",
+    "No description": "설명 없음",
+    "No AI summary": "AI 요약 없음",
+    "No content": "내용 없음"
+  },
+  "user": {
+    "activated": {
+      "default": "<Recorder/> 님이 활성화되었습니다.",
+      "user": "사용자님이 활성화되었습니다."
+    },
+    "declined_project_invitation": {
+      "default": "<Recorder/> 님이 프로젝트 초대를 거절했습니다.",
+      "user": "사용자님이 프로젝트 초대를 거절했습니다."
+    }
+  },
+  "project": {
+    "project_created": {
+      "default": "<Recorder/> 님이 프로젝트를 생성했습니다.",
+      "user": "사용자님이 프로젝트 <Project/>을 생성했습니다."
+    },
+    "project_updated": {
+      "default": "<Recorder/> 님이 프로젝트를 수정했습니다.",
+      "user": "사용자님이 프로젝트 <Project/>을 수정했습니다."
+    },
+    "project_assigned_users_updated": {
+      "default": "<Recorder/> 님이 프로젝트의 담당 사용자를 수정했습니다.",
+      "user": "사용자님이 프로젝트 <Project/>에서 프로젝트의 담당 사용자를 수정했습니다."
+    },
+    "project_email_notification_policy_updated": {
+      "default": "<Recorder/> 님이 프로젝트의 이메일 수신자를 수정했습니다.",
+      "user": "사용자님이 프로젝트 <Project/>에서 프로젝트의 이메일 수신자를 수정했습니다."
+    },
+    "project_invited_user_accepted": {
+      "default": "<Recorder/> 님이 프로젝트 초대를 수락했습니다.",
+      "user": "사용자님이 프로젝트 초대를 수락했습니다."
+    },
+    "project_deleted": {
+      "default": "<Recorder/> 님이 프로젝트 <Project/>을 삭제했습니다.",
+      "user": "사용자님이 프로젝트 <Project/>을 삭제했습니다."
+    },
+    "project_column_created": {
+      "default": "<Recorder/> 님이 열 <Column/>을 생성했습니다.",
+      "user": "사용자님이 프로젝트 <Project/>에서 열 <Column/>을 생성했습니다."
+    },
+    "project_column_name_changed": {
+      "default": "<Recorder/> 님이 열 <Column/>의 이름을 변경했습니다.",
+      "user": "사용자님이 프로젝트 <Project/>에서 열 <Column/>의 이름을 변경했습니다."
+    },
+    "project_column_deleted": {
+      "default": "<Recorder/> 님이 열 <Column/>을 삭제했습니다.",
+      "user": "사용자님이 프로젝트 <Project/>에서 열 <Column/>을 삭제했습니다."
+    },
+    "project_label_created": {
+      "default": "<Recorder/> 님이 라벨 <Label/>을 생성했습니다.",
+      "user": "사용자님이 프로젝트 <Project/>에서 라벨 <Label/>을 생성했습니다."
+    },
+    "project_label_updated": {
+      "default": "<Recorder/> 님이 라벨 <Label/>을 수정했습니다.",
+      "user": "사용자님이 프로젝트 <Project/>에서 라벨 <Label/>을 수정했습니다."
+    },
+    "project_label_deleted": {
+      "default": "<Recorder/> 님이 라벨 <Label/>을 삭제했습니다.",
+      "user": "사용자님이 프로젝트 <Project/>에서 라벨 <Label/>을 삭제했습니다."
+    },
+    "card_created": {
+      "default": "<Recorder/> 님이 열 <Column/>에 카드 <Card/>를 생성했습니다.",
+      "user": "사용자님이 프로젝트 <Project/>에서 열 <Column/>에 카드 <Card/>를 생성했습니다."
+    },
+    "card_updated": {
+      "default": "<Recorder/> 님이 카드 <Card/>를 수정했습니다.",
+      "user": "사용자님이 프로젝트 <Project/>에서 카드 <Card/>를 수정했습니다."
+    },
+    "card_moved": {
+      "default": "<Recorder/> 님이 카드 <Card/>를 열 <FromColumn/>에서 열 <Column/>으로 이동했습니다.",
+      "user": "사용자님이 프로젝트 <Project/>에서 카드 <Card/>를 열 <FromColumn/>에서 열 <Column/>으로 이동했습니다."
+    },
+    "card_assigned_users_updated": {
+      "default": "<Recorder/> 님이 카드 <Card/>의 담당 사용자를 수정했습니다.",
+      "user": "사용자님이 프로젝트 <Project/>에서 카드 <Card/>의 담당 사용자를 수정했습니다."
+    },
+    "card_labels_updated": {
+      "default": "<Recorder/> 님이 카드 <Card/>의 라벨을 수정했습니다.",
+      "user": "사용자님이 프로젝트 <Project/>에서 카드 <Card/>의 라벨을 수정했습니다."
+    },
+    "card_deleted": {
+      "default": "<Recorder/> 님이 카드 <Card/>를 삭제했습니다.",
+      "user": "사용자님이 프로젝트 <Project/>에서 카드 <Card/>를 삭제했습니다."
+    },
+    "card_attachment_uploaded": {
+      "default": "<Recorder/> 님이 카드 <Card/>에 첨부 파일 <Attachment/>을 업로드했습니다.",
+      "user": "사용자님이 프로젝트 <Project/>에서 카드 <Card/>에 첨부 파일 <Attachment/>을 업로드했습니다."
+    },
+    "card_attachment_name_changed": {
+      "default": "<Recorder/> 님이 카드 <Card/>의 첨부 파일 <Attachment/> 이름을 변경했습니다.",
+      "user": "사용자님이 프로젝트 <Project/>에서 카드 <Card/>의 첨부 파일 <Attachment/> 이름을 변경했습니다."
+    },
+    "card_attachment_deleted": {
+      "default": "<Recorder/> 님이 카드 <Card/>에서 첨부 파일 <Attachment/>을 삭제했습니다.",
+      "user": "사용자님이 프로젝트 <Project/>에서 카드 <Card/>에서 첨부 파일 <Attachment/>을 삭제했습니다."
+    },
+    "card_comment_added": {
+      "default": "<Recorder/> 님이 카드 <Card/>에 댓글을 추가했습니다.",
+      "user": "사용자님이 프로젝트 <Project/>에서 카드 <Card/>에 댓글을 추가했습니다."
+    },
+    "card_comment_updated": {
+      "default": "<Recorder/> 님이 카드 <Card/>의 댓글을 수정했습니다.",
+      "user": "사용자님이 프로젝트 <Project/>에서 카드 <Card/>의 댓글을 수정했습니다."
+    },
+    "card_comment_deleted": {
+      "default": "<Recorder/> 님이 카드 <Card/>의 댓글을 삭제했습니다.",
+      "user": "사용자님이 프로젝트 <Project/>에서 카드 <Card/>의 댓글을 삭제했습니다."
+    },
+    "card_comment_reacted": {
+      "default": "<Recorder/> 님이 카드 <Card/>의 댓글에 반응을 추가했습니다.",
+      "user": "사용자님이 프로젝트 <Project/>에서 카드 <Card/>의 댓글에 반응을 추가했습니다."
+    },
+    "card_comment_unreacted": {
+      "default": "<Recorder/> 님이 카드 <Card/>의 댓글에서 반응을 취소했습니다.",
+      "user": "사용자님이 프로젝트 <Project/>에서 카드 <Card/>의 댓글에서 반응을 취소했습니다."
+    },
+    "card_relationships_updated": {
+      "default": "<Recorder/> 님이 카드 <Card/>의 관계를 수정했습니다.",
+      "user": "사용자님이 프로젝트 <Project/>에서 카드 <Card/>의 관계를 수정했습니다."
+    },
+    "card_checklist_created": {
+      "default": "<Recorder/> 님이 카드 <Card/>에 체크리스트 <Checklist/>를 생성했습니다.",
+      "user": "사용자님이 프로젝트 <Project/>에서 카드 <Card/>에 체크리스트 <Checklist/>를 생성했습니다."
+    },
+    "card_checklist_title_changed": {
+      "default": "<Recorder/> 님이 카드 <Card/>의 체크리스트 <Checklist/> 제목을 변경했습니다.",
+      "user": "사용자님이 프로젝트 <Project/>에서 카드 <Card/>의 체크리스트 <Checklist/> 제목을 변경했습니다."
+    },
+    "card_checklist_checked": {
+      "default": "<Recorder/> 님이 카드 <Card/>의 체크 항목 <Checkitem/>을 체크했습니다.",
+      "user": "사용자님이 프로젝트 <Project/>에서 카드 <Card/>의 체크 항목 <Checkitem/>을 체크했습니다."
+    },
+    "card_checklist_unchecked": {
+      "default": "<Recorder/> 님이 카드 <Card/>의 체크 항목 <Checkitem/>을 체크 해제했습니다.",
+      "user": "사용자님이 프로젝트 <Project/>에서 카드 <Card/>의 체크 항목 <Checkitem/>을 체크 해제했습니다."
+    },
+    "card_checklist_deleted": {
+      "default": "<Recorder/> 님이 카드 <Card/>에서 체크리스트 <Checklist/>를 삭제했습니다.",
+      "user": "사용자님이 프로젝트 <Project/>에서 카드 <Card/>에서 체크리스트 <Checklist/>를 삭제했습니다."
+    },
+    "card_checkitem_created": {
+      "default": "<Recorder/> 님이 카드 <Card/>의 체크리스트 <Checklist/>에 체크 항목 <Checkitem/>을 생성했습니다.",
+      "user": "사용자님이 프로젝트 <Project/>에서 카드 <Card/>의 체크리스트 <Checklist/>에 체크 항목 <Checkitem/>을 생성했습니다."
+    },
+    "card_checkitem_title_changed": {
+      "default": "<Recorder/> 님이 카드 <Card/>의 체크 항목 <Checkitem/> 제목을 변경했습니다.",
+      "user": "사용자님이 프로젝트 <Project/>에서 카드 <Card/>의 체크 항목 <Checkitem/> 제목을 변경했습니다."
+    },
+    "card_checkitem_timer_started": {
+      "default": "<Recorder/> 님이 카드 <Card/>의 체크 항목 <Checkitem/> 타이머를 시작했습니다.",
+      "user": "사용자님이 프로젝트 <Project/>에서 카드 <Card/>의 체크 항목 <Checkitem/> 타이머를 시작했습니다."
+    },
+    "card_checkitem_timer_paused": {
+      "default": "<Recorder/> 님이 카드 <Card/>의 체크 항목 <Checkitem/> 타이머를 일시 정지했습니다.",
+      "user": "사용자님이 프로젝트 <Project/>에서 카드 <Card/>의 체크 항목 <Checkitem/> 타이머를 일시 정지했습니다."
+    },
+    "card_checkitem_timer_stopped": {
+      "default": "<Recorder/> 님이 카드 <Card/>의 체크 항목 <Checkitem/> 타이머를 중지했습니다.",
+      "user": "사용자님이 프로젝트 <Project/>에서 카드 <Card/>의 체크 항목 <Checkitem/> 타이머를 중지했습니다."
+    },
+    "card_checkitem_checked": {
+      "default": "<Recorder/> 님이 카드 <Card/>의 체크 항목 <Checkitem/>을 체크했습니다.",
+      "user": "사용자님이 프로젝트 <Project/>에서 카드 <Card/>의 체크 항목 <Checkitem/>을 체크했습니다."
+    },
+    "card_checkitem_unchecked": {
+      "default": "<Recorder/> 님이 카드 <Card/>의 체크 항목 <Checkitem/>을 체크 해제했습니다.",
+      "user": "사용자님이 프로젝트 <Project/>에서 카드 <Card/>의 체크 항목 <Checkitem/>을 체크 해제했습니다."
+    },
+    "card_checkitem_cardified": {
+      "default": "<Recorder/> 님이 카드 <Card/>의 체크 항목 <Checkitem/>을 카드 <CardifiedCard/>로 변환했습니다.",
+      "user": "사용자님이 프로젝트 <Project/>에서 카드 <Card/>의 체크 항목 <Checkitem/>을 카드 <CardifiedCard/>로 변환했습니다."
+    },
+    "card_checkitem_deleted": {
+      "default": "<Recorder/> 님이 카드 <Card/>에서 체크 항목 <Checkitem/>을 삭제했습니다.",
+      "user": "사용자님이 프로젝트 <Project/>에서 카드 <Card/>에서 체크 항목 <Checkitem/>을 삭제했습니다."
+    },
+    "wiki_created": {
+      "default": "<Recorder/> 님이 위키 <Wiki/>를 생성했습니다.",
+      "user": "사용자님이 프로젝트 <Project/>에서 위키 <Wiki/>를 생성했습니다."
+    },
+    "wiki_updated": {
+      "default": "<Recorder/> 님이 위키 <Wiki/>를 수정했습니다.",
+      "user": "사용자님이 프로젝트 <Project/>에서 위키 <Wiki/>를 수정했습니다."
+    },
+    "wiki_publicity_changed": {
+      "default": "<Recorder/> 님이 위키 <Wiki/>의 공개 상태를 변경했습니다.",
+      "user": "사용자님이 프로젝트 <Project/>에서 위키 <Wiki/>의 공개 상태를 변경했습니다."
+    },
+    "wiki_assignees_updated": {
+      "default": "<Recorder/> 님이 위키 <Wiki/>의 담당자를 수정했습니다.",
+      "user": "사용자님이 프로젝트 <Project/>에서 위키 <Wiki/>의 담당자를 수정했습니다."
+    },
+    "wiki_deleted": {
+      "default": "<Recorder/> 님이 위키 <Wiki/>를 삭제했습니다.",
+      "user": "사용자님이 프로젝트 <Project/>에서 위키 <Wiki/>를 삭제했습니다."
+    }
+  }
+}

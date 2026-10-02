@@ -1,0 +1,143 @@
+{
+  "Notifications": "通知",
+  "{count} notifications received": "收到 {{count}} 条通知",
+  "Only show unread": "仅显示未读",
+  "You have a new notification.": "您有一条新通知。",
+  "Read all notifications": "将所有通知标为已读",
+  "Delete all notifications": "删除所有通知",
+  "Read notification": "将通知标为已读",
+  "Delete notification": "删除通知",
+  "No notifications received.": "未收到通知。",
+  "timeRanges": {
+    "3d": "最近3天",
+    "7d": "最近7天",
+    "1m": "最近一个月",
+    "all": "全部"
+  },
+  "titles": {
+    "project_invited": "<Who/> <Span>邀请您加入项目。</Span>",
+    "mentioned_in_card": "<Who/> <Span>在卡片中提及了您。</Span>",
+    "mentioned_in_comment": "<Who/> <Span>在评论中提及了您。</Span>",
+    "mentioned_in_wiki": "<Who/> <Span>在 Wiki 中提及了您。</Span>",
+    "assigned_to_card": "<Who/> <Span>将您指定为卡片负责人。</Span>",
+    "reacted_to_comment": "<Who/> <Span>回应了您的评论。</Span>",
+    "notified_from_checklist": "<Who/> <Span>在检查清单中通知了您。</Span>",
+    "scheduled_rule": "<Span>满足了定时通知规则。</Span>"
+  },
+  "subtitles": {
+    "project_invited": "{{records.project.title}}",
+    "mentioned_in_card": "{{records.project.title}} 中的 {{records.card.title}}",
+    "mentioned_in_comment": "{{records.project.title}} 中的 {{records.card.title}}",
+    "mentioned_in_wiki": "{{records.project.title}} 中的 {{records.wiki.title}}",
+    "assigned_to_card": "{{records.project.title}} 中的 {{records.card.title}}",
+    "reacted_to_comment": "{{records.project.title}} 中的 {{records.card.title}}",
+    "notified_from_checklist": "{{records.project.title}} 中的 {{records.card.title}}",
+    "scheduled_rule": "{{records.project.title}} 中的 {{message_vars.rule_name}}"
+  },
+  "ruleTitles": {
+    "project": {
+      "created_at": {
+        "older_than_days": "<Span>项目创建已超过 {{message_vars.days_delta}} 天。</Span>"
+      },
+      "updated_at": {
+        "older_than_days": "<Span>项目已超过 {{message_vars.days_delta}} 天没有活动。</Span>"
+      }
+    },
+    "card": {
+      "deadline_at": {
+        "within_next_days": "<Span>卡片即将到期。</Span>",
+        "overdue": "<Span>卡片已逾期。</Span>"
+      },
+      "created_at": {
+        "older_than_days": "<Span>卡片创建已超过 {{message_vars.days_delta}} 天。</Span>"
+      },
+      "archived_at": {
+        "is_empty": "<Span>卡片尚未归档。</Span>",
+        "is_not_empty": "<Span>卡片已归档。</Span>"
+      }
+    },
+    "checkitem": {
+      "status": {
+        "equals": "<Span>检查项状态与 {{message_vars.value}} 匹配。</Span>"
+      },
+      "is_checked": {
+        "equals": "<Span>检查项的勾选状态与 {{message_vars.value}} 匹配。</Span>"
+      },
+      "deadline_at": {
+        "within_next_days": "<Span>检查项即将到期。</Span>",
+        "overdue": "<Span>检查项已逾期。</Span>"
+      },
+      "created_at": {
+        "older_than_days": "<Span>检查项创建已超过 {{message_vars.days_delta}} 天。</Span>"
+      },
+      "accumulated_seconds": {
+        "greater_than_seconds": "<Span>检查项计时器已超过 {{message_vars.value}} 秒。</Span>"
+      }
+    }
+  },
+  "ruleSubtitles": {
+    "project": {
+      "created_at": {
+        "older_than_days": "{{records.project.title}} 创建于 {{message_vars.days_delta}} 天前。"
+      },
+      "updated_at": {
+        "older_than_days": "{{records.project.title}} 已有 {{message_vars.days_delta}} 天未更新。"
+      }
+    },
+    "card": {
+      "deadline_at": {
+        "within_next_days": "{{records.card.title}} 将于 {{message_vars.days_delta}} 天后到期。",
+        "overdue": "{{records.card.title}} 已逾期 {{message_vars.days_delta}} 天。"
+      },
+      "created_at": {
+        "older_than_days": "{{records.card.title}} 创建于 {{message_vars.days_delta}} 天前。"
+      },
+      "archived_at": {
+        "is_empty": "{{records.card.title}} 尚未归档。",
+        "is_not_empty": "{{records.card.title}} 已归档。"
+      }
+    },
+    "checkitem": {
+      "status": {
+        "equals": "{{records.checkitem.title}} 的状态为 {{message_vars.value}}。"
+      },
+      "is_checked": {
+        "equals": "{{records.checkitem.title}} 的勾选状态为 {{message_vars.value}}。"
+      },
+      "deadline_at": {
+        "within_next_days": "{{records.checkitem.title}} 将于 {{message_vars.days_delta}} 天后到期。",
+        "overdue": "{{records.checkitem.title}} 已逾期 {{message_vars.days_delta}} 天。"
+      },
+      "created_at": {
+        "older_than_days": "{{records.checkitem.title}} 创建于 {{message_vars.days_delta}} 天前。"
+      },
+      "accumulated_seconds": {
+        "greater_than_seconds": "{{records.checkitem.title}} 已记录超过 {{message_vars.value}} 秒。"
+      }
+    }
+  },
+  "settings": {
+    "Notification settings": "通知设置",
+    "channels": {
+      "web": "网页",
+      "email": "邮件",
+      "mobile": "移动端",
+      "iot": "IoT"
+    },
+    "typeKeyMap": {
+      "project": "项目",
+      "column": "列",
+      "card": "卡片",
+      "wiki": "Wiki"
+    },
+    "types": {
+      "mentioned_in_card": "在卡片中被提及",
+      "mentioned_in_comment": "在评论中被提及",
+      "mentioned_in_wiki": "在 Wiki 中被提及",
+      "assigned_to_card": "被指定为卡片负责人",
+      "reacted_to_comment": "评论收到回应",
+      "notified_from_checklist": "来自检查清单的通知",
+      "scheduled_rule": "定时规则"
+    }
+  }
+}

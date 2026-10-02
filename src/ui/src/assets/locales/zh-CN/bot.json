@@ -1,0 +1,154 @@
+{
+  "Scope bot": "范围机器人",
+  "Schedules": "计划",
+  "Triggers": "触发器",
+  "Using default scope branch": "正在使用默认范围分支",
+  "Apply default scope branch": "应用默认范围分支",
+  "Custom": "自定义",
+  "Switch to Custom": "切换为自定义",
+  "Add bot defaults": "添加机器人默认值",
+  "Replace bot defaults": "替换机器人默认值",
+  "Logs": "日志",
+  "No logs found": "没有日志",
+  "Scoped": "已设置范围",
+  "Scheduled": "已计划",
+  "Onboarding": "初始设置",
+  "Frozen": "已冻结",
+  "Freeze": "冻结",
+  "Unfreeze": "解冻",
+  "Human input required": "需要人工输入",
+  "Editor approval requested": "已请求编辑器批准",
+  "Approval request": "批准请求",
+  "Pending approvals": "待批准",
+  "{count} pending approvals": "{{count}} 项待批准",
+  "{count} more in Bots": "机器人中还有 {{count}} 项",
+  "Approve": "批准",
+  "Reject": "拒绝",
+  "Tell graph what to do instead": "告诉图要改为执行什么...",
+  "Submitted instruction": "已提交的指令",
+  "Resuming...": "正在恢复...",
+  "Resolved by": "由 {{user}} 解决",
+  "approvalStatuses": {
+    "approved": "已批准",
+    "rejected": "已拒绝",
+    "expired": "已过期",
+    "cancelled": "已取消",
+    "resolved": "已解决"
+  },
+  "approvalOriginTypes": {
+    "chat": "聊天",
+    "editor": "编辑器",
+    "trigger": "触发器",
+    "schedule": "计划",
+    "manual_scope_run": "手动运行"
+  },
+  "approvalPermissions": {
+    "read": "读取",
+    "create": "创建",
+    "edit": "编辑",
+    "delete": "删除"
+  },
+  "Search bots": "搜索机器人",
+  "Search bots...": "搜索机器人...",
+  "Select running type": "选择运行类型",
+  "platforms": {
+    "default": "默认",
+    "langflow": "LangFlow",
+    "n8n": "N8N"
+  },
+  "platformRunningTypes": {
+    "default": "默认",
+    "endpoint": "端点"
+  },
+  "target_tables": {
+    "project": "项目",
+    "project_column": "项目列",
+    "card": "卡片",
+    "project_wiki": "项目 Wiki"
+  },
+  "schedules": {
+    "Schedule": "计划",
+    "Set start time": "设置开始时间",
+    "Set end time": "设置结束时间",
+    "Reschedule": "重新安排",
+    "Unschedule": "取消计划",
+    "Scheduling...": "正在安排...",
+    "Rescheduling...": "正在重新安排...",
+    "cronRunningTypes": {
+      "infinite": "无限期",
+      "duration": "持续时间",
+      "reserved": "预约运行",
+      "onetime": "单次"
+    },
+    "cronStatus": {
+      "pending": "等待中",
+      "started": "运行中",
+      "stopped": "已停止"
+    },
+    "cronHeaders": {
+      "Interval": "间隔",
+      "Type": "类型",
+      "Status": "状态",
+      "Start at": "开始时间",
+      "End at": "结束时间",
+      "Execute at": "执行时间",
+      "Manage": "管理"
+    },
+    "errors": {
+      "Cron start time is required.": "必须设置 Cron 开始时间。",
+      "Cron end time is required.": "必须设置 Cron 结束时间。"
+    }
+  },
+  "logs": {
+    "types": {
+      "info": "信息",
+      "success": "成功",
+      "error": "错误"
+    }
+  },
+  "agent": {
+    "Agent settings": "智能体设置",
+    "Select a provider": "选择提供商",
+    "System prompt": "系统提示词",
+    "Comfort tools": "便捷工具",
+    "Base tools": "基础工具",
+    "Select comfort tool(s) to use": "选择要使用的便捷工具",
+    "Add comfort tool description": "添加 {{tool}} 的说明",
+    "Select API(s) to use": "选择要使用的 API",
+    "Action suggestion help": "根据当前提示词推荐工具，无需保存机器人。",
+    "Add actions from prompt": "根据提示词添加操作",
+    "Apply action": "应用",
+    "Applied": "已应用",
+    "Review action": "审核",
+    "Bot creation assistant": "机器人创建助手",
+    "Draft only": "仅草稿",
+    "Describe the bot to create": "描述要创建的机器人...",
+    "Create draft": "创建草稿",
+    "Bot draft applied": "已为 {{name}} 应用草稿。",
+    "actionSuggestionSources": {
+      "comfort_tool": "便捷",
+      "api": "API",
+      "mcp_tool": "MCP 工具",
+      "mcp_tool_group": "MCP 组"
+    },
+    "actionSuggestionRisks": {
+      "low": "低风险",
+      "medium": "修改数据",
+      "high": "高风险"
+    },
+    "errors": {
+      "missing": {
+        "agent_llm": "必须选择智能体提供商。",
+        "api_key": "必须提供 API 密钥。",
+        "api_version": "必须提供 API 版本。",
+        "azure_endpoint": "必须提供端点。",
+        "azure_deployment": "必须提供部署名称。",
+        "aws_access_key_id": "必须提供访问密钥 ID。",
+        "aws_secret_access_key": "必须提供秘密访问密钥。",
+        "model_name": "必须选择模型。",
+        "model_id": "必须选择模型。",
+        "region_name": "必须选择区域。"
+      }
+    }
+  }
+}

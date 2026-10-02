@@ -1,0 +1,216 @@
+{
+  "{count} New Activities": "{{count}} 条新活动",
+  "No activities": "没有活动",
+  "changes": {
+    "title": "标题",
+    "deadline_at": "截止日期",
+    "name": "名称",
+    "color": "颜色",
+    "project_type": "项目类型",
+    "archive_visible_days": "归档可见天数",
+    "description": "说明",
+    "ai_description": "AI 摘要",
+    "content": "内容",
+    "is_disabled": "激活",
+    "No deadline": "无截止日期",
+    "No description": "无说明",
+    "No AI summary": "无 AI 摘要",
+    "No content": "无内容"
+  },
+  "user": {
+    "activated": {
+      "default": "<Recorder/>已激活。",
+      "user": "您已激活。"
+    },
+    "declined_project_invitation": {
+      "default": "<Recorder/>拒绝了项目邀请。",
+      "user": "您拒绝了项目邀请。"
+    }
+  },
+  "project": {
+    "project_created": {
+      "default": "<Recorder/>创建了项目。",
+      "user": "您创建了项目 <Project/>。"
+    },
+    "project_updated": {
+      "default": "<Recorder/>更新了项目。",
+      "user": "您更新了项目 <Project/>。"
+    },
+    "project_assigned_users_updated": {
+      "default": "<Recorder/>更新了项目的负责用户。",
+      "user": "您在项目 <Project/> 中更新了项目的负责用户。"
+    },
+    "project_email_notification_policy_updated": {
+      "default": "<Recorder/>更新了项目的邮件接收人。",
+      "user": "您在项目 <Project/> 中更新了项目的邮件接收人。"
+    },
+    "project_invited_user_accepted": {
+      "default": "<Recorder/>接受了项目邀请。",
+      "user": "您接受了项目邀请。"
+    },
+    "project_deleted": {
+      "default": "<Recorder/>删除了项目 <Project/>。",
+      "user": "您删除了项目 <Project/>。"
+    },
+    "project_column_created": {
+      "default": "<Recorder/>创建了列 <Column/>。",
+      "user": "您在项目 <Project/> 中创建了列 <Column/>。"
+    },
+    "project_column_name_changed": {
+      "default": "<Recorder/>更改了列 <Column/> 的名称。",
+      "user": "您在项目 <Project/> 中更改了列 <Column/> 的名称。"
+    },
+    "project_column_deleted": {
+      "default": "<Recorder/>删除了列 <Column/>。",
+      "user": "您在项目 <Project/> 中删除了列 <Column/>。"
+    },
+    "project_label_created": {
+      "default": "<Recorder/>创建了标签 <Label/>。",
+      "user": "您在项目 <Project/> 中创建了标签 <Label/>。"
+    },
+    "project_label_updated": {
+      "default": "<Recorder/>更新了标签 <Label/>。",
+      "user": "您在项目 <Project/> 中更新了标签 <Label/>。"
+    },
+    "project_label_deleted": {
+      "default": "<Recorder/>删除了标签 <Label/>。",
+      "user": "您在项目 <Project/> 中删除了标签 <Label/>。"
+    },
+    "card_created": {
+      "default": "<Recorder/>在列 <Column/> 中创建了卡片 <Card/>。",
+      "user": "您在项目 <Project/> 中在列 <Column/> 中创建了卡片 <Card/>。"
+    },
+    "card_updated": {
+      "default": "<Recorder/>更新了卡片 <Card/>。",
+      "user": "您在项目 <Project/> 中更新了卡片 <Card/>。"
+    },
+    "card_moved": {
+      "default": "<Recorder/>将卡片 <Card/> 从列 <FromColumn/> 移到了列 <Column/>。",
+      "user": "您在项目 <Project/> 中将卡片 <Card/> 从列 <FromColumn/> 移到了列 <Column/>。"
+    },
+    "card_assigned_users_updated": {
+      "default": "<Recorder/>更新了卡片 <Card/> 的负责用户。",
+      "user": "您在项目 <Project/> 中更新了卡片 <Card/> 的负责用户。"
+    },
+    "card_labels_updated": {
+      "default": "<Recorder/>更新了卡片 <Card/> 的标签。",
+      "user": "您在项目 <Project/> 中更新了卡片 <Card/> 的标签。"
+    },
+    "card_deleted": {
+      "default": "<Recorder/>删除了卡片 <Card/>。",
+      "user": "您在项目 <Project/> 中删除了卡片 <Card/>。"
+    },
+    "card_attachment_uploaded": {
+      "default": "<Recorder/>向卡片 <Card/> 上传了附件 <Attachment/>。",
+      "user": "您在项目 <Project/> 中向卡片 <Card/> 上传了附件 <Attachment/>。"
+    },
+    "card_attachment_name_changed": {
+      "default": "<Recorder/>更改了卡片 <Card/> 中附件 <Attachment/> 的名称。",
+      "user": "您在项目 <Project/> 中更改了卡片 <Card/> 中附件 <Attachment/> 的名称。"
+    },
+    "card_attachment_deleted": {
+      "default": "<Recorder/>从卡片 <Card/> 中删除了附件 <Attachment/>。",
+      "user": "您在项目 <Project/> 中从卡片 <Card/> 中删除了附件 <Attachment/>。"
+    },
+    "card_comment_added": {
+      "default": "<Recorder/>在卡片 <Card/> 中添加了评论。",
+      "user": "您在项目 <Project/> 中在卡片 <Card/> 中添加了评论。"
+    },
+    "card_comment_updated": {
+      "default": "<Recorder/>更新了卡片 <Card/> 的评论。",
+      "user": "您在项目 <Project/> 中更新了卡片 <Card/> 的评论。"
+    },
+    "card_comment_deleted": {
+      "default": "<Recorder/>删除了卡片 <Card/> 的评论。",
+      "user": "您在项目 <Project/> 中删除了卡片 <Card/> 的评论。"
+    },
+    "card_comment_reacted": {
+      "default": "<Recorder/>回应了卡片 <Card/> 的评论。",
+      "user": "您在项目 <Project/> 中回应了卡片 <Card/> 的评论。"
+    },
+    "card_comment_unreacted": {
+      "default": "<Recorder/>取消了对卡片 <Card/> 评论的回应。",
+      "user": "您在项目 <Project/> 中取消了对卡片 <Card/> 评论的回应。"
+    },
+    "card_relationships_updated": {
+      "default": "<Recorder/>更新了卡片 <Card/> 的关系。",
+      "user": "您在项目 <Project/> 中更新了卡片 <Card/> 的关系。"
+    },
+    "card_checklist_created": {
+      "default": "<Recorder/>在卡片 <Card/> 中创建了检查清单 <Checklist/>。",
+      "user": "您在项目 <Project/> 中在卡片 <Card/> 中创建了检查清单 <Checklist/>。"
+    },
+    "card_checklist_title_changed": {
+      "default": "<Recorder/>更改了卡片 <Card/> 中检查清单 <Checklist/> 的标题。",
+      "user": "您在项目 <Project/> 中更改了卡片 <Card/> 中检查清单 <Checklist/> 的标题。"
+    },
+    "card_checklist_checked": {
+      "default": "<Recorder/>勾选了卡片 <Card/> 中的检查项 <Checkitem/>。",
+      "user": "您在项目 <Project/> 中勾选了卡片 <Card/> 中的检查项 <Checkitem/>。"
+    },
+    "card_checklist_unchecked": {
+      "default": "<Recorder/>取消勾选了卡片 <Card/> 中的检查项 <Checkitem/>。",
+      "user": "您在项目 <Project/> 中取消勾选了卡片 <Card/> 中的检查项 <Checkitem/>。"
+    },
+    "card_checklist_deleted": {
+      "default": "<Recorder/>从卡片 <Card/> 中删除了检查清单 <Checklist/>。",
+      "user": "您在项目 <Project/> 中从卡片 <Card/> 中删除了检查清单 <Checklist/>。"
+    },
+    "card_checkitem_created": {
+      "default": "<Recorder/>在卡片 <Card/> 的检查清单 <Checklist/> 中创建了检查项 <Checkitem/>。",
+      "user": "您在项目 <Project/> 中在卡片 <Card/> 的检查清单 <Checklist/> 中创建了检查项 <Checkitem/>。"
+    },
+    "card_checkitem_title_changed": {
+      "default": "<Recorder/>更改了卡片 <Card/> 中检查项 <Checkitem/> 的标题。",
+      "user": "您在项目 <Project/> 中更改了卡片 <Card/> 中检查项 <Checkitem/> 的标题。"
+    },
+    "card_checkitem_timer_started": {
+      "default": "<Recorder/>启动了卡片 <Card/> 中检查项 <Checkitem/> 的计时器。",
+      "user": "您在项目 <Project/> 中启动了卡片 <Card/> 中检查项 <Checkitem/> 的计时器。"
+    },
+    "card_checkitem_timer_paused": {
+      "default": "<Recorder/>暂停了卡片 <Card/> 中检查项 <Checkitem/> 的计时器。",
+      "user": "您在项目 <Project/> 中暂停了卡片 <Card/> 中检查项 <Checkitem/> 的计时器。"
+    },
+    "card_checkitem_timer_stopped": {
+      "default": "<Recorder/>停止了卡片 <Card/> 中检查项 <Checkitem/> 的计时器。",
+      "user": "您在项目 <Project/> 中停止了卡片 <Card/> 中检查项 <Checkitem/> 的计时器。"
+    },
+    "card_checkitem_checked": {
+      "default": "<Recorder/>勾选了卡片 <Card/> 中的检查项 <Checkitem/>。",
+      "user": "您在项目 <Project/> 中勾选了卡片 <Card/> 中的检查项 <Checkitem/>。"
+    },
+    "card_checkitem_unchecked": {
+      "default": "<Recorder/>取消勾选了卡片 <Card/> 中的检查项 <Checkitem/>。",
+      "user": "您在项目 <Project/> 中取消勾选了卡片 <Card/> 中的检查项 <Checkitem/>。"
+    },
+    "card_checkitem_cardified": {
+      "default": "<Recorder/>将卡片 <Card/> 中的检查项 <Checkitem/> 转换为了卡片 <CardifiedCard/>。",
+      "user": "您在项目 <Project/> 中将卡片 <Card/> 中的检查项 <Checkitem/> 转换为了卡片 <CardifiedCard/>。"
+    },
+    "card_checkitem_deleted": {
+      "default": "<Recorder/>从卡片 <Card/> 中删除了检查项 <Checkitem/>。",
+      "user": "您在项目 <Project/> 中从卡片 <Card/> 中删除了检查项 <Checkitem/>。"
+    },
+    "wiki_created": {
+      "default": "<Recorder/>创建了 Wiki <Wiki/>。",
+      "user": "您在项目 <Project/> 中创建了 Wiki <Wiki/>。"
+    },
+    "wiki_updated": {
+      "default": "<Recorder/>更新了 Wiki <Wiki/>。",
+      "user": "您在项目 <Project/> 中更新了 Wiki <Wiki/>。"
+    },
+    "wiki_publicity_changed": {
+      "default": "<Recorder/>更改了 Wiki <Wiki/> 的公开状态。",
+      "user": "您在项目 <Project/> 中更改了 Wiki <Wiki/> 的公开状态。"
+    },
+    "wiki_assignees_updated": {
+      "default": "<Recorder/>更新了 Wiki <Wiki/> 的负责人。",
+      "user": "您在项目 <Project/> 中更新了 Wiki <Wiki/> 的负责人。"
+    },
+    "wiki_deleted": {
+      "default": "<Recorder/>删除了 Wiki <Wiki/>。",
+      "user": "您在项目 <Project/> 中删除了 Wiki <Wiki/>。"
+    }
+  }
+}

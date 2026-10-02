@@ -1,0 +1,143 @@
+{
+  "Notifications": "通知",
+  "{count} notifications received": "通知 {{count}} 件を受信",
+  "Only show unread": "未読のみ表示",
+  "You have a new notification.": "新しい通知があります。",
+  "Read all notifications": "すべての通知を既読にする",
+  "Delete all notifications": "すべての通知を削除",
+  "Read notification": "通知を既読にする",
+  "Delete notification": "通知を削除",
+  "No notifications received.": "受信した通知はありません。",
+  "timeRanges": {
+    "3d": "過去3日間",
+    "7d": "過去7日間",
+    "1m": "過去1か月",
+    "all": "すべて"
+  },
+  "titles": {
+    "project_invited": "<Who/> <Span>があなたをプロジェクトに招待しました。</Span>",
+    "mentioned_in_card": "<Who/> <Span>がカードであなたにメンションしました。</Span>",
+    "mentioned_in_comment": "<Who/> <Span>がコメントであなたにメンションしました。</Span>",
+    "mentioned_in_wiki": "<Who/> <Span>が Wiki であなたにメンションしました。</Span>",
+    "assigned_to_card": "<Who/> <Span>があなたをカードの担当者に指定しました。</Span>",
+    "reacted_to_comment": "<Who/> <Span>があなたのコメントにリアクションしました。</Span>",
+    "notified_from_checklist": "<Who/> <Span>がチェックリストであなたに通知しました。</Span>",
+    "scheduled_rule": "<Span>定期通知ルールの条件が満たされました。</Span>"
+  },
+  "subtitles": {
+    "project_invited": "{{records.project.title}}",
+    "mentioned_in_card": "{{records.project.title}} 内の {{records.card.title}}",
+    "mentioned_in_comment": "{{records.project.title}} 内の {{records.card.title}}",
+    "mentioned_in_wiki": "{{records.project.title}} 内の {{records.wiki.title}}",
+    "assigned_to_card": "{{records.project.title}} 内の {{records.card.title}}",
+    "reacted_to_comment": "{{records.project.title}} 内の {{records.card.title}}",
+    "notified_from_checklist": "{{records.project.title}} 内の {{records.card.title}}",
+    "scheduled_rule": "{{records.project.title}} 内の {{message_vars.rule_name}}"
+  },
+  "ruleTitles": {
+    "project": {
+      "created_at": {
+        "older_than_days": "<Span>プロジェクトの作成から {{message_vars.days_delta}} 日以上経過しています。</Span>"
+      },
+      "updated_at": {
+        "older_than_days": "<Span>プロジェクトに {{message_vars.days_delta}} 日以上更新がありません。</Span>"
+      }
+    },
+    "card": {
+      "deadline_at": {
+        "within_next_days": "<Span>カードの期限が近づいています。</Span>",
+        "overdue": "<Span>カードの期限を過ぎています。</Span>"
+      },
+      "created_at": {
+        "older_than_days": "<Span>カードの作成から {{message_vars.days_delta}} 日以上経過しています。</Span>"
+      },
+      "archived_at": {
+        "is_empty": "<Span>カードはアーカイブされていません。</Span>",
+        "is_not_empty": "<Span>カードはアーカイブされています。</Span>"
+      }
+    },
+    "checkitem": {
+      "status": {
+        "equals": "<Span>チェック項目の状態が {{message_vars.value}} に一致しました。</Span>"
+      },
+      "is_checked": {
+        "equals": "<Span>チェック項目のチェック状態が {{message_vars.value}} に一致しました。</Span>"
+      },
+      "deadline_at": {
+        "within_next_days": "<Span>チェック項目の期限が近づいています。</Span>",
+        "overdue": "<Span>チェック項目の期限を過ぎています。</Span>"
+      },
+      "created_at": {
+        "older_than_days": "<Span>チェック項目の作成から {{message_vars.days_delta}} 日以上経過しています。</Span>"
+      },
+      "accumulated_seconds": {
+        "greater_than_seconds": "<Span>チェック項目のタイマーが {{message_vars.value}} 秒を超えました。</Span>"
+      }
+    }
+  },
+  "ruleSubtitles": {
+    "project": {
+      "created_at": {
+        "older_than_days": "{{records.project.title}} は {{message_vars.days_delta}} 日前に作成されました。"
+      },
+      "updated_at": {
+        "older_than_days": "{{records.project.title}} は {{message_vars.days_delta}} 日間更新されていません。"
+      }
+    },
+    "card": {
+      "deadline_at": {
+        "within_next_days": "{{records.card.title}} の期限まであと {{message_vars.days_delta}} 日です。",
+        "overdue": "{{records.card.title}} の期限から {{message_vars.days_delta}} 日経過しています。"
+      },
+      "created_at": {
+        "older_than_days": "{{records.card.title}} は {{message_vars.days_delta}} 日前に作成されました。"
+      },
+      "archived_at": {
+        "is_empty": "{{records.card.title}} はアーカイブされていません。",
+        "is_not_empty": "{{records.card.title}} はアーカイブされています。"
+      }
+    },
+    "checkitem": {
+      "status": {
+        "equals": "{{records.checkitem.title}} の状態は {{message_vars.value}} です。"
+      },
+      "is_checked": {
+        "equals": "{{records.checkitem.title}} のチェック状態は {{message_vars.value}} です。"
+      },
+      "deadline_at": {
+        "within_next_days": "{{records.checkitem.title}} の期限まであと {{message_vars.days_delta}} 日です。",
+        "overdue": "{{records.checkitem.title}} の期限から {{message_vars.days_delta}} 日経過しています。"
+      },
+      "created_at": {
+        "older_than_days": "{{records.checkitem.title}} は {{message_vars.days_delta}} 日前に作成されました。"
+      },
+      "accumulated_seconds": {
+        "greater_than_seconds": "{{records.checkitem.title}} の記録時間は {{message_vars.value}} 秒を超えています。"
+      }
+    }
+  },
+  "settings": {
+    "Notification settings": "通知設定",
+    "channels": {
+      "web": "ウェブ",
+      "email": "メール",
+      "mobile": "モバイル",
+      "iot": "IoT"
+    },
+    "typeKeyMap": {
+      "project": "プロジェクト",
+      "column": "列",
+      "card": "カード",
+      "wiki": "Wiki"
+    },
+    "types": {
+      "mentioned_in_card": "カードでのメンション",
+      "mentioned_in_comment": "コメントでのメンション",
+      "mentioned_in_wiki": "Wiki でのメンション",
+      "assigned_to_card": "カードの担当者に指定",
+      "reacted_to_comment": "コメントへのリアクション",
+      "notified_from_checklist": "チェックリストからの通知",
+      "scheduled_rule": "定期ルール"
+    }
+  }
+}

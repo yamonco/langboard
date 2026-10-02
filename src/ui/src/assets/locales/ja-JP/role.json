@@ -1,0 +1,68 @@
+{
+  "project": {
+    "read": "閲覧",
+    "update": "更新",
+    "card_write": "カード作成",
+    "card_update": "カード更新",
+    "card_delete": "カード削除"
+  },
+  "setting": {
+    "user_read": "閲覧",
+    "user_create": "作成",
+    "user_update": "更新",
+    "user_delete": "削除",
+    "bot_read": "閲覧",
+    "bot_create": "作成",
+    "bot_update": "更新",
+    "bot_delete": "削除",
+    "internal_bot_read": "閲覧",
+    "internal_bot_create": "作成",
+    "internal_bot_update": "更新",
+    "internal_bot_delete": "削除",
+    "global_relationship_read": "閲覧",
+    "global_relationship_create": "作成",
+    "global_relationship_update": "更新",
+    "global_relationship_delete": "削除",
+    "api_comfort_tool_read": "閲覧",
+    "api_comfort_tool_create": "作成",
+    "api_comfort_tool_update": "更新",
+    "api_comfort_tool_delete": "削除",
+    "webhook_read": "閲覧",
+    "webhook_create": "作成",
+    "webhook_update": "更新",
+    "webhook_delete": "削除",
+    "notification_schedule_read": "閲覧",
+    "notification_schedule_create": "作成",
+    "notification_schedule_update": "更新",
+    "notification_schedule_delete": "削除",
+    "ollama_read": "閲覧"
+  },
+  "setting_categories": {
+    "user": "ユーザー管理",
+    "bot": "ボット管理",
+    "internal_bot": "内部ボット管理",
+    "global_relationship": "グローバル関係管理",
+    "api_comfort_tool": "API便利ツール管理",
+    "webhook": "Webhook管理",
+    "notification_schedule": "通知スケジュール管理",
+    "ollama": "Ollama管理"
+  },
+  "action_types": {
+    "read": "すべての閲覧権限",
+    "create": "すべての作成権限",
+    "update": "すべての更新権限",
+    "delete": "すべての削除権限"
+  },
+  "api_key": {
+    "read": "閲覧",
+    "create": "作成",
+    "update": "更新",
+    "delete": "削除"
+  },
+  "mcp": {
+    "read": "閲覧",
+    "create": "作成",
+    "update": "更新",
+    "delete": "削除"
+  }
+}

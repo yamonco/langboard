@@ -1,0 +1,68 @@
+{
+  "project": {
+    "read": "读取",
+    "update": "更新",
+    "card_write": "创建卡片",
+    "card_update": "更新卡片",
+    "card_delete": "删除卡片"
+  },
+  "setting": {
+    "user_read": "读取",
+    "user_create": "创建",
+    "user_update": "更新",
+    "user_delete": "删除",
+    "bot_read": "读取",
+    "bot_create": "创建",
+    "bot_update": "更新",
+    "bot_delete": "删除",
+    "internal_bot_read": "读取",
+    "internal_bot_create": "创建",
+    "internal_bot_update": "更新",
+    "internal_bot_delete": "删除",
+    "global_relationship_read": "读取",
+    "global_relationship_create": "创建",
+    "global_relationship_update": "更新",
+    "global_relationship_delete": "删除",
+    "api_comfort_tool_read": "读取",
+    "api_comfort_tool_create": "创建",
+    "api_comfort_tool_update": "更新",
+    "api_comfort_tool_delete": "删除",
+    "webhook_read": "读取",
+    "webhook_create": "创建",
+    "webhook_update": "更新",
+    "webhook_delete": "删除",
+    "notification_schedule_read": "读取",
+    "notification_schedule_create": "创建",
+    "notification_schedule_update": "更新",
+    "notification_schedule_delete": "删除",
+    "ollama_read": "读取"
+  },
+  "setting_categories": {
+    "user": "用户管理",
+    "bot": "机器人管理",
+    "internal_bot": "内部机器人管理",
+    "global_relationship": "全局关系管理",
+    "api_comfort_tool": "API 便捷工具管理",
+    "webhook": "Webhook 管理",
+    "notification_schedule": "通知计划管理",
+    "ollama": "Ollama 管理"
+  },
+  "action_types": {
+    "read": "全部读取权限",
+    "create": "全部创建权限",
+    "update": "全部更新权限",
+    "delete": "全部删除权限"
+  },
+  "api_key": {
+    "read": "读取",
+    "create": "创建",
+    "update": "更新",
+    "delete": "删除"
+  },
+  "mcp": {
+    "read": "读取",
+    "create": "创建",
+    "update": "更新",
+    "delete": "删除"
+  }
+}
