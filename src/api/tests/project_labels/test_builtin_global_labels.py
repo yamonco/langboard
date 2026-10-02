@@ -3,6 +3,7 @@
 import importlib.util
 from pathlib import Path
 from types import SimpleNamespace
+import pytest
 import sqlalchemy as sa
 
 
@@ -96,3 +97,24 @@ def test_development_contract_and_money_pricing_boundaries_are_explicit():
     assert "법률·상거래 계약" in rows["Contract"]["translations"]["ko"]["description"]
     assert "never authorizes a payment" in rows["Money"]["description"]
     assert "billing rules" in rows["Pricing"]["description"]
+
+
+def test_seed_ids_reject_existing_and_batch_collisions(monkeypatch):
+    module = migration()
+    candidates = iter([1, 1, 2, 2, *range(3, 15)])
+    monkeypatch.setattr(module, "SnowflakeID", lambda: next(candidates))
+    rows = module._rows_to_insert([], {1})
+    assert [row["id"] for row in rows] == list(range(2, 15))
+
+
+def test_seed_allocation_exhaustion_does_not_insert_partial_rows(monkeypatch):
+    module = migration()
+    writes = []
+    connection = SimpleNamespace(execute=lambda query: [SimpleNamespace(id=1, name="Custom")])
+    monkeypatch.setattr(
+        module, "op", SimpleNamespace(get_bind=lambda: connection, bulk_insert=lambda *args: writes.append(args))
+    )
+    monkeypatch.setattr(module, "SnowflakeID", lambda: 1)
+    with pytest.raises(RuntimeError, match="allocation exhausted"):
+        module.seed_defaults()
+    assert not writes

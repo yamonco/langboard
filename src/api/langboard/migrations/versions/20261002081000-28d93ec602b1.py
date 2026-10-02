@@ -183,12 +183,23 @@ global_label = sa.table(
 )
 
 
-def _rows_to_insert(existing_names: list[str]) -> list[dict]:
+def _rows_to_insert(existing_names: list[str], existing_ids: set[int] | None = None) -> list[dict]:
     existing = {name.strip().casefold() for name in existing_names}
     now = datetime.now(timezone.utc)
+    used_ids = set(existing_ids or ())
+
+    def next_id() -> int:
+        # The shared allocator can collide; never insert conflicting seed IDs.
+        for _ in range(32):
+            candidate = int(SnowflakeID())
+            if candidate not in used_ids:
+                used_ids.add(candidate)
+                return candidate
+        raise RuntimeError("Builtin label ID allocation exhausted; no seed rows inserted")
+
     return [
         {
-            "id": int(SnowflakeID()),
+            "id": next_id(),
             "created_at": now,
             "updated_at": now,
             "name": names[0],
@@ -206,8 +217,8 @@ def _rows_to_insert(existing_names: list[str]) -> list[dict]:
 
 
 def seed_defaults() -> None:
-    names = list(op.get_bind().execute(sa.select(global_label.c.name)).scalars())
-    rows = _rows_to_insert(names)
+    existing = list(op.get_bind().execute(sa.select(global_label.c.id, global_label.c.name)))
+    rows = _rows_to_insert([row.name for row in existing], {int(row.id) for row in existing})
     if rows:
         op.bulk_insert(global_label, rows)
 
