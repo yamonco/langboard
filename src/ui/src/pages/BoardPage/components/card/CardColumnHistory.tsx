@@ -1,3 +1,4 @@
+import { formatDateTime } from "@/core/utils/LocaleFormat";
 import Tooltip from "@/components/base/Tooltip";
 import IconComponent from "@/components/base/IconComponent";
 import { api } from "@/core/helpers/Api";
@@ -20,7 +21,7 @@ export default function CardColumnHistory({ card }: { card: ProjectCard.TModel }
     const { projectUID } = useBoardCard();
     const columnUID = card.useField("project_column_uid");
     const [events, setEvents] = useState<ColumnEvent[]>([]);
-    const [t] = useTranslation();
+    const [t, i18n] = useTranslation();
 
     useEffect(() => {
         const controller = new AbortController();
@@ -40,7 +41,7 @@ export default function CardColumnHistory({ card }: { card: ProjectCard.TModel }
             <IconComponent icon="history" size="3" className="shrink-0 opacity-70" aria-hidden="true" />
             {events.map((event, index) => {
                 const date = new Date(event.created_at);
-                const exact = date.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "medium" });
+                const exact = formatDateTime(date, i18n.language, { timeStyle: "medium" });
                 const actor =
                     event.recorder?.type === "bot"
                         ? event.recorder.name

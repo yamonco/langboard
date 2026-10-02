@@ -9,6 +9,9 @@ on:
       - src/ui/src/constants.ts
       - src/ui/src/core/utils/LocalePolicy*
       - src/ui/src/core/utils/LocaleRuntime*
+      - src/ui/src/core/utils/LocaleFormat*
+      - src/ui/src/core/hooks/useUpdateDateDistance.ts
+      - src/ui/src/core/injection/StringExtensions.ts
       - src/ui/src/core/providers/AuthProvider.tsx
       - src/ui/src/core/providers/AuthLanguage*
       - src/ui/src/core/stores/AuthStore.ts
@@ -16,6 +19,7 @@ on:
       - src/ui/src/pages/AccountPage/components/preference/PreferenceLanguage*
       - src/ui/scripts/verify-locale-resources.mjs
       - src/ui/playwright.locale-runtime.config.ts
+      - src/ui/playwright.locale-format.config.ts
       - src/ui/playwright.default-language.config.ts
       - src/ui/playwright.auth-language.config.ts
       - src/ui/vite.card-load.config.ts
@@ -45,7 +49,7 @@ jobs:
         working-directory: src/ui
       - run: node --experimental-strip-types scripts/verify-locale-resources.mjs --complete
         working-directory: src/ui
-      - run: node --experimental-strip-types --test src/core/utils/LocalePolicy.test.ts
+      - run: node --experimental-strip-types --test src/core/utils/LocalePolicy.test.ts src/core/utils/LocaleFormat.test.ts
         working-directory: src/ui
       - run: yarn playwright install --with-deps chrome
         working-directory: src/ui
@@ -54,4 +58,6 @@ jobs:
       - run: yarn playwright test -c playwright.default-language.config.ts
         working-directory: src/ui
       - run: yarn playwright test -c playwright.auth-language.config.ts
+        working-directory: src/ui
+      - run: yarn playwright test -c playwright.locale-format.config.ts
         working-directory: src/ui

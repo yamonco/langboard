@@ -14,9 +14,7 @@ const useUpdateDateDistance = (date: Date | undefined, timeout: number = 60000) 
                 runningTimeout = undefined;
             }
 
-            if (date) {
-                setDistance(Utils.String.formatDateDistance(i18n, t, date));
-            }
+            setDistance(date ? Utils.String.formatDateDistance(i18n, t, date) : "");
 
             runningTimeout = setTimeout(updateCommentedAt, timeout);
         };
@@ -27,13 +25,7 @@ const useUpdateDateDistance = (date: Date | undefined, timeout: number = 60000) 
             clearTimeout(runningTimeout);
             runningTimeout = undefined;
         };
-    }, [date]);
-
-    useEffect(() => {
-        if (date) {
-            setDistance(Utils.String.formatDateDistance(i18n, t, date));
-        }
-    }, [date]);
+    }, [date, i18n, i18n.language, t, timeout]);
 
     return distance;
 };

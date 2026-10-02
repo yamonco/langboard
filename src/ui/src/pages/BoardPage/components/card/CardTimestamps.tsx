@@ -1,3 +1,4 @@
+import { formatDateTime } from "@/core/utils/LocaleFormat";
 import CardMetadataPreview from "@/pages/BoardPage/components/card/CardMetadataPreview";
 import { ProjectCard } from "@/core/models";
 import Tooltip from "@/components/base/Tooltip";
@@ -9,10 +10,10 @@ import { cn } from "@/core/utils/ComponentUtils";
 export default function CardTimestamps({ card, compact = false }: { card: ProjectCard.TModel; compact?: boolean }) {
     const createdAt = card.useField("created_at");
     const updatedAt = card.useField("updated_at");
-    const [t] = useTranslation();
+    const [t, i18n] = useTranslation();
     const createdDistance = useUpdateDateDistance(createdAt);
     const updatedDistance = useUpdateDateDistance(updatedAt);
-    const exact = (date: Date) => date.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "medium" });
+    const exact = (date: Date) => formatDateTime(date, i18n.language, { timeStyle: "medium" });
 
     if (compact) {
         return (

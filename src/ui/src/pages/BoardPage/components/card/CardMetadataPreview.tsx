@@ -1,3 +1,4 @@
+import { formatDateTime } from "@/core/utils/LocaleFormat";
 import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { ProjectCard, ProjectColumn, User } from "@/core/models";
@@ -16,7 +17,7 @@ function ColumnName({ column }: { column: ProjectColumn.TModel }) {
 }
 
 export default function CardMetadataPreview({ card, children }: { card: ProjectCard.TModel; children: ReactNode }) {
-    const [t] = useTranslation();
+    const [t, i18n] = useTranslation();
     const [open, setOpen] = useState(false);
     const { project, columns } = useBoard();
     const members = project.useForeignFieldArray("all_members");
@@ -29,7 +30,7 @@ export default function CardMetadataPreview({ card, children }: { card: ProjectC
     const columnUID = card.useField("project_column_uid");
     const column = columns.find((item) => item.uid === columnUID);
     const assignees = members.filter((member) => memberUIDs.includes(member.uid));
-    const exact = (date: Date) => date.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "medium" });
+    const exact = (date: Date) => formatDateTime(date, i18n.language, { timeStyle: "medium" });
     const rows: [string, ReactNode][] = [
         [t("card.Created"), exact(createdAt)],
         [t("card.Updated"), exact(updatedAt)],

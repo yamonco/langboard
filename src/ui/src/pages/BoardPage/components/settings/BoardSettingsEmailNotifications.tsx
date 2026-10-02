@@ -1,3 +1,4 @@
+import { formatDateTime } from "@/core/utils/LocaleFormat";
 import Alert from "@/components/base/Alert";
 import Button from "@/components/base/Button";
 import Checkbox from "@/components/base/Checkbox";
@@ -18,7 +19,7 @@ import { useTranslation } from "react-i18next";
 const CATEGORIES: TProjectEmailNotificationCategory[] = ["board", "cards", "comments", "attachments", "checklists", "wiki"];
 
 const BoardSettingsEmailNotifications = memo(() => {
-    const [t] = useTranslation();
+    const [t, i18n] = useTranslation();
     const { project, canEditBasicInfo } = useBoardSettings();
     const { data: policy, isLoading, isError, refetch } = useGetProjectEmailNotificationPolicy(project.uid);
     const { mutateAsync, isPending } = useUpdateProjectEmailNotificationPolicy(project.uid);
@@ -80,7 +81,7 @@ const BoardSettingsEmailNotifications = memo(() => {
                 <Alert variant="destructive" title={t("project.settings.Recent email delivery failed")}>
                     <p className="text-sm">
                         {policy.last_delivery_recipient_email}
-                        {policy.last_delivery_at ? ` · ${new Date(policy.last_delivery_at).toLocaleString()}` : ""}
+                        {policy.last_delivery_at ? ` · ${formatDateTime(new Date(policy.last_delivery_at), i18n.language)}` : ""}
                     </p>
                     {policy.last_delivery_error && <p className="text-xs">{policy.last_delivery_error}</p>}
                 </Alert>

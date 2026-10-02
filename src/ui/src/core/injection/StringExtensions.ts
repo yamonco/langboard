@@ -1,20 +1,13 @@
 import { Utils } from "@langboard/core/utils";
-import { differenceInDays, Duration, formatDistanceToNow } from "date-fns";
-import { TFunction, i18n } from "i18next";
-import * as dateLocale from "date-fns/locale";
+import { Duration } from "date-fns";
+import currentI18n, { TFunction, i18n } from "i18next";
+import { formatDateDistance, formatDateTime } from "@/core/utils/LocaleFormat";
 import { API_URL } from "@/constants";
 
-Utils.String.formatDateLocale = (date: Date) => date.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+Utils.String.formatDateLocale = (date: Date) => formatDateTime(date, currentI18n.language);
 
-Utils.String.formatDateDistance = (i18n: i18n, translate: TFunction<"translation", undefined>, date: Date): string => {
-    return differenceInDays(Date.now(), date) >= 1
-        ? Utils.String.formatDateLocale(date)
-        : translate("date.{distance} ago", {
-              distance: formatDistanceToNow(date, {
-                  locale: dateLocale[new Utils.String.Case(i18n.language).toLanguageObjKey() as keyof typeof dateLocale],
-              }),
-          });
-};
+Utils.String.formatDateDistance = (i18n: i18n, _translate: TFunction<"translation", undefined>, date: Date): string =>
+    formatDateDistance(date, i18n.language);
 
 Utils.String.formatTimerDuration = (duration: Duration) => {
     let hours = duration.hours ?? 0;
