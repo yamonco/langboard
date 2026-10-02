@@ -10,6 +10,8 @@ function render() {
         document: document.documentElement.lang,
         cached: localStorage.getItem("lang"),
         close: i18n.t("common.Close"),
+        fallbackExample: i18n.t("board.Board"),
+        availableTools: i18n.t("mcp.Available Tools ({count})", { count: 3 }),
         fallback: i18n.options.fallbackLng,
         supported: i18n.options.supportedLngs,
     });

@@ -1,0 +1,10 @@
+{
+  "Metadata": "元数据",
+  "Key": "键",
+  "Value": "值",
+  "Add a data": "添加数据",
+  "errors": {
+    "Key is required.": "请输入键。",
+    "Invalid JSON format.": "JSON格式无效。"
+  }
+}

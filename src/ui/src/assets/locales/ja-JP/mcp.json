@@ -1,0 +1,10 @@
+{
+  "Create Global MCP Server": "グローバルMCPサーバーを作成",
+  "Create Admin MCP Server": "管理者MCPサーバーを作成",
+  "MCP Server": "MCPサーバー",
+  "MCP Server Configuration": "MCPサーバー設定",
+  "Copy config": "設定をコピー",
+  "Available Tools ({count})": "利用可能なツール ({{count}})",
+  "View Input Schema": "入力スキーマを見る",
+  "{count} tools": "{{count}}個のツール"
+}

@@ -1,0 +1,10 @@
+{
+  "Create Global MCP Server": "创建全局MCP服务器",
+  "Create Admin MCP Server": "创建管理员MCP服务器",
+  "MCP Server": "MCP服务器",
+  "MCP Server Configuration": "MCP服务器配置",
+  "Copy config": "复制配置",
+  "Available Tools ({count})": "可用工具 ({{count}})",
+  "View Input Schema": "查看输入架构",
+  "{count} tools": "{{count}}个工具"
+}
