@@ -36,7 +36,7 @@ function SettingsProxy(): React.JSX.Element {
     const socket = useSocket();
     const navigate = usePageNavigateRef();
     const pathname = location.pathname.split("/").slice(0, 3).join("/");
-    const { data, isFetching, error } = useGetSettingRoles();
+    const { data, error } = useGetSettingRoles();
     const [isReady, setIsReady] = useState(false);
     const [isOllamaAvailable, setIsOllamaAvailable] = useState(false);
     const [isOllamaHealthChecked, setIsOllamaHealthChecked] = useState(!IS_OLLAMA_RUNNING);
@@ -61,7 +61,7 @@ function SettingsProxy(): React.JSX.Element {
     }, [error]);
 
     useEffect(() => {
-        if (!data || isFetching) {
+        if (!data) {
             setIsReady(() => false);
             return;
         }
@@ -81,7 +81,7 @@ function SettingsProxy(): React.JSX.Element {
         return () => {
             socket.unsubscribe(ESocketTopic.AppSettings, topicIds);
         };
-    }, [currentUser, data, isFetching, socket]);
+    }, [currentUser, data, socket]);
 
     useEffect(() => {
         if (!IS_OLLAMA_RUNNING) {
@@ -154,7 +154,7 @@ function SettingsProxy(): React.JSX.Element {
 
     return (
         <>
-            {isReady && isOllamaHealthChecked && currentUser ? (
+            {isReady && currentUser && (pathname !== ROUTES.SETTINGS.OLLAMA || isOllamaHealthChecked) ? (
                 <SettingsProxyDisplay currentUser={currentUser} isOllamaAvailable={isOllamaAvailable} />
             ) : (
                 <DashboardStyledLayout headerNavs={[]} sidebarNavs={[]}>
