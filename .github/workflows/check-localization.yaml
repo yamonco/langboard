@@ -80,3 +80,6 @@ jobs:
 
       - run: yarn playwright test -c playwright.template-selection.config.ts
         working-directory: src/ui
+
+      - run: yarn playwright test -c playwright.workload.config.ts
+        working-directory: src/ui

@@ -1,4 +1,5 @@
 import "./ProjectWorkloadBadges.css";
+import { formatNumber } from "@/core/utils/LocaleFormat";
 import { useReducer, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import Popover from "@/components/base/Popover";
@@ -18,7 +19,7 @@ export default function ProjectWorkloadBadges({
     compact?: boolean;
     onNavigate?: () => void;
 }) {
-    const [t] = useTranslation();
+    const [t, i18n] = useTranslation();
     const navigate = usePageNavigateRef();
     const [, refresh] = useReducer((value) => value + 1, 0);
     const columns = ProjectColumn.Model.useModels((column) => column.project_uid === projectUID, [projectUID]);
@@ -56,7 +57,7 @@ export default function ProjectWorkloadBadges({
                     title={t("dashboard.Open cards")}
                     aria-label={t("dashboard.Open cards count", { count: openTotal })}
                 >
-                    {openTotal}
+                    {formatNumber(openTotal, i18n.language)}
                 </span>
             )}
             {compact
@@ -145,7 +146,7 @@ function ColumnGraph({
 }
 
 function WorkloadPie({ columns, total }: { columns: ProjectColumn.TModel[]; total: number }) {
-    const [t] = useTranslation();
+    const [t, i18n] = useTranslation();
     let offset = 0;
     const segments = columns.map((column) => {
         const start = offset;
@@ -156,7 +157,7 @@ function WorkloadPie({ columns, total }: { columns: ProjectColumn.TModel[]; tota
         <div className="flex max-w-64 items-center gap-3 py-1">
             <span
                 role="img"
-                aria-label={`${t("dashboard.Unfinished cards")}: ${total}`}
+                aria-label={t("dashboard.Unfinished cards count", { count: total })}
                 data-workload-pie="true"
                 className="size-16 shrink-0 rounded-full bg-muted"
                 style={{ background: total > 0 ? `conic-gradient(${segments.join(",")})` : undefined }}
@@ -169,7 +170,7 @@ function WorkloadPie({ columns, total }: { columns: ProjectColumn.TModel[]; tota
                             style={{ background: new Utils.Color.Generator(column.name).generateRandomColor() }}
                         />
                         <span className="truncate">{column.name}</span>
-                        <span className="ml-auto tabular-nums">{column.incomplete_count ?? 0}</span>
+                        <span className="ml-auto tabular-nums">{formatNumber(column.incomplete_count ?? 0, i18n.language)}</span>
                     </span>
                 ))}
             </div>

@@ -1,3 +1,4 @@
+import { formatNumber } from "@/core/utils/LocaleFormat";
 import Box from "@/components/base/Box";
 import Flex from "@/components/base/Flex";
 import { Project } from "@/core/models";
@@ -27,7 +28,7 @@ const ProjectCompactList = ({
     listClassName,
     dense,
 }: IProjectCompactListProps): React.JSX.Element | null => {
-    const [t] = useTranslation();
+    const [t, i18n] = useTranslation();
     const listId = useId();
     const [expanded, setExpanded] = useState(false);
     const { items, nextPage } = useInfiniteScrollPager({ allItems: projects, size: 24 });
@@ -43,7 +44,7 @@ const ProjectCompactList = ({
             {title ? (
                 <Flex items="baseline" gap="2" className="mb-2 px-1">
                     <h2 className="text-sm font-semibold">{title}</h2>
-                    <span className="text-xs tabular-nums text-muted-foreground">{projects.length}</span>
+                    <span className="text-xs tabular-nums text-muted-foreground">{formatNumber(projects.length, i18n.language)}</span>
                     {initialVisibleCount && projects.length > initialVisibleCount ? (
                         <Button
                             type="button"
@@ -54,7 +55,7 @@ const ProjectCompactList = ({
                             aria-controls={listId}
                             onClick={() => setExpanded((value) => !value)}
                         >
-                            {expanded ? t("editor.Show less") : `${t("editor.Show more")} (+${projects.length - initialVisibleCount})`}
+                            {expanded ? t("editor.Show less") : t("dashboard.Show more projects", { count: projects.length - initialVisibleCount })}
                         </Button>
                     ) : null}
                 </Flex>
