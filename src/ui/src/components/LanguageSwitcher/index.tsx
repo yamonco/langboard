@@ -1,3 +1,4 @@
+import { LANGUAGE_LOCALES } from "@/constants";
 import { useTranslation } from "react-i18next";
 import Button, { type ButtonProps } from "@/components/base/Button";
 import DropdownMenu from "@/components/base/DropdownMenu";
@@ -35,14 +36,14 @@ function LanguageSwitcher({
             return;
         }
 
-        if (!i18n.languages.includes(lang)) {
+        if (!LANGUAGE_LOCALES.includes(lang)) {
             return;
         }
 
         i18n.changeLanguage(lang);
     };
 
-    const langs = i18n.languages.filter((locale) => locale !== curLang);
+    const langs = LANGUAGE_LOCALES.filter((locale) => locale !== curLang);
 
     return (
         <DropdownMenu.Root>

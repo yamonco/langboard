@@ -35,12 +35,12 @@ function UserPreferenceLanguageSwitcher({ currentUser, ...props }: IUserPreferen
                 return messageRef.message;
             },
             success: () => {
+                currentUser.preferred_lang = lang;
+                i18n.changeLanguage(lang);
                 return t("successes.Preferred language updated successfully.");
             },
             finally: () => {
                 setIsValidating(false);
-                currentUser.preferred_lang = lang;
-                i18n.changeLanguage(lang);
             },
         });
     };

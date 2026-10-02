@@ -11,7 +11,7 @@ export const IS_OLLAMA_RUNNING = process.env.IS_OLLAMA_RUNNING === "true" || fal
 export const APP_ACCESS_TOKEN = `access_token_${APP_SHORT_NAME}`;
 export const APP_REFRESH_TOKEN = `refresh_token_${APP_SHORT_NAME}`;
 
-export const LANGUAGE_LOCALES = ["en-US"];
+export const LANGUAGE_LOCALES = ["en-US", "ko-KR", "ja-JP", "zh-CN"];
 
 export const EMAIL_REGEX = /^\S+@\S+\.\S+$/;
 

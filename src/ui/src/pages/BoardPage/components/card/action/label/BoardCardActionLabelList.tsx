@@ -44,7 +44,13 @@ const BoardCardActionLabelList = memo(
         const flatProjectLabels = ProjectLabel.Model.useModels((model) => model.project_uid === card.project_uid);
         const projectLabels = [...flatProjectLabels]
             .sort((a, b) => a.order - b.order)
-            .filter((label) => `${label.name} ${label.description}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
+            .filter((label) =>
+                `${label.name} ${label.description} ${Object.values(label.global_display?.translations ?? {})
+                    .map((text) => `${text.name} ${text.description}`)
+                    .join(" ")}`
+                    .toLocaleLowerCase()
+                    .includes(query.trim().toLocaleLowerCase())
+            );
         const remainingGlobalLabels = globalLabels
             .filter(
                 (label) =>

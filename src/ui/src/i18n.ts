@@ -27,6 +27,7 @@ class I18NextBackend implements BackendModule {
     read(language: string, _: string, callback: ReadCallback): void {
         const loader = locales[language];
         if (!loader) {
+            callback(null, {});
             return;
         }
 
@@ -45,7 +46,7 @@ i18n.use(new I18NextBackend())
     .use(initReactI18next)
     .init({
         debug: !IS_PRODUCTION && false,
-        fallbackLng: LANGUAGE_LOCALES,
+        fallbackLng: "en-US",
         load: "currentOnly",
         keySeparator: ".",
         preload: false,
