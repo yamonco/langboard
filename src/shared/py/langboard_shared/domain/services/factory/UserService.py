@@ -261,6 +261,9 @@ class UserService(BaseDomainService):
 
         return True
 
+    def get_preferred_lang(self, user: User) -> str:
+        return self.repo.user.get_preferred_lang(user)
+
     def update_preferred_lang(self, user: User, lang: str):
         if lang in LangEnum.__members__:
             lang = LangEnum[lang].value

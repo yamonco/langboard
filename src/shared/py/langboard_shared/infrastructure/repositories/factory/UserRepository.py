@@ -24,6 +24,13 @@ class UserRepository(BaseRepository[User]):
     def name() -> str:
         return "user"
 
+    def get_preferred_lang(self, user: User) -> str:
+        # Account bootstrap must observe a preference write before replica replay.
+        query = select(User.column("preferred_lang")).where(User.column("id") == user.id)
+        with DbSession.use(readonly=False) as db:
+            row = db.exec(query).first()
+        return row[0] if row else user.preferred_lang
+
     def get_all_with_profile_in_settings(self):
         query = (
             SqlBuilder.select.tables(User, UserProfile)
