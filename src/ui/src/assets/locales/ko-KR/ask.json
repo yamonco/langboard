@@ -1,0 +1,20 @@
+{
+  "Are you sure you want to unassign this assignee?": "이 담당자의 할당을 해제하시겠습니까?",
+  "Are you sure you want to archive this card?": "이 카드를 아카이브하시겠습니까?",
+  "Are you sure you want to delete this card?": "이 카드를 삭제하시겠습니까?",
+  "Are you sure you want to delete this file?": "이 파일을 삭제하시겠습니까?",
+  "Are you sure you want to delete this checklist?": "이 체크리스트를 삭제하시겠습니까?",
+  "Are you sure you want to delete this checkitem?": "이 체크항목을 삭제하시겠습니까?",
+  "Are you sure you want to delete this column?": "이 칼럼을 삭제하시겠습니까?",
+  "Are you sure you want to unschedule this cron?": "이 cron 예약을 해제하시겠습니까?",
+  "Are you sure you want to delete this label?": "이 라벨을 삭제하시겠습니까?",
+  "Are you sure you want to delete this project?": "이 프로젝트를 삭제하시겠습니까?",
+  "Are you sure you want to delete this template?": "이 템플릿을 삭제하시겠습니까?",
+  "Are you sure you want to delete this user?": "이 사용자를 삭제하시겠습니까?",
+  "Are you sure you want to delete this bot?": "이 봇을 삭제하시겠습니까?",
+  "Are you sure you want to delete this internal bot?": "이 내장 봇을 삭제하시겠습니까?",
+  "Are you sure you want to delete this model?": "이 모델을 삭제하시겠습니까?",
+  "Are you sure you want to delete this API key?": "이 API 키를 삭제하시겠습니까?",
+  "Are you sure you want to delete this API comfort tool?": "이 API 편의 도구를 삭제하시겠습니까?",
+  "Are you sure you want to delete this MCP tool group?": "이 MCP 도구 그룹을 삭제하시겠습니까?"
+}

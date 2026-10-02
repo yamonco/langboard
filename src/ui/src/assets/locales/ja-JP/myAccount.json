@@ -1,0 +1,38 @@
+{
+  "My account": "マイアカウント",
+  "Sign out": "ログアウト",
+  "Profile": "プロフィール",
+  "Emails": "メールアドレス",
+  "Add new email": "新しいメールアドレスを追加",
+  "Primary email": "メインのメールアドレス",
+  "Primary": "メイン",
+  "Sub": "追加",
+  "Unverified": "未確認",
+  "Search email...": "メールアドレスを検索...",
+  "Resend": "再送信",
+  "Groups": "グループ",
+  "Add an email...": "メールアドレスを追加...",
+  "Add new group": "新しいグループを追加",
+  "Preferences": "環境設定",
+  "Language": "言語",
+  "errors": {
+    "You must sign in before verifying your email.": "メールアドレスを確認する前にログインしてください。",
+    "missing": {
+      "firstname": "名を入力してください。",
+      "lastname": "姓を入力してください。",
+      "new_email": "新しいメールアドレスを入力してください。",
+      "current_password": "現在のパスワードを入力してください。",
+      "new_password": "新しいパスワードを入力してください。",
+      "password-confirm": "新しい確認用パスワードを入力してください。"
+    },
+    "invalid": {
+      "new_email": "有効なメールアドレスを入力してください。",
+      "current_password": "現在のパスワードが違います。再試行してください。",
+      "password-confirm": "確認用パスワードが一致しません。再試行してください。"
+    },
+    "exists": {
+      "new_email": "このメールアドレスは使用されています。別のアドレスを入力してください。"
+    },
+    "Invalid language.": "無効な言語です。"
+  }
+}

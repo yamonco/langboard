@@ -44,3 +44,21 @@ test("language changes keep document/cache canonical and load translated resourc
         );
     }
 });
+
+const accountLabels: Record<string, string[]> = {
+    "en-US": ["Sign in", "Welcome to Langboard!", "Password recovery", "Language", "Email", "Are you sure you want to delete this API key?"],
+    "ko-KR": ["로그인", "Langboard에 오신 것을 환영합니다!", "비밀번호 찾기", "언어", "이메일", "이 API 키를 삭제하시겠습니까?"],
+    "ja-JP": ["ログイン", "Langboardへようこそ！", "パスワードの復旧", "言語", "メールアドレス", "このAPIキーを削除しますか？"],
+    "zh-CN": ["登录", "欢迎使用Langboard！", "找回密码", "语言", "邮箱", "确定要删除此API密钥吗？"],
+};
+for (const locale of Object.keys(accountLabels)) {
+    test(`account namespaces load and interpolate in ${locale}`, async ({ page }) => {
+        await page.addInitScript((value) => localStorage.setItem("lang", value), locale);
+        await page.goto("/src/core/utils/LocaleRuntime.fixture.html");
+        await expect(page.locator("output")).toContainText(`"language":"${locale}"`);
+        const state = JSON.parse(await page.locator("output").innerText());
+        expect([state.signIn, state.welcome, state.recovery, state.languageLabel, state.emailLabel, state.deleteApiKey]).toEqual(
+            accountLabels[locale]
+        );
+    });
+}

@@ -1,0 +1,38 @@
+{
+  "My account": "我的账号",
+  "Sign out": "退出登录",
+  "Profile": "个人资料",
+  "Emails": "邮箱",
+  "Add new email": "添加新邮箱",
+  "Primary email": "主邮箱",
+  "Primary": "主要",
+  "Sub": "附加",
+  "Unverified": "未验证",
+  "Search email...": "搜索邮箱...",
+  "Resend": "重新发送",
+  "Groups": "群组",
+  "Add an email...": "添加邮箱...",
+  "Add new group": "添加新群组",
+  "Preferences": "偏好设置",
+  "Language": "语言",
+  "errors": {
+    "You must sign in before verifying your email.": "验证邮箱前请先登录。",
+    "missing": {
+      "firstname": "请输入名字。",
+      "lastname": "请输入姓氏。",
+      "new_email": "请输入新邮箱地址。",
+      "current_password": "请输入当前密码。",
+      "new_password": "请输入新密码。",
+      "password-confirm": "请输入新确认密码。"
+    },
+    "invalid": {
+      "new_email": "请输入有效的邮箱地址。",
+      "current_password": "当前密码错误。请重试。",
+      "password-confirm": "确认密码不匹配。请重试。"
+    },
+    "exists": {
+      "new_email": "邮箱已被使用。请尝试其他邮箱。"
+    },
+    "Invalid language.": "无效语言。"
+  }
+}

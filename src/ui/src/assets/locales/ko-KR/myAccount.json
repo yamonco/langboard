@@ -1,0 +1,38 @@
+{
+  "My account": "내 계정",
+  "Sign out": "로그아웃",
+  "Profile": "프로필",
+  "Emails": "이메일",
+  "Add new email": "새 이메일 추가",
+  "Primary email": "기본 이메일",
+  "Primary": "기본",
+  "Sub": "추가",
+  "Unverified": "미인증",
+  "Search email...": "이메일 검색...",
+  "Resend": "다시 보내기",
+  "Groups": "그룹",
+  "Add an email...": "이메일 추가...",
+  "Add new group": "새 그룹 추가",
+  "Preferences": "환경설정",
+  "Language": "언어",
+  "errors": {
+    "You must sign in before verifying your email.": "이메일을 인증하려면 먼저 로그인해 주세요.",
+    "missing": {
+      "firstname": "이름을 입력해 주세요.",
+      "lastname": "성을 입력해 주세요.",
+      "new_email": "새 이메일 주소를 입력해 주세요.",
+      "current_password": "현재 비밀번호를 입력해 주세요.",
+      "new_password": "새 비밀번호를 입력해 주세요.",
+      "password-confirm": "새 비밀번호 확인을 입력해 주세요."
+    },
+    "invalid": {
+      "new_email": "올바른 이메일 주소를 입력해 주세요.",
+      "current_password": "현재 비밀번호가 틀렸습니다. 다시 시도해 주세요.",
+      "password-confirm": "비밀번호 확인이 일치하지 않습니다. 다시 시도해 주세요."
+    },
+    "exists": {
+      "new_email": "이미 사용 중인 이메일입니다. 다른 주소를 입력해 주세요."
+    },
+    "Invalid language.": "지원하지 않는 언어입니다."
+  }
+}

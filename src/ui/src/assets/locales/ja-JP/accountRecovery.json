@@ -1,0 +1,26 @@
+{
+  "Password recovery": "パスワードの復旧",
+  "Please enter your name to verify your account.": "アカウントを確認するため、お名前を入力してください。",
+  "Password Reset Link Sent": "パスワード再設定リンクを送信しました",
+  "A password reset link has been successfully sent to your registered email address.": "登録されたメールアドレスにパスワード再設定リンクを送信しました。",
+  "Please check your inbox (and spam/junk folder) for the email. Follow the instructions in the email to reset your password.": "受信トレイと迷惑メールフォルダーを確認してください。メールの手順に従ってパスワードを再設定してください。",
+  "If you do not receive the email within a few minutes, please try again or contact support for assistance.": "数分待ってもメールが届かない場合は、再試行するかサポートにお問い合わせください。",
+  "Please enter your new password.": "新しいパスワードを入力してください。",
+  "Resend Link": "リンクを再送信",
+  "Resent link successfully.": "リンクを再送信しました。",
+  "Password Reset Successful": "パスワードの再設定完了",
+  "Your password has been successfully reset.": "パスワードを再設定しました。",
+  "You can now sign in with your new password.": "新しいパスワードでログインできます。",
+  "errors": {
+    "missing": {
+      "firstname": "名を入力してください。",
+      "lastname": "姓を入力してください。",
+      "password": "新しいパスワードを入力してください。",
+      "password-confirm": "確認用パスワードを入力してください。"
+    },
+    "invalid": {
+      "name": "名前が一致しません。再試行してください。",
+      "password-confirm": "確認用パスワードが一致しません。再試行してください。"
+    }
+  }
+}
