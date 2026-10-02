@@ -269,5 +269,10 @@
   "Complete unchecked items": "미완료 항목 완료 처리",
   "Stop running timers": "실행 중인 타이머 중지",
   "Saving does not replay effects on existing cards.": "저장해도 기존 카드에 효과를 다시 적용하지 않습니다.",
-  "Columns using this stage": "이 단계를 사용하는 열"
+  "Columns using this stage": "이 단계를 사용하는 열",
+  "New template": "새 템플릿",
+  "Template name": "템플릿 이름",
+  "Column name": "칼럼명",
+  "Move up": "위로 이동",
+  "Add column": "칼럼 추가"
 }

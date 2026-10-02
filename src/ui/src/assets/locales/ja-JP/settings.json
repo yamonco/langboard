@@ -269,5 +269,10 @@
   "Complete unchecked items": "未チェックの項目を完了にする",
   "Stop running timers": "実行中のタイマーを停止",
   "Saving does not replay effects on existing cards.": "保存しても既存のカードに処理は再適用されません。",
-  "Columns using this stage": "このステージを使用している列"
+  "Columns using this stage": "このステージを使用している列",
+  "New template": "新しいテンプレート",
+  "Template name": "テンプレート名",
+  "Column name": "列名",
+  "Move up": "上へ移動",
+  "Add column": "列を追加"
 }

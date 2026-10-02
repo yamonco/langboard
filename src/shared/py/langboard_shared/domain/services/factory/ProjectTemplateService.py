@@ -1,3 +1,4 @@
+import re
 from typing import Any
 from ....core.domain import BaseDomainService
 from ....helpers import InfraHelper
@@ -94,6 +95,64 @@ class ProjectTemplateService(BaseDomainService):
         template = self.get(name)
         self.repo.project_template.replace_default(template)
         template.is_default = True
+        return template
+
+    def save_columns(self, name: str, columns: list[dict[str, Any]], uid: str | None = None) -> ProjectTemplate | None:
+        """Edit the existing structural SSOT without replacing automation snapshots."""
+        template = InfraHelper.get_by_id_like(ProjectTemplate, uid) if uid else None
+        if uid and not template:
+            return None
+        name = name.strip()
+        if not name or len(name) > 100 or not 1 <= len(columns) <= 100:
+            raise ValueError("Invalid template structure")
+        existing = self.repo.project_template.get_by_name(name)
+        if existing and (not template or existing.id != template.id):
+            raise ValueError("Template name already exists")
+        if (name == "SI" and not template) or (template and template.is_builtin and template.name != name):
+            raise ValueError("Built-in template name is immutable")
+        definitions = []
+        for column in columns:
+            column_name = column["name"].strip()
+            description = column.get("description", "")
+            stage_key = column.get("workflow_stage")
+            if not column_name or len(column_name) > 100 or len(description) > 4096:
+                raise ValueError("Invalid template column")
+            if stage_key:
+                stage = self.repo.workflow_stage.get_by_keys({stage_key}).get(stage_key)
+                old_keys = {item.get("workflow_stage") for item in template.column_definitions()} if template else set()
+                if not stage or (not stage.is_active and stage_key not in old_keys):
+                    raise ValueError("Unknown or inactive workflow stage")
+            translations = {language: dict(text) for language, text in column.get("translations", {}).items()}
+            if len(set(translations) | {"en"}) > 30:
+                raise ValueError("Too many column languages")
+            for language, text in translations.items():
+                if (
+                    not re.fullmatch(r"[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*", language)
+                    or set(text) - {"name", "description"}
+                    or len(text.get("name", "")) > 100
+                    or len(text.get("description", "")) > 4096
+                ):
+                    raise ValueError("Invalid column translation")
+            translations["en"] = {"name": column_name, "description": description}
+            definitions.append(
+                {
+                    "name": column_name,
+                    "description": description,
+                    "workflow_stage": stage_key or None,
+                    "translations": translations,
+                }
+            )
+        if template:
+            scoped_names = {scope.get("column_name") for scope in template.column_bot_scopes}
+            if scoped_names - {column["name"] for column in definitions}:
+                raise ValueError("Update column bot scopes before renaming or removing bound columns")
+            template.name = name
+            template.columns = definitions
+            template.column_descriptions = []
+            self.repo.project_template.update(template)
+        else:
+            template = ProjectTemplate(name=name, columns=definitions)
+            self.repo.project_template.insert(template)
         return template
 
     def copy_from_project(self, project: Project, name: str) -> ProjectTemplate:

@@ -269,5 +269,10 @@
   "Complete unchecked items": "Complete unchecked items",
   "Stop running timers": "Stop running timers",
   "Saving does not replay effects on existing cards.": "Saving does not replay effects on existing cards.",
-  "Columns using this stage": "Columns using this stage"
+  "Columns using this stage": "Columns using this stage",
+  "New template": "New template",
+  "Template name": "Template name",
+  "Column name": "Column name",
+  "Move up": "Move up",
+  "Add column": "Add column"
 }

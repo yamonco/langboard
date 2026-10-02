@@ -299,6 +299,19 @@ class DeleteSelectedWebhooksForm(BaseFormModel):
     webhook_uids: list[str]
 
 
+class ProjectTemplateColumnForm(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    description: str = Field(default="", max_length=4096)
+    workflow_stage: str | None = None
+    translations: dict[str, dict[str, str]] = Field(default_factory=dict)
+
+
+@form_model
+class SaveProjectTemplateForm(BaseFormModel):
+    name: str = Field(min_length=1, max_length=100)
+    columns: list[ProjectTemplateColumnForm] = Field(min_length=1, max_length=100)
+
+
 @form_model
 class SetDefaultProjectTemplateForm(BaseFormModel):
     template_name: str

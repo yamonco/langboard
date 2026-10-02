@@ -2,10 +2,17 @@ import { api } from "@/core/helpers/Api";
 import { TMutationOptions, useQueryMutation } from "@/core/helpers/QueryMutation";
 import { Routing } from "@langboard/core/constants";
 
+export interface ITemplateColumn {
+    name: string;
+    description: string;
+    workflow_stage: string | null;
+    translations?: Record<string, { name: string; description: string }>;
+}
 export interface IProjectTemplate {
     uid: string;
     name: string;
     columns: string[];
+    column_definitions?: ITemplateColumn[];
     column_descriptions?: string[];
     is_builtin: boolean;
     is_default: boolean;
@@ -34,5 +41,19 @@ export const useSetDefaultProjectTemplate = (options?: TMutationOptions<{ templa
             return response.data.template;
         },
         { ...options, retry: 0 }
+    );
+};
+
+export const useSaveProjectTemplate = () => {
+    const { mutate } = useQueryMutation();
+    return mutate(
+        ["save-project-template"],
+        async ({ uid, ...form }: { uid?: string; name: string; columns: ITemplateColumn[] }) => {
+            const response = uid
+                ? await api.put<{ template: IProjectTemplate }>(`/settings/project-templates/${uid}`, form)
+                : await api.post<{ template: IProjectTemplate }>("/settings/project-templates", form);
+            return response.data.template;
+        },
+        { retry: 0 }
     );
 };

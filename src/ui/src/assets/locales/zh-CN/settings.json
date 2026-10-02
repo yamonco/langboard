@@ -269,5 +269,10 @@
   "Complete unchecked items": "完成未勾选的项目",
   "Stop running timers": "停止运行中的计时器",
   "Saving does not replay effects on existing cards.": "保存不会对现有卡片重新执行这些操作。",
-  "Columns using this stage": "使用此阶段的列"
+  "Columns using this stage": "使用此阶段的列",
+  "New template": "新建模板",
+  "Template name": "模板名称",
+  "Column name": "列名称",
+  "Move up": "上移",
+  "Add column": "添加列"
 }
