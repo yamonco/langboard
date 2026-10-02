@@ -75,7 +75,7 @@
   "Enter a title": "Enter a title",
   "Select parent cards": "Select parent cards",
   "Select child cards": "Select child cards",
-  "{count} selected": "{{count}} selected",
+  "{count} selected": "{{count, number}} selected",
   "Unread changes": "Unread changes",
   "Sort cards": "Sort cards",
   "Manual order is preserved; switch to Manual to drag cards": "Personal view only. Switch to Manual to drag cards.",

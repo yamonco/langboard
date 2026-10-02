@@ -5,7 +5,7 @@ export const MAX_RAIL_MARKERS = 96;
 export interface IRailMarker {
     index: number;
     chunk: IDescriptionChunk;
-    rangeLabel?: string;
+    range?: { start: number; end: number };
 }
 
 export function buildRailMarkers(chunks: IDescriptionChunk[]): IRailMarker[] {
@@ -25,7 +25,7 @@ export function buildRailMarkers(chunks: IDescriptionChunk[]): IRailMarker[] {
         markers.push({
             index: representativeIndex,
             chunk: chunks[representativeIndex],
-            rangeLabel: `${start + 1}-${end}`,
+            range: { start: start + 1, end },
         });
     }
 

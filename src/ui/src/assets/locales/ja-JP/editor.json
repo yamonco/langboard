@@ -130,7 +130,7 @@
   "Loading...": "読み込み中...",
   "Rendering...": "レンダリング中...",
   "Preview will appear here": "ここにプレビューが表示されます",
-  "Navigate description": "{{total}}件中{{position}}番目の説明に移動",
+  "Navigate description": "{{total, number}}件中{{position, number}}番目の説明に移動",
   "Show less": "表示を減らす",
   "Show more": "もっと表示",
   "Show all": "すべて表示",

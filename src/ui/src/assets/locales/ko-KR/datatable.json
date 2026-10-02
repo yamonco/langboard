@@ -1,12 +1,12 @@
 {
-  "{count} New Records": "새 레코드 {{count}}개",
-  "Showing {start} to {end} of {total} results": "전체 {{total}}개 중 {{start}}~{{end}} 표시",
+  "{count} New Records": "새 레코드 {{count, number}}개",
+  "Showing {start} to {end} of {total} results": "전체 {{total, number}}개 중 {{start, number}}~{{end, number}} 표시",
   "Search...": "검색...",
   "Active filters": "적용된 필터",
   "Next Page": "다음 페이지",
   "Previous Page": "이전 페이지",
   "More Pages": "더 많은 페이지",
-  "Page {page}": "{{page}}페이지",
+  "Page {page}": "{{page, number}}페이지",
   "No data available": "사용 가능한 데이터 없음",
   "Try adjusting your search or filter criteria": "검색어나 필터 조건을 조정해 보세요"
 }

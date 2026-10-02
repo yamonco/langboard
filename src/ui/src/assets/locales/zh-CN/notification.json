@@ -1,6 +1,6 @@
 {
   "Notifications": "通知",
-  "{count} notifications received": "收到 {{count}} 条通知",
+  "{count} notifications received": "收到 {{count, number}} 条通知",
   "Only show unread": "仅显示未读",
   "You have a new notification.": "您有一条新通知。",
   "Read all notifications": "将所有通知标为已读",

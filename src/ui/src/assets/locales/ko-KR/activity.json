@@ -1,5 +1,5 @@
 {
-  "{count} New Activities": "{{count}}개의 새 활동",
+  "{count} New Activities": "{{count, number}}개의 새 활동",
   "No activities": "활동 없음",
   "changes": {
     "title": "제목",

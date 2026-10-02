@@ -161,7 +161,7 @@ export default function WorkflowStagesPage({ currentUser }: { currentUser: AuthU
                             </div>
                             <p className="mt-1 font-mono text-xs text-muted-foreground">{stage.key}</p>
                             <p className="mt-1 text-xs text-muted-foreground">
-                                {t("settings.Columns using this stage")}: {stage.used_column_count ?? 0}
+                                {t("settings.Columns using this stage")}: {formatNumber(stage.used_column_count ?? 0, i18n.language)}
                             </p>
                             <div className="mt-3 flex flex-wrap gap-1 text-xs text-muted-foreground">
                                 {stage.counts_as_completed && <span className="rounded-full border px-2 py-0.5">{t("settings.Completed")}</span>}

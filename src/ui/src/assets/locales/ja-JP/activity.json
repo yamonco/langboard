@@ -1,5 +1,5 @@
 {
-  "{count} New Activities": "新しいアクティビティ {{count}} 件",
+  "{count} New Activities": "新しいアクティビティ {{count, number}} 件",
   "No activities": "アクティビティなし",
   "changes": {
     "title": "タイトル",

@@ -130,7 +130,7 @@
   "Loading...": "加载中...",
   "Rendering...": "渲染中...",
   "Preview will appear here": "预览将显示在此处",
-  "Navigate description": "转到第 {{position}} 条说明，共 {{total}} 条",
+  "Navigate description": "转到第 {{position, number}} 条说明，共 {{total, number}} 条",
   "Show less": "收起",
   "Show more": "展开",
   "Show all": "显示全部",

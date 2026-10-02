@@ -75,7 +75,7 @@
   "Enter a title": "输入标题",
   "Select parent cards": "选择父卡片",
   "Select child cards": "选择子卡片",
-  "{count} selected": "已选择 {{count}} 项",
+  "{count} selected": "已选择 {{count, number}} 项",
   "Unread changes": "未读更改",
   "Sort cards": "卡片排序",
   "Manual order is preserved; switch to Manual to drag cards": "仅适用于个人视图。切换到手动排序后可拖动卡片。",

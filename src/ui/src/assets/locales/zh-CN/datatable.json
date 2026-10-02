@@ -1,12 +1,12 @@
 {
-  "{count} New Records": "{{count}}条新记录",
-  "Showing {start} to {end} of {total} results": "显示第{{start}}至{{end}}条，共{{total}}条结果",
+  "{count} New Records": "{{count, number}}条新记录",
+  "Showing {start} to {end} of {total} results": "显示第{{start, number}}至{{end, number}}条，共{{total, number}}条结果",
   "Search...": "搜索...",
   "Active filters": "已应用的筛选条件",
   "Next Page": "下一页",
   "Previous Page": "上一页",
   "More Pages": "更多页",
-  "Page {page}": "第{{page}}页",
+  "Page {page}": "第{{page, number}}页",
   "No data available": "暂无数据",
   "Try adjusting your search or filter criteria": "请尝试调整搜索或筛选条件"
 }

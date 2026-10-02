@@ -1,3 +1,4 @@
+import { formatNumber } from "@/core/utils/LocaleFormat";
 import Box from "@/components/base/Box";
 import HoverCard from "@/components/base/HoverCard";
 import { cn } from "@/core/utils/ComponentUtils";
@@ -33,7 +34,7 @@ export function getPreviewTitleKey(type: IDescriptionChunk["metadata"]["type"]):
 }
 
 export const DescriptionOverviewRail = memo(({ chunks, activeIndex, onNavigate }: IDescriptionOverviewRailProps): React.JSX.Element => {
-    const [t] = useTranslation();
+    const [t, i18n] = useTranslation();
     const markers = useMemo(() => buildRailMarkers(chunks), [chunks]);
     const nearestActiveMarkerIndex = useMemo(() => getNearestMarkerIndex(markers, activeIndex), [activeIndex, markers]);
 
@@ -87,7 +88,9 @@ export const DescriptionOverviewRail = memo(({ chunks, activeIndex, onNavigate }
                                         </div>
                                     )}
                                     <div className="mt-2 text-[11px] text-muted-foreground/80">
-                                        {marker.rangeLabel ?? `${marker.index + 1} / ${chunks.length}`}
+                                        {marker.range
+                                            ? `${formatNumber(marker.range.start, i18n.language)}–${formatNumber(marker.range.end, i18n.language)}`
+                                            : `${formatNumber(marker.index + 1, i18n.language)} / ${formatNumber(chunks.length, i18n.language)}`}
                                     </div>
                                 </HoverCard.Content>
                             </HoverCard.Portal>

@@ -75,7 +75,7 @@
   "Enter a title": "タイトルを入力",
   "Select parent cards": "親カードを選択",
   "Select child cards": "子カードを選択",
-  "{count} selected": "{{count}} 件選択中",
+  "{count} selected": "{{count, number}} 件選択中",
   "Unread changes": "未読の変更",
   "Sort cards": "カードを並べ替え",
   "Manual order is preserved; switch to Manual to drag cards": "個人の表示にのみ適用されます。カードをドラッグするには手動に切り替えてください。",

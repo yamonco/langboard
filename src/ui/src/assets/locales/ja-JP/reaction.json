@@ -1,7 +1,7 @@
 {
   "React": "リアクションを追加",
   "Reacted by": "リアクションした人",
-  "and more": "ほか{{count}}人",
+  "and more": "ほか{{count, number}}人",
   "Bot": "ボット",
   "check-mark": "チェック",
   "thumbs-up": "いいね",

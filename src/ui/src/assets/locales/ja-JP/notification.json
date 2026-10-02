@@ -1,6 +1,6 @@
 {
   "Notifications": "通知",
-  "{count} notifications received": "通知 {{count}} 件を受信",
+  "{count} notifications received": "通知 {{count, number}} 件を受信",
   "Only show unread": "未読のみ表示",
   "You have a new notification.": "新しい通知があります。",
   "Read all notifications": "すべての通知を既読にする",

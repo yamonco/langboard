@@ -1,3 +1,4 @@
+import { formatNumber } from "@/core/utils/LocaleFormat";
 import Button from "@/components/base/Button";
 import Checkbox from "@/components/base/Checkbox";
 import Avatar from "@/components/base/Avatar";
@@ -22,7 +23,7 @@ export function SkeletonBoardFilter() {
 
 function BoardFilter() {
     const { project, columns, cards, currentUser, filters, filterCard, filterMember, filterLabel, navigateWithFilters } = useBoard();
-    const [t] = useTranslation();
+    const [t, i18n] = useTranslation();
     const [category, setCategory] = useState<"status" | "members" | "creators" | "labels" | "relationships" | null>(null);
     const categories = [
         { key: "status", label: t("board.filters.Status"), keys: ["unfinished", "columns"] },
@@ -121,7 +122,7 @@ function BoardFilter() {
                     <Button variant="ghost" aria-label={t("board.Filters")} className="gap-1 px-2 text-xs xs:px-4 xs:text-sm">
                         <IconComponent icon="list-filter" size={{ initial: "3", xs: "4" }} />
                         <span>{t("board.Filters")}</span>
-                        {countAppliedFilters > 0 && <span>{` (${countAppliedFilters})`}</span>}
+                        {countAppliedFilters > 0 && <span>{` (${formatNumber(countAppliedFilters, i18n.language)})`}</span>}
                     </Button>
                 </Popover.Trigger>
                 <Popover.Content align="end" className="w-[34rem] max-w-[calc(100vw-2rem)] p-0">
@@ -157,7 +158,7 @@ function BoardFilter() {
                                     >
                                         <span>{item.label}</span>
                                         <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                                            {count > 0 && count}
+                                            {count > 0 && formatNumber(count, i18n.language)}
                                             <IconComponent icon="chevron-right" size="3" />
                                         </span>
                                     </Button>
@@ -355,7 +356,7 @@ interface IBoardFilterExtendedProps {
 
 function BoardExtendedFilter({ filterLangLabel, uncountableItems, filterName, createFilterItems }: IBoardFilterExtendedProps) {
     const { project, filters, navigateWithFilters } = useBoard();
-    const [t] = useTranslation();
+    const [t, i18n] = useTranslation();
 
     const countSelections = filters[filterName]?.filter((v) => !(uncountableItems ?? []).includes(v)).length ?? 0;
 
@@ -370,7 +371,7 @@ function BoardExtendedFilter({ filterLangLabel, uncountableItems, filterName, cr
             <div className="mt-2 flex items-center justify-between gap-2 px-3 text-xs text-muted-foreground">
                 <span>
                     {t(`board.filters.${filterLangLabel}`)}
-                    {countSelections > 0 && ` (${countSelections})`}
+                    {countSelections > 0 && ` (${formatNumber(countSelections, i18n.language)})`}
                 </span>
                 {countSelections > 0 && (
                     <Button variant="ghost" size="sm" className="h-7 px-1 text-xs" onClick={clearSelection}>

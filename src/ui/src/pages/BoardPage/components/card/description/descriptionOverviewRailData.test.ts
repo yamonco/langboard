@@ -24,9 +24,13 @@ test("oversized documents are bucketed while preferring headings", () => {
     const markers = buildRailMarkers(chunks);
 
     assert.equal(markers.length, MAX_RAIL_MARKERS);
-    markers.forEach((marker) => {
+    markers.forEach((marker, bucketIndex) => {
         assert.equal(chunks[marker.index].metadata.type, "heading");
-        assert.equal(Boolean(marker.rangeLabel), true);
+        const bucketSize = Math.ceil(chunks.length / MAX_RAIL_MARKERS);
+        assert.deepEqual(marker.range, {
+            start: bucketIndex * bucketSize + 1,
+            end: Math.min(chunks.length, (bucketIndex + 1) * bucketSize),
+        });
     });
 });
 

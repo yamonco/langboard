@@ -1,12 +1,12 @@
 {
-  "{count} New Records": "新しいレコード{{count}}件",
-  "Showing {start} to {end} of {total} results": "全{{total}}件中{{start}}〜{{end}}件を表示",
+  "{count} New Records": "新しいレコード{{count, number}}件",
+  "Showing {start} to {end} of {total} results": "全{{total, number}}件中{{start, number}}〜{{end, number}}件を表示",
   "Search...": "検索...",
   "Active filters": "適用中のフィルター",
   "Next Page": "次のページ",
   "Previous Page": "前のページ",
   "More Pages": "その他のページ",
-  "Page {page}": "{{page}}ページ",
+  "Page {page}": "{{page, number}}ページ",
   "No data available": "データがありません",
   "Try adjusting your search or filter criteria": "検索条件やフィルターを調整してください"
 }

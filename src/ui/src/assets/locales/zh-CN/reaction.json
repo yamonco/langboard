@@ -1,7 +1,7 @@
 {
   "React": "添加回应",
   "Reacted by": "回应者",
-  "and more": "另有{{count}}人",
+  "and more": "另有{{count, number}}人",
   "Bot": "机器人",
   "check-mark": "勾选",
   "thumbs-up": "赞",

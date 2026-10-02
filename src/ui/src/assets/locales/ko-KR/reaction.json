@@ -1,7 +1,7 @@
 {
   "React": "반응 추가",
   "Reacted by": "반응한 사람",
-  "and more": "외 {{count}}명",
+  "and more": "외 {{count, number}}명",
   "Bot": "봇",
   "check-mark": "확인",
   "thumbs-up": "좋아요",

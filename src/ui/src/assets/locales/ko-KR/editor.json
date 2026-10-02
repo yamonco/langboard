@@ -130,7 +130,7 @@
   "Loading...": "불러오는 중...",
   "Rendering...": "렌더링 중...",
   "Preview will appear here": "미리보기가 여기에 표시됩니다",
-  "Navigate description": "{{total}}개 중 {{position}}번째 설명으로 이동",
+  "Navigate description": "{{total, number}}개 중 {{position, number}}번째 설명으로 이동",
   "Show less": "간략히 보기",
   "Show more": "더 보기",
   "Show all": "모두 보기",

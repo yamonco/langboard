@@ -1,5 +1,5 @@
 {
-  "{count} New Activities": "{{count}} 条新活动",
+  "{count} New Activities": "{{count, number}} 条新活动",
   "No activities": "没有活动",
   "changes": {
     "title": "标题",

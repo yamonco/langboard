@@ -1,6 +1,6 @@
 {
   "Notifications": "알림",
-  "{count} notifications received": "알림 {{count}}개 수신",
+  "{count} notifications received": "알림 {{count, number}}개 수신",
   "Only show unread": "읽지 않은 알림만 표시",
   "You have a new notification.": "새 알림이 있습니다.",
   "Read all notifications": "모든 알림 읽음으로 표시",
