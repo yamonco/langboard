@@ -253,7 +253,8 @@ function BoardProxyDisplay({ pageRoute, isFetching, isProjectLoading, project }:
         setBoardChat,
     } = useBoardController();
     const isCardPage = !!pageRoute && !["graph", "wiki", "settings"].includes(pageRoute);
-    const { data: boardCardsData } = useGetCards({ project_uid: project.uid }, { enabled: isCardPage && !isProjectLoading });
+    // BoardPage owns fetching; the shell only observes its snapshot for the card title.
+    const { data: boardCardsData } = useGetCards({ project_uid: project.uid }, { enabled: false });
     const activeCard = boardCardsData && isCardPage ? ProjectCard.Model.getModel(pageRoute) : undefined;
     const { data: approvalCountData, refetch: refetchApprovalCount } = useGetGraphApprovalCount(project.uid, {
         interceptToast: false,
