@@ -87,5 +87,18 @@
     "updated_oldest": "Least recently updated",
     "deadline": "Deadline first",
     "unassigned": "Unassigned first"
-  }
+  },
+  "No checklist work can be started on this card.": "No checklist work can be started on this card.",
+  "Release to start work": "Release to start work",
+  "Drop to start work": "Drop to start work",
+  "Loading work...": "Loading work...",
+  "Could not load work. Retry": "Could not load work. Retry",
+  "No work is running.": "No work is running.",
+  "View all work": "View all work",
+  "Switch work": "Switch work",
+  "Choose a work item": "Choose a work item",
+  "Work is already running. Pause it and switch to the new work.": "Work is already running. Pause it and switch to the new work.",
+  "Current work": "Current work",
+  "New work": "New work",
+  "Pause existing work and switch": "Pause existing work and switch"
 }

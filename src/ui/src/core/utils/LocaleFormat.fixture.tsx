@@ -1,3 +1,9 @@
+import BoardWorkIsland from "@/pages/BoardPage/components/board/BoardWorkIsland";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MemoryRouter } from "react-router";
+import { Project } from "@/core/models";
+import { api } from "@/core/helpers/Api";
+import { useState } from "react";
 import Breadcrumb from "@/components/base/Breadcrumb";
 import Dialog from "@/components/base/Dialog";
 import MarkdownThinkBlock from "@/components/Markdown/ThinkBlock";
@@ -10,12 +16,19 @@ import useUpdateDateDistance from "@/core/hooks/useUpdateDateDistance";
 import { formatDateTime, formatTimerDuration, formatNumber } from "./LocaleFormat";
 import { SUPPORTED_LOCALES } from "./LocalePolicy";
 
+api.defaults.adapter = async (config) => ({ status: 200, statusText: "OK", headers: {}, config, data: { active_work: [] } });
+const fixtureProject = { uid: "locale-fixture" } as Project.TModel;
 const date = new Date(Date.now() - 300000);
 function Fixture() {
     const [t, language] = useTranslation();
+    const [dragging, setDragging] = useState(false);
     const distance = useUpdateDateDistance(date);
     return (
         <>
+            <div data-testid="work-island">
+                <BoardWorkIsland project={fixtureProject} dragging={dragging} />
+            </div>
+            <input type="checkbox" aria-label="fixture dragging" checked={dragging} onChange={(event) => setDragging(event.target.checked)} />
             <div data-testid="common-ui">
                 <Breadcrumb.Root>
                     <Breadcrumb.List>
@@ -47,7 +60,13 @@ function Fixture() {
     );
 }
 function render() {
-    createRoot(document.getElementById("root")!).render(<Fixture />);
+    createRoot(document.getElementById("root")!).render(
+        <QueryClientProvider client={new QueryClient()}>
+            <MemoryRouter>
+                <Fixture />
+            </MemoryRouter>
+        </QueryClientProvider>
+    );
 }
 if (i18n.isInitialized) render();
 else i18n.on("initialized", render);

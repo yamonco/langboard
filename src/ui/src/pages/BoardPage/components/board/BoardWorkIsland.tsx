@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { isAxiosError } from "axios";
 import { dropTargetForElements } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
@@ -58,6 +59,7 @@ interface ICardDetailsResponse {
 }
 
 export default function BoardWorkIsland({ project, dragging }: { project: Project.TModel; dragging: bool }) {
+    const [t] = useTranslation();
     const targetRef = useRef<HTMLButtonElement>(null);
     const navigate = usePageNavigateRef();
     const [over, setOver] = useState(false);
@@ -160,7 +162,7 @@ export default function BoardWorkIsland({ project, dragging }: { project: Projec
                     .filter((checkitem) => !checkitem.is_checked && !checkitem.cardified_card);
 
                 if (!next.length) {
-                    Toast.Add.info("이 카드에는 시작할 수 있는 체크리스트 작업이 없습니다.");
+                    Toast.Add.info(t("board.No checklist work can be started on this card."));
                     return;
                 }
                 if (next.length === 1) {
@@ -180,7 +182,7 @@ export default function BoardWorkIsland({ project, dragging }: { project: Projec
                 setBusy(false);
             }
         },
-        [busy, project.uid, start]
+        [busy, project.uid, start, t]
     );
 
     useEffect(() => {
@@ -204,7 +206,7 @@ export default function BoardWorkIsland({ project, dragging }: { project: Projec
     }, [acceptCard, project.uid]);
 
     const dialogOpen = !!candidateCard && (candidates.length > 1 || !!conflictTarget);
-    const currentLabel = current ? `${current.card.title} · ${current.checkitem.title}` : "My Work";
+    const currentLabel = current ? `${current.card.title} · ${current.checkitem.title}` : t("dashboard.My Work");
 
     return (
         <>
@@ -227,21 +229,21 @@ export default function BoardWorkIsland({ project, dragging }: { project: Projec
                             dragging ? "min-w-44 border border-dashed border-primary/60 md:px-4" : "min-w-0",
                             over && "scale-[1.03]"
                         )}
-                        aria-label={over ? "Release to start work" : currentLabel}
+                        aria-label={over ? t("board.Release to start work") : currentLabel}
                     >
                         <IconComponent icon="hammer" size="4" />
                         <span className={cn("max-w-16 truncate text-xs md:max-w-44", !dragging && !current && "md:max-w-20")}>
-                            {over ? "Release to start work" : dragging ? "Drop to start work" : currentLabel}
+                            {over ? t("board.Release to start work") : dragging ? t("board.Drop to start work") : currentLabel}
                         </span>
                     </Button>
                 </Popover.Trigger>
                 <Popover.Content side="top" align="end" className="w-[min(22rem,calc(100vw-1rem))] p-3">
-                    <div className="mb-2 text-sm font-semibold">My Work</div>
+                    <div className="mb-2 text-sm font-semibold">{t("dashboard.My Work")}</div>
                     {loadingWork && !activeWork.length ? (
-                        <div className="py-2 text-xs text-muted-foreground">작업을 불러오는 중...</div>
+                        <div className="py-2 text-xs text-muted-foreground">{t("board.Loading work...")}</div>
                     ) : workError ? (
                         <Button variant="ghost" size="sm" onClick={() => void refreshActiveWork()}>
-                            작업을 불러오지 못했습니다. 다시 시도
+                            {t("board.Could not load work. Retry")}
                         </Button>
                     ) : activeWork.length ? (
                         <div className="max-h-64 space-y-1 overflow-y-auto">
@@ -278,7 +280,7 @@ export default function BoardWorkIsland({ project, dragging }: { project: Projec
                             })}
                         </div>
                     ) : (
-                        <div className="py-2 text-xs text-muted-foreground">실행 중인 작업이 없습니다.</div>
+                        <div className="py-2 text-xs text-muted-foreground">{t("board.No work is running.")}</div>
                     )}
                     <Button
                         type="button"
@@ -290,7 +292,7 @@ export default function BoardWorkIsland({ project, dragging }: { project: Projec
                             navigate(`${ROUTES.DASHBOARD.MY_WORK}?project_uid=${project.uid}`, { smooth: true });
                         }}
                     >
-                        모든 작업 보기
+                        {t("board.View all work")}
                     </Button>
                 </Popover.Content>
             </Popover.Root>
@@ -307,23 +309,21 @@ export default function BoardWorkIsland({ project, dragging }: { project: Projec
             >
                 <Dialog.Content className="sm:max-w-md">
                     <Dialog.Header>
-                        <Dialog.Title>{conflictTarget ? "작업 전환" : "작업 항목 선택"}</Dialog.Title>
+                        <Dialog.Title>{conflictTarget ? t("board.Switch work") : t("board.Choose a work item")}</Dialog.Title>
                         <Dialog.Description>
-                            {conflictTarget
-                                ? "이미 진행 중인 작업이 있습니다. 기존 작업을 일시정지하고 새 작업으로 전환합니다."
-                                : candidateCard?.title}
+                            {conflictTarget ? t("board.Work is already running. Pause it and switch to the new work.") : candidateCard?.title}
                         </Dialog.Description>
                     </Dialog.Header>
 
                     {conflictTarget && current ? (
                         <Flex direction="col" gap="3" mt="4">
                             <div className="rounded-lg border bg-muted/40 p-3 text-sm">
-                                <div className="text-xs text-muted-foreground">현재 작업</div>
+                                <div className="text-xs text-muted-foreground">{t("board.Current work")}</div>
                                 <div className="mt-1 font-medium">{current.card.title}</div>
                                 <div className="mt-1 text-xs text-muted-foreground">{current.checkitem.title}</div>
                             </div>
                             <div className="rounded-lg border p-3 text-sm">
-                                <div className="text-xs text-muted-foreground">새 작업</div>
+                                <div className="text-xs text-muted-foreground">{t("board.New work")}</div>
                                 <div className="mt-1 font-medium">{candidateCard?.title}</div>
                                 <div className="mt-1 text-xs text-muted-foreground">{conflictTarget.title}</div>
                             </div>
@@ -358,10 +358,10 @@ export default function BoardWorkIsland({ project, dragging }: { project: Projec
                                     setConflictTarget(undefined);
                                 }}
                             >
-                                취소
+                                {t("common.Cancel")}
                             </Button>
                             <Button type="button" disabled={busy} onClick={() => void start(candidateCard, conflictTarget, true)}>
-                                기존 작업 일시정지 후 전환
+                                {t("board.Pause existing work and switch")}
                             </Button>
                         </Dialog.Footer>
                     )}

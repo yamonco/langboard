@@ -87,5 +87,18 @@
     "updated_oldest": "更新日時が古い順",
     "deadline": "期限順",
     "unassigned": "未割り当てを優先"
-  }
+  },
+  "No checklist work can be started on this card.": "このカードには開始できるチェックリスト作業がありません。",
+  "Release to start work": "離して作業を開始",
+  "Drop to start work": "ドロップして作業を開始",
+  "Loading work...": "作業を読み込み中...",
+  "Could not load work. Retry": "作業を読み込めませんでした。再試行",
+  "No work is running.": "実行中の作業はありません。",
+  "View all work": "すべての作業を表示",
+  "Switch work": "作業を切り替え",
+  "Choose a work item": "作業項目を選択",
+  "Work is already running. Pause it and switch to the new work.": "すでに実行中の作業があります。現在の作業を一時停止し、新しい作業に切り替えます。",
+  "Current work": "現在の作業",
+  "New work": "新しい作業",
+  "Pause existing work and switch": "現在の作業を一時停止して切り替え"
 }

@@ -156,66 +156,6 @@
     "text": "접근할 수 없는 선행조건"
   },
   {
-    "file": "src/pages/BoardPage/components/board/BoardWorkIsland.tsx",
-    "line": 163,
-    "kind": "dialog-toast",
-    "text": "이 카드에는 시작할 수 있는 체크리스트 작업이 없습니다."
-  },
-  {
-    "file": "src/pages/BoardPage/components/board/BoardWorkIsland.tsx",
-    "line": 239,
-    "kind": "jsx-text",
-    "text": "My Work"
-  },
-  {
-    "file": "src/pages/BoardPage/components/board/BoardWorkIsland.tsx",
-    "line": 241,
-    "kind": "jsx-text",
-    "text": "작업을 불러오는 중..."
-  },
-  {
-    "file": "src/pages/BoardPage/components/board/BoardWorkIsland.tsx",
-    "line": 244,
-    "kind": "jsx-text",
-    "text": "작업을 불러오지 못했습니다. 다시 시도"
-  },
-  {
-    "file": "src/pages/BoardPage/components/board/BoardWorkIsland.tsx",
-    "line": 281,
-    "kind": "jsx-text",
-    "text": "실행 중인 작업이 없습니다."
-  },
-  {
-    "file": "src/pages/BoardPage/components/board/BoardWorkIsland.tsx",
-    "line": 293,
-    "kind": "jsx-text",
-    "text": "모든 작업 보기"
-  },
-  {
-    "file": "src/pages/BoardPage/components/board/BoardWorkIsland.tsx",
-    "line": 321,
-    "kind": "jsx-text",
-    "text": "현재 작업"
-  },
-  {
-    "file": "src/pages/BoardPage/components/board/BoardWorkIsland.tsx",
-    "line": 326,
-    "kind": "jsx-text",
-    "text": "새 작업"
-  },
-  {
-    "file": "src/pages/BoardPage/components/board/BoardWorkIsland.tsx",
-    "line": 361,
-    "kind": "jsx-text",
-    "text": "취소"
-  },
-  {
-    "file": "src/pages/BoardPage/components/board/BoardWorkIsland.tsx",
-    "line": 364,
-    "kind": "jsx-text",
-    "text": "기존 작업 일시정지 후 전환"
-  },
-  {
     "file": "src/pages/BoardPage/components/card/BoardCard.tsx",
     "line": 563,
     "kind": "attribute:title",

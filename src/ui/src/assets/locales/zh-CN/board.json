@@ -87,5 +87,18 @@
     "updated_oldest": "更新时间从旧到新",
     "deadline": "截止日期优先",
     "unassigned": "未分配优先"
-  }
+  },
+  "No checklist work can be started on this card.": "此卡片没有可开始的检查清单任务。",
+  "Release to start work": "松开以开始工作",
+  "Drop to start work": "拖放以开始工作",
+  "Loading work...": "正在加载工作...",
+  "Could not load work. Retry": "无法加载工作，请重试",
+  "No work is running.": "没有正在进行的工作。",
+  "View all work": "查看所有工作",
+  "Switch work": "切换工作",
+  "Choose a work item": "选择工作项",
+  "Work is already running. Pause it and switch to the new work.": "已有正在进行的工作。暂停当前工作并切换到新工作。",
+  "Current work": "当前工作",
+  "New work": "新工作",
+  "Pause existing work and switch": "暂停当前工作并切换"
 }

@@ -87,5 +87,18 @@
     "updated_oldest": "오래된 수정순",
     "deadline": "마감일 우선",
     "unassigned": "미배정 우선"
-  }
+  },
+  "No checklist work can be started on this card.": "이 카드에는 시작할 수 있는 체크리스트 작업이 없습니다.",
+  "Release to start work": "놓아서 작업 시작",
+  "Drop to start work": "작업을 끌어놓아 시작",
+  "Loading work...": "작업을 불러오는 중...",
+  "Could not load work. Retry": "작업을 불러오지 못했습니다. 다시 시도",
+  "No work is running.": "실행 중인 작업이 없습니다.",
+  "View all work": "모든 작업 보기",
+  "Switch work": "작업 전환",
+  "Choose a work item": "작업 항목 선택",
+  "Work is already running. Pause it and switch to the new work.": "이미 진행 중인 작업이 있습니다. 기존 작업을 일시정지하고 새 작업으로 전환합니다.",
+  "Current work": "현재 작업",
+  "New work": "새 작업",
+  "Pause existing work and switch": "기존 작업 일시정지 후 전환"
 }
