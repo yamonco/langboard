@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { useLocation } from "react-router";
+import Button from "@/components/base/Button";
 import useGetWikis from "@/controllers/api/wiki/useGetWikis";
 import { usePageNavigateRef } from "@/core/hooks/usePageNavigate";
 import { ROUTES } from "@/core/routing/constants";
@@ -9,7 +10,7 @@ export default function BoardWikiSidebar({ projectUID, onNavigate }: { projectUI
     const [t] = useTranslation();
     const navigate = usePageNavigateRef();
     const location = useLocation();
-    const { data, isFetching, error } = useGetWikis({ project_uid: projectUID });
+    const { data, isFetching, error, refetch } = useGetWikis({ project_uid: projectUID });
     const wikis = data?.wikis.filter((wiki) => !wiki.forbidden && !wiki.isInBin) ?? [];
     const open = (url: string) => {
         navigate(url);
@@ -26,14 +27,18 @@ export default function BoardWikiSidebar({ projectUID, onNavigate }: { projectUI
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto p-2">
                 {error ? (
-                    <p role="alert" className="px-2 py-3 text-sm text-destructive">
-                        {t("dashboard.Could not load wikis")}
-                    </p>
-                ) : isFetching && !data ? (
+                    <div role="alert" className="flex flex-wrap items-center gap-2 px-2 py-3">
+                        <span className="text-sm text-muted-foreground">{t("dashboard.Could not load wikis")}</span>
+                        <Button type="button" size="sm" variant="outline" disabled={isFetching} onClick={() => void refetch()}>
+                            {t("dashboard.Retry")}
+                        </Button>
+                    </div>
+                ) : null}
+                {isFetching && !data ? (
                     <p role="status" className="px-2 py-3 text-sm text-muted-foreground">
                         {t("dashboard.Loading wikis")}
                     </p>
-                ) : !wikis.length ? (
+                ) : !data && error ? null : !wikis.length ? (
                     <p className="px-2 py-3 text-sm text-muted-foreground">{t("dashboard.No wikis")}</p>
                 ) : (
                     wikis.map((wiki) => {
