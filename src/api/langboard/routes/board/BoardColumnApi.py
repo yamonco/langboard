@@ -163,6 +163,13 @@ def update_project_column_description(
     return JsonResponse(content={"description": form.description})
 
 
+@AppRouter.api.get("/board/{project_uid}/workflow-stages", tags=["Board.Column"])
+@RoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+@AuthFilter.add()
+def get_project_workflow_stages(project_uid: str, service: DomainService = DomainService.scope()) -> JsonResponse:
+    return JsonResponse(content={"stages": service.project_column.get_workflow_stage_options(project_uid)})
+
+
 @AppRouter.schema(form=ColumnWorkflowStageForm, permission=ApiPermission.Edit)
 @AppRouter.api.put(
     "/board/{project_uid}/column/{column_uid}/workflow-stage",
@@ -178,7 +185,11 @@ def update_project_column_workflow_stage(
     form: ColumnWorkflowStageForm,
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
-    if not service.project_column.change_workflow_stage(project_uid, column_uid, form.workflow_stage):
+    try:
+        changed = service.project_column.change_workflow_stage(project_uid, column_uid, form.workflow_stage)
+    except ValueError as exc:
+        raise ApiException.BadRequest_400(ApiErrorCode.VA0000) from exc
+    if not changed:
         raise ApiException.NotFound_404(ApiErrorCode.NF2004)
     return JsonResponse(content={"workflow_stage": form.workflow_stage})
 

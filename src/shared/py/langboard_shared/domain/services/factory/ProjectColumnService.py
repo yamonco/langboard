@@ -16,7 +16,25 @@ from .GraphApprovalRequestService import GraphApprovalRequestService
 
 
 class ProjectColumnService(BaseDomainService):
-    WORKFLOW_STAGES = frozenset({"backlog", "ready", "active", "review", "closed", "reference"})
+    def _validate_workflow_stage(self, key: str | None) -> None:
+        if key is None:
+            return
+        definition = self.repo.workflow_stage.get_by_keys({key}).get(key)
+        if definition is None or not definition.is_active:
+            raise ValueError("Unknown or inactive workflow stage")
+
+    def get_workflow_stage_options(self, project: TProjectParam) -> list[dict]:
+        columns = InfraHelper.get_all_by(ProjectColumn, "project_id", InfraHelper.convert_id(project))
+        bound_keys = {column.workflow_stage for column in columns if not column.is_archive and column.workflow_stage}
+        from ...models import WorkflowStageDefinition
+
+        return [
+            stage.api_response()
+            for stage in sorted(
+                InfraHelper.get_all(WorkflowStageDefinition), key=lambda stage: (stage.order, stage.key)
+            )
+            if stage.is_active or stage.key in bound_keys
+        ]
 
     @staticmethod
     def name() -> str:
@@ -135,8 +153,7 @@ class ProjectColumnService(BaseDomainService):
         """Create a workflow column with optional guidance, preserving legacy name-only callers."""
         if len(description) > 4096:
             raise ValueError("Column description must not exceed 4096 characters")
-        if workflow_stage is not None and workflow_stage not in self.WORKFLOW_STAGES:
-            raise ValueError("Unknown workflow stage")
+        self._validate_workflow_stage(workflow_stage)
         project = InfraHelper.get_by_id_like(Project, project)
         if not project:
             return None
@@ -186,8 +203,6 @@ class ProjectColumnService(BaseDomainService):
         self, project: TProjectParam | None, column: TColumnParam | None, workflow_stage: str | None
     ) -> bool:
         """Store an explicit meaning; never classify from a mutable column name."""
-        if workflow_stage is not None and workflow_stage not in self.WORKFLOW_STAGES:
-            raise ValueError("Unknown workflow stage")
         params = InfraHelper.get_records_with_foreign_by_params((Project, project), (ProjectColumn, column))
         if not params:
             return False
@@ -205,6 +220,7 @@ class ProjectColumnService(BaseDomainService):
                 return False
             if column.workflow_stage == workflow_stage:
                 return True
+            self._validate_workflow_stage(workflow_stage)
             # ponytail: rare workflow edits fence the project; scope to the column
             # and blocks dependents if large-board latency makes this costly.
             execution.watch_project(project.id)

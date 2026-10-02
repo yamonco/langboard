@@ -10,7 +10,7 @@ export interface Interface extends IBaseModel {
     project_uid: string;
     name: string;
     description?: string;
-    workflow_stage?: "backlog" | "ready" | "active" | "review" | "closed" | "reference" | null;
+    workflow_stage?: string | null;
     order: number;
     dock_order?: number | null;
     is_archive: bool;

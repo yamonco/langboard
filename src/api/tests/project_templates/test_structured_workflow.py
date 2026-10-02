@@ -21,13 +21,19 @@ from sqlalchemy import create_engine
 def storage(monkeypatch):
     engine = create_engine("sqlite://")
     ProjectTemplate.__table__.create(engine)
+    from langboard_shared.domain.models import WorkflowStageDefinition
+    from langboard_shared.infrastructure.repositories.factory.WorkflowStageRepository import WorkflowStageRepository
+    WorkflowStageDefinition.__table__.create(engine)
     ProjectColumn.__table__.create(engine)
     monkeypatch.setattr(DbEngine, "get_main_engine", lambda: engine)
     monkeypatch.setattr(DbEngine, "get_readonly_engine", lambda: engine)
     repositories = SimpleNamespace(
         project_template=ProjectTemplateRepository(None, None),
         project_column=ProjectColumnRepository(None, None),
+        workflow_stage=WorkflowStageRepository(None, None),
     )
+    for key in SI_WORKFLOW_STAGES:
+        repositories.workflow_stage.insert(WorkflowStageDefinition(key=key, name=key))
     yield repositories
     engine.dispose()
 
@@ -82,7 +88,7 @@ def test_native_template_creation_persists_semantics_or_calls_project_cleanup(st
             ],
         )
         storage.project_template.insert(template)
-        with pytest.raises(ValueError, match="Unknown workflow stage"):
+        with pytest.raises(ValueError, match="Unknown or inactive workflow stage"):
             service.create_project(actor, "QA", template_name="Invalid")
         project_service.delete.assert_called_once_with(actor, project)
         return

@@ -6,6 +6,7 @@ import Toast from "@/components/base/Toast";
 import { DISABLE_DRAGGING_ATTR } from "@/constants";
 import useChangeProjectColumnDescription from "@/controllers/api/board/useChangeProjectColumnDescription";
 import useChangeProjectColumnWorkflowStage from "@/controllers/api/board/useChangeProjectColumnWorkflowStage";
+import useProjectWorkflowStages from "@/controllers/api/board/useProjectWorkflowStages";
 import setupApiErrorHandler from "@/core/helpers/setupApiErrorHandler";
 import { ProjectColumn } from "@/core/models";
 import { ProjectRole } from "@/core/models/roles";
@@ -15,7 +16,7 @@ import { useTranslation } from "react-i18next";
 
 /** Readable workflow guidance, editable only by board editors. */
 function BoardColumnDescription({ column }: { column: ProjectColumn.TModel }) {
-    const [t] = useTranslation();
+    const [t, i18n] = useTranslation();
     const { hasRoleAction } = useBoard();
     const description = column.useField("description") ?? "";
     const workflowStage = column.useField("workflow_stage") ?? null;
@@ -25,6 +26,13 @@ function BoardColumnDescription({ column }: { column: ProjectColumn.TModel }) {
     const { mutateAsync: saveDescription, isPending } = useChangeProjectColumnDescription({ interceptToast: true });
     const { mutateAsync: saveStage, isPending: isStagePending } = useChangeProjectColumnWorkflowStage({ interceptToast: true });
     const canEdit = hasRoleAction(ProjectRole.EAction.Update) && !column.is_archive;
+
+    const stages = useProjectWorkflowStages(column.project_uid, open);
+    const selectedStage = stages.data?.find((stage) => stage.key === stageDraft);
+    const localized = (stage: NonNullable<typeof selectedStage>) =>
+        stage.translations[i18n.resolvedLanguage ?? "en"] ??
+        stage.translations[(i18n.resolvedLanguage ?? "en").split("-")[0]] ??
+        stage.translations.en;
 
     const save = async () => {
         try {
@@ -88,17 +96,40 @@ function BoardColumnDescription({ column }: { column: ProjectColumn.TModel }) {
                                 className="w-full rounded border border-input bg-background px-2 py-1.5"
                                 value={stageDraft ?? ""}
                                 onChange={(event) => setStageDraft((event.target.value || null) as typeof stageDraft)}
-                                disabled={isPending || isStagePending}
+                                disabled={isPending || isStagePending || stages.isLoading || !!stages.error}
                             >
                                 <option value="">Unclassified</option>
-                                <option value="backlog">Backlog</option>
-                                <option value="ready">Ready</option>
-                                <option value="active">Active</option>
-                                <option value="review">Review</option>
-                                <option value="closed">Closed</option>
-                                <option value="reference">Reference</option>
+                                {workflowStage && !stages.data?.some((stage) => stage.key === workflowStage) && (
+                                    <option value={workflowStage} disabled>
+                                        {workflowStage}
+                                    </option>
+                                )}
+                                {stages.data?.map((stage) => (
+                                    <option key={stage.key} value={stage.key} disabled={!stage.is_active && stage.key !== workflowStage}>
+                                        {localized(stage)?.name || stage.name}
+                                        {!stage.is_active ? " (Inactive)" : ""}
+                                    </option>
+                                ))}
                             </select>
                         </label>
+                        {stages.error && (
+                            <p role="alert" className="text-sm text-destructive">
+                                Workflow stages could not be loaded.
+                            </p>
+                        )}
+                        {selectedStage && (
+                            <div className="space-y-1 rounded-md bg-muted/50 p-2 text-xs text-muted-foreground">
+                                <p className="whitespace-pre-wrap">{localized(selectedStage)?.description || selectedStage.description}</p>
+                                <p>
+                                    {selectedStage.counts_as_completed ? "Completed · " : ""}Queue {selectedStage.active_queue_policy} · Overdue{" "}
+                                    {selectedStage.overdue_policy}
+                                </p>
+                                <p>Entry effects: {selectedStage.entry_effects.length}</p>
+                                {selectedStage.entry_effects.map((effect) => (
+                                    <p key={effect}>{effect === "complete_checkitems" ? "Complete unchecked items" : "Stop running timers"}</p>
+                                ))}
+                            </div>
+                        )}
                         <div className="flex justify-end gap-2">
                             <Button variant="ghost" disabled={isPending || isStagePending} onClick={() => setOpen(false)}>
                                 {t("common.Cancel")}

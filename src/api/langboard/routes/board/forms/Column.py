@@ -1,4 +1,3 @@
-from typing import Literal
 from langboard_shared.core.routing import BaseFormModel, form_model
 from pydantic import Field
 
@@ -25,7 +24,7 @@ class ColumnDescriptionForm(BaseFormModel):
 
 @form_model
 class ColumnWorkflowStageForm(BaseFormModel):
-    workflow_stage: Literal["backlog", "ready", "active", "review", "closed", "reference"] | None
+    workflow_stage: str | None = Field(..., max_length=64, pattern=r"^[a-z][a-z0-9_]{0,63}$")
 
 
 @form_model
