@@ -1,3 +1,5 @@
+import { useGetGlobalLabels, IGlobalLabel } from "@/controllers/api/settings/globalLabels/useGlobalLabels";
+import { globalLabelDisplay } from "@/core/utils/LabelDisplay";
 import Input from "@/components/base/Input";
 import Textarea from "@/components/base/Textarea";
 import { useWorkflowStages } from "@/controllers/api/settings/workflowStages/useWorkflowStages";
@@ -28,7 +30,15 @@ function ProjectTemplatesPage() {
     const { mutateAsync: saveTemplate, isPending: isSaving } = useSaveProjectTemplate();
     const { load } = useWorkflowStages();
     const [stages, setStages] = useState<Awaited<ReturnType<typeof load.mutateAsync>>>([]);
-    const [draft, setDraft] = useState<{ uid?: string; name: string; columns: ITemplateColumn[] } | null>(null);
+    const [draft, setDraft] = useState<{
+        uid?: string;
+        name: string;
+        description: string;
+        global_label_uids: string[];
+        columns: ITemplateColumn[];
+    } | null>(null);
+    const [labels, setLabels] = useState<IGlobalLabel[]>([]);
+    const { mutateAsync: getLabels } = useGetGlobalLabels();
     const [language, setLanguage] = useState("en");
     const [newLanguage, setNewLanguage] = useState("");
     const [error, setError] = useState(false);
@@ -36,6 +46,9 @@ function ProjectTemplatesPage() {
 
     useEffect(() => {
         setPageAliasRef.current(t("settings.Project templates"));
+        getLabels({})
+            .then(setLabels)
+            .catch(() => setError(true));
         load.mutateAsync({})
             .then(setStages)
             .catch(() => setError(true));
@@ -69,6 +82,8 @@ function ProjectTemplatesPage() {
                 ? {
                       uid: template.uid,
                       name: template.name,
+                      description: template.description ?? "",
+                      global_label_uids: [...(template.global_label_uids ?? [])],
                       columns: (
                           template.column_definitions ??
                           template.columns.map((name, index) => ({
@@ -79,7 +94,7 @@ function ProjectTemplatesPage() {
                           }))
                       ).map((column) => ({ ...column, translations: { ...column.translations } })),
                   }
-                : { name: "", columns: [{ name: "", description: "", workflow_stage: null }] }
+                : { name: "", description: "", global_label_uids: [], columns: [{ name: "", description: "", workflow_stage: null }] }
         );
     };
     const updateColumn = (index: number, fields: Partial<ITemplateColumn>) =>
@@ -147,6 +162,33 @@ function ProjectTemplatesPage() {
                         onChange={(event) => setDraft({ ...draft, name: event.target.value })}
                         required
                     />
+                    <Textarea
+                        aria-label={t("settings.Template description")}
+                        maxLength={4096}
+                        value={draft.description}
+                        onChange={(event) => setDraft({ ...draft, description: event.target.value })}
+                    />
+                    <fieldset className="space-y-2 rounded-lg border p-3">
+                        <legend className="px-1 text-sm">{t("settings.Default labels")}</legend>
+                        {labels.map((label) => (
+                            <label key={label.uid} className="flex items-center gap-2 text-sm">
+                                <input
+                                    type="checkbox"
+                                    checked={draft.global_label_uids.includes(label.uid)}
+                                    onChange={(event) =>
+                                        setDraft({
+                                            ...draft,
+                                            global_label_uids: event.target.checked
+                                                ? [...draft.global_label_uids, label.uid]
+                                                : draft.global_label_uids.filter((uid) => uid !== label.uid),
+                                        })
+                                    }
+                                />
+                                <span className="size-2 rounded-full" style={{ backgroundColor: label.color }} />
+                                {globalLabelDisplay(label.name, label.description, label, i18n.language).name}
+                            </label>
+                        ))}
+                    </fieldset>
                     <div className="flex flex-wrap gap-2">
                         {Array.from(
                             new Set(["en", "ko", "ja", "zh", ...draft.columns.flatMap((column) => Object.keys(column.translations ?? {}))])

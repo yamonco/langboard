@@ -274,5 +274,7 @@
   "Template name": "テンプレート名",
   "Column name": "列名",
   "Move up": "上へ移動",
-  "Add column": "列を追加"
+  "Add column": "列を追加",
+  "Template description": "テンプレートの説明",
+  "Default labels": "既定のラベル"
 }

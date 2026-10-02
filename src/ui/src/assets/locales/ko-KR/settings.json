@@ -274,5 +274,7 @@
   "Template name": "템플릿 이름",
   "Column name": "칼럼명",
   "Move up": "위로 이동",
-  "Add column": "칼럼 추가"
+  "Add column": "칼럼 추가",
+  "Template description": "템플릿 설명",
+  "Default labels": "기본 포함 라벨"
 }

@@ -31,7 +31,11 @@ def set_default_project_template(
 def _save_structure(form: SaveProjectTemplateForm, service: DomainService, uid: str | None = None) -> JsonResponse:
     try:
         template = service.project_template.save_columns(
-            form.name, [column.model_dump() for column in form.columns], uid
+            form.name,
+            [column.model_dump() for column in form.columns],
+            uid,
+            description=form.description,
+            global_label_uids=form.global_label_uids,
         )
     except (ValueError, IntegrityError) as exc:
         raise ApiException.BadRequest_400(ApiErrorCode.VA0000) from exc

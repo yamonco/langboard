@@ -274,5 +274,7 @@
   "Template name": "Template name",
   "Column name": "Column name",
   "Move up": "Move up",
-  "Add column": "Add column"
+  "Add column": "Add column",
+  "Template description": "Template description",
+  "Default labels": "Default labels"
 }

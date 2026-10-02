@@ -274,5 +274,7 @@
   "Template name": "模板名称",
   "Column name": "列名称",
   "Move up": "上移",
-  "Add column": "添加列"
+  "Add column": "添加列",
+  "Template description": "模板描述",
+  "Default labels": "默认标签"
 }

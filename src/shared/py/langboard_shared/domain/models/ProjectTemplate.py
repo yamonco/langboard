@@ -6,6 +6,8 @@ from ...core.db import ApiField, BaseDbModel, Field
 class ProjectTemplate(BaseDbModel, table=True):
     """Reusable project structure and automation snapshot."""
 
+    description: str = Field(default="", nullable=False, api_field=ApiField())
+    global_label_uids: list[str] = Field(default_factory=list, nullable=False, sa_type=JSON, api_field=ApiField())
     name: str = Field(nullable=False, unique=True, index=True, api_field=ApiField())
     columns: list[str | dict[str, Any]] = Field(
         default_factory=list, nullable=False, sa_type=JSON, api_field=ApiField()

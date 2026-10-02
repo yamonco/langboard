@@ -308,6 +308,8 @@ class ProjectTemplateColumnForm(BaseModel):
 
 @form_model
 class SaveProjectTemplateForm(BaseFormModel):
+    description: str | None = Field(default=None, max_length=4096)
+    global_label_uids: list[str] | None = Field(default=None, max_length=100)
     name: str = Field(min_length=1, max_length=100)
     columns: list[ProjectTemplateColumnForm] = Field(min_length=1, max_length=100)
 

@@ -5,6 +5,7 @@ from ....helpers import InfraHelper
 from ...models import (
     Bot,
     BotDefaultScopeBranch,
+    GlobalLabel,
     InternalBot,
     Project,
     ProjectAssignedInternalBot,
@@ -97,7 +98,15 @@ class ProjectTemplateService(BaseDomainService):
         template.is_default = True
         return template
 
-    def save_columns(self, name: str, columns: list[dict[str, Any]], uid: str | None = None) -> ProjectTemplate | None:
+    def save_columns(
+        self,
+        name: str,
+        columns: list[dict[str, Any]],
+        uid: str | None = None,
+        *,
+        description: str | None = None,
+        global_label_uids: list[str] | None = None,
+    ) -> ProjectTemplate | None:
         """Edit the existing structural SSOT without replacing automation snapshots."""
         template = InfraHelper.get_by_id_like(ProjectTemplate, uid) if uid else None
         if uid and not template:
@@ -110,12 +119,20 @@ class ProjectTemplateService(BaseDomainService):
             raise ValueError("Template name already exists")
         if (name == "SI" and not template) or (template and template.is_builtin and template.name != name):
             raise ValueError("Built-in template name is immutable")
+        if description is not None and len(description) > 4096:
+            raise ValueError("Template description is too long")
+        if global_label_uids is not None:
+            if len(global_label_uids) > 100 or len(set(global_label_uids)) != len(global_label_uids):
+                raise ValueError("Invalid template labels")
+            for label_uid in global_label_uids:
+                if not InfraHelper.get_by_id_like(GlobalLabel, label_uid):
+                    raise ValueError("Unknown global label")
         definitions = []
         for column in columns:
             column_name = column["name"].strip()
-            description = column.get("description", "")
+            column_description = column.get("description", "")
             stage_key = column.get("workflow_stage")
-            if not column_name or len(column_name) > 100 or len(description) > 4096:
+            if not column_name or len(column_name) > 100 or len(column_description) > 4096:
                 raise ValueError("Invalid template column")
             if stage_key:
                 stage = self.repo.workflow_stage.get_by_keys({stage_key}).get(stage_key)
@@ -133,11 +150,11 @@ class ProjectTemplateService(BaseDomainService):
                     or len(text.get("description", "")) > 4096
                 ):
                     raise ValueError("Invalid column translation")
-            translations["en"] = {"name": column_name, "description": description}
+            translations["en"] = {"name": column_name, "description": column_description}
             definitions.append(
                 {
                     "name": column_name,
-                    "description": description,
+                    "description": column_description,
                     "workflow_stage": stage_key or None,
                     "translations": translations,
                 }
@@ -149,9 +166,18 @@ class ProjectTemplateService(BaseDomainService):
             template.name = name
             template.columns = definitions
             template.column_descriptions = []
+            if description is not None:
+                template.description = description
+            if global_label_uids is not None:
+                template.global_label_uids = list(global_label_uids)
             self.repo.project_template.update(template)
         else:
-            template = ProjectTemplate(name=name, columns=definitions)
+            template = ProjectTemplate(
+                name=name,
+                columns=definitions,
+                description=description or "",
+                global_label_uids=list(global_label_uids or []),
+            )
             self.repo.project_template.insert(template)
         return template
 
@@ -229,6 +255,11 @@ class ProjectTemplateService(BaseDomainService):
                 column.order = order
             archive.order = len(columns)
             self.repo.project_column.update([*columns, archive])
+            if template.global_label_uids:
+                label_service = self._get_service_by_name("project_label")
+                for label_uid in template.global_label_uids:
+                    if not label_service.use_global(user, project, label_uid):
+                        raise ValueError("Template global label is unavailable")
             self._apply_internal_bots(project, template.internal_bots)
             self._apply_scopes(project, columns, template)
             self._apply_email_notification_policy(project, template)

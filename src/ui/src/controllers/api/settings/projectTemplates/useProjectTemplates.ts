@@ -11,6 +11,8 @@ export interface ITemplateColumn {
 export interface IProjectTemplate {
     uid: string;
     name: string;
+    description?: string;
+    global_label_uids?: string[];
     columns: string[];
     column_definitions?: ITemplateColumn[];
     column_descriptions?: string[];
@@ -48,7 +50,7 @@ export const useSaveProjectTemplate = () => {
     const { mutate } = useQueryMutation();
     return mutate(
         ["save-project-template"],
-        async ({ uid, ...form }: { uid?: string; name: string; columns: ITemplateColumn[] }) => {
+        async ({ uid, ...form }: { uid?: string; name: string; description?: string; global_label_uids?: string[]; columns: ITemplateColumn[] }) => {
             const response = uid
                 ? await api.put<{ template: IProjectTemplate }>(`/settings/project-templates/${uid}`, form)
                 : await api.post<{ template: IProjectTemplate }>("/settings/project-templates", form);
