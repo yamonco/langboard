@@ -7,7 +7,7 @@ from typing import Iterator, NamedTuple
 from uuid import uuid4
 from sqlalchemy import select, text
 from ...core.db import DbSession
-from ...domain.services.DependencyPolicy import BLOCKING_RELATION_JOINS, UNSATISFIED_PREREQUISITE
+from ...domain.DependencyConditions import BLOCKING_RELATION_JOINS, UNSATISFIED_PREREQUISITE
 
 
 WORK_EVENT = "io.langboard.work.ready.v1"

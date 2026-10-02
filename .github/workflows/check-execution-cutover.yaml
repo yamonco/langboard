@@ -12,6 +12,8 @@ on:
       - src/api/tests/webhooks/test_execution*.py
       - src/api/tests/webhooks/test_native_execution_receipt_postgres.py
       - src/shared/py/langboard_shared/tasks/webhooks/**
+      - src/shared/py/langboard_shared/domain/DependencyConditions.py
+      - src/shared/py/langboard_shared/domain/services/DependencyPolicy.py
   workflow_dispatch:
 
 jobs:
@@ -43,5 +45,5 @@ jobs:
         with:
           python-version: "3.12"
       - run: uv sync --frozen
-      - run: uv run --no-sync ruff check src/api/tests/webhooks/test_card_context_execution.py src/api/tests/webhooks/test_execution_readiness_uow_postgres.py src/api/tests/webhooks/test_execution_outbox_postgres.py src/api/tests/webhooks/test_native_execution_receipt_postgres.py src/api/tests/webhooks/test_execution_outbox.py src/api/tests/webhooks/test_execution_binding.py src/api/tests/webhooks/test_execution_event_contract.py src/shared/py/langboard_shared/tasks/webhooks/ExecutionReadinessUow.py src/shared/py/langboard_shared/tasks/webhooks/ExecutionOutboxWorker.py src/api/langboard/routes/board/BoardCardApi.py src/api/langboard/routes/board/ExecutionReceiptApi.py
-      - run: uv run --no-sync pytest -q src/api/tests/webhooks/test_card_context_execution.py src/api/tests/webhooks/test_execution_readiness_uow_postgres.py src/api/tests/webhooks/test_execution_outbox_postgres.py src/api/tests/webhooks/test_native_execution_receipt_postgres.py src/api/tests/webhooks/test_execution_outbox.py src/api/tests/webhooks/test_execution_binding.py src/api/tests/webhooks/test_execution_event_contract.py
+      - run: uv run --no-sync ruff check src/api/tests/webhooks/test_card_context_execution.py src/api/tests/webhooks/test_execution_readiness_uow_postgres.py src/api/tests/webhooks/test_execution_outbox_postgres.py src/api/tests/webhooks/test_native_execution_receipt_postgres.py src/api/tests/webhooks/test_execution_outbox.py src/api/tests/webhooks/test_execution_import_order.py src/api/tests/webhooks/test_execution_binding.py src/api/tests/webhooks/test_execution_event_contract.py src/shared/py/langboard_shared/domain/DependencyConditions.py src/shared/py/langboard_shared/domain/services/DependencyPolicy.py src/shared/py/langboard_shared/tasks/webhooks/ExecutionReadinessUow.py src/shared/py/langboard_shared/tasks/webhooks/ExecutionOutboxWorker.py src/api/langboard/routes/board/BoardCardApi.py src/api/langboard/routes/board/ExecutionReceiptApi.py
+      - run: uv run --no-sync pytest -q src/api/tests/webhooks/test_card_context_execution.py src/api/tests/webhooks/test_execution_readiness_uow_postgres.py src/api/tests/webhooks/test_execution_outbox_postgres.py src/api/tests/webhooks/test_native_execution_receipt_postgres.py src/api/tests/webhooks/test_execution_outbox.py src/api/tests/webhooks/test_execution_import_order.py src/api/tests/webhooks/test_execution_binding.py src/api/tests/webhooks/test_execution_event_contract.py
