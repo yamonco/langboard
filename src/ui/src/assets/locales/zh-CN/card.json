@@ -161,5 +161,6 @@
   "Unchanged for {{days}} days_one": "{{days, number}} 天未更改",
   "{{days, number}} days_other": "{{days, number}}天",
   "{{days, number}} days_one": "{{days, number}}天",
-  "Checklist progress": "检查清单进度：共 {{total, number}} 项，已完成 {{completed, number}} 项"
+  "Checklist progress": "检查清单进度：共 {{total, number}} 项，已完成 {{completed, number}} 项",
+  "Comments panel width": "评论面板宽度"
 }

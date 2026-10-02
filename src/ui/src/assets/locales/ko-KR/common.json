@@ -94,5 +94,7 @@
   "Show thoughts...": "생각 펼치기...",
   "Thoughts": "생각",
   "Connect company SSO": "회사 SSO 연결",
-  "Could not connect company SSO. Please try again.": "회사 SSO에 연결하지 못했습니다. 다시 시도해 주세요."
+  "Could not connect company SSO. Please try again.": "회사 SSO에 연결하지 못했습니다. 다시 시도해 주세요.",
+  "User changed field": "{{name}} 님이 {{field}} 변경",
+  "Sign in with email": "{{email}} 계정으로 로그인"
 }

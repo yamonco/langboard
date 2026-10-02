@@ -161,5 +161,6 @@
   "Unchanged for {{days}} days_one": "Unchanged for {{days, number}} day",
   "{{days, number}} days_other": "{{days, number}} days",
   "{{days, number}} days_one": "{{days, number}} day",
-  "Checklist progress": "Checklist progress: {{completed, number}} of {{total, number}} complete"
+  "Checklist progress": "Checklist progress: {{completed, number}} of {{total, number}} complete",
+  "Comments panel width": "Comments panel width"
 }

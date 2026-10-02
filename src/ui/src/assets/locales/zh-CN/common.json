@@ -94,5 +94,7 @@
   "Show thoughts...": "展开思考...",
   "Thoughts": "思考",
   "Connect company SSO": "连接公司SSO",
-  "Could not connect company SSO. Please try again.": "无法连接公司SSO，请重试。"
+  "Could not connect company SSO. Please try again.": "无法连接公司SSO，请重试。",
+  "User changed field": "{{name}} 更改了 {{field}}",
+  "Sign in with email": "使用 {{email}} 登录"
 }

@@ -176,7 +176,7 @@ const DashboardProxy = memo((): React.JSX.Element => {
             activityRailItems={[
                 {
                     icon: "panel-left",
-                    label: "Explorer",
+                    label: t("common.Explorer"),
                     onClick: () => showContext("explorer"),
                     active: contextMode === "explorer" && (isMobile ? isMobileExplorerOpen : isExplorerOpen),
                 },

@@ -94,5 +94,7 @@
   "Show thoughts...": "思考を表示...",
   "Thoughts": "思考",
   "Connect company SSO": "会社のSSOに接続",
-  "Could not connect company SSO. Please try again.": "会社のSSOに接続できませんでした。もう一度お試しください。"
+  "Could not connect company SSO. Please try again.": "会社のSSOに接続できませんでした。もう一度お試しください。",
+  "User changed field": "{{name}} さんが {{field}} を変更",
+  "Sign in with email": "{{email}} でログイン"
 }

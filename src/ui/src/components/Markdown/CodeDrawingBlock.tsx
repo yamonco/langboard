@@ -7,6 +7,7 @@ import MarkdownCodeBlock from "@/components/Markdown/CodeBlock";
 import { cn, copyToClipboard } from "@/core/utils/ComponentUtils";
 import type { CodeDrawingType } from "@platejs/code-drawing";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 export interface IMarkdownCodeDrawingBlockProps {
     code: string;
@@ -37,6 +38,7 @@ const decodeCodeDrawingEntities = (content: string) => {
 };
 
 function MarkdownCodeDrawingBlock({ code, language }: IMarkdownCodeDrawingBlockProps) {
+    const [t] = useTranslation();
     const [image, setImage] = useState("");
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState("");
@@ -100,7 +102,7 @@ function MarkdownCodeDrawingBlock({ code, language }: IMarkdownCodeDrawingBlockP
         <Flex direction="col" mt="2" w="full" rounded="md" className="min-w-0 overflow-hidden border bg-card text-left">
             <Flex items="center" justify="between" w="full" pl="3" pr="1.5" py="1.5" className="border-b bg-muted/60">
                 <span className="text-sm font-semibold">{drawingType}</span>
-                <Button variant="ghost" size="icon-sm" onClick={copy}>
+                <Button variant="ghost" size="icon-sm" onClick={copy} aria-label={t("common.Copy")}>
                     <IconComponent icon={isCopied ? "check" : "copy"} size="4" />
                 </Button>
             </Flex>
@@ -108,7 +110,7 @@ function MarkdownCodeDrawingBlock({ code, language }: IMarkdownCodeDrawingBlockP
                 {isLoading ? (
                     <Loading size="4" variant="secondary" spacing="2" animate="pulse" />
                 ) : image ? (
-                    <img src={image} alt={`${drawingType} diagram`} className="h-auto max-h-[50vh] max-w-none object-contain" />
+                    <img src={image} alt={t("editor.Code drawing")} className="h-auto max-h-[50vh] max-w-none object-contain" />
                 ) : error ? (
                     <MarkdownCodeBlock language={language} code={code} />
                 ) : null}

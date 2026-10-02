@@ -44,3 +44,21 @@ test("persisted creation defaults are detected without treating user input as li
         ]
     );
 });
+
+test("activity rail labels and fixed accessible template text are checked without rewriting model content", () => {
+    const found = scanSource(
+        "Example.tsx",
+        `
+        const view = <Layout activityRailItems={[{ label: "Explorer" }, { label: t("common.Explorer") }]} />;
+        const images = <><img alt={\`\${drawingType} diagram\`}/><img alt={user.title}/><img alt={t("editor.Code drawing")}/></>;
+        const language = { label: "JavaScript" };
+    `
+    );
+    assert.deepEqual(
+        found.map(({ kind, text }) => [kind, text]),
+        [
+            ["activity-rail-label", "Explorer"],
+            ["attribute-template:alt", "diagram"],
+        ]
+    );
+});

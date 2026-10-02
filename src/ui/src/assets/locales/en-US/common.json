@@ -94,5 +94,7 @@
   "Show thoughts...": "Show thoughts...",
   "Thoughts": "Thoughts",
   "Connect company SSO": "Connect company SSO",
-  "Could not connect company SSO. Please try again.": "Could not connect company SSO. Please try again."
+  "Could not connect company SSO. Please try again.": "Could not connect company SSO. Please try again.",
+  "User changed field": "User {{name}} changed {{field}}",
+  "Sign in with email": "Sign in with {{email}}"
 }

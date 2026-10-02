@@ -781,7 +781,7 @@ function BoardCardCommentPanel(): React.JSX.Element {
                 <div
                     role="separator"
                     aria-orientation="vertical"
-                    aria-label={`${t("card.Comments")} panel width`}
+                    aria-label={t("card.Comments panel width")}
                     aria-valuemin={MIN_COMMENT_PANEL_WIDTH}
                     aria-valuemax={maxWidth}
                     aria-valuenow={width}

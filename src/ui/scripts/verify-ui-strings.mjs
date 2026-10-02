@@ -29,6 +29,11 @@ export function scanSource(file, source) {
                 : ts.isJsxExpression(node.initializer) && node.initializer.expression && ts.isStringLiteralLike(node.initializer.expression)
                   ? node.initializer.expression
                   : null;
+            const expression = ts.isJsxExpression(node.initializer) ? node.initializer.expression : null;
+            if (expression && ts.isTemplateExpression(expression)) {
+                const fixedText = expression.head.text + expression.templateSpans.map((span) => span.literal.text).join("");
+                add(expression, `attribute-template:${node.name.getText(tree)}`, fixedText);
+            }
             if (literal) {
                 const name = node.name.getText(tree);
                 const tag = node.parent.parent.tagName.getText(tree);
@@ -37,6 +42,11 @@ export function scanSource(file, source) {
                     add(node, `attribute:${name}`, literal.text);
                 }
             }
+        }
+        if (ts.isPropertyAssignment(node) && node.name.getText(tree) === "label" && ts.isStringLiteralLike(node.initializer)) {
+            let parent = node.parent;
+            while (parent && !ts.isJsxAttribute(parent)) parent = parent.parent;
+            if (parent?.name.getText(tree) === "activityRailItems") add(node, "activity-rail-label", node.initializer.text);
         }
         if (ts.isCallExpression(node)) {
             const callee = node.expression.getText(tree);

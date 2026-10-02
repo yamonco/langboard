@@ -161,5 +161,6 @@
   "Unchanged for {{days}} days_one": "{{days, number}} 日間変更なし",
   "{{days, number}} days_other": "{{days, number}}日",
   "{{days, number}} days_one": "{{days, number}}日",
-  "Checklist progress": "チェックリストの進捗：{{total, number}} 件中 {{completed, number}} 件完了"
+  "Checklist progress": "チェックリストの進捗：{{total, number}} 件中 {{completed, number}} 件完了",
+  "Comments panel width": "コメントパネルの幅"
 }

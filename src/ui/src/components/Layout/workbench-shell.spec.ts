@@ -103,6 +103,9 @@ test("Escape from page-owned portaled controls dismisses the physical mobile pan
     const panel = page.getByRole("complementary", { name: "Explorer", exact: true });
     await expect(panel).toBeFocused();
     await panel.press("Tab");
+    await expect(panel.getByRole("button", { name: "Close", exact: true })).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(panel.getByRole("textbox", { name: "Sidebar search", exact: true })).toBeFocused();
     await page.keyboard.press("Tab");
     await expect(panel.getByRole("button", { name: "Nested menu", exact: true })).toBeFocused();
     await page.keyboard.press("Escape");
