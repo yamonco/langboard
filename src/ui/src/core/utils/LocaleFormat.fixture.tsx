@@ -1,3 +1,6 @@
+import { createPlateEditor, Plate } from "platejs/react";
+import { CodeBlockKit } from "@/components/Editor/plugins/code-block-kit";
+import { Editor } from "@/components/plate-ui/editor";
 import CardContentBlockList from "@/pages/BoardPage/components/card/CardContentBlockList";
 import RelationshipTypePicker from "@/pages/BoardPage/components/board/RelationshipTypePicker";
 import { GlobalRelationshipType } from "@/core/models";
@@ -32,9 +35,20 @@ const date = new Date(Date.now() - 300000);
 function Fixture() {
     const [t, language] = useTranslation();
     const [dragging, setDragging] = useState(false);
+    const [editor] = useState(() =>
+        createPlateEditor({
+            plugins: [...CodeBlockKit],
+            value: [{ type: "code_block", lang: "plaintext", children: [{ type: "code_line", children: [{ text: "const user = 1;" }] }] }],
+        })
+    );
     const distance = useUpdateDateDistance(date);
     return (
         <>
+            <div data-testid="code-editor">
+                <Plate editor={editor}>
+                    <Editor aria-label="fixture code editor" />
+                </Plate>
+            </div>
             <div data-testid="content-blocks">
                 <CardContentBlockList
                     blocks={[

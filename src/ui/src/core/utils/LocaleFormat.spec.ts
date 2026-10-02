@@ -110,3 +110,24 @@ test("card diagram fallback and source label translate without altering source c
         await expect(blocks.locator("code")).toHaveText("graph TD; User--&gt;Data;");
     }
 });
+
+test("code language choices translate and search without rewriting source", async ({ page }) => {
+    await page.goto("/src/core/utils/LocaleFormat.fixture.html");
+    for (const [locale, plain, auto] of [
+        ["ko-KR", "일반 텍스트", "자동"],
+        ["ja-JP", "プレーンテキスト", "自動"],
+        ["zh-CN", "纯文本", "自动"],
+        ["en-US", "Plain Text", "Auto"],
+    ]) {
+        await page.getByRole("button", { name: locale, exact: true }).click();
+        const editor = page.getByTestId("code-editor");
+        await expect(editor.getByRole("combobox")).toHaveText(plain);
+        await editor.getByRole("combobox").click();
+        const search = page.getByRole("dialog").getByRole("combobox");
+        await search.fill(auto);
+        await expect(page.getByRole("option", { name: auto, exact: true })).toBeVisible();
+        await search.fill("plaintext");
+        await page.getByRole("option", { name: plain, exact: true }).click();
+        await expect(editor.locator("pre code")).toHaveText("const user = 1;");
+    }
+});

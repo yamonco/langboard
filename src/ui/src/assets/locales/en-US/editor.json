@@ -177,5 +177,7 @@
     "upload": {
       "unknown": "Something went wrong, please try again later."
     }
-  }
+  },
+  "Auto": "Auto",
+  "Plain Text": "Plain Text"
 }

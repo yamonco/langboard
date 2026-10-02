@@ -64,8 +64,19 @@ function CodeBlockCombobox() {
     const [searchValue, setSearchValue] = React.useState("");
 
     const items = React.useMemo(
-        () => languages.filter((language) => !searchValue || language.label.toLowerCase().includes(searchValue.toLowerCase())),
-        [searchValue]
+        () =>
+            languages
+                .map((language) => ({
+                    ...language,
+                    label: language.value === "auto" ? t("editor.Auto") : language.value === "plaintext" ? t("editor.Plain Text") : language.label,
+                }))
+                .filter(
+                    (language) =>
+                        !searchValue ||
+                        language.label.toLowerCase().includes(searchValue.toLowerCase()) ||
+                        language.value.toLowerCase().includes(searchValue.toLowerCase())
+                ),
+        [searchValue, t]
     );
 
     if (readOnly) return null;
@@ -80,7 +91,11 @@ function CodeBlockCombobox() {
                     aria-expanded={open}
                     role="combobox"
                 >
-                    {languages.find((language) => language.value === value)?.label ?? "Plain Text"}
+                    {value === "auto"
+                        ? t("editor.Auto")
+                        : value === "plaintext"
+                          ? t("editor.Plain Text")
+                          : (languages.find((language) => language.value === value)?.label ?? t("editor.Plain Text"))}
                 </Button>
             </Popover.Trigger>
             <Popover.Content className="w-[200px] p-0" onCloseAutoFocus={() => setSearchValue("")}>
