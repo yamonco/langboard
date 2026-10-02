@@ -52,10 +52,11 @@ function GraphCard({ data }: NodeProps<TCardNode>) {
 }
 
 function GraphLane({ data }: NodeProps<Node<{ name: string; count: number }, "lane">>) {
+    const [, i18n] = useTranslation();
     return (
         <div className="flex items-center justify-between gap-2 border-b px-4 py-3">
             <span className="truncate text-sm font-semibold text-foreground">{data.name}</span>
-            <span className="rounded-md bg-background px-2 py-0.5 text-xs text-muted-foreground">{data.count}</span>
+            <span className="rounded-md bg-background px-2 py-0.5 text-xs text-muted-foreground">{formatNumber(data.count, i18n.language)}</span>
         </div>
     );
 }

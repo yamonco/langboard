@@ -7,7 +7,8 @@ import { GlobalRelationshipType } from "@/core/models";
 import BoardWorkIsland from "@/pages/BoardPage/components/board/BoardWorkIsland";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router";
-import { Project } from "@/core/models";
+import { Project, ProjectCard } from "@/core/models";
+import BoardOutlineSidebar from "@/pages/BoardPage/components/board/BoardOutlineSidebar";
 import { api } from "@/core/helpers/Api";
 import { useState } from "react";
 import Breadcrumb from "@/components/base/Breadcrumb";
@@ -32,6 +33,20 @@ const fixtureRelationships = ["contains", "blocks", "references"].map((machine_s
     child_name: `User ${machine_semantic}`,
 })) as GlobalRelationshipType.TModel[];
 const date = new Date(Date.now() - 300000);
+ProjectCard.Model.fromOne({
+    uid: "locale-outline",
+    project_uid: "locale-fixture",
+    project_column_uid: "locale-column",
+    title: "User card title",
+    description: "",
+    order: 0,
+    created_at: new Date(),
+    updated_at: new Date(),
+    checklist_total_count: 2345,
+    checklist_completed_count: 1234,
+    count_comment: 1234,
+    relationships: [],
+});
 function Fixture() {
     const [t, language] = useTranslation();
     const [dragging, setDragging] = useState(false);
@@ -90,6 +105,9 @@ function Fixture() {
                     <Dialog.CloseButton />
                 </Dialog.Root>
                 <MarkdownThinkBlock>Fixture content</MarkdownThinkBlock>
+            </div>
+            <div data-testid="outline-counts">
+                <BoardOutlineSidebar cardUID="locale-outline" onRelations={() => {}} />
             </div>
             <output data-testid="relative">{distance}</output>
             <output data-testid="workflow-stage-label">{t("board.Workflow stage display", { stage: "User stage" })}</output>

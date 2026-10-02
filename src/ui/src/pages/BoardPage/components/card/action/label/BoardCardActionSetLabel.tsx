@@ -1,3 +1,4 @@
+import { formatNumber } from "@/core/utils/LocaleFormat";
 import Box from "@/components/base/Box";
 import Button from "@/components/base/Button";
 import { ICollaborativeTextMeta, useCollaborativeText } from "@/components/Collaborative/useCollaborativeText";
@@ -30,7 +31,7 @@ interface ILabelToggleMeta {
 const BoardCardActionSetLabel = memo(({ buttonClassName }: IBoardCardActionSetLabelProps) => {
     const { projectUID, card, hasRoleAction } = useBoardCard();
     const labels = card.useForeignFieldArray("labels");
-    const [t] = useTranslation();
+    const [t, i18n] = useTranslation();
     const [isOpened, setIsOpened] = useState(false);
     const [isValidating, setIsValidating] = useState(false);
     const canUseGlobal = hasRoleAction(ProjectRole.EAction.Update);
@@ -159,7 +160,7 @@ const BoardCardActionSetLabel = memo(({ buttonClassName }: IBoardCardActionSetLa
                         </Box>
                     </Flex>
                     <Box textSize="xs" className="rounded-full bg-secondary px-2 py-0.5 text-muted-foreground">
-                        {selectedLabelUIDs.length}
+                        {formatNumber(selectedLabelUIDs.length, i18n.language)}
                     </Box>
                 </Flex>
                 <Box mb="3" textSize="xs" className="text-muted-foreground">

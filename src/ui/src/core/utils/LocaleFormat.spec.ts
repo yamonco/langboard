@@ -152,3 +152,20 @@ test("board counts and stale days use locale interpolation and singular grammar"
     await expect(page.getByTestId("stale-one")).toHaveText("Unchanged for 1 day");
     await expect(page.getByTestId("stale-many")).toHaveText("Unchanged for 1,234 days");
 });
+
+test("card outline counts follow language switches and keep user content unchanged", async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem("lang", "en-US"));
+    await page.goto("/src/core/utils/LocaleFormat.fixture.html");
+    for (const [locale, checklist, comments] of [
+        ["ko-KR", "체크리스트", "댓글"],
+        ["ja-JP", "チェックリスト", "コメント"],
+        ["zh-CN", "检查清单", "评论"],
+        ["en-US", "Checklists", "Comments"],
+    ]) {
+        await page.getByRole("button", { name: locale, exact: true }).click();
+        const outline = page.getByTestId("outline-counts");
+        await expect(outline.getByRole("button", { name: `${checklist}1,234/2,345`, exact: true })).toBeVisible();
+        await expect(outline.getByRole("button", { name: `${comments}1,234`, exact: true })).toBeVisible();
+        await expect(outline.getByText("User card title", { exact: true })).toBeVisible();
+    }
+});

@@ -1,3 +1,4 @@
+import { formatNumber } from "@/core/utils/LocaleFormat";
 import { metadataDisplay } from "@/core/utils/MetadataDisplay";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -169,7 +170,7 @@ export default function WorkflowStagesPage({ currentUser }: { currentUser: AuthU
                                     <span className="rounded-full border px-2 py-0.5">{t("settings.Hide overdue")}</span>
                                 )}
                                 <span className="rounded-full border px-2 py-0.5">
-                                    {t("settings.Entry effects")}: {stage.entry_effects.length}
+                                    {t("settings.Entry effects")}: {formatNumber(stage.entry_effects.length, i18n.language)}
                                 </span>
                             </div>
                         </button>

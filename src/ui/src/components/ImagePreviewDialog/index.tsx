@@ -1,3 +1,4 @@
+import { formatNumber } from "@/core/utils/LocaleFormat";
 import Box from "@/components/base/Box";
 import Button from "@/components/base/Button";
 import Flex from "@/components/base/Flex";
@@ -22,7 +23,7 @@ interface ImagePreviewDialogProps {
 }
 
 const ImagePreviewDialog = ({ files, initialIndex, onClose }: ImagePreviewDialogProps) => {
-    const [t] = useTranslation();
+    const [t, i18n] = useTranslation();
     const [currentIndex, setCurrentIndex] = useState(initialIndex);
     const [zoom, setZoom] = useState(1);
     const currentFile = useMemo(() => files[currentIndex], [files, currentIndex]);
@@ -157,7 +158,7 @@ const ImagePreviewDialog = ({ files, initialIndex, onClose }: ImagePreviewDialog
                                 variant="ghost"
                                 className="h-auto w-10 p-0 text-center"
                             />
-                            <span className="text-nowrap text-xs text-gray-500">/ {files.length}</span>
+                            <span className="text-nowrap text-xs text-gray-500">/ {formatNumber(files.length, i18n.language)}</span>
                         </Label>
                         <Flex items="center">
                             <Button variant="ghost" size="icon-sm" onClick={goPrev}>

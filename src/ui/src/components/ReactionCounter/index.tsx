@@ -1,3 +1,4 @@
+import { formatNumber } from "@/core/utils/LocaleFormat";
 import Button from "@/components/base/Button";
 import Dock from "@/components/base/Dock";
 import Flex from "@/components/base/Flex";
@@ -123,7 +124,7 @@ function ReactionCounterButton({
     isActiveReaction,
     disabled,
 }: TReactionCounterButtonProps): React.JSX.Element {
-    const [t] = useTranslation();
+    const [t, i18n] = useTranslation();
     const lottieRef = useRef<LottieRefCurrentProps>(null);
     const isPlayed = useRef(false);
     const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -215,7 +216,7 @@ function ReactionCounterButton({
             <Flex items="center" w="4">
                 {emoji}
             </Flex>
-            {reactionData.length}
+            {formatNumber(reactionData.length, i18n.language)}
         </Button>
     );
 

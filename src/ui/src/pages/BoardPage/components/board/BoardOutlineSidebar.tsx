@@ -1,3 +1,4 @@
+import { formatNumber } from "@/core/utils/LocaleFormat";
 import { useTranslation } from "react-i18next";
 import { ProjectCard, ProjectCardAttachment } from "@/core/models";
 import { WORKBENCH_OUTLINE_EVENT } from "@/pages/DashboardPage/components/WorkbenchCommands";
@@ -31,7 +32,7 @@ export default function BoardOutlineSidebar({
 }
 
 function CardOutline({ card, onRelations, onNavigate }: { card: ProjectCard.TModel; onRelations: () => void; onNavigate?: () => void }) {
-    const [t] = useTranslation();
+    const [t, i18n] = useTranslation();
     const checklistTotal = card.useField("checklist_total_count") ?? 0;
     const checklistCompleted = card.useField("checklist_completed_count") ?? 0;
     const commentCount = card.useField("count_comment") ?? 0;
@@ -41,9 +42,19 @@ function CardOutline({ card, onRelations, onNavigate }: { card: ProjectCard.TMod
     const attachments = ProjectCardAttachment.Model.useModels((attachment) => attachment.card_uid === card.uid, [card.uid]);
     const sections: Array<{ key: TOutlineSection; label: string; count?: string }> = [
         ...(hasDescription ? [{ key: "description" as const, label: t("card.Description") }] : []),
-        ...(checklistTotal ? [{ key: "checklists" as const, label: t("card.Checklists"), count: `${checklistCompleted}/${checklistTotal}` }] : []),
-        { key: "comments", label: t("card.Comments"), count: String(commentCount) },
-        ...(attachments.length ? [{ key: "attachments" as const, label: t("card.Attached files"), count: String(attachments.length) }] : []),
+        ...(checklistTotal
+            ? [
+                  {
+                      key: "checklists" as const,
+                      label: t("card.Checklists"),
+                      count: `${formatNumber(checklistCompleted, i18n.language)}/${formatNumber(checklistTotal, i18n.language)}`,
+                  },
+              ]
+            : []),
+        { key: "comments", label: t("card.Comments"), count: formatNumber(commentCount, i18n.language) },
+        ...(attachments.length
+            ? [{ key: "attachments" as const, label: t("card.Attached files"), count: formatNumber(attachments.length, i18n.language) }]
+            : []),
     ];
     const openSection = (section: TOutlineSection, blockUID?: string) => {
         window.dispatchEvent(new CustomEvent(WORKBENCH_OUTLINE_EVENT, { detail: { cardUID: card.uid, section, blockUID } }));
@@ -68,7 +79,7 @@ function CardOutline({ card, onRelations, onNavigate }: { card: ProjectCard.TMod
             ))}
             <button type="button" className="flex w-full items-center gap-2 rounded px-2 py-1 text-left hover:bg-muted" onClick={onRelations}>
                 <span className="min-w-0 flex-1 truncate">{t("dashboard.Relations")}</span>
-                <span className="text-xs text-muted-foreground">{relationships.length}</span>
+                <span className="text-xs text-muted-foreground">{formatNumber(relationships.length, i18n.language)}</span>
             </button>
             {[...contentBlocks]
                 .sort((a, b) => a.order - b.order)
@@ -80,7 +91,7 @@ function CardOutline({ card, onRelations, onNavigate }: { card: ProjectCard.TMod
                         className="block w-full truncate rounded px-4 py-1 text-left text-xs text-muted-foreground hover:bg-muted"
                         onClick={() => openSection("description", block.block_uid)}
                     >
-                        {t(block.type === "code" ? "dashboard.Code blocks" : "dashboard.Diagrams")} {index + 1}
+                        {t(block.type === "code" ? "dashboard.Code blocks" : "dashboard.Diagrams")} {formatNumber(index + 1, i18n.language)}
                     </button>
                 ))}
         </div>
