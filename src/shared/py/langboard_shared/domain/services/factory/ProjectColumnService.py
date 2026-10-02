@@ -1,4 +1,5 @@
 import logging
+from collections.abc import Sequence
 from typing import Any
 from ....ai import BotScheduleHelper, BotScopeHelper
 from ....core.db import SqlBuilder
@@ -29,6 +30,7 @@ class ProjectColumnService(BaseDomainService):
     def get_api_list_by_project(self, projects: TProjectParam | list[TProjectParam]) -> list[dict[str, Any]]:
         raw_columns = self.repo.project_column.get_all_by_project(projects)
         work_counts = self.repo.project_column.get_work_counts(projects)
+        guidance = self.get_workflow_guidance([column for column, _ in raw_columns])
 
         columns = []
         for raw_column, count in raw_columns:
@@ -37,12 +39,46 @@ class ProjectColumnService(BaseDomainService):
             columns.append(
                 {
                     **raw_column.api_response(),
+                    **guidance[raw_column.id],
                     "count": count,
                     **work_counts.get(raw_column.id, {"open_count": 0, "incomplete_count": 0}),
                 }
             )
 
         return columns
+
+    def get_workflow_guidance(self, columns: Sequence[ProjectColumn]) -> dict[SnowflakeID, dict[str, Any]]:
+        """Resolve canonical registry guidance once per batch, retaining both sources.
+
+        An inactive definition still explains an existing binding. Missing keys
+        remain explicit; column display names never imply a stage.
+        """
+        stages = self.repo.workflow_stage.get_by_keys(
+            {column.workflow_stage for column in columns if column.workflow_stage}
+        )
+        result = {}
+        for column in columns:
+            stage = stages.get(column.workflow_stage)
+            stage_description = stage.description if stage else ""
+            column_description = column.description
+            parts = []
+            if stage_description.strip():
+                parts.append(f"Workflow stage:\n{stage_description}")
+            if column_description.strip():
+                parts.append(f"Column:\n{column_description}")
+            result[column.id] = {
+                "workflow_stage_description": stage_description,
+                "column_description": column_description,
+                "workflow_guidance": "\n\n".join(parts),
+                "workflow_stage_status": "active"
+                if stage and stage.is_active
+                else "inactive"
+                if stage
+                else "missing"
+                if column.workflow_stage
+                else "unclassified",
+            }
+        return result
 
     def get_api_bot_scopes_by_project(self, project: TProjectParam | None) -> list[dict[str, Any]]:
         project = InfraHelper.get_by_id_like(Project, project)

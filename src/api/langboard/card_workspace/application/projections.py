@@ -62,7 +62,7 @@ _BOT_SCHEDULE_KEYS = (
 _MAX_FIELD_CHARS = 1_000
 
 
-def pick(source: dict[str, Any], keys: Iterable[str]) -> dict[str, Any]:
+def pick(source: dict[str, Any], keys: Iterable[str], max_field_chars: int = _MAX_FIELD_CHARS) -> dict[str, Any]:
     """Copy only explicitly approved fields from a native response."""
 
     result: dict[str, Any] = {}
@@ -70,8 +70,8 @@ def pick(source: dict[str, Any], keys: Iterable[str]) -> dict[str, Any]:
         if key not in source:
             continue
         value = source.get(key)
-        if isinstance(value, str) and len(value) > _MAX_FIELD_CHARS:
-            result[key] = value[:_MAX_FIELD_CHARS]
+        if isinstance(value, str) and len(value) > max_field_chars:
+            result[key] = value[:max_field_chars]
             result[f"{key}_total_chars"] = len(value)
             result[f"{key}_truncated"] = True
         else:

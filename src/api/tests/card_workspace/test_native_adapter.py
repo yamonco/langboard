@@ -74,7 +74,7 @@ def _service(people: list[dict[str, Any]] | None = None) -> tuple[Any, list[tupl
 
     service = SimpleNamespace(
         project=SimpleNamespace(get_by_id_like=lambda uid: project),
-        project_column=SimpleNamespace(get_by_id_like=lambda uid: column),
+        project_column=SimpleNamespace(get_by_id_like=lambda uid: column, get_workflow_guidance=lambda _: {2: {}}),
         card=SimpleNamespace(
             get_by_id_like=lambda uid: card,
             can_delete=lambda actor, target: False,
@@ -216,7 +216,7 @@ def test_native_source_projects_linked_wiki_content_without_task_sections() -> N
     )
     service = SimpleNamespace(
         project=SimpleNamespace(get_by_id_like=lambda _uid: project),
-        project_column=SimpleNamespace(get_by_id_like=lambda _uid: column),
+        project_column=SimpleNamespace(get_by_id_like=lambda _uid: column, get_workflow_guidance=lambda _: {2: {}}),
         card=SimpleNamespace(get_by_id_like=lambda _uid: card, get_details=get_details),
     )
 
@@ -245,7 +245,7 @@ def test_native_checkitem_continuation_reads_only_the_requested_checklist() -> N
     calls: list[tuple[Any, Any, int]] = []
     service = SimpleNamespace(
         project=SimpleNamespace(get_by_id_like=lambda _uid: project),
-        project_column=SimpleNamespace(get_by_id_like=lambda _uid: column),
+        project_column=SimpleNamespace(get_by_id_like=lambda _uid: column, get_workflow_guidance=lambda _: {column.id: {}}),
         card=SimpleNamespace(
             get_by_id_like=lambda _uid: card,
             can_delete=lambda actor, target: False,

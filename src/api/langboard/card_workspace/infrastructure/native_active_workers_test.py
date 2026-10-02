@@ -26,7 +26,10 @@ def test_people_bundle_uses_native_workers_and_core_read_does_not_overfetch(monk
             get_active_workers=workers,
             get_work_states=lambda _: {2: {"workflow_stage": None, "blocker_state": None}},
         ),
-        project_column=SimpleNamespace(get_by_id_like=lambda _: SimpleNamespace(project_id=1, name="Doing")),
+        project_column=SimpleNamespace(
+            get_by_id_like=lambda _: SimpleNamespace(id=3, project_id=1, name="Doing"),
+            get_workflow_guidance=lambda _: {3: {}},
+        ),
     )
     adapter = NativeCardWorkspaceAdapter(SimpleNamespace(), service)
     monkeypatch.setattr(adapter, "_ensure_project_card", lambda *_: (project, card))

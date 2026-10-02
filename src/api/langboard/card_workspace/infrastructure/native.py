@@ -62,6 +62,7 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
             if details is None:
                 return None
             details["workflow_stage"] = getattr(column, "workflow_stage", None)
+            details.update(self._service.project_column.get_workflow_guidance([column])[column.id])
             resource = details.get("linked_resource", {})
             if resource.get("status") == "available":
                 details["title"] = resource.get("title", "")
@@ -90,6 +91,7 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
         details["creator"] = self._card_creator(card)
         details["project_column_name"] = column.name
         details["workflow_stage"] = getattr(column, "workflow_stage", None)
+        details.update(self._service.project_column.get_workflow_guidance([column])[column.id])
         details["work_state"] = self._service.card.get_work_states([card])[card.id]
 
         if "people" in requested_sections:
@@ -230,6 +232,11 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
                     "name": str(column["name"]),
                     "description": str(column.get("description") or ""),
                     "workflow_stage": column.get("workflow_stage"),
+                    **{
+                        key: column[key]
+                        for key in ("workflow_stage_description", "column_description", "workflow_guidance", "workflow_stage_status")
+                        if key in column
+                    },
                     "order": int(column["order"]),
                 }
                 for column in self._bounded_source(
