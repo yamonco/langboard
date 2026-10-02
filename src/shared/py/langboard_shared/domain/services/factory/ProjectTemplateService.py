@@ -1,5 +1,6 @@
 import re
 from typing import Any
+from ....core.db import DbSession
 from ....core.domain import BaseDomainService
 from ....helpers import InfraHelper
 from ...models import (
@@ -267,19 +268,20 @@ class ProjectTemplateService(BaseDomainService):
         template = self.get(template_name)
         project_service = self._get_service_by_name("project")
         column_service = self._get_service_by_name("project_column")
-        project = project_service.create(user, title, description, project_type)
-        columns: list[ProjectColumn] = []
-        try:
+        with DbSession.atomic() as db:
+            project = project_service.create(user, title, description, project_type)
+            columns: list[ProjectColumn] = []
             for definition in template.column_definitions():
                 fields = {"description": definition.get("description", "")}
                 if definition.get("translations"):
                     fields["translations"] = definition["translations"]
                 if definition.get("workflow_stage") is not None:
                     fields["workflow_stage"] = definition["workflow_stage"]
-                column = column_service.create(user, project, definition["name"], **fields)
+                column = column_service.create(user, project, definition["name"], dispatch_effects=False, **fields)
                 if not column:
                     raise RuntimeError(f"Failed to create project column: {definition['name']}")
                 columns.append(column)
+                db.after_commit(lambda column=column: column_service.dispatch_created(user, project, column))
             archive = self.repo.project_column.get_or_create_archive_if_not_exists(project)
             for order, column in enumerate(columns):
                 column.order = order
@@ -293,10 +295,7 @@ class ProjectTemplateService(BaseDomainService):
             self._apply_internal_bots(project, template.internal_bots)
             self._apply_scopes(project, columns, template)
             self._apply_email_notification_policy(project, template)
-        except Exception:
-            project_service.delete(user, project)
-            raise
-        return project, columns, template
+            return project, columns, template
 
     def _email_notification_policy_snapshot(self, project: Project) -> dict[str, Any]:
         policy, _ = self.repo.project_email_notification.get_with_recipients(project)

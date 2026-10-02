@@ -9,12 +9,13 @@ import sqlalchemy as sa
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from langboard.routes.board.forms import ColumnDescriptionForm, CreateColumnForm
+from langboard_shared.core.db.DbEngine import DbEngine
 from langboard_shared.domain.models import ProjectTemplate
 from langboard_shared.domain.services.factory.ProjectTemplateService import ProjectTemplateService
 
 
 @pytest.mark.parametrize("descriptions", [[], ["First queue", "Second queue"]])
-def test_template_creation_preserves_order_and_legacy_empty_guidance(descriptions: list[str]) -> None:
+def test_template_creation_preserves_order_and_legacy_empty_guidance(descriptions: list[str], monkeypatch) -> None:
     """Descriptions follow positions, including duplicate column names and older templates."""
     template = ProjectTemplate(name="Duplicate", columns=["Queue", "Queue"], column_descriptions=descriptions)
     archive = SimpleNamespace(order=-1)
@@ -24,20 +25,23 @@ def test_template_creation_preserves_order_and_legacy_empty_guidance(description
     created: list[SimpleNamespace] = []
     project = SimpleNamespace(id=1)
 
-    def create_column(_user: object, _project: object, name: str, description: str = "") -> SimpleNamespace:
+    def create_column(_user: object, _project: object, name: str, description: str = "", **_kwargs) -> SimpleNamespace:
         column = SimpleNamespace(name=name, description=description, order=99)
         created.append(column)
         return column
 
     services = {
         "project": SimpleNamespace(create=Mock(return_value=project), delete=Mock()),
-        "project_column": SimpleNamespace(create=create_column),
+        "project_column": SimpleNamespace(create=create_column, dispatch_created=Mock()),
     }
     service = ProjectTemplateService(lambda _: None, services.__getitem__, repository)
     service.get = Mock(return_value=template)
     service._apply_internal_bots = Mock()
     service._apply_scopes = Mock()
     service._apply_email_notification_policy = Mock()
+    engine = sa.create_engine("sqlite://")
+    monkeypatch.setattr(DbEngine, "get_main_engine", lambda: engine)
+    monkeypatch.setattr(DbEngine, "get_readonly_engine", lambda: engine)
     _, columns, _ = service.create_project(object(), "Test", template_name="Duplicate")
     assert [column.name for column in columns] == ["Queue", "Queue"]
     assert [column.description for column in columns] == (descriptions or ["", ""])

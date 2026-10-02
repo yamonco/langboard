@@ -1,5 +1,6 @@
 from typing import TYPE_CHECKING, Any, Literal, Sequence, cast
 from ....ai import BotScheduleHelper, BotScopeHelper
+from ....core.db import DbSession
 from ....core.domain import BaseDomainService
 from ....core.domain.BaseDomainService import TMutableValidatorMap
 from ....core.schema import TimeBasedPagination
@@ -310,7 +311,8 @@ class ProjectService(BaseDomainService):
             assigned_internal_bot = ProjectAssignedInternalBot(project_id=project.id, internal_bot_id=internal_bot.id)
             self.repo.project_assigned_internal_bot.insert(assigned_internal_bot)
 
-        ProjectActivityTask.project_created(user, project)
+        with DbSession.use(readonly=False) as db:
+            db.after_commit(lambda: ProjectActivityTask.project_created(user, project))
 
         return project
 

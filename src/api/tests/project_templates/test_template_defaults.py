@@ -6,6 +6,7 @@ import pytest
 import sqlalchemy as sa
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
+from langboard_shared.core.db.DbEngine import DbEngine
 from langboard_shared.domain.models import ProjectTemplate
 from langboard_shared.domain.services.factory.ProjectTemplateService import ProjectTemplateService
 from langboard_shared.helpers import InfraHelper
@@ -33,14 +34,14 @@ def test_defaults_validation_and_omission_preserve_existing_selection(monkeypatc
 
 
 @pytest.mark.parametrize("result", [None, {"created": True}])
-def test_project_creation_applies_existing_global_path_or_rolls_back(result):
+def test_project_creation_applies_existing_global_path_or_rolls_back(result, monkeypatch):
     template = ProjectTemplate(name="Custom", columns=["Queue"], global_label_uids=["label"])
     project = SimpleNamespace(id=1)
     column = SimpleNamespace(order=0)
     archive = SimpleNamespace(order=1)
     services = {
         "project": SimpleNamespace(create=Mock(return_value=project), delete=Mock()),
-        "project_column": SimpleNamespace(create=Mock(return_value=column)),
+        "project_column": SimpleNamespace(create=Mock(return_value=column), dispatch_created=Mock()),
         "project_label": SimpleNamespace(use_global=Mock(return_value=result)),
     }
     repo = SimpleNamespace(
@@ -51,13 +52,17 @@ def test_project_creation_applies_existing_global_path_or_rolls_back(result):
     service._apply_internal_bots = Mock()
     service._apply_scopes = Mock()
     service._apply_email_notification_policy = Mock()
+    engine = sa.create_engine("sqlite://")
+    monkeypatch.setattr(DbEngine, "get_main_engine", lambda: engine)
+    monkeypatch.setattr(DbEngine, "get_readonly_engine", lambda: engine)
     if result:
         service.create_project("user", "New")
     else:
         with pytest.raises(ValueError):
             service.create_project("user", "New")
     services["project_label"].use_global.assert_called_once_with("user", project, "label")
-    assert services["project"].delete.called is (result is None)
+    services["project"].delete.assert_not_called()
+    assert services["project_column"].dispatch_created.called is (result is not None)
 
 
 def test_additive_migration_keeps_existing_templates():

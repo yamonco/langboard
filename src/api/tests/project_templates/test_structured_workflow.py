@@ -91,7 +91,12 @@ def test_native_template_creation_persists_semantics_or_calls_project_cleanup(st
         storage.project_template.insert(template)
         with pytest.raises(ValueError, match="Unknown or inactive workflow stage"):
             service.create_project(actor, "QA", template_name="Invalid")
-        project_service.delete.assert_called_once_with(actor, project)
+        project_service.delete.assert_not_called()
+        column_service.dispatch_created.assert_not_called()
+        from langboard_shared.core.db import DbSession, SqlBuilder
+
+        with DbSession.use(readonly=True) as db:
+            assert db.exec(SqlBuilder.select.table(ProjectColumn)).all() == []
         return
     _, columns, template = service.create_project(actor, "QA", template_name="SI")
     from langboard_shared.core.db import DbSession, SqlBuilder
@@ -149,4 +154,61 @@ def test_template_translations_survive_native_create_and_copy(storage, monkeypat
     assert copied.column_definitions()[0]["translations"] == translations
     assert copied.column_definitions()[0]["workflow_stage"] == "ready"
     assert len(copied.column_definitions()) == 1
+    project_service.delete.assert_not_called()
+
+
+@pytest.mark.parametrize("failure_phase", ["project", "column", "bots", "scopes", "email", None])
+def test_project_and_columns_are_atomic_and_effects_run_only_after_commit(storage, monkeypatch, failure_phase):
+    from langboard_shared.core.db import DbSession, SqlBuilder
+    from langboard_shared.domain.models import User
+
+    engine = DbEngine.get_main_engine()
+    User.__table__.create(engine)
+    Project.__table__.create(engine)
+    with DbSession.use(readonly=False) as db:
+        actor = User(firstname="Atomic", lastname="Owner", email="atomic@example.invalid", password="test-only")
+        db.insert(actor)
+    effects = []
+
+    def create_project(_actor, title, *_args):
+        project = Project(owner_id=actor.id, title=title)
+        with DbSession.use(readonly=False) as db:
+            db.insert(project)
+            db.after_commit(lambda: effects.append("project"))
+        if failure_phase == "project":
+            raise RuntimeError("injected project failure")
+        return project
+
+    project_service = SimpleNamespace(create=create_project, delete=Mock())
+    column_service = ProjectColumnService(None, None, storage)
+    column_service.dispatch_created = lambda _actor, _project, column: effects.append(column.name)
+    monkeypatch.setattr(InfraHelper, "get_by_id_like", lambda _model, value: value)
+    services = {"project": project_service, "project_column": column_service}
+    service = ProjectTemplateService(None, services.__getitem__, storage)
+    template = ProjectTemplate(name="Atomic", columns=[{"name": "Queue", "workflow_stage": "ready"}])
+    if failure_phase == "column":
+        template.columns.append({"name": "Invalid", "workflow_stage": "missing"})
+    service.get = Mock(return_value=template)
+
+    def phase(name):
+        def apply(*_args):
+            assert effects == []
+            if failure_phase == name:
+                raise RuntimeError(f"injected {name} failure")
+        return apply
+
+    service._apply_internal_bots = phase("bots")
+    service._apply_scopes = phase("scopes")
+    service._apply_email_notification_policy = phase("email")
+    if failure_phase:
+        with pytest.raises((ValueError, RuntimeError)):
+            service.create_project(actor, "Atomic board")
+    else:
+        service.create_project(actor, "Atomic board")
+    with DbSession.use(readonly=True) as db:
+        projects = db.exec(SqlBuilder.select.table(Project)).all()
+        columns = db.exec(SqlBuilder.select.table(ProjectColumn)).all()
+    assert len(projects) == (0 if failure_phase else 1)
+    assert len(columns) == (0 if failure_phase else 2)
+    assert effects == ([] if failure_phase else ["project", "Queue"])
     project_service.delete.assert_not_called()
