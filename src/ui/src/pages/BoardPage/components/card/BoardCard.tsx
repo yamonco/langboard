@@ -447,7 +447,7 @@ function BoardTaskCardResult({
                         )}
                         <Box className="relative flex h-full min-h-0 min-w-0 flex-col overflow-visible">
                             <Dialog.Header className="sticky top-0 z-[100] mb-3 shrink-0 border-b-2 bg-background pb-3 text-left sm:-top-2">
-                                <Flex items="center" gap="2">
+                                <Flex items="center" gap="2" className="min-w-0">
                                     {deadlineAt && isCheckCard && (
                                         <Button
                                             type="button"
