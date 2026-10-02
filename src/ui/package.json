@@ -40,7 +40,8 @@
     "format": "prettier --write \"{tests,src}/**/*.{js,jsx,ts,tsx,json,md}\" --ignore-path .prettierignore",
     "check-format": "prettier --check \"{tests,src}/**/*.{js,jsx,ts,tsx,json,md}\" --ignore-path .prettierignore",
     "test:workbench-shell": "playwright test -c playwright.workbench.config.ts",
-    "test:locale-resources": "node --experimental-strip-types scripts/verify-locale-resources.mjs"
+    "test:locale-resources": "node --experimental-strip-types scripts/verify-locale-resources.mjs",
+    "test:i18n-initialization": "node --test scripts/i18n-initialization.test.mjs"
   },
   "dependencies": {
     "@ai-sdk/react": "^3.0.113",
