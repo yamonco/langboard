@@ -14,6 +14,7 @@ import { cn } from "@/core/utils/ComponentUtils";
 import { useTranslation } from "react-i18next";
 
 export function CodeBlockElement(props: PlateElementProps<TCodeBlockElement>) {
+    const [t] = useTranslation();
     const { editor, element } = props;
 
     return (
@@ -33,7 +34,7 @@ export function CodeBlockElement(props: PlateElementProps<TCodeBlockElement>) {
                             variant="ghost"
                             className="size-6 text-xs"
                             onClick={() => formatCodeBlock(editor, { element })}
-                            title="Format code"
+                            title={t("card.Format code")}
                         >
                             <BracesIcon className="!size-3.5 text-muted-foreground" />
                         </Button>
@@ -118,6 +119,7 @@ function CodeBlockCombobox() {
 }
 
 function CopyButton({ value, ...props }: { value: (() => string) | string } & Omit<React.ComponentProps<typeof Button>, "value">) {
+    const [t] = useTranslation();
     const [hasCopied, setHasCopied] = React.useState(false);
 
     React.useEffect(() => {
@@ -134,7 +136,7 @@ function CopyButton({ value, ...props }: { value: (() => string) | string } & Om
             }}
             {...props}
         >
-            <span className="sr-only">Copy</span>
+            <span className="sr-only">{t("common.Copy")}</span>
             {hasCopied ? <CheckIcon className="!size-3" /> : <CopyIcon className="!size-3" />}
         </Button>
     );

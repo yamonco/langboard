@@ -145,5 +145,14 @@
   "Global labels unavailable": "无法加载全局标签。请关闭后重新打开以重试。",
   "Overdue by {{count}} day_one": "已逾期{{count, number}}天",
   "Overdue by {{count}} day_other": "已逾期{{count, number}}天",
-  "D-{{count}}": "D-{{count}}"
+  "D-{{count}}": "D-{{count}}",
+  "Format code": "格式化代码",
+  "Execution records": "执行记录",
+  "Execution evidence checklist": "执行证据检查清单",
+  "Could not render the {{engine}} diagram.": "无法渲染{{engine}}图表。",
+  "{{engine}} diagram preview is unavailable.": "无法预览{{engine}}图表。",
+  "{{engine}} diagram": "{{engine}}图表",
+  "YouTube video": "YouTube视频",
+  "{{days, number}} days": "{{days, number}}天",
+  "{{engine}} source": "{{engine}} 源代码"
 }

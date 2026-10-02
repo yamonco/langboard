@@ -1,3 +1,4 @@
+import CardContentBlockList from "@/pages/BoardPage/components/card/CardContentBlockList";
 import RelationshipTypePicker from "@/pages/BoardPage/components/board/RelationshipTypePicker";
 import { GlobalRelationshipType } from "@/core/models";
 import BoardWorkIsland from "@/pages/BoardPage/components/board/BoardWorkIsland";
@@ -34,6 +35,28 @@ function Fixture() {
     const distance = useUpdateDateDistance(date);
     return (
         <>
+            <div data-testid="content-blocks">
+                <CardContentBlockList
+                    blocks={[
+                        {
+                            block_uid: "source",
+                            revision: 0,
+                            updated_at: null,
+                            order: 0,
+                            type: "diagram",
+                            payload: { engine: "mermaid", source: "graph TD; User--&gt;Data;", view_mode: "source" },
+                        },
+                        {
+                            block_uid: "empty",
+                            revision: 0,
+                            updated_at: null,
+                            order: 1,
+                            type: "diagram",
+                            payload: { engine: "mermaid", source: "", view_mode: "image" },
+                        },
+                    ]}
+                />
+            </div>
             <div data-testid="relationship-picker">
                 <RelationshipTypePicker types={fixtureRelationships} isParent onSelect={() => {}} />
             </div>

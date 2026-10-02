@@ -560,7 +560,7 @@ function BoardTaskCardResult({
                                                     />
                                                 </BoardCardSection>
                                                 {executionReceipts.length > 0 && (
-                                                    <BoardCardSection title="실행 기록">
+                                                    <BoardCardSection title="card.Execution records">
                                                         <div className="space-y-3">
                                                             {executionReceipts.map(({ generation, receipt, checklist_projection }) => (
                                                                 <div key={generation} className="rounded-md border p-3 text-sm">
@@ -580,7 +580,10 @@ function BoardTaskCardResult({
                                                                         </a>
                                                                     ))}
                                                                     {checklist_projection?.length > 0 && (
-                                                                        <ul className="mt-2 space-y-1" aria-label="실행 근거 체크리스트">
+                                                                        <ul
+                                                                            className="mt-2 space-y-1"
+                                                                            aria-label={t("card.Execution evidence checklist")}
+                                                                        >
                                                                             {checklist_projection.map((item) => (
                                                                                 <li key={item.item_uid}>
                                                                                     {item.is_checked ? "☑" : "☐"} {item.item_uid}: {item.kind}

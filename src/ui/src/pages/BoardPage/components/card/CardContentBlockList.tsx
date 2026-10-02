@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { memo, useEffect, useRef, useState } from "react";
 import Box from "@/components/base/Box";
 import Flex from "@/components/base/Flex";
@@ -20,6 +21,7 @@ function asString(value: unknown, fallback = ""): string {
 }
 
 const DiagramBlockBody = memo(function DiagramBlockBody({ engine, source }: { engine: TEngine; source: string }) {
+    const [t] = useTranslation();
     const [image, setImage] = useState("");
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
@@ -55,20 +57,20 @@ const DiagramBlockBody = memo(function DiagramBlockBody({ engine, source }: { en
     if (error) {
         return (
             <Box className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-                {engine} 다이어그램을 렌더링하지 못했습니다: {error}
+                {t("card.Could not render the {{engine}} diagram.", { engine })}
             </Box>
         );
     }
     if (!image) {
         return (
             <Box className="rounded-lg border border-dashed px-3 py-2 text-xs text-muted-foreground">
-                {engine} 다이어그램 미리보기를 사용할 수 없습니다
+                {t("card.{{engine}} diagram preview is unavailable.", { engine })}
             </Box>
         );
     }
     return (
         <div className="flex justify-center overflow-x-auto">
-            <img src={image} alt={`${engine} diagram`} className="max-w-full" />
+            <img src={image} alt={t("card.{{engine}} diagram", { engine })} className="max-w-full" />
         </div>
     );
 });
@@ -96,6 +98,7 @@ function CodeBlock({ block }: { block: IContentBlock }) {
 }
 
 function DiagramBlock({ block }: { block: IContentBlock }) {
+    const [t] = useTranslation();
     const engine = (asString(block.payload.engine, "mermaid") as TEngine) ?? "mermaid";
     const source = asString(block.payload.source);
     const rawMode = asString(block.payload.view_mode, "both");
@@ -111,7 +114,7 @@ function DiagramBlock({ block }: { block: IContentBlock }) {
             ) : null}
             {showCode ? (
                 <details open={!showDiagram}>
-                    <summary className="cursor-pointer select-none text-xs text-muted-foreground">{engine} source</summary>
+                    <summary className="cursor-pointer select-none text-xs text-muted-foreground">{t("card.{{engine}} source", { engine })}</summary>
                     <pre className="mt-2 overflow-x-auto rounded bg-secondary/50 p-2 font-mono text-xs leading-relaxed">
                         <code>{source}</code>
                     </pre>

@@ -145,5 +145,14 @@
   "Global labels unavailable": "グローバルラベルを読み込めませんでした。閉じてから再度開いてお試しください。",
   "Overdue by {{count}} day_one": "{{count, number}}日超過",
   "Overdue by {{count}} day_other": "{{count, number}}日超過",
-  "D-{{count}}": "D-{{count}}"
+  "D-{{count}}": "D-{{count}}",
+  "Format code": "コードを整形",
+  "Execution records": "実行記録",
+  "Execution evidence checklist": "実行根拠チェックリスト",
+  "Could not render the {{engine}} diagram.": "{{engine}}ダイアグラムを描画できませんでした。",
+  "{{engine}} diagram preview is unavailable.": "{{engine}}ダイアグラムのプレビューは利用できません。",
+  "{{engine}} diagram": "{{engine}}ダイアグラム",
+  "YouTube video": "YouTube動画",
+  "{{days, number}} days": "{{days, number}}日",
+  "{{engine}} source": "{{engine}} ソース"
 }

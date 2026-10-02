@@ -145,5 +145,14 @@
   "Global labels unavailable": "Global labels could not be loaded. Close and reopen to retry.",
   "Overdue by {{count}} day_one": "Overdue by {{count, number}} day",
   "Overdue by {{count}} day_other": "Overdue by {{count, number}} days",
-  "D-{{count}}": "D-{{count}}"
+  "D-{{count}}": "D-{{count}}",
+  "Format code": "Format code",
+  "Execution records": "Execution records",
+  "Execution evidence checklist": "Execution evidence checklist",
+  "Could not render the {{engine}} diagram.": "Could not render the {{engine}} diagram.",
+  "{{engine}} diagram preview is unavailable.": "{{engine}} diagram preview is unavailable.",
+  "{{engine}} diagram": "{{engine}} diagram",
+  "YouTube video": "YouTube video",
+  "{{days, number}} days": "{{days, number}} days",
+  "{{engine}} source": "{{engine}} source"
 }

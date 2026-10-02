@@ -347,7 +347,7 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
                                         )}
                                     >
                                         <IconComponent icon="clock-3" size="3" aria-hidden="true" />
-                                        {t("card.Stale")} · {staleDays}d
+                                        {t("card.Stale")} · {t("card.{{days, number}} days", { days: staleDays })}
                                     </span>
                                 )}
                             </div>

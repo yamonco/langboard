@@ -12,30 +12,6 @@
     "text": "⌘K"
   },
   {
-    "file": "src/components/plate-ui/code-block-node.tsx",
-    "line": 36,
-    "kind": "attribute:title",
-    "text": "Format code"
-  },
-  {
-    "file": "src/components/plate-ui/code-block-node.tsx",
-    "line": 137,
-    "kind": "jsx-text",
-    "text": "Copy"
-  },
-  {
-    "file": "src/components/plate-ui/emoji-toolbar-button.tsx",
-    "line": 295,
-    "kind": "attribute:aria-label",
-    "text": "Search"
-  },
-  {
-    "file": "src/components/plate-ui/emoji-toolbar-button.tsx",
-    "line": 321,
-    "kind": "attribute:aria-label",
-    "text": "Clear"
-  },
-  {
     "file": "src/components/plate-ui/equation-node.tsx",
     "line": 66,
     "kind": "attribute:placeholder",
@@ -48,70 +24,16 @@
     "text": "E = mc^2"
   },
   {
-    "file": "src/components/plate-ui/media-embed-node.tsx",
-    "line": 54,
-    "kind": "attribute:title",
-    "text": "youtube"
-  },
-  {
-    "file": "src/components/plate-ui/media-embed-node.tsx",
-    "line": 88,
-    "kind": "attribute:title",
-    "text": "embed"
-  },
-  {
     "file": "src/components/plate-ui/media-toolbar-button.tsx",
     "line": 176,
     "kind": "jsx-text",
     "text": "URL"
   },
   {
-    "file": "src/components/plate-ui/media-video-node.tsx",
-    "line": 63,
-    "kind": "attribute:title",
-    "text": "youtube"
-  },
-  {
     "file": "src/components/plate-ui/table-toolbar-button.tsx",
     "line": 231,
     "kind": "jsx-text",
     "text": "x"
-  },
-  {
-    "file": "src/pages/BoardPage/components/board/BoardColumnCardCollapsible.tsx",
-    "line": 350,
-    "kind": "jsx-text",
-    "text": "d"
-  },
-  {
-    "file": "src/pages/BoardPage/components/card/BoardCard.tsx",
-    "line": 563,
-    "kind": "attribute:title",
-    "text": "실행 기록"
-  },
-  {
-    "file": "src/pages/BoardPage/components/card/BoardCard.tsx",
-    "line": 583,
-    "kind": "attribute:aria-label",
-    "text": "실행 근거 체크리스트"
-  },
-  {
-    "file": "src/pages/BoardPage/components/card/CardContentBlockList.tsx",
-    "line": 58,
-    "kind": "jsx-text",
-    "text": "다이어그램을 렌더링하지 못했습니다:"
-  },
-  {
-    "file": "src/pages/BoardPage/components/card/CardContentBlockList.tsx",
-    "line": 65,
-    "kind": "jsx-text",
-    "text": "다이어그램 미리보기를 사용할 수 없습니다"
-  },
-  {
-    "file": "src/pages/BoardPage/components/card/CardContentBlockList.tsx",
-    "line": 114,
-    "kind": "jsx-text",
-    "text": "source"
   },
   {
     "file": "src/pages/DashboardPage/components/ProjectQuickSwitcher.tsx",

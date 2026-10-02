@@ -93,3 +93,20 @@ test("relationship classifications translate while user relation names remain un
             await expect(picker.getByRole("button", { name: `User ${semantic}`, exact: true })).toBeVisible();
     }
 });
+
+test("card diagram fallback and source label translate without altering source content", async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem("lang", "en-US"));
+    await page.goto("/src/core/utils/LocaleFormat.fixture.html");
+    for (const [locale, source, unavailable] of [
+        ["ko-KR", "소스", "mermaid 다이어그램 미리보기를 사용할 수 없습니다."],
+        ["ja-JP", "ソース", "mermaidダイアグラムのプレビューは利用できません。"],
+        ["zh-CN", "源代码", "无法预览mermaid图表。"],
+        ["en-US", "source", "mermaid diagram preview is unavailable."],
+    ]) {
+        await page.getByRole("button", { name: locale, exact: true }).click();
+        const blocks = page.getByTestId("content-blocks");
+        await expect(blocks.locator("summary")).toHaveText(`mermaid ${source}`);
+        await expect(blocks.getByText(unavailable, { exact: true })).toBeVisible();
+        await expect(blocks.locator("code")).toHaveText("graph TD; User--&gt;Data;");
+    }
+});
