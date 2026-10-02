@@ -3,14 +3,16 @@
 from __future__ import annotations
 import json
 from typing import Any
-from langboard_shared.core.db import EditorContentModel
+from langboard_shared.core.db import DbSession, EditorContentModel
 from langboard_shared.core.exceptions.CardDescriptionConflict import CardDescriptionConflict
 from langboard_shared.core.types import SafeDateTime
 from langboard_shared.domain.models import Bot, CardMetadata, User
 from langboard_shared.domain.services import DomainService
 from langboard_shared.Env import Env
+from sqlalchemy import column, select, table
 from ..application.ports import (
     CardBundleSource,
+    CardExecutionSource,
     CardWorkspaceCommandPort,
     CardWorkspaceQueryPort,
     CommentPageSource,
@@ -30,6 +32,15 @@ from ..domain import (
 
 MAX_NATIVE_SECTION_SOURCE = 100
 _SOURCE_QUERY_LIMIT = MAX_NATIVE_SECTION_SOURCE + 1
+
+# Lightweight mapping onto the readiness table maintained by the database
+# execution recheck gate, so reads reuse the gate's persisted verdict as-is.
+CARD_EXECUTION_READINESS = table(
+    "card_execution_readiness",
+    column("card_id"),
+    column("is_ready"),
+    column("execution_generation"),
+)
 
 
 class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPort):
@@ -266,6 +277,24 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
         except ValueError:
             return None
         return self._service.card_content_block.api_blocks_by_card(card)
+
+    def get_card_execution(self, project_uid: str, card_uid: str) -> CardExecutionSource | None:
+        try:
+            _project, card = self._ensure_project_card(project_uid, card_uid)
+        except ValueError:
+            return None
+        with DbSession.use(readonly=True) as db:
+            row = db.exec(
+                select(
+                    CARD_EXECUTION_READINESS.c.is_ready,
+                    CARD_EXECUTION_READINESS.c.execution_generation,
+                ).where(CARD_EXECUTION_READINESS.c.card_id == card.id)
+            ).first()
+        if row is None:
+            # The recheck gate only writes a row once a binding exists; the
+            # table defaults describe that untouched state: not ready, generation 0.
+            return CardExecutionSource(is_ready=False, generation=0)
+        return CardExecutionSource(is_ready=bool(row[0]), generation=int(row[1]))
 
     def create_card_content_block(
         self,

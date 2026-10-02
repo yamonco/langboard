@@ -174,7 +174,7 @@ def get_card_details(
 @AppRouter.api.get(
     "/board/{project_uid}/card/{card_uid}/context",
     tags=["Board.Card"],
-    description="Get bounded card context for project chat.",
+    description="Get bounded card context for project chat, including persisted execution readiness.",
     responses=(OpenApiSchema().suc({"scope_context": "object"}).auth().forbidden().err(404, ApiErrorCode.NF2003).get()),
 )
 @RoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
@@ -201,6 +201,7 @@ def get_card_context(
             CardBundleInclude.Checklists,
             CardBundleInclude.Attachments,
             CardBundleInclude.Metadata,
+            CardBundleInclude.Execution,
         ],
     )
     return JsonResponse(content={"scope_context": context.model_dump(mode="json")})

@@ -50,6 +50,7 @@ class CardBundleInclude(StrEnum):
     Metadata = "metadata"
     Automation = "automation"
     ContentBlocks = "content_blocks"
+    Execution = "execution"
 
 
 class CardBundleSection(StrEnum):
