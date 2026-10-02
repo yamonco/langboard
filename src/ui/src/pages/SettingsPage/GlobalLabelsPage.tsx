@@ -1,3 +1,4 @@
+import { globalLabelDisplay } from "@/core/utils/LabelDisplay";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@/components/base/Button";
@@ -79,7 +80,6 @@ export default function GlobalLabelsPage({ currentUser }: { currentUser: AuthUse
             Toast.Add.error(t("errors.Internal server error"));
         }
     };
-    const locale = i18n.resolvedLanguage?.split("-")[0] ?? "en";
     return (
         <section className="space-y-5">
             <header className="flex flex-wrap items-center justify-between gap-3">
@@ -116,8 +116,7 @@ export default function GlobalLabelsPage({ currentUser }: { currentUser: AuthUse
                             >
                                 <span className="size-3 shrink-0 rounded-full" style={{ backgroundColor: label.color }} />
                                 <span className="truncate">
-                                    {label.emoji && `${label.emoji} `}
-                                    {label.translations[locale]?.name || label.name}
+                                    {globalLabelDisplay(label.name, label.description, label, i18n.resolvedLanguage ?? i18n.language).name}
                                 </span>
                             </button>
                         ))

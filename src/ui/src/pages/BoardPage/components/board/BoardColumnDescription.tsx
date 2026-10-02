@@ -1,3 +1,4 @@
+import { metadataDisplay } from "@/core/utils/MetadataDisplay";
 import { formatNumber } from "@/core/utils/LocaleFormat";
 import Button from "@/components/base/Button";
 import IconComponent from "@/components/base/IconComponent";
@@ -31,9 +32,7 @@ function BoardColumnDescription({ column }: { column: ProjectColumn.TModel }) {
     const stages = useProjectWorkflowStages(column.project_uid, open);
     const selectedStage = stages.data?.find((stage) => stage.key === stageDraft);
     const localized = (stage: NonNullable<typeof selectedStage>) =>
-        stage.translations[i18n.resolvedLanguage ?? "en"] ??
-        stage.translations[(i18n.resolvedLanguage ?? "en").split("-")[0]] ??
-        stage.translations.en;
+        metadataDisplay(stage, stage.translations, i18n.resolvedLanguage ?? i18n.language);
 
     const save = async () => {
         try {

@@ -1,3 +1,4 @@
+import { metadataDisplay } from "@/core/utils/MetadataDisplay";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Dialog from "@/components/base/Dialog";
@@ -115,7 +116,6 @@ export default function WorkflowStagesPage({ currentUser }: { currentUser: AuthU
         }
     };
     const text = language === "en" ? draft : draft.translations[language];
-    const locale = i18n.language.split("-")[0];
     const selected = stages.find((stage) => stage.uid === draft.uid);
     return (
         <section className="space-y-5">
@@ -151,7 +151,9 @@ export default function WorkflowStagesPage({ currentUser }: { currentUser: AuthU
                         >
                             <div className="flex items-center gap-2">
                                 <span className="size-3 shrink-0 rounded-full" style={{ backgroundColor: stage.color }} />
-                                <span className="font-medium">{stage.translations[locale]?.name || stage.name}</span>
+                                <span className="font-medium">
+                                    {metadataDisplay(stage, stage.translations, i18n.resolvedLanguage ?? i18n.language).name}
+                                </span>
                                 <span className="ml-auto text-xs text-muted-foreground">
                                     {stage.is_active ? t("settings.Active") : t("settings.Inactive")}
                                 </span>

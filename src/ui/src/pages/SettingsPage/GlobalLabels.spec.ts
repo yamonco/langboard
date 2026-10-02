@@ -57,3 +57,27 @@ for (const width of [1280, 390])
         await expect(page.getByLabel("Emoji (optional)", { exact: true })).toHaveValue("");
         expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
     });
+
+test("global label list prefers exact locale then language while preserving canonical edit fields", async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem("lang", "ko-KR"));
+    await page.route("**/settings/global-labels**", (route) =>
+        route.fulfill({
+            json: {
+                labels: [
+                    {
+                        uid: "fixture",
+                        name: "Contract",
+                        description: "English contract",
+                        color: "#8B5CF6",
+                        emoji: "📜",
+                        translations: { "ko-KR": { name: "지역 계약", description: "" }, ko: { name: "계약", description: "언어 설명" } },
+                    },
+                ],
+            },
+        })
+    );
+    await page.goto("/src/pages/SettingsPage/GlobalLabels.fixture.html");
+    await page.getByRole("navigation").getByRole("button", { name: "📜 지역 계약", exact: true }).click();
+    await expect(page.locator("input[value=Contract]")).toBeVisible();
+    await expect(page.locator("textarea")).toHaveValue("English contract");
+});
