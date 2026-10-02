@@ -39,6 +39,10 @@ class DomainService(Factory):
         return self._create_or_get_product(factory.ProjectService)
 
     @property
+    def global_label(self):
+        return self._create_or_get_product(factory.GlobalLabelService)
+
+    @property
     def project_template(self):
         return self._create_or_get_product(factory.ProjectTemplateService)
 

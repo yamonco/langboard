@@ -22,6 +22,7 @@ from .CheckitemRepository import CheckitemRepository
 from .CheckitemTimerRecordRepository import CheckitemTimerRecordRepository
 from .ChecklistRepository import ChecklistRepository
 from .GlobalCardRelationshipTypeRepository import GlobalCardRelationshipTypeRepository
+from .GlobalLabelRepository import GlobalLabelRepository
 from .GraphApprovalRequestRepository import GraphApprovalRequestRepository
 from .InternalBotRepository import InternalBotRepository
 from .McpToolGroupRepository import McpToolGroupRepository
@@ -87,6 +88,7 @@ __all__ = [
     "CheckitemTimerRecordRepository",
     "ChecklistRepository",
     "GlobalCardRelationshipTypeRepository",
+    "GlobalLabelRepository",
     "GraphApprovalRequestRepository",
     "InternalBotRepository",
     "McpToolGroupRepository",

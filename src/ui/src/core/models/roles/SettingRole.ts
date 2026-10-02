@@ -13,6 +13,9 @@ export enum EAction {
     InternalBotCreate = "internal_bot_create",
     InternalBotUpdate = "internal_bot_update",
     InternalBotDelete = "internal_bot_delete",
+    GlobalLabelRead = "global_label_read",
+    GlobalLabelCreate = "global_label_create",
+    GlobalLabelUpdate = "global_label_update",
     GlobalRelationshipRead = "global_relationship_read",
     GlobalRelationshipCreate = "global_relationship_create",
     GlobalRelationshipUpdate = "global_relationship_update",
@@ -38,6 +41,7 @@ export const CATEGORIZED_MAP = {
     User: [EAction.UserRead, EAction.UserCreate, EAction.UserUpdate, EAction.UserDelete],
     Bot: [EAction.BotRead, EAction.BotCreate, EAction.BotUpdate, EAction.BotDelete],
     InternalBot: [EAction.InternalBotRead, EAction.InternalBotCreate, EAction.InternalBotUpdate, EAction.InternalBotDelete],
+    GlobalLabel: [EAction.GlobalLabelRead, EAction.GlobalLabelCreate, EAction.GlobalLabelUpdate],
     GlobalRelationship: [
         EAction.GlobalRelationshipRead,
         EAction.GlobalRelationshipCreate,

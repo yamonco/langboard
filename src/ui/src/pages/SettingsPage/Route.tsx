@@ -34,6 +34,10 @@ const routes: RouteObject[] = [
                 element: <></>,
             },
             {
+                path: ROUTES.SETTINGS.GLOBAL_LABELS,
+                element: <></>,
+            },
+            {
                 path: ROUTES.SETTINGS.PROJECT_TEMPLATES,
                 element: <></>,
             },

@@ -21,6 +21,11 @@ class SettingRoleAction(Enum):
     InternalBotUpdate = "internal_bot_update"
     InternalBotDelete = "internal_bot_delete"
 
+    # Global Label Management
+    GlobalLabelRead = "global_label_read"
+    GlobalLabelCreate = "global_label_create"
+    GlobalLabelUpdate = "global_label_update"
+
     # Global Relationship Management
     GlobalRelationshipRead = "global_relationship_read"
     GlobalRelationshipCreate = "global_relationship_create"
@@ -54,6 +59,7 @@ class SettingRoleCategory(Enum):
     Bot = "bot"
     InternalBot = "internal_bot"
     GlobalRelationship = "global_relationship"
+    GlobalLabel = "global_label"
     Webhook = "webhook"
     NotificationSchedule = "notification_schedule"
     ApiComfortTool = "api_comfort_tool"
@@ -73,6 +79,7 @@ class SettingRole(BaseRoleModel, table=True):
             SettingRoleAction.BotRead,
             SettingRoleAction.InternalBotRead,
             SettingRoleAction.GlobalRelationshipRead,
+            SettingRoleAction.GlobalLabelRead,
             SettingRoleAction.WebhookRead,
             SettingRoleAction.NotificationScheduleRead,
             SettingRoleAction.ApiComfortToolRead,

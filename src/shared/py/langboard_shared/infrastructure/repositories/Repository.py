@@ -12,6 +12,10 @@ class Repository(Factory):
         return self._create_or_get_product(factory.ProjectRepository)
 
     @property
+    def global_label(self):
+        return self._create_or_get_product(factory.GlobalLabelRepository)
+
+    @property
     def project_template(self):
         return self._create_or_get_product(factory.ProjectTemplateRepository)
 

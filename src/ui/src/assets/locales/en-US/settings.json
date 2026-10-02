@@ -228,5 +228,19 @@
         "email": "Email already exists. Try another one."
       }
     }
-  }
+  },
+  "Global labels": "Global labels",
+  "Reusable labels for project templates. Existing project labels keep their own values.": "Reusable labels for project templates. Existing project labels keep their own values.",
+  "New label": "New label",
+  "No global labels yet": "No global labels yet",
+  "Label preview": "Label preview",
+  "English is the default and fallback language.": "English is the default and fallback language.",
+  "Languages": "Languages",
+  "Label name": "Label name",
+  "Color": "Color",
+  "Language code": "Language code",
+  "Add language": "Add language",
+  "Discard unsaved changes?": "Discard unsaved changes?",
+  "Label description": "Label description",
+  "Label saved": "Label saved"
 }

@@ -32,6 +32,7 @@ from .Checklist import Checklist
 from .EditorGraphApprovalRequest import EditorGraphApprovalRequest
 from .ExternalImportRecord import ExternalImportRecord
 from .GlobalCardRelationshipType import GlobalCardRelationshipType
+from .GlobalLabel import GlobalLabel
 from .GraphApprovalRequest import GraphApprovalRequest
 from .InternalBot import InternalBot
 from .ManualScopeRunGraphApprovalRequest import ManualScopeRunGraphApprovalRequest
@@ -116,6 +117,7 @@ __all__ = [
     "CheckitemTimerRecord",
     "Checklist",
     "GlobalCardRelationshipType",
+    "GlobalLabel",
     "BotScheduleGraphApprovalRequest",
     "BotTriggerGraphApprovalRequest",
     "ChatGraphApprovalRequest",

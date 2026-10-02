@@ -27,6 +27,7 @@ import { AuthUser } from "@/core/models";
 import useRoleActionFilter from "@/core/hooks/useRoleActionFilter";
 import { ApiKeyRole, McpRole, SettingRole } from "@/core/models/roles";
 import useGetOllamaHealth from "@/controllers/api/settings/ollama/useGetOllamaHealth";
+import GlobalLabelsPage from "@/pages/SettingsPage/GlobalLabelsPage";
 import ProjectTemplatesPage from "@/pages/SettingsPage/ProjectTemplatesPage";
 
 function SettingsProxy(): React.JSX.Element {
@@ -177,6 +178,12 @@ function SettingsProxyDisplay({ currentUser, isOllamaAvailable }: { currentUser:
     const headerNavs: Record<string, IHeaderNavItem> = {};
 
     const sidebarNavs: Record<string, ISidebarNavItem> = {
+        [ROUTES.SETTINGS.GLOBAL_LABELS]: {
+            icon: "tags",
+            name: t("settings.Global labels"),
+            onClick: () => navigate(ROUTES.SETTINGS.GLOBAL_LABELS, { smooth: true }),
+            hidden: !hasSettingRoleAction(...SettingRole.CATEGORIZED_MAP.GlobalLabel),
+        },
         [ROUTES.SETTINGS.PROJECT_TEMPLATES]: {
             icon: "layout-template",
             name: t("settings.Project templates"),
@@ -274,6 +281,9 @@ function SettingsProxyDisplay({ currentUser, isOllamaAvailable }: { currentUser:
 
     let pageContent;
     switch (pathname) {
+        case ROUTES.SETTINGS.GLOBAL_LABELS:
+            pageContent = <GlobalLabelsPage currentUser={currentUser} />;
+            break;
         case ROUTES.SETTINGS.PROJECT_TEMPLATES:
             pageContent = <ProjectTemplatesPage />;
             break;
@@ -312,6 +322,11 @@ function SettingsProxyDisplay({ currentUser, isOllamaAvailable }: { currentUser:
     useEffect(() => {
         const foundAvailableRoute = Object.entries(sidebarNavs).find(([_, nav]) => !nav.hidden)?.[0];
         switch (pathname) {
+            case ROUTES.SETTINGS.GLOBAL_LABELS:
+                if (!currentUser.is_admin || !hasSettingRoleAction(...SettingRole.CATEGORIZED_MAP.GlobalLabel)) {
+                    navigate(foundAvailableRoute ?? ROUTES.DASHBOARD.PROJECTS.ALL, { replace: true });
+                }
+                break;
             case ROUTES.SETTINGS.PROJECT_TEMPLATES:
                 if (!currentUser.is_admin) {
                     navigate(foundAvailableRoute ?? ROUTES.DASHBOARD.PROJECTS.ALL, { replace: true });

@@ -335,3 +335,19 @@ class UpdateNotificationScheduleRuleForm(BaseFormModel):
 @form_model
 class DeleteSelectedNotificationScheduleRulesForm(BaseFormModel):
     rule_uids: list[str]
+
+
+@form_model
+class SaveGlobalLabelForm(BaseFormModel):
+    translations: dict[str, dict[str, str]] = Field(default_factory=dict)
+    name: str = Field(min_length=1, max_length=100)
+    color: str = Field(pattern=r"^#[0-9a-fA-F]{6}$")
+    description: str = Field(default="", max_length=4000)
+
+    @field_validator("name")
+    @classmethod
+    def clean_label_name(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Label name is required")
+        return value

@@ -14,6 +14,7 @@ from .CheckitemService import CheckitemService
 from .ChecklistService import ChecklistService
 from .DoclingMetadataService import DoclingMetadataService
 from .EmailService import EmailService
+from .GlobalLabelService import GlobalLabelService
 from .GraphApprovalRequestService import GraphApprovalRequestService
 from .IdentityLinkService import IdentityLinkService
 from .InternalBotService import InternalBotService
@@ -53,6 +54,7 @@ __all__ = [
     "ChecklistService",
     "DoclingMetadataService",
     "EmailService",
+    "GlobalLabelService",
     "GraphApprovalRequestService",
     "IdentityLinkService",
     "InternalBotService",
