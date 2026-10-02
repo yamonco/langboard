@@ -79,5 +79,11 @@
   },
   "Loading...": "Loading...",
   "Retry": "Retry",
-  "days": "days"
+  "days": "days",
+  "Logo": "Logo",
+  "Toggle navigation menu": "Toggle navigation menu",
+  "Explorer": "Explorer",
+  "Breadcrumb": "Breadcrumb",
+  "Sign in with another email": "Sign in with another email",
+  "Workflow stage": "Workflow stage"
 }

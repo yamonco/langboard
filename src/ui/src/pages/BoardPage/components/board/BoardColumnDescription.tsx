@@ -92,7 +92,7 @@ function BoardColumnDescription({ column }: { column: ProjectColumn.TModel }) {
                         <label className="block space-y-1 text-sm">
                             <span>Workflow stage</span>
                             <select
-                                aria-label="Workflow stage"
+                                aria-label={t("common.Workflow stage")}
                                 className="w-full rounded border border-input bg-background px-2 py-1.5"
                                 value={stageDraft ?? ""}
                                 onChange={(event) => setStageDraft((event.target.value || null) as typeof stageDraft)}

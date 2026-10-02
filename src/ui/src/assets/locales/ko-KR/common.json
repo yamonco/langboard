@@ -79,5 +79,11 @@
   },
   "Loading...": "로딩 중...",
   "Retry": "다시 시도",
-  "days": "일"
+  "days": "일",
+  "Logo": "로고",
+  "Toggle navigation menu": "탐색 메뉴 열기/닫기",
+  "Explorer": "탐색기",
+  "Breadcrumb": "이동 경로",
+  "Sign in with another email": "다른 이메일로 로그인",
+  "Workflow stage": "워크플로우 단계"
 }

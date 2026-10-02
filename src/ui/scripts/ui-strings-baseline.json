@@ -1,0 +1,362 @@
+[
+  {
+    "file": "src/components/Chat/ChatBubble.tsx",
+    "line": 68,
+    "kind": "attribute:alt",
+    "text": "Avatar"
+  },
+  {
+    "file": "src/components/Chat/ChatMessageList.tsx",
+    "line": 66,
+    "kind": "attribute:aria-label",
+    "text": "Scroll to bottom"
+  },
+  {
+    "file": "src/components/Header/index.tsx",
+    "line": 82,
+    "kind": "jsx-text",
+    "text": "Langboard"
+  },
+  {
+    "file": "src/components/Header/index.tsx",
+    "line": 203,
+    "kind": "jsx-text",
+    "text": "⌘K"
+  },
+  {
+    "file": "src/components/Layout/ActivityRail.tsx",
+    "line": 17,
+    "kind": "attribute:aria-label",
+    "text": "Workspace"
+  },
+  {
+    "file": "src/components/Layout/FormOnlyLayout.tsx",
+    "line": 91,
+    "kind": "attribute:alt",
+    "text": "Logo"
+  },
+  {
+    "file": "src/components/Markdown/ThinkBlock.tsx",
+    "line": 13,
+    "kind": "jsx-text",
+    "text": "Think: Show more..."
+  },
+  {
+    "file": "src/components/Markdown/ThinkBlock.tsx",
+    "line": 19,
+    "kind": "jsx-text",
+    "text": "Think:"
+  },
+  {
+    "file": "src/components/base/Alert/index.tsx",
+    "line": 76,
+    "kind": "attribute:aria-label",
+    "text": "Dismiss alert"
+  },
+  {
+    "file": "src/components/base/Breadcrumb/index.tsx",
+    "line": 11,
+    "kind": "attribute:aria-label",
+    "text": "breadcrumb"
+  },
+  {
+    "file": "src/components/base/Breadcrumb/index.tsx",
+    "line": 54,
+    "kind": "jsx-text",
+    "text": "More"
+  },
+  {
+    "file": "src/components/base/DataTable/Table.tsx",
+    "line": 288,
+    "kind": "attribute:placeholder",
+    "text": "Filter..."
+  },
+  {
+    "file": "src/components/base/Dialog/index.tsx",
+    "line": 46,
+    "kind": "jsx-text",
+    "text": "Close"
+  },
+  {
+    "file": "src/components/base/Sheet/index.tsx",
+    "line": 61,
+    "kind": "jsx-text",
+    "text": "Close"
+  },
+  {
+    "file": "src/components/bots/BotValueInput/Text.tsx",
+    "line": 57,
+    "kind": "attribute:title",
+    "text": "Save"
+  },
+  {
+    "file": "src/components/plate-ui/code-block-node.tsx",
+    "line": 36,
+    "kind": "attribute:title",
+    "text": "Format code"
+  },
+  {
+    "file": "src/components/plate-ui/code-block-node.tsx",
+    "line": 137,
+    "kind": "jsx-text",
+    "text": "Copy"
+  },
+  {
+    "file": "src/components/plate-ui/emoji-node.tsx",
+    "line": 39,
+    "kind": "jsx-text",
+    "text": "No results"
+  },
+  {
+    "file": "src/components/plate-ui/emoji-toolbar-button.tsx",
+    "line": 295,
+    "kind": "attribute:aria-label",
+    "text": "Search"
+  },
+  {
+    "file": "src/components/plate-ui/emoji-toolbar-button.tsx",
+    "line": 321,
+    "kind": "attribute:aria-label",
+    "text": "Clear"
+  },
+  {
+    "file": "src/components/plate-ui/equation-node.tsx",
+    "line": 66,
+    "kind": "attribute:placeholder",
+    "text": "f(x) = \\begin{cases} x^2, &\\quad x > 0 \\\\ 0, &\\quad x = 0 \\\\ -x^2, &\\quad x < 0 \\end{cases}"
+  },
+  {
+    "file": "src/components/plate-ui/equation-node.tsx",
+    "line": 130,
+    "kind": "attribute:placeholder",
+    "text": "E = mc^2"
+  },
+  {
+    "file": "src/components/plate-ui/media-embed-node.tsx",
+    "line": 54,
+    "kind": "attribute:title",
+    "text": "youtube"
+  },
+  {
+    "file": "src/components/plate-ui/media-embed-node.tsx",
+    "line": 88,
+    "kind": "attribute:title",
+    "text": "embed"
+  },
+  {
+    "file": "src/components/plate-ui/media-toolbar-button.tsx",
+    "line": 176,
+    "kind": "jsx-text",
+    "text": "URL"
+  },
+  {
+    "file": "src/components/plate-ui/media-video-node.tsx",
+    "line": 63,
+    "kind": "attribute:title",
+    "text": "youtube"
+  },
+  {
+    "file": "src/components/plate-ui/table-toolbar-button.tsx",
+    "line": 231,
+    "kind": "jsx-text",
+    "text": "x"
+  },
+  {
+    "file": "src/pages/AccountPage/ProfilePage.tsx",
+    "line": 172,
+    "kind": "dialog-toast",
+    "text": "Could not connect company SSO. Please try again."
+  },
+  {
+    "file": "src/pages/AccountPage/ProfilePage.tsx",
+    "line": 176,
+    "kind": "jsx-text",
+    "text": "Connect company SSO"
+  },
+  {
+    "file": "src/pages/BoardPage/components/board/BoardColumn.tsx",
+    "line": 355,
+    "kind": "jsx-text",
+    "text": "포함 관계가 순환하여 트리를 한 번씩만 표시합니다. 실행 차단은 별도입니다."
+  },
+  {
+    "file": "src/pages/BoardPage/components/board/BoardColumnCardCollapsible.tsx",
+    "line": 350,
+    "kind": "jsx-text",
+    "text": "d"
+  },
+  {
+    "file": "src/pages/BoardPage/components/board/BoardColumnDescription.tsx",
+    "line": 93,
+    "kind": "jsx-text",
+    "text": "Workflow stage"
+  },
+  {
+    "file": "src/pages/BoardPage/components/board/BoardColumnDescription.tsx",
+    "line": 101,
+    "kind": "jsx-text",
+    "text": "Unclassified"
+  },
+  {
+    "file": "src/pages/BoardPage/components/board/BoardColumnDescription.tsx",
+    "line": 117,
+    "kind": "jsx-text",
+    "text": "Workflow stages could not be loaded."
+  },
+  {
+    "file": "src/pages/BoardPage/components/board/BoardColumnDescription.tsx",
+    "line": 124,
+    "kind": "jsx-text",
+    "text": "Queue"
+  },
+  {
+    "file": "src/pages/BoardPage/components/board/BoardColumnDescription.tsx",
+    "line": 124,
+    "kind": "jsx-text",
+    "text": "· Overdue"
+  },
+  {
+    "file": "src/pages/BoardPage/components/board/BoardColumnDescription.tsx",
+    "line": 127,
+    "kind": "jsx-text",
+    "text": "Entry effects:"
+  },
+  {
+    "file": "src/pages/BoardPage/components/board/BoardColumnDescription.tsx",
+    "line": 145,
+    "kind": "jsx-text",
+    "text": "Workflow stage:"
+  },
+  {
+    "file": "src/pages/BoardPage/components/board/BoardRelationsSidebar.tsx",
+    "line": 64,
+    "kind": "jsx-text",
+    "text": "포함 관계 순환이 있습니다. 트리 표시를 제한하며 실행을 차단하지 않습니다."
+  },
+  {
+    "file": "src/pages/BoardPage/components/board/BoardRelationsSidebar.tsx",
+    "line": 68,
+    "kind": "attribute:aria-label",
+    "text": "막힌 이유"
+  },
+  {
+    "file": "src/pages/BoardPage/components/board/BoardRelationsSidebar.tsx",
+    "line": 69,
+    "kind": "jsx-text",
+    "text": "막힌 이유 ·"
+  },
+  {
+    "file": "src/pages/BoardPage/components/board/BoardRelationsSidebar.tsx",
+    "line": 82,
+    "kind": "jsx-text",
+    "text": "접근할 수 없는 선행조건"
+  },
+  {
+    "file": "src/pages/BoardPage/components/board/BoardWorkIsland.tsx",
+    "line": 163,
+    "kind": "dialog-toast",
+    "text": "이 카드에는 시작할 수 있는 체크리스트 작업이 없습니다."
+  },
+  {
+    "file": "src/pages/BoardPage/components/board/BoardWorkIsland.tsx",
+    "line": 239,
+    "kind": "jsx-text",
+    "text": "My Work"
+  },
+  {
+    "file": "src/pages/BoardPage/components/board/BoardWorkIsland.tsx",
+    "line": 241,
+    "kind": "jsx-text",
+    "text": "작업을 불러오는 중..."
+  },
+  {
+    "file": "src/pages/BoardPage/components/board/BoardWorkIsland.tsx",
+    "line": 244,
+    "kind": "jsx-text",
+    "text": "작업을 불러오지 못했습니다. 다시 시도"
+  },
+  {
+    "file": "src/pages/BoardPage/components/board/BoardWorkIsland.tsx",
+    "line": 281,
+    "kind": "jsx-text",
+    "text": "실행 중인 작업이 없습니다."
+  },
+  {
+    "file": "src/pages/BoardPage/components/board/BoardWorkIsland.tsx",
+    "line": 293,
+    "kind": "jsx-text",
+    "text": "모든 작업 보기"
+  },
+  {
+    "file": "src/pages/BoardPage/components/board/BoardWorkIsland.tsx",
+    "line": 321,
+    "kind": "jsx-text",
+    "text": "현재 작업"
+  },
+  {
+    "file": "src/pages/BoardPage/components/board/BoardWorkIsland.tsx",
+    "line": 326,
+    "kind": "jsx-text",
+    "text": "새 작업"
+  },
+  {
+    "file": "src/pages/BoardPage/components/board/BoardWorkIsland.tsx",
+    "line": 361,
+    "kind": "jsx-text",
+    "text": "취소"
+  },
+  {
+    "file": "src/pages/BoardPage/components/board/BoardWorkIsland.tsx",
+    "line": 364,
+    "kind": "jsx-text",
+    "text": "기존 작업 일시정지 후 전환"
+  },
+  {
+    "file": "src/pages/BoardPage/components/card/BoardCard.tsx",
+    "line": 563,
+    "kind": "attribute:title",
+    "text": "실행 기록"
+  },
+  {
+    "file": "src/pages/BoardPage/components/card/BoardCard.tsx",
+    "line": 583,
+    "kind": "attribute:aria-label",
+    "text": "실행 근거 체크리스트"
+  },
+  {
+    "file": "src/pages/BoardPage/components/card/CardContentBlockList.tsx",
+    "line": 58,
+    "kind": "jsx-text",
+    "text": "다이어그램을 렌더링하지 못했습니다:"
+  },
+  {
+    "file": "src/pages/BoardPage/components/card/CardContentBlockList.tsx",
+    "line": 65,
+    "kind": "jsx-text",
+    "text": "다이어그램 미리보기를 사용할 수 없습니다"
+  },
+  {
+    "file": "src/pages/BoardPage/components/card/CardContentBlockList.tsx",
+    "line": 114,
+    "kind": "jsx-text",
+    "text": "source"
+  },
+  {
+    "file": "src/pages/DashboardPage/components/ProjectQuickSwitcher.tsx",
+    "line": 345,
+    "kind": "jsx-text",
+    "text": "⌘K / Ctrl K"
+  },
+  {
+    "file": "src/pages/SettingsPage/GlobalLabelsPage.tsx",
+    "line": 220,
+    "kind": "attribute:placeholder",
+    "text": "fr, de, zh-TW…"
+  },
+  {
+    "file": "src/pages/SettingsPage/WorkflowStagesPage.tsx",
+    "line": 247,
+    "kind": "attribute:placeholder",
+    "text": "fr"
+  }
+]

@@ -79,5 +79,11 @@
   },
   "Loading...": "読み込み中...",
   "Retry": "再試行",
-  "days": "日"
+  "days": "日",
+  "Logo": "ロゴ",
+  "Toggle navigation menu": "ナビゲーションメニューを切り替え",
+  "Explorer": "エクスプローラー",
+  "Breadcrumb": "パンくずリスト",
+  "Sign in with another email": "別のメールアドレスでログイン",
+  "Workflow stage": "ワークフローステージ"
 }

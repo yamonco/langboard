@@ -79,5 +79,11 @@
   },
   "Loading...": "正在加载...",
   "Retry": "重试",
-  "days": "天"
+  "days": "天",
+  "Logo": "标志",
+  "Toggle navigation menu": "切换导航菜单",
+  "Explorer": "浏览器",
+  "Breadcrumb": "导航路径",
+  "Sign in with another email": "使用其他电子邮箱登录",
+  "Workflow stage": "工作流阶段"
 }

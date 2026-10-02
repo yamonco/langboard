@@ -51,7 +51,7 @@ const Header = memo(({ navs, title, compact, navigationReady = true, mobileNavig
                         aria-label={t("common.Go to Dashboard")}
                         className="flex size-6 cursor-pointer items-center gap-2 text-lg font-semibold md:text-base"
                     >
-                        <CachedImage src="/images/logo.png" alt="Logo" size="full" />
+                        <CachedImage src="/images/logo.png" alt={t("common.Logo")} size="full" />
                     </Link>
                 </Flex>
             )}
@@ -75,7 +75,7 @@ const Header = memo(({ navs, title, compact, navigationReady = true, mobileNavig
                     aria-label={t("common.Go to Dashboard")}
                     className={compact ? "hidden size-6 shrink-0 cursor-pointer items-center md:flex" : "flex size-6 cursor-pointer items-center"}
                 >
-                    <CachedImage src="/images/logo.png" alt="Logo" size="full" />
+                    <CachedImage src="/images/logo.png" alt={t("common.Logo")} size="full" />
                 </Link>
                 {compact ? (
                     <span className="flex min-w-0 items-center gap-2 text-sm font-medium">
@@ -116,7 +116,7 @@ const Header = memo(({ navs, title, compact, navigationReady = true, mobileNavig
                             className={compact ? "order-first shrink-0 md:hidden" : "shrink-0 md:hidden"}
                         >
                             <IconComponent icon="menu" size="5" />
-                            <span className="sr-only">Toggle navigation menu</span>
+                            <span className="sr-only">{t("common.Toggle navigation menu")}</span>
                         </Button>
                     </Sheet.Trigger>
                     <Sheet.Content
@@ -150,7 +150,7 @@ const Header = memo(({ navs, title, compact, navigationReady = true, mobileNavig
                                 className="flex cursor-pointer items-center gap-2 text-lg font-semibold"
                                 onClick={() => setIsOpen(false)}
                             >
-                                <CachedImage src="/images/logo.png" alt="Logo" size="6" />
+                                <CachedImage src="/images/logo.png" alt={t("common.Logo")} size="6" />
                             </Link>
                             {!!title && (
                                 <>

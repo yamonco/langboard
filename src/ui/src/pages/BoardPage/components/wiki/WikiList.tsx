@@ -96,7 +96,7 @@ function WikiListDisplay({ wikiUID }: IWikiListDisplayProps) {
 
     return (
         <Box p="2">
-            <nav aria-label="Breadcrumb" className="mb-2 flex min-w-0 items-center gap-2 px-1 text-xs text-muted-foreground">
+            <nav aria-label={t("common.Breadcrumb")} className="mb-2 flex min-w-0 items-center gap-2 px-1 text-xs text-muted-foreground">
                 <a href={ROUTES.BOARD.MAIN(project.uid)} className="hover:text-foreground hover:underline">
                     {t("board.Board")}
                 </a>

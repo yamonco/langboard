@@ -17,6 +17,9 @@ on:
       - src/ui/src/core/stores/AuthStore.ts
       - src/ui/src/components/LanguageSwitcher/**
       - src/ui/src/pages/AccountPage/components/preference/PreferenceLanguage*
+      - src/ui/src/**
+      - src/ui/scripts/verify-ui-strings*
+      - src/ui/scripts/ui-strings-baseline.json
       - src/ui/scripts/verify-locale-resources.mjs
       - src/ui/playwright.locale-runtime.config.ts
       - src/ui/playwright.locale-format.config.ts
@@ -44,6 +47,10 @@ jobs:
       - run: yarn build
         working-directory: src/shared/ts
       - run: yarn install --frozen-lockfile
+        working-directory: src/ui
+      - run: node --test scripts/verify-ui-strings.test.mjs
+        working-directory: src/ui
+      - run: node scripts/verify-ui-strings.mjs
         working-directory: src/ui
       - run: node scripts/verify-core-package.mjs
         working-directory: src/ui

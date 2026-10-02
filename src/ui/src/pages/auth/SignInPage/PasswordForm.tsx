@@ -105,7 +105,7 @@ function PasswordForm({ signToken, emailToken, email, setEmail, className }: IPa
                     size="sm"
                     className="mt-4"
                     onClick={backToEmail}
-                    title="Sign in with another email"
+                    title={t("common.Sign in with another email")}
                     disabled={isValidating}
                 >
                     {email}
