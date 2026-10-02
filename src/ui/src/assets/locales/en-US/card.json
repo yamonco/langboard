@@ -135,5 +135,10 @@
   "Column": "Column",
   "Seen by count": "Seen by {{count}}",
   "Card view receipt": "Read automatically when the card is viewed; not an acknowledgement or approval.",
-  "Mark card unread": "Mark card unread"
+  "Mark card unread": "Mark card unread",
+  "Add labels": "Add labels",
+  "Labels": "Labels",
+  "Select labels to attach or remove, then save.": "Select labels to attach or remove, then save.",
+  "Search labels": "Search labels",
+  "No matching labels": "No matching labels"
 }

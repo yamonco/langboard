@@ -463,7 +463,7 @@ function BoardTaskCardResult({
                                     )}
                                     <BoardCardTitle key={`board-card-title-${card.uid}`} className={isExpanded ? "sm:mr-44" : undefined} />
                                 </Flex>
-                                <Flex gap="3">
+                                <Flex gap="3" wrap items="center" className="min-w-0">
                                     {isExpanded ? (
                                         <Box textSize="sm" className="text-muted">
                                             <BoardCardColumnName key={`board-card-column-name-${card.uid}`} />

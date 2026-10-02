@@ -134,17 +134,28 @@ const BoardCardActionSetLabel = memo(({ buttonClassName }: IBoardCardActionSetLa
     return (
         <Popover.Root modal open={isOpened} onOpenChange={changeOpenedState}>
             <Popover.Trigger asChild>
-                <Button variant="secondary" className={buttonClassName}>
-                    <IconComponent icon="file-up" size="4" />
-                    {t("card.Set label")}
+                <Button variant="outline" className={buttonClassName} aria-label={t("card.Add labels")}>
+                    <IconComponent icon="plus" size="3" />
+                    {t("card.Add labels")}
                 </Button>
             </Popover.Trigger>
-            <Popover.Content align="end" className="w-[min(theme(spacing.72),80vw)]">
-                <Box mb="2" textSize="sm" weight="semibold">
-                    {t("card.Set label")}
+            <Popover.Content align="start" sideOffset={8} className="w-[min(340px,calc(100vw-24px))] rounded-xl p-3 shadow-xl">
+                <Flex items="center" justify="between" mb="2">
+                    <Flex items="center" gap="2">
+                        <IconComponent icon="tags" size="4" />
+                        <Box textSize="sm" weight="semibold">
+                            {t("card.Labels")}
+                        </Box>
+                    </Flex>
+                    <Box textSize="xs" className="rounded-full bg-secondary px-2 py-0.5 text-muted-foreground">
+                        {selectedLabelUIDs.length}
+                    </Box>
+                </Flex>
+                <Box mb="3" textSize="xs" className="text-muted-foreground">
+                    {t("card.Select labels to attach or remove, then save.")}
                 </Box>
                 <BoardCardActionLabelList
-                    disabled={isWaitingForSync}
+                    disabled={isWaitingForSync || isValidating}
                     remoteLabelStates={remoteLabelStates}
                     selectedLabelUIDs={selectedLabelUIDs}
                     setSelectedLabelUIDs={handleSelectedLabelUIDsChange}
