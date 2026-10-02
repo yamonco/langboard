@@ -66,6 +66,9 @@ class CardWorkspaceQueryPort(Protocol):
         limit: int,
         before_updated_at: str | None,
         before_card_uid: str | None,
+        *,
+        include_closed: bool = False,
+        workflow_stages: list[str] | None = None,
     ) -> ProjectCardPageSource:
         """Load one bounded project-card keyset page."""
 

@@ -89,6 +89,8 @@ def search_project_cards(
     date_field: Literal["created_at", "updated_at"] = "updated_at",
     since: str | None = None,
     until: str | None = None,
+    include_closed: bool = False,
+    workflow_stages: list[str] | None = None,
 ) -> dict:
     """Search bounded card context through the native project-scoped query."""
 
@@ -96,6 +98,9 @@ def search_project_cards(
     if not 1 <= len(normalized_query) <= 1000:
         raise ValueError("query must contain between 1 and 1000 characters")
 
+    if workflow_stages is not None:
+        if len(workflow_stages) > 30 or any(not stage or len(stage) > 64 for stage in workflow_stages):
+            raise ValueError("workflow_stages must contain at most 30 nonempty stage keys of at most 64 characters")
     lower, upper = _parse_time_bound(since), _parse_time_bound(until)
     if lower is not None and upper is not None and lower >= upper:
         raise ValueError("since must be earlier than until")
@@ -106,6 +111,8 @@ def search_project_cards(
             date_field=date_field,
             since=lower,
             until=upper,
+            include_closed=include_closed,
+            workflow_stages=workflow_stages,
         )
     }
 

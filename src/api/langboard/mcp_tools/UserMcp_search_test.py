@@ -1,6 +1,7 @@
 """Validate explicit search periods before invoking the native query."""
 
 import os
+from datetime import datetime
 from types import SimpleNamespace
 from unittest.mock import Mock
 import pytest
@@ -30,8 +31,8 @@ def test_search_passes_timezone_aware_half_open_period_to_native_query() -> None
     project, query, filters = calls[0]
     assert (project, query) == ("project", "release")
     assert filters["date_field"] == "created_at"
-    assert filters["since"].isoformat() == "2026-09-15T00:00:00+09:00"
-    assert filters["until"].isoformat() == "2026-09-16T00:00:00+09:00"
+    assert filters["since"] == datetime.fromisoformat("2026-09-15T00:00:00+09:00")
+    assert filters["until"] == datetime.fromisoformat("2026-09-16T00:00:00+09:00")
 
 
 @pytest.mark.parametrize(

@@ -171,17 +171,27 @@ def list_project_cards(
     project_uid: str,
     limit: int = 20,
     cursor: str | None = None,
+    *,
+    include_closed: bool = False,
+    workflow_stages: list[str] | None = None,
 ) -> ProjectCardListResponse:
     """List a bounded, newest-updated-first project card page."""
 
     if isinstance(limit, bool) or not 1 <= limit <= 25:
         raise ValueError("limit must be between 1 and 25")
+    if workflow_stages is not None:
+        if len(workflow_stages) > 30 or any(
+            not isinstance(stage, str) or not stage or len(stage) > 64 for stage in workflow_stages
+        ):
+            raise ValueError("workflow_stages must contain at most 30 nonempty stage keys of at most 64 characters")
     decoded = ProjectCardCursor.decode(cursor) if cursor else None
     page = port.get_project_card_page(
         project_uid,
         limit,
         decoded.updated_at if decoded else None,
         decoded.card_uid if decoded else None,
+        include_closed=include_closed,
+        workflow_stages=workflow_stages,
     )
     next_cursor = ProjectCardCursor(*page.next_cursor_fields).encode() if page.next_cursor_fields else None
     return ProjectCardListResponse(

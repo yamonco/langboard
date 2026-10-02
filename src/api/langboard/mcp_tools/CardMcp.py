@@ -660,10 +660,19 @@ def list_project_cards(
     service: DomainService,
     limit: int = 20,
     cursor: str | None = None,
+    include_closed: bool = False,
+    workflow_stages: list[str] | None = None,
 ) -> ProjectCardListResponse:
     """Read one safe project card page with an opaque keyset cursor."""
 
-    return query_project_cards(_adapter(user_or_bot, service), project_uid, limit, cursor)
+    return query_project_cards(
+        _adapter(user_or_bot, service),
+        project_uid,
+        limit,
+        cursor,
+        include_closed=include_closed,
+        workflow_stages=workflow_stages,
+    )
 
 
 @McpTool.add(

@@ -107,6 +107,9 @@ class FakeQueryPort:
         limit: int,
         before_updated_at: str | None,
         before_card_uid: str | None,
+        *,
+        include_closed: bool = False,
+        workflow_stages: list[str] | None = None,
     ) -> ProjectCardPageSource:
         return ProjectCardPageSource(
             [
@@ -385,3 +388,15 @@ def test_public_metadata_exposes_opaque_continuation() -> None:
     second = get_public_card_metadata(port, "p1", "c1", limit=1, cursor=first.next_cursor)
 
     assert second.items[0]["key"] != first.items[0]["key"]
+
+
+def test_project_list_forwards_completion_and_stage_filters_before_paging():
+    from unittest.mock import Mock
+    port = FakeQueryPort()
+    port.get_project_card_page = Mock(return_value=ProjectCardPageSource([], 0, None))
+    list_project_cards(port, "p1")
+    assert port.get_project_card_page.call_args.kwargs == {"include_closed": False, "workflow_stages": None}
+    list_project_cards(port, "p1", include_closed=True, workflow_stages=["released"])
+    assert port.get_project_card_page.call_args.kwargs == {"include_closed": True, "workflow_stages": ["released"]}
+    with pytest.raises(ValueError, match="workflow_stages"):
+        list_project_cards(port, "p1", workflow_stages=[""])

@@ -8,6 +8,8 @@ from langboard_shared.core.types import SafeDateTime
 from langboard_shared.domain.models import (
     Card,
     CardAssignedUser,
+    CardAttachment,
+    CardComment,
     Checkitem,
     Checklist,
     Project,
@@ -23,7 +25,7 @@ from sqlalchemy import create_engine
 @pytest.fixture
 def work_db(monkeypatch):
     engine = create_engine("sqlite://")
-    for model in (User, Project, ProjectColumn, Card, CardAssignedUser, Checklist, Checkitem, WorkflowStageDefinition):
+    for model in (User, Project, ProjectColumn, Card, CardAssignedUser, CardComment, CardAttachment, Checklist, Checkitem, WorkflowStageDefinition):
         model.__table__.create(engine)
     monkeypatch.setattr(DbEngine, "get_main_engine", lambda: engine)
     monkeypatch.setattr(DbEngine, "get_readonly_engine", lambda: engine)
@@ -137,3 +139,27 @@ def test_overdue_purpose_excludes_suppressed_policy_without_hiding_other_work(wo
         stage.overdue_policy = "normal"
         db.update(stage)
     assert {card.id for card, *_ in my_work(data, {"overdue"})} == {data.cards["active"].id}
+
+
+def test_project_page_and_search_filter_registry_completion_before_limit(work_db):
+    data = work_db
+    repo = CardRepository(None, None)
+    page = repo.get_page_by_project(data.project, 25, include_closed=False)
+    ids = {card.id for card, _ in page}
+    assert data.cards["released"].id not in ids
+    assert data.cards["active"].id in ids  # Display name Done is not completion.
+    assert data.cards[None].id in ids
+    assert repo.count_by_project(data.project, include_closed=False) == len(page)
+    assert data.cards["released"].id in {card.id for card, _ in repo.get_page_by_project(data.project, 25, include_closed=True)}
+    assert repo.get_page_by_project(data.project, 25, include_closed=False, workflow_stages=["released"]) == []
+    assert {card.id for card, _ in repo.get_page_by_project(data.project, 25, include_closed=True, workflow_stages=["released"])} == {data.cards["released"].id}
+    assert repo.count_by_project(data.project, include_closed=True, workflow_stages=["released"]) == 1
+    assert repo.get_page_by_project(data.project, 25, workflow_stages=[]) == []
+    assert repo.search_context_by_project(data.project, "Still", include_closed=False) == []
+    assert {card.id for card, _ in repo.search_context_by_project(data.project, "Still", include_closed=True)} == {data.cards["released"].id}
+    assert {card.id for card, _ in repo.search_context_by_project(data.project, "Done", include_closed=False, workflow_stages=["active"])} == {data.cards["active"].id}
+    with DbSession.use(readonly=False) as db:
+        data.definitions["released"].counts_as_completed = False
+        data.definitions["released"].is_active = False
+        db.update(data.definitions["released"])
+    assert data.cards["released"].id in {card.id for card, _ in repo.get_page_by_project(data.project, 25, include_closed=False)}

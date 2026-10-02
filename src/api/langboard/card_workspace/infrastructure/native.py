@@ -266,6 +266,9 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
         limit: int,
         before_updated_at: str | None,
         before_card_uid: str | None,
+        *,
+        include_closed: bool = False,
+        workflow_stages: list[str] | None = None,
     ) -> ProjectCardPageSource:
         before = SafeDateTime.fromisoformat(before_updated_at) if before_updated_at else None
         result = self._service.card.get_api_page_by_project(
@@ -274,6 +277,8 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
             before,
             before_card_uid,
             user_or_bot=self._actor,
+            include_closed=include_closed,
+            workflow_stages=workflow_stages,
         )
         if result is None:
             raise ValueError("Project not found")

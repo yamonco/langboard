@@ -75,7 +75,7 @@ def test_imported_card_shares_native_creation_invariants(
             "user", "user_identity_link", "project", "project_column", "project_label", "project_assigned_user",
             "card", "card_assigned_user", "card_assigned_project_label", "card_attachment", "card_comment", "checklist",
             "checkitem", "external_import_record", "project_execution_binding",
-            "webhook_setting", "card_relationship",
+            "webhook_setting", "card_relationship", "workflow_stage_definition",
         }
         while True:
             previous = len(needed)

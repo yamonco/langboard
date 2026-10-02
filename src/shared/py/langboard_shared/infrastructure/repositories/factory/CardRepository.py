@@ -278,6 +278,9 @@ class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
         date_field: str = "updated_at",
         since: SafeDateTime | None = None,
         until: SafeDateTime | None = None,
+        *,
+        include_closed: bool = True,
+        workflow_stages: list[str] | None = None,
     ) -> list[tuple[Card, ProjectColumn]]:
         project_id = InfraHelper.convert_id(project)
         escaped_input = input_value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
@@ -314,6 +317,7 @@ class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
             .order_by(Card.column("updated_at").desc(), Card.column("id").desc())
             .limit(limit)
         )
+        query = self._filter_project_workflow(query, include_closed, workflow_stages)
         if date_field not in {"created_at", "updated_at"}:
             raise ValueError("date_field must be created_at or updated_at")
         if since is not None and until is not None and since >= until:
@@ -419,6 +423,9 @@ class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
         limit: int,
         before_updated_at: SafeDateTime | None = None,
         before_card: TCardParam | None = None,
+        *,
+        include_closed: bool = True,
+        workflow_stages: list[str] | None = None,
     ) -> list[tuple[Card, ProjectColumn]]:
         """Return a bounded newest-updated-first project-card keyset page."""
 
@@ -428,6 +435,7 @@ class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
             .join(ProjectColumn, Card.column("project_column_id") == ProjectColumn.column("id"))
             .where(Card.column("project_id") == project_id)
         )
+        query = self._filter_project_workflow(query, include_closed, workflow_stages)
         if before_updated_at is not None:
             if before_card is None:
                 raise ValueError("before_card is required with before_updated_at")
@@ -440,21 +448,35 @@ class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
         with DbSession.use(readonly=True) as db:
             return list(db.exec(query).all())
 
-    def count_by_project(self, project: TProjectParam) -> int:
-        """Count the same live cards and columns returned by project pagination."""
-
-        project_id = InfraHelper.convert_id(project)
-        with DbSession.use(readonly=True) as db:
-            return (
-                db.exec(
-                    SqlBuilder.select.count(Card, Card.column("id"))
-                    .join(ProjectColumn, Card.column("project_column_id") == ProjectColumn.column("id"))
-                    .where(Card.column("project_id") == project_id)
-                    .where(Card.column("deleted_at").is_(None))
-                    .where(ProjectColumn.column("deleted_at").is_(None))
-                ).first()
-                or 0
+    @staticmethod
+    def _filter_project_workflow(query, include_closed: bool, workflow_stages: list[str] | None):
+        if not include_closed:
+            query = query.where(Card.archived_at.is_(None)).where(ProjectColumn.is_archive.is_(False))
+            query = query.outerjoin(
+                WorkflowStageDefinition, WorkflowStageDefinition.key == ProjectColumn.workflow_stage
             )
+            query = query.where(
+                or_(WorkflowStageDefinition.id.is_(None), WorkflowStageDefinition.counts_as_completed.is_(False))
+            )
+        if workflow_stages is not None:
+            query = query.where(ProjectColumn.workflow_stage.in_(workflow_stages))
+        return query
+
+    def count_by_project(
+        self, project: TProjectParam, *, include_closed: bool = True, workflow_stages: list[str] | None = None
+    ) -> int:
+        """Count with the same workflow filters as project pagination."""
+        project_id = InfraHelper.convert_id(project)
+        query = (
+            SqlBuilder.select.count(Card, Card.column("id"))
+            .join(ProjectColumn, Card.column("project_column_id") == ProjectColumn.column("id"))
+            .where(Card.column("project_id") == project_id)
+            .where(Card.column("deleted_at").is_(None))
+            .where(ProjectColumn.column("deleted_at").is_(None))
+        )
+        query = self._filter_project_workflow(query, include_closed, workflow_stages)
+        with DbSession.use(readonly=True) as db:
+            return db.exec(query).first() or 0
 
     def get_all_by_column(self, column: TColumnParam):
         column_id = InfraHelper.convert_id(column)

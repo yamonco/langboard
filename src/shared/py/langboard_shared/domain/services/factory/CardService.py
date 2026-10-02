@@ -763,6 +763,9 @@ class CardService(BaseDomainService):
         date_field: str = "updated_at",
         since: SafeDateTime | None = None,
         until: SafeDateTime | None = None,
+        *,
+        include_closed: bool = False,
+        workflow_stages: list[str] | None = None,
     ) -> list[dict[str, Any]]:
         project = InfraHelper.get_by_id_like(Project, project)
         if not project:
@@ -775,6 +778,8 @@ class CardService(BaseDomainService):
             date_field=date_field,
             since=since,
             until=until,
+            include_closed=include_closed,
+            workflow_stages=workflow_stages,
         ):
             description = card.description.content
             if len(description) > self.CONTEXT_DESCRIPTION_MAX_LENGTH:
@@ -893,13 +898,23 @@ class CardService(BaseDomainService):
         before_updated_at: SafeDateTime | None = None,
         before_card: TCardParam | None = None,
         user_or_bot: TUserOrBot | None = None,
+        *,
+        include_closed: bool = False,
+        workflow_stages: list[str] | None = None,
     ) -> tuple[list[dict[str, Any]], int, tuple[str, str] | None] | None:
         """Return a bounded newest-updated-first card page and opaque cursor fields."""
 
         project = InfraHelper.get_by_id_like(Project, project)
         if not project:
             return None
-        records = self.repo.card.get_page_by_project(project, limit, before_updated_at, before_card)
+        records = self.repo.card.get_page_by_project(
+            project,
+            limit,
+            before_updated_at,
+            before_card,
+            include_closed=include_closed,
+            workflow_stages=workflow_stages,
+        )
         has_more = len(records) > limit
         page = records[:limit]
         resource_payloads = self._get_linked_resource_payloads(
@@ -921,7 +936,11 @@ class CardService(BaseDomainService):
         if has_more and page:
             last_card = page[-1][0]
             next_fields = (last_card.updated_at.isoformat(), last_card.get_uid())
-        return cards, self.repo.card.count_by_project(project), next_fields
+        return (
+            cards,
+            self.repo.card.count_by_project(project, include_closed=include_closed, workflow_stages=workflow_stages),
+            next_fields,
+        )
 
     def get_api_list_by_column(self, column: TColumnParam | None) -> list[dict[str, Any]]:
         column = InfraHelper.get_by_id_like(ProjectColumn, column)
