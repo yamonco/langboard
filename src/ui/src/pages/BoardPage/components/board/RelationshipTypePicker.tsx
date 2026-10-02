@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import Button from "@/components/base/Button";
 import { GlobalRelationshipType } from "@/core/models";
 import { cn } from "@/core/utils/ComponentUtils";
@@ -6,9 +7,9 @@ import { Boxes, GitBranch, Link2, type LucideIcon } from "lucide-react";
 type Semantic = "contains" | "blocks" | "references";
 
 export const RELATIONSHIP_GROUPS: { semantic: Semantic; label: string; hint: string; Icon: LucideIcon }[] = [
-    { semantic: "contains", label: "구성", hint: "같은 Sprint·Epic·기능에 포함", Icon: Boxes },
-    { semantic: "blocks", label: "실행 의존성", hint: "선행 작업 완료 후 시작", Icon: GitBranch },
-    { semantic: "references", label: "참고", hint: "설계·근거·관련 작업 연결", Icon: Link2 },
+    { semantic: "contains", label: "board.Composition", hint: "board.Included in the same sprint, epic or feature", Icon: Boxes },
+    { semantic: "blocks", label: "board.Execution dependencies", hint: "board.Start after prerequisite work is complete", Icon: GitBranch },
+    { semantic: "references", label: "board.References", hint: "board.Link designs, evidence and related work", Icon: Link2 },
 ];
 
 interface Props {
@@ -20,6 +21,7 @@ interface Props {
 
 /** Inactive legacy edges remain selectable only when already attached to this card. */
 const RelationshipTypePicker = ({ types, selectedUid, isParent, onSelect }: Props) => {
+    const [t] = useTranslation();
     const visible = types.filter((type) => type.is_active !== false || type.uid === selectedUid);
     const renderOption = (type: GlobalRelationshipType.TModel, Icon: LucideIcon, hint: string) => {
         const name = isParent ? type.parent_name : type.child_name;
@@ -49,12 +51,12 @@ const RelationshipTypePicker = ({ types, selectedUid, isParent, onSelect }: Prop
                 if (!matches.length) return null;
                 return (
                     <div key={semantic}>
-                        <div className="px-2 py-1 text-xs font-semibold text-muted-foreground">{label}</div>
-                        {matches.map((type) => renderOption(type, Icon, hint))}
+                        <div className="px-2 py-1 text-xs font-semibold text-muted-foreground">{t(label)}</div>
+                        {matches.map((type) => renderOption(type, Icon, t(hint)))}
                     </div>
                 );
             })}
-            {visible.filter((type) => !type.machine_semantic).map((type) => renderOption(type, Link2, "기존 미분류 관계"))}
+            {visible.filter((type) => !type.machine_semantic).map((type) => renderOption(type, Link2, t("board.Legacy unclassified relationships")))}
         </div>
     );
 };

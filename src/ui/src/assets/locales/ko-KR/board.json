@@ -100,5 +100,20 @@
   "Work is already running. Pause it and switch to the new work.": "이미 진행 중인 작업이 있습니다. 기존 작업을 일시정지하고 새 작업으로 전환합니다.",
   "Current work": "현재 작업",
   "New work": "새 작업",
-  "Pause existing work and switch": "기존 작업 일시정지 후 전환"
+  "Pause existing work and switch": "기존 작업 일시정지 후 전환",
+  "Unclassified": "미분류",
+  "Normal overdue rules": "일반 마감 초과 규칙",
+  "Workflow stage: {{stage}}": "워크플로우 단계: {{stage}}",
+  "Containment cycles limit the tree display and do not block execution.": "포함 관계 순환이 있습니다. 트리 표시를 제한하며 실행을 차단하지 않습니다.",
+  "Containment cycles display each card once. Execution blocking is separate.": "포함 관계가 순환하여 트리를 한 번씩만 표시합니다. 실행 차단은 별도입니다.",
+  "Blockers": "막힌 이유",
+  "Blockers · {{count}}": "막힌 이유 · {{count, number}}",
+  "Inaccessible prerequisite": "접근할 수 없는 선행조건",
+  "Legacy unclassified relationships": "기존 미분류 관계",
+  "Composition": "구성",
+  "Included in the same sprint, epic or feature": "같은 스프린트·에픽·기능에 포함",
+  "Execution dependencies": "실행 의존성",
+  "Start after prerequisite work is complete": "선행 작업 완료 후 시작",
+  "References": "참고",
+  "Link designs, evidence and related work": "설계·근거·관련 작업 연결"
 }

@@ -1,5 +1,7 @@
 "use client";
 
+import { useTranslation } from "react-i18next";
+
 import useColumnCardSort from "./useColumnCardSort";
 import { sortColumnCards } from "./columnCardSort";
 import { memo, type RefObject, useEffect, useMemo, useReducer, useRef, useState } from "react";
@@ -175,6 +177,7 @@ interface IBoardColumnCardListProps extends IBoardColumnProps {
 }
 
 const BoardColumnCardList = memo(({ column, updateBoard, scrollableRef, onCardCountChange }: IBoardColumnCardListProps) => {
+    const [t] = useTranslation();
     const {
         project,
         socket,
@@ -352,7 +355,7 @@ const BoardColumnCardList = memo(({ column, updateBoard, scrollableRef, onCardCo
                     >
                         {group.hasContainmentCycle && (
                             <p role="status" className="px-2 py-1 text-xs text-muted-foreground">
-                                포함 관계가 순환하여 트리를 한 번씩만 표시합니다. 실행 차단은 별도입니다.
+                                {t("board.Containment cycles display each card once. Execution blocking is separate.")}
                             </p>
                         )}
                         {group.descendants.length ? (

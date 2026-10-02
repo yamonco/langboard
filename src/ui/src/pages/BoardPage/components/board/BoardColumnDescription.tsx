@@ -1,3 +1,4 @@
+import { formatNumber } from "@/core/utils/LocaleFormat";
 import Button from "@/components/base/Button";
 import IconComponent from "@/components/base/IconComponent";
 import Popover from "@/components/base/Popover";
@@ -90,7 +91,7 @@ function BoardColumnDescription({ column }: { column: ProjectColumn.TModel }) {
                             placeholder={t("project.When should a card enter this column?")}
                         />
                         <label className="block space-y-1 text-sm">
-                            <span>Workflow stage</span>
+                            <span>{t("common.Workflow stage")}</span>
                             <select
                                 aria-label={t("common.Workflow stage")}
                                 className="w-full rounded border border-input bg-background px-2 py-1.5"
@@ -98,7 +99,7 @@ function BoardColumnDescription({ column }: { column: ProjectColumn.TModel }) {
                                 onChange={(event) => setStageDraft((event.target.value || null) as typeof stageDraft)}
                                 disabled={isPending || isStagePending || stages.isLoading || !!stages.error}
                             >
-                                <option value="">Unclassified</option>
+                                <option value="">{t("board.Unclassified")}</option>
                                 {workflowStage && !stages.data?.some((stage) => stage.key === workflowStage) && (
                                     <option value={workflowStage} disabled>
                                         {workflowStage}
@@ -107,26 +108,31 @@ function BoardColumnDescription({ column }: { column: ProjectColumn.TModel }) {
                                 {stages.data?.map((stage) => (
                                     <option key={stage.key} value={stage.key} disabled={!stage.is_active && stage.key !== workflowStage}>
                                         {localized(stage)?.name || stage.name}
-                                        {!stage.is_active ? " (Inactive)" : ""}
+                                        {!stage.is_active ? ` (${t("settings.Inactive")})` : ""}
                                     </option>
                                 ))}
                             </select>
                         </label>
                         {stages.error && (
                             <p role="alert" className="text-sm text-destructive">
-                                Workflow stages could not be loaded.
+                                {t("settings.Could not load workflow stages")}
                             </p>
                         )}
                         {selectedStage && (
                             <div className="space-y-1 rounded-md bg-muted/50 p-2 text-xs text-muted-foreground">
                                 <p className="whitespace-pre-wrap">{localized(selectedStage)?.description || selectedStage.description}</p>
                                 <p>
-                                    {selectedStage.counts_as_completed ? "Completed · " : ""}Queue {selectedStage.active_queue_policy} · Overdue{" "}
-                                    {selectedStage.overdue_policy}
+                                    {selectedStage.counts_as_completed && <>{t("settings.Completed")} · </>}
+                                    {t(`settings.Queue ${selectedStage.active_queue_policy}`)} ·{" "}
+                                    {t(selectedStage.overdue_policy === "suppress" ? "settings.Hide overdue" : "board.Normal overdue rules")}
                                 </p>
-                                <p>Entry effects: {selectedStage.entry_effects.length}</p>
+                                <p>
+                                    {t("settings.Entry effects")}: {formatNumber(selectedStage.entry_effects.length, i18n.language)}
+                                </p>
                                 {selectedStage.entry_effects.map((effect) => (
-                                    <p key={effect}>{effect === "complete_checkitems" ? "Complete unchecked items" : "Stop running timers"}</p>
+                                    <p key={effect}>
+                                        {t(effect === "complete_checkitems" ? "settings.Complete unchecked items" : "settings.Stop running timers")}
+                                    </p>
                                 ))}
                             </div>
                         )}
@@ -142,7 +148,13 @@ function BoardColumnDescription({ column }: { column: ProjectColumn.TModel }) {
                 ) : (
                     <>
                         <p className="whitespace-pre-wrap break-words text-sm">{description || t("project.No column description")}</p>
-                        <p className="text-xs text-muted-foreground">Workflow stage: {workflowStage ?? "Unclassified"}</p>
+                        <p className="text-xs text-muted-foreground">
+                            {t("board.Workflow stage: {{stage}}", {
+                                stage: selectedStage
+                                    ? localized(selectedStage)?.name || selectedStage.name
+                                    : (workflowStage ?? t("board.Unclassified")),
+                            })}
+                        </p>
                     </>
                 )}
             </Popover.Content>

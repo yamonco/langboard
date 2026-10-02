@@ -78,82 +78,10 @@
     "text": "x"
   },
   {
-    "file": "src/pages/BoardPage/components/board/BoardColumn.tsx",
-    "line": 355,
-    "kind": "jsx-text",
-    "text": "포함 관계가 순환하여 트리를 한 번씩만 표시합니다. 실행 차단은 별도입니다."
-  },
-  {
     "file": "src/pages/BoardPage/components/board/BoardColumnCardCollapsible.tsx",
     "line": 350,
     "kind": "jsx-text",
     "text": "d"
-  },
-  {
-    "file": "src/pages/BoardPage/components/board/BoardColumnDescription.tsx",
-    "line": 93,
-    "kind": "jsx-text",
-    "text": "Workflow stage"
-  },
-  {
-    "file": "src/pages/BoardPage/components/board/BoardColumnDescription.tsx",
-    "line": 101,
-    "kind": "jsx-text",
-    "text": "Unclassified"
-  },
-  {
-    "file": "src/pages/BoardPage/components/board/BoardColumnDescription.tsx",
-    "line": 117,
-    "kind": "jsx-text",
-    "text": "Workflow stages could not be loaded."
-  },
-  {
-    "file": "src/pages/BoardPage/components/board/BoardColumnDescription.tsx",
-    "line": 124,
-    "kind": "jsx-text",
-    "text": "Queue"
-  },
-  {
-    "file": "src/pages/BoardPage/components/board/BoardColumnDescription.tsx",
-    "line": 124,
-    "kind": "jsx-text",
-    "text": "· Overdue"
-  },
-  {
-    "file": "src/pages/BoardPage/components/board/BoardColumnDescription.tsx",
-    "line": 127,
-    "kind": "jsx-text",
-    "text": "Entry effects:"
-  },
-  {
-    "file": "src/pages/BoardPage/components/board/BoardColumnDescription.tsx",
-    "line": 145,
-    "kind": "jsx-text",
-    "text": "Workflow stage:"
-  },
-  {
-    "file": "src/pages/BoardPage/components/board/BoardRelationsSidebar.tsx",
-    "line": 64,
-    "kind": "jsx-text",
-    "text": "포함 관계 순환이 있습니다. 트리 표시를 제한하며 실행을 차단하지 않습니다."
-  },
-  {
-    "file": "src/pages/BoardPage/components/board/BoardRelationsSidebar.tsx",
-    "line": 68,
-    "kind": "attribute:aria-label",
-    "text": "막힌 이유"
-  },
-  {
-    "file": "src/pages/BoardPage/components/board/BoardRelationsSidebar.tsx",
-    "line": 69,
-    "kind": "jsx-text",
-    "text": "막힌 이유 ·"
-  },
-  {
-    "file": "src/pages/BoardPage/components/board/BoardRelationsSidebar.tsx",
-    "line": 82,
-    "kind": "jsx-text",
-    "text": "접근할 수 없는 선행조건"
   },
   {
     "file": "src/pages/BoardPage/components/card/BoardCard.tsx",

@@ -100,5 +100,20 @@
   "Work is already running. Pause it and switch to the new work.": "すでに実行中の作業があります。現在の作業を一時停止し、新しい作業に切り替えます。",
   "Current work": "現在の作業",
   "New work": "新しい作業",
-  "Pause existing work and switch": "現在の作業を一時停止して切り替え"
+  "Pause existing work and switch": "現在の作業を一時停止して切り替え",
+  "Unclassified": "未分類",
+  "Normal overdue rules": "通常の期限超過ルール",
+  "Workflow stage: {{stage}}": "ワークフローステージ: {{stage}}",
+  "Containment cycles limit the tree display and do not block execution.": "包含関係に循環があります。ツリー表示を制限しますが、実行はブロックしません。",
+  "Containment cycles display each card once. Execution blocking is separate.": "包含関係が循環しているため各カードを一度だけ表示します。実行のブロックは別です。",
+  "Blockers": "ブロックの理由",
+  "Blockers · {{count}}": "ブロックの理由 · {{count, number}}",
+  "Inaccessible prerequisite": "アクセスできない前提条件",
+  "Legacy unclassified relationships": "既存の未分類関係",
+  "Composition": "構成",
+  "Included in the same sprint, epic or feature": "同じスプリント・エピック・機能に含まれる",
+  "Execution dependencies": "実行の依存関係",
+  "Start after prerequisite work is complete": "前提作業の完了後に開始",
+  "References": "参照",
+  "Link designs, evidence and related work": "設計・根拠・関連作業を接続"
 }

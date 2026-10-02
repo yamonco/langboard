@@ -100,5 +100,20 @@
   "Work is already running. Pause it and switch to the new work.": "已有正在进行的工作。暂停当前工作并切换到新工作。",
   "Current work": "当前工作",
   "New work": "新工作",
-  "Pause existing work and switch": "暂停当前工作并切换"
+  "Pause existing work and switch": "暂停当前工作并切换",
+  "Unclassified": "未分类",
+  "Normal overdue rules": "常规逾期规则",
+  "Workflow stage: {{stage}}": "工作流阶段：{{stage}}",
+  "Containment cycles limit the tree display and do not block execution.": "包含关系存在循环。将限制树形显示，但不会阻止执行。",
+  "Containment cycles display each card once. Execution blocking is separate.": "包含关系存在循环，每张卡片仅显示一次。执行阻塞单独处理。",
+  "Blockers": "阻塞原因",
+  "Blockers · {{count}}": "阻塞原因 · {{count, number}}",
+  "Inaccessible prerequisite": "无法访问的前置条件",
+  "Legacy unclassified relationships": "现有未分类关系",
+  "Composition": "组成",
+  "Included in the same sprint, epic or feature": "属于同一迭代、史诗或功能",
+  "Execution dependencies": "执行依赖",
+  "Start after prerequisite work is complete": "前置工作完成后开始",
+  "References": "参考",
+  "Link designs, evidence and related work": "关联设计、证据和相关工作"
 }

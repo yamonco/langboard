@@ -100,5 +100,20 @@
   "Work is already running. Pause it and switch to the new work.": "Work is already running. Pause it and switch to the new work.",
   "Current work": "Current work",
   "New work": "New work",
-  "Pause existing work and switch": "Pause existing work and switch"
+  "Pause existing work and switch": "Pause existing work and switch",
+  "Unclassified": "Unclassified",
+  "Normal overdue rules": "Normal overdue rules",
+  "Workflow stage: {{stage}}": "Workflow stage: {{stage}}",
+  "Containment cycles limit the tree display and do not block execution.": "Containment cycles limit the tree display and do not block execution.",
+  "Containment cycles display each card once. Execution blocking is separate.": "Containment cycles display each card once. Execution blocking is separate.",
+  "Blockers": "Blockers",
+  "Blockers · {{count}}": "Blockers · {{count, number}}",
+  "Inaccessible prerequisite": "Inaccessible prerequisite",
+  "Legacy unclassified relationships": "Legacy unclassified relationships",
+  "Composition": "Composition",
+  "Included in the same sprint, epic or feature": "Included in the same sprint, epic or feature",
+  "Execution dependencies": "Execution dependencies",
+  "Start after prerequisite work is complete": "Start after prerequisite work is complete",
+  "References": "References",
+  "Link designs, evidence and related work": "Link designs, evidence and related work"
 }

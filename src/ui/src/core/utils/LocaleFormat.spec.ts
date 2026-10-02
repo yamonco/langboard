@@ -76,3 +76,20 @@ test("work island empty menu and drag prompt switch languages without navigation
         await page.getByRole("checkbox", { name: "fixture dragging" }).uncheck();
     }
 });
+
+test("relationship classifications translate while user relation names remain unchanged", async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem("lang", "en-US"));
+    await page.goto("/src/core/utils/LocaleFormat.fixture.html");
+    for (const [locale, composition, dependencies, references] of [
+        ["ko-KR", "구성", "실행 의존성", "참고"],
+        ["ja-JP", "構成", "実行の依存関係", "参照"],
+        ["zh-CN", "组成", "执行依赖", "参考"],
+        ["en-US", "Composition", "Execution dependencies", "References"],
+    ]) {
+        await page.getByRole("button", { name: locale, exact: true }).click();
+        const picker = page.getByTestId("relationship-picker");
+        for (const label of [composition, dependencies, references]) await expect(picker.getByText(label, { exact: true })).toBeVisible();
+        for (const semantic of ["contains", "blocks", "references"])
+            await expect(picker.getByRole("button", { name: `User ${semantic}`, exact: true })).toBeVisible();
+    }
+});

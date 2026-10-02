@@ -1,3 +1,4 @@
+import { formatNumber } from "@/core/utils/LocaleFormat";
 import { useTranslation } from "react-i18next";
 import { GlobalRelationshipType, ProjectCard } from "@/core/models";
 import { usePageNavigateRef } from "@/core/hooks/usePageNavigate";
@@ -31,24 +32,27 @@ export default function BoardRelationsSidebar({ projectUID, cardUID }: { project
 }
 
 function RelationsTree({ card, projectUID }: { card: ProjectCard.TModel; projectUID: string }) {
-    const [t] = useTranslation();
+    const [t, i18n] = useTranslation();
     const navigate = usePageNavigateRef();
     const relationships = card.useForeignFieldArray("relationships");
     const workState = card.useField("work_state");
     const blockers = workState?.dependency_state?.direct_blockers ?? [];
-    const containsCycle = hasContainmentCycle(ProjectCard.Model.getModels((candidate) => candidate.project_uid === projectUID), card.uid);
+    const containsCycle = hasContainmentCycle(
+        ProjectCard.Model.getModels((candidate) => candidate.project_uid === projectUID),
+        card.uid
+    );
     const semanticOf = (relationship: (typeof relationships)[number]) =>
         relationship.machine_semantic ?? GlobalRelationshipType.Model.getModel(relationship.relationship_type_uid)?.machine_semantic;
     const sections = [
         ...RELATIONSHIP_GROUPS.map((group) => ({
             key: group.semantic,
-            label: group.label,
+            label: t(group.label),
             Icon: group.Icon,
             items: relationships.filter((relationship) => semanticOf(relationship) === group.semantic),
         })),
         {
             key: "legacy",
-            label: "기존 미분류 관계",
+            label: t("board.Legacy unclassified relationships"),
             Icon: Link2,
             items: relationships.filter((relationship) => !semanticOf(relationship)),
         },
@@ -61,12 +65,14 @@ function RelationsTree({ card, projectUID }: { card: ProjectCard.TModel; project
             </p>
             {containsCycle && (
                 <p role="status" className="px-2 text-xs text-muted-foreground">
-                    포함 관계 순환이 있습니다. 트리 표시를 제한하며 실행을 차단하지 않습니다.
+                    {t("board.Containment cycles limit the tree display and do not block execution.")}
                 </p>
             )}
             {blockers.length > 0 && (
-                <section aria-label="막힌 이유">
-                    <h2 className="px-2 py-1 text-xs font-medium text-muted-foreground">막힌 이유 · {blockers.length}</h2>
+                <section aria-label={t("board.Blockers")}>
+                    <h2 className="px-2 py-1 text-xs font-medium text-muted-foreground">
+                        {t("board.Blockers · {{count}}", { count: blockers.length })}
+                    </h2>
                     {blockers.map((blocker) =>
                         blocker.accessible && blocker.card_uid ? (
                             <button
@@ -79,7 +85,7 @@ function RelationsTree({ card, projectUID }: { card: ProjectCard.TModel; project
                             </button>
                         ) : (
                             <p key={blocker.relationship_uid} className="px-2 py-1 text-muted-foreground">
-                                접근할 수 없는 선행조건
+                                {t("board.Inaccessible prerequisite")}
                             </p>
                         )
                     )}
@@ -88,7 +94,7 @@ function RelationsTree({ card, projectUID }: { card: ProjectCard.TModel; project
             {sections.map(({ key, label, Icon, items }) => (
                 <section key={key}>
                     <h2 className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-muted-foreground">
-                        <Icon size={14} aria-hidden="true" /> {label} · {items.length}
+                        <Icon size={14} aria-hidden="true" /> {label} · {formatNumber(items.length, i18n.language)}
                     </h2>
                     {items.map((relationship) => {
                         const isParent = relationship.child_card_uid === card.uid;

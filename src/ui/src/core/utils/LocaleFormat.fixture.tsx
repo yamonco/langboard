@@ -1,3 +1,5 @@
+import RelationshipTypePicker from "@/pages/BoardPage/components/board/RelationshipTypePicker";
+import { GlobalRelationshipType } from "@/core/models";
 import BoardWorkIsland from "@/pages/BoardPage/components/board/BoardWorkIsland";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router";
@@ -18,6 +20,13 @@ import { SUPPORTED_LOCALES } from "./LocalePolicy";
 
 api.defaults.adapter = async (config) => ({ status: 200, statusText: "OK", headers: {}, config, data: { active_work: [] } });
 const fixtureProject = { uid: "locale-fixture" } as Project.TModel;
+const fixtureRelationships = ["contains", "blocks", "references"].map((machine_semantic) => ({
+    uid: machine_semantic,
+    machine_semantic,
+    is_active: true,
+    parent_name: `User ${machine_semantic}`,
+    child_name: `User ${machine_semantic}`,
+})) as GlobalRelationshipType.TModel[];
 const date = new Date(Date.now() - 300000);
 function Fixture() {
     const [t, language] = useTranslation();
@@ -25,6 +34,9 @@ function Fixture() {
     const distance = useUpdateDateDistance(date);
     return (
         <>
+            <div data-testid="relationship-picker">
+                <RelationshipTypePicker types={fixtureRelationships} isParent onSelect={() => {}} />
+            </div>
             <div data-testid="work-island">
                 <BoardWorkIsland project={fixtureProject} dragging={dragging} />
             </div>
