@@ -1,6 +1,8 @@
 import re
+from ....core.db import DbSession, SqlBuilder
 from ....core.domain import BaseDomainService
 from ....helpers import InfraHelper
+from ....tasks.webhooks.ExecutionReadinessUow import execution_readiness_uow
 from ...models import WorkflowStageDefinition
 
 
@@ -63,9 +65,24 @@ class WorkflowStageService(BaseDomainService):
             raise ValueError("Workflow key already exists")
         values = {**fields, "name": name, "color": color.upper(), "translations": translations}
         if stage:
-            for field, value in values.items():
-                setattr(stage, field, value)
-            self.repo.workflow_stage.update(stage)
+            with DbSession.atomic() as db:
+                stage = db.exec(
+                    SqlBuilder.select.table(WorkflowStageDefinition)
+                    .where(WorkflowStageDefinition.column("id") == stage.id)
+                    .with_for_update()
+                ).first()
+                if stage is None:
+                    return None
+                if stage.counts_as_completed != values["counts_as_completed"]:
+                    with execution_readiness_uow() as execution:
+                        execution.watch_workflow_stage(stage.key)
+                        for field, value in values.items():
+                            setattr(stage, field, value)
+                        self.repo.workflow_stage.update(stage)
+                else:
+                    for field, value in values.items():
+                        setattr(stage, field, value)
+                    self.repo.workflow_stage.update(stage)
         else:
             stage = WorkflowStageDefinition(**values)
             self.repo.workflow_stage.insert(stage)

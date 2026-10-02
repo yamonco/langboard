@@ -46,8 +46,6 @@ def test_application_uow_emits_only_ready_edges_and_freezes_payload(monkeypatch:
         with engine.begin() as connection:
             for statement in (
                 "CREATE TABLE project_column (id bigint PRIMARY KEY, deleted_at timestamptz, is_archive boolean NOT NULL, workflow_stage text, project_id bigint)",
-                "CREATE TABLE workflow_stage_definition (key text PRIMARY KEY, counts_as_completed boolean NOT NULL)",
-                "INSERT INTO workflow_stage_definition VALUES ('closed',true),('released',true)",
                 "CREATE TABLE webhook_setting (id bigint PRIMARY KEY, secret_id bigint, events jsonb NOT NULL)",
                 # Baseline binding shape as the public main history leaves it;
                 # the install migration adds the semantic id columns on top.
@@ -64,11 +62,23 @@ def test_application_uow_emits_only_ready_edges_and_freezes_payload(monkeypatch:
                 "CREATE TABLE card_assigned_user (card_id bigint, user_id bigint)",
             ):
                 connection.execute(text(statement))
+            from langboard_shared.domain.models import WorkflowStageDefinition
+
+            WorkflowStageDefinition.__table__.create(connection)
+            connection.execute(
+                WorkflowStageDefinition.__table__.insert(),
+                [
+                    WorkflowStageDefinition(id=1, key="closed", name="Closed", counts_as_completed=True).model_dump(),
+                    WorkflowStageDefinition(id=2, key="released", name="Released", counts_as_completed=True).model_dump(),
+                ],
+            )
             with Operations.context(MigrationContext.configure(connection)):
                 migration.upgrade()
             connection.execute(text("INSERT INTO global_card_relationship_type VALUES (30, 'blocks', true)"))
             connection.execute(
-                text("INSERT INTO project_column VALUES (20, NULL, false, NULL, 7), (21, NULL, false, NULL, 7), (22, NULL, false, NULL, 7)")
+                text(
+                    "INSERT INTO project_column VALUES (20, NULL, false, NULL, 7), (21, NULL, false, NULL, 7), (22, NULL, false, NULL, 7)"
+                )
             )
             connection.execute(
                 text("INSERT INTO webhook_setting VALUES (40, 50, CAST(:events AS jsonb))"),
@@ -173,6 +183,63 @@ def test_application_uow_emits_only_ready_edges_and_freezes_payload(monkeypatch:
         current = current_execution(102)
         assert (current.is_ready, current.generation) == (True, 2)
         assert len(enqueued) == 4
+        # Native registry edits fence existing dependents in the same transaction.
+        from types import SimpleNamespace
+        from langboard_shared.domain.services.factory.WorkflowStageService import WorkflowStageService
+        from langboard_shared.infrastructure.repositories.factory.WorkflowStageRepository import WorkflowStageRepository
+
+        service = WorkflowStageService(
+            lambda _: None,
+            lambda _: None,
+            SimpleNamespace(workflow_stage=WorkflowStageRepository(lambda _: None, lambda _: None)),
+        )
+        fields = dict(
+            key="closed",
+            name="Closed",
+            description="Accepted",
+            color="#64748B",
+            order=0,
+            counts_as_completed=False,
+            active_queue_policy="exclude",
+            overdue_policy="suppress",
+            entry_effects=["complete_checkitems"],
+            translations={},
+        )
+        saved = service.save(fields, WorkflowStageDefinition(id=1, key="closed", name="Closed").get_uid())
+        assert saved.counts_as_completed is False
+        assert current_execution(102).is_ready is False
+        with engine.connect() as connection:
+            assert (
+                connection.execute(
+                    text("SELECT state FROM execution_outbox WHERE card_id=102 AND execution_generation=2")
+                ).scalar_one()
+                == "superseded"
+            )
+        fields["counts_as_completed"] = True
+        service.save(fields, saved.get_uid())
+        assert (current_execution(102).is_ready, current_execution(102).generation) == (True, 3)
+        assert len(enqueued) == 5
+        fields["description"] = "Display edit only"
+        service.save(fields, saved.get_uid())
+        assert current_execution(102).generation == 3
+        assert len(enqueued) == 5
+        # A later failure rolls back the policy and suppresses post-commit enqueue.
+        with pytest.raises(ValueError):
+            from langboard_shared.core.db import DbSession
+
+            with DbSession.atomic():
+                fields["counts_as_completed"] = False
+                service.save(fields, saved.get_uid())
+                raise ValueError("rollback registry edit")
+        assert current_execution(102).is_ready is True
+        with engine.connect() as connection:
+            assert (
+                connection.execute(
+                    text("SELECT counts_as_completed FROM workflow_stage_definition WHERE key='closed'")
+                ).scalar_one()
+                is True
+            )
+        assert len(enqueued) == 5
     finally:
         engine.dispose()
         with admin.begin() as connection:
@@ -235,7 +302,9 @@ def test_ready_content_edit_drains_latest_content_and_only_readiness_edges_super
                 migration.upgrade()
             connection.execute(text("INSERT INTO global_card_relationship_type VALUES (30, 'blocks', true)"))
             connection.execute(
-                text("INSERT INTO project_column VALUES (20, NULL, false, NULL, 7), (21, NULL, false, NULL, 7), (22, NULL, false, NULL, 7)")
+                text(
+                    "INSERT INTO project_column VALUES (20, NULL, false, NULL, 7), (21, NULL, false, NULL, 7), (22, NULL, false, NULL, 7)"
+                )
             )
             connection.execute(
                 text("INSERT INTO webhook_setting VALUES (40, 50, CAST(:events AS jsonb))"),
@@ -280,13 +349,9 @@ def test_ready_content_edit_drains_latest_content_and_only_readiness_edges_super
 
         # Completion 1: READY-preserving title edit keeps the execution and delivers latest content.
         with engine.begin() as connection:
-            connection.execute(
-                text("UPDATE card SET title = 'Edited title', updated_at = now() WHERE id = 100")
-            )
+            connection.execute(text("UPDATE card SET title = 'Edited title', updated_at = now() WHERE id = 100"))
         with engine.begin() as connection:
-            connection.execute(
-                text("UPDATE card SET updated_at = now() + interval '1 second' WHERE id = 100")
-            )
+            connection.execute(text("UPDATE card SET updated_at = now() + interval '1 second' WHERE id = 100"))
         assert asyncio_run(worker.drain_one())
         assert len(delivered) == 1
         delivered_model = delivered[0][0]
@@ -302,7 +367,9 @@ def test_ready_content_edit_drains_latest_content_and_only_readiness_edges_super
 
         # Completion 2: READY-preserving label change delivers the latest labels.
         with engine.begin() as connection:
-            connection.execute(text("DELETE FROM card_assigned_project_label WHERE card_id = 100 AND project_label_id = 9"))
+            connection.execute(
+                text("DELETE FROM card_assigned_project_label WHERE card_id = 100 AND project_label_id = 9")
+            )
             connection.execute(text("INSERT INTO card_assigned_project_label VALUES (100, 10)"))
             connection.execute(text("UPDATE card SET updated_at = now() + interval '2 seconds' WHERE id = 100"))
         with engine.begin() as connection:

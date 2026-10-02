@@ -78,6 +78,7 @@ def _scalar(db: DbSession, statement, **params):
 
 def current_execution(card_id: int, db: DbSession | None = None) -> CurrentExecution | None:
     """Read execution fence and current content from one database statement."""
+
     def read(session: DbSession):
         return session.exec(
             select(
@@ -153,6 +154,25 @@ class ExecutionReadinessUow:
         rows = self.db.exec(
             select(text("id")).select_from(text("card")).where(text("project_id = :project_id")),
             params={"project_id": project_id},
+        ).all()
+        self.watch(row[0] for row in rows)
+
+    def watch_workflow_stage(self, stage_key: str) -> None:
+        """Fence only cards bound to this stage and their direct dependents."""
+        rows = self.db.exec(
+            select(text("affected.id")).select_from(
+                text("""
+                (SELECT c.id FROM card c
+                 JOIN project_column column_stage ON column_stage.id = c.project_column_id
+                 WHERE column_stage.workflow_stage = :stage_key
+                 UNION
+                 SELECT r.card_id_child AS id FROM card_relationship r
+                 JOIN card parent ON parent.id = r.card_id_parent
+                 JOIN project_column column_stage ON column_stage.id = parent.project_column_id
+                 WHERE column_stage.workflow_stage = :stage_key) affected
+            """)
+            ),
+            params={"stage_key": stage_key},
         ).all()
         self.watch(row[0] for row in rows)
 
@@ -245,6 +265,7 @@ class ExecutionReadinessUow:
                     ),
                 },
             )
+
             def enqueue(event_id=event_id) -> None:
                 from .ExecutionOutboxTask import execution_outbox_task
 
