@@ -1,0 +1,57 @@
+name: Check Localization
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/check-localization.yaml
+      - src/ui/src/assets/locales/**
+      - src/ui/src/i18n.ts
+      - src/ui/src/constants.ts
+      - src/ui/src/core/utils/LocalePolicy*
+      - src/ui/src/core/utils/LocaleRuntime*
+      - src/ui/src/core/providers/AuthProvider.tsx
+      - src/ui/src/core/providers/AuthLanguage*
+      - src/ui/src/core/stores/AuthStore.ts
+      - src/ui/src/components/LanguageSwitcher/**
+      - src/ui/src/pages/AccountPage/components/preference/PreferenceLanguage*
+      - src/ui/scripts/verify-locale-resources.mjs
+      - src/ui/playwright.locale-runtime.config.ts
+      - src/ui/playwright.default-language.config.ts
+      - src/ui/playwright.auth-language.config.ts
+      - src/ui/vite.card-load.config.ts
+      - src/ui/package.json
+      - src/ui/yarn.lock
+      - src/shared/ts/**
+  workflow_dispatch:
+
+jobs:
+  resources-and-runtime:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: yarn
+          cache-dependency-path: src/ui/yarn.lock
+      - run: corepack enable
+      - run: yarn install --frozen-lockfile
+        working-directory: src/shared/ts
+      - run: yarn build
+        working-directory: src/shared/ts
+      - run: yarn install --frozen-lockfile
+        working-directory: src/ui
+      - run: node scripts/verify-core-package.mjs
+        working-directory: src/ui
+      - run: node --experimental-strip-types scripts/verify-locale-resources.mjs --complete
+        working-directory: src/ui
+      - run: node --experimental-strip-types --test src/core/utils/LocalePolicy.test.ts
+        working-directory: src/ui
+      - run: yarn playwright install --with-deps chrome
+        working-directory: src/ui
+      - run: yarn playwright test -c playwright.locale-runtime.config.ts
+        working-directory: src/ui
+      - run: yarn playwright test -c playwright.default-language.config.ts
+        working-directory: src/ui
+      - run: yarn playwright test -c playwright.auth-language.config.ts
+        working-directory: src/ui

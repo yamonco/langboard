@@ -4,7 +4,6 @@ import useSocketStore from "@/core/stores/SocketStore";
 import { AxiosInstance } from "axios";
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
-import { APP_SHORT_NAME } from "@/constants";
 
 type TOidcCallbackRequestStatus = "pending" | "done";
 
@@ -16,8 +15,6 @@ interface IAuthStore {
     getSessionVersion: () => number;
     updateToken: (token: string, api: AxiosInstance) => Promise<void>;
     removeToken: () => void;
-    hasSetPreferredLang: () => bool;
-    setPreferredLangHandled: () => void;
     getOidcCallbackRequestStatus: (requestKey: string) => TOidcCallbackRequestStatus | null;
     setOidcCallbackRequestStatus: (requestKey: string, status: TOidcCallbackRequestStatus) => void;
     removeOidcCallbackRequestStatus: (requestKey: string) => void;
@@ -25,7 +22,6 @@ interface IAuthStore {
 
 let accessToken: string | null = null;
 let tokenUpdateVersion = 0;
-const HAS_SET_LANG_STORAGE_KEY = `has-set-lang-${APP_SHORT_NAME}`;
 
 const useAuthStore = create(
     immer<IAuthStore>((set, get) => {
@@ -91,8 +87,6 @@ const useAuthStore = create(
                 tokenUpdateVersion += 1;
                 set({ currentUser: null, state: "loaded" });
             },
-            hasSetPreferredLang: () => localStorage.getItem(HAS_SET_LANG_STORAGE_KEY) === "true",
-            setPreferredLangHandled: () => localStorage.setItem(HAS_SET_LANG_STORAGE_KEY, "true"),
             getOidcCallbackRequestStatus: (requestKey) => {
                 const status = sessionStorage.getItem(requestKey);
                 return status === "pending" || status === "done" ? status : null;

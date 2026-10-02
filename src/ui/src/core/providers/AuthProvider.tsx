@@ -41,17 +41,19 @@ export const AuthProvider = ({ children }: IAuthProviderProps): React.ReactNode 
     const timeRange = useUserSettings("notifications_time_range");
     const navigate = usePageNavigateRef();
     const hadAuthenticatedUserRef = useRef(false);
+    const preferredLanguageUserRef = useRef<string | null>(null);
 
     useEffect(() => {
-        if (state !== "loaded" || !currentUser) {
+        if (state !== "loaded") return;
+        if (!currentUser) {
+            preferredLanguageUserRef.current = null;
             return;
         }
-
-        if (!getAuthStore().hasSetPreferredLang()) {
-            i18n.changeLanguage(normalizeLocale(currentUser.preferred_lang));
-            getAuthStore().setPreferredLangHandled();
+        if (preferredLanguageUserRef.current !== currentUser.uid) {
+            if (currentUser.preferred_lang) i18n.changeLanguage(normalizeLocale(currentUser.preferred_lang));
+            preferredLanguageUserRef.current = currentUser.uid;
         }
-    }, [state]);
+    }, [state, currentUser, i18n]);
 
     useEffect(() => {
         const shouldSkip =
