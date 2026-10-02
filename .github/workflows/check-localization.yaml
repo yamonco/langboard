@@ -71,3 +71,6 @@ jobs:
 
       - run: yarn playwright test -c playwright.workflow-filter-refresh.config.ts
         working-directory: src/ui
+
+      - run: yarn playwright test -c playwright.auth-api.config.ts
+        working-directory: src/ui

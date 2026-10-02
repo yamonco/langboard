@@ -124,7 +124,9 @@ api.interceptors.response.use(
             [EHttpStatus.HTTP_422_UNPROCESSABLE_CONTENT]: {
                 message: async (e) => {
                     const authStore = getAuthStore();
-                    const originalConfig: AxiosRequestConfig = e.config!;
+                    const originalConfig = e.config as AxiosRequestConfig & { _langboardAuthReplayed?: boolean };
+                    if (originalConfig._langboardAuthReplayed) throw e;
+                    originalConfig._langboardAuthReplayed = true;
                     const isRefreshed = await refresh();
                     if (!isRefreshed) {
                         throw e;

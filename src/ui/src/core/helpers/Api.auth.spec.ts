@@ -201,3 +201,56 @@ test("expired cookie refresh terminates once and rejects the original request", 
     const result = JSON.parse((await page.locator("#result").textContent())!);
     expect(result).toEqual({ reads: 1, refreshes: 1, rejected: true, status: 422, signedOut: true, sessionChanges: 1 });
 });
+
+test("a replayed 422 terminates without recursively refreshing again", async ({ page }) => {
+    await page.goto("/src/controllers/api/board/refreshProjectColumnDock.fixture.html");
+    let reads = 0;
+    let refreshes = 0;
+    let identities = 0;
+    await page.route("**/__token-replay-proof", async (route) => {
+        reads += 1;
+        await route.fulfill({ status: reads < 4 ? 422 : 401, json: { value: "current" } });
+    });
+    await page.route("**/auth/refresh", async (route) => {
+        refreshes += 1;
+        await route.fulfill({ status: 200, json: { access_token: "synthetic-test-token" } });
+    });
+    await page.route("**/auth/me", async (route) => {
+        identities += 1;
+        await route.fulfill({
+            status: 200,
+            json: {
+                user: {
+                    uid: "token-test-user",
+                    type: "user",
+                    firstname: "Test",
+                    lastname: "User",
+                    email: "user@example.invalid",
+                    username: "synthetic-user",
+                    user_groups: [],
+                    api_key_role_actions: [],
+                    setting_role_actions: [],
+                    mcp_role_actions: [],
+                    created_at: "2026-01-01T00:00:00Z",
+                    updated_at: "2026-01-01T00:00:00Z",
+                },
+                bots: [],
+            },
+        });
+    });
+    const result = await page.evaluate(async () => {
+        const apiPath = "/src/core/helpers/Api.ts";
+        const authPath = "/src/core/stores/AuthStore.ts";
+        const { api } = await import(apiPath);
+        const { getAuthStore } = await import(authPath);
+        api.defaults.baseURL = location.origin;
+        try {
+            await api.get(`${location.origin}/__token-replay-proof`);
+            return { rejected: false, status: 0 };
+        } catch (error) {
+            return { rejected: true, status: (error as { response?: { status: number } }).response?.status };
+        }
+    });
+    expect(result).toEqual({ rejected: true, status: 422 });
+    expect({ reads, refreshes, identities }).toEqual({ reads: 2, refreshes: 1, identities: 1 });
+});
