@@ -15,7 +15,7 @@ const WikiCreateButton = memo(() => {
     const createWiki = () => {
         const promise = createWikiMutateAsync({
             project_uid: project.uid,
-            title: "New page",
+            title: t("wiki.New page"),
         });
 
         Toast.Add.promise(promise, {

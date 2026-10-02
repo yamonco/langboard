@@ -107,12 +107,13 @@
     "Delete project": "プロジェクトを削除",
     "Chat templates": "チャットテンプレート",
     "Add a template": "テンプレートを追加",
-    "Template name": "テンプレート名",
     "Template": "テンプレート",
     "errors": {
       "Label name cannot be empty.": "ラベル名は空にできません。",
       "Color cannot be empty.": "色は空にできません。",
       "Description cannot be empty.": "説明は空にできません。"
-    }
+    },
+    "New Label": "新しいラベル",
+    "Sample label description": "ラベルの説明例"
   }
 }

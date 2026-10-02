@@ -107,12 +107,13 @@
     "Delete project": "Delete project",
     "Chat templates": "Chat templates",
     "Add a template": "Add a template",
-    "Template name": "Template name",
     "Template": "Template",
     "errors": {
       "Label name cannot be empty.": "Label name cannot be empty.",
       "Color cannot be empty.": "Color cannot be empty.",
       "Description cannot be empty.": "Description cannot be empty."
-    }
+    },
+    "New Label": "New Label",
+    "Sample label description": "Sample label description"
   }
 }

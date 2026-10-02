@@ -107,12 +107,13 @@
     "Delete project": "프로젝트 삭제",
     "Chat templates": "채팅 템플릿",
     "Add a template": "템플릿 추가",
-    "Template name": "템플릿 이름",
     "Template": "템플릿",
     "errors": {
       "Label name cannot be empty.": "라벨 이름은 비워 둘 수 없습니다.",
       "Color cannot be empty.": "색상은 비워 둘 수 없습니다.",
       "Description cannot be empty.": "설명은 비워 둘 수 없습니다."
-    }
+    },
+    "New Label": "새 라벨",
+    "Sample label description": "라벨 설명 예시"
   }
 }

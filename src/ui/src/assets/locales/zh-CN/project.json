@@ -107,12 +107,13 @@
     "Delete project": "删除项目",
     "Chat templates": "聊天模板",
     "Add a template": "添加模板",
-    "Template name": "模板名称",
     "Template": "模板",
     "errors": {
       "Label name cannot be empty.": "标签名称不能为空。",
       "Color cannot be empty.": "颜色不能为空。",
       "Description cannot be empty.": "描述不能为空。"
-    }
+    },
+    "New Label": "新标签",
+    "Sample label description": "标签描述示例"
   }
 }

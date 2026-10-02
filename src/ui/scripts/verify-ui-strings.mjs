@@ -40,6 +40,20 @@ export function scanSource(file, source) {
         }
         if (ts.isCallExpression(node)) {
             const callee = node.expression.getText(tree);
+            // Creation defaults become persisted user-visible content. Inspect only known request calls.
+            if (/^(?:createWiki|createCheckitem|createProjectLabel)MutateAsync$/.test(callee)) {
+                for (const arg of node.arguments)
+                    if (ts.isObjectLiteralExpression(arg)) {
+                        for (const prop of arg.properties)
+                            if (
+                                ts.isPropertyAssignment(prop) &&
+                                ["title", "name", "description"].includes(prop.name.getText(tree)) &&
+                                ts.isStringLiteralLike(prop.initializer)
+                            ) {
+                                add(prop, "creation-default", prop.initializer.text);
+                            }
+                    }
+            }
             const kind =
                 /(?:^|\.)(?:confirm|alert|prompt)$/.test(callee) || /Toast\.Add\.(?:error|success|warning|info)$/.test(callee)
                     ? "dialog-toast"

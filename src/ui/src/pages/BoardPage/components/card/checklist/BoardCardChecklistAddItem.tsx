@@ -45,7 +45,7 @@ function BoardCardChecklistAddItem(): React.JSX.Element {
             project_uid: projectUID,
             card_uid: card.uid,
             checklist_uid: checklist.uid,
-            title: "New checkitem",
+            title: t("card.New checkitem"),
         });
 
         Toast.Add.promise(promise, {

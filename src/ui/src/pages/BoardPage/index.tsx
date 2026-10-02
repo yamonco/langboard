@@ -646,7 +646,7 @@ function BoardProxyDisplay({ pageRoute, isFetching, isProjectLoading, project }:
                 activityRailItems={[
                     {
                         icon: "panel-left",
-                        label: "Explorer",
+                        label: t("common.Explorer"),
                         onClick: () => showWorkbenchContext("explorer"),
                         active: isWorkbenchContextVisible && workbenchContextMode === "explorer",
                     },

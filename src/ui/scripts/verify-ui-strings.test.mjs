@@ -16,7 +16,7 @@ test("raw accessible text, dialog and validation literals are detected; translat
             ["attribute:aria-label", "Open menu"],
             ["jsx-text", "Open"],
             ["attribute:placeholder", "Name"],
-                ["dialog-toast", "Delete this item?"],
+            ["dialog-toast", "Delete this item?"],
             ["dialog-toast", "Save failed"],
             ["validation", "Required"],
         ]
@@ -31,4 +31,16 @@ test("raw accessible text, dialog and validation literals are detected; translat
 test("TypeScript generics and HTML spacing entities are not user-facing messages", () => {
     assert.deepEqual(scanSource("Models.ts", "const identity = <T>(value: T): T => value;"), []);
     assert.deepEqual(scanSource("Spacing.tsx", "const view = <span>&nbsp;</span>;"), []);
+});
+
+test("persisted creation defaults are detected without treating user input as literals", () => {
+    const source =
+        'createWikiMutateAsync({title: "New page"}); createCheckitemMutateAsync({title: t("card.New checkitem")}); createProjectLabelMutateAsync({name: form.name, description: "Sample description"});';
+    assert.deepEqual(
+        scanSource("Create.tsx", source).map(({ kind, text }) => [kind, text]),
+        [
+            ["creation-default", "New page"],
+            ["creation-default", "Sample description"],
+        ]
+    );
 });
