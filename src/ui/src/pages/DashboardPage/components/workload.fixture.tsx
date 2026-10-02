@@ -5,8 +5,19 @@ import ProjectWorkloadBadges from "./ProjectWorkloadBadges";
 import "@/i18n";
 import "@/assets/styles/main.css";
 const fixtureColumns: Omit<ProjectColumn.IStore, "created_at" | "updated_at">[] = [
-    { uid: "ready", project_uid: "fixture", name: "Ready", order: 0, is_archive: false, workflow_stage: "ready", count: 9, incomplete_count: 3 },
-    { uid: "active", project_uid: "fixture", name: "Active", order: 1, is_archive: false, workflow_stage: "active", count: 7, incomplete_count: 2 },
+    { uid: "ready", project_uid: "fixture", name: "Ready", order: 0, is_archive: false, workflow_stage: "ready", count: 9, incomplete_count: 1 },
+    { uid: "active", project_uid: "fixture", name: "Active", order: 1, is_archive: false, workflow_stage: "active", count: 7, incomplete_count: 4 },
+    { uid: "review", project_uid: "fixture", name: "Review", order: 2, is_archive: false, workflow_stage: "review", count: 8, incomplete_count: 2 },
+    {
+        uid: "request",
+        project_uid: "fixture",
+        name: "Request",
+        order: 3,
+        is_archive: false,
+        workflow_stage: "backlog",
+        count: 6,
+        incomplete_count: 3,
+    },
     { uid: "done", project_uid: "fixture", name: "Done", order: 2, is_archive: false, workflow_stage: null, count: 99, incomplete_count: 0 },
     { uid: "archive", project_uid: "fixture", name: "Archive", order: 3, is_archive: true, count: 99, incomplete_count: 0 },
 ];
@@ -23,11 +34,18 @@ function Fixture() {
                 <ProjectWorkloadBadges projectUID="fixture" />
             </section>
             <section aria-label="Favorites">
-                <ProjectWorkloadBadges projectUID="fixture" compact />
+                <div className="flex min-w-0 items-center gap-1" style={{ containerType: "inline-size", containerName: "project-workload" }}>
+                    <button className="min-w-0 flex-1 truncate" data-testid="favorite-title">
+                        A visible project name
+                    </button>
+                    <ProjectWorkloadBadges projectUID="fixture" compact />
+                </div>
             </section>
             <section aria-label="Explorer">
-                <div className="flex items-center justify-between">
-                    <button>Project title</button>
+                <div className="flex min-w-0 items-center gap-1" style={{ containerType: "inline-size", containerName: "project-workload" }}>
+                    <button className="min-w-0 flex-1 truncate" data-testid="explorer-title">
+                        Project title
+                    </button>
                     <ProjectWorkloadBadges projectUID="fixture" compact />
                 </div>
             </section>
@@ -35,6 +53,8 @@ function Fixture() {
                 onClick={() => {
                     columns[0].incomplete_count = 0;
                     columns[1].incomplete_count = 1;
+                    columns[2].incomplete_count = 0;
+                    columns[3].incomplete_count = 0;
                 }}
             >
                 Apply live counts
