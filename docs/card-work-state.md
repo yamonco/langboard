@@ -1,64 +1,48 @@
-# Common card work state, phase one
+# Card work state
 
-`CardService.get_work_states` is the shared read projection for board cards,
-card details, dashboard/My Work, assigned-work pages and MCP bundles/list pages.
-The existing authorized card query supplies IDs; projection queries do not
-discover additional cards or reveal related-card data. A batch uses one column
-query, one grouped checkitem query and one latest-verification query, including
-archived cards for diagnostics.
+Authorized card reads expose a `work_state` projection so clients can distinguish
+workflow, progress, review, execution and archive state. Reading this projection
+does not modify the card or grant access to another card or linked resource.
 
-This is a partial contract. Clients must preserve nullable axes and must never
-turn `active_queue_eligible: null` into `true`. It deliberately does not replace
-existing queues or their selection policy yet.
+Some axes remain unknown. Preserve `null`; in particular,
+`active_queue_eligible: null` does not mean the card is ready for execution.
 
-| Field | Current evidence | Meaning |
-| --- | --- | --- |
-| workflow_stage | ProjectColumn.workflow_stage | Explicit mapping only; unconfigured is null regardless of display name |
-| verification_state | User checkitem progress plus append-only reviewer record | all checked alone is never verified; explicit current evidence may yield verified; linked Wiki is not_required |
-| execution_state | User checkitem started/paused status | human_active/paused; absent human timers leaves agent state unknown (null) |
-| blocker_state | Not integrated | null; dependency/input/approval gates cannot be assumed clear |
-| material_kind | Linked Wiki or explicit reference column | wiki-like/reference/work; meeting classification remains pending |
-| lifecycle | Card.archived_at | active/archived, independent of workflow |
-| active_queue_eligible | Known exclusion facts | false for archive, closed/reference or linked Wiki; otherwise null until gates exist |
+| Field | Meaning |
+| --- | --- |
+| `version` | Projection format version, currently `1` |
+| `workflow_stage` | Explicit column mapping with an available workflow definition; otherwise `null` |
+| `completed` | Whether that workflow definition counts the card as completed; otherwise `null` |
+| `active_queue_policy` | Active-queue policy of the mapped workflow definition; otherwise `null` |
+| `overdue_policy` | Deadline policy of the mapped workflow definition; otherwise `null` |
+| `overdue_suppressed` | Whether deadline alerts are suppressed; archived and linked-resource cards are suppressed; missing policy can leave this `null` |
+| `verification_state` | `unverified`, `partial`, `verified`, `stale` or `not_required`; checked items alone do not prove review or approval |
+| `verification_source_change_seq` | Card change cursor used to evaluate whether reviewer evidence is current |
+| `verification` | Current reviewer evidence record, when available |
+| `execution_state` | `human_active` or `paused` for checklist timers, `idle` for linked resources, otherwise `null` when no authoritative execution state is available |
+| `blocker_state` | `blocked` when a known prerequisite prevents execution; otherwise `null`, which does not prove all gates are clear |
+| `dependency_state` | Direct prerequisite status and permission-filtered blockers; `clear` covers dependencies only, not input or approval gates |
+| `material_kind` | `work`, `reference` or `wiki-like` |
+| `lifecycle` | `active` or `archived`, independent of workflow |
+| `active_queue_eligible` | `false` for a known exclusion or prerequisite blocker; otherwise `null` until all required gates can be established |
+| `checklist_progress` | Ordinary checkitem `total` and `completed` counts, separate from required acceptance criteria |
 
-`reasons` and `state_inconsistency` contain code/message/source_ref. Sources
-reference only the authorized card. Closed cards with open checkitems, active
-cards with all checkitems checked, and archived cards with running timers are
-diagnosed without changing data. These counts do not declare checkitems to be
-required acceptance criteria. No assignee or timer owner data is exposed here.
+`reasons` and `state_inconsistency` provide `code`, `message` and `source_ref`.
+They explain missing information or inconsistent states without changing data.
+Inaccessible prerequisites expose no private title or card identifier. A card in
+a completed workflow with unchecked items, or an archived card with a running
+timer, can still be reported as inconsistent. These diagnostics do not change
+assignees, timer ownership or checklist completion.
 
-## Remaining acceptance work
+## Reviewer evidence
 
-- Independent required-acceptance and release-gate policy. The new record's
-  card change cursor invalidates ordinary edits; external source and permission
-  revocation still need their own invalidation contract. Legacy orchestration
-  `passed` metadata has no evidence revision and cannot promote verification.
-- Authoritative agent execution lifecycle, failure and freshness.
-- Dependency/approval/input gate evaluation with permission-safe reasons.
-- Explicit meeting/material classification and unmapped-column administration.
-- UI consumers and live socket invalidation; typed storage alone is not full
-  live UI adoption. Preserve server projection rather than recalculating from
-  column labels or checkbox counts.
-- Actionable queues and atomic actions after those contracts are complete.
+The authenticated `verification-evidence` API requires permission to update the
+card, its current `last_change_seq`, the expected previous evidence record UID,
+an explicit reviewer decision and references that identify source revision and
+environment. A `verified` decision requires a card-level reference and a
+reference for every explicitly declared required checkitem. Those items must
+belong to the card and currently be checked. The server records reviewer identity.
 
-No database migration or task mutation was introduced in phase one.
-
-## Reviewer evidence (second phase)
-
-Verification now has a separate append-only `card_verification_record` table.
-Generic card metadata, including old orchestration `passed`, cannot become a
-trusted record. The authenticated native `verification-evidence` write requires
-`CardUpdate`, the card's current `last_change_seq`, the expected previous
-record UID, an explicit reviewer decision, and at least one reference with
-source revision and environment. `verified` requires a card-level reference
-and one for each explicitly declared required checkitem; those items must be
-currently checked and belong to the card. The server locks the card and appends
-the reviewer identity itself. It does not move the card or approve a release.
-
-A later card change makes that record `stale`. This cursor intentionally also
-invalidates on comments; false-positive re-review is safer than treating old
-evidence as current. `verified` describes the reviewer's declared evidence
-scope, not acceptance-policy completeness across every card or release-gate
-approval. Those policies and agent/dependency gates still need authoritative
-native contracts before `active_queue_eligible` can become `true`. The
-read projection does not grant access to linked resources or other cards.
+A later card change, including a comment, makes prior evidence `stale`.
+`verified` describes the reviewer's declared scope; it does not approve a release,
+move the card, establish every acceptance policy or clear separate execution gates.
+Generic card metadata cannot substitute for reviewer evidence.
