@@ -1,3 +1,4 @@
+import { metadataDisplay } from "@/core/utils/MetadataDisplay";
 import { useTranslation } from "react-i18next";
 import FormErrorMessage from "@/components/FormErrorMessage";
 import AutoComplete from "@/components/base/AutoComplete";
@@ -23,7 +24,7 @@ export interface ICreateProjectFormDialogProps {
 }
 
 function CreateProjectFormDialog({ opened, setOpened }: ICreateProjectFormDialogProps): React.JSX.Element {
-    const [t] = useTranslation();
+    const [t, i18n] = useTranslation();
     const navigate = usePageNavigateRef();
     const { mutate } = useCreateProject();
     const { mutateAsync: getTemplates } = useGetProjectTemplates({ interceptToast: true });
@@ -116,7 +117,17 @@ function CreateProjectFormDialog({ opened, setOpened }: ICreateProjectFormDialog
                             <Select.Content>
                                 {templates.map((template) => (
                                     <Select.Item key={template.uid} value={template.name}>
-                                        {template.name} · {template.columns.join(" → ")}
+                                        {template.name} ·{" "}
+                                        {template.columns
+                                            .map(
+                                                (name, index) =>
+                                                    metadataDisplay(
+                                                        { name, description: "" },
+                                                        template.column_definitions?.[index]?.translations,
+                                                        i18n.language
+                                                    ).name
+                                            )
+                                            .join(" → ")}
                                     </Select.Item>
                                 ))}
                             </Select.Content>

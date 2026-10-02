@@ -143,7 +143,17 @@ function ProjectTemplatesPage() {
                         <Select.Content>
                             {templates.map((template) => (
                                 <Select.Item key={template.uid} value={template.name}>
-                                    {template.name} · {template.columns.join(" → ")}
+                                    {template.name} ·{" "}
+                                    {template.columns
+                                        .map(
+                                            (name, index) =>
+                                                metadataDisplay(
+                                                    { name, description: "" },
+                                                    template.column_definitions?.[index]?.translations,
+                                                    i18n.language
+                                                ).name
+                                        )
+                                        .join(" → ")}
                                 </Select.Item>
                             ))}
                         </Select.Content>
