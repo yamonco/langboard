@@ -1,4 +1,5 @@
 import logging
+import re
 from collections.abc import Sequence
 from typing import Any
 from ....ai import BotScheduleHelper, BotScopeHelper
@@ -149,10 +150,22 @@ class ProjectColumnService(BaseDomainService):
         dispatch_effects: bool = True,
         workflow_stage: str | None = None,
         order_override: int | None = None,
+        translations: dict[str, dict[str, str]] | None = None,
     ) -> ProjectColumn | None:
         """Create a workflow column with optional guidance, preserving legacy name-only callers."""
         if len(description) > 4096:
             raise ValueError("Column description must not exceed 4096 characters")
+        translations = {language: dict(text) for language, text in (translations or {}).items()}
+        if len(translations) > 30:
+            raise ValueError("Too many column languages")
+        for language, text in translations.items():
+            if (
+                not re.fullmatch(r"[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*", language)
+                or set(text) - {"name", "description"}
+                or len(text.get("name", "")) > 100
+                or len(text.get("description", "")) > 4096
+            ):
+                raise ValueError("Invalid column translation")
         self._validate_workflow_stage(workflow_stage)
         project = InfraHelper.get_by_id_like(Project, project)
         if not project:
@@ -162,6 +175,7 @@ class ProjectColumnService(BaseDomainService):
             project_id=project.id,
             name=name,
             description=description,
+            translations=translations,
             workflow_stage=workflow_stage,
             order=order_override if order_override is not None else self.repo.project_column.get_next_order(project),
         )

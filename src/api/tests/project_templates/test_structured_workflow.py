@@ -23,6 +23,7 @@ def storage(monkeypatch):
     ProjectTemplate.__table__.create(engine)
     from langboard_shared.domain.models import WorkflowStageDefinition
     from langboard_shared.infrastructure.repositories.factory.WorkflowStageRepository import WorkflowStageRepository
+
     WorkflowStageDefinition.__table__.create(engine)
     ProjectColumn.__table__.create(engine)
     monkeypatch.setattr(DbEngine, "get_main_engine", lambda: engine)
@@ -104,3 +105,48 @@ def test_native_template_creation_persists_semantics_or_calls_project_cleanup(st
     assert [column.name for column in columns] == template.api_response()["columns"]
     project_service.delete.assert_not_called()
     assert column_service.dispatch_created.call_count == 5
+
+
+def test_template_translations_survive_native_create_and_copy(storage, monkeypatch):
+    project = Project(id=1, owner_id=1, title="QA")
+    monkeypatch.setattr(InfraHelper, "get_by_id_like", lambda _model, _uid: project)
+    column_service = ProjectColumnService(None, None, storage)
+    column_service.dispatch_created = Mock()
+    project_service = SimpleNamespace(create=Mock(return_value=project), delete=Mock())
+    services = {"project": project_service, "project_column": column_service}
+    service = ProjectTemplateService(None, services.__getitem__, storage)
+    service._apply_internal_bots = Mock()
+    service._apply_scopes = Mock()
+    service._apply_email_notification_policy = Mock()
+    translations = {"ko": {"name": "대기", "description": "실행 대기"}, "ja": {"name": "待機", "description": ""}}
+    template = ProjectTemplate(
+        name="Localized",
+        columns=[
+            {
+                "name": "Queue",
+                "description": "Waiting",
+                "workflow_stage": "ready",
+                "translations": translations,
+            }
+        ],
+    )
+    storage.project_template.insert(template)
+    _, columns, _ = service.create_project(object(), "QA", template_name="Localized")
+    from langboard_shared.core.db import DbSession, SqlBuilder
+
+    with DbSession.use(readonly=True) as db:
+        loaded = db.exec(SqlBuilder.select.table(ProjectColumn).where(ProjectColumn.name == "Queue")).first()
+    assert loaded.translations == translations
+    assert loaded.name == "Queue" and loaded.description == "Waiting" and loaded.workflow_stage == "ready"
+    from langboard_shared.domain.models import Card
+
+    Card.__table__.create(DbEngine.get_main_engine())
+    storage.project_assigned_internal_bot = SimpleNamespace(get_all_by_project=lambda _: [])
+    storage.project_bot_scope = SimpleNamespace(get_all_by_project=lambda _: [])
+    storage.project_column.get_bot_scopes_by_project = lambda _: []
+    service._email_notification_policy_snapshot = Mock(return_value={})
+    copied = service.copy_from_project(project, "Localized copy")
+    assert copied.column_definitions()[0]["translations"] == translations
+    assert copied.column_definitions()[0]["workflow_stage"] == "ready"
+    assert len(copied.column_definitions()) == 1
+    project_service.delete.assert_not_called()

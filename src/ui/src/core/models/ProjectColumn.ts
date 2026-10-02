@@ -10,6 +10,7 @@ export interface Interface extends IBaseModel {
     project_uid: string;
     name: string;
     description?: string;
+    translations?: Record<string, { name: string; description: string }>;
     workflow_stage?: string | null;
     order: number;
     dock_order?: number | null;

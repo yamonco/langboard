@@ -234,7 +234,12 @@ class ProjectTemplateService(BaseDomainService):
         template = ProjectTemplate(
             name=clean_name,
             columns=[
-                {"name": column.name, "workflow_stage": column.workflow_stage, "description": column.description}
+                {
+                    "name": column.name,
+                    "workflow_stage": column.workflow_stage,
+                    "description": column.description,
+                    "translations": getattr(column, "translations", {}),
+                }
                 for column in columns
             ],
             internal_bots=internal_bots,
@@ -267,6 +272,8 @@ class ProjectTemplateService(BaseDomainService):
         try:
             for definition in template.column_definitions():
                 fields = {"description": definition.get("description", "")}
+                if definition.get("translations"):
+                    fields["translations"] = definition["translations"]
                 if definition.get("workflow_stage") is not None:
                     fields["workflow_stage"] = definition["workflow_stage"]
                 column = column_service.create(user, project, definition["name"], **fields)

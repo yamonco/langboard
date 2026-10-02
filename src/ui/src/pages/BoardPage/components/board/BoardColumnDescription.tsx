@@ -21,6 +21,12 @@ function BoardColumnDescription({ column }: { column: ProjectColumn.TModel }) {
     const [t, i18n] = useTranslation();
     const { hasRoleAction } = useBoard();
     const description = column.useField("description") ?? "";
+    const translations = column.useField("translations");
+    const displayDescription = metadataDisplay(
+        { name: column.name, description },
+        { ...translations, en: { name: column.name, description }, "en-US": { name: column.name, description } },
+        i18n.resolvedLanguage ?? i18n.language
+    ).description;
     const workflowStage = column.useField("workflow_stage") ?? null;
     const [open, setOpen] = useState(false);
     const [draft, setDraft] = useState(description);
@@ -146,7 +152,7 @@ function BoardColumnDescription({ column }: { column: ProjectColumn.TModel }) {
                     </>
                 ) : (
                     <>
-                        <p className="whitespace-pre-wrap break-words text-sm">{description || t("project.No column description")}</p>
+                        <p className="whitespace-pre-wrap break-words text-sm">{displayDescription || t("project.No column description")}</p>
                         <p className="text-xs text-muted-foreground">
                             {t("board.Workflow stage: {{stage}}", {
                                 stage: selectedStage

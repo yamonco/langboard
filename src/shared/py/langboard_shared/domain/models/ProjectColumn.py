@@ -1,5 +1,5 @@
 from typing import Any, ClassVar
-from sqlalchemy import TEXT
+from sqlalchemy import JSON, TEXT
 from ...core.db import ApiField, Field, SnowflakeIDField, SoftDeleteModel
 from ...core.types import SnowflakeID
 from .Project import Project
@@ -20,6 +20,9 @@ class ProjectColumn(SoftDeleteModel, table=True):
     dock_order: int | None = Field(default=None, nullable=True, api_field=ApiField())
     is_archive: bool = Field(default=False, nullable=False, api_field=ApiField())
     # Explicit board workflow meaning. None means unclassified, never inferred from the display name.
+    translations: dict[str, dict[str, str]] = Field(
+        default_factory=dict, nullable=False, sa_type=JSON, api_field=ApiField()
+    )
     workflow_stage: str | None = Field(default=None, nullable=True, api_field=ApiField())
 
     def notification_data(self) -> dict[str, Any]:
