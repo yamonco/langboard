@@ -110,3 +110,13 @@ test("Escape from page-owned portaled controls dismisses the physical mobile pan
     await expect(trigger).toBeFocused();
     await expect(page.getByRole("heading", { name: "Dashboard", exact: true })).toBeVisible();
 });
+
+test("same workspace navigation preserves sidebar state", async ({ page }) => {
+    await page.goto("/src/components/Layout/workbench-shell.fixture.html");
+    await page.getByRole("link", { name: "Open Board", exact: true }).click();
+    await page.getByRole("textbox", { name: "Sidebar search", exact: true }).fill("retained query");
+    await page.getByRole("link", { name: "Open Card", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Card", exact: true })).toBeVisible();
+    await expect(page.getByRole("textbox", { name: "Sidebar search", exact: true })).toHaveValue("retained query");
+    await expect(page.locator("[inert]")).toHaveCount(0);
+});

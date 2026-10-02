@@ -20,7 +20,8 @@ export default function WorkbenchRouteLayout() {
                 inert={pending || props?.inert}
                 aria-busy={pending || props?.["aria-busy"]}
                 workbenchContext={configuration?.hasContext ? <div ref={setSidebarSlot} className="size-full" /> : undefined}
-                workbenchContextHidden={pending || props?.workbenchContextHidden}
+                // Keep the portal target mounted during route registration; inert blocks stale actions.
+                workbenchContextHidden={props?.workbenchContextHidden}
             >
                 {outlet}
             </DashboardStyledLayoutFrame>

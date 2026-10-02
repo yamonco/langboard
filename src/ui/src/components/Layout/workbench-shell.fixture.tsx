@@ -10,9 +10,11 @@ import "@/assets/styles/main.css";
 
 const PageContext = createContext("missing context");
 function SidebarContent() {
+    const [search, setSearch] = useState("");
     return (
         <>
             <p>{useContext(PageContext)}</p>
+            <input aria-label="Sidebar search" value={search} onChange={(event) => setSearch(event.currentTarget.value)} />
             <DropdownMenu.Root>
                 <DropdownMenu.Trigger asChild>
                     <button type="button">Nested menu</button>
