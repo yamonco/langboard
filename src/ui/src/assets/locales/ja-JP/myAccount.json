@@ -34,5 +34,7 @@
       "new_email": "このメールアドレスは使用されています。別のアドレスを入力してください。"
     },
     "Invalid language.": "無効な言語です。"
-  }
+  },
+  "Default language": "既定の言語",
+  "Default language description": "ログイン時に使用する言語を選択してください。変更はアカウントに保存されます。"
 }

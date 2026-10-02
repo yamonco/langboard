@@ -34,5 +34,7 @@
       "new_email": "邮箱已被使用。请尝试其他邮箱。"
     },
     "Invalid language.": "无效语言。"
-  }
+  },
+  "Default language": "默认语言",
+  "Default language description": "选择登录时使用的语言。更改将保存到您的账号。"
 }

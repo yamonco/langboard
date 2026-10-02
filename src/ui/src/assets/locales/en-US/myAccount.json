@@ -34,5 +34,7 @@
       "new_email": "Email already exists. Try another one."
     },
     "Invalid language.": "Invalid language."
-  }
+  },
+  "Default language": "Default language",
+  "Default language description": "Choose the language used when you sign in. Changes are saved to your account."
 }

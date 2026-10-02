@@ -5,6 +5,7 @@ import LanguageSwitcher from "@/components/LanguageSwitcher";
 import setupApiErrorHandler from "@/core/helpers/setupApiErrorHandler";
 import { AuthUser } from "@/core/models";
 import { useState } from "react";
+import { normalizeLocale } from "@/core/utils/LocalePolicy";
 
 export interface IUserPreferenceLanguageSwitcherProps extends Omit<React.ComponentProps<typeof LanguageSwitcher>, "asForm"> {
     currentUser: AuthUser.TModel;
@@ -21,13 +22,15 @@ function UserPreferenceLanguageSwitcher({ currentUser, ...props }: IUserPreferen
             return;
         }
 
+        const previousLanguage = normalizeLocale(i18n.language);
         setIsValidating(true);
 
-        const promise = mutateAsync({ lang });
+        const promise = i18n.changeLanguage(lang).then(() => mutateAsync({ lang }));
 
         Toast.Add.promise(promise, {
             loading: t("common.Updating..."),
             error: (error) => {
+                i18n.changeLanguage(previousLanguage);
                 const messageRef = { message: "" };
                 const { handle } = setupApiErrorHandler({}, messageRef);
 
@@ -36,7 +39,6 @@ function UserPreferenceLanguageSwitcher({ currentUser, ...props }: IUserPreferen
             },
             success: () => {
                 currentUser.preferred_lang = lang;
-                i18n.changeLanguage(lang);
                 return t("successes.Preferred language updated successfully.");
             },
             finally: () => {
@@ -49,7 +51,7 @@ function UserPreferenceLanguageSwitcher({ currentUser, ...props }: IUserPreferen
         <LanguageSwitcher
             {...props}
             asForm={{
-                initialValue: preferredLang,
+                initialValue: normalizeLocale(i18n.language),
                 disabled: isValidating,
                 onChange: handleUpdate,
             }}
