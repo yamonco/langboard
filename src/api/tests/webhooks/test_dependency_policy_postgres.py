@@ -29,6 +29,8 @@ def policy_db(monkeypatch):
         with engine.begin() as conn:
             for sql in (
                 "CREATE TABLE project_column(id bigint PRIMARY KEY, project_id bigint, deleted_at timestamptz, is_archive boolean, workflow_stage text)",
+                "CREATE TABLE workflow_stage_definition(key text PRIMARY KEY, counts_as_completed boolean, is_active boolean)",
+                "INSERT INTO workflow_stage_definition VALUES('ready',false,true),('active',false,true),('closed',true,true),('released',true,false)",
                 "CREATE TABLE card(id bigint PRIMARY KEY, project_id bigint, project_column_id bigint, deleted_at timestamptz, archived_at timestamptz, source_type text, title text)",
                 "CREATE TABLE global_card_relationship_type(id bigint PRIMARY KEY, machine_semantic text, is_active boolean)",
                 "CREATE TABLE card_relationship(id bigint PRIMARY KEY, card_id_parent bigint, card_id_child bigint, relationship_type_id bigint)",
@@ -137,3 +139,26 @@ def test_delete_and_type_change_immediately_recompute_same_policy(policy_db):
     with policy_db.begin() as conn:
         conn.execute(text("DELETE FROM card_relationship"))
     assert ready(policy_db) is True
+
+
+@pytest.mark.parametrize("stage, expected_ready", [("released", True), (None, False), ("missing", False)])
+def test_registry_keys_and_missing_definitions_control_both_paths(policy_db, stage, expected_ready):
+    edge(policy_db, 22, 1)
+    with policy_db.begin() as conn:
+        conn.execute(text("UPDATE project_column SET workflow_stage=:stage WHERE id=12"), {"stage": stage})
+    assert ready(policy_db) is expected_ready
+    assert bool(dependency_blockers([20])[20]) is not expected_ready
+
+
+def test_policy_edit_reinterprets_existing_cards_without_name_or_terminal_fallback(policy_db):
+    edge(policy_db, 22, 1)
+    assert ready(policy_db) is True
+    with policy_db.begin() as conn:
+        conn.execute(text("UPDATE workflow_stage_definition SET counts_as_completed=false WHERE key='closed'"))
+    assert ready(policy_db) is False
+    assert len(dependency_blockers([20])[20]) == 1
+    with policy_db.begin() as conn:
+        conn.execute(text("UPDATE workflow_stage_definition SET counts_as_completed=true WHERE key='active'"))
+        conn.execute(text("UPDATE project_column SET workflow_stage='active' WHERE id=12"))
+    assert ready(policy_db) is True
+    assert dependency_blockers([20]) == {20: []}

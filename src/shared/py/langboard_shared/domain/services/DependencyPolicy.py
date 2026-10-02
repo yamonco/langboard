@@ -15,6 +15,7 @@ BLOCKING_RELATION_JOINS = """
       AND dependency_type.machine_semantic = 'blocks'
     LEFT JOIN card prerequisite ON prerequisite.id = r.card_id_parent
     LEFT JOIN project_column prerequisite_column ON prerequisite_column.id = prerequisite.project_column_id
+    LEFT JOIN workflow_stage_definition prerequisite_stage ON prerequisite_stage.key = prerequisite_column.workflow_stage
 """
 UNSATISFIED_PREREQUISITE = """
     (prerequisite.id IS NULL OR prerequisite.deleted_at IS NOT NULL
@@ -23,9 +24,7 @@ UNSATISFIED_PREREQUISITE = """
      OR prerequisite_column.id IS NULL OR prerequisite_column.deleted_at IS NOT NULL
      OR prerequisite_column.project_id IS DISTINCT FROM c.project_id
      OR prerequisite_column.is_archive
-     OR COALESCE(prerequisite_column.workflow_stage,
-         CASE WHEN b.column_semantic_ids ->> (prerequisite.project_column_id::text) = 'terminal'
-              THEN 'closed' END) IS DISTINCT FROM 'closed')
+     OR prerequisite_stage.counts_as_completed IS DISTINCT FROM TRUE)
 """
 _VISIBLE_PREREQUISITE = """
     prerequisite.project_id = c.project_id AND prerequisite.deleted_at IS NULL
@@ -45,10 +44,7 @@ def dependency_blockers(card_ids: list[int]) -> dict[int, list[dict]]:
             text(f"CASE WHEN {_VISIBLE_PREREQUISITE} THEN prerequisite.title ELSE NULL END"),
         )
         .select_from(
-            text(
-                "card c JOIN card_relationship r ON r.card_id_child = c.id "
-                "LEFT JOIN project_execution_binding b ON b.project_id = c.project_id " + BLOCKING_RELATION_JOINS
-            )
+            text("card c JOIN card_relationship r ON r.card_id_child = c.id " + BLOCKING_RELATION_JOINS)
         )
         .where(text("c.id IN :card_ids").bindparams(bindparam("card_ids", expanding=True)))
         .where(text(UNSATISFIED_PREREQUISITE))

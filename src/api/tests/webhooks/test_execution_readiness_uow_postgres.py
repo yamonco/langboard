@@ -46,6 +46,8 @@ def test_application_uow_emits_only_ready_edges_and_freezes_payload(monkeypatch:
         with engine.begin() as connection:
             for statement in (
                 "CREATE TABLE project_column (id bigint PRIMARY KEY, deleted_at timestamptz, is_archive boolean NOT NULL, workflow_stage text, project_id bigint)",
+                "CREATE TABLE workflow_stage_definition (key text PRIMARY KEY, counts_as_completed boolean NOT NULL)",
+                "INSERT INTO workflow_stage_definition VALUES ('closed',true),('released',true)",
                 "CREATE TABLE webhook_setting (id bigint PRIMARY KEY, secret_id bigint, events jsonb NOT NULL)",
                 # Baseline binding shape as the public main history leaves it;
                 # the install migration adds the semantic id columns on top.
@@ -133,6 +135,7 @@ def test_application_uow_emits_only_ready_edges_and_freezes_payload(monkeypatch:
         assert (current.is_ready, current.generation) == (False, 0)
         with execution_readiness_uow() as execution:
             execution.watch_card_and_dependents(101)
+            execution.db.exec(text("UPDATE project_column SET workflow_stage = 'released' WHERE id = 21"))
             execution.db.exec(text("UPDATE card SET project_column_id = 21 WHERE id = 101"))
         current = current_execution(102)
         assert (current.is_ready, current.generation) == (True, 1)
@@ -210,6 +213,8 @@ def test_ready_content_edit_drains_latest_content_and_only_readiness_edges_super
         with engine.begin() as connection:
             for statement in (
                 "CREATE TABLE project_column (id bigint PRIMARY KEY, deleted_at timestamptz, is_archive boolean NOT NULL, workflow_stage text, project_id bigint)",
+                "CREATE TABLE workflow_stage_definition (key text PRIMARY KEY, counts_as_completed boolean NOT NULL)",
+                "INSERT INTO workflow_stage_definition VALUES ('closed',true),('released',true)",
                 "CREATE TABLE webhook_setting (id bigint PRIMARY KEY, secret_id bigint, events jsonb NOT NULL)",
                 # Baseline binding shape as the public main history leaves it;
                 # the install migration adds the semantic id columns on top.
@@ -334,6 +339,7 @@ def test_ready_content_edit_drains_latest_content_and_only_readiness_edges_super
         # Completion 4: blocked → ready creates generation 6-style new generation; only it executes.
         with execution_readiness_uow() as execution:
             execution.watch_card_and_dependents(101)
+            execution.db.exec(text("UPDATE project_column SET workflow_stage = 'released' WHERE id = 21"))
             execution.db.exec(text("UPDATE card SET project_column_id = 21 WHERE id = 101"))
         current = current_execution(100)
         assert (current.is_ready, current.generation) == (True, 2)
