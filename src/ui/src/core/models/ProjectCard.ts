@@ -61,7 +61,11 @@ export interface Interface extends IBaseModel {
 
 export interface IWorkState {
     version: number;
-    workflow_stage: "backlog" | "ready" | "active" | "review" | "closed" | "reference" | null;
+    workflow_stage: string | null;
+    completed?: boolean | null;
+    active_queue_policy?: "include" | "exclude" | "conditional" | null;
+    overdue_policy?: "normal" | "suppress" | null;
+    overdue_suppressed?: boolean | null;
     verification_state: "not_required" | "unverified" | "partial" | "verified" | "stale";
     verification_source_change_seq: number;
     verification: {

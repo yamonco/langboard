@@ -58,10 +58,12 @@ const BoardCardDeadline = memo(() => {
     const checklistTotalCount = card.useField("checklist_total_count") ?? 0;
     const { deadlineClock } = useBoard();
     const completed = card.useField("completed") ?? false;
+    const workState = card.useField("work_state");
     const isFinished = isDeadlineWarningSuppressed({
         archivedAt,
         checklist: { completed: checklistCompletedCount, total: checklistTotalCount },
         completed,
+        workState,
     });
     const isOverdue = getDeadlinePressureLevel({ deadlineAt: deadline, isCompleted: isFinished, now: deadlineClock }) === "overdue";
     const overdueDays = getOverdueDays({ deadlineAt: deadline, now: deadlineClock });

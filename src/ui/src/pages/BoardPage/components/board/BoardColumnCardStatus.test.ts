@@ -135,3 +135,23 @@ describe("board column card status", () => {
         assert.equal(getUpcomingDeadlineDays({ deadlineAt: at(30), now, isCompleted: true }), null);
     });
 });
+
+describe("server workflow deadline policy", () => {
+    const checklist = { completed: 0, total: 2 };
+    it("suppresses incomplete work when the authoritative policy requests it", () => {
+        assert.equal(isDeadlineWarningSuppressed({ checklist, workState: { completed: false, overdue_suppressed: true } }), true);
+        assert.equal(isDeadlineWarningSuppressed({ checklist, workState: { completed: true, overdue_suppressed: false } }), true);
+    });
+    it("does not treat missing or false policy as completion", () => {
+        assert.equal(isDeadlineWarningSuppressed({ checklist, workState: { completed: false, overdue_suppressed: false } }), false);
+        assert.equal(isDeadlineWarningSuppressed({ checklist, workState: { completed: null, overdue_suppressed: null } }), false);
+        assert.equal(isDeadlineWarningSuppressed({ checklist }), false);
+    });
+    it("retains archive and fully completed checklist suppression", () => {
+        assert.equal(isDeadlineWarningSuppressed({ checklist, workState: { lifecycle: "archived" } }), true);
+        assert.equal(
+            isDeadlineWarningSuppressed({ checklist: { completed: 2, total: 2 }, workState: { completed: false, overdue_suppressed: false } }),
+            true
+        );
+    });
+});

@@ -124,8 +124,13 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
     );
     const isChecklistTerminated = isChecklistCompleted(checklistProgress);
     const completed = card.useField("completed") ?? false;
-    const isFinished = isDeadlineWarningSuppressed({ archivedAt, checklist: checklistProgress, completed });
-    const staleDays = getStaleDays({ updatedAt, now: deadlineClock, isFinished });
+    const workState = card.useField("work_state");
+    const isFinished = isDeadlineWarningSuppressed({ archivedAt, checklist: checklistProgress, completed, workState });
+    const staleDays = getStaleDays({
+        updatedAt,
+        now: deadlineClock,
+        isFinished: Boolean(archivedAt) || isChecklistTerminated || completed || workState?.completed === true || workState?.lifecycle === "archived",
+    });
     const deadlinePressure = useMemo(
         () => calculateDeadlinePressure({ deadlineAt, isCompleted: isFinished, now: deadlineClock }),
         [deadlineAt, isFinished, deadlineClock]
