@@ -41,6 +41,7 @@ const DEFAULT_CONFIGS: IApiErrorHandlerMap = {
         toast: true,
     },
     nonApi: {
+        message: () => t("errors.Internal server error"),
         toast: true,
     },
     network: {
