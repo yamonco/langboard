@@ -91,8 +91,14 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     } else if (process.argv.includes("--inventory")) {
         process.stdout.write(JSON.stringify(findings, null, 2) + "\n");
     } else {
-        const introduced = regressions(findings, JSON.parse(readFileSync(baselinePath, "utf8")));
+        const baseline = JSON.parse(readFileSync(baselinePath, "utf8"));
+        const introduced = regressions(findings, baseline);
         assert.equal(introduced.length, 0, `New untranslated UI literals:\n${JSON.stringify(introduced, null, 2)}`);
+        assert.equal(
+            regressions(baseline, findings).length,
+            0,
+            "Remove translated or obsolete literals from the baseline to prevent their reintroduction."
+        );
         console.log(JSON.stringify({ existingCandidates: findings.length, newCandidates: introduced.length }));
     }
 }

@@ -40,3 +40,19 @@ test("calendar and duration follow all four account languages without remount", 
         await expect(page.getByTestId("overdue-other")).toHaveText(overdue[locale as keyof typeof overdue][1]);
     }
 });
+
+test("shared accessible UI labels update with the account language", async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem("lang", "en-US"));
+    await page.goto("/src/core/utils/LocaleFormat.fixture.html");
+    for (const [locale, breadcrumb, close, thoughts] of [
+        ["ko-KR", "이동 경로", "닫기", "생각 펼치기..."],
+        ["ja-JP", "パンくずリスト", "閉じる", "思考を表示..."],
+        ["zh-CN", "导航路径", "关闭", "展开思考..."],
+        ["en-US", "Breadcrumb", "Close", "Show thoughts..."],
+    ]) {
+        await page.getByRole("button", { name: locale, exact: true }).click();
+        await expect(page.getByTestId("common-ui").getByRole("navigation", { name: breadcrumb })).toBeVisible();
+        await expect(page.getByTestId("common-ui").getByRole("button", { name: close, exact: true })).toBeVisible();
+        await expect(page.getByTestId("common-ui").getByRole("button", { name: thoughts })).toBeVisible();
+    }
+});

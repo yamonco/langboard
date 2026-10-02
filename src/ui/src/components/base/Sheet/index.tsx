@@ -3,6 +3,7 @@
 
 import * as SheetPrimitive from "@radix-ui/react-dialog";
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { type VariantProps, tv } from "tailwind-variants";
 import IconComponent from "@/components/base/IconComponent";
 import { cn } from "@/core/utils/ComponentUtils";
@@ -52,18 +53,21 @@ const sheetVariants = tv(
 interface SheetContentProps extends React.ComponentPropsWithoutRef<typeof SheetPrimitive.Content>, VariantProps<typeof sheetVariants> {}
 
 const Content = React.forwardRef<React.ComponentRef<typeof SheetPrimitive.Content>, SheetContentProps>(
-    ({ side = "right", className, children, ...props }, ref) => (
-        <Portal>
-            <Overlay />
-            <SheetPrimitive.Content ref={ref} className={cn(sheetVariants({ side }), className)} {...props}>
-                <SheetPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-secondary">
-                    <IconComponent icon="x" size="5" />
-                    <span className="sr-only">Close</span>
-                </SheetPrimitive.Close>
-                {children}
-            </SheetPrimitive.Content>
-        </Portal>
-    )
+    ({ side = "right", className, children, ...props }, ref) => {
+        const [t] = useTranslation();
+        return (
+            <Portal>
+                <Overlay />
+                <SheetPrimitive.Content ref={ref} className={cn(sheetVariants({ side }), className)} {...props}>
+                    <SheetPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-secondary">
+                        <IconComponent icon="x" size="5" />
+                        <span className="sr-only">{t("common.Close")}</span>
+                    </SheetPrimitive.Close>
+                    {children}
+                </SheetPrimitive.Content>
+            </Portal>
+        );
+    }
 );
 Content.displayName = SheetPrimitive.Content.displayName;
 

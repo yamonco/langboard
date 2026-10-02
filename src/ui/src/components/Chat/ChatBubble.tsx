@@ -63,9 +63,10 @@ interface ChatBubbleAvatarProps {
 }
 
 const ChatBubbleAvatar: React.FC<ChatBubbleAvatarProps> = ({ src, fallback, title, titleAlign, titleSide, className }) => {
+    const [t] = useTranslation();
     const avatar = (
         <Avatar.Root className={className}>
-            <Avatar.Image src={src} alt="Avatar" />
+            <Avatar.Image src={src} alt={t("common.Avatar")} />
             <Avatar.Fallback>{fallback}</Avatar.Fallback>
         </Avatar.Root>
     );

@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import IconComponent from "@/components/base/IconComponent";
 import Tooltip from "@/components/base/Tooltip";
 import { cn } from "@/core/utils/ComponentUtils";
@@ -12,9 +13,10 @@ export interface IActivityRailItem {
 }
 
 export default function ActivityRail({ items }: { items: IActivityRailItem[] }) {
+    const [t] = useTranslation();
     return (
         <nav
-            aria-label="Workspace"
+            aria-label={t("common.Workspace")}
             data-workbench-context=""
             className="hidden w-12 shrink-0 flex-col items-center gap-1 overflow-y-auto border-r bg-background py-2 md:flex"
         >

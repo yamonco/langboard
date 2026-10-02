@@ -85,5 +85,14 @@
   "Explorer": "탐색기",
   "Breadcrumb": "이동 경로",
   "Sign in with another email": "다른 이메일로 로그인",
-  "Workflow stage": "워크플로우 단계"
+  "Workflow stage": "워크플로우 단계",
+  "Avatar": "아바타",
+  "Scroll to bottom": "맨 아래로 이동",
+  "Workspace": "작업 공간",
+  "Dismiss alert": "알림 닫기",
+  "Filter...": "필터...",
+  "Show thoughts...": "생각 펼치기...",
+  "Thoughts": "생각",
+  "Connect company SSO": "회사 SSO 연결",
+  "Could not connect company SSO. Please try again.": "회사 SSO에 연결하지 못했습니다. 다시 시도해 주세요."
 }

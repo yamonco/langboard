@@ -24,6 +24,7 @@ test("raw accessible text, dialog and validation literals are detected; translat
     assert.equal(regressions(found, []).length, 6);
     assert.equal(regressions(found, found).length, 0);
     assert.equal(regressions([...found, found[0]], found).length, 1);
+    assert.equal(regressions(found, found.slice(1)).length, 1);
     assert.equal(regressions(scanSource("Example.tsx", '<button aria-label={t("common.Open")}>{user.title}</button>'), found).length, 0);
 });
 

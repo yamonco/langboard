@@ -85,5 +85,14 @@
   "Explorer": "エクスプローラー",
   "Breadcrumb": "パンくずリスト",
   "Sign in with another email": "別のメールアドレスでログイン",
-  "Workflow stage": "ワークフローステージ"
+  "Workflow stage": "ワークフローステージ",
+  "Avatar": "アバター",
+  "Scroll to bottom": "一番下へ移動",
+  "Workspace": "ワークスペース",
+  "Dismiss alert": "通知を閉じる",
+  "Filter...": "フィルター...",
+  "Show thoughts...": "思考を表示...",
+  "Thoughts": "思考",
+  "Connect company SSO": "会社のSSOに接続",
+  "Could not connect company SSO. Please try again.": "会社のSSOに接続できませんでした。もう一度お試しください。"
 }

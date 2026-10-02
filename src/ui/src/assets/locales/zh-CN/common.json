@@ -85,5 +85,14 @@
   "Explorer": "浏览器",
   "Breadcrumb": "导航路径",
   "Sign in with another email": "使用其他电子邮箱登录",
-  "Workflow stage": "工作流阶段"
+  "Workflow stage": "工作流阶段",
+  "Avatar": "头像",
+  "Scroll to bottom": "滚动到底部",
+  "Workspace": "工作空间",
+  "Dismiss alert": "关闭提示",
+  "Filter...": "筛选...",
+  "Show thoughts...": "展开思考...",
+  "Thoughts": "思考",
+  "Connect company SSO": "连接公司SSO",
+  "Could not connect company SSO. Please try again.": "无法连接公司SSO，请重试。"
 }

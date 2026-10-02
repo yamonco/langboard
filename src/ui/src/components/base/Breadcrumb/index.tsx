@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import * as React from "react";
 import { Slot } from "@radix-ui/react-slot";
 import { ChevronRight, MoreHorizontal } from "lucide-react";
@@ -8,7 +9,10 @@ const Root = React.forwardRef<
     React.ComponentPropsWithoutRef<"nav"> & {
         separator?: React.ReactNode;
     }
->(({ ...props }, ref) => <nav ref={ref} aria-label="breadcrumb" {...props} />);
+>(({ ...props }, ref) => {
+    const [t] = useTranslation();
+    return <nav ref={ref} aria-label={t("common.Breadcrumb")} {...props} />;
+});
 Root.displayName = "Breadcrumb";
 
 const List = React.forwardRef<HTMLOListElement, React.ComponentPropsWithoutRef<"ol">>(({ className, ...props }, ref) => (
@@ -48,10 +52,11 @@ function Separator({ children, className, ...props }: React.ComponentProps<"li">
 Separator.displayName = "BreadcrumbSeparator";
 
 function Ellipsis({ className, ...props }: React.ComponentProps<"span">) {
+    const [t] = useTranslation();
     return (
         <span role="presentation" aria-hidden="true" className={cn("flex size-9 items-center justify-center", className)} {...props}>
             <MoreHorizontal className="size-4" />
-            <span className="sr-only">More</span>
+            <span className="sr-only">{t("common.More")}</span>
         </span>
     );
 }

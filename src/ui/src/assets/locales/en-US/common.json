@@ -85,5 +85,14 @@
   "Explorer": "Explorer",
   "Breadcrumb": "Breadcrumb",
   "Sign in with another email": "Sign in with another email",
-  "Workflow stage": "Workflow stage"
+  "Workflow stage": "Workflow stage",
+  "Avatar": "Avatar",
+  "Scroll to bottom": "Scroll to bottom",
+  "Workspace": "Workspace",
+  "Dismiss alert": "Dismiss alert",
+  "Filter...": "Filter...",
+  "Show thoughts...": "Show thoughts...",
+  "Thoughts": "Thoughts",
+  "Connect company SSO": "Connect company SSO",
+  "Could not connect company SSO. Please try again.": "Could not connect company SSO. Please try again."
 }

@@ -3,6 +3,7 @@
 
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import IconComponent from "@/components/base/IconComponent";
 import { cn } from "@/core/utils/ComponentUtils";
 import ScrollArea from "@/components/base/ScrollArea";
@@ -33,19 +34,22 @@ const Overlay = React.forwardRef<React.ComponentRef<typeof DialogPrimitive.Overl
 Overlay.displayName = DialogPrimitive.Overlay.displayName;
 
 const CloseButton = React.forwardRef<React.ComponentRef<typeof DialogPrimitive.Close>, React.ComponentPropsWithoutRef<typeof DialogPrimitive.Close>>(
-    ({ className, ...props }, ref) => (
-        <DialogPrimitive.Close
-            className={cn(
-                "rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground",
-                className
-            )}
-            {...props}
-            ref={ref}
-        >
-            <IconComponent icon="x" size="4" />
-            <span className="sr-only">Close</span>
-        </DialogPrimitive.Close>
-    )
+    ({ className, ...props }, ref) => {
+        const [t] = useTranslation();
+        return (
+            <DialogPrimitive.Close
+                className={cn(
+                    "rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground",
+                    className
+                )}
+                {...props}
+                ref={ref}
+            >
+                <IconComponent icon="x" size="4" />
+                <span className="sr-only">{t("common.Close")}</span>
+            </DialogPrimitive.Close>
+        );
+    }
 );
 
 interface IContentProps extends React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> {

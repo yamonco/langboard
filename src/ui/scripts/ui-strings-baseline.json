@@ -1,17 +1,5 @@
 [
   {
-    "file": "src/components/Chat/ChatBubble.tsx",
-    "line": 68,
-    "kind": "attribute:alt",
-    "text": "Avatar"
-  },
-  {
-    "file": "src/components/Chat/ChatMessageList.tsx",
-    "line": 66,
-    "kind": "attribute:aria-label",
-    "text": "Scroll to bottom"
-  },
-  {
     "file": "src/components/Header/index.tsx",
     "line": 82,
     "kind": "jsx-text",
@@ -24,72 +12,6 @@
     "text": "⌘K"
   },
   {
-    "file": "src/components/Layout/ActivityRail.tsx",
-    "line": 17,
-    "kind": "attribute:aria-label",
-    "text": "Workspace"
-  },
-  {
-    "file": "src/components/Layout/FormOnlyLayout.tsx",
-    "line": 91,
-    "kind": "attribute:alt",
-    "text": "Logo"
-  },
-  {
-    "file": "src/components/Markdown/ThinkBlock.tsx",
-    "line": 13,
-    "kind": "jsx-text",
-    "text": "Think: Show more..."
-  },
-  {
-    "file": "src/components/Markdown/ThinkBlock.tsx",
-    "line": 19,
-    "kind": "jsx-text",
-    "text": "Think:"
-  },
-  {
-    "file": "src/components/base/Alert/index.tsx",
-    "line": 76,
-    "kind": "attribute:aria-label",
-    "text": "Dismiss alert"
-  },
-  {
-    "file": "src/components/base/Breadcrumb/index.tsx",
-    "line": 11,
-    "kind": "attribute:aria-label",
-    "text": "breadcrumb"
-  },
-  {
-    "file": "src/components/base/Breadcrumb/index.tsx",
-    "line": 54,
-    "kind": "jsx-text",
-    "text": "More"
-  },
-  {
-    "file": "src/components/base/DataTable/Table.tsx",
-    "line": 288,
-    "kind": "attribute:placeholder",
-    "text": "Filter..."
-  },
-  {
-    "file": "src/components/base/Dialog/index.tsx",
-    "line": 46,
-    "kind": "jsx-text",
-    "text": "Close"
-  },
-  {
-    "file": "src/components/base/Sheet/index.tsx",
-    "line": 61,
-    "kind": "jsx-text",
-    "text": "Close"
-  },
-  {
-    "file": "src/components/bots/BotValueInput/Text.tsx",
-    "line": 57,
-    "kind": "attribute:title",
-    "text": "Save"
-  },
-  {
     "file": "src/components/plate-ui/code-block-node.tsx",
     "line": 36,
     "kind": "attribute:title",
@@ -100,12 +22,6 @@
     "line": 137,
     "kind": "jsx-text",
     "text": "Copy"
-  },
-  {
-    "file": "src/components/plate-ui/emoji-node.tsx",
-    "line": 39,
-    "kind": "jsx-text",
-    "text": "No results"
   },
   {
     "file": "src/components/plate-ui/emoji-toolbar-button.tsx",
@@ -160,18 +76,6 @@
     "line": 231,
     "kind": "jsx-text",
     "text": "x"
-  },
-  {
-    "file": "src/pages/AccountPage/ProfilePage.tsx",
-    "line": 172,
-    "kind": "dialog-toast",
-    "text": "Could not connect company SSO. Please try again."
-  },
-  {
-    "file": "src/pages/AccountPage/ProfilePage.tsx",
-    "line": 176,
-    "kind": "jsx-text",
-    "text": "Connect company SSO"
   },
   {
     "file": "src/pages/BoardPage/components/board/BoardColumn.tsx",

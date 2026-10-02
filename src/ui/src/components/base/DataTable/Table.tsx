@@ -237,6 +237,7 @@ function DataTableTable<T extends Record<string, any>>({
 }
 
 function DataTableColumnFilter<T extends Record<string, any>>({ column }: { column: TDataTableColumn<T> }) {
+    const [t] = useTranslation();
     const { columnFilters, paginate } = useDataTable();
     const [inputValue, setInputValue] = useState(columnFilters[String(column.key)] || "");
     const lastInputValueRef = useRef(columnFilters[String(column.key)] || "");
@@ -285,7 +286,7 @@ function DataTableColumnFilter<T extends Record<string, any>>({ column }: { colu
 
     return (
         <Input
-            placeholder="Filter..."
+            placeholder={t("common.Filter...")}
             value={inputValue}
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}

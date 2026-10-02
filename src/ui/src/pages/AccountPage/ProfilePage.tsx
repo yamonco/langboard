@@ -169,11 +169,11 @@ function ProfilePage(): React.JSX.Element {
                                 window.location.assign(data.authorize_url);
                             } catch {
                                 setIsLinkingOidc(false);
-                                Toast.Add.error("Could not connect company SSO. Please try again.");
+                                Toast.Add.error(t("common.Could not connect company SSO. Please try again."));
                             }
                         }}
                     >
-                        Connect company SSO
+                        {t("common.Connect company SSO")}
                     </Button>
                 </Flex>
             )}
