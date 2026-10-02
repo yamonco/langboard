@@ -1,3 +1,5 @@
+import { SUPPORTED_LOCALES } from "@/core/utils/LocalePolicy";
+
 export const IS_PRODUCTION = process.env.IS_PRODUCTION === "true";
 
 export const APP_NAME = process.env.PROJECT_NAME || "App";
@@ -11,7 +13,7 @@ export const IS_OLLAMA_RUNNING = process.env.IS_OLLAMA_RUNNING === "true" || fal
 export const APP_ACCESS_TOKEN = `access_token_${APP_SHORT_NAME}`;
 export const APP_REFRESH_TOKEN = `refresh_token_${APP_SHORT_NAME}`;
 
-export const LANGUAGE_LOCALES = ["en-US", "ko-KR", "ja-JP", "zh-CN"];
+export const LANGUAGE_LOCALES: string[] = [...SUPPORTED_LOCALES];
 
 export const EMAIL_REGEX = /^\S+@\S+\.\S+$/;
 

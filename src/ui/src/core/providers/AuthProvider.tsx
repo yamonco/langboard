@@ -1,3 +1,4 @@
+import { normalizeLocale } from "@/core/utils/LocalePolicy";
 import { createContext, useContext, useEffect, useRef } from "react";
 import { Routing } from "@langboard/core/constants";
 import { api, refresh } from "@/core/helpers/Api";
@@ -47,7 +48,7 @@ export const AuthProvider = ({ children }: IAuthProviderProps): React.ReactNode 
         }
 
         if (!getAuthStore().hasSetPreferredLang()) {
-            i18n.changeLanguage(currentUser.preferred_lang);
+            i18n.changeLanguage(normalizeLocale(currentUser.preferred_lang));
             getAuthStore().setPreferredLangHandled();
         }
     }, [state]);
