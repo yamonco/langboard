@@ -30,9 +30,51 @@ SI_COLUMN_DESCRIPTIONS = [
     "Completed and accepted work. Move here only when completion is explicitly confirmed.",
 ]
 SI_WORKFLOW_STAGES = ["backlog", "ready", "active", "review", "closed"]
+SI_COLUMN_TRANSLATIONS = {
+    "ko": [
+        ("백로그", "미분류 또는 아직 맡지 않은 업무입니다. 담당자로 지정된 것만으로 작업 시작을 의미하지 않습니다."),
+        (
+            "준비",
+            "담당자와 준비가 갖춰져 시작을 기다리는 업무입니다. 백로그 업무를 맡기로 했다면 이 단계를 제안합니다.",
+        ),
+        ("진행 중", "실제로 수행 중인 업무입니다. 단순 배정이 아니라 담당자가 명시적으로 작업을 시작할 때 진입합니다."),
+        ("검토", "구현이 끝나 검토 또는 인수를 기다립니다. 담당자 배정으로 승인을 추론하지 않습니다."),
+        ("완료", "완료되고 인수된 업무입니다. 완료가 명시적으로 확인된 경우에만 이동합니다."),
+    ],
+    "ja": [
+        ("バックログ", "未分類または未着手の業務です。担当者への割り当てだけでは作業開始を意味しません。"),
+        (
+            "準備完了",
+            "担当者と準備が整い、開始を待つ業務です。バックログの業務を引き受ける場合にこの段階を提案します。",
+        ),
+        ("進行中", "実際に実行中の業務です。単なる割り当てではなく、担当者が明示的に作業を開始したときに移動します。"),
+        ("レビュー", "実装が完了し、レビューまたは受け入れを待ちます。担当者の割り当てから承認を推測しません。"),
+        ("完了", "完了し受け入れられた業務です。完了が明示的に確認された場合にのみ移動します。"),
+    ],
+    "zh": [
+        ("待办", "尚未分类或认领的工作。仅指定负责人不代表工作已经开始。"),
+        ("就绪", "已指定负责人并准备就绪，等待开始的工作。有人认领待办工作时可建议此阶段。"),
+        ("进行中", "正在实际执行的工作。负责人明确开始工作时进入此阶段，而不是仅被分配时。"),
+        ("审核", "实现已完成，等待审核或验收。不要根据负责人分配推断已获批准。"),
+        ("完成", "已完成并通过验收的工作。仅在明确确认完成后移入此阶段。"),
+    ],
+}
 SI_COLUMN_DEFINITIONS = [
-    {"name": name, "workflow_stage": stage, "description": description}
-    for name, stage, description in zip(SI_COLUMNS, SI_WORKFLOW_STAGES, SI_COLUMN_DESCRIPTIONS, strict=True)
+    {
+        "name": name,
+        "workflow_stage": stage,
+        "description": description,
+        "translations": {
+            "en": {"name": name, "description": description},
+            **{
+                language: {"name": text[index][0], "description": text[index][1]}
+                for language, text in SI_COLUMN_TRANSLATIONS.items()
+            },
+        },
+    }
+    for index, (name, stage, description) in enumerate(
+        zip(SI_COLUMNS, SI_WORKFLOW_STAGES, SI_COLUMN_DESCRIPTIONS, strict=True)
+    )
 ]
 SI_EMAIL_NOTIFICATION_POLICY = {
     "is_enabled": True,
@@ -69,10 +111,36 @@ class ProjectTemplateService(BaseDomainService):
                 template.columns = definitions
                 template.column_descriptions = []
                 self.repo.project_template.update(template)
+            definitions = template.column_definitions()
+            changed = False
+            for definition in definitions:
+                # Seed only unchanged built-in guidance; custom canonical text must not acquire mismatched translations.
+                default = next(
+                    (
+                        item
+                        for item in SI_COLUMN_DEFINITIONS
+                        if all(definition.get(key) == item[key] for key in ("name", "description", "workflow_stage"))
+                    ),
+                    None,
+                )
+                if default is None:
+                    continue
+                translations = {language: dict(text) for language, text in definition.get("translations", {}).items()}
+                for language, text in default["translations"].items():
+                    if language not in translations:
+                        translations[language] = dict(text)
+                        changed = True
+                definition["translations"] = translations
+            if changed:
+                template.columns = definitions
+                self.repo.project_template.update(template)
             return template
         template = ProjectTemplate(
             name="SI",
-            columns=[dict(column) for column in SI_COLUMN_DEFINITIONS],
+            columns=[
+                {**column, "translations": {language: dict(text) for language, text in column["translations"].items()}}
+                for column in SI_COLUMN_DEFINITIONS
+            ],
             email_notification_policy=SI_EMAIL_NOTIFICATION_POLICY,
             is_builtin=True,
             is_default=True,

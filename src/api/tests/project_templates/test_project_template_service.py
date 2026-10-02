@@ -284,3 +284,38 @@ def test_creation_prefix_is_used_only_when_it_is_a_real_template() -> None:
         "SI Customer board",
         None,
     )
+
+
+def test_builtin_si_supplies_four_languages_and_does_not_share_translation_dicts() -> None:
+    from langboard_shared.domain.services.factory.ProjectTemplateService import SI_COLUMN_DEFINITIONS
+
+    repository = SimpleNamespace(project_template=TemplateRepository())
+    template = _service(repository).ensure_builtin()
+    for canonical, definition in zip(SI_COLUMN_DEFINITIONS, template.column_definitions(), strict=True):
+        assert set(definition["translations"]) == {"en", "ko", "ja", "zh"}
+        assert definition["translations"]["en"] == {"name": canonical["name"], "description": canonical["description"]}
+        assert all(text["name"] and text["description"] for text in definition["translations"].values())
+    template.columns[0]["translations"]["ko"]["name"] = "사용자 번역"
+    assert SI_COLUMN_DEFINITIONS[0]["translations"]["ko"]["name"] == "백로그"
+
+
+def test_builtin_si_backfills_missing_locales_without_overwriting_edits_or_custom_canonical() -> None:
+    from copy import deepcopy
+    from langboard_shared.domain.services.factory.ProjectTemplateService import SI_COLUMN_DEFINITIONS
+
+    templates = TemplateRepository()
+    columns = deepcopy(SI_COLUMN_DEFINITIONS)
+    columns[0]["translations"] = {"ko": {"name": "", "description": "사용자 설명"}}
+    columns[1]["description"] = "Custom guidance"
+    columns[1]["translations"] = {}
+    template = ProjectTemplate(name="SI", columns=columns, is_builtin=True, is_default=True)
+    templates.items.append(template)
+    service = _service(SimpleNamespace(project_template=templates))
+    service.ensure_builtin()
+    assert template.columns[0]["translations"]["ko"] == {"name": "", "description": "사용자 설명"}
+    assert set(template.columns[0]["translations"]) == {"en", "ko", "ja", "zh"}
+    assert template.columns[1]["description"] == "Custom guidance"
+    assert template.columns[1]["translations"] == {}
+    first = deepcopy(template.columns)
+    service.ensure_builtin()
+    assert template.columns == first
