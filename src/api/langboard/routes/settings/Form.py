@@ -352,3 +352,17 @@ class SaveGlobalLabelForm(BaseFormModel):
         if not value:
             raise ValueError("Label name is required")
         return value
+
+
+@form_model
+class SaveWorkflowStageForm(BaseFormModel):
+    key: str = Field(pattern=r"^[a-z][a-z0-9_]{0,63}$")
+    name: str = Field(min_length=1, max_length=100)
+    description: str = Field(default="", max_length=4000)
+    color: str = Field(default="#64748B", pattern=r"^#[0-9a-fA-F]{6}$")
+    order: int = Field(default=0, ge=0, le=100000)
+    counts_as_completed: bool = False
+    active_queue_policy: str = Field(default="conditional", pattern=r"^(include|exclude|conditional)$")
+    overdue_policy: str = Field(default="normal", pattern=r"^(normal|suppress)$")
+    entry_effects: list[str] = Field(default_factory=list, max_length=2)
+    translations: dict[str, dict[str, str]] = Field(default_factory=dict)

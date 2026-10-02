@@ -61,6 +61,7 @@ from .UserProfileRepository import UserProfileRepository
 from .UserRepository import UserRepository
 from .UserSignInHistoryRepository import UserSignInHistoryRepository
 from .WebhookSettingRepository import WebhookSettingRepository
+from .WorkflowStageRepository import WorkflowStageRepository
 
 
 __all__ = [
@@ -89,6 +90,7 @@ __all__ = [
     "ChecklistRepository",
     "GlobalCardRelationshipTypeRepository",
     "GlobalLabelRepository",
+    "WorkflowStageRepository",
     "GraphApprovalRequestRepository",
     "InternalBotRepository",
     "McpToolGroupRepository",

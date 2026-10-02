@@ -82,6 +82,7 @@ from .UserNotificationUnsubscription import UserNotificationUnsubscription
 from .UserProfile import UserProfile
 from .UserSignInHistory import UserSignInHistory
 from .WebhookSetting import WebhookSetting
+from .WorkflowStageDefinition import WorkflowStageDefinition
 
 
 __all__ = [
@@ -118,6 +119,7 @@ __all__ = [
     "Checklist",
     "GlobalCardRelationshipType",
     "GlobalLabel",
+    "WorkflowStageDefinition",
     "BotScheduleGraphApprovalRequest",
     "BotTriggerGraphApprovalRequest",
     "ChatGraphApprovalRequest",

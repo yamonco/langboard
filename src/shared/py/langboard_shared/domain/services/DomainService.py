@@ -39,6 +39,10 @@ class DomainService(Factory):
         return self._create_or_get_product(factory.ProjectService)
 
     @property
+    def workflow_stage(self):
+        return self._create_or_get_product(factory.WorkflowStageService)
+
+    @property
     def global_label(self):
         return self._create_or_get_product(factory.GlobalLabelService)
 

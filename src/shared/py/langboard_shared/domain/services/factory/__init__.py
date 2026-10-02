@@ -35,6 +35,7 @@ from .ScimProvisioningService import ScimProvisioningService
 from .UserGroupService import UserGroupService
 from .UserNotificationSettingService import UserNotificationSettingService
 from .UserService import UserService
+from .WorkflowStageService import WorkflowStageService
 
 
 __all__ = [
@@ -55,6 +56,7 @@ __all__ = [
     "DoclingMetadataService",
     "EmailService",
     "GlobalLabelService",
+    "WorkflowStageService",
     "GraphApprovalRequestService",
     "IdentityLinkService",
     "InternalBotService",
