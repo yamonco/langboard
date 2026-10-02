@@ -95,8 +95,14 @@ for (const width of [1280, 390])
         await page.getByRole("button", { name: "fr", exact: true }).click();
         await expect(page.getByLabel("Stage name", { exact: true })).toHaveValue("Livré");
         expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
-        page.once("dialog", (dialog) => dialog.accept());
         await page.getByRole("button", { name: "Deactivate", exact: true }).click();
+        const confirm = page.getByRole("dialog", { name: "Deactivate", exact: true });
+        await expect(confirm).toBeVisible();
+        await confirm.getByRole("button", { name: "Cancel", exact: true }).click();
+        await expect(confirm).not.toBeVisible();
+        await expect(page.getByRole("button", { name: "Deactivate", exact: true })).toBeEnabled();
+        await page.getByRole("button", { name: "Deactivate", exact: true }).click();
+        await confirm.getByRole("button", { name: "Deactivate", exact: true }).click();
         await expect(page.getByRole("dialog")).not.toBeVisible();
         await expect(page.getByRole("button", { name: /^Released.*Inactive/ })).toBeVisible();
     });
@@ -119,5 +125,34 @@ test("read-only stage settings prevent mutations", async ({ page }) => {
     await expect(page.getByLabel("Stage name", { exact: true })).toBeDisabled();
     await expect(page.getByRole("button", { name: "Save", exact: true })).toBeDisabled();
     await expect(page.getByRole("button", { name: "Deactivate", exact: true })).not.toBeVisible();
+    expect(writes).toBe(0);
+});
+
+test("discard confirmation preserves draft on cancel and closes without writes on confirm", async ({ page }) => {
+    let writes = 0;
+    page.on("dialog", () => {
+        throw new Error("Native confirmation must not open");
+    });
+    await page.route("**/settings/workflow-stages**", (route) => {
+        const headers = {
+            "Access-Control-Allow-Origin": "http://127.0.0.1:4194",
+            "Access-Control-Allow-Credentials": "true",
+            "Access-Control-Allow-Headers": "content-type,authorization",
+        };
+        if (route.request().method() === "OPTIONS") return route.fulfill({ status: 204, headers });
+        if (route.request().method() !== "GET") writes++;
+        return route.fulfill({ headers, json: { stages: [existing()] } });
+    });
+    await page.goto("/src/pages/SettingsPage/WorkflowStages.fixture.html");
+    await page.getByRole("button", { name: /^Closed/ }).click();
+    await page.getByLabel("Stage name", { exact: true }).fill("Unsaved name");
+    await page.getByRole("button", { name: "Close", exact: true }).click();
+    const confirmation = page.getByRole("dialog", { name: "Discard unsaved changes?", exact: true });
+    await expect(confirmation).toBeVisible();
+    await confirmation.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(page.getByLabel("Stage name", { exact: true })).toHaveValue("Unsaved name");
+    await page.getByRole("button", { name: "Close", exact: true }).click();
+    await confirmation.getByRole("button", { name: "Discard changes", exact: true }).click();
+    await expect(page.getByRole("dialog")).not.toBeVisible();
     expect(writes).toBe(0);
 });

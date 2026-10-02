@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import Dialog from "@/components/base/Dialog";
 import Button from "@/components/base/Button";
 import Input from "@/components/base/Input";
 import ColorPicker from "@/components/base/ColorPicker";
@@ -36,6 +37,7 @@ export default function WorkflowStagesPage({ currentUser }: { currentUser: AuthU
     const [opened, setOpened] = useState(false);
     const [pickerContainer, setPickerContainer] = useState<HTMLDivElement | null>(null);
     const [dirty, setDirty] = useState(false);
+    const [confirmation, setConfirmation] = useState<{ kind: "deactivate" | "close" } | { kind: "select"; stage?: IWorkflowStage } | null>(null);
     const [error, setError] = useState(false);
     const [language, setLanguage] = useState("en");
     const [newLanguage, setNewLanguage] = useState("");
@@ -53,8 +55,7 @@ export default function WorkflowStagesPage({ currentUser }: { currentUser: AuthU
         setPageAliasRef.current(t("settings.Workflow stages"));
         void reload();
     }, []);
-    const select = (stage?: IWorkflowStage) => {
-        if (dirty && !window.confirm(t("settings.Discard unsaved changes?"))) return;
+    const applySelection = (stage?: IWorkflowStage) => {
         const { uid, key, name, description, color, order, counts_as_completed, active_queue_policy, overdue_policy, entry_effects, translations } =
             stage ?? { ...blank(), uid: undefined };
         setDraft({
@@ -73,6 +74,10 @@ export default function WorkflowStagesPage({ currentUser }: { currentUser: AuthU
         setLanguage("en");
         setDirty(false);
         setOpened(true);
+    };
+    const select = (stage?: IWorkflowStage) => {
+        if (dirty) setConfirmation({ kind: "select", stage });
+        else applySelection(stage);
     };
     const edit = (fields: Partial<TWorkflowInput>) => {
         setDraft((item) => ({ ...item, ...fields }));
@@ -100,13 +105,7 @@ export default function WorkflowStagesPage({ currentUser }: { currentUser: AuthU
         }
     };
     const disable = async () => {
-        if (
-            !draft.uid ||
-            busy ||
-            !hasRoleAction(SettingRole.EAction.WorkflowStageDeactivate) ||
-            !window.confirm(t("settings.Deactivate this stage? Existing bindings are preserved."))
-        )
-            return;
+        if (!draft.uid || busy || !hasRoleAction(SettingRole.EAction.WorkflowStageDeactivate)) return;
         try {
             replace(await deactivate.mutateAsync(draft.uid));
             setDirty(false);
@@ -179,7 +178,10 @@ export default function WorkflowStagesPage({ currentUser }: { currentUser: AuthU
                 open={opened}
                 onOpenChange={(value) => {
                     if (busy) return;
-                    if (!value && dirty && !window.confirm(t("settings.Discard unsaved changes?"))) return;
+                    if (!value && dirty) {
+                        setConfirmation({ kind: "close" });
+                        return;
+                    }
                     setOpened(value);
                     if (!value) setDirty(false);
                 }}
@@ -366,7 +368,7 @@ export default function WorkflowStagesPage({ currentUser }: { currentUser: AuthU
                         </fieldset>
                         <div className="flex flex-wrap justify-between gap-2 border-t pt-4">
                             {selected?.is_active && hasRoleAction(SettingRole.EAction.WorkflowStageDeactivate) && (
-                                <Button type="button" variant="outline" disabled={busy} onClick={() => void disable()}>
+                                <Button type="button" variant="outline" disabled={busy} onClick={() => setConfirmation({ kind: "deactivate" })}>
                                     {t("settings.Deactivate")}
                                 </Button>
                             )}
@@ -377,6 +379,44 @@ export default function WorkflowStagesPage({ currentUser }: { currentUser: AuthU
                     </form>
                 </Sheet.Content>
             </Sheet.Root>
+            <Dialog.Root
+                open={confirmation !== null}
+                onOpenChange={(value) => {
+                    if (!value) setConfirmation(null);
+                }}
+            >
+                <Dialog.Content>
+                    <Dialog.Header>
+                        <Dialog.Title>
+                            {confirmation?.kind === "deactivate" ? t("settings.Deactivate") : t("settings.Discard unsaved changes?")}
+                        </Dialog.Title>
+                        <Dialog.Description>
+                            {confirmation?.kind === "deactivate"
+                                ? t("settings.Deactivate this stage? Existing bindings are preserved.")
+                                : t("settings.Discard unsaved changes?")}
+                        </Dialog.Description>
+                    </Dialog.Header>
+                    <Dialog.Footer>
+                        <Button variant="outline" onClick={() => setConfirmation(null)}>
+                            {t("common.Cancel")}
+                        </Button>
+                        <Button
+                            onClick={() => {
+                                const action = confirmation;
+                                setConfirmation(null);
+                                if (action?.kind === "deactivate") void disable();
+                                else if (action?.kind === "select") applySelection(action.stage);
+                                else if (action?.kind === "close") {
+                                    setOpened(false);
+                                    setDirty(false);
+                                }
+                            }}
+                        >
+                            {confirmation?.kind === "deactivate" ? t("settings.Deactivate") : t("settings.Discard changes")}
+                        </Button>
+                    </Dialog.Footer>
+                </Dialog.Content>
+            </Dialog.Root>
         </section>
     );
 }
