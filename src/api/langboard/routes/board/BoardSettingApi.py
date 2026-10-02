@@ -297,7 +297,12 @@ def copy_project_as_template(
                     },
                 ),
                 "internal_bots": [InternalBot],
-                "project_columns": [(ProjectColumn, {"schema": {"count": "integer", "incomplete_count": "integer"}})],
+                "project_columns": [
+                    (
+                        ProjectColumn,
+                        {"schema": {"count": "integer", "open_count": "integer", "incomplete_count": "integer"}},
+                    )
+                ],
                 "cards": [(Card, {"schema": {"project_column_name": "string"}})],
             }
         )

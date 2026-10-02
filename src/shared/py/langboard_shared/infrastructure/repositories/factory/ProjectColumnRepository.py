@@ -199,7 +199,10 @@ class ProjectColumnRepository(BaseOrderRepository[ProjectColumn, Project]):
         return raw_columns
 
     def get_incomplete_work_counts(self, projects: TProjectParam | list[TProjectParam]) -> dict[SnowflakeID, int]:
-        """Batch unfinished work counts without loading card bodies or changing physical column counts."""
+        return {column_id: counts["incomplete_count"] for column_id, counts in self.get_work_counts(projects).items()}
+
+    def get_work_counts(self, projects: TProjectParam | list[TProjectParam]) -> dict[SnowflakeID, dict[str, int]]:
+        """Batch open and unfinished work counts without loading card bodies or changing physical counts."""
         if not isinstance(projects, list):
             projects = [projects]
         project_ids = [InfraHelper.convert_id(project) for project in projects]
@@ -218,7 +221,6 @@ class ProjectColumnRepository(BaseOrderRepository[ProjectColumn, Project]):
             & Card.deleted_at.is_(None)
             & Card.archived_at.is_(None)
             & or_(Card.source_type.is_(None), Card.source_type != Card.LINKED_RESOURCE_PROJECT_WIKI)
-            & ~all_items_complete
             & ProjectColumn.is_archive.is_(False)
             & or_(
                 ProjectColumn.workflow_stage.not_in(("closed", "reference")),
@@ -227,14 +229,17 @@ class ProjectColumnRepository(BaseOrderRepository[ProjectColumn, Project]):
             )
         )
         query = (
-            select(ProjectColumn.id, func.count(Card.id))
+            select(ProjectColumn.id, func.count(Card.id), func.count(case((~all_items_complete, Card.id))))
             .outerjoin(Card, eligible)
             .where(ProjectColumn.project_id.in_(project_ids), ProjectColumn.deleted_at.is_(None))
             .group_by(ProjectColumn.id)
         )
         # Activity events follow committed writes; read the primary for current counts.
         with DbSession.use(readonly=False) as db:
-            return {column_id: count for column_id, count in db.exec(query).all()}
+            return {
+                column_id: {"open_count": open_count, "incomplete_count": incomplete_count}
+                for column_id, open_count, incomplete_count in db.exec(query).all()
+            }
 
     def get_or_create_archive_if_not_exists(self, project: TProjectParam) -> ProjectColumn:
         project_id = InfraHelper.convert_id(project)

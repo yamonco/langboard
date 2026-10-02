@@ -63,10 +63,12 @@ const ProjectCardStarButton = memo(
 
         return (
             <Button
-                variant={starred ? "default" : "outline"}
+                variant="ghost"
                 className={cn(
                     !compact && "absolute right-2.5 top-1 mt-0",
-                    compact && "shrink-0 rounded-lg shadow-none",
+                    "rounded-lg border-0 text-muted-foreground shadow-none hover:bg-secondary hover:text-foreground",
+                    compact && "size-7 shrink-0",
+                    starred && "text-foreground",
                     compact &&
                         !starred &&
                         "group-focus-within:opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100"
@@ -74,14 +76,15 @@ const ProjectCardStarButton = memo(
                 size={compact ? "icon-sm" : "icon"}
                 title={t(`dashboard.${starred ? "Unstar this project" : "Star this project"}`)}
                 aria-label={t(`dashboard.${starred ? "Unstar this project" : "Star this project"}`)}
+                aria-pressed={!!starred}
                 titleSide="bottom"
                 onClick={toggleStar}
                 disabled={isUpdating}
             >
                 {isUpdating ? (
-                    <IconComponent icon="loader-circle" size="5" strokeWidth="3" className="animate-spin" />
+                    <IconComponent icon="loader-circle" size="4" className="animate-spin" />
                 ) : (
-                    <IconComponent icon="star" />
+                    <IconComponent icon="star" size="4" strokeWidth={1.75} className={starred ? "fill-current" : undefined} />
                 )}
             </Button>
         );

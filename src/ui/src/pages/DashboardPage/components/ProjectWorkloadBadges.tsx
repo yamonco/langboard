@@ -7,7 +7,7 @@ import { ProjectColumn } from "@/core/models";
 import { usePageNavigateRef } from "@/core/hooks/usePageNavigate";
 import { ROUTES } from "@/core/routing/constants";
 import { Utils } from "@langboard/core/utils";
-import { workloadColumns, workloadSearch, workloadTotal } from "./ProjectWorkload";
+import { openWorkTotal, workloadColumns, workloadSearch, workloadTotal } from "./ProjectWorkload";
 
 export default function ProjectWorkloadBadges({
     projectUID,
@@ -23,6 +23,7 @@ export default function ProjectWorkloadBadges({
     const [, refresh] = useReducer((value) => value + 1, 0);
     const columns = ProjectColumn.Model.useModels((column) => column.project_uid === projectUID, [projectUID]);
     const total = workloadTotal(columns);
+    const openTotal = openWorkTotal(columns);
     const open = (columnUID?: string) => {
         navigate(`${ROUTES.BOARD.MAIN(projectUID)}${workloadSearch(columnUID)}`, { state: { commandPaletteFocus: true } });
         onNavigate?.();
@@ -49,16 +50,14 @@ export default function ProjectWorkloadBadges({
             {columns.map((column) => (
                 <CountObserver key={column.uid} column={column} refresh={refresh} />
             ))}
-            {compact && total !== undefined && (
-                <button
-                    type="button"
-                    className="project-workload-total shrink-0 rounded-md bg-muted px-1.5 py-0.5 text-xs tabular-nums hover:bg-accent"
-                    title={t("dashboard.Unfinished cards")}
-                    aria-label={t("dashboard.Unfinished cards count", { count: total })}
-                    onClick={() => open()}
+            {openTotal !== undefined && (
+                <span
+                    className="shrink-0 rounded-md bg-muted/60 px-1.5 py-0.5 text-xs font-medium tabular-nums text-muted-foreground"
+                    title={t("dashboard.Open cards")}
+                    aria-label={t("dashboard.Open cards count", { count: openTotal })}
                 >
-                    {total}
-                </button>
+                    {openTotal}
+                </span>
             )}
             {compact
                 ? total !== undefined && (
@@ -89,6 +88,7 @@ export default function ProjectWorkloadBadges({
 function CountObserver({ column, refresh }: { column: ProjectColumn.TModel; refresh: () => void }) {
     column.useField("incomplete_count", refresh);
     column.useField("count", refresh);
+    column.useField("open_count", refresh);
     column.useField("workflow_stage", refresh);
     column.useField("is_archive", refresh);
     column.useField("order", refresh);

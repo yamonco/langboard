@@ -1,5 +1,4 @@
 from datetime import timedelta
-
 from fastapi import Depends, Query, status
 from langboard_shared.core.filter import AuthFilter
 from langboard_shared.core.routing import ApiErrorCode, ApiException, AppRouter, JsonResponse
@@ -71,7 +70,12 @@ def get_starred_projects(
                         },
                     ),
                 ],
-                "columns": [(ProjectColumn, {"schema": {"count": "integer", "incomplete_count": "integer"}})],
+                "columns": [
+                    (
+                        ProjectColumn,
+                        {"schema": {"count": "integer", "open_count": "integer", "incomplete_count": "integer"}},
+                    )
+                ],
             }
         )
         .auth()

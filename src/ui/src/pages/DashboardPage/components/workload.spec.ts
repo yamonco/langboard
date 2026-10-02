@@ -3,7 +3,7 @@ for (const width of [1280, 390]) {
     test(`workload graphs, state links and model updates at ${width}px`, async ({ page }) => {
         await page.setViewportSize({ width, height: 844 });
         await page.goto("/src/pages/DashboardPage/components/workload.fixture.html");
-        await expect(page.getByRole("button", { name: "10 unfinished cards", exact: true, includeHidden: true })).toHaveCount(2);
+        await expect(page.getByLabel("30 open cards", { exact: true })).toHaveCount(3);
         const list = page.getByRole("region", { name: "Project list", exact: true });
         await expect(list.getByRole("button", { name: "Ready: 1 unfinished cards", exact: true })).toBeVisible();
         await expect(list.getByRole("button", { name: "Active: 4 unfinished cards", exact: true })).toBeVisible();
@@ -45,7 +45,7 @@ for (const width of [1280, 390]) {
         await list.getByRole("button", { name: "Active: 4 unfinished cards", exact: true }).press("Enter");
         await expect(page.getByTestId("route")).toContainText("/board/fixture?filters=unfinished%3Ayes%2Ccolumns%3Aactive");
         await page.getByRole("button", { name: "Apply live counts", exact: true }).click();
-        await expect(page.getByRole("button", { name: "1 unfinished cards", exact: true, includeHidden: true })).toHaveCount(2);
+        await expect(page.getByLabel("30 open cards", { exact: true })).toHaveCount(3);
         await list.getByRole("button", { name: "Ready: 0 unfinished cards", exact: true }).press("Enter");
         await expect(page.getByTestId("route")).toContainText("columns%3Aready");
         expect(await page.locator("button button").count()).toBe(0);

@@ -119,7 +119,12 @@ from .forms import (
                 "attachments": [CardAttachment],
                 "linked_wikis": [{"wiki_uid": "string", "title": "string"}],
                 "global_relationships": [GlobalCardRelationshipType],
-                "project_columns": [(ProjectColumn, {"schema": {"count": "integer", "incomplete_count": "integer"}})],
+                "project_columns": [
+                    (
+                        ProjectColumn,
+                        {"schema": {"count": "integer", "open_count": "integer", "incomplete_count": "integer"}},
+                    )
+                ],
                 "project_labels": [ProjectLabel],
                 "bot_scopes": [CardBotScope],
             }
@@ -877,7 +882,9 @@ def mark_card_seen(
 @AppRouter.api.get("/board/{project_uid}/card/{card_uid}/read-state", tags=["Board.Card"])
 @RoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
 @AuthFilter.add("user")
-def get_card_read_state(project_uid: str, card_uid: str, service: DomainService = DomainService.scope()) -> JsonResponse:
+def get_card_read_state(
+    project_uid: str, card_uid: str, service: DomainService = DomainService.scope()
+) -> JsonResponse:
     result = service.card.get_card_read_state(project_uid, card_uid)
     if result is None:
         raise ApiException.NotFound_404(ApiErrorCode.NF2004)
@@ -888,8 +895,9 @@ def get_card_read_state(project_uid: str, card_uid: str, service: DomainService 
 @AppRouter.api.post("/board/{project_uid}/card/{card_uid}/unread", tags=["Board.Card"])
 @RoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
 @AuthFilter.add("user")
-def mark_card_unread(project_uid: str, card_uid: str, user: User = Auth.scope("user"),
-                     service: DomainService = DomainService.scope()) -> JsonResponse:
+def mark_card_unread(
+    project_uid: str, card_uid: str, user: User = Auth.scope("user"), service: DomainService = DomainService.scope()
+) -> JsonResponse:
     result = service.card.set_card_read_state(user, project_uid, card_uid, False)
     if result is None:
         raise ApiException.NotFound_404(ApiErrorCode.NF2004)

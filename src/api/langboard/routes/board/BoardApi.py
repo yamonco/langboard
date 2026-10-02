@@ -152,7 +152,16 @@ def search_project_member_candidates(
     description="Get project columns.",
     responses=(
         OpenApiSchema()
-        .suc({"columns": [(ProjectColumn, {"schema": {"count": "integer", "incomplete_count": "integer"}})]})
+        .suc(
+            {
+                "columns": [
+                    (
+                        ProjectColumn,
+                        {"schema": {"count": "integer", "open_count": "integer", "incomplete_count": "integer"}},
+                    )
+                ]
+            }
+        )
         .auth()
         .forbidden()
         .err(404, ApiErrorCode.NF2001)
@@ -321,7 +330,12 @@ def get_archived_project_cards(
                 "column_bot_schedules": [ProjectColumnBotSchedule],
                 "checklists": [Checklist],
                 "global_relationships": [GlobalCardRelationshipType],
-                "columns": [(ProjectColumn, {"schema": {"count": "integer", "incomplete_count": "integer"}})],
+                "columns": [
+                    (
+                        ProjectColumn,
+                        {"schema": {"count": "integer", "open_count": "integer", "incomplete_count": "integer"}},
+                    )
+                ],
             }
         )
         .auth()

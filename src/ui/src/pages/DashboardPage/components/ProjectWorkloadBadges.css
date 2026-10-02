@@ -7,7 +7,6 @@
         flex-wrap: wrap;
         gap: 0.25rem;
     }
-    .project-workload-total,
     .project-workload-details {
         display: none;
     }

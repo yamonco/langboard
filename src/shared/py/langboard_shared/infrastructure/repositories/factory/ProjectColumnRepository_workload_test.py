@@ -82,15 +82,22 @@ def test_workload_counts_scope_completion_and_changed_state(monkeypatch):
     assert len(statements) == 1  # batched by authorized scope, never per project/card
     assert counts == {active.id: 5, closed.id: 0, archive.id: 0, legacy_done.id: 0, reference.id: 0, empty.id: 0}
     assert foreign_column.id not in counts and deleted_column.id not in counts
+    statements.clear()
+    work_counts = repository.get_work_counts([project])
+    assert len(statements) == 1
+    assert work_counts[active.id] == {"open_count": 6, "incomplete_count": 5}
+    assert all(work_counts[value.id]["open_count"] == 0 for value in (closed, archive, legacy_done, reference, empty))
     event.remove(engine, "before_cursor_execute", record)
     with DbSession.use(readonly=False) as db:
         unchecked.is_checked = True
         db.update(unchecked)
     assert repository.get_incomplete_work_counts(project)[active.id] == 4
+    assert repository.get_work_counts(project)[active.id]["open_count"] == 6
     with DbSession.use(readonly=False) as db:
         unchecked.is_checked = False
         db.update(unchecked)
         open_card.project_column_id = archive.id
         db.update(open_card)
     assert repository.get_incomplete_work_counts(project)[active.id] == 4
+    assert repository.get_work_counts(project)[active.id]["open_count"] == 5
     engine.dispose()

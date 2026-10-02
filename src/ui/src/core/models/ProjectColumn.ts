@@ -19,6 +19,7 @@ export interface Interface extends IBaseModel {
 export interface IStore extends Interface {
     count: number;
     incomplete_count?: number;
+    open_count?: number;
 }
 
 class ProjectColumn extends BaseModel<IStore> {
@@ -86,6 +87,10 @@ class ProjectColumn extends BaseModel<IStore> {
 
     public get count() {
         return this.getValue("count");
+    }
+
+    public get open_count() {
+        return this.getValue("open_count");
     }
 
     public get incomplete_count() {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { workloadColumns, workloadSearch, workloadTotal, matchesWorkload, type WorkloadColumn } from "./ProjectWorkload.ts";
+import { openWorkTotal, workloadColumns, workloadSearch, workloadTotal, matchesWorkload, type WorkloadColumn } from "./ProjectWorkload.ts";
 const column = (fields: Partial<WorkloadColumn> = {}): WorkloadColumn => ({
     uid: "open",
     name: "Done",
@@ -44,4 +44,19 @@ test("board filter uses same completion and resource semantics", () => {
     assert.equal(matchesWorkload(card, column({ workflow_stage: "closed" })), false);
     assert.equal(matchesWorkload(card, column({ is_archive: true })), false);
     assert.equal(matchesWorkload(card, undefined), false);
+});
+
+test("open total retains completed checklists but excludes terminal and reference columns", () => {
+    const columns = [
+        column({ open_count: 8, incomplete_count: 3 }),
+        column({ uid: "next", name: "Ready", open_count: 2, incomplete_count: 0 }),
+        column({ workflow_stage: "closed", open_count: 99 }),
+        column({ workflow_stage: "reference", open_count: 99 }),
+        column({ is_archive: true, open_count: 99 }),
+    ];
+    assert.equal(openWorkTotal(columns), 10);
+    assert.equal(workloadTotal(columns), 3);
+    assert.equal(openWorkTotal([column({ open_count: undefined })]), undefined);
+    assert.equal(openWorkTotal([column({ open_count: -1 })]), undefined);
+    assert.equal(openWorkTotal([column({ open_count: 0 })]), 0);
 });

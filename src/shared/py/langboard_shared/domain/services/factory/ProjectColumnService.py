@@ -28,7 +28,7 @@ class ProjectColumnService(BaseDomainService):
 
     def get_api_list_by_project(self, projects: TProjectParam | list[TProjectParam]) -> list[dict[str, Any]]:
         raw_columns = self.repo.project_column.get_all_by_project(projects)
-        incomplete_counts = self.repo.project_column.get_incomplete_work_counts(projects)
+        work_counts = self.repo.project_column.get_work_counts(projects)
 
         columns = []
         for raw_column, count in raw_columns:
@@ -38,7 +38,7 @@ class ProjectColumnService(BaseDomainService):
                 {
                     **raw_column.api_response(),
                     "count": count,
-                    "incomplete_count": incomplete_counts.get(raw_column.id, 0),
+                    **work_counts.get(raw_column.id, {"open_count": 0, "incomplete_count": 0}),
                 }
             )
 

@@ -5,6 +5,7 @@ export interface WorkloadColumn {
     is_archive: boolean;
     workflow_stage?: string | null;
     incomplete_count?: number;
+    open_count?: number;
 }
 
 export function isUnfinishedColumn(column: Pick<WorkloadColumn, "name" | "is_archive" | "workflow_stage">): boolean {
@@ -21,6 +22,13 @@ export function workloadTotal(columns: WorkloadColumn[]): number | undefined {
     const visible = workloadColumns(columns);
     if (!columns.length || visible.some((column) => !Number.isSafeInteger(column.incomplete_count) || column.incomplete_count! < 0)) return undefined;
     return visible.reduce((total, column) => total + column.incomplete_count!, 0);
+}
+
+export function openWorkTotal(columns: WorkloadColumn[]): number | undefined {
+    const visible = workloadColumns(columns);
+    if (!columns.length || visible.some((column) => !Number.isSafeInteger(column.open_count) || column.open_count! < 0)) return undefined;
+    // Authoritative open count excludes archived cards but retains completed checklists.
+    return visible.reduce((total, column) => total + column.open_count!, 0);
 }
 
 export function workloadSearch(columnUID?: string): string {
