@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createRequire } from "node:module";
 import { createPlateEditor } from "platejs/react";
 import { YjsPlugin } from "@platejs/yjs/react";
 import { createSlateEditor } from "platejs";
@@ -58,4 +59,12 @@ test("legacy blockquotes normalize and nested quotes preserve their text through
     const saved = editor.api.markdown.serialize();
     assert.ok(saved.includes("인용"));
     assert.ok(saved.includes("> > 중첩"));
+});
+
+test("the app and Plate share one Slate React context and transform implementation", () => {
+    const app = createRequire(import.meta.url);
+    const plate = createRequire(app.resolve("@platejs/core"));
+    for (const name of ["slate", "slate-dom", "slate-react"]) {
+        assert.equal(app.resolve(name), plate.resolve(name), `${name} must resolve to one package instance`);
+    }
 });
