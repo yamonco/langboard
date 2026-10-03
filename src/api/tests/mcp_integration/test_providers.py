@@ -15,6 +15,37 @@ from langboard.mcp_integration.Tool import McpTool
 from langboard.middlewares.McpAuthMiddleware import mcp_auth_context
 
 
+async def test_modern_annotations_reach_catalog_and_raw_search_without_changing_legacy():
+    import json
+    from langboard.Loader import ModuleLoader
+    from langboard.mcp_integration.Annotations import READ_ONLY_TOOLS
+
+    ModuleLoader.load("mcp_tools", "Mcp", log=False)
+    registered = set(McpTool.get_tools())
+    assert READ_ONLY_TOOLS - {"search_raw_tools"} <= registered
+    token = mcp_auth_context.set({"tool_group": SimpleNamespace(activated_at=object(), tools=list(registered))})
+    try:
+        catalogs = {}
+        for profile in ("compatibility", "agent", "raw"):
+            _, server = McpServer.get_http_app(profile)
+            async with Client(server) as client:
+                catalogs[profile] = {tool.name: tool for tool in await client.list_tools()}
+                if profile == "raw":
+                    result = await client.call_tool("search_raw_tools", {"pattern": r"^get_public_card_metadata\b"})
+                    definition = json.loads(result.content[0].text)[0]
+                    assert definition["annotations"]["readOnlyHint"] is True
+        assert all(tool.annotations is None for tool in catalogs["compatibility"].values())
+        read = catalogs["agent"]["get_card_bundle"].annotations
+        assert read.read_only_hint is True and read.destructive_hint is False and read.idempotent_hint is True
+        write = catalogs["agent"]["create_card"].annotations
+        assert write.read_only_hint is False and write.destructive_hint is True and write.idempotent_hint is False
+        assert catalogs["raw"]["search_raw_tools"].annotations.read_only_hint is True
+        assert catalogs["raw"]["call_raw_tool"].annotations.read_only_hint is False
+        assert catalogs["raw"]["call_raw_tool"].annotations.idempotent_hint is False
+    finally:
+        mcp_auth_context.reset(token)
+
+
 @pytest.mark.parametrize("role_allowed", [True, False])
 async def test_provider_preserves_wrapped_dispatch_and_tool_group_deny(monkeypatch, role_allowed):
     calls = []
