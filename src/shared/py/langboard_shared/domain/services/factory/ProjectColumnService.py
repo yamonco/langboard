@@ -86,6 +86,7 @@ class ProjectColumnService(BaseDomainService):
             if column_description.strip():
                 parts.append(f"Column:\n{column_description}")
             result[column.id] = {
+                "workflow_counts_as_completed": stage.counts_as_completed if stage else None,
                 "workflow_stage_description": stage_description,
                 "column_description": column_description,
                 "workflow_guidance": "\n\n".join(parts),
@@ -241,7 +242,9 @@ class ProjectColumnService(BaseDomainService):
             column.workflow_stage = workflow_stage
             self.repo.project_column.update(column)
             affected_ids = list(execution.before)
-        ProjectColumnPublisher.workflow_stage_changed(project, column)
+        ProjectColumnPublisher.workflow_stage_changed(
+            project, column, self.get_workflow_guidance([column])[column.id]["workflow_counts_as_completed"]
+        )
         from .CardService import CardService
 
         self._get_service(CardService).publish_work_states(project, affected_ids)

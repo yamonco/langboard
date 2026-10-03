@@ -91,6 +91,7 @@ function CountObserver({ column, refresh }: { column: ProjectColumn.TModel; refr
     column.useField("count", refresh);
     column.useField("open_count", refresh);
     column.useField("workflow_stage", refresh);
+    column.useField("workflow_counts_as_completed", refresh);
     column.useField("is_archive", refresh);
     column.useField("order", refresh);
     column.useField("name", refresh);

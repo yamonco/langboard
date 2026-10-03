@@ -4,12 +4,15 @@ export interface WorkloadColumn {
     order: number;
     is_archive: boolean;
     workflow_stage?: string | null;
+    workflow_counts_as_completed?: boolean | null;
     incomplete_count?: number;
     open_count?: number;
 }
 
-export function isUnfinishedColumn(column: Pick<WorkloadColumn, "name" | "is_archive" | "workflow_stage">): boolean {
-    if (column.is_archive || ["closed", "reference"].includes(column.workflow_stage ?? "")) return false;
+export function isUnfinishedColumn(column: Pick<WorkloadColumn, "name" | "is_archive" | "workflow_stage" | "workflow_counts_as_completed">): boolean {
+    if (column.is_archive || column.workflow_stage === "reference") return false;
+    if (typeof column.workflow_counts_as_completed === "boolean") return !column.workflow_counts_as_completed;
+    if (column.workflow_stage === "closed") return false;
     // Match the existing legacy queue policy only while explicit workflow mapping is absent.
     return !!column.workflow_stage || !["done", "completed", "complete", "완료"].includes(column.name.trim().toLowerCase());
 }

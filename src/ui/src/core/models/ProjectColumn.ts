@@ -12,6 +12,7 @@ export interface Interface extends IBaseModel {
     description?: string;
     translations?: Record<string, { name: string; description: string }>;
     workflow_stage?: string | null;
+    workflow_counts_as_completed?: boolean | null;
     order: number;
     dock_order?: number | null;
     is_archive: bool;
@@ -81,6 +82,12 @@ class ProjectColumn extends BaseModel<IStore> {
     }
     public set workflow_stage(value) {
         this.update({ workflow_stage: value });
+    }
+    public get workflow_counts_as_completed() {
+        return this.getValue("workflow_counts_as_completed");
+    }
+    public set workflow_counts_as_completed(value) {
+        this.update({ workflow_counts_as_completed: value });
     }
     public set order(value) {
         this.update({ order: value });

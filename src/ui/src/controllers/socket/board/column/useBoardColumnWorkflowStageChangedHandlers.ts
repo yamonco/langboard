@@ -8,7 +8,10 @@ interface Props extends IBaseUseSocketHandlersProps<{}> {
 }
 
 const useBoardColumnWorkflowStageChangedHandlers = ({ callback, projectUID }: Props) => {
-    return useSocketHandler<{}, { uid: string; workflow_stage: ProjectColumn.Interface["workflow_stage"] }>({
+    return useSocketHandler<
+        {},
+        { uid: string; workflow_stage: ProjectColumn.Interface["workflow_stage"]; workflow_counts_as_completed?: boolean | null }
+    >({
         topic: ESocketTopic.Board,
         topicId: projectUID,
         eventKey: `board-column-workflow-stage-changed-${projectUID}`,
@@ -18,7 +21,10 @@ const useBoardColumnWorkflowStageChangedHandlers = ({ callback, projectUID }: Pr
             callback,
             responseConverter: (data) => {
                 const column = ProjectColumn.Model.getModel(data.uid);
-                if (column) column.workflow_stage = data.workflow_stage ?? null;
+                if (column) {
+                    column.workflow_stage = data.workflow_stage ?? null;
+                    column.workflow_counts_as_completed = data.workflow_counts_as_completed ?? null;
+                }
                 return {};
             },
         },

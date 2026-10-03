@@ -99,8 +99,14 @@ class ProjectColumnPublisher(BaseSocketPublisher):
         )
 
     @staticmethod
-    def workflow_stage_changed(project: Project, column: ProjectColumn) -> None:
-        model = {"uid": column.get_uid(), "workflow_stage": column.workflow_stage}
+    def workflow_stage_changed(
+        project: Project, column: ProjectColumn, counts_as_completed: bool | None = None
+    ) -> None:
+        model = {
+            "uid": column.get_uid(),
+            "workflow_stage": column.workflow_stage,
+            "workflow_counts_as_completed": counts_as_completed,
+        }
         topic_id = project.get_uid()
         ProjectColumnPublisher.put_dispather(
             model,

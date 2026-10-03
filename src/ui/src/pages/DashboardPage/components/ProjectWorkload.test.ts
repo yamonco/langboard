@@ -72,3 +72,11 @@ test("custom workflow completion policy hides cards without changing their colum
     assert.equal(matchesWorkload(card, column({ workflow_stage: "reference" })), false);
     assert.equal(matchesWorkload(card, column({ is_archive: true })), false);
 });
+
+test("aggregate visibility follows registry policy even when built-in keys change meaning", () => {
+    assert.equal(openWorkTotal([column({ workflow_stage: "closed", workflow_counts_as_completed: false, open_count: 4 })]), 4);
+    assert.equal(workloadTotal([column({ workflow_stage: "custom_release", workflow_counts_as_completed: true })]), 0);
+    assert.equal(workloadTotal([column({ workflow_stage: "reference", workflow_counts_as_completed: false })]), 0);
+    assert.equal(workloadTotal([column({ is_archive: true, workflow_counts_as_completed: false })]), 0);
+    assert.equal(workloadTotal([column({ workflow_stage: "closed", workflow_counts_as_completed: null })]), 0);
+});

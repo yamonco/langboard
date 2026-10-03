@@ -32,6 +32,7 @@ def test_guidance_resolves_one_batch_preserves_sources_and_inactive_bindings(reg
     result = service.get_workflow_guidance(columns)
     repo.get_by_keys.assert_called_once_with({"released", "unknown"})
     assert result[1] == {
+        "workflow_counts_as_completed": False,
         "workflow_stage_description": "Accepted delivery",
         "column_description": "Client signs receipt",
         "workflow_guidance": "Workflow stage:\nAccepted delivery\n\nColumn:\nClient signs receipt",
@@ -39,8 +40,10 @@ def test_guidance_resolves_one_batch_preserves_sources_and_inactive_bindings(reg
     }
     assert result[2]["workflow_guidance"] == "Workflow stage:\nAccepted delivery"
     assert result[3]["workflow_stage_status"] == "unclassified"
+    assert result[3]["workflow_counts_as_completed"] is None
     assert result[3]["workflow_stage_description"] == ""
     assert result[4]["workflow_stage_status"] == "missing"
+    assert result[4]["workflow_counts_as_completed"] is None
     assert result[4]["workflow_guidance"] == "Column:\nCustom guidance"
 
 
