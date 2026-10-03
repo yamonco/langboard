@@ -62,6 +62,44 @@ def settings(**changes):
     )
 
 
+async def test_native_storage_preserves_registration_and_encrypts_state(monkeypatch, tmp_path):
+    from fastmcp.server.auth.oidc_proxy import OIDCConfiguration
+    from fastmcp.server.auth.oauth_proxy import proxy
+    from mcp.shared.auth import OAuthClientInformationFull
+    from pydantic import AnyUrl
+
+    monkeypatch.setattr(OAuth, "Env", settings())
+    monkeypatch.setattr(proxy.settings, "home", tmp_path)
+    configuration = OIDCConfiguration(
+        issuer="https://id.example",
+        authorization_endpoint="https://id.example/authorize",
+        token_endpoint="https://id.example/token",
+        jwks_uri="https://id.example/jwks",
+        response_types_supported=["code"],
+        subject_types_supported=["public"],
+        id_token_signing_alg_values_supported=["RS256"],
+    )
+    monkeypatch.setattr(OAuth.OIDCProxy, "get_oidc_configuration", lambda *args, **kwargs: configuration)
+    first = OAuth.create_oauth_provider()
+    client = OAuthClientInformationFull(
+        client_id="persistence-test-client",
+        client_name="encrypted-registration-marker",
+        redirect_uris=[AnyUrl("https://client.example/callback")],
+        scope="mcp:access",
+    )
+    await first.register_client(client)
+    restored = OAuth.create_oauth_provider()
+    loaded = await restored.get_client(client.client_id)
+    assert loaded is not None
+    assert loaded.client_name == client.client_name
+    files = [path for path in tmp_path.rglob("*") if path.is_file()]
+    assert files
+    assert all(b"encrypted-registration-marker" not in path.read_bytes() for path in files)
+    monkeypatch.setattr(OAuth, "Env", settings(MCP_OAUTH_SIGNING_KEY="rotated-example-signing-key-32-bytes-long"))
+    rotated = OAuth.create_oauth_provider()
+    assert await rotated.get_client(client.client_id) is None
+
+
 def service_fixture():
     user = SimpleNamespace(id=1, activated_at=object(), deleted_at=None, is_admin=False)
     service = SimpleNamespace(
