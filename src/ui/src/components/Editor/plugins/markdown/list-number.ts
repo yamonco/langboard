@@ -1,4 +1,4 @@
-import { ElementApi, KEYS } from "platejs";
+import { createBlockStartInputRule, ElementApi, KEYS } from "platejs";
 import type { Descendant, SlateEditor } from "platejs";
 import { getMergedOptionsSerialize, markdownToAstProcessor, serializeMd } from "@platejs/markdown";
 import type { DeserializeMdOptions } from "@platejs/markdown";
@@ -11,6 +11,20 @@ import { unified } from "unified";
 export function formatOrderedList(editor: SlateEditor, { matchString }: { matchString: string }): void {
     toggleList(editor, { listRestart: Number.parseInt(matchString, 10) || 1, listStyleType: KEYS.ol });
 }
+
+// Preserve deliberate numbering even after an earlier numbered item.
+export const orderedListInputRules = [".", ")"].map((variant) =>
+    createBlockStartInputRule({
+        trigger: " ",
+        match: variant === "." ? /^(\d+)\.$/ : /^(\d+)\)$/,
+        enabled: ({ editor }) => !editor.api.some({ match: { type: editor.getType(KEYS.codeBlock) } }),
+        apply: ({ editor }, match) => {
+            editor.tf.delete({ at: match.range });
+            formatOrderedList(editor, { matchString: match.text });
+            return true;
+        },
+    })
+);
 
 function orderedNodes(value: Descendant[]): Descendant[] {
     return value.flatMap((node) => {

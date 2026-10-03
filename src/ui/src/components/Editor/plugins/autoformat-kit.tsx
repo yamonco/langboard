@@ -1,264 +1,348 @@
 "use client";
 
-import type { AutoformatRule } from "@platejs/autoformat";
-import {
-    autoformatArrow,
-    autoformatLegal,
-    autoformatLegalHtml,
-    autoformatMath,
-    AutoformatPlugin,
-    autoformatPunctuation,
-    autoformatSmartQuotes,
-} from "@platejs/autoformat";
-import { insertEmptyCodeBlock } from "@platejs/code-block";
 import { CODE_DRAWING_TYPE_ARRAY, CodeDrawingType, VIEW_MODE } from "@platejs/code-drawing";
-import { toggleList } from "@platejs/list";
-import { KEYS } from "platejs";
-import { formatOrderedList } from "./markdown/list-number";
+import { createBlockStartInputRule, createSlatePlugin, createTextSubstitutionInputRule, KEYS, type SlateEditor } from "platejs";
 
-const autoformatMarks: AutoformatRule[] = [
+const enabled = ({ editor }: { editor: SlateEditor }) => !editor.api.some({ match: { type: editor.getType(KEYS.codeBlock) } });
+
+// Preserve the existing symbol substitutions using Plate's native input-rule runtime.
+const patterns = [
     {
-        match: "***",
-        mode: "mark",
-        type: [KEYS.bold, KEYS.italic],
+        match: String.fromCharCode(34),
+        format: ["“", "”"],
     },
     {
-        match: "__*",
-        mode: "mark",
-        type: [KEYS.underline, KEYS.italic],
+        match: "'",
+        format: ["‘", "’"],
     },
     {
-        match: "__**",
-        mode: "mark",
-        type: [KEYS.underline, KEYS.bold],
+        match: "--",
+        format: "—",
     },
     {
-        match: "___***",
-        mode: "mark",
-        type: [KEYS.underline, KEYS.bold, KEYS.italic],
+        match: "...",
+        format: "…",
     },
     {
-        match: "**",
-        mode: "mark",
-        type: KEYS.bold,
+        match: ">>",
+        format: "»",
     },
     {
-        match: "__",
-        mode: "mark",
-        type: KEYS.underline,
+        match: "<<",
+        format: "«",
     },
     {
-        match: "*",
-        mode: "mark",
-        type: KEYS.italic,
+        match: ["(tm)", "(TM)"],
+        format: "™",
     },
     {
-        match: "_",
-        mode: "mark",
-        type: KEYS.italic,
+        match: ["(r)", "(R)"],
+        format: "®",
     },
     {
-        match: "~~",
-        mode: "mark",
-        type: KEYS.strikethrough,
+        match: ["(c)", "(C)"],
+        format: "©",
     },
     {
-        match: "^",
-        mode: "mark",
-        type: KEYS.sup,
+        match: "&trade;",
+        format: "™",
     },
     {
-        match: "~",
-        mode: "mark",
-        type: KEYS.sub,
+        match: "&reg;",
+        format: "®",
+    },
+    {
+        match: "&copy;",
+        format: "©",
+    },
+    {
+        match: "&sect;",
+        format: "§",
+    },
+    {
+        match: "->",
+        format: "→",
+    },
+    {
+        match: "<-",
+        format: "←",
+    },
+    {
+        match: "=>",
+        format: "⇒",
+    },
+    {
+        match: ["<=", "≤="],
+        format: "⇐",
+    },
+    {
+        match: "!>",
+        format: "≯",
+    },
+    {
+        match: "!<",
+        format: "≮",
+    },
+    {
+        match: ">=",
+        format: "≥",
+    },
+    {
+        match: "<=",
+        format: "≤",
+    },
+    {
+        match: "!>=",
+        format: "≱",
+    },
+    {
+        match: "!<=",
+        format: "≰",
+    },
+    {
+        match: "!=",
+        format: "≠",
     },
     {
         match: "==",
-        mode: "mark",
-        type: KEYS.highlight,
+        format: "≡",
     },
     {
-        match: "≡",
-        mode: "mark",
-        type: KEYS.highlight,
+        match: ["!==", "≠="],
+        format: "≢",
     },
     {
-        match: "`",
-        mode: "mark",
-        type: KEYS.code,
-    },
-];
-
-const autoformatBlocks: AutoformatRule[] = [
-    {
-        match: "# ",
-        mode: "block",
-        type: KEYS.h1,
+        match: "~=",
+        format: "≈",
     },
     {
-        match: "## ",
-        mode: "block",
-        type: KEYS.h2,
+        match: "!~=",
+        format: "≉",
     },
     {
-        match: "### ",
-        mode: "block",
-        type: KEYS.h3,
+        match: "+-",
+        format: "±",
     },
     {
-        match: "#### ",
-        mode: "block",
-        type: KEYS.h4,
+        match: "%%",
+        format: "‰",
     },
     {
-        match: "##### ",
-        mode: "block",
-        type: KEYS.h5,
+        match: ["%%%", "‰%"],
+        format: "‱",
     },
     {
-        match: "###### ",
-        mode: "block",
-        type: KEYS.h6,
+        match: "//",
+        format: "÷",
     },
     {
-        match: "> ",
-        mode: "block",
-        type: KEYS.blockquote,
+        match: "1/2",
+        format: "½",
     },
     {
-        match: "```",
-        mode: "block",
-        type: KEYS.codeBlock,
-        format: (editor) => {
-            insertEmptyCodeBlock(editor, {
-                defaultType: KEYS.p,
-                insertNodesOptions: { select: true },
-            });
-        },
+        match: "1/3",
+        format: "⅓",
     },
     {
-        match: ["---", "—-", "___ "],
-        mode: "block",
-        type: KEYS.hr,
-        format: (editor) => {
-            editor.tf.setNodes({ type: KEYS.hr });
-            editor.tf.insertNodes({
-                children: [{ text: "" }],
-                type: KEYS.p,
-            });
-        },
+        match: "1/4",
+        format: "¼",
     },
     {
-        match: "$$eq",
-        mode: "block",
-        type: KEYS.equation,
-        format: (editor) => {
-            editor.tf.setNodes({ type: KEYS.equation });
-            editor.tf.insertNodes({
-                children: [{ text: "" }],
-                type: KEYS.p,
-            });
-        },
-    },
-    ...CODE_DRAWING_TYPE_ARRAY.map(
-        (codeDrawingType) =>
-            ({
-                match: `$$${codeDrawingType}`,
-                mode: "block",
-                type: KEYS.codeDrawing,
-                format: (editor) => {
-                    editor.tf.setNodes({
-                        type: KEYS.codeDrawing,
-                        children: [{ text: "" }],
-                        data: {
-                            drawingType: codeDrawingType as unknown as CodeDrawingType,
-                            drawingMode: VIEW_MODE.Both,
-                            code: "",
-                        },
-                    });
-                },
-            }) as AutoformatRule
-    ),
-];
-
-const autoformatLists: AutoformatRule[] = [
-    {
-        match: ["* ", "- "],
-        mode: "block",
-        type: "list",
-        format: (editor) => {
-            toggleList(editor, {
-                listStyleType: KEYS.ul,
-            });
-        },
+        match: "1/5",
+        format: "⅕",
     },
     {
-        match: [String.raw`^\d+\.$ `, String.raw`^\d+\)$ `],
-        matchByRegex: true,
-        mode: "block",
-        type: "list",
-        format: formatOrderedList,
+        match: "1/6",
+        format: "⅙",
     },
     {
-        match: ["[] "],
-        mode: "block",
-        type: "list",
-        format: (editor) => {
-            toggleList(editor, {
-                listStyleType: KEYS.listTodo,
-            });
-            editor.tf.setNodes({
-                checked: false,
-                listStyleType: KEYS.listTodo,
-            });
-        },
+        match: "1/7",
+        format: "⅐",
     },
     {
-        match: ["[x] "],
-        mode: "block",
-        type: "list",
-        format: (editor) => {
-            toggleList(editor, {
-                listStyleType: KEYS.listTodo,
-            });
-            editor.tf.setNodes({
-                checked: true,
-                listStyleType: KEYS.listTodo,
-            });
-        },
+        match: "1/8",
+        format: "⅛",
     },
     {
-        match: ["[["],
-        mode: "text",
-        format: (editor) => {
-            editor.tf.insertText("{{");
-        },
+        match: "1/9",
+        format: "⅑",
+    },
+    {
+        match: "1/10",
+        format: "⅒",
+    },
+    {
+        match: "2/3",
+        format: "⅔",
+    },
+    {
+        match: "2/5",
+        format: "⅖",
+    },
+    {
+        match: "3/4",
+        format: "¾",
+    },
+    {
+        match: "3/5",
+        format: "⅗",
+    },
+    {
+        match: "3/8",
+        format: "⅜",
+    },
+    {
+        match: "4/5",
+        format: "⅘",
+    },
+    {
+        match: "5/6",
+        format: "⅚",
+    },
+    {
+        match: "5/8",
+        format: "⅝",
+    },
+    {
+        match: "7/8",
+        format: "⅞",
+    },
+    {
+        match: "^o",
+        format: "°",
+    },
+    {
+        match: "^+",
+        format: "⁺",
+    },
+    {
+        match: "^-",
+        format: "⁻",
+    },
+    {
+        match: "~+",
+        format: "₊",
+    },
+    {
+        match: "~-",
+        format: "₋",
+    },
+    {
+        match: "^0",
+        format: "⁰",
+    },
+    {
+        match: "^1",
+        format: "¹",
+    },
+    {
+        match: "^2",
+        format: "²",
+    },
+    {
+        match: "^3",
+        format: "³",
+    },
+    {
+        match: "^4",
+        format: "⁴",
+    },
+    {
+        match: "^5",
+        format: "⁵",
+    },
+    {
+        match: "^6",
+        format: "⁶",
+    },
+    {
+        match: "^7",
+        format: "⁷",
+    },
+    {
+        match: "^8",
+        format: "⁸",
+    },
+    {
+        match: "^9",
+        format: "⁹",
+    },
+    {
+        match: "~0",
+        format: "₀",
+    },
+    {
+        match: "~1",
+        format: "₁",
+    },
+    {
+        match: "~2",
+        format: "₂",
+    },
+    {
+        match: "~3",
+        format: "₃",
+    },
+    {
+        match: "~4",
+        format: "₄",
+    },
+    {
+        match: "~5",
+        format: "₅",
+    },
+    {
+        match: "~6",
+        format: "₆",
+    },
+    {
+        match: "~7",
+        format: "₇",
+    },
+    {
+        match: "~8",
+        format: "₈",
+    },
+    {
+        match: "~9",
+        format: "₉",
     },
 ];
 
 export const AutoformatKit = [
-    AutoformatPlugin.configure({
-        options: {
-            enableUndoOnDelete: true,
-            rules: [
-                ...autoformatBlocks,
-                ...autoformatMarks,
-                ...autoformatSmartQuotes,
-                ...autoformatPunctuation,
-                ...autoformatLegal,
-                ...autoformatLegalHtml,
-                ...autoformatArrow,
-                ...autoformatMath,
-                ...autoformatLists,
-            ].map(
-                (rule): AutoformatRule => ({
-                    ...rule,
-                    query: (editor) =>
-                        !editor.api.some({
-                            match: { type: editor.getType(KEYS.codeBlock) },
-                        }),
+    createSlatePlugin({
+        key: "editorShortcuts",
+        inputRules: [
+            createTextSubstitutionInputRule({ enabled, patterns }),
+            createTextSubstitutionInputRule({ enabled, patterns: [{ match: "[[", format: "{{" }] }),
+            createBlockStartInputRule({
+                enabled,
+                match: "$$eq",
+                trigger: "q",
+                node: KEYS.equation,
+                apply: ({ editor }, match) => {
+                    editor.tf.delete({ at: match.range });
+                    editor.tf.setNodes({ type: KEYS.equation });
+                    editor.tf.insertNodes({ type: KEYS.p, children: [{ text: "" }] });
+                    return true;
+                },
+            }),
+            ...CODE_DRAWING_TYPE_ARRAY.map((drawingType) =>
+                createBlockStartInputRule({
+                    enabled,
+                    match: `$$${drawingType}`,
+                    trigger: drawingType.slice(-1),
+                    node: KEYS.codeDrawing,
+                    apply: ({ editor }, match) => {
+                        editor.tf.delete({ at: match.range });
+                        editor.tf.setNodes({
+                            type: KEYS.codeDrawing,
+                            data: { drawingType: drawingType as unknown as CodeDrawingType, drawingMode: VIEW_MODE.Both, code: "" },
+                        });
+                        return true;
+                    },
                 })
             ),
-        },
+        ],
     }),
 ];
