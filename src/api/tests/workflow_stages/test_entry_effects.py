@@ -32,17 +32,33 @@ from sqlalchemy import create_engine, event, select, text
 
 
 @pytest.fixture
-def flow(monkeypatch):
-    engine = create_engine(os.getenv("LANGBOARD_EFFECT_TEST_DATABASE", "sqlite://"))
+def flow(monkeypatch, request):
+    schema = None
+    database_url = os.getenv("LANGBOARD_EFFECT_TEST_DATABASE", "sqlite://")
+    engine = create_engine(database_url)
+    if "bouncer" in (engine.url.host or "").lower():
+        engine.dispose()
+        raise ValueError("Workflow schema tests require a direct PostgreSQL connection, not PgBouncer")
+    def cleanup():
+        engine.dispose()
+        if schema is not None:
+            cleanup_engine = create_engine(engine.url)
+            try:
+                with cleanup_engine.begin() as connection:
+                    connection.execute(text(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE'))
+            finally:
+                cleanup_engine.dispose()
+
+    request.addfinalizer(cleanup)
     if engine.dialect.name == "postgresql":
         schema = "uow236_" + uuid4().hex
         with engine.begin() as connection:
             connection.execute(text(f'CREATE SCHEMA "{schema}"'))
 
-        @event.listens_for(engine, "connect")
-        def set_schema(connection, _):
-            with connection.cursor() as cursor:
-                cursor.execute(f'SET search_path TO "{schema}"')
+        @event.listens_for(engine, "begin")
+        def set_schema(connection):
+            # Transaction-local scope cannot leak through a database connection pool.
+            connection.exec_driver_sql(f'SET LOCAL search_path TO "{schema}"')
 
         engine.dispose()
         with engine.begin() as connection:
@@ -127,7 +143,6 @@ def flow(monkeypatch):
         summary=summary,
         notifications=notifications,
     )
-    engine.dispose()
 
 
 def snapshot(engine, card_id):

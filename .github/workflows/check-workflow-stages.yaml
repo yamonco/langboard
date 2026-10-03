@@ -1,0 +1,61 @@
+name: Check Workflow Stages
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/check-workflow-stages.yaml
+      - src/api/tests/workflow_stages/**
+      - src/api/langboard/routes/settings/WorkflowStageSettingsApi.py
+      - src/api/langboard/routes/settings/Form.py
+      - src/api/langboard/card_workspace/**
+      - src/api/langboard/mcp_tools/UserMcp.py
+      - src/api/langboard/migrations/versions/20261002114000-4afb6de824d3.py
+      - src/api/langboard/migrations/versions/20261002234000-7be934f2a6c1.py
+      - src/shared/py/langboard_shared/domain/models/WorkflowStageDefinition.py
+      - src/shared/py/langboard_shared/domain/services/CardWorkState.py
+      - src/shared/py/langboard_shared/domain/services/factory/WorkflowStageService.py
+      - src/shared/py/langboard_shared/domain/services/factory/WorkflowStagePolicyService.py
+      - src/shared/py/langboard_shared/domain/services/factory/CardService.py
+      - src/shared/py/langboard_shared/domain/services/factory/CheckitemService.py
+      - src/shared/py/langboard_shared/domain/services/factory/ProjectColumnService.py
+      - src/shared/py/langboard_shared/infrastructure/repositories/factory/WorkflowStageRepository.py
+      - src/shared/py/langboard_shared/infrastructure/repositories/factory/CardRepository.py
+      - src/shared/py/langboard_shared/infrastructure/repositories/factory/CheckitemTimerRecordRepository.py
+      - src/shared/py/langboard_shared/publishers/CheckitemPublisher.py
+  workflow_dispatch:
+
+jobs:
+  policy-and-transition:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: langboard_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d langboard_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      PROJECT_NAME: langboard
+      PYTHONPATH: .
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: uv sync --frozen
+      - name: Registry, guidance, policy and SQLite transitions
+        run: uv run --no-sync pytest -q src/api/tests/workflow_stages
+      - name: PostgreSQL transitions and rollback
+        env:
+          LANGBOARD_EFFECT_TEST_DATABASE: postgresql+psycopg://postgres:postgres@localhost:5432/langboard_test
+        run: uv run --no-sync pytest -q src/api/tests/workflow_stages/test_entry_effects.py
