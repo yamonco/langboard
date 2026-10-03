@@ -7,6 +7,7 @@ from urllib.parse import urlsplit
 from fastmcp import FastMCP
 from fastmcp.exceptions import AuthorizationError
 from fastmcp.tools import Tool
+from mcp.types import Icon
 from langboard_shared.core.types import Factory
 from langboard_shared.core.utils.decorators import class_instance
 from langboard_shared.domain.models import Bot, User
@@ -34,6 +35,7 @@ class McpServer:
     def __init__(self):
         self.mcp = _create_fastmcp()
         self._streamable_http_app = None
+        self.oauth_discovery_routes = []
 
     def get_http_app(self) -> tuple[Any, FastMCP]:
         """Build the MCP transport or fail application startup."""
@@ -57,6 +59,33 @@ class McpServer:
 
         self.mcp = app
         return http_app, app
+
+    def get_oauth_http_app(self):
+        """Expose an opt-in OAuth transport beside the unchanged legacy transport."""
+        from fastmcp.server.auth import require_scopes
+        from fastmcp.server.middleware import AuthMiddleware
+        from .OAuth import NativeOAuthMiddleware, create_oauth_provider
+
+        auth = create_oauth_provider()
+        if auth is None:
+            self.oauth_discovery_routes = []
+            return None
+        app = FastMCP(
+            Env.PROJECT_NAME,
+            icons=[Icon(src=f"{Env.PUBLIC_UI_URL}/images/favicon.ico")],
+            website_url=Env.PUBLIC_UI_URL,
+            auth=auth,
+            strict_input_validation=True,
+            mask_error_details=True,
+            middleware=[NativeOAuthMiddleware(), AuthMiddleware(auth=require_scopes("mcp:access"))],
+        )
+        for name, data in McpTool.get_tools().items():
+            app.add_tool(
+                Tool.from_function(self._wrap_tool(name, data["handler"]), name=name, description=data["description"])
+            )
+        hosts, origins = _get_transport_security_allowlists()
+        self.oauth_discovery_routes = auth.get_well_known_routes(mcp_path="/stream")
+        return app.http_app(path="/stream", stateless_http=True, allowed_hosts=hosts, allowed_origins=origins)
 
     def _wrap_tool(self, tool_name: str, handler: Callable[..., Any]):
         sig = signature(handler)
