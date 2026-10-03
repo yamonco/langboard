@@ -126,8 +126,9 @@ function EditorWrapper({
     const [isCollaborativeReady, setIsCollaborativeReady] = useState(false);
     const [showSyncUnavailable, setShowSyncUnavailable] = useState(false);
     const [collaborativeRetryKey, setCollaborativeRetryKey] = useState(0);
+    const collaborativeEditorInitializedRef = useRef(false);
     const handleCollaborativeSyncChange = useCallback((isSynced: bool) => {
-        setIsCollaborativeReady(isSynced);
+        setIsCollaborativeReady(isSynced && collaborativeEditorInitializedRef.current);
     }, []);
     const editor = useCreateEditor({
         value,
@@ -356,6 +357,7 @@ function EditorWrapper({
         }
 
         setIsCollaborativeReady(false);
+        collaborativeEditorInitializedRef.current = false;
         const originalOnChange = editor.onChange;
         if (!Utils.Type.isFunction<TEditorOnChange>(originalOnChange)) {
             return;
@@ -406,7 +408,9 @@ function EditorWrapper({
                     value: getEditorValue(editor),
                     onReady: () => {
                         initialized = true;
-                        if (!disposed && editor.getOptions(YjsPlugin)?._isSynced) {
+                        if (disposed) return;
+                        collaborativeEditorInitializedRef.current = true;
+                        if (editor.getOptions(YjsPlugin)?._isSynced) {
                             setIsCollaborativeReady(true);
                         }
                     },
@@ -426,6 +430,7 @@ function EditorWrapper({
 
         return () => {
             disposed = true;
+            collaborativeEditorInitializedRef.current = false;
             editor.onChange = originalOnChange;
             setIsCollaborativeReady(false);
             if (!initStarted) {
