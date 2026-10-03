@@ -3,6 +3,7 @@
 from types import SimpleNamespace
 import pytest
 from fastmcp import Client
+from langboard.card_workspace.domain import CardGraphNewCard
 from langboard.mcp_integration.GraphOutputs import GraphPatchOutput
 from langboard.mcp_integration.Server import McpServer
 from langboard.mcp_integration.Tool import McpTool
@@ -10,7 +11,6 @@ from langboard.mcp_tools import CardMcp
 from langboard.middlewares.McpAuthMiddleware import mcp_auth_context
 from langboard_shared.domain.models import Card, CardRelationship
 from pydantic import TypeAdapter
-from langboard.card_workspace.domain import CardGraphNewCard
 
 
 def native_graph():
