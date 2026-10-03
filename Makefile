@@ -1,4 +1,4 @@
-.PHONY: help init format lint start_docker stop_docker rebuild_docker update_docker clean_docker_build_cache
+.PHONY: help init format lint start_docker stop_docker rebuild_docker update_docker deploy_ui clean_docker_build_cache
 
 # Function to get compose args from script
 get_compose_args = $(shell WITH_DOCS=$(WITH_DOCS) WITH_UI_WATCHER=$(WITH_UI_WATCHER) WITH_OLLAMA_CPU=$(WITH_OLLAMA_CPU) WITH_OLLAMA_GPU=$(WITH_OLLAMA_GPU) WITH_DB_BACKUP=$(WITH_DB_BACKUP) bash scripts/utils/get-compose-args.sh)
@@ -151,6 +151,10 @@ update_ts_core:
 	@cd $(UI_DIR) && yarn add @langboard/core@file:../shared/ts
 	@cd $(SOCKET_DIR) && yarn remove @langboard/core
 	@cd $(SOCKET_DIR) && yarn add @langboard/core@file:../shared/ts
+
+deploy_ui: ## rebuild UI assets using the existing image without restarting dependencies
+	# The server already mounts src/ui/dist; no service recreation is needed.
+	docker compose $(COMPOSE_ARGS) run --rm --no-deps ui
 
 start_docker: ## run Docker in the production environment
 	make init_env
