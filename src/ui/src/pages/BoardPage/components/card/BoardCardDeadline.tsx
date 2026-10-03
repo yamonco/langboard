@@ -71,8 +71,8 @@ const BoardCardDeadlineDraft = memo(() => {
     const isOverdue = getDeadlinePressureLevel({ deadlineAt: deadline, isCompleted: isFinished, now: deadlineClock }) === "overdue";
     const overdueDays = getOverdueDays({ deadlineAt: deadline, now: deadlineClock });
     const upcomingDays = getUpcomingDeadlineDays({ deadlineAt: deadline, now: deadlineClock, isCompleted: isFinished });
-    const [isEditing, setIsEditing] = useState(false);
     const restoredDraft = useCardFlipDraftStore.getState().drafts[flipDraftKey(currentUser.uid, projectUID, card.uid)];
+    const [isEditing, setIsEditing] = useState(() => restoredDraft?.deadline_at !== undefined);
     const [draftDeadline, setDraftDeadline] = useState<Date | undefined>(() =>
         restoredDraft?.deadline_at !== undefined ? (restoredDraft.deadline_at ? new Date(restoredDraft.deadline_at) : undefined) : deadline
     );
@@ -128,11 +128,10 @@ const BoardCardDeadlineDraft = memo(() => {
             e.stopPropagation();
 
             requestAnimationFrame(() => {
-                setDraftDeadline(deadline);
                 setIsEditing(true);
             });
         },
-        [canStartEditing, deadline]
+        [canStartEditing]
     );
 
     const handleClearDeadline = useCallback(() => {
