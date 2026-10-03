@@ -10,6 +10,7 @@ from fastmcp.server.providers.local_provider import LocalProvider
 from fastmcp.server.transforms import Visibility
 from fastmcp.tools import Tool
 from .Annotations import tool_annotations
+from .BoardOutputs import BOARD_OUTPUTS
 from .BotOutputs import BOT_OUTPUTS
 from .ContentOutputs import CONTENT_OUTPUTS
 from .Outputs import with_typed_output
@@ -66,7 +67,9 @@ def create_native_domain_provider(
         handler = wrap_tool(name, metadata["handler"])
         if modern_annotations:
             handler = with_typed_output(
-                name, handler, WORK_OUTPUTS.get(name) or CONTENT_OUTPUTS.get(name) or BOT_OUTPUTS.get(name)
+                name,
+                handler,
+                WORK_OUTPUTS.get(name) or CONTENT_OUTPUTS.get(name) or BOT_OUTPUTS.get(name) or BOARD_OUTPUTS.get(name),
             )
         provider.add_tool(
             Tool.from_function(
