@@ -102,3 +102,36 @@ test("failed bot choices preserve saved selection during unrelated edits", async
     await expect(page.locator("form")).toHaveCount(0);
     expect(saved).toBe(true);
 });
+
+for (const width of [1280, 390])
+    test(`long template menus stay within the viewport and remain selectable at ${width}px`, async ({ page }) => {
+        await page.setViewportSize({ width, height: 850 });
+        const name = "Client-Delivery " + "Long template name ".repeat(8);
+        const columns = ["Intake", "Scoping", "Proposal", "Approved", "Delivery", "Client Review", "Completed"];
+        await page.route("**/settings/project-template-bots", (route) => route.fulfill({ json: { bots: [] } }));
+        await page.route("**/settings/global-labels", (route) => route.fulfill({ json: { labels: [] } }));
+        await page.route("**/settings/workflow-stages", (route) => route.fulfill({ json: { stages: [] } }));
+        await page.route("**/settings/project-templates**", (route) =>
+            route.fulfill({
+                json: {
+                    templates: [
+                        { uid: "long", name, columns, is_default: true, is_builtin: false },
+                        { uid: "short", name: "Short", columns: ["Queue"], is_default: false, is_builtin: false },
+                    ],
+                },
+            })
+        );
+        await page.goto("/src/pages/SettingsPage/ProjectTemplates.fixture.html");
+        await page.getByRole("combobox").click();
+        const menu = page.getByRole("listbox");
+        await expect(menu).toBeVisible();
+        const bounds = await menu.boundingBox();
+        expect(bounds!.x).toBeGreaterThanOrEqual(0);
+        expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width);
+        await page.getByRole("option", { name: "Short · Queue", exact: true }).click();
+        await expect(page.getByRole("combobox")).toHaveText("Short · Queue");
+        await page.getByRole("combobox").click();
+        await page.getByRole("option", { name: name + " · " + columns.join(" → "), exact: true }).click();
+        await page.getByRole("button", { name: "Edit", exact: true }).click();
+        await expect(page.getByLabel("Board template name", { exact: true })).toHaveValue(name);
+    });
