@@ -85,6 +85,15 @@ Membership counts do not expose recipient identities. Coverage is now 47
 reviewed commands and one additional query; 23 remaining commands still use
 their existing untyped output annotations.
 
+Structured content creation/update now uses a discriminated output union for
+code, diagram and rich-text blocks. Normalized literal payloads, block revision
+and timestamps remain unchanged. Verification recording declares typed evidence,
+reviewer identity and source cursor fields; recording evidence never approves a
+workflow or release. Dedicated pre-save content-block and verification conflicts
+also return not_applied revision-conflict receipts. Other failures remain unknown.
+Coverage is now 50 reviewed commands and one additional query; 20 commands and
+remaining query contracts still need output models.
+
 This delivery separates existing canonical entry points. It does not yet supply
 all planned action facades, atomic Work Plan handling,
 OAuth profile access, deprecation telemetry or representative installed-client

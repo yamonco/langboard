@@ -6,6 +6,8 @@ from fastmcp.exceptions import AuthorizationError
 from fastmcp.server.middleware import Middleware
 from fastmcp.tools import ToolResult
 from langboard_shared.core.exceptions.WikiContentConflict import WikiContentConflict
+from langboard_shared.domain.contracts.content_blocks import ContentBlockConflictError
+from langboard_shared.domain.services.CardVerification import VerificationConflict
 from pydantic import BaseModel, ConfigDict
 from ..card_workspace.domain import DescriptionPatchConflict
 from .Annotations import READ_ONLY_TOOLS
@@ -28,7 +30,9 @@ def _revision_conflict(error: Exception) -> bool:
     current = error
     while current is not None and id(current) not in seen:
         seen.add(id(current))
-        if isinstance(current, (DescriptionPatchConflict, WikiContentConflict)):
+        if isinstance(
+            current, (DescriptionPatchConflict, WikiContentConflict, ContentBlockConflictError, VerificationConflict)
+        ):
             return True
         current = current.__cause__
     return False
