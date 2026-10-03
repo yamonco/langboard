@@ -44,6 +44,9 @@ def resolve_principal(access_token, service):
     subject = claims.get("sub") if isinstance(claims, dict) else None
     if not isinstance(issuer, str) or not issuer or not isinstance(subject, str) or not subject:
         raise AuthorizationError("A verified OIDC identity is required")
+    issuer = issuer.strip().rstrip("/")
+    if not issuer:
+        raise AuthorizationError("A verified OIDC identity is required")
     user = service.identity_link.get_user_by_provider_external_id(IdentityProvider.Oidc, subject, issuer)
     if not user or not user.activated_at or user.deleted_at:
         raise AuthorizationError("An active linked user is required")

@@ -106,11 +106,12 @@ def test_incomplete_configuration_fails_closed(monkeypatch, changes):
         OAuth.create_oauth_provider()
 
 
-def test_principal_uses_issuer_subject_without_toolgroup_dependency(monkeypatch):
+@pytest.mark.parametrize("issuer", ["https://id.example", "https://id.example/"])
+def test_principal_uses_issuer_subject_without_toolgroup_dependency(monkeypatch, issuer):
     monkeypatch.setattr(OAuth, "Env", settings())
     user, service = service_fixture()
     token = SimpleNamespace(
-        claims={"iss": "https://id.example", "sub": "stable-sub", "email": "ignored@example.invalid"}
+        claims={"iss": issuer, "sub": "stable-sub", "email": "ignored@example.invalid"}
     )
     result = OAuth.resolve_principal(token, service)
     assert result["user_or_bot"] is user
