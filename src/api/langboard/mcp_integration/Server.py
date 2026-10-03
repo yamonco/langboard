@@ -6,7 +6,6 @@ from typing import Any, TypeGuard, Union, get_args, get_origin
 from urllib.parse import urlsplit
 from fastmcp import FastMCP
 from fastmcp.exceptions import AuthorizationError
-from fastmcp.tools import Tool
 from langboard_shared.core.types import Factory
 from langboard_shared.core.utils.decorators import class_instance
 from langboard_shared.domain.models import Bot, User
@@ -16,6 +15,7 @@ from langboard_shared.infrastructure.repositories import Repository
 from ..mcp_tools.RoleChecker import McpRoleChecker
 from ..middlewares import McpAuthMiddleware
 from ..middlewares.McpAuthMiddleware import mcp_auth_context
+from .Providers import create_compatibility_provider
 from .Tool import McpTool
 from .ToolGroupMiddleware import ToolGroupMiddleware
 
@@ -41,11 +41,7 @@ class McpServer:
         allowed_hosts, allowed_origins = _get_transport_security_allowlists()
         app = _create_fastmcp()
 
-        all_tools = McpTool.get_tools()
-        for tool_name, tool_data in all_tools.items():
-            handler = tool_data["handler"]
-            wrapper = self._wrap_tool(tool_name, handler)
-            app.add_tool(Tool.from_function(wrapper, name=tool_name, description=tool_data["description"]))
+        app.add_provider(create_compatibility_provider(self._wrap_tool))
 
         http_app = app.http_app(
             path="/stream",
