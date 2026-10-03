@@ -1,4 +1,6 @@
 import { formatNumber } from "@/core/utils/LocaleFormat";
+import { metadataDisplay } from "@/core/utils/MetadataDisplay";
+import useProjectWorkflowStages from "@/controllers/api/board/useProjectWorkflowStages";
 import Button from "@/components/base/Button";
 import Checkbox from "@/components/base/Checkbox";
 import Avatar from "@/components/base/Avatar";
@@ -24,9 +26,16 @@ export function SkeletonBoardFilter() {
 function BoardFilter() {
     const { project, columns, cards, currentUser, filters, filterCard, filterMember, filterLabel, navigateWithFilters } = useBoard();
     const [t, i18n] = useTranslation();
-    const [category, setCategory] = useState<"status" | "members" | "creators" | "labels" | "relationships" | null>(null);
+    const [open, setOpen] = useState(false);
+    const stages = useProjectWorkflowStages(project.uid, open || Boolean(filters.workflow_stages?.length));
+    const stageName = (key: string) => {
+        const stage = stages.data?.find((item) => item.key === key);
+        return stage ? metadataDisplay(stage, stage.translations, i18n.resolvedLanguage ?? i18n.language).name : key;
+    };
+    const [category, setCategory] = useState<"status" | "workflow" | "members" | "creators" | "labels" | "relationships" | null>(null);
     const categories = [
         { key: "status", label: t("board.filters.Status"), keys: ["unfinished", "columns"] },
+        { key: "workflow", label: t("common.Workflow stage"), keys: ["workflow_stages"] },
         { key: "members", label: t("board.filters.Assignee"), keys: ["members"] },
         { key: "creators", label: t("board.filters.Creator"), keys: ["creators"] },
         { key: "labels", label: t("board.filters.Labels"), keys: ["labels"] },
@@ -89,6 +98,7 @@ function BoardFilter() {
 
     const filterTitle = (name: keyof IFilterMap, value: string) => {
         if (name === "keyword") return `${t("board.filters.Keyword")}: ${value}`;
+        if (name === "workflow_stages") return `${t("common.Workflow stage")}: ${stageName(value)}`;
         if (name === "unfinished") return t("dashboard.Unfinished cards");
         if (name === "columns") return `${t("board.filters.Status")}: ${columns.find((item) => item.uid === value)?.name ?? t("common.Unknown")}`;
         if (name === "members") {
@@ -115,6 +125,7 @@ function BoardFilter() {
         <div className="flex min-w-0 flex-wrap items-center gap-1">
             <Popover.Root
                 onOpenChange={(open) => {
+                    setOpen(open);
                     if (open) setCategory(null);
                 }}
             >
@@ -188,6 +199,25 @@ function BoardFilter() {
                                         .map((column) => (
                                             <BoardFilterItem key={column.uid} name="columns" value={column.uid}>
                                                 {column.name}
+                                            </BoardFilterItem>
+                                        ))}
+                                </Flex>
+                            )}
+                            {category === "workflow" && (
+                                <Flex direction="col">
+                                    <Label>{t("common.Workflow stage")}</Label>
+                                    {stages.isPending && <Skeleton h="8" />}
+                                    {stages.isError && (
+                                        <Button variant="ghost" onClick={() => stages.refetch()}>
+                                            {t("common.Retry")}
+                                        </Button>
+                                    )}
+                                    {stages.data
+                                        ?.filter((stage) => stage.is_active || filters.workflow_stages?.includes(stage.key))
+                                        .map((stage) => (
+                                            <BoardFilterItem key={stage.key} name="workflow_stages" value={stage.key}>
+                                                <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: stage.color }} />
+                                                {stageName(stage.key)}
                                             </BoardFilterItem>
                                         ))}
                                 </Flex>

@@ -29,6 +29,7 @@ on:
       - src/ui/playwright.command-context.config.ts
       - src/ui/playwright.default-language.config.ts
       - src/ui/playwright.auth-language.config.ts
+      - src/ui/playwright.filter.config.ts
       - src/ui/vite.card-load.config.ts
       - src/ui/package.json
       - src/ui/yarn.lock
@@ -77,6 +78,8 @@ jobs:
       - run: yarn playwright test -c playwright.locale-format.config.ts
         working-directory: src/ui
 
+      - run: yarn playwright test -c playwright.filter.config.ts
+        working-directory: src/ui
       - run: yarn playwright test -c playwright.workflow-filter-refresh.config.ts
         working-directory: src/ui
       - run: yarn playwright test -c playwright.workflow-stages.config.ts

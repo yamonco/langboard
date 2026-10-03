@@ -39,7 +39,7 @@ ProjectColumn.Model.fromArray(
         name: uid,
         order,
         is_archive: false,
-        workflow_stage: uid,
+        workflow_stage: `custom_${uid}`,
         count: 2,
     }))
 );
@@ -90,7 +90,7 @@ function Result() {
     return (
         <>
             <BoardFilter />
-            <p data-testid="url">{location.search}</p>
+            <p data-testid="url" className="break-all">{location.search}</p>
             <section aria-label="Results">
                 {cards
                     .filter(

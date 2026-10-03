@@ -45,10 +45,21 @@ export interface IFilterMap extends ISearchFilterMap {
     parents?: string[];
     children?: string[];
     columns?: string[];
+    workflow_stages?: string[];
     unfinished?: string[];
 }
 
-export const BOARD_FILTER_KEYS = ["keyword", "members", "creators", "labels", "parents", "children", "columns", "unfinished"] as (keyof IFilterMap)[];
+export const BOARD_FILTER_KEYS = [
+    "keyword",
+    "members",
+    "creators",
+    "labels",
+    "parents",
+    "children",
+    "columns",
+    "workflow_stages",
+    "unfinished",
+] as (keyof IFilterMap)[];
 
 export interface IBoardContext {
     socket: ISocketContext;
@@ -278,6 +289,10 @@ export const BoardProvider = memo(({ project, currentUser, children }: IBoardPro
 
     const filterCard = (card: ProjectCard.TModel) => {
         if (filters.columns?.length && !filters.columns.includes(card.project_column_uid)) return false;
+        if (filters.workflow_stages?.length) {
+            const stage = columns.find((column) => column.uid === card.project_column_uid)?.workflow_stage;
+            if (!stage || !filters.workflow_stages.includes(stage)) return false;
+        }
         if (
             filters.unfinished?.includes("yes") &&
             !matchesWorkload(
