@@ -588,8 +588,8 @@ function BoardProxyDisplay({ pageRoute, isFetching, isProjectLoading, project }:
     // Route-backed pages must win during the render that observes a location
     // change. Waiting for the boardViewType effect leaves the previous Wiki
     // tree mounted for one render, where its auto-selection can overwrite a
-    // card deep link and navigate back to the Wiki.
-    const renderedViewType = pageRoute ? getCurrentPage(pageRoute) : boardViewType;
+    // card deep link or the bare board route and navigate back to the Wiki.
+    const renderedViewType = getCurrentPage(pageRoute);
     switch (renderedViewType) {
         case "graph":
             PageComponent = BoardGraphPage;

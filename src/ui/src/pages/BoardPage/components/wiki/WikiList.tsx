@@ -16,7 +16,7 @@ import WikiEmptyState from "@/pages/BoardPage/components/wiki/WikiEmptyState";
 import WikiTabList, { SkeletonWikiTabList } from "@/pages/BoardPage/components/wiki/WikiTabList";
 import { memo, useCallback, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { useParams } from "react-router";
+import { Link, useParams } from "react-router";
 
 export function SkeletonWikiList() {
     return (
@@ -97,15 +97,15 @@ function WikiListDisplay({ wikiUID }: IWikiListDisplayProps) {
     return (
         <Box p="2">
             <nav aria-label={t("common.Breadcrumb")} className="mb-2 flex min-w-0 items-center gap-2 px-1 text-xs text-muted-foreground">
-                <a href={ROUTES.BOARD.MAIN(project.uid)} className="hover:text-foreground hover:underline">
+                <Link to={ROUTES.BOARD.MAIN(project.uid)} className="hover:text-foreground hover:underline">
                     {t("board.Board")}
-                </a>
+                </Link>
                 <span aria-hidden="true">/</span>
                 <span>{t("board.Wiki")}</span>
                 {activeWiki && (
                     <>
                         <span aria-hidden="true">/</span>
-                        <WikiBreadcrumbTitle wiki={activeWiki} />
+                        <WikiBreadcrumbTitle key={activeWiki.uid} wiki={activeWiki} />
                     </>
                 )}
             </nav>
