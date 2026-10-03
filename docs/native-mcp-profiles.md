@@ -60,6 +60,15 @@ missing or malformed domain fields. Remaining outputs are not yet typed.
 Boolean fields reject integers and strings explicitly, including `Literal[True]`
 fields that Pydantic otherwise accepts as `1` in strict mode.
 
+Eight additional work commands declare typed nested outputs for comment
+creation/editing, checklist and checkitem creation/update, work timer transitions,
+and public metadata writes. Nested projections preserve omitted fields separately
+from explicit nulls, bounded titles, cardified references and continuation cursors.
+Native datetime objects retain their existing JSON serialization. Domain DTOs
+are validated without replacing their pagination semantics. Malformed nested
+output after execution still produces an unknown receipt. The 39 reviewed
+command contracts do not establish coverage of all domain/query responses.
+
 This delivery separates existing canonical entry points. It does not yet supply
 all planned action facades, atomic Work Plan handling,
 OAuth profile access, deprecation telemetry or representative installed-client
