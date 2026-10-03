@@ -205,6 +205,24 @@ const BoardCardPageComponent = ({
                         <Dialog.Content
                             ref={contentRef}
                             data-card-viewer=""
+                            onPointerDownCapture={(event) => {
+                                const target = event.target as Element;
+                                // Dialog includes the transparent gap around the floating actions.
+                                // Portalled controls belong to their own dismissable layer.
+                                if (
+                                    isExpanded ||
+                                    shouldHideForCardSelection ||
+                                    event.button !== 0 ||
+                                    !event.currentTarget.contains(target) ||
+                                    target.closest(
+                                        "[data-card-surface], [data-floating-nav-content], [data-scroll-area-scrollbar], " +
+                                            "button, a, input, textarea, [role=button]"
+                                    ) ||
+                                    isNotificationInteraction(target)
+                                )
+                                    return;
+                                handleCloseRequest();
+                            }}
                             onCloseAutoFocus={(event) => {
                                 // Route/card switches keep destination focus. Explicit dismissal
                                 // returns to a visible card opener, or the workspace navigation.

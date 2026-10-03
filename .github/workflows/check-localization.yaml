@@ -96,6 +96,8 @@ jobs:
 
       - run: yarn playwright test -c playwright.workbench.config.ts
         working-directory: src/ui
+      - run: yarn playwright test -c playwright.card-deeplink.config.ts
+        working-directory: src/ui
 
       - run: yarn playwright test -c playwright.error-locale.config.ts
         working-directory: src/ui

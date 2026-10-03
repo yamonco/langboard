@@ -2,6 +2,7 @@ import { StrictMode, lazy, Suspense, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { MemoryRouter, Navigate, Route, Routes, useLocation, useParams } from "react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import "@/core/injection";
 import "@/i18n";
 import "@/assets/styles/main.css";
 import { AuthProvider } from "@/core/providers/AuthProvider";

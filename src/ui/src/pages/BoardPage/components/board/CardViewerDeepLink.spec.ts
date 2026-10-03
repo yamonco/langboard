@@ -2,6 +2,11 @@ import { test, expect, type Page, type Route } from "@playwright/test";
 
 const FIXTURE = "/src/pages/BoardPage/components/board/CardViewerDeepLink.fixture.html";
 
+test.beforeEach(async ({ page }) => {
+    page.on("pageerror", (error) => console.error("Fixture page error:", error.message));
+    page.on("requestfailed", (request) => console.error("Fixture request failure:", new URL(request.url()).pathname, request.failure()?.errorText));
+});
+
 const NOW_ISO = new Date().toISOString();
 
 const FIXTURE_USER = {
@@ -181,4 +186,21 @@ test("deep link under StrictMode double mounts plays the open animation exactly 
 
     const results = await collectResults(page);
     expect(results.openAnimationStarts).toBe(1);
+});
+
+test("visual blank area dismisses the card while surface and floating actions stay open", async ({ page }) => {
+    await mockBoardApi(page);
+    await page.goto(FIXTURE);
+    const viewer = page.locator("[data-card-viewer]");
+    await expect(page.locator("[data-card-surface]")).toBeVisible();
+    await page.locator("[data-card-surface]").click({ position: { x: 10, y: 10 } });
+    await expect(viewer).toBeVisible();
+    await page.getByRole("button", { name: "Actions", exact: true }).click();
+    await expect(viewer).toBeVisible();
+    const surface = await page.locator("[data-card-surface]").boundingBox();
+    const nav = await page.locator("[data-floating-nav-content]").locator("button").first().boundingBox();
+    expect(surface).not.toBeNull();
+    expect(nav).not.toBeNull();
+    await page.mouse.click(surface!.x + 8, (surface!.y + surface!.height + nav!.y) / 2);
+    await expect(viewer).toHaveCount(0);
 });

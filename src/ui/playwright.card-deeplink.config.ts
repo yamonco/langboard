@@ -14,6 +14,7 @@ export default defineConfig({
         viewport: { width: 1280, height: 800 },
     },
     webServer: {
+        env: { API_PORT: "5381", SOCKET_PORT: "5382" },
         command: "yarn vite --host 127.0.0.1 --port 4175 --strictPort",
         url: "http://127.0.0.1:4175/src/pages/BoardPage/components/board/CardViewerDeepLink.fixture.html",
         reuseExistingServer: true,

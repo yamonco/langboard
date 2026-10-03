@@ -54,6 +54,7 @@ function Nav({
             )}
         >
             <Flex
+                data-floating-nav-content=""
                 items="center"
                 gap="1"
                 className={cn(

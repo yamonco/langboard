@@ -223,7 +223,7 @@ const BoardCard = memo(
         return (
             <>
                 {error && (
-                    <Box role="alert" className="shrink-0 rounded-xl border bg-background p-4">
+                    <Box role="alert" data-card-surface="" className="shrink-0 rounded-xl border bg-background p-4">
                         {!cardData ? (
                             <Dialog.Title className="text-base font-semibold">{t("card.Could not load card")}</Dialog.Title>
                         ) : (
@@ -270,7 +270,7 @@ const BoardCard = memo(
 export function SkeletonBoardCard(): React.JSX.Element {
     return (
         <Flex direction="col" className="h-full min-h-0 gap-4">
-            <Box className="relative min-h-0 flex-1 rounded-2xl border bg-background px-4 py-4 shadow-2xl sm:px-6 sm:py-6">
+            <Box data-card-surface="" className="relative min-h-0 flex-1 rounded-2xl border bg-background px-4 py-4 shadow-2xl sm:px-6 sm:py-6">
                 <Flex
                     direction="col"
                     mb="3"
@@ -452,6 +452,7 @@ function BoardTaskCardResult({
             <Flex direction="col" className="h-full min-h-0 gap-2">
                 <Flex className={cn("min-h-0 min-w-0 flex-1", isExpanded ? "overflow-hidden" : "overflow-visible")}>
                     <Box
+                        data-card-surface=""
                         className={cn(
                             "relative min-h-0 min-w-0 max-w-full flex-1 border bg-background px-4 py-4 sm:px-6 sm:py-6",
                             isExpanded ? "overflow-hidden border-0 shadow-none" : "overflow-visible rounded-2xl shadow-2xl"
