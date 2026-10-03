@@ -69,6 +69,14 @@ are validated without replacing their pagination semantics. Malformed nested
 output after execution still produces an unknown receipt. The 39 reviewed
 command contracts do not establish coverage of all domain/query responses.
 
+Label catalog reads and local creation, global-label reuse, and card attach/detach
+also declare typed outputs. Local-first ordering, offset pagination, truncation
+metadata and optional emoji/global source fields retain their domain meaning.
+An existing local name match can satisfy global-label reuse without receiving
+global identity or emoji fields. Output contracts never authorize creation;
+the explicit local-creation instruction guard and global-creation prohibition
+remain in force. Coverage is now 42 reviewed commands and one additional query.
+
 This delivery separates existing canonical entry points. It does not yet supply
 all planned action facades, atomic Work Plan handling,
 OAuth profile access, deprecation telemetry or representative installed-client

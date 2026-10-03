@@ -92,6 +92,46 @@ class PublicMetadataOutput(CommandOutput):
     truncated: bool
 
 
+class LabelOutput(ProjectionOutput):
+    uid: str
+    name: str
+    color: str
+    description: str | None = None
+    order: int | None = None
+    global_label_uid: str | None = None
+    emoji: str | None = None
+    name_total_chars: int | None = None
+    name_truncated: bool | None = None
+    color_total_chars: int | None = None
+    color_truncated: bool | None = None
+    description_total_chars: int | None = None
+    description_truncated: bool | None = None
+
+
+class LabelCreationOutput(CommandOutput):
+    label: LabelOutput
+    created: bool
+
+
+class GlobalLabelUseOutput(LabelCreationOutput):
+    global_label_uid: str
+
+
+class CardLabelChangeOutput(CommandOutput):
+    labels: list[LabelOutput]
+    changed: bool
+
+
+class CatalogLabelOutput(LabelOutput):
+    source: Literal["local", "global"]
+
+
+class LabelCatalogOutput(CommandOutput):
+    items: list[CatalogLabelOutput]
+    total_count: int = Field(ge=0)
+    next_offset: int | None = Field(ge=0)
+
+
 WORK_OUTPUTS = {
     "create_card_checklist": ChecklistCreationOutput,
     "create_card_checkitem": CheckitemCreationOutput,
@@ -101,4 +141,8 @@ WORK_OUTPUTS = {
     "add_card_comment": CommentMutationOutput,
     "update_card_comment": CommentMutationOutput,
     "save_public_card_metadata": PublicMetadataOutput,
+    "create_local_project_label": LabelCreationOutput,
+    "use_global_project_label": GlobalLabelUseOutput,
+    "change_card_label": CardLabelChangeOutput,
+    "get_project_label_catalog": LabelCatalogOutput,
 }
