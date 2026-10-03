@@ -6,6 +6,7 @@ from typing import Any, TypeGuard, Union, get_args, get_origin
 from urllib.parse import urlsplit
 from fastmcp import FastMCP
 from fastmcp.exceptions import AuthorizationError
+from fastmcp.server.transforms.search import RegexSearchTransform
 from langboard_shared.core.types import Factory
 from langboard_shared.core.utils.decorators import class_instance
 from langboard_shared.domain.models import Bot, User
@@ -20,12 +21,15 @@ from .Tool import McpTool
 from .ToolGroupMiddleware import ToolGroupMiddleware
 
 
-def _create_fastmcp() -> FastMCP:
+RAW_DISCOVERY_TOOLS = frozenset({"search_raw_tools", "call_raw_tool"})
+
+
+def _create_fastmcp(discovery_tools: frozenset[str] = frozenset()) -> FastMCP:
     return FastMCP(
         Env.PROJECT_NAME,
         strict_input_validation=True,
         mask_error_details=True,
-        middleware=[ToolGroupMiddleware()],
+        middleware=[ToolGroupMiddleware(discovery_tools)],
     )
 
 
@@ -39,7 +43,7 @@ class McpServer:
         """Build the MCP transport or fail application startup."""
 
         allowed_hosts, allowed_origins = _get_transport_security_allowlists()
-        app = _create_fastmcp()
+        app = _create_fastmcp(RAW_DISCOVERY_TOOLS if profile == "raw" else frozenset())
 
         providers = {
             "compatibility": create_compatibility_provider,
@@ -49,6 +53,10 @@ class McpServer:
         if profile not in providers:
             raise ValueError(f"Unknown MCP profile: {profile}")
         app.add_provider(providers[profile](self._wrap_tool))
+        if profile == "raw":
+            app.add_transform(
+                RegexSearchTransform(max_results=5, search_tool_name="search_raw_tools", call_tool_name="call_raw_tool")
+            )
 
         http_app = app.http_app(
             path="/stream",
