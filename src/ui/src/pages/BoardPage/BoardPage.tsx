@@ -5,6 +5,7 @@ import useGetCards from "@/controllers/api/board/useGetCards";
 import setupApiErrorHandler from "@/core/helpers/setupApiErrorHandler";
 import { ROUTES } from "@/core/routing/constants";
 import BoardFilter from "@/pages/BoardPage/components/board/BoardFilter";
+import BoardSort from "@/pages/BoardPage/components/board/BoardSort";
 import { memo, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { BoardProvider } from "@/core/providers/BoardProvider";
@@ -86,6 +87,7 @@ const BoardResult = memo(({ project }: { project: Project.TModel }) => {
                 <BoardMemberList isSelectCardView={!!selectCardViewType} />
                 <Flex items="center" gap="1">
                     <BoardFilter />
+                    <BoardSort />
                 </Flex>
             </Flex>
 
