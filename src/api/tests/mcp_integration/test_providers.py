@@ -61,12 +61,64 @@ async def test_registered_profiles_partition_catalog_without_changing_schemas():
     try:
         catalogs = {}
         for profile in ("compatibility", "agent", "raw"):
-            _, server = McpServer.get_http_app(profile)
+            if profile == "raw":
+                server = _create_fastmcp()
+                server.add_provider(create_raw_primitive_provider(McpServer._wrap_tool))
+            else:
+                _, server = McpServer.get_http_app(profile)
             async with Client(server) as client:
                 catalogs[profile] = {tool.name: tool.input_schema for tool in await client.list_tools()}
         assert set(catalogs["agent"]) == AGENT_CORE_TOOLS
         assert set(catalogs["raw"]) == registered - AGENT_CORE_TOOLS
         assert {**catalogs["agent"], **catalogs["raw"]} == catalogs["compatibility"]
+    finally:
+        mcp_auth_context.reset(token)
+
+
+@pytest.mark.parametrize("role_allowed", [True, False])
+async def test_raw_search_respects_grants_and_proxy_rechecks_current_authorization(monkeypatch, role_allowed):
+    import json
+
+    calls = []
+
+    def record(value: int) -> dict[str, int]:
+        calls.append(value)
+        return {"value": value}
+
+    metadata = {"handler": record, "description": "Record", "exclude": [], "accessible_type": "all"}
+    names = {"archive_card", "delete_card", "get_projects"}
+    monkeypatch.setattr(McpTool, "get_tools", lambda: dict.fromkeys(names, metadata))
+    monkeypatch.setattr(McpTool, "get_tool", lambda name: metadata if name in names else None)
+    monkeypatch.setattr(McpServer, "_validate_auth", lambda actor, name: True)
+    monkeypatch.setattr(McpServer, "_validate_role", lambda actor, handler, **kwargs: role_allowed)
+    _, server = McpServer.get_http_app("raw")
+    group = SimpleNamespace(activated_at=object(), tools=["archive_card", "get_projects"])
+    token = mcp_auth_context.set({"user_or_bot": object(), "tool_group": group})
+    try:
+        async with Client(server) as client:
+            assert {tool.name for tool in await client.list_tools()} == {"search_raw_tools", "call_raw_tool"}
+            search = await client.call_tool("search_raw_tools", {"pattern": ".*"})
+            definitions = json.loads(search.content[0].text)
+            assert [tool["name"] for tool in definitions] == ["archive_card"]
+            assert definitions[0]["inputSchema"]["properties"]["value"]["type"] == "integer"
+            if role_allowed:
+                result = await client.call_tool("call_raw_tool", {"name": "archive_card", "arguments": {"value": 3}})
+                assert result.structured_content == {"value": 3}
+            else:
+                with pytest.raises(ToolError):
+                    await client.call_tool("call_raw_tool", {"name": "archive_card", "arguments": {"value": 3}})
+            for denied in ("delete_card", "get_projects", "call_raw_tool"):
+                with pytest.raises(ToolError):
+                    await client.call_tool("call_raw_tool", {"name": denied, "arguments": {"value": 4}})
+            group.tools = []
+            revoked = await client.call_tool("search_raw_tools", {"pattern": ".*"})
+            assert not revoked.content
+            with pytest.raises(ToolError):
+                await client.call_tool("call_raw_tool", {"name": "archive_card", "arguments": {"value": 5}})
+            group.activated_at = None
+            with pytest.raises(ToolError):
+                await client.call_tool("search_raw_tools", {"pattern": ".*"})
+            assert calls == ([3] if role_allowed else [])
     finally:
         mcp_auth_context.reset(token)
 
