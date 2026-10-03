@@ -841,3 +841,52 @@ def test_project_identity_does_not_trust_actor_shaped_content() -> None:
     )
     result = NativeCardWorkspaceAdapter(actor, service).get_project_identity("p1")
     assert result["authenticated_actor"] is None
+
+
+@pytest.mark.parametrize("actor_type", [native_module.User, native_module.Bot])
+@pytest.mark.parametrize("dispatch_effects", [True, False])
+def test_created_card_projects_authenticated_creator_before_publish(
+    monkeypatch: pytest.MonkeyPatch, actor_type, dispatch_effects: bool
+) -> None:
+    """Creation and its event carry the persisted author, never an assignee or private actor data."""
+    from contextlib import contextmanager
+    from importlib import import_module
+    from unittest.mock import Mock
+    from langboard_shared.core.db import EditorContentModel
+    from langboard_shared.domain.services.factory.CardService import CardService
+
+    module = import_module(CardService.__module__)
+    actor = actor_type.model_construct(id=42)
+    monkeypatch.setattr(actor_type, "get_fullname", lambda _: "Creator")
+    monkeypatch.setattr(actor_type, "api_response", lambda _: {"avatar": None, "email": "private", "api_key": "secret"})
+    project = SimpleNamespace(id=1)
+    column = SimpleNamespace(id=2, is_archive=False)
+    monkeypatch.setattr(module.InfraHelper, "get_records_with_foreign_by_params", lambda *_: (project, column))
+    committed: list[bool] = []
+
+    @contextmanager
+    def uow():
+        yield SimpleNamespace(watch_new=lambda _: None)
+        committed.append(True)
+
+    monkeypatch.setattr(module, "execution_readiness_uow", uow)
+    repository = SimpleNamespace(card=SimpleNamespace(insert=Mock(), get_next_order=lambda *_: 0))
+    service = CardService(lambda _: None, lambda _: None, repository)
+    service.next_change_seq = Mock(return_value=1)
+    dispatched: list[dict[str, Any]] = []
+
+    def publish(_actor, _project, _column, _card, model, _users):
+        assert committed == [True]
+        dispatched.append(model)
+
+    service.dispatch_created = publish
+    card, payload = service.create(actor, project, column, "Work", EditorContentModel(content="Body"), dispatch_effects=dispatch_effects)
+    expected_type = "user" if actor_type is native_module.User else "bot"
+    assert card.created_by_user_id == (42 if expected_type == "user" else None)
+    assert card.created_by_bot_id == (42 if expected_type == "bot" else None)
+    assert payload["member_uids"] == []
+    assert payload["creator"] == {
+        "uid": actor.get_uid(), "type": expected_type, "name": "Creator", "avatar": None,
+        "created_at": card.created_at.isoformat(),
+    }
+    assert dispatched == ([{"card": payload}] if dispatch_effects else [])

@@ -1159,7 +1159,15 @@ class CardService(BaseDomainService):
                 self.ensure_completion_checklist(card)
 
             api_card = card.board_api_response(
-                0, [user.get_uid() for user in users], [], [], completed=False, is_check_card=is_check_card
+                0,
+                [user.get_uid() for user in users],
+                [],
+                [],
+                creator=self._card_creator_projection(card, user_or_bot)
+                if isinstance(user_or_bot, (User, Bot))
+                else None,
+                completed=False,
+                is_check_card=is_check_card,
             )
             model = {"card": api_card}
 
