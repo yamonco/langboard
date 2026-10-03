@@ -329,12 +329,18 @@ def test_description_unexpected_failure_is_not_claimed_unsaved(monkeypatch: pyte
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("reason", ["stale revision", "missing fragment", "ambiguous fragment", "effect failure"])
-async def test_description_conflict_through_http_route(monkeypatch: pytest.MonkeyPatch, reason: str) -> None:
+@pytest.mark.parametrize("request_id", ["7c4bc47e58ae43ac91fc53cfb5f008b0", "invalid-secret-value"])
+async def test_description_conflict_through_http_route(
+    monkeypatch: pytest.MonkeyPatch, reason: str, request_id: str
+) -> None:
     """The HTTP dispatcher preserves safe validation errors and unknown outcomes separately."""
+    from unittest.mock import Mock
+    from uuid import UUID
     from fastapi import FastAPI, Request
     from fastmcp import FastMCP
     from httpx import ASGITransport, AsyncClient
     from langboard.card_workspace.domain import DescriptionPatchConflict
+    from langboard_shared.core.logger import Logger
 
     route = importlib.import_module("langboard.routes.mcp.McpApi")
     closed: list[bool] = []
@@ -346,10 +352,12 @@ async def test_description_conflict_through_http_route(monkeypatch: pytest.Monke
     monkeypatch.setattr(route, "DomainService", lambda: service)
     monkeypatch.setattr(route, "User", SimpleNamespace)
     monkeypatch.setattr(CardMcp, "_adapter", lambda *args: object())
+    audit = Mock()
+    monkeypatch.setattr(Logger.main, "error", audit)
 
     def reject(*args: Any, **kwargs: Any) -> None:
         if reason == "effect failure":
-            raise ValueError("effect failure")
+            raise ValueError("private-effect-failure-detail")
         raise DescriptionPatchConflict(reason)
 
     monkeypatch.setattr(CardMcp, "replace_description_text", reject)
@@ -375,11 +383,24 @@ async def test_description_conflict_through_http_route(monkeypatch: pytest.Monke
         response = await client.post(
             "/mcp/tools/patch_card_description",
             json={},
-            headers={route.AuthSecurity.MCP_TOOL_GROUP_UID_HEADER: "test-group"},
+            headers={route.AuthSecurity.MCP_TOOL_GROUP_UID_HEADER: "test-group", "X-Request-ID": request_id},
         )
     assert response.status_code == (500 if reason == "effect failure" else 400)
     assert closed == [True]
     assert route.mcp_auth_context.get() is None
+    if reason == "effect failure":
+        body = response.json()
+        assert body["outcome"] == "unknown"
+        assert UUID(body["request_id"]).hex == body["request_id"]
+        assert response.headers["X-Request-ID"] == body["request_id"]
+        if request_id != "invalid-secret-value":
+            assert body["request_id"] == request_id
+        audit.assert_called_once()
+        assert audit.call_args.args[-1] == "ValueError"
+        assert "private-effect-failure-detail" not in response.text + str(audit.call_args)
+        assert "invalid-secret-value" not in response.text + str(audit.call_args)
+    else:
+        audit.assert_not_called()
 
 
 def test_card_bundle_schema_exposes_opt_in_sections() -> None:
