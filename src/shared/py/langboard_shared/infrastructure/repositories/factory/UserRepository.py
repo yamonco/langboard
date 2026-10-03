@@ -3,6 +3,7 @@ from sqlalchemy import and_, func, or_, select
 from ....core.db import DbSession, SqlBuilder
 from ....core.domain import BaseRepository
 from ....core.types.ParamTypes import TUserParam
+from ....core.types import SafeDateTime
 from ....domain.models import (
     IdentityProvider,
     ProjectAssignedUser,
@@ -30,6 +31,15 @@ class UserRepository(BaseRepository[User]):
         with DbSession.use(readonly=False) as db:
             row = db.exec(query).first()
         return row[0] if row else user.preferred_lang
+
+    def update_preferred_lang(self, user: User, lang: str) -> None:
+        # The authentication model may still contain the requested replica value.
+        with DbSession.use(readonly=False) as db:
+            db.exec(
+                SqlBuilder.update.table(User)
+                .where(User.column("id") == user.id)
+                .values({User.column("preferred_lang"): lang, User.column("updated_at"): SafeDateTime.now()})
+            )
 
     def get_all_with_profile_in_settings(self):
         query = (

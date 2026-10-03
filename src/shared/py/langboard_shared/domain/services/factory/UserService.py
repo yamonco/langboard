@@ -272,8 +272,8 @@ class UserService(BaseDomainService):
         else:
             return False
 
+        self.repo.user.update_preferred_lang(user, lang)
         user.preferred_lang = lang
-        self.repo.user.update(user)
 
         return True
 

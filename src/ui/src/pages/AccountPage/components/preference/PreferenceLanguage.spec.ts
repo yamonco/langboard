@@ -1,5 +1,19 @@
 import { expect, test } from "@playwright/test";
 for (const width of [1280, 390]) {
+    test(`avatar language dropdown survives hover exit at ${width}px`, async ({ page }) => {
+        await page.setViewportSize({ width, height: 850 });
+        await page.route("**/account/preferred-language", (route) => route.fulfill({ status: 200, contentType: "application/json", body: "{}" }));
+        await page.goto("/src/pages/AccountPage/components/preference/PreferenceLanguage.fixture.html");
+        await page.getByRole("button", { name: "Open user menu" }).click();
+        await page.getByRole("dialog").getByRole("button", { name: "English (US)" }).click();
+        await page.mouse.move(1, 1);
+        await page.waitForTimeout(700);
+        await expect(page.getByRole("menuitem", { name: "한국어" })).toBeVisible();
+        await page.getByRole("menuitem", { name: "한국어" }).click();
+        await expect(page.locator("output")).toContainText('"preferred":"ko-KR"');
+    });
+}
+for (const width of [1280, 390]) {
     test(`own preference saves immediately and survives reload at ${width}px`, async ({ page }) => {
         await page.setViewportSize({ width, height: 850 });
         let release: () => void = () => {};
