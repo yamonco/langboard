@@ -53,7 +53,7 @@ for (const width of [1280, 390])
         await page.getByRole("button", { name: "Edit", exact: true }).click();
         await expect(page.getByLabel("Column name", { exact: true })).toHaveValue("Queue");
         await page.getByLabel("Column description", { exact: true }).fill("Edited guidance");
-        await page.getByLabel("Template description", { exact: true }).fill("Reusable support board");
+        await page.getByLabel("Board template description", { exact: true }).fill("Reusable support board");
         await page.getByRole("checkbox", { name: "Question" }).check();
         await page.getByRole("combobox", { name: "Project chat", exact: true }).selectOption("bot");
         await page.getByRole("button", { name: "ko", exact: true }).click();
@@ -97,7 +97,7 @@ test("failed bot choices preserve saved selection during unrelated edits", async
     await page.getByRole("button", { name: "Edit", exact: true }).click();
     await expect(page.getByRole("combobox", { name: "Project chat", exact: true })).toBeDisabled();
     await expect(page.getByRole("combobox", { name: "Project chat", exact: true })).toHaveValue("existing");
-    await page.getByLabel("Template description", { exact: true }).fill("Unrelated change");
+    await page.getByLabel("Board template description", { exact: true }).fill("Unrelated change");
     await page.getByRole("button", { name: "Save", exact: true }).click();
     await expect(page.locator("form")).toHaveCount(0);
     expect(saved).toBe(true);
