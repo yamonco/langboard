@@ -118,9 +118,9 @@ COMMAND_OUTPUTS = {
 }
 
 
-def with_typed_output(name, handler):
+def with_typed_output(name, handler, output_model=None):
     """Use native FastMCP return annotations and validate after domain execution."""
-    model = COMMAND_OUTPUTS.get(name)
+    model = output_model or COMMAND_OUTPUTS.get(name)
     if model is None:
         return handler
 

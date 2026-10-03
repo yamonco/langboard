@@ -13,6 +13,7 @@ from .Annotations import tool_annotations
 from .Outputs import with_typed_output
 from .Tool import McpTool
 from .ToolGroupMiddleware import ToolGroupMiddleware
+from .WorkOutputs import WORK_OUTPUTS
 
 
 # Existing canonical entry points; profile selection never grants permission.
@@ -62,7 +63,7 @@ def create_native_domain_provider(
     for name, metadata in McpTool.get_tools().items():
         handler = wrap_tool(name, metadata["handler"])
         if modern_annotations:
-            handler = with_typed_output(name, handler)
+            handler = with_typed_output(name, handler, WORK_OUTPUTS.get(name))
         provider.add_tool(
             Tool.from_function(
                 handler,
