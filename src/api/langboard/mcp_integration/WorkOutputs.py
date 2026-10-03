@@ -132,6 +132,46 @@ class LabelCatalogOutput(CommandOutput):
     next_offset: int | None = Field(ge=0)
 
 
+class MembershipChangeOutput(CommandOutput):
+    requested_count: int = Field(ge=0)
+    changed_count: int = Field(ge=0)
+    status: Literal["updated", "unchanged"]
+
+
+class PeopleAndLabelsOutput(ProjectionOutput):
+    member_uids: list[str] | None = None
+    labels: list[LabelOutput] | None = None
+
+
+class RelationshipOutput(ProjectionOutput):
+    uid: str | None = None
+    relationship_type_uid: str | None = None
+    parent_name: str | None = None
+    child_name: str | None = None
+    machine_semantic: str | None = None
+    affects_readiness: bool | None = None
+    is_system_default: bool | None = None
+    parent_card_uid: str | None = None
+    child_card_uid: str | None = None
+    card_uid_parent: str | None = None
+    card_uid_child: str | None = None
+    parent_name_total_chars: int | None = None
+    parent_name_truncated: bool | None = None
+    child_name_total_chars: int | None = None
+    child_name_truncated: bool | None = None
+    machine_semantic_total_chars: int | None = None
+    machine_semantic_truncated: bool | None = None
+
+
+class RelationshipsOutput(CommandOutput):
+    relationships: list[RelationshipOutput]
+
+
+class ChecklistReconcileOutput(ChecklistCreationOutput):
+    changed: bool
+    receipt: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
 WORK_OUTPUTS = {
     "create_card_checklist": ChecklistCreationOutput,
     "create_card_checkitem": CheckitemCreationOutput,
@@ -145,4 +185,9 @@ WORK_OUTPUTS = {
     "use_global_project_label": GlobalLabelUseOutput,
     "change_card_label": CardLabelChangeOutput,
     "get_project_label_catalog": LabelCatalogOutput,
+    "invite_project_members": MembershipChangeOutput,
+    "add_project_people": MembershipChangeOutput,
+    "set_card_people_and_labels": PeopleAndLabelsOutput,
+    "set_card_relationships": RelationshipsOutput,
+    "reconcile_card_checklist_projection": ChecklistReconcileOutput,
 }
