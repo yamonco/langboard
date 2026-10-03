@@ -132,7 +132,7 @@
   "Card details": "Card details",
   "Creator": "Creator",
   "Column": "Column",
-  "Seen by count": "Seen by {{count}}",
+  "Seen by count": "Seen by {{count, number}}",
   "Card view receipt": "Read automatically when the card is viewed; not an acknowledgement or approval.",
   "Mark card unread": "Mark card unread",
   "Add labels": "Add labels",

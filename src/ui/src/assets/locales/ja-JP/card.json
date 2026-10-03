@@ -132,7 +132,7 @@
   "Card details": "カードの詳細",
   "Creator": "作成者",
   "Column": "列",
-  "Seen by count": "{{count}} 人が閲覧",
+  "Seen by count": "{{count, number}} 人が閲覧",
   "Card view receipt": "カードを閲覧すると自動で既読になります。確認や承認を意味するものではありません。",
   "Mark card unread": "カードを未読にする",
   "Add labels": "ラベルを追加",

@@ -4,7 +4,7 @@
   "MCP Server": "MCP服务器",
   "MCP Server Configuration": "MCP服务器配置",
   "Copy config": "复制配置",
-  "Available Tools ({count})": "可用工具 ({{count}})",
+  "Available Tools ({count})": "可用工具 ({{count, number}})",
   "View Input Schema": "查看输入架构",
-  "{count} tools": "{{count}}个工具"
+  "{count} tools": "{{count, number}}个工具"
 }

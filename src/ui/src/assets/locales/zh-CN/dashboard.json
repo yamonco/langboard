@@ -44,7 +44,7 @@
   "Could not load projects": "无法加载项目。",
   "Could not load work": "无法加载工作。",
   "No work found": "此范围内未找到工作。",
-  "Showing recent work": "正在显示 {{count}} 项最近工作（最多 50 项）",
+  "Showing recent work": "正在显示 {{count, number}} 项最近工作（最多 50 项）",
   "Refreshing": "正在刷新...",
   "Retry": "重试",
   "Overdue": "已逾期",

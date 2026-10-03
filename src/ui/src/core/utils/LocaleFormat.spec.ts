@@ -192,3 +192,13 @@ test("large description rail formats grouped ranges and accessible totals", asyn
         await page.getByRole("button", { name: locale, exact: true }).focus();
     }
 });
+
+test("remaining permission, event, work, reader and tool counts use locale grouping", async ({ page }) => {
+    await page.goto("/src/core/utils/LocaleFormat.fixture.html");
+    for (const locale of ["ko-KR", "ja-JP", "zh-CN", "en-US"]) {
+        await page.getByRole("button", { name: locale, exact: true }).click();
+        const messages = page.getByTestId("remaining-counts").locator("span");
+        await expect(messages).toHaveCount(7);
+        for (const message of await messages.all()) await expect(message).toContainText("1,234");
+    }
+});

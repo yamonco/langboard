@@ -4,7 +4,7 @@
   "MCP Server": "MCP 서버",
   "MCP Server Configuration": "MCP 서버 설정",
   "Copy config": "설정 복사",
-  "Available Tools ({count})": "사용 가능한 도구 ({{count}})",
+  "Available Tools ({count})": "사용 가능한 도구 ({{count, number}})",
   "View Input Schema": "입력 스키마 보기",
-  "{count} tools": "도구 {{count}}개"
+  "{count} tools": "도구 {{count, number}}개"
 }

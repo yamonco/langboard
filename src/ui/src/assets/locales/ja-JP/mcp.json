@@ -4,7 +4,7 @@
   "MCP Server": "MCPサーバー",
   "MCP Server Configuration": "MCPサーバー設定",
   "Copy config": "設定をコピー",
-  "Available Tools ({count})": "利用可能なツール ({{count}})",
+  "Available Tools ({count})": "利用可能なツール ({{count, number}})",
   "View Input Schema": "入力スキーマを見る",
-  "{count} tools": "{{count}}個のツール"
+  "{count} tools": "{{count, number}}個のツール"
 }

@@ -132,7 +132,7 @@
   "Card details": "카드 상세 정보",
   "Creator": "작성자",
   "Column": "열",
-  "Seen by count": "{{count}}명이 열람함",
+  "Seen by count": "{{count, number}}명이 열람함",
   "Card view receipt": "카드를 열람하면 자동으로 읽음 처리됩니다. 확인 응답이나 승인을 의미하지 않습니다.",
   "Mark card unread": "카드를 읽지 않음으로 표시",
   "Add labels": "라벨 추가",

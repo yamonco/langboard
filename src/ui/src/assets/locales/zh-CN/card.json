@@ -132,7 +132,7 @@
   "Card details": "卡片详情",
   "Creator": "创建者",
   "Column": "列",
-  "Seen by count": "{{count}} 人已查看",
+  "Seen by count": "{{count, number}} 人已查看",
   "Card view receipt": "查看卡片时会自动标记为已读；不表示确认或批准。",
   "Mark card unread": "将卡片标记为未读",
   "Add labels": "添加标签",

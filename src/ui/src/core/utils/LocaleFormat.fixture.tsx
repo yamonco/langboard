@@ -129,6 +129,21 @@ function Fixture() {
                 <DescriptionOverviewRail chunks={railChunks} activeIndex={1233} onNavigate={() => {}} />
             </div>
             <output data-testid="relative">{distance}</output>
+            <output data-testid="remaining-counts">
+                {[
+                    "settings.Partial Admin ({{count}} permissions)",
+                    "settings.Partial access ({{count}} permissions)",
+                    "settings.Selected event count",
+                    "dashboard.Showing recent work",
+                    "card.Seen by count",
+                    "mcp.Available Tools ({count})",
+                    "mcp.{count} tools",
+                ].map((key) => (
+                    <span key={key} data-count-key={key}>
+                        {t(key, { count: 1234 })}
+                    </span>
+                ))}
+            </output>
             <output data-testid="workflow-stage-label">{t("board.Workflow stage display", { stage: "User stage" })}</output>
             <output data-testid="graph-counts">
                 {t("board.{cards} cards, {relationships} relationships", { cards: 1234, relationships: 2345 })}

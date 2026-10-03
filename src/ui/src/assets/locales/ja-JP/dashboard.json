@@ -44,7 +44,7 @@
   "Could not load projects": "プロジェクトを読み込めませんでした。",
   "Could not load work": "作業を読み込めませんでした。",
   "No work found": "この範囲に作業が見つかりません。",
-  "Showing recent work": "最近の作業 {{count}} 件を表示中（最大50件）",
+  "Showing recent work": "最近の作業 {{count, number}} 件を表示中（最大50件）",
   "Refreshing": "更新中...",
   "Retry": "再試行",
   "Overdue": "期限超過",
