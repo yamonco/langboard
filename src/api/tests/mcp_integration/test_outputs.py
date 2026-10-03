@@ -91,3 +91,58 @@ async def test_reviewed_outputs_preserve_fields_and_reject_drift(name, payload):
         COMMAND_OUTPUTS[name].model_validate({**payload, "unexpected": "private"})
     with pytest.raises(ValidationError):
         COMMAND_OUTPUTS[name].model_validate({})
+
+
+@pytest.mark.parametrize(
+    "field,name",
+    [
+        ("read", "mark_notification_read"),
+        ("deleted", "delete_card_comment"),
+        ("moved", "move_card_content_block"),
+        ("is_reacted", "toggle_card_comment_reaction"),
+    ],
+)
+@pytest.mark.parametrize("value", [1, 0, "true", None])
+def test_boolean_contracts_do_not_coerce_literal_values(field, name, value):
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        COMMAND_OUTPUTS[name].model_validate({field: value})
+
+
+async def test_all_reviewed_contracts_have_native_registered_handlers():
+    from langboard.Loader import ModuleLoader
+
+    ModuleLoader.load("mcp_tools", "Mcp", log=False)
+    assert set(COMMAND_OUTPUTS) <= set(McpTool.get_tools())
+
+
+@pytest.mark.parametrize("operation", ["append", "patch", "replace", "delete"])
+async def test_wiki_domain_results_validate_without_changing_revision(operation):
+    from langboard.wiki_workspace.application.commands import append_wiki, delete_wiki, patch_wiki, replace_wiki
+    from langboard.wiki_workspace.domain import WikiSnapshot
+
+    snapshot = WikiSnapshot("wiki", "title", "before")
+    writes = []
+    repository = SimpleNamespace(
+        snapshot=lambda *args: snapshot,
+        append=lambda *args: writes.append(args),
+        replace=lambda *args: writes.append(args),
+        delete=lambda *args: writes.append(args),
+    )
+    args = (repository, "project", "wiki", snapshot.revision)
+    if operation == "append":
+        payload = append_wiki(*args, "after")
+    elif operation == "patch":
+        payload = patch_wiki(*args, [("before", "after")])
+    elif operation == "replace":
+        payload = replace_wiki(*args, "after")
+    else:
+        payload = delete_wiki(*args)
+    name = "delete_project_wiki" if operation == "delete" else operation + "_wiki_content"
+
+    async def handler():
+        return payload
+
+    assert (await with_typed_output(name, handler)()).model_dump() == payload
+    assert len(writes) == 1

@@ -118,7 +118,14 @@ async def test_raw_search_respects_grants_and_proxy_rechecks_current_authorizati
 
     metadata = {"handler": record, "description": "Record", "exclude": [], "accessible_type": "all"}
     names = {"archive_card", "delete_card", "get_projects"}
-    monkeypatch.setattr(McpTool, "get_tools", lambda: dict.fromkeys(names, metadata))
+
+    def archive(value: int) -> dict[str, str]:
+        calls.append(value)
+        return {"message": "Archived"}
+
+    registry = dict.fromkeys(names, metadata)
+    registry["archive_card"] = {**metadata, "handler": archive}
+    monkeypatch.setattr(McpTool, "get_tools", lambda: registry)
     monkeypatch.setattr(McpTool, "get_tool", lambda name: metadata if name in names else None)
     monkeypatch.setattr(McpServer, "_validate_auth", lambda actor, name: True)
     monkeypatch.setattr(McpServer, "_validate_role", lambda actor, handler, **kwargs: role_allowed)
@@ -134,7 +141,7 @@ async def test_raw_search_respects_grants_and_proxy_rechecks_current_authorizati
             assert definitions[0]["inputSchema"]["properties"]["value"]["type"] == "integer"
             if role_allowed:
                 result = await client.call_tool("call_raw_tool", {"name": "archive_card", "arguments": {"value": 3}})
-                assert result.structured_content == {"value": 3}
+                assert result.structured_content == {"message": "Archived"}
             else:
                 with pytest.raises(ToolError):
                     await client.call_tool("call_raw_tool", {"name": "archive_card", "arguments": {"value": 3}})
@@ -198,7 +205,14 @@ async def test_profiles_preserve_domain_dispatch_and_deny_hidden_or_ungranted_ca
 
     metadata = {"handler": record, "description": "Record", "exclude": [], "accessible_type": "all"}
     names = {"get_projects", "archive_card", "denied"}
-    monkeypatch.setattr(McpTool, "get_tools", lambda: dict.fromkeys(names, metadata))
+
+    def archive(value: int) -> dict[str, str]:
+        calls.append(value)
+        return {"message": "Archived"}
+
+    registry = dict.fromkeys(names, metadata)
+    registry["archive_card"] = {**metadata, "handler": archive}
+    monkeypatch.setattr(McpTool, "get_tools", lambda: registry)
     monkeypatch.setattr(McpTool, "get_tool", lambda name: metadata if name in names else None)
     monkeypatch.setattr(McpServer, "_validate_auth", lambda actor, name: True)
     monkeypatch.setattr(McpServer, "_validate_role", lambda actor, handler, **kwargs: role_allowed)
@@ -216,7 +230,9 @@ async def test_profiles_preserve_domain_dispatch_and_deny_hidden_or_ungranted_ca
             assert {tool.name for tool in tools} == ({visible} if hidden else {"get_projects", "archive_card"})
             if role_allowed:
                 result = await client.call_tool(visible, {"value": 3})
-                assert result.structured_content == {"value": 3}
+                assert result.structured_content == (
+                    {"message": "Archived"} if visible == "archive_card" else {"value": 3}
+                )
             else:
                 with pytest.raises(ToolError, match="Insufficient permissions"):
                     await client.call_tool(visible, {"value": 3})
