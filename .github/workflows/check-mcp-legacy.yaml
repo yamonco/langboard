@@ -34,9 +34,11 @@ jobs:
       - run: uv sync --frozen
       - name: Verify immutable artifacts and rejection behavior
         run: uv run --no-sync python scripts/mcp_contracts/test_legacy.py
+      - name: Verify native protocol and authorization contracts
+        run: uv run --no-sync pytest -q src/api/tests/mcp_integration
       - name: Capture candidate catalog without deployed database access
         run: uv run --no-sync python scripts/mcp_contracts/capture_native.py --catalog-only > candidate.json
       - name: Preserve all legacy tool schemas and annotations
         run: >-
           uv run --no-sync python scripts/mcp_contracts/check_legacy.py --catalog-only
-          src/api/tests/mcp_integration/fixtures/legacy-canary-20261004.json candidate.json
+          src/api/tests/mcp_integration/fixtures/legacy-native-v1.json candidate.json

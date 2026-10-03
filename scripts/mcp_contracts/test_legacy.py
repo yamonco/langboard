@@ -8,7 +8,7 @@ from pathlib import Path
 from check_legacy import canonical_bytes, check_legacy
 
 
-FIXTURE = Path(__file__).parents[2] / "src/api/tests/mcp_integration/fixtures/legacy-canary-20261004.json"
+FIXTURE = Path(__file__).parents[2] / "src/api/tests/mcp_integration/fixtures/legacy-native-v1.json"
 
 
 def sign(snapshot):
@@ -18,12 +18,16 @@ def sign(snapshot):
 
 class LegacyContractTest(unittest.TestCase):
     def test_captured_artifacts_match_provenance_manifest(self):
-        manifest = json.loads(FIXTURE.with_name("legacy-canary-20261004-manifest.json").read_text())
+        manifest = json.loads(FIXTURE.with_name("legacy-native-v1-manifest.json").read_text())
         for filename, digest in manifest["files"].items():
             self.assertEqual(hashlib.sha256(FIXTURE.with_name(filename).read_bytes()).hexdigest(), digest)
 
     def setUp(self):
         self.baseline = json.loads(FIXTURE.read_text())
+        self.baseline["contract"]["tool_groups"] = [
+            {"key": "example-group", "owner": "example-owner", "scope": "user", "active": True, "tools": ["example"]}
+        ]
+        sign(self.baseline)
         self.current = copy.deepcopy(self.baseline)
 
     def test_baseline_integrity_and_additive_tools(self):

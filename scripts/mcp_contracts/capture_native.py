@@ -16,7 +16,7 @@ def canonical_bytes(value):
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
 
 
-async def capture(*, include_groups=True):
+async def capture(*, include_groups=False):
     from langboard.Loader import ModuleLoader
     from langboard.mcp_integration import McpServer, McpTool
     from langboard_shared.core.db import DbSession, SqlBuilder
@@ -64,17 +64,24 @@ async def capture(*, include_groups=True):
         "observed_at": datetime.now(timezone.utc).isoformat(),
         "fastmcp_version": version("fastmcp"),
         "contract_sha256": hashlib.sha256(canonical_bytes(contract)).hexdigest(),
-        "scope": "Deployed source registration and readonly ToolGroup rows; not authenticated discovery or tool invocation.",
+        "scope": "Source registration; optional readonly deployment ToolGroups. Not authenticated discovery or invocation.",
         "contract": contract,
     }
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--catalog-only", action="store_true", help="Skip deployed ToolGroup DB read for isolated CI.")
+    parser.add_argument("--catalog-only", action="store_true", help="Capture only the portable tool catalog (default).")
+    parser.add_argument(
+        "--include-tool-groups",
+        action="store_true",
+        help="Include deployment-specific groups for external evidence only.",
+    )
     args = parser.parse_args()
+    if args.catalog_only and args.include_tool_groups:
+        parser.error("--catalog-only and --include-tool-groups are mutually exclusive")
     print(
         json.dumps(
-            asyncio.run(capture(include_groups=not args.catalog_only)), ensure_ascii=False, sort_keys=True, indent=2
+            asyncio.run(capture(include_groups=args.include_tool_groups)), ensure_ascii=False, sort_keys=True, indent=2
         )
     )

@@ -22,7 +22,7 @@ dependencies = [
     "inflect>=7.5.0",
     "kafka-python>=2.2.15",
     "langboard-shared",
-    "fastmcp==4.0.0b3",
+    "fastmcp==4.0.10",
     "orjson>=3.11.0",
     "psutil>=7.1.2",
     "psycopg[binary]>=3.2.12",

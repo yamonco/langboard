@@ -92,11 +92,14 @@ def test_project_search_reuses_native_bounded_search() -> None:
     service = SimpleNamespace(
         card=SimpleNamespace(
             search_context_by_project=lambda project_uid, query, **_filters: calls.append((project_uid, query))
-            or [{"uid": "c1"}]
+            or [{"uid": "c1", "description": "Example card"}]
         )
     )
 
-    assert UserMcp.search_project_cards("project-1", "  release  ", service) == {"cards": [{"uid": "c1"}]}
+    assert UserMcp.search_project_cards("project-1", "  release  ", service) == {
+        "cards": [{"uid": "c1", "description": "Example card"}],
+        "workflow_stages": {},
+    }
     assert calls == [("project-1", "release")]
 
 
