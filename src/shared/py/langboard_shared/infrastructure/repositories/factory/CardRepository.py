@@ -84,7 +84,14 @@ class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
             changed = db.exec(
                 update(Card.__table__)
                 .where(Card.column("id") == card.id)
-                .values(description=card.description, updated_at=updated_at)
+                .values(
+                    description=card.description,
+                    updated_at=updated_at,
+                    last_change_seq=card.last_change_seq,
+                    last_change_target_type=card.last_change_target_type,
+                    last_change_target_id=card.last_change_target_id,
+                    last_change_at=card.last_change_at,
+                )
             )
             if changed != 1:
                 return False

@@ -25,6 +25,7 @@ from langboard.mcp_tools import CardMcp, ProjectMcp  # noqa: E402
 class Card:
     """Minimal native card double."""
 
+    id = 7
     project_id = 1
     project_column_id = 2
     created_by_user_id = None
@@ -77,6 +78,7 @@ def _service(people: list[dict[str, Any]] | None = None) -> tuple[Any, list[tupl
         project_column=SimpleNamespace(get_by_id_like=lambda uid: column, get_workflow_guidance=lambda _: {2: {}}),
         card=SimpleNamespace(
             get_by_id_like=lambda uid: card,
+            get_work_states=lambda cards: {item.id: {"version": 1} for item in cards},
             can_delete=lambda actor, target: False,
             get_api_assigned_user_list=lambda target, limit: people or [],
             get_api_bot_scope_list=lambda target_project, target_card, limit: [],
@@ -234,7 +236,7 @@ def test_native_source_projects_linked_wiki_content_without_task_sections() -> N
     assert source.metadata == {}
     assert source.bot_scopes == []
     assert source.bot_schedules == []
-    get_details.assert_called_once_with(project, card, actor, limit=MAX_NATIVE_SECTION_SOURCE + 1)
+    get_details.assert_called_once_with(project, card, actor)
 
 
 def test_native_checkitem_continuation_reads_only_the_requested_checklist() -> None:
@@ -248,6 +250,7 @@ def test_native_checkitem_continuation_reads_only_the_requested_checklist() -> N
         project_column=SimpleNamespace(get_by_id_like=lambda _uid: column, get_workflow_guidance=lambda _: {column.id: {}}),
         card=SimpleNamespace(
             get_by_id_like=lambda _uid: card,
+            get_work_states=lambda cards: {item.id: {"version": 1} for item in cards},
             can_delete=lambda actor, target: False,
         ),
         checklist=SimpleNamespace(
@@ -582,6 +585,7 @@ def test_native_description_read_revision_can_be_used_for_multi_hunk_patch() -> 
     editor = EditorContentModel(content=original)
     service, _ = _service()
     card = SimpleNamespace(
+        id=7,
         project_id=1,
         project_column_id=2,
         description=editor,
@@ -719,12 +723,18 @@ def test_description_repository_rejects_stale_writer_and_preserves_other_fields(
         title="other stale title",
         description=EditorContentModel(content="second edit"),
     )
+    first.last_change_seq = 41
+    first.last_change_target_type = "description"
+    second.last_change_seq = 42
     assert repository.update_description_if_current(first, "original") is True
     assert repository.update_description_if_current(second, "original") is False
     with engine.connect() as connection:
-        row = connection.execute(select(NativeCard.__table__.c.title, NativeCard.__table__.c.description)).one()
+        row = connection.execute(
+            select(NativeCard.__table__.c.title, NativeCard.__table__.c.description, NativeCard.__table__.c.last_change_seq)
+        ).one()
     assert row.title == "preserved title"
     assert row.description.content == "first edit"
+    assert row.last_change_seq == 41
     if engine.dialect.name == "postgresql":
         from concurrent.futures import ThreadPoolExecutor
         from threading import Barrier
@@ -777,6 +787,9 @@ def test_conditional_description_emits_effects_only_after_save(monkeypatch: pyte
     )
     notifications = Mock()
     service._get_service = Mock(return_value=notifications)
+    service.next_change_seq = Mock(return_value=41)
+    service.is_check_card = Mock(return_value=False)
+    service.remove_completion_checklist = Mock()
     monkeypatch.setattr(InfraHelper, "get_records_with_foreign_by_params", lambda *_args: (project, card))
     effects = [Mock(), Mock(), Mock()]
     monkeypatch.setattr(CardPublisher, "updated", effects[0])

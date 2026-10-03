@@ -1494,8 +1494,6 @@ class CardService(BaseDomainService):
             self.repo.card.update(card)
         elif not self.repo.card.update_description_if_current(card, expected_description):
             raise CardDescriptionConflict("Card description changed after review: concurrent update")
-        else:
-            self.repo.card.update(card)
 
         if "description" in old_record or "deadline_at" in old_record:
             if self.is_check_card(card):
