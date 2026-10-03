@@ -4,7 +4,8 @@ import IconComponent from "@/components/base/IconComponent";
 import { api } from "@/core/helpers/Api";
 import { ProjectCard } from "@/core/models";
 import { useBoardCard } from "@/core/providers/BoardCardProvider";
-import { Routing } from "@langboard/core/constants";
+import { Routing, SocketEvents } from "@langboard/core/constants";
+import { ESocketTopic } from "@langboard/core/enums";
 import { Utils } from "@langboard/core/utils";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -18,21 +19,43 @@ interface ColumnEvent {
 }
 
 export default function CardColumnHistory({ card }: { card: ProjectCard.TModel }) {
-    const { projectUID } = useBoardCard();
+    const { projectUID, socket } = useBoardCard();
     const columnUID = card.useField("project_column_uid");
     const [events, setEvents] = useState<ColumnEvent[]>([]);
     const [t, i18n] = useTranslation();
 
     useEffect(() => {
-        const controller = new AbortController();
+        let controller: AbortController | undefined;
         const url = Utils.String.format(Routing.API.ACTIVITIY.CARD_COLUMN_HISTORY, { uid: projectUID, card_uid: card.uid });
-        api.get<{ records: ColumnEvent[] }>(url, { signal: controller.signal, env: { interceptToast: true } as never })
-            .then(({ data }) => setEvents(data.records.filter((event) => event.column?.name)))
-            .catch(() => {
-                if (!controller.signal.aborted) setEvents([]);
-            });
-        return () => controller.abort();
-    }, [projectUID, card.uid, columnUID]);
+        const refresh = () => {
+            controller?.abort();
+            const request = new AbortController();
+            controller = request;
+            void api
+                .get<{ records: ColumnEvent[] }>(url, { signal: request.signal, env: { interceptToast: true } as never })
+                .then(({ data }) => {
+                    if (!request.signal.aborted) setEvents(data.records.filter((event) => event.column?.name));
+                })
+                .catch(() => {
+                    if (!request.signal.aborted) setEvents([]);
+                });
+        };
+        // Column changes can precede the asynchronous activity write. Refresh after its committed event too.
+        // The dashboard project loader owns this subscription; only add a listener here.
+        const listener = {
+            topic: ESocketTopic.Dashboard,
+            topicId: projectUID,
+            event: SocketEvents.SERVER.DASHBOARD.PROJECT.ACTIVITY_RECORDED.replace("{uid}", projectUID),
+            eventKey: `card-column-history-${projectUID}-${card.uid}`,
+            callback: refresh,
+        };
+        socket.on(listener);
+        refresh();
+        return () => {
+            controller?.abort();
+            socket.off(listener);
+        };
+    }, [projectUID, card.uid, columnUID, socket]);
 
     if (!events.length) return null;
 
