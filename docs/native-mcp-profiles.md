@@ -122,6 +122,12 @@ provisioning reuses the typed template-board result. Coverage is now 68 commands
 and one additional query. Graph patch and legacy project-detail results remain
 untyped, alongside the remaining query contracts.
 
+Graph patch results now declare created native cards, created relationship
+identities and removed relationship IDs. Domain transaction/validation ownership
+is unchanged. Coverage is now 69 reviewed commands and one additional query;
+legacy project details still need a contract covering their member/label/bot
+projections and initialization/view side effects.
+
 This delivery separates existing canonical entry points. It does not yet supply
 all planned action facades, atomic Work Plan handling,
 OAuth profile access, deprecation telemetry or representative installed-client
