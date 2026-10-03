@@ -42,6 +42,48 @@ def test_mounted_discovery_and_callback_urls_use_native_fastmcp_routes(monkeypat
         assert "mcp:access" in resource.json()["scopes_supported"]
         assert client.get("/mcp/oauth/auth/callback").status_code == 400
         assert client.post("/mcp/oauth/stream").status_code == 401
+        registered = client.post(
+            "/mcp/oauth/register",
+            json={
+                "client_name": "<example-client>",
+                "redirect_uris": ["https://client.example/callback"],
+                "grant_types": ["authorization_code", "refresh_token"],
+                "response_types": ["code"],
+                "token_endpoint_auth_method": "none",
+                "scope": "mcp:access",
+            },
+        )
+        assert registered.status_code == 201
+        authorized = client.get(
+            "/mcp/oauth/authorize",
+            params={
+                "client_id": registered.json()["client_id"],
+                "redirect_uri": "https://client.example/callback",
+                "response_type": "code",
+                "scope": "mcp:access",
+                "state": "fixture-client-state",
+                "code_challenge": "A" * 43,
+                "code_challenge_method": "S256",
+            },
+            follow_redirects=False,
+        )
+        assert authorized.status_code == 302
+        consent = client.get(authorized.headers["location"])
+        assert consent.status_code == 200
+        assert "&lt;example-client&gt;" in consent.text
+        assert "/images/favicon.ico" in consent.text
+        assert "name=\"csrf_token\"" in consent.text
+        from html import unescape
+
+        assert "default-src 'none'" in unescape(consent.text)
+        assert "Allow Access" in consent.text
+        # Native consent submission must still reject a missing CSRF token.
+        rejected = client.post(
+            authorized.headers["location"],
+            data={"submit": "true", "action": "approve"},
+            follow_redirects=False,
+        )
+        assert rejected.status_code == 400
 
 
 def settings(**changes):
