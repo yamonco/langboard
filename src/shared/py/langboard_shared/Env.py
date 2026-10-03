@@ -87,6 +87,38 @@ class Env:
         return [origin.strip().rstrip("/") for origin in origins.split(",") if origin.strip()]
 
     @property
+    def MCP_OAUTH_ENABLED(self) -> bool:
+        return self.__get_from_cache("MCP_OAUTH_ENABLED", "false").lower() == "true"
+
+    @property
+    def MCP_OAUTH_BASE_URL(self) -> str:
+        return self.__get_from_cache("MCP_OAUTH_BASE_URL", "")
+
+    @property
+    def MCP_OAUTH_DISCOVERY_URL(self) -> str:
+        return self.__get_from_cache("MCP_OAUTH_DISCOVERY_URL", "")
+
+    @property
+    def MCP_OAUTH_CLIENT_ID(self) -> str:
+        return self.__get_from_cache("MCP_OAUTH_CLIENT_ID", "")
+
+    @property
+    def MCP_OAUTH_CLIENT_SECRET(self) -> str:
+        return self.__get_from_cache("MCP_OAUTH_CLIENT_SECRET", "")
+
+    @property
+    def MCP_OAUTH_SIGNING_KEY(self) -> str:
+        return self.__get_from_cache("MCP_OAUTH_SIGNING_KEY", "")
+
+    @property
+    def MCP_OAUTH_SCOPES(self) -> str:
+        return self.__get_from_cache("MCP_OAUTH_SCOPES", "openid profile mcp:access")
+
+    @property
+    def MCP_OAUTH_PROMPT(self) -> str:
+        return self.__get_from_cache("MCP_OAUTH_PROMPT", "")
+
+    @property
     def UI_PORT(self) -> int:
         return int(self.__get_from_cache("UI_PORT", "5173"))
 
