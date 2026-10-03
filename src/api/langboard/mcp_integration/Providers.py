@@ -14,6 +14,7 @@ from .BoardOutputs import BOARD_OUTPUTS
 from .BotOutputs import BOT_OUTPUTS
 from .ContentOutputs import CONTENT_OUTPUTS
 from .Outputs import with_typed_output
+from .ResourceOutputs import RESOURCE_OUTPUTS
 from .Tool import McpTool
 from .ToolGroupMiddleware import ToolGroupMiddleware
 from .WorkOutputs import WORK_OUTPUTS
@@ -69,7 +70,11 @@ def create_native_domain_provider(
             handler = with_typed_output(
                 name,
                 handler,
-                WORK_OUTPUTS.get(name) or CONTENT_OUTPUTS.get(name) or BOT_OUTPUTS.get(name) or BOARD_OUTPUTS.get(name),
+                WORK_OUTPUTS.get(name)
+                or CONTENT_OUTPUTS.get(name)
+                or BOT_OUTPUTS.get(name)
+                or BOARD_OUTPUTS.get(name)
+                or RESOURCE_OUTPUTS.get(name),
             )
         provider.add_tool(
             Tool.from_function(

@@ -108,6 +108,13 @@ guidance fields; partial card edits retain omissions and explicit nulls. Coverag
 is now 60 commands and one additional query; ten commands and remaining queries
 still require reviewed output contracts.
 
+Attachment upload/update and wiki link/card-to-wiki creation now have typed
+outputs. Upload retains its native URL; public attachment updates retain
+privacy-filtered metadata, truncation and pagination without adding URLs or
+emails. Wiki links retain the visibility-filtered result and archive flag.
+Coverage is now 64 commands and one additional query; six commands and remaining
+query contracts still require reviewed output models.
+
 This delivery separates existing canonical entry points. It does not yet supply
 all planned action facades, atomic Work Plan handling,
 OAuth profile access, deprecation telemetry or representative installed-client
