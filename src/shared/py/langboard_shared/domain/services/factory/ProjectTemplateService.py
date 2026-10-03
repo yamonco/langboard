@@ -300,8 +300,19 @@ class ProjectTemplateService(BaseDomainService):
             for scope in self.repo.project_column.get_bot_scopes_by_project(project)
             if scope.project_column_id in column_by_id
         ]
+        global_label_uids: list[str] = []
+        for label in self.repo.project_label.get_all_by_project(project):
+            if label.global_label_id is None:
+                continue
+            global_label = InfraHelper.get_by_id_like(GlobalLabel, label.global_label_id)
+            if not global_label:
+                raise ValueError("Project global label is unavailable")
+            uid = global_label.get_uid()
+            if uid not in global_label_uids:
+                global_label_uids.append(uid)
         template = ProjectTemplate(
             name=clean_name,
+            global_label_uids=global_label_uids,
             columns=[
                 {
                     "name": column.name,

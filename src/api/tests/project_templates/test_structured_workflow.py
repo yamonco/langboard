@@ -150,6 +150,7 @@ def test_template_translations_survive_native_create_and_copy(storage, monkeypat
     storage.project_bot_scope = SimpleNamespace(get_all_by_project=lambda _: [])
     storage.project_column.get_bot_scopes_by_project = lambda _: []
     service._email_notification_policy_snapshot = Mock(return_value={})
+    storage.project_label = SimpleNamespace(get_all_by_project=lambda _: [])
     copied = service.copy_from_project(project, "Localized copy")
     assert copied.column_definitions()[0]["translations"] == translations
     assert copied.column_definitions()[0]["workflow_stage"] == "ready"
@@ -195,6 +196,7 @@ def test_project_and_columns_are_atomic_and_effects_run_only_after_commit(storag
             assert effects == []
             if failure_phase == name:
                 raise RuntimeError(f"injected {name} failure")
+
         return apply
 
     service._apply_internal_bots = phase("bots")

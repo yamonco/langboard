@@ -217,6 +217,12 @@ def test_native_project_membership_labels_roles_and_policy_share_template_transa
                 assert restored_bots[0][0].id == internal.id
                 assert restored_bots[0][1].prompt == assigned[0].prompt
                 assert restored_bots[0][1].use_default_prompt is False
+                assert copied_template.global_label_uids == [label.get_uid()]
+                restored_labels = service.project_template.repo.project_label.get_all_by_project(restored)
+                assert len(restored_labels) == len(models.ProjectLabel.DEFAULT_LABELS) + 1
+                restored_global = next(item for item in restored_labels if item.global_label_id == label.id)
+                assert restored_global.global_display == copied_label.global_display
+                assert restored_global.description == copied_label.description
                 assert copied_template.internal_bots == template.internal_bots
                 assert copied_template.project_bot_scopes == template.project_bot_scopes
                 assert copied_template.column_bot_scopes == template.column_bot_scopes

@@ -104,7 +104,7 @@ def test_builtin_si_name_cannot_be_claimed_by_a_project_copy() -> None:
         raise AssertionError("Expected a reserved-name error")
 
 
-def test_copy_snapshot_preserves_order_and_bot_settings_but_not_cards_or_schedules() -> None:
+def test_copy_snapshot_preserves_order_and_bot_settings_but_not_cards_or_schedules(monkeypatch) -> None:
     """Copy captures only reusable board structure and automation hooks."""
 
     templates = TemplateRepository()
@@ -120,11 +120,20 @@ def test_copy_snapshot_preserves_order_and_bot_settings_but_not_cards_or_schedul
             id=1, name="Backlog", description="Uncommitted work", workflow_stage="backlog", order=0, is_archive=False
         ),
     ]
+    global_label = SimpleNamespace(get_uid=lambda: "global-contract")
+    monkeypatch.setattr(InfraHelper, "get_by_id_like", lambda _model, _uid: global_label)
     bot_type = SimpleNamespace(value="project_chat")
     internal_bot = SimpleNamespace(bot_type=bot_type, get_uid=lambda: "internal-bot-uid")
     setting = SimpleNamespace(prompt="Keep it short", use_default_prompt=False)
     repository = SimpleNamespace(
         project_template=templates,
+        project_label=SimpleNamespace(
+            get_all_by_project=lambda _project: [
+                SimpleNamespace(global_label_id=None),
+                SimpleNamespace(global_label_id=42),
+                SimpleNamespace(global_label_id=42),
+            ]
+        ),
         project_column=SimpleNamespace(
             get_all_by_project=lambda _project: [(column, 0) for column in columns],
             get_bot_scopes_by_project=lambda _project: [],
@@ -136,6 +145,7 @@ def test_copy_snapshot_preserves_order_and_bot_settings_but_not_cards_or_schedul
 
     template = _service(repository).copy_from_project(project, "Support")
 
+    assert template.global_label_uids == ["global-contract"]
     assert template.api_response()["columns"] == ["Backlog", "Done"]
     assert template.api_response()["column_descriptions"] == ["Uncommitted work", "Accepted work"]
     assert [item["workflow_stage"] for item in template.column_definitions()] == ["backlog", "closed"]
