@@ -2,6 +2,7 @@ import { api } from "@/core/helpers/Api";
 import { useQueryMutation } from "@/core/helpers/QueryMutation";
 
 export interface IWorkflowStage {
+    revision: string;
     uid: string;
     used_column_count?: number;
     key: string;
@@ -17,7 +18,10 @@ export interface IWorkflowStage {
     entry_effects: string[];
     translations: Record<string, { name: string; description: string }>;
 }
-export type TWorkflowInput = Omit<IWorkflowStage, "uid" | "is_builtin" | "is_active" | "used_column_count"> & { uid?: string };
+export type TWorkflowInput = Omit<IWorkflowStage, "uid" | "is_builtin" | "is_active" | "used_column_count" | "revision"> & {
+    uid?: string;
+    expected_revision?: string;
+};
 export const useWorkflowStages = () => {
     const { mutate, query } = useQueryMutation();
     const load = query(["workflow-stages"], async () => (await api.get<{ stages: IWorkflowStage[] }>("/settings/workflow-stages")).data.stages, {
@@ -36,7 +40,8 @@ export const useWorkflowStages = () => {
     );
     const deactivate = mutate(
         ["deactivate-workflow-stage"],
-        async (uid: string) => (await api.post<{ stage: IWorkflowStage }>(`/settings/workflow-stages/${uid}/deactivate`)).data.stage,
+        async ({ uid, expected_revision }: { uid: string; expected_revision?: string }) =>
+            (await api.post<{ stage: IWorkflowStage }>(`/settings/workflow-stages/${uid}/deactivate`, { expected_revision })).data.stage,
         { retry: 0 }
     );
     return { load, save, deactivate };

@@ -1,3 +1,5 @@
+import hashlib
+import json
 from typing import Any
 from sqlalchemy import JSON
 from ...core.db import ApiField, BaseDbModel, Field
@@ -23,6 +25,13 @@ class WorkflowStageDefinition(BaseDbModel, table=True):
 
     def notification_data(self) -> dict[str, Any]:
         return {}
+
+    def edit_revision(self) -> str:
+        payload = json.dumps(super().api_response(), sort_keys=True, separators=(",", ":"), default=str)
+        return hashlib.sha256(payload.encode()).hexdigest()
+
+    def api_response(self, **kwargs) -> dict[str, Any]:
+        return {**super().api_response(**kwargs), "revision": self.edit_revision()}
 
     def _get_repr_keys(self) -> list[str | tuple[str, str]]:
         return ["key", "name", "is_active"]

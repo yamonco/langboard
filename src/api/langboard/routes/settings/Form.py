@@ -372,6 +372,7 @@ class SaveGlobalLabelForm(BaseFormModel):
 
 @form_model
 class SaveWorkflowStageForm(BaseFormModel):
+    expected_revision: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
     key: str = Field(pattern=r"^[a-z][a-z0-9_]{0,63}$")
     name: str = Field(min_length=1, max_length=100)
     description: str = Field(default="", max_length=4000)
@@ -382,3 +383,8 @@ class SaveWorkflowStageForm(BaseFormModel):
     overdue_policy: str = Field(default="normal", pattern=r"^(normal|suppress)$")
     entry_effects: list[str] = Field(default_factory=list, max_length=2)
     translations: dict[str, dict[str, str]] = Field(default_factory=dict)
+
+
+@form_model
+class DeactivateWorkflowStageForm(BaseFormModel):
+    expected_revision: str = Field(pattern=r"^[a-f0-9]{64}$")

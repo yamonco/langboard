@@ -284,5 +284,6 @@
   "Template bot role editor_chat": "エディターチャット",
   "Template bot role editor_copilot": "エディターコパイロット",
   "Use solution default": "ソリューションの既定値を使用",
-  "Unavailable bot": "利用できないボット"
+  "Unavailable bot": "利用できないボット",
+  "This stage changed elsewhere. Your draft is preserved. Reload before saving.": "別の場所でこのステージが変更されました。入力内容は保持されています。保存する前に再読み込みしてください。"
 }

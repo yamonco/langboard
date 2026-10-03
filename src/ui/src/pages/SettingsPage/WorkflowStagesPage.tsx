@@ -1,6 +1,7 @@
 import { formatNumber } from "@/core/utils/LocaleFormat";
 import { metadataDisplay } from "@/core/utils/MetadataDisplay";
 import { useEffect, useState } from "react";
+import { isAxiosError } from "axios";
 import { useTranslation } from "react-i18next";
 import Dialog from "@/components/base/Dialog";
 import Button from "@/components/base/Button";
@@ -39,6 +40,7 @@ export default function WorkflowStagesPage({ currentUser }: { currentUser: AuthU
     const [opened, setOpened] = useState(false);
     const [pickerContainer, setPickerContainer] = useState<HTMLDivElement | null>(null);
     const [dirty, setDirty] = useState(false);
+    const [conflict, setConflict] = useState(false);
     const [confirmation, setConfirmation] = useState<{ kind: "deactivate" | "close" } | { kind: "select"; stage?: IWorkflowStage } | null>(null);
     const [error, setError] = useState(false);
     const [language, setLanguage] = useState("en");
@@ -67,6 +69,7 @@ export default function WorkflowStagesPage({ currentUser }: { currentUser: AuthU
             stage ?? { ...blank(), uid: undefined };
         setDraft({
             uid,
+            expected_revision: stage?.revision,
             key,
             name,
             description,
@@ -80,6 +83,7 @@ export default function WorkflowStagesPage({ currentUser }: { currentUser: AuthU
         });
         setLanguage("en");
         setDirty(false);
+        setConflict(false);
         setOpened(true);
     };
     const select = (stage?: IWorkflowStage) => {
@@ -103,22 +107,25 @@ export default function WorkflowStagesPage({ currentUser }: { currentUser: AuthU
         try {
             const stage = await save.mutateAsync(draft);
             replace(stage);
-            const { is_active: _, is_builtin: __, used_column_count: ___, ...input } = stage;
-            setDraft(input);
+            const { is_active: _, is_builtin: __, used_column_count: ___, revision, ...input } = stage;
+            setDraft({ ...input, expected_revision: revision });
             setDirty(false);
+            setConflict(false);
             Toast.Add.success(t("settings.Workflow stage saved"));
-        } catch {
-            Toast.Add.error(t("errors.Internal server error"));
+        } catch (error) {
+            if (isAxiosError(error) && error.response?.status === 409) setConflict(true);
+            else Toast.Add.error(t("errors.Internal server error"));
         }
     };
     const disable = async () => {
         if (!draft.uid || busy || !hasRoleAction(SettingRole.EAction.WorkflowStageDeactivate)) return;
         try {
-            replace(await deactivate.mutateAsync(draft.uid));
+            replace(await deactivate.mutateAsync({ uid: draft.uid, expected_revision: draft.expected_revision }));
             setDirty(false);
             setOpened(false);
-        } catch {
-            Toast.Add.error(t("errors.Internal server error"));
+        } catch (error) {
+            if (isAxiosError(error) && error.response?.status === 409) setConflict(true);
+            else Toast.Add.error(t("errors.Internal server error"));
         }
     };
     const text = language === "en" ? draft : draft.translations[language];
@@ -374,6 +381,24 @@ export default function WorkflowStagesPage({ currentUser }: { currentUser: AuthU
                             ))}
                             <p className="text-xs text-muted-foreground">{t("settings.Saving does not replay effects on existing cards.")}</p>
                         </fieldset>
+                        {conflict && (
+                            <div role="alert" className="space-y-2 rounded-md border border-destructive/30 p-3 text-sm">
+                                <p>{t("settings.This stage changed elsewhere. Your draft is preserved. Reload before saving.")}</p>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    disabled={busy}
+                                    onClick={async () => {
+                                        const result = await load.refetch();
+                                        const latest = result.data?.find((stage) => stage.uid === draft.uid);
+                                        if (result.error || !latest) Toast.Add.error(t("errors.Internal server error"));
+                                        else setConfirmation({ kind: "select", stage: latest });
+                                    }}
+                                >
+                                    {t("common.Refresh")}
+                                </Button>
+                            </div>
+                        )}
                         <div className="flex flex-wrap justify-between gap-2 border-t pt-4">
                             {selected?.is_active && hasRoleAction(SettingRole.EAction.WorkflowStageDeactivate) && (
                                 <Button type="button" variant="outline" disabled={busy} onClick={() => setConfirmation({ kind: "deactivate" })}>

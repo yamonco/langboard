@@ -2,6 +2,7 @@ import { test, expect } from "@playwright/test";
 import type { IWorkflowStage } from "@/controllers/api/settings/workflowStages/useWorkflowStages";
 
 const existing = (): IWorkflowStage => ({
+    revision: "a".repeat(64),
     uid: "existing",
     key: "closed",
     name: "Closed",
@@ -45,7 +46,7 @@ for (const width of [1280, 390])
                 fail = false;
                 return route.fulfill({ status: 500, headers, json: { error: "test unavailable" } });
             }
-            const stage = { ...route.request().postDataJSON(), uid: "saved", is_active: true, is_builtin: false };
+            const stage = { ...route.request().postDataJSON(), revision: "b".repeat(64), uid: "saved", is_active: true, is_builtin: false };
             stages = [stage];
             return route.fulfill({ headers, json: { stage } });
         });
@@ -126,6 +127,40 @@ test("read-only stage settings prevent mutations", async ({ page }) => {
     await expect(page.getByRole("button", { name: "Save", exact: true })).toBeDisabled();
     await expect(page.getByRole("button", { name: "Deactivate", exact: true })).not.toBeVisible();
     expect(writes).toBe(0);
+});
+
+test("conflict preserves the draft and reload requires explicit discard", async ({ page }) => {
+    let latest = existing();
+    let writes = 0;
+    await page.route("**/settings/workflow-stages**", async (route) => {
+        const headers = {
+            "Access-Control-Allow-Origin": "http://127.0.0.1:4194",
+            "Access-Control-Allow-Credentials": "true",
+            "Access-Control-Allow-Methods": "GET,PUT,OPTIONS",
+            "Access-Control-Allow-Headers": "content-type,authorization,content-encoding",
+        };
+        if (route.request().method() === "OPTIONS") return route.fulfill({ status: 204, headers });
+        if (route.request().method() === "GET") return route.fulfill({ headers, json: { stages: [latest] } });
+        writes++;
+        expect(route.request().postDataJSON().expected_revision).toBe("a".repeat(64));
+        latest = { ...latest, name: "Latest server name", revision: "b".repeat(64) };
+        return route.fulfill({ status: 409, headers, json: { code: "EX3004" } });
+    });
+    await page.goto("/src/pages/SettingsPage/WorkflowStages.fixture.html");
+    await page.getByRole("button", { name: /^Closed/ }).click();
+    await page.getByLabel("Stage name", { exact: true }).fill("Unsaved local name");
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(page.getByRole("alert")).toContainText("Your draft is preserved");
+    await expect(page.getByLabel("Stage name", { exact: true })).toHaveValue("Unsaved local name");
+    await page.getByRole("alert").getByRole("button", { name: "Refresh", exact: true }).click();
+    const confirm = page.getByRole("dialog", { name: "Discard unsaved changes?", exact: true });
+    await confirm.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(page.getByLabel("Stage name", { exact: true })).toHaveValue("Unsaved local name");
+    await page.getByRole("alert").getByRole("button", { name: "Refresh", exact: true }).click();
+    await confirm.getByRole("button", { name: "Discard changes", exact: true }).click();
+    await expect(page.getByLabel("Stage name", { exact: true })).toHaveValue("Latest server name");
+    await expect(page.getByRole("alert")).not.toBeVisible();
+    expect(writes).toBe(1);
 });
 
 test("discard confirmation preserves draft on cancel and closes without writes on confirm", async ({ page }) => {

@@ -284,5 +284,6 @@
   "Template bot role editor_chat": "Editor chat",
   "Template bot role editor_copilot": "Editor copilot",
   "Use solution default": "Use solution default",
-  "Unavailable bot": "Unavailable bot"
+  "Unavailable bot": "Unavailable bot",
+  "This stage changed elsewhere. Your draft is preserved. Reload before saving.": "This stage changed elsewhere. Your draft is preserved. Reload before saving."
 }

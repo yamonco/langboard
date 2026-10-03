@@ -284,5 +284,6 @@
   "Template bot role editor_chat": "编辑器聊天",
   "Template bot role editor_copilot": "编辑器副驾驶",
   "Use solution default": "使用系统默认值",
-  "Unavailable bot": "不可用的机器人"
+  "Unavailable bot": "不可用的机器人",
+  "This stage changed elsewhere. Your draft is preserved. Reload before saving.": "此阶段已在其他位置更改。您的输入已保留。请重新加载后再保存。"
 }

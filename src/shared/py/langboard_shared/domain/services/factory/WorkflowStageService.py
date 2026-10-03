@@ -7,6 +7,10 @@ from ....tasks.webhooks.ExecutionReadinessUow import execution_readiness_uow
 from ...models import Project, WorkflowStageDefinition
 
 
+class WorkflowStageEditConflict(Exception):
+    """The editor's snapshot no longer matches the locked registry row."""
+
+
 class WorkflowStageService(BaseDomainService):
     @staticmethod
     def name() -> str:
@@ -24,6 +28,8 @@ class WorkflowStageService(BaseDomainService):
         return {key: stage.api_response() for key, stage in self.repo.workflow_stage.get_by_keys(keys).items()}
 
     def save(self, fields: dict, uid: str | None = None) -> WorkflowStageDefinition | None:
+        fields = dict(fields)
+        expected_revision = fields.pop("expected_revision", None)
         if set(fields) - {
             "key",
             "name",
@@ -78,6 +84,8 @@ class WorkflowStageService(BaseDomainService):
                 ).first()
                 if stage is None:
                     return None
+                if expected_revision is not None and expected_revision != stage.edit_revision():
+                    raise WorkflowStageEditConflict()
                 policy_changed = any(
                     getattr(stage, field) != values[field]
                     for field in (
@@ -107,10 +115,19 @@ class WorkflowStageService(BaseDomainService):
                 db.after_commit(AppSettingPublisher.workflow_stages_changed)
         return stage
 
-    def deactivate(self, uid: str) -> WorkflowStageDefinition | None:
+    def deactivate(self, uid: str, expected_revision: str | None = None) -> WorkflowStageDefinition | None:
         stage = InfraHelper.get_by_id_like(WorkflowStageDefinition, uid)
         if stage:
             with DbSession.atomic() as db:
+                stage = db.exec(
+                    SqlBuilder.select.table(WorkflowStageDefinition)
+                    .where(WorkflowStageDefinition.column("id") == stage.id)
+                    .with_for_update()
+                ).first()
+                if stage is None:
+                    return None
+                if expected_revision is not None and expected_revision != stage.edit_revision():
+                    raise WorkflowStageEditConflict()
                 stage.is_active = False
                 self.repo.workflow_stage.update(stage)
                 db.after_commit(AppSettingPublisher.workflow_stages_changed)

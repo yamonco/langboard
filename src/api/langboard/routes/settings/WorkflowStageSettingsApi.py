@@ -3,10 +3,11 @@ from langboard_shared.core.routing import ApiErrorCode, ApiException, AppRouter,
 from langboard_shared.domain.models import SettingRole
 from langboard_shared.domain.models.SettingRole import SettingRoleAction
 from langboard_shared.domain.services import DomainService
+from langboard_shared.domain.services.factory.WorkflowStageService import WorkflowStageEditConflict
 from langboard_shared.filter import RoleFilter
 from langboard_shared.security import RoleFinder
 from sqlalchemy.exc import IntegrityError
-from .Form import SaveWorkflowStageForm
+from .Form import DeactivateWorkflowStageForm, SaveWorkflowStageForm
 
 
 @AppRouter.api.get("/settings/workflow-stages", tags=["AppSettings.WorkflowStage"])
@@ -17,8 +18,12 @@ def get_workflow_stages(service: DomainService = DomainService.scope()) -> JsonR
 
 
 def _save(form: SaveWorkflowStageForm, service: DomainService, uid: str | None = None) -> JsonResponse:
+    if uid and form.expected_revision is None:
+        raise ApiException.BadRequest_400(ApiErrorCode.VA0000)
     try:
         stage = service.workflow_stage.save(form.model_dump(), uid)
+    except WorkflowStageEditConflict as exc:
+        raise ApiException.Conflict_409(ApiErrorCode.EX3004) from exc
     except (ValueError, IntegrityError) as exc:
         raise ApiException.BadRequest_400(ApiErrorCode.VA0000) from exc
     if not stage:
@@ -45,8 +50,13 @@ def update_workflow_stage(
 @AppRouter.api.post("/settings/workflow-stages/{stage_uid}/deactivate", tags=["AppSettings.WorkflowStage"])
 @RoleFilter.add(SettingRole, [SettingRoleAction.WorkflowStageDeactivate], RoleFinder.setting, allowed_all_admin=False)
 @AuthFilter.add("admin")
-def deactivate_workflow_stage(stage_uid: str, service: DomainService = DomainService.scope()) -> JsonResponse:
-    stage = service.workflow_stage.deactivate(stage_uid)
+def deactivate_workflow_stage(
+    stage_uid: str, form: DeactivateWorkflowStageForm, service: DomainService = DomainService.scope()
+) -> JsonResponse:
+    try:
+        stage = service.workflow_stage.deactivate(stage_uid, form.expected_revision)
+    except WorkflowStageEditConflict as exc:
+        raise ApiException.Conflict_409(ApiErrorCode.EX3004) from exc
     if not stage:
         raise ApiException.NotFound_404(ApiErrorCode.NF3003)
     return JsonResponse(content={"stage": stage.api_response()})

@@ -13,7 +13,10 @@ os.environ.setdefault("PROJECT_NAME", "langboard")
 from langboard.routes.settings.Form import SaveWorkflowStageForm  # noqa: E402
 from langboard_shared.core.db.DbEngine import DbEngine  # noqa: E402
 from langboard_shared.domain.models import WorkflowStageDefinition  # noqa: E402
-from langboard_shared.domain.services.factory.WorkflowStageService import WorkflowStageService  # noqa: E402
+from langboard_shared.domain.services.factory.WorkflowStageService import (
+    WorkflowStageEditConflict,
+    WorkflowStageService,  # noqa: E402
+)
 from langboard_shared.infrastructure.repositories.factory.WorkflowStageRepository import (
     WorkflowStageRepository,  # noqa: E402
 )
@@ -53,6 +56,30 @@ def form(**changes):
     return SaveWorkflowStageForm(
         key="released", name="Released", description="Accepted delivery", **changes
     ).model_dump()
+
+
+def test_stale_editor_cannot_overwrite_or_deactivate_latest_stage(registry):
+    service, _ = registry
+    fields = form()
+    stage = service.save(fields)
+    uid = stage.get_uid()
+    original = service.get_api_list()[0]["revision"]
+    service.save({**fields, "name": "Latest", "expected_revision": original}, uid)
+    latest = service.get_api_list()[0]
+    assert latest["revision"] != original
+    publisher = AppSettingPublisher.workflow_stages_changed
+    publisher.reset_mock()
+    with pytest.raises(WorkflowStageEditConflict):
+        service.save({**fields, "name": "Stale", "expected_revision": original}, uid)
+    with pytest.raises(WorkflowStageEditConflict):
+        service.deactivate(uid, original)
+    publisher.assert_not_called()
+    service._publish_work_states.assert_not_called()
+    saved = service.get_api_list()[0]
+    assert saved["name"] == "Latest" and saved["is_active"] is True
+    service.deactivate(uid, saved["revision"])
+    inactive = service.get_api_list()[0]
+    assert inactive["is_active"] is False and inactive["revision"] != saved["revision"]
 
 
 def test_registry_invalidation_publishes_after_commit_only(registry):
