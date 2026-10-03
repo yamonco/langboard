@@ -190,7 +190,28 @@ def public_card_summary(card: dict[str, Any]) -> dict[str, Any]:
 
     result = pick(card, _CARD_KEYS + _WORKFLOW_KEYS)
     if isinstance(card.get("work_state"), dict):
-        result["work_state"] = card["work_state"]
+        state = card["work_state"]
+        result["work_state"] = pick(
+            state,
+            (
+                "workflow_stage",
+                "completed",
+                "verification_state",
+                "execution_state",
+                "blocker_state",
+                "material_kind",
+                "lifecycle",
+                "active_queue_eligible",
+                "overdue_suppressed",
+                "checklist_progress",
+            ),
+        )
+        result["work_state"]["reason_codes"] = [
+            reason["code"] for reason in state.get("reasons", []) if "code" in reason
+        ]
+        result["work_state"]["inconsistency_codes"] = [
+            reason["code"] for reason in state.get("state_inconsistency", []) if "code" in reason
+        ]
     if "member_uids" in card:
         result["member_uids"] = list(card.get("member_uids") or [])[:25]
     return result
@@ -299,3 +320,25 @@ def _bounded_inline(value: Any, limit: int) -> tuple[str, str, int]:
         content = dumps(value, ensure_ascii=False, separators=(",", ":"), sort_keys=True, default=str)
         content_format = "json"
     return content[:limit], content_format, len(content)
+
+
+def public_workflow_stages(stages: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Publish each resolved workflow policy once, without translations or storage internals."""
+    return {
+        key: pick(
+            stage,
+            (
+                "key",
+                "name",
+                "description",
+                "color",
+                "is_active",
+                "counts_as_completed",
+                "active_queue_policy",
+                "overdue_policy",
+                "entry_effects",
+            ),
+            4000,
+        )
+        for key, stage in stages.items()
+    }

@@ -770,13 +770,14 @@ class CardService(BaseDomainService):
         *,
         include_closed: bool = False,
         workflow_stages: list[str] | None = None,
+        include_work_state: bool = False,
     ) -> list[dict[str, Any]]:
         project = InfraHelper.get_by_id_like(Project, project)
         if not project:
             return []
 
         cards = []
-        for card, column in self.repo.card.search_context_by_project(
+        records = self.repo.card.search_context_by_project(
             project,
             input_value,
             date_field=date_field,
@@ -784,7 +785,9 @@ class CardService(BaseDomainService):
             until=until,
             include_closed=include_closed,
             workflow_stages=workflow_stages,
-        ):
+        )
+        states = self.get_work_states([card for card, _ in records]) if include_work_state else {}
+        for card, column in records:
             description = card.description.content
             if len(description) > self.CONTEXT_DESCRIPTION_MAX_LENGTH:
                 description = f"{description[: self.CONTEXT_DESCRIPTION_MAX_LENGTH - 3]}..."
@@ -794,6 +797,11 @@ class CardService(BaseDomainService):
                     "title": card.title,
                     "description": {"content": description},
                     "project_column_name": column.name,
+                    **(
+                        {"project_column_uid": column.get_uid(), "work_state": states[card.id]}
+                        if include_work_state
+                        else {}
+                    ),
                 }
             )
         return cards

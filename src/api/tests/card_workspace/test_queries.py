@@ -392,6 +392,7 @@ def test_public_metadata_exposes_opaque_continuation() -> None:
 
 def test_project_list_forwards_completion_and_stage_filters_before_paging():
     from unittest.mock import Mock
+
     port = FakeQueryPort()
     port.get_project_card_page = Mock(return_value=ProjectCardPageSource([], 0, None))
     list_project_cards(port, "p1")
@@ -414,3 +415,32 @@ def test_project_identity_rejects_private_or_unrecognized_actor_fields() -> None
     port.get_project_identity = lambda uid: {**original(uid), "authenticated_actor": {"uid": "actor", "type": "admin"}}
     with pytest.raises(ValueError):
         get_project_identity(port, "p1")
+
+
+def test_project_list_compacts_repeated_workflow_without_inventing_completion():
+    from unittest.mock import Mock
+
+    port = FakeQueryPort()
+    state = {
+        "workflow_stage": "active",
+        "completed": False,
+        "verification_state": "unverified",
+        "execution_state": None,
+        "reasons": [{"code": "unknown", "message": "x" * 4000}],
+        "state_inconsistency": [{"code": "open_items", "message": "y" * 4000}],
+    }
+    definition = {"key": "active", "entry_effects": ["stop_running_timers"]}
+    items = [{"uid": str(i), "project_column_uid": "column", "work_state": state} for i in range(25)]
+    port.get_project_card_page = Mock(return_value=ProjectCardPageSource(items, 25, None, {"active": definition}))
+    response = list_project_cards(port, "p1", limit=25)
+    assert response.workflow_stages == {"active": definition}
+    assert len(response.cards.items) == 25
+    for item in response.cards.items:
+        assert item["work_state"]["completed"] is False
+        assert item["work_state"]["execution_state"] is None
+        assert item["work_state"]["reason_codes"] == ["unknown"]
+        assert item["work_state"]["inconsistency_codes"] == ["open_items"]
+        assert "entry_effects" not in item["work_state"]
+    assert len(json.dumps(response.model_dump())) < len(json.dumps(items)) / 10
+    items[0]["work_state"] = {"workflow_stage": None, "completed": None}
+    assert list_project_cards(port, "p1").cards.items[0]["work_state"]["completed"] is None

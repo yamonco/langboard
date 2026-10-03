@@ -18,6 +18,10 @@ class WorkflowStageService(BaseDomainService):
             for stage in sorted(InfraHelper.get_all(WorkflowStageDefinition), key=lambda s: (s.order, s.key))
         ]
 
+    def get_api_by_keys(self, keys: set[str]) -> dict[str, dict]:
+        """Resolve only workflow definitions used by an authorized result page."""
+        return {key: stage.api_response() for key, stage in self.repo.workflow_stage.get_by_keys(keys).items()}
+
     def save(self, fields: dict, uid: str | None = None) -> WorkflowStageDefinition | None:
         if set(fields) - {
             "key",

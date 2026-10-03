@@ -27,7 +27,7 @@ def test_search_passes_timezone_aware_half_open_period_to_native_query() -> None
         "created_at",
         "2026-09-15T00:00:00+09:00",
         "2026-09-16T00:00:00+09:00",
-    ) == {"cards": []}
+    ) == {"cards": [], "workflow_stages": {}}
     project, query, filters = calls[0]
     assert (project, query) == ("project", "release")
     assert filters["date_field"] == "created_at"
@@ -69,3 +69,16 @@ def test_my_work_scopes_projects_and_round_trips_keyset_cursor() -> None:
         UserMcp.list_my_work(user, service, project_uid="hidden")
     with pytest.raises(ValueError, match="Invalid My Work cursor"):
         UserMcp.list_my_work(user, service, cursor="bad!")
+
+
+def test_search_resolves_distinct_workflow_once_and_keeps_bounded_description():
+    state = {"workflow_stage": "released", "completed": True, "reasons": [{"code": "recorded", "message": "verbose"}]}
+    cards = [{"uid": str(i), "description": {"content": "match"}, "project_column_uid": "c", "work_state": state} for i in range(3)]
+    resolve = Mock(return_value={"released": {"key": "released", "counts_as_completed": True, "entry_effects": ["stop_running_timers"], "translations": {"ko": {"name": "완료"}}}})
+    service = SimpleNamespace(card=SimpleNamespace(search_context_by_project=Mock(return_value=cards)), workflow_stage=SimpleNamespace(get_api_by_keys=resolve))
+    response = UserMcp.search_project_cards("p", "match", service)
+    resolve.assert_called_once_with({"released"})
+    assert service.card.search_context_by_project.call_args.kwargs["include_work_state"] is True
+    assert response["workflow_stages"]["released"]["entry_effects"] == ["stop_running_timers"]
+    assert "translations" not in response["workflow_stages"]["released"]
+    assert all(item["description"] == {"content": "match"} and item["work_state"]["completed"] is True and "reasons" not in item["work_state"] for item in response["cards"])

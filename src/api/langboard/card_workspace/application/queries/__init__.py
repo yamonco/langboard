@@ -196,6 +196,7 @@ def list_project_cards(
     next_cursor = ProjectCardCursor(*page.next_cursor_fields).encode() if page.next_cursor_fields else None
     return ProjectCardListResponse(
         project_uid=project_uid,
+        workflow_stages=page.workflow_stages,
         cards=BoundedItemsDto(
             items=[public_card_summary(item) for item in page.items],
             total_count=page.total_count,

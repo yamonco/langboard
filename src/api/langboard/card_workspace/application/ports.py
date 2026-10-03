@@ -35,6 +35,7 @@ class ProjectCardPageSource:
     items: list[dict[str, Any]]
     total_count: int
     next_cursor_fields: tuple[str, str] | None
+    workflow_stages: dict[str, dict[str, Any]] = field(default_factory=dict)
 
 
 class CardWorkspaceQueryPort(Protocol):

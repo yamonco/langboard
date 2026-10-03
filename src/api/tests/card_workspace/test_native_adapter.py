@@ -890,3 +890,20 @@ def test_created_card_projects_authenticated_creator_before_publish(
         "created_at": card.created_at.isoformat(),
     }
     assert dispatched == ([{"card": payload}] if dispatch_effects else [])
+
+
+def test_project_card_page_resolves_policies_once_for_only_visible_stages():
+    items = [
+        {"uid": "1", "work_state": {"workflow_stage": "released", "completed": True}},
+        {"uid": "2", "work_state": {"workflow_stage": "released", "completed": True}},
+        {"uid": "3", "work_state": {"workflow_stage": None, "completed": None}},
+    ]
+    resolve = Mock(return_value={"released": {"key": "released", "counts_as_completed": True, "entry_effects": ["stop_running_timers"], "translations": {"ko": {"name": "완료"}}, "private": "hidden"}})
+    service = SimpleNamespace(card=SimpleNamespace(get_api_page_by_project=Mock(return_value=(items, 3, None))), workflow_stage=SimpleNamespace(get_api_by_keys=resolve))
+    page = NativeCardWorkspaceAdapter(object(), service).get_project_card_page("p", 3, None, None)
+    resolve.assert_called_once_with({"released"})
+    assert page.workflow_stages == {"released": {"key": "released", "counts_as_completed": True, "entry_effects": ["stop_running_timers"]}}
+    service.card.get_api_page_by_project.return_value = ([], 0, None)
+    resolve.reset_mock()
+    assert NativeCardWorkspaceAdapter(object(), service).get_project_card_page("p", 3, None, None).workflow_stages == {}
+    resolve.assert_not_called()

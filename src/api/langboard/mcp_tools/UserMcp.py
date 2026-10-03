@@ -12,6 +12,7 @@ from langboard_shared.domain.services import DomainService
 from langboard_shared.helpers import InfraHelper
 from langboard_shared.security import RoleFinder
 from pydantic import Field
+from ..card_workspace.application.projections import public_card_summary, public_workflow_stages
 from ..mcp_integration import McpRoleFilter, McpTool
 
 
@@ -104,16 +105,21 @@ def search_project_cards(
     lower, upper = _parse_time_bound(since), _parse_time_bound(until)
     if lower is not None and upper is not None and lower >= upper:
         raise ValueError("since must be earlier than until")
+    cards = service.card.search_context_by_project(
+        project_uid,
+        normalized_query,
+        date_field=date_field,
+        since=lower,
+        until=upper,
+        include_closed=include_closed,
+        workflow_stages=workflow_stages,
+        include_work_state=True,
+    )
+    keys = {card["work_state"]["workflow_stage"] for card in cards if card.get("work_state", {}).get("workflow_stage")}
+    stages = service.workflow_stage.get_api_by_keys(keys) if keys else {}
     return {
-        "cards": service.card.search_context_by_project(
-            project_uid,
-            normalized_query,
-            date_field=date_field,
-            since=lower,
-            until=upper,
-            include_closed=include_closed,
-            workflow_stages=workflow_stages,
-        )
+        "cards": [{**public_card_summary(card), "description": card["description"]} for card in cards],
+        "workflow_stages": public_workflow_stages(stages),
     }
 
 
