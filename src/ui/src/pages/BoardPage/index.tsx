@@ -18,9 +18,9 @@ import { useSocket } from "@/core/providers/SocketProvider";
 import { useAuth } from "@/core/providers/AuthProvider";
 import { usePageNavigateRef } from "@/core/hooks/usePageNavigate";
 import BoardPage from "@/pages/BoardPage/BoardPage";
-import BoardCardPage from "@/pages/BoardPage/BoardCardPage";
+import SuspenseComponent from "@/components/base/SuspenseComponent";
 import { IHeaderNavItem } from "@/components/Header/types";
-import BoardSettingsPage, { SkeletonBoardSettingsPage } from "@/pages/BoardPage/BoardSettingsPage";
+import { SkeletonBoardSettingsPage } from "@/pages/BoardPage/SkeletonBoardSettingsPage";
 import { TBoardViewType, useBoardController } from "@/core/providers/BoardController";
 import useBoardAssignedUsersUpdatedHandlers from "@/controllers/socket/board/useBoardAssignedUsersUpdatedHandlers";
 import useProjectDeletedHandlers from "@/controllers/socket/shared/useProjectDeletedHandlers";
@@ -65,6 +65,8 @@ import {
 } from "@/pages/DashboardPage/components/WorkbenchCommands";
 import { closeProject } from "@/pages/DashboardPage/components/OpenCardsStore";
 
+const BoardCardPage = lazy(() => import("@/pages/BoardPage/BoardCardPage"));
+const BoardSettingsPage = lazy(() => import("@/pages/BoardPage/BoardSettingsPage"));
 const BoardGraphPage = lazy(() => import("@/pages/BoardPage/BoardGraphPage"));
 const BoardWikiPage = lazy(() => import("@/pages/BoardPage/BoardWikiPage"));
 const BoardChangesSidebar = lazy(() => import("@/pages/BoardPage/components/board/BoardChangesSidebar"));
@@ -787,17 +789,21 @@ function BoardProxyDisplay({ pageRoute, isFetching, isProjectLoading, project }:
                                         "pointer-events-none absolute inset-0 -z-[9999] overflow-hidden"
                                 )}
                             >
-                                <PageComponent key={project.uid} project={project} currentUser={currentUser} />
+                                <Suspense fallback={<SkeletonComponent />}>
+                                    <PageComponent key={project.uid} project={project} currentUser={currentUser} />
+                                </Suspense>
                             </Box>
                             {isCardPage && (
-                                <BoardCardPage
-                                    key={pageRoute}
-                                    projectUID={project.uid}
-                                    cardUID={pageRoute}
-                                    embedded
-                                    isExpanded={isCardExpanded}
-                                    setIsExpanded={setIsCardExpanded}
-                                />
+                                <SuspenseComponent isPage>
+                                    <BoardCardPage
+                                        key={pageRoute}
+                                        projectUID={project.uid}
+                                        cardUID={pageRoute}
+                                        embedded
+                                        isExpanded={isCardExpanded}
+                                        setIsExpanded={setIsCardExpanded}
+                                    />
+                                </SuspenseComponent>
                             )}
                             {!isCardPage && !selectCardViewType && (isMobile || boardChat || renderedViewType === "board") && (
                                 <BoardFloatingNavigation
