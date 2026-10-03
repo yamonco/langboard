@@ -354,7 +354,10 @@ def delete_card(project_uid: str, card_uid: str, user_or_bot: User | Bot, servic
     except CardDeleteForbidden as exc:
         raise ValidationError(f"{exc.code}: {exc}") from exc
     if not result:
-        raise ValueError("Failed to delete")
+        raise ValidationError(
+            "CARD_DELETE_PRECONDITION_FAILED: Read the card again. Ordinary cards must be archived before deletion; "
+            "a missing card cannot be deleted. No deletion was performed."
+        )
     return {"message": "Deleted"}
 
 

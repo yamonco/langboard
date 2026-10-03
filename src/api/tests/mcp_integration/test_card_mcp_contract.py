@@ -659,6 +659,14 @@ def test_card_delete_mcp_returns_actionable_author_or_admin_error(monkeypatch: p
         CardMcp.delete_card("project", "card", object(), service)
 
 
+def test_card_delete_mcp_rejects_unmet_precondition_as_validation_error() -> None:
+    from fastmcp.exceptions import ValidationError
+
+    service = SimpleNamespace(card=SimpleNamespace(delete=lambda *_args: False))
+    with pytest.raises(ValidationError, match="CARD_DELETE_PRECONDITION_FAILED.*must be archived"):
+        CardMcp.delete_card("project", "card", object(), service)
+
+
 def test_native_move_rejects_column_from_another_project(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
