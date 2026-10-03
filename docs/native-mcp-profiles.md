@@ -101,6 +101,13 @@ receipts remain separate from transport mutation receipts. Bot author, target
 project and ToolGroup checks are unchanged. Reviewed coverage is now 56 commands
 and one additional query; 14 commands and remaining query outputs are pending.
 
+Board template creation, column creation/order and card title/deadline changes
+also declare typed outputs. Column translations, per-column counts and combined
+workflow guidance remain intact. Template results retain their existing omitted
+guidance fields; partial card edits retain omissions and explicit nulls. Coverage
+is now 60 commands and one additional query; ten commands and remaining queries
+still require reviewed output contracts.
+
 This delivery separates existing canonical entry points. It does not yet supply
 all planned action facades, atomic Work Plan handling,
 OAuth profile access, deprecation telemetry or representative installed-client
