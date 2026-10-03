@@ -1,3 +1,4 @@
+import { flipDraftKey, useCardFlipDraftStore } from "./CardFlipDraftStore";
 import Dialog from "@/components/base/Dialog";
 import Flex from "@/components/base/Flex";
 import IconComponent from "@/components/base/IconComponent";
@@ -24,15 +25,16 @@ export function SkeletonBoardCardTitle() {
 
 function BoardCardTitle({ className, useDialogTitle = true }: { className?: string; useDialogTitle?: bool }): React.JSX.Element {
     const { setPageAliasRef } = usePageHeader();
-    const { card, isCardEditing, canEditCard } = useBoardCard();
+    const { card, currentUser, projectUID, isCardEditing, canEditCard } = useBoardCard();
     const [t] = useTranslation();
     const { registerSectionCancelHandler, registerSectionSaveHandler } = useBoardCardSectionSaveActions();
+    const restoredDraft = useCardFlipDraftStore.getState().drafts[flipDraftKey(currentUser.uid, projectUID, card.uid)];
     const title = card.useField("title");
     const titleSpanRef = useRef<HTMLSpanElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const updateCollaborativeTitleRef = useRef<((value: string) => void) | null>(null);
     const resetCollaborativeTitleRef = useRef<((value: string) => void) | null>(null);
-    const [draftTitle, setDraftTitle] = useState(title);
+    const [draftTitle, setDraftTitle] = useState(restoredDraft?.title ?? title);
     const [height, setHeight] = useState(0);
     const [isOpened, setIsOpened] = useState(false);
     const [isTitleWrapping, setIsTitleWrapping] = useState(false);
@@ -226,7 +228,7 @@ function BoardCardTitle({ className, useDialogTitle = true }: { className?: stri
                     uid={card.uid}
                     section="title"
                     field="title"
-                    defaultValue={title}
+                    defaultValue={restoredDraft?.title ?? title}
                     resetSyncedValueToDefault
                     className={cn(
                         "min-h-8 break-all rounded-none border-x-0 border-t-0 p-0 text-2xl scrollbar-hide",

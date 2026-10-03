@@ -98,7 +98,7 @@ jobs:
 
       - run: yarn playwright test -c playwright.workbench.config.ts
         working-directory: src/ui
-      - run: node --experimental-strip-types --test src/pages/BoardPage/components/card/CardFlipStore.test.ts
+      - run: node --experimental-strip-types --test src/pages/BoardPage/components/card/CardFlipStore.test.ts src/pages/BoardPage/components/card/CardFlipDraftStore.test.ts
         working-directory: src/ui
 
       - run: yarn playwright test -c playwright.error-locale.config.ts

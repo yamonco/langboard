@@ -245,13 +245,17 @@ test("Flip preserves a card, restores it and swaps a second card without mountin
     expect(saved["fixture-user:fixture-project"].map((card: { uid: string }) => card.uid)).toEqual(["fixture-card", "other-0"]);
     await page.getByRole("button", { name: "Restore Fixture card", exact: true }).click();
     await expect(page.locator("[data-card-viewer]")).toHaveCount(1);
-    await page.getByRole("button", { name: "Restore Card other-0", exact: true }).click();
+    const otherCard = page.getByRole("button", { name: "Restore Card other-0", exact: true });
+    if (!(await otherCard.isVisible())) await page.getByRole("button", { name: "Flipped cards · 1", exact: true }).click();
+    await otherCard.click();
     await expect(page.locator("[data-card-viewer]")).toHaveCount(1);
     await expect(page.getByText("Card other-0", { exact: true }).first()).toBeVisible();
-    await expect(page.getByRole("button", { name: "Restore Fixture card", exact: true })).toBeVisible();
+    const swappedCard = page.getByRole("button", { name: "Restore Fixture card", exact: true });
+    if (!(await swappedCard.isVisible())) await page.getByRole("button", { name: "Flipped cards · 1", exact: true }).click();
+    await expect(swappedCard).toBeVisible();
 });
 
-test("card edit mode disables Flip and tray restoration", async ({ page }) => {
+test("card edit mode permits draft-preserving Flip while protecting tray swaps", async ({ page }) => {
     await mockBoardApi(page);
     await seedTray(page, 1);
     await page.goto(FIXTURE);
@@ -273,7 +277,7 @@ test("card edit mode disables Flip and tray restoration", async ({ page }) => {
     await page.locator("[data-floating-nav-content]").getByRole("button", { name: "Edit", exact: true }).click();
     try {
         await expect(page.getByRole("button", { name: "Cancel", exact: true })).toBeVisible();
-        await expect(page.getByRole("button", { name: "Flip card", exact: true })).toBeDisabled();
+        await expect(page.getByRole("button", { name: "Flip card", exact: true })).toBeEnabled();
     } catch (error) {
         console.error(
             "Edit transition diagnostics:",
@@ -354,5 +358,90 @@ test("reduced-motion keeps the compact tray keyboard accessible", async ({ page 
     await page.keyboard.press("Escape");
     await expect(button).toHaveAttribute("aria-expanded", "false");
     await expect(button).toBeFocused();
+    await expect(page.locator("[data-card-viewer]")).toHaveCount(1);
+});
+
+test("retained comment draft has a tray dot and restore expands from the chip", async ({ page }) => {
+    await mockBoardApi(page);
+    await seedTray(page, 1);
+    await page.addInitScript(() => sessionStorage.setItem("comment-fixture-project-other-0", "Unsaved comment"));
+    await page.goto(FIXTURE);
+    const chip = page.locator("[data-card-flip-item=other-0]");
+    await expect(chip.locator("[data-card-flip-unsaved]")).toBeVisible();
+    await page.getByRole("button", { name: "Restore Card other-0", exact: true }).click();
+    const viewer = page.locator("[data-card-viewer]");
+    await expect(viewer).toHaveCount(1);
+    await expect.poll(() => viewer.evaluate((element) => element.style.getPropertyValue("--card-origin-transform"))).toContain("translate(");
+});
+
+test("restoring a suspended card resumes its unsaved title edit", async ({ page }) => {
+    await mockBoardApi(page);
+    await page.addInitScript(() => {
+        sessionStorage.setItem(
+            "langboard-card-flip-drafts",
+            JSON.stringify({ state: { drafts: { "fixture-user:fixture-project:fixture-card": { title: "Suspended title" } } }, version: 0 })
+        );
+    });
+    await page.goto(FIXTURE);
+    await expect(page.getByRole("button", { name: "Cancel", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Flip card", exact: true }).click();
+    await expect(page.locator("[data-card-viewer]")).toHaveCount(0);
+    await expect(page.locator("[data-card-flip-unsaved]")).toBeVisible();
+    await page.getByRole("button", { name: "Restore Fixture card", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Cancel", exact: true })).toBeVisible();
+});
+
+for (const width of [390, 1280]) {
+    test(`tray drag changes order without restoring a card at ${width}px`, async ({ page }) => {
+        await page.setViewportSize({ width, height: 844 });
+        await mockBoardApi(page);
+        await seedTray(page, 3);
+        await page.goto(FIXTURE);
+        const overflow = page.getByRole("button", { name: "Flipped cards · 3", exact: true });
+        const vertical = width < 768;
+        if (vertical) await overflow.waitFor({ state: "visible" });
+        if (vertical) await overflow.click();
+        const first = await page.locator("[data-card-flip-item=other-0] [data-card-flip-drag-handle]").boundingBox();
+        const last = await page.locator("[data-card-flip-item=other-2]").boundingBox();
+        await page.mouse.move(first!.x + first!.width / 2, first!.y + first!.height / 2);
+        await page.mouse.down();
+        await page.mouse.move(vertical ? last!.x + 12 : last!.x + last!.width / 2 + 8, vertical ? last!.y + last!.height / 2 + 8 : last!.y + 12, {
+            steps: 20,
+        });
+        await page.mouse.up();
+        await expect
+            .poll(() =>
+                page.evaluate(() =>
+                    JSON.parse(sessionStorage.getItem("langboard-card-flip-session")!).state.trays["fixture-user:fixture-project"].map(
+                        (card: { uid: string }) => card.uid
+                    )
+                )
+            )
+            .toEqual(["other-1", "other-2", "other-0"]);
+        await expect(page.locator("[data-card-viewer]")).toHaveCount(1);
+    });
+}
+
+test("touch drag reorders compact tray without restoring", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await mockBoardApi(page);
+    await seedTray(page, 3);
+    await page.goto(FIXTURE);
+    await page.getByRole("button", { name: "Flipped cards · 3", exact: true }).click();
+    const first = await page.locator("[data-card-flip-item=other-0] [data-card-flip-drag-handle]").boundingBox();
+    const last = await page.locator("[data-card-flip-item=other-2]").boundingBox();
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: first!.x + 10, y: first!.y + 15 }] });
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: last!.x + 10, y: last!.y + last!.height / 2 + 8 }] });
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    await expect
+        .poll(() =>
+            page.evaluate(() =>
+                JSON.parse(sessionStorage.getItem("langboard-card-flip-session")!).state.trays["fixture-user:fixture-project"].map(
+                    (c: { uid: string }) => c.uid
+                )
+            )
+        )
+        .toEqual(["other-1", "other-2", "other-0"]);
     await expect(page.locator("[data-card-viewer]")).toHaveCount(1);
 });

@@ -9,7 +9,8 @@ import { cn } from "@/core/utils/ComponentUtils";
 import { ProjectCard } from "@/core/models";
 import { useCardFlipStore } from "@/pages/BoardPage/components/card/CardFlipStore";
 import BoardCard from "@/pages/BoardPage/components/card/BoardCard";
-import { BoardCardSectionSaveProvider } from "@/pages/BoardPage/components/card/BoardCardSectionSaveProvider";
+import { flipDraftKey, useCardFlipDraftStore } from "./components/card/CardFlipDraftStore";
+import { BoardCardSectionSaveProvider, useBoardCardSectionSaveActions } from "@/pages/BoardPage/components/card/BoardCardSectionSaveProvider";
 import { EHttpStatus } from "@langboard/core/enums";
 import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Navigate, useParams } from "react-router";
@@ -43,6 +44,7 @@ const BoardCardPageComponent = ({
 }: IBoardCardPageProps) => {
     const navigate = usePageNavigateRef();
     const { currentUser } = useAuth();
+    const { saveSections } = useBoardCardSectionSaveActions();
     const params = useParams();
     const projectUID = projectUIDProp ?? params.projectUID;
     const cardUID = cardUIDProp ?? params.cardUID;
@@ -115,7 +117,7 @@ const BoardCardPageComponent = ({
         });
     };
 
-    const close = () => {
+    const close = (toTray = false) => {
         if (closingRef.current) {
             return;
         }
@@ -126,9 +128,22 @@ const BoardCardPageComponent = ({
             return;
         }
 
-        const source = document.getElementById(`board-card-${cardUID}`);
+        const source = toTray
+            ? (document.querySelector(`[data-card-flip-item="${cardUID}"]`) ?? document.querySelector("[data-card-flip-tray]"))
+            : document.getElementById(`board-card-${cardUID}`);
         const content = contentRef.current;
-        const sourceRect = source?.getBoundingClientRect();
+        const dockRect = source?.getBoundingClientRect();
+        const workspace =
+            document.getElementById("board-scrollport")?.getBoundingClientRect() ?? document.querySelector("main")?.getBoundingClientRect();
+        const sourceRect =
+            toTray && dockRect
+                ? {
+                      left: Math.max(workspace?.left ?? 0, dockRect.left),
+                      top: window.innerHeight - 56,
+                      width: Math.min(dockRect.width, 116),
+                      height: 40,
+                  }
+                : dockRect;
         const targetRect = content?.getBoundingClientRect();
         const windowRect = { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
         const boardRect = document.getElementById("board-scrollport")?.getBoundingClientRect();
@@ -136,7 +151,7 @@ const BoardCardPageComponent = ({
             sourceRect &&
             targetRect &&
             isRectCenterInside(sourceRect, windowRect) &&
-            (!boardRect || isRectCenterInside(sourceRect, boardRect)) &&
+            (toTray || !boardRect || isRectCenterInside(sourceRect, boardRect)) &&
             targetRect.width > 0 &&
             targetRect.height > 0
         ) {
@@ -376,14 +391,22 @@ const BoardCardPageComponent = ({
                                 isExpanded={isExpanded}
                                 setIsExpanded={setIsExpanded}
                                 onClose={handleCloseRequest}
-                                onFlip={() => {
-                                    if (isCardEditingRef.current || isComposing || !currentUser) return;
+                                onFlip={async () => {
+                                    if (isComposing || !currentUser || closingRef.current) return;
+                                    if (isCardEditingRef.current) {
+                                        const patch = await saveSections();
+                                        if (patch === false) return;
+                                        useCardFlipDraftStore.getState().save(flipDraftKey(currentUser.uid, projectUID, cardUID), {
+                                            ...patch,
+                                            deadline_at: patch.deadline_at instanceof Date ? patch.deadline_at.toISOString() : patch.deadline_at,
+                                        });
+                                    }
                                     const card = ProjectCard.Model.getModel(cardUID);
                                     if (!card) return;
                                     useCardFlipStore
                                         .getState()
                                         .flip(currentUser.uid, projectUID, { uid: cardUID, title: card.linked_resource?.title ?? card.title });
-                                    close();
+                                    requestAnimationFrame(() => close(true));
                                 }}
                                 onEditModeStateChange={handleEditModeStateChange}
                             />

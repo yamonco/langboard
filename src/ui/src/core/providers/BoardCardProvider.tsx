@@ -1,3 +1,4 @@
+import { flipDraftKey, useCardFlipDraftStore } from "@/pages/BoardPage/components/card/CardFlipDraftStore";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { AuthUser, ProjectCard } from "@/core/models";
 import useRoleActionFilter from "@/core/hooks/useRoleActionFilter";
@@ -90,7 +91,9 @@ export const BoardCardProvider = ({ projectUID, card, currentUser, viewportRef, 
     const [isCommentPanelOpen, setIsCommentPanelOpen] = useState(() => commentCount > 0);
     const [isActionPanelOpen, setIsActionPanelOpen] = useState(false);
     const [commentLayoutMode, setCommentLayoutMode] = useState<"mobile" | "panel">("mobile");
-    const [cardEditMode, setCardEditMode] = useState<"view" | "edit">("view");
+    const [cardEditMode, setCardEditMode] = useState<"view" | "edit">(() =>
+        useCardFlipDraftStore.getState().drafts[flipDraftKey(currentUser.uid, projectUID, card.uid)] ? "edit" : "view"
+    );
     const currentUserRoleActions = card.useField("current_auth_role_actions");
     const { hasRoleAction } = useRoleActionFilter(currentUserRoleActions);
     const canEditCard = hasRoleAction(ProjectRole.EAction.CardUpdate);
@@ -129,8 +132,9 @@ export const BoardCardProvider = ({ projectUID, card, currentUser, viewportRef, 
         setCardEditMode("edit");
     }, [canEditCard]);
     const leaveCardEditMode = useCallback(() => {
+        useCardFlipDraftStore.getState().clear(flipDraftKey(currentUser.uid, projectUID, card.uid));
         setCardEditMode("view");
-    }, []);
+    }, [currentUser.uid, projectUID, card.uid]);
     const toggleCardEditMode = useCallback(() => {
         if (!canEditCard) {
             return;

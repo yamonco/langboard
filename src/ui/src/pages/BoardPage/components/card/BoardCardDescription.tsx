@@ -1,3 +1,4 @@
+import { flipDraftKey, useCardFlipDraftStore } from "./CardFlipDraftStore";
 import Box from "@/components/base/Box";
 import Button from "@/components/base/Button";
 import IconComponent from "@/components/base/IconComponent";
@@ -86,6 +87,7 @@ const BoardCardDescription = memo(({ scrollParentRef }: IBoardCardDescriptionPro
     const { data: commentsData } = useGetCardComments({ project_uid: projectUID, card_uid: card.uid });
     const comments = commentsData?.comments ?? modelComments;
     const description = card.useField("description");
+    const restoredDraft = useCardFlipDraftStore.getState().drafts[flipDraftKey(currentUser.uid, projectUID, card.uid)];
     const contentBlocks = (card as unknown as { content_blocks?: import("@/core/models/ProjectCard").IContentBlock[] }).content_blocks ?? [];
     const [isEditing, setIsEditing] = useState(false);
     const [anchorComposer, setAnchorComposer] = useState<IAnchorComposerPosition | null>(null);
@@ -373,7 +375,7 @@ const BoardCardDescription = memo(({ scrollParentRef }: IBoardCardDescriptionPro
                     <CardContentBlockList blocks={contentBlocks} />
                 ) : isEditing ? (
                     <PlateEditor
-                        value={description}
+                        value={restoredDraft?.description ?? description}
                         mentionables={mentionables}
                         linkables={cards}
                         currentUser={currentUser}
@@ -387,7 +389,7 @@ const BoardCardDescription = memo(({ scrollParentRef }: IBoardCardDescriptionPro
                         }}
                         placeholder={t("card.No description")}
                         setValue={() => {}}
-                        authoritativeCollaborativeValue={description?.content ?? ""}
+                        authoritativeCollaborativeValue={restoredDraft?.description?.content ?? description?.content ?? ""}
                         onCollaborativeValueReady={handleCollaborativeValueReady}
                         onCollaborativeValueResetReady={handleCollaborativeValueResetReady}
                         serializeOnChange={false}

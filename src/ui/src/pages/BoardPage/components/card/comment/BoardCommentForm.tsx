@@ -239,6 +239,8 @@ const BoardCommentForm = memo(({ variant = "mobile" }: IBoardCommentFormProps): 
         };
     }, [anchoredCommentRef, isCurrentEditor, isReplyOwner, isValidating, openEditor, setIsCommentPanelOpen, variant]);
 
+    useEffect(() => () => saveDraftToStorage(valueRef.current.content), [saveDraftToStorage]);
+
     useEffect(() => {
         if (!isCurrentEditor) {
             saveDraftToStorage(valueRef.current.content);

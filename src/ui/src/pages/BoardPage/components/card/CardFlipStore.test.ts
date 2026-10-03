@@ -66,3 +66,15 @@ test("unavailable cards are removed and malformed stored entries cannot crash th
     store.getState().remove("u", "p", "a");
     assert.deepEqual(store.getState().trays["u:p"], []);
 });
+
+
+test("drag order preserves membership and rejects foreign or duplicated entries", () => {
+    const actions = store.getState();
+    actions.flip("reorder-user", "board", { uid: "a", title: "A" });
+    actions.flip("reorder-user", "board", { uid: "b", title: "B" });
+    actions.reorder("reorder-user", "board", ["a", "b"]);
+    assert.deepEqual(store.getState().trays["reorder-user:board"].map((card) => card.uid), ["a", "b"]);
+    actions.reorder("reorder-user", "board", ["a", "a"]);
+    actions.reorder("reorder-user", "board", ["a", "foreign"]);
+    assert.deepEqual(store.getState().trays["reorder-user:board"].map((card) => card.uid), ["a", "b"]);
+});

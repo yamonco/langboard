@@ -534,7 +534,6 @@ function BoardTaskCardResult({
                                             className="size-8"
                                             title={t("card.Flip card")}
                                             aria-label={t("card.Flip card")}
-                                            disabled={isCardEditing}
                                             onClick={onFlip}
                                         >
                                             <IconComponent icon="layers" size="4" />

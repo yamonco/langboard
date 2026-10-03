@@ -1,3 +1,4 @@
+import { flipDraftKey, useCardFlipDraftStore } from "./CardFlipDraftStore";
 import { formatNumber } from "@/core/utils/LocaleFormat";
 import BoardCardInlineDeadline from "@/pages/BoardPage/components/card/BoardCardInlineDeadline";
 import Button from "@/components/base/Button";
@@ -51,7 +52,7 @@ const parseDeadline = (value: string) => {
 };
 
 const BoardCardDeadlineDraft = memo(() => {
-    const { card, hasRoleAction, isCardEditing } = useBoardCard();
+    const { card, currentUser, projectUID, hasRoleAction, isCardEditing } = useBoardCard();
     const [t, i18n] = useTranslation();
     const { registerSectionCancelHandler, registerSectionSaveHandler } = useBoardCardSectionSaveActions();
     const deadline = card.useField("deadline_at");
@@ -71,7 +72,10 @@ const BoardCardDeadlineDraft = memo(() => {
     const overdueDays = getOverdueDays({ deadlineAt: deadline, now: deadlineClock });
     const upcomingDays = getUpcomingDeadlineDays({ deadlineAt: deadline, now: deadlineClock, isCompleted: isFinished });
     const [isEditing, setIsEditing] = useState(false);
-    const [draftDeadline, setDraftDeadline] = useState<Date | undefined>(deadline);
+    const restoredDraft = useCardFlipDraftStore.getState().drafts[flipDraftKey(currentUser.uid, projectUID, card.uid)];
+    const [draftDeadline, setDraftDeadline] = useState<Date | undefined>(() =>
+        restoredDraft?.deadline_at !== undefined ? (restoredDraft.deadline_at ? new Date(restoredDraft.deadline_at) : undefined) : deadline
+    );
     const canStartEditing = hasRoleAction(ProjectRole.EAction.CardUpdate) && isCardEditing;
     const editable = canStartEditing && isEditing;
 
@@ -91,7 +95,7 @@ const BoardCardDeadlineDraft = memo(() => {
         updateMeta: updateCollaborativeDeadlineMeta,
         updateValue: updateCollaborativeDeadline,
     } = useCollaborativeText({
-        defaultValue: serializeDeadline(deadline),
+        defaultValue: restoredDraft?.deadline_at ?? serializeDeadline(deadline),
         disabled: !editable,
         collaborationType: EEditorCollaborationType.Card,
         uid: card.uid,
