@@ -15,7 +15,7 @@ from langboard_shared.infrastructure.repositories import Repository
 from ..mcp_tools.RoleChecker import McpRoleChecker
 from ..middlewares import McpAuthMiddleware
 from ..middlewares.McpAuthMiddleware import mcp_auth_context
-from .Providers import create_compatibility_provider
+from .Providers import create_agent_core_provider, create_compatibility_provider, create_raw_primitive_provider
 from .Tool import McpTool
 from .ToolGroupMiddleware import ToolGroupMiddleware
 
@@ -35,13 +35,20 @@ class McpServer:
         self.mcp = _create_fastmcp()
         self._streamable_http_app = None
 
-    def get_http_app(self) -> tuple[Any, FastMCP]:
+    def get_http_app(self, profile: str = "compatibility") -> tuple[Any, FastMCP]:
         """Build the MCP transport or fail application startup."""
 
         allowed_hosts, allowed_origins = _get_transport_security_allowlists()
         app = _create_fastmcp()
 
-        app.add_provider(create_compatibility_provider(self._wrap_tool))
+        providers = {
+            "compatibility": create_compatibility_provider,
+            "agent": create_agent_core_provider,
+            "raw": create_raw_primitive_provider,
+        }
+        if profile not in providers:
+            raise ValueError(f"Unknown MCP profile: {profile}")
+        app.add_provider(providers[profile](self._wrap_tool))
 
         http_app = app.http_app(
             path="/stream",
@@ -51,7 +58,8 @@ class McpServer:
         )
         http_app.add_middleware(McpAuthMiddleware)
 
-        self.mcp = app
+        if profile == "compatibility":
+            self.mcp = app
         return http_app, app
 
     def _wrap_tool(self, tool_name: str, handler: Callable[..., Any]):
