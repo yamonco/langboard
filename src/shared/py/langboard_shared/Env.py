@@ -73,6 +73,11 @@ class Env:
         return self.__get_from_cache("API_INTERNAL_URL", f"http://{self.API_HOST}:{self.API_PORT}").rstrip("/")
 
     @property
+    def MCP_OIDC_DEFAULT_TOOL_GROUP_UID(self) -> str:
+        """Optional native tool group for verified OIDC users without a group header."""
+        return self.__get_from_cache("MCP_OIDC_DEFAULT_TOOL_GROUP_UID", "").strip()
+
+    @property
     def MCP_ALLOWED_HOSTS(self) -> list[str]:
         """Return explicitly allowed MCP Host header values."""
 
@@ -292,6 +297,14 @@ class Env:
     @property
     def OIDC_ISSUER(self) -> str:
         return self.__get_from_cache("OIDC_ISSUER", "")
+
+    @property
+    def OIDC_API_AUDIENCE(self) -> str:
+        return self.__get_from_cache("OIDC_API_AUDIENCE", "")
+
+    @property
+    def EMPLOYEE_IDENTITY_SIGNING_KEY_PATH(self) -> str:
+        return self.__get_from_cache("EMPLOYEE_IDENTITY_SIGNING_KEY_PATH", "")
 
     @property
     def OIDC_DISCOVERY_URL(self) -> str:

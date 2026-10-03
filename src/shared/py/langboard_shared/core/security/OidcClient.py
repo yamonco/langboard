@@ -101,6 +101,40 @@ class OidcClient:
         return payload
 
     @staticmethod
+    def validate_access_token(token: str) -> dict[str, Any]:
+        """Verify API credentials using native discovery/JWKS and a fixed audience."""
+        if not OidcClient.is_enabled() or not Env.OIDC_API_AUDIENCE or not Env.OIDC_ISSUER.startswith("https://"):
+            raise RuntimeError("OIDC API identity is unavailable")
+        if not token or len(token) > 16384:
+            raise RuntimeError("OIDC API credential is invalid")
+        header = get_unverified_header(token)
+        if header.get("alg") != "RS256":
+            raise RuntimeError("Unsupported OIDC API signature")
+        discovery = OidcClient.get_discovery()
+        if discovery.get("issuer") != Env.OIDC_ISSUER:
+            raise RuntimeError("OIDC discovery issuer differs")
+        jwk = OidcClient._find_jwk(header)
+        if not jwk:
+            raise RuntimeError("OIDC API signing key unavailable")
+        claims = jwt_decode(
+            token,
+            key=RSAAlgorithm.from_jwk(json_dumps(jwk)),
+            algorithms=["RS256"],
+            audience=Env.OIDC_API_AUDIENCE,
+            issuer=Env.OIDC_ISSUER,
+            leeway=0,
+            options={"require": ["sub", "iss", "aud", "exp", "iat"]},
+        )
+        if claims.get("typ") != "Bearer":
+            raise RuntimeError("OIDC API access token required")
+        subject = claims["sub"]
+        if not isinstance(subject, str) or not subject.strip() or len(subject) > 512:
+            raise RuntimeError("OIDC API subject unavailable")
+        if type(claims["exp"]) is not int or type(claims["iat"]) is not int:
+            raise RuntimeError("OIDC API time claims invalid")
+        return claims
+
+    @staticmethod
     def fetch_userinfo(access_token: str) -> dict[str, Any]:
         discovery = OidcClient.get_discovery()
         userinfo_endpoint = str(discovery.get("userinfo_endpoint", "")).strip()

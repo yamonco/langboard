@@ -61,7 +61,8 @@ class MiddlewareHelper:
             pass
 
     @staticmethod
-    def validate_auth(scope: Scope) -> User | Bot | int:
+    def validate_auth(scope: Scope, *, allow_oidc: bool = False) -> User | Bot | int:
+        scope.pop("oidc_claims", None)
         headers = Headers(scope=scope)
         if headers.get(AuthSecurity.API_TOKEN_HEADER, headers.get(AuthSecurity.API_TOKEN_HEADER.lower())):
             validation_result = Auth.validate_user_by_api_token(headers)
@@ -82,8 +83,21 @@ class MiddlewareHelper:
                 scope["auth"] = user
                 scope["api_key"] = api_key
                 return user
+            return status.HTTP_401_UNAUTHORIZED
 
         validation_result = Auth.validate(headers)
+        if allow_oidc and not isinstance(validation_result, User) and not scope.get("api_key"):
+            authorization = headers.get("authorization", "").split(" ", maxsplit=1)
+            if len(authorization) == 2 and authorization[0].lower() == "bearer":
+                from ..security.OidcMcpIdentity import resolve_oidc_mcp_identity
+
+                try:
+                    user, claims = resolve_oidc_mcp_identity(authorization[1])
+                    scope["auth"] = user
+                    scope["oidc_claims"] = claims
+                    return user
+                except Exception:
+                    pass
         if isinstance(validation_result, User):
             scope["auth"] = validation_result
 
