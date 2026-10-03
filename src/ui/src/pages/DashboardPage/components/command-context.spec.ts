@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { readFileSync } from "node:fs";
 for (const viewport of [
     { width: 1280, height: 720 },
     { width: 390, height: 844 },
@@ -29,5 +30,24 @@ for (const viewport of [
         await page.getByRole("button", { name: "Open palette", exact: true }).press("Enter");
         await page.getByRole("combobox", { name: "Command palette", exact: true }).press("Escape");
         await expect(page.getByRole("button", { name: "Open palette", exact: true })).toBeFocused();
+    });
+}
+
+for (const language of ["en-US", "ko-KR", "ja-JP", "zh-CN"]) {
+    const labels = JSON.parse(readFileSync(new URL(`../../../assets/locales/${language}/dashboard.json`, import.meta.url), "utf8"));
+    test(`visible command labels are searchable in ${language}`, async ({ page }) => {
+        await page.addInitScript((lang) => localStorage.setItem("lang", lang), language);
+        await page.goto("/src/pages/DashboardPage/components/command-context.fixture.html");
+        await page.getByRole("button", { name: "Open palette", exact: true }).click();
+        const input = page.getByRole("combobox", { name: labels["Command palette"], exact: true });
+        for (const key of ["New card", "New project", "Toggle sidebar", "My Work", "Changes", "Relations"]) {
+            const label = labels[key];
+            await input.fill(label);
+            await expect(page.getByRole("option", { name: label, exact: true })).toBeVisible();
+        }
+        await input.fill(labels.Changes);
+        await input.press("Enter");
+        await expect(page.getByRole("region", { name: "changes", exact: true })).toBeFocused();
+        await expect(page.getByTestId("route")).toHaveText("/board/fixture");
     });
 }

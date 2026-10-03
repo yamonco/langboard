@@ -251,7 +251,7 @@ const ProjectQuickSwitcher = memo((): React.JSX.Element => {
                     {currentProjectUID && (
                         <Command.Item
                             value="action:new-card"
-                            keywords={[t("board.Add a card")]}
+                            keywords={[t("dashboard.New card"), t("board.Add a card")]}
                             onSelect={() => selectRoute(`${ROUTES.BOARD.MAIN(currentProjectUID)}?new-card=1`)}
                             className="gap-3 rounded-lg"
                         >
@@ -261,7 +261,7 @@ const ProjectQuickSwitcher = memo((): React.JSX.Element => {
                     )}
                     <Command.Item
                         value="action:new-project"
-                        keywords={[t("dashboard.Create New Project")]}
+                        keywords={[t("dashboard.New project"), t("dashboard.Create New Project")]}
                         onSelect={() => selectRoute(`${ROUTES.DASHBOARD.PROJECTS.ALL}/new-project`)}
                         className="gap-3 rounded-lg"
                     >
@@ -270,6 +270,7 @@ const ProjectQuickSwitcher = memo((): React.JSX.Element => {
                     </Command.Item>
                     <Command.Item
                         value="action:toggle-sidebar"
+                        keywords={[t("dashboard.Toggle sidebar")]}
                         onSelect={() => selectCommand(WORKBENCH_TOGGLE_CONTEXT_EVENT)}
                         className="gap-3 rounded-lg"
                     >
@@ -308,6 +309,7 @@ const ProjectQuickSwitcher = memo((): React.JSX.Element => {
                 <Command.Group heading={t("dashboard.Navigation")}>
                     <Command.Item
                         value="navigation:my-work"
+                        keywords={[t("dashboard.My Work")]}
                         onSelect={() =>
                             currentProjectUID || location.pathname.startsWith("/dashboard/")
                                 ? selectCommand(WORKBENCH_OPEN_MY_WORK_EVENT)
@@ -322,6 +324,7 @@ const ProjectQuickSwitcher = memo((): React.JSX.Element => {
                         <>
                             <Command.Item
                                 value="navigation:changes"
+                                keywords={[t("dashboard.Changes")]}
                                 onSelect={() => selectCommand(WORKBENCH_OPEN_CHANGES_EVENT)}
                                 className="gap-3 rounded-lg"
                             >
@@ -330,6 +333,7 @@ const ProjectQuickSwitcher = memo((): React.JSX.Element => {
                             </Command.Item>
                             <Command.Item
                                 value="navigation:relations"
+                                keywords={[t("dashboard.Relations")]}
                                 onSelect={() => selectCommand(WORKBENCH_OPEN_RELATIONS_EVENT)}
                                 className="gap-3 rounded-lg"
                             >

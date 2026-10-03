@@ -26,6 +26,7 @@ on:
       - src/ui/playwright.locale-format.config.ts
       - src/ui/playwright.error-locale.config.ts
       - src/ui/playwright.workbench.config.ts
+      - src/ui/playwright.command-context.config.ts
       - src/ui/playwright.default-language.config.ts
       - src/ui/playwright.auth-language.config.ts
       - src/ui/vite.card-load.config.ts
@@ -93,4 +94,7 @@ jobs:
         working-directory: src/ui
 
       - run: yarn playwright test -c playwright.error-locale.config.ts
+        working-directory: src/ui
+
+      - run: yarn playwright test -c playwright.command-context.config.ts
         working-directory: src/ui
