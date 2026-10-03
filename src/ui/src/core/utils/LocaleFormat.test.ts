@@ -41,3 +41,18 @@ test("localized count and duration preserve zero, mixed units and 100-hour compa
         assert.equal(formatTimerDuration({ days: 4, hours: 4, minutes: 2 }, locale), unit(100, "hour"));
     }
 });
+
+test("sub-minute metadata uses localized now without future zero or seconds", () => {
+    for (const locale of SUPPORTED_LOCALES) {
+        const justNow = new Intl.RelativeTimeFormat(locale, { numeric: "auto" }).format(0, "second");
+        for (const milliseconds of [-59999, -1, 0, 1, 59999]) {
+            assert.equal(formatDateDistance(new Date(now + milliseconds), locale, now), justNow);
+        }
+        for (const minutes of [-1, 1]) {
+            assert.equal(
+                formatDateDistance(new Date(now + minutes * 60000), locale, now),
+                new Intl.RelativeTimeFormat(locale, { numeric: "always" }).format(minutes, "minute")
+            );
+        }
+    }
+});

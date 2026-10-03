@@ -9,10 +9,11 @@ export function formatDateDistance(date: Date, locale: unknown, now: number = Da
     const delta = date.getTime() - now;
     if (Math.abs(delta) >= 86400000) return formatDateTime(date, locale);
     // Keep metadata compact; seconds remain available in the exact timestamp tooltip.
+    if (Math.abs(delta) < 60000) return new Intl.RelativeTimeFormat(normalizeLocale(locale), { numeric: "auto" }).format(0, "second");
     const unit = Math.abs(delta) >= 3600000 ? "hour" : "minute";
     const divisor = unit === "hour" ? 3600000 : 60000;
     const value = Math.trunc(delta / divisor);
-    return new Intl.RelativeTimeFormat(normalizeLocale(locale), { numeric: "always" }).format(value === 0 ? 0 : value, unit);
+    return new Intl.RelativeTimeFormat(normalizeLocale(locale), { numeric: "always" }).format(value, unit);
 }
 
 export function formatNumber(value: number, locale: unknown, options: Intl.NumberFormatOptions = {}) {
