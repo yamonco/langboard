@@ -7,6 +7,7 @@ from urllib.parse import urlsplit
 from fastmcp import FastMCP
 from fastmcp.exceptions import AuthorizationError
 from fastmcp.tools import Tool
+from mcp.types import Icon
 from langboard_shared.core.types import Factory
 from langboard_shared.core.utils.decorators import class_instance
 from langboard_shared.domain.models import Bot, User
@@ -71,6 +72,8 @@ class McpServer:
             return None
         app = FastMCP(
             Env.PROJECT_NAME,
+            icons=[Icon(src=f"{Env.PUBLIC_UI_URL}/images/favicon.ico")],
+            website_url=Env.PUBLIC_UI_URL,
             auth=auth,
             strict_input_validation=True,
             mask_error_details=True,
