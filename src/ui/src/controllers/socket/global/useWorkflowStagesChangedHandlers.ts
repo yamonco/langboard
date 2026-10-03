@@ -13,6 +13,7 @@ export default function useWorkflowStagesChangedHandlers() {
             callback: () => {
                 void queryClient.invalidateQueries({ queryKey: ["workflow-stages"] });
                 void queryClient.invalidateQueries({ queryKey: ["project-workflow-stages"] });
+                void queryClient.invalidateQueries({ queryKey: ["get-dashboard-projects"] });
             },
         },
     });
