@@ -205,7 +205,7 @@ const DashboardProxy = memo((): React.JSX.Element => {
             mobileWorkbenchContext={
                 isMobile && isMobileExplorerOpen
                     ? {
-                          title: contextMode === "my-work" ? t("dashboard.My Work") : "Explorer",
+                          title: contextMode === "my-work" ? t("dashboard.My Work") : t("common.Explorer"),
                           icon: contextMode === "my-work" ? "list-checks" : "panel-left",
                           onClose: () => setIsMobileExplorerOpen(false),
                       }

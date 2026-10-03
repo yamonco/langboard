@@ -196,7 +196,7 @@ function BoardProxyDisplay({ pageRoute, isFetching, isProjectLoading, project }:
     const [activeSidePanel, setActiveSidePanel] = useState<TBoardSidePanel>();
     const [workbenchContextMode, setWorkbenchContextMode] = useState<TWorkbenchContext>("explorer");
     const workbenchContextTitle = {
-        explorer: "Explorer",
+        explorer: t("common.Explorer"),
         "my-work": t("dashboard.My Work"),
         changes: t("dashboard.Changes"),
         activity: t("board.Activity"),
@@ -740,7 +740,7 @@ function BoardProxyDisplay({ pageRoute, isFetching, isProjectLoading, project }:
                 mobileWorkbenchContext={
                     isMobile && !selectCardViewType && activeSidePanel
                         ? {
-                              title: isBotScopeOpened ? "Bots" : workbenchContextTitle,
+                              title: isBotScopeOpened ? t("settings.Bots") : workbenchContextTitle,
                               icon: isBotScopeOpened
                                   ? "bot"
                                   : {
