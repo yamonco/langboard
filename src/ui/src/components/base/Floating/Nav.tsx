@@ -96,6 +96,7 @@ function Nav({
                             item.className
                         )}
                         onClick={item.onClick}
+                        aria-label={typeof item.label === "string" ? item.label : undefined}
                     >
                         {item.badge && (
                             <span
