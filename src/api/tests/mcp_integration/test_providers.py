@@ -44,3 +44,18 @@ async def test_provider_preserves_wrapped_dispatch_and_tool_group_deny(monkeypat
             assert calls == ([3] if role_allowed else [])
     finally:
         mcp_auth_context.reset(token)
+
+
+async def test_provider_exposes_server_owned_workflow_resource_and_prompt(monkeypatch):
+    monkeypatch.setattr(McpTool, "get_tools", lambda: {})
+    server = _create_fastmcp()
+    server.add_provider(create_compatibility_provider(McpServer._wrap_tool))
+    async with Client(server) as client:
+        resources = await client.list_resources()
+        assert [str(resource.uri) for resource in resources] == ["langboard://policy/workflow"]
+        resource = await client.read_resource("langboard://policy/workflow")
+        assert "workflow_stage_status" in str(resource)
+        prompts = await client.list_prompts()
+        assert [prompt.name for prompt in prompts] == ["apply_workflow_policy"]
+        prompt = await client.get_prompt("apply_workflow_policy", {})
+        assert "get_project_identity" in str(prompt)
