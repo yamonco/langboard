@@ -59,6 +59,7 @@ const useGetProjects = (options?: TQueryOptions<unknown, IGetProjectsResponse>) 
     const result = query(["get-dashboard-projects"], getProjects, {
         ...options,
         retry: 0,
+        staleTime: options?.staleTime ?? 30_000,
         refetchInterval: Infinity,
         refetchOnWindowFocus: options?.refetchOnWindowFocus ?? false,
     });
