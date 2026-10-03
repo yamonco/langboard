@@ -273,7 +273,6 @@ class ProjectColumnRepository(BaseOrderRepository[ProjectColumn, Project]):
 
         scopes = BotScopeHelper.get_list(
             ProjectColumnBotScope,
-    WorkflowStageDefinition,
             lambda q: q.join(
                 ProjectColumn,
                 ProjectColumn.column("id") == ProjectColumnBotScope.column("project_column_id"),

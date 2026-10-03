@@ -35,6 +35,7 @@ def test_native_project_membership_labels_roles_and_policy_share_template_transa
         engine = create_engine("sqlite://")
     tables = [
         models.User,
+        models.Card,
         models.Project,
         models.ProjectColumn,
         models.ProjectLabel,
@@ -202,6 +203,23 @@ def test_native_project_membership_labels_roles_and_policy_share_template_transa
                 active_column = next(item for item in rows[models.ProjectColumn] if not item.is_archive)
                 assert active_column.description == "Column contract"
                 assert active_column.translations["ko"]["name"] == "대기"
+                effects.clear()
+                copied_template = service.project_template.copy_from_project(_project, "Roundtrip custom")
+                restored, restored_columns, _ = service.project_template.create_project(
+                    actor, "Restored roundtrip", template_name=copied_template.name
+                )
+                assert restored.id != _project.id
+                assert [column.workflow_stage for column in restored_columns] == ["ready"]
+                assert restored_columns[0].description == active_column.description
+                assert restored_columns[0].translations == active_column.translations
+                restored_bots = service.project_template.repo.project_assigned_internal_bot.get_all_by_project(restored)
+                assert len(restored_bots) == 1
+                assert restored_bots[0][0].id == internal.id
+                assert restored_bots[0][1].prompt == assigned[0].prompt
+                assert restored_bots[0][1].use_default_prompt is False
+                assert copied_template.internal_bots == template.internal_bots
+                assert copied_template.project_bot_scopes == template.project_bot_scopes
+                assert copied_template.column_bot_scopes == template.column_bot_scopes
     finally:
         service.close()
         engine.dispose()
