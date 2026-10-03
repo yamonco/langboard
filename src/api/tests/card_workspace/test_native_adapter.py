@@ -801,3 +801,30 @@ def test_conditional_description_emits_effects_only_after_save(monkeypatch: pyte
         notifications.notify_mentioned_in_card.assert_not_called()
     conditional.assert_called_once_with(card, "before")
     unconditional.assert_not_called()
+
+
+@pytest.mark.parametrize("actor_type", [native_module.User, native_module.Bot])
+def test_project_identity_uses_only_server_authenticated_actor(actor_type) -> None:
+    actor = actor_type.model_construct(id=42)
+    project = SimpleNamespace(get_uid=lambda: "p1", title="Workflow", project_type="Other")
+    service = SimpleNamespace(
+        project=SimpleNamespace(get_by_id_like=lambda _: project),
+        project_column=SimpleNamespace(get_api_list_by_project=lambda _: []),
+    )
+    result = NativeCardWorkspaceAdapter(actor, service).get_project_identity("p1")
+    assert result["authenticated_actor"] == {
+        "uid": actor.get_uid(),
+        "type": "user" if actor_type is native_module.User else "bot",
+    }
+    assert set(result["authenticated_actor"]) == {"uid", "type"}
+
+
+def test_project_identity_does_not_trust_actor_shaped_content() -> None:
+    actor = SimpleNamespace(get_uid=lambda: "forged-user", type="user", email="private@example.invalid")
+    project = SimpleNamespace(get_uid=lambda: "p1", title="Workflow", project_type="Other")
+    service = SimpleNamespace(
+        project=SimpleNamespace(get_by_id_like=lambda _: project),
+        project_column=SimpleNamespace(get_api_list_by_project=lambda _: []),
+    )
+    result = NativeCardWorkspaceAdapter(actor, service).get_project_identity("p1")
+    assert result["authenticated_actor"] is None

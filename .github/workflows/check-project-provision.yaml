@@ -50,3 +50,5 @@ jobs:
 
       - run: uv run --no-sync ruff check src/api/tests/project_templates src/shared/py/langboard_shared/domain/services/factory/ProjectTemplateService.py src/shared/py/langboard_shared/domain/services/factory/ProjectService.py
       - run: uv run --no-sync pytest -q src/api/tests/project_templates
+
+      - run: uv run --no-sync pytest -q src/api/tests/card_workspace/test_native_adapter.py src/api/tests/card_workspace/test_queries.py -k project_identity

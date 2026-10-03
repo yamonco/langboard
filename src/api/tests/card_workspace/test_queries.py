@@ -400,3 +400,17 @@ def test_project_list_forwards_completion_and_stage_filters_before_paging():
     assert port.get_project_card_page.call_args.kwargs == {"include_closed": True, "workflow_stages": ["released"]}
     with pytest.raises(ValueError, match="workflow_stages"):
         list_project_cards(port, "p1", workflow_stages=[""])
+
+
+def test_project_identity_rejects_private_or_unrecognized_actor_fields() -> None:
+    port = FakeQueryPort()
+    original = port.get_project_identity
+    port.get_project_identity = lambda uid: {
+        **original(uid),
+        "authenticated_actor": {"uid": "actor", "type": "user", "email": "private@example.invalid"},
+    }
+    with pytest.raises(ValueError):
+        get_project_identity(port, "p1")
+    port.get_project_identity = lambda uid: {**original(uid), "authenticated_actor": {"uid": "actor", "type": "admin"}}
+    with pytest.raises(ValueError):
+        get_project_identity(port, "p1")

@@ -249,6 +249,12 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
         )
         return {
             "uid": uid,
+            "authenticated_actor": {
+                "uid": self._actor.get_uid(),
+                "type": "user" if isinstance(self._actor, User) else "bot",
+            }
+            if isinstance(self._actor, (User, Bot))
+            else None,
             "title": project.title,
             "project_type": project.project_type,
             "url": f"{Env.PUBLIC_UI_URL}/board/{uid}",

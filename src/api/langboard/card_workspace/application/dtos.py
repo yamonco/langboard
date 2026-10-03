@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, SerializerFunctionWrapHandler, model_serializer, model_validator
 
 
@@ -109,6 +109,15 @@ class CardBundleResponse(BaseModel):
         return self
 
 
+class AuthenticatedActorDto(BaseModel):
+    """Minimal identity from the server-authenticated principal, never a client hint."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    uid: str
+    type: Literal["user", "bot"]
+
+
 class ProjectIdentityResponse(BaseModel):
     """Stable project identity plus its bounded active workflow columns."""
 
@@ -119,6 +128,7 @@ class ProjectIdentityResponse(BaseModel):
     project_type: str
     url: str
     columns: BoundedItemsDto
+    authenticated_actor: AuthenticatedActorDto | None = None
 
 
 class ProjectCardListResponse(BaseModel):
