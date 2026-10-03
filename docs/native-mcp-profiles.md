@@ -94,6 +94,13 @@ also return not_applied revision-conflict receipts. Other failures remain unknow
 Coverage is now 50 reviewed commands and one additional query; 20 commands and
 remaining query contracts still need output models.
 
+Six bot mutation commands now declare native schedule and Hook output models.
+Schedule scope identities, date windows and omitted change fields remain intact;
+Hook operations retain their events and active state. These domain operation
+receipts remain separate from transport mutation receipts. Bot author, target
+project and ToolGroup checks are unchanged. Reviewed coverage is now 56 commands
+and one additional query; 14 commands and remaining query outputs are pending.
+
 This delivery separates existing canonical entry points. It does not yet supply
 all planned action facades, atomic Work Plan handling,
 OAuth profile access, deprecation telemetry or representative installed-client
