@@ -4,7 +4,12 @@ from types import SimpleNamespace
 import pytest
 from fastmcp import Client
 from fastmcp.exceptions import ToolError
-from langboard.mcp_integration.Providers import create_compatibility_provider
+from langboard.mcp_integration.Providers import (
+    AGENT_CORE_TOOLS,
+    create_agent_core_provider,
+    create_compatibility_provider,
+    create_raw_primitive_provider,
+)
 from langboard.mcp_integration.Server import McpServer, _create_fastmcp
 from langboard.mcp_integration.Tool import McpTool
 from langboard.middlewares.McpAuthMiddleware import mcp_auth_context
@@ -41,6 +46,102 @@ async def test_provider_preserves_wrapped_dispatch_and_tool_group_deny(monkeypat
                     await client.call_tool("record", {"value": 3})
             with pytest.raises(ToolError):
                 await client.call_tool("denied", {"value": 4})
+            assert calls == ([3] if role_allowed else [])
+    finally:
+        mcp_auth_context.reset(token)
+
+
+async def test_registered_profiles_partition_catalog_without_changing_schemas():
+    from langboard.Loader import ModuleLoader
+
+    ModuleLoader.load("mcp_tools", "Mcp", log=False)
+    registered = set(McpTool.get_tools())
+    assert AGENT_CORE_TOOLS <= registered
+    token = mcp_auth_context.set({"tool_group": SimpleNamespace(activated_at=object(), tools=list(registered))})
+    try:
+        catalogs = {}
+        for profile in ("compatibility", "agent", "raw"):
+            _, server = McpServer.get_http_app(profile)
+            async with Client(server) as client:
+                catalogs[profile] = {tool.name: tool.input_schema for tool in await client.list_tools()}
+        assert set(catalogs["agent"]) == AGENT_CORE_TOOLS
+        assert set(catalogs["raw"]) == registered - AGENT_CORE_TOOLS
+        assert {**catalogs["agent"], **catalogs["raw"]} == catalogs["compatibility"]
+    finally:
+        mcp_auth_context.reset(token)
+
+
+@pytest.mark.parametrize("path", ["/mcp/stream", "/mcp/agent/stream", "/mcp/raw/stream"])
+def test_mounted_profiles_retain_http_authentication(monkeypatch, path):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from langboard.App import App
+    from langboard.Loader import ModuleLoader
+    from langboard_shared.helpers import MiddlewareHelper
+
+    monkeypatch.setattr(ModuleLoader, "load", lambda *args, **kwargs: {})
+    monkeypatch.setattr(MiddlewareHelper, "validate_auth", lambda scope: 401)
+    app = App.__new__(App)
+    app.config = SimpleNamespace(is_restarting=False)
+    app.api = FastAPI()
+    app._init_mcp_server()
+    app._init_api_routes()
+    with TestClient(app.api) as client:
+        response = client.post(path, json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
+        assert response.status_code == 401
+
+
+@pytest.mark.parametrize(
+    "factory,visible,hidden",
+    [
+        (create_agent_core_provider, "get_projects", "archive_card"),
+        (create_raw_primitive_provider, "archive_card", "get_projects"),
+        (create_compatibility_provider, "get_projects", None),
+    ],
+)
+@pytest.mark.parametrize("role_allowed", [True, False])
+async def test_profiles_preserve_domain_dispatch_and_deny_hidden_or_ungranted_calls(
+    monkeypatch,
+    factory,
+    visible,
+    hidden,
+    role_allowed,
+):
+    calls = []
+
+    def record(value: int) -> dict[str, int]:
+        calls.append(value)
+        return {"value": value}
+
+    metadata = {"handler": record, "description": "Record", "exclude": [], "accessible_type": "all"}
+    names = {"get_projects", "archive_card", "denied"}
+    monkeypatch.setattr(McpTool, "get_tools", lambda: dict.fromkeys(names, metadata))
+    monkeypatch.setattr(McpTool, "get_tool", lambda name: metadata if name in names else None)
+    monkeypatch.setattr(McpServer, "_validate_auth", lambda actor, name: True)
+    monkeypatch.setattr(McpServer, "_validate_role", lambda actor, handler, **kwargs: role_allowed)
+    server = _create_fastmcp()
+    server.add_provider(factory(McpServer._wrap_tool))
+    token = mcp_auth_context.set(
+        {
+            "user_or_bot": object(),
+            "tool_group": SimpleNamespace(activated_at=object(), tools=["get_projects", "archive_card"]),
+        }
+    )
+    try:
+        async with Client(server) as client:
+            tools = await client.list_tools()
+            assert {tool.name for tool in tools} == ({visible} if hidden else {"get_projects", "archive_card"})
+            if role_allowed:
+                result = await client.call_tool(visible, {"value": 3})
+                assert result.structured_content == {"value": 3}
+            else:
+                with pytest.raises(ToolError, match="Insufficient permissions"):
+                    await client.call_tool(visible, {"value": 3})
+            if hidden:
+                with pytest.raises(ToolError):
+                    await client.call_tool(hidden, {"value": 4})
+            with pytest.raises(ToolError):
+                await client.call_tool("denied", {"value": 5})
             assert calls == ([3] if role_allowed else [])
     finally:
         mcp_auth_context.reset(token)

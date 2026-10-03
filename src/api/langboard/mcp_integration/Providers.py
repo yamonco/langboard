@@ -7,19 +7,59 @@ from fastmcp.exceptions import AuthorizationError
 from fastmcp.prompts import Prompt
 from fastmcp.resources import Resource, ResourceTemplate
 from fastmcp.server.providers.local_provider import LocalProvider
+from fastmcp.server.transforms import Visibility
 from fastmcp.tools import Tool
 from .Tool import McpTool
 from .ToolGroupMiddleware import ToolGroupMiddleware
 
 
-def create_compatibility_provider(wrap_tool: Callable[[str, Callable[..., Any]], Callable[..., Any]]) -> LocalProvider:
-    """Preserve legacy names and domain wrappers while using native providers."""
+# Existing canonical entry points; profile selection never grants permission.
+AGENT_CORE_TOOLS = frozenset(
+    {
+        "diagnose_connection",
+        "get_projects",
+        "get_project_identity",
+        "create_project",
+        "list_project_cards",
+        "search_project_cards",
+        "get_card_bundle",
+        "create_card",
+        "patch_card_description",
+        "assign_card_to_me",
+        "apply_card_graph_patch",
+        "record_card_verification_evidence",
+        "change_card_checkitem_work",
+        "list_my_work",
+        "list_project_members",
+        "search_project_people",
+        "add_project_people",
+        "list_project_wikis",
+        "read_wiki_content",
+        "patch_wiki_content",
+        "create_project_wiki",
+        "get_unread_notifications",
+        "mark_notification_read",
+        "read_card_attachment",
+        "get_project_label_catalog",
+        "get_shared_user_activities",
+        "update_card_comment",
+        "create_card_checklist",
+        "create_card_checkitem",
+        "update_card_checkitem",
+    }
+)
+
+
+def create_native_domain_provider(wrap_tool: Callable[[str, Callable[..., Any]], Callable[..., Any]]) -> LocalProvider:
+    """Adapt the native registry once; every profile uses identical domain wrappers."""
     provider = LocalProvider(on_duplicate="error")
     for name, metadata in McpTool.get_tools().items():
         provider.add_tool(
             Tool.from_function(wrap_tool(name, metadata["handler"]), name=name, description=metadata["description"])
         )
-    provider.add_resource(Resource.from_function(_workflow_policy, uri="langboard://policy/workflow", name="workflow_policy"))
+    provider.add_resource(
+        Resource.from_function(_workflow_policy, uri="langboard://policy/workflow", name="workflow_policy")
+    )
     provider.add_prompt(Prompt.from_function(_workflow_policy_prompt, name="apply_workflow_policy"))
     metadata = McpTool.get_tool("get_card_bundle")
     if metadata:
@@ -53,6 +93,26 @@ def create_compatibility_provider(wrap_tool: Callable[[str, Callable[..., Any]],
             return _workflow_policy() + "\nCurrent server state:\n" + await card_workflow(project_uid, card_uid)
 
         provider.add_prompt(Prompt.from_function(apply_card_workflow, name="apply_card_workflow"))
+    return provider
+
+
+def create_compatibility_provider(wrap_tool: Callable[[str, Callable[..., Any]], Callable[..., Any]]) -> LocalProvider:
+    """Preserve the complete legacy catalog without visibility changes."""
+    return create_native_domain_provider(wrap_tool)
+
+
+def create_agent_core_provider(wrap_tool: Callable[[str, Callable[..., Any]], Callable[..., Any]]) -> LocalProvider:
+    """Expose canonical entry points using FastMCP's native visibility transform."""
+    provider = create_native_domain_provider(wrap_tool)
+    provider.add_transform(Visibility(False, components={"tool"}, match_all=True))
+    provider.add_transform(Visibility(True, names=set(AGENT_CORE_TOOLS), components={"tool"}))
+    return provider
+
+
+def create_raw_primitive_provider(wrap_tool: Callable[[str, Callable[..., Any]], Callable[..., Any]]) -> LocalProvider:
+    """Keep primitive and compatibility actions outside the compact core catalog."""
+    provider = create_native_domain_provider(wrap_tool)
+    provider.add_transform(Visibility(False, names=set(AGENT_CORE_TOOLS), components={"tool"}))
     return provider
 
 
