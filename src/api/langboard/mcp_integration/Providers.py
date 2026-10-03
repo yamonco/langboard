@@ -9,6 +9,7 @@ from fastmcp.resources import Resource, ResourceTemplate
 from fastmcp.server.providers.local_provider import LocalProvider
 from fastmcp.server.transforms import Visibility
 from fastmcp.tools import Tool
+from .Annotations import tool_annotations
 from .Tool import McpTool
 from .ToolGroupMiddleware import ToolGroupMiddleware
 
@@ -50,12 +51,21 @@ AGENT_CORE_TOOLS = frozenset(
 )
 
 
-def create_native_domain_provider(wrap_tool: Callable[[str, Callable[..., Any]], Callable[..., Any]]) -> LocalProvider:
+def create_native_domain_provider(
+    wrap_tool: Callable[[str, Callable[..., Any]], Callable[..., Any]],
+    *,
+    modern_annotations: bool = False,
+) -> LocalProvider:
     """Adapt the native registry once; every profile uses identical domain wrappers."""
     provider = LocalProvider(on_duplicate="error")
     for name, metadata in McpTool.get_tools().items():
         provider.add_tool(
-            Tool.from_function(wrap_tool(name, metadata["handler"]), name=name, description=metadata["description"])
+            Tool.from_function(
+                wrap_tool(name, metadata["handler"]),
+                name=name,
+                description=metadata["description"],
+                annotations=tool_annotations(name) if modern_annotations else None,
+            )
         )
     provider.add_resource(
         Resource.from_function(_workflow_policy, uri="langboard://policy/workflow", name="workflow_policy")
@@ -103,7 +113,7 @@ def create_compatibility_provider(wrap_tool: Callable[[str, Callable[..., Any]],
 
 def create_agent_core_provider(wrap_tool: Callable[[str, Callable[..., Any]], Callable[..., Any]]) -> LocalProvider:
     """Expose canonical entry points using FastMCP's native visibility transform."""
-    provider = create_native_domain_provider(wrap_tool)
+    provider = create_native_domain_provider(wrap_tool, modern_annotations=True)
     provider.add_transform(Visibility(False, components={"tool"}, match_all=True))
     provider.add_transform(Visibility(True, names=set(AGENT_CORE_TOOLS), components={"tool"}))
     return provider
@@ -111,7 +121,7 @@ def create_agent_core_provider(wrap_tool: Callable[[str, Callable[..., Any]], Ca
 
 def create_raw_primitive_provider(wrap_tool: Callable[[str, Callable[..., Any]], Callable[..., Any]]) -> LocalProvider:
     """Keep primitive and compatibility actions outside the compact core catalog."""
-    provider = create_native_domain_provider(wrap_tool)
+    provider = create_native_domain_provider(wrap_tool, modern_annotations=True)
     provider.add_transform(Visibility(False, names=set(AGENT_CORE_TOOLS), components={"tool"}))
     return provider
 

@@ -16,6 +16,7 @@ from langboard_shared.infrastructure.repositories import Repository
 from ..mcp_tools.RoleChecker import McpRoleChecker
 from ..middlewares import McpAuthMiddleware
 from ..middlewares.McpAuthMiddleware import mcp_auth_context
+from .Annotations import ToolAnnotationTransform
 from .Providers import create_agent_core_provider, create_compatibility_provider, create_raw_primitive_provider
 from .Tool import McpTool
 from .ToolGroupMiddleware import ToolGroupMiddleware
@@ -57,6 +58,7 @@ class McpServer:
             app.add_transform(
                 RegexSearchTransform(max_results=5, search_tool_name="search_raw_tools", call_tool_name="call_raw_tool")
             )
+            app.add_transform(ToolAnnotationTransform())
 
         http_app = app.http_app(
             path="/stream",

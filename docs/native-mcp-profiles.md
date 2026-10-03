@@ -25,6 +25,14 @@ invokes the target through normal middleware and domain authorization. Revoked
 grants are not cached between search and execution. Core tools and recursive
 synthetic calls cannot be invoked through the Raw proxy.
 
+Modern profiles declare standard read-only, destructive, idempotent and
+open-world hints. Reviewed query entry points are explicitly listed as reads;
+names are not classified by prefixes. Unreviewed commands and the generic Raw
+call proxy remain potentially destructive and non-idempotent. Open-world is
+kept true because attachments and user-authored content may cross trust
+boundaries. Compatibility retains its original annotations. These hints never
+replace authorization, approval or mutation outcome receipts.
+
 This delivery separates existing canonical entry points. It does not yet supply
 all planned action facades, atomic Work Plan handling,
 OAuth profile access, deprecation telemetry or representative installed-client
