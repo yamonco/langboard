@@ -1,0 +1,42 @@
+name: Check MCP Legacy Contracts
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/check-mcp-legacy.yaml
+      - scripts/mcp_contracts/**
+      - src/api/tests/mcp_integration/fixtures/**
+      - src/api/langboard/mcp_tools/**
+      - src/api/langboard/mcp_integration/**
+      - src/api/langboard/middlewares/McpAuthMiddleware.py
+      - src/shared/py/langboard_shared/**
+      - pyproject.toml
+      - uv.lock
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  catalog:
+    runs-on: ubuntu-latest
+    env:
+      PROJECT_NAME: langboard
+      PYTHONPATH: .
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: uv sync --frozen
+      - name: Verify immutable artifacts and rejection behavior
+        run: uv run --no-sync python scripts/mcp_contracts/test_legacy.py
+      - name: Capture candidate catalog without deployed database access
+        run: uv run --no-sync python scripts/mcp_contracts/capture_native.py --catalog-only > candidate.json
+      - name: Preserve all legacy tool schemas and annotations
+        run: >-
+          uv run --no-sync python scripts/mcp_contracts/check_legacy.py --catalog-only
+          src/api/tests/mcp_integration/fixtures/legacy-canary-20261004.json candidate.json

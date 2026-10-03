@@ -1,0 +1,2271 @@
+{
+  "capture_kind": "deployed-package-registered-catalog-auth-disabled-with-synthetic-settings",
+  "source_sha256": {
+    "__init__.py": "f0b9882bb2e10a9b656d188ce98b22dbf9436276c3520bea8f8232a26f59cae5",
+    "features/__init__.py": "c198871a97ae450724bedd4f1877f411976584ce27ed2cefd949d04c074166b3",
+    "features/card_graph/__init__.py": "0b1bd87f8fedc49a37e36427693dcc2345c5a266ae0583b25e912329756b2d3f",
+    "features/card_graph/application.py": "4ee00b738fa517885894daa427ef0790bfaafc3dd782550bd880e005f89f605b",
+    "features/card_graph/contracts.py": "665b048ab5dc583f283e78ca5ab70bda3ffe0c4583a525915a37b5354262fcbc",
+    "features/card_images/__init__.py": "abe020b84583fbefd2031d1c1923e5a97b14b85208e791cfbbcd52259caeea30",
+    "features/card_images/application.py": "b5110954d2c420b82a44d7a67f5408bcd342ecccd1f26617a73bc9cee66d282c",
+    "server.py": "9445f6fb09e1b40feafe677f772e7fdbe599a96fde9061263e3d81022251c3d9",
+    "shared/__init__.py": "d83fc8bd4c12f379f0dbda6a3adf3cdc2c91958967f9e6921763ffb8007e39fa",
+    "shared/config.py": "90634bd4c20c9949fc309f1dfca60c90d2b9e02ee6b53fa1c8b0295a781eaf1a",
+    "shared/langboard_client.py": "708a86771b1a301b8402387aa7de54a218bed153fcdf0760a3f2612e32f4898c",
+    "shared/resources.py": "80daccb701b055267612e3c013884b5df2908b33009744350b938fa2e958653c",
+    "shared/token_exchange.py": "4ab833455dfda22e0282d1fb0a11b248e55bf615a218cdcbd2fbf2ef37edbbac"
+  },
+  "tools": [
+    {
+      "_meta": {
+        "fastmcp": {
+          "tags": []
+        }
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "description": "Immediately add selected existing SSO people without email, acceptance, replacement, or invitations.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "member_uids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 10,
+            "minItems": 1,
+            "type": "array"
+          },
+          "project_uid": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_uid",
+          "member_uids"
+        ],
+        "type": "object"
+      },
+      "name": "add_project_people",
+      "outputSchema": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Add Project People"
+    },
+    {
+      "_meta": {
+        "fastmcp": {
+          "tags": []
+        },
+        "ui": {
+          "resourceUri": "ui://langboard/card-relationship-proposal-v4.html"
+        }
+      },
+      "annotations": {
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "description": "Apply one reviewed graph plan after ChatGPT obtains native confirmation.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "add_edges": {
+            "anyOf": [
+              {
+                "items": {
+                  "properties": {
+                    "child_ref": {
+                      "maxLength": 80,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "parent_ref": {
+                      "maxLength": 80,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "relationship_type_uid": {
+                      "maxLength": 80,
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "parent_ref",
+                    "child_ref",
+                    "relationship_type_uid"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "anchor_card_uid": {
+            "type": "string"
+          },
+          "cardify_checkitems": {
+            "anyOf": [
+              {
+                "items": {
+                  "properties": {
+                    "checkitem_uid": {
+                      "maxLength": 80,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "client_ref": {
+                      "maxLength": 80,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "project_column_uid": {
+                      "maxLength": 80,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "source_card_uid": {
+                      "maxLength": 80,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "title": {
+                      "maxLength": 500,
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "client_ref",
+                    "source_card_uid",
+                    "checkitem_uid",
+                    "title",
+                    "project_column_uid"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "existing_cards": {
+            "anyOf": [
+              {
+                "items": {
+                  "properties": {
+                    "title": {
+                      "maxLength": 500,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "uid": {
+                      "maxLength": 80,
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "uid",
+                    "title"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "existing_relationships": {
+            "anyOf": [
+              {
+                "items": {
+                  "properties": {
+                    "child_ref": {
+                      "maxLength": 80,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "parent_ref": {
+                      "maxLength": 80,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "relationship_type_uid": {
+                      "maxLength": 80,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "uid": {
+                      "maxLength": 80,
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "uid",
+                    "parent_ref",
+                    "child_ref",
+                    "relationship_type_uid"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "new_cards": {
+            "anyOf": [
+              {
+                "items": {
+                  "properties": {
+                    "client_ref": {
+                      "maxLength": 80,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "description": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null
+                    },
+                    "title": {
+                      "maxLength": 500,
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "client_ref",
+                    "title"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "new_checklists": {
+            "anyOf": [
+              {
+                "items": {
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "maxLength": 500,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "maxItems": 25,
+                      "minItems": 1,
+                      "type": "array"
+                    },
+                    "target_card_ref": {
+                      "maxLength": 80,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "title": {
+                      "maxLength": 500,
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "target_card_ref",
+                    "title",
+                    "items"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "project_uid": {
+            "type": "string"
+          },
+          "remove_relationship_uids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "title": {
+            "default": "Card relationship proposal",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_uid",
+          "anchor_card_uid"
+        ],
+        "type": "object"
+      },
+      "name": "apply_card_relationship_graph",
+      "outputSchema": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Apply Card Relationship Graph"
+    },
+    {
+      "_meta": {
+        "fastmcp": {
+          "tags": []
+        }
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "description": "Add the signed-in user as an assignee, preserving all other assignees. Native confirmation applies.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "card_uid": {
+            "type": "string"
+          },
+          "project_uid": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_uid",
+          "card_uid"
+        ],
+        "type": "object"
+      },
+      "name": "assign_card_to_me",
+      "outputSchema": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Assign Card To Me"
+    },
+    {
+      "_meta": {
+        "fastmcp": {
+          "tags": []
+        }
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "description": "Create one card in the leftmost active column after native confirmation.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "assign_user_uids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "project_uid": {
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 500,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_uid",
+          "title"
+        ],
+        "type": "object"
+      },
+      "name": "create_card",
+      "outputSchema": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Create Card"
+    },
+    {
+      "_meta": {
+        "fastmcp": {
+          "tags": []
+        }
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "description": "Create a board after native ChatGPT confirmation; a returned result proves host approval, not a bypass.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 4000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "template_name": {
+            "anyOf": [
+              {
+                "maxLength": 300,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "title": {
+            "maxLength": 300,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "type": "object"
+      },
+      "name": "create_project",
+      "outputSchema": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Create Project"
+    },
+    {
+      "_meta": {
+        "fastmcp": {
+          "tags": []
+        }
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "description": "Create a reviewed project-visible wiki. Do not duplicate wikis or broaden private information's audience.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "content": {
+            "maxLength": 32000,
+            "type": "string"
+          },
+          "project_uid": {
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 300,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_uid",
+          "title",
+          "content"
+        ],
+        "type": "object"
+      },
+      "name": "create_project_wiki",
+      "outputSchema": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Create Project Wiki"
+    },
+    {
+      "_meta": {
+        "fastmcp": {
+          "tags": []
+        }
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "description": "Read one complete card snapshot and ready-to-render card_link_markdown by default; include narrows it.\nclassification=labels/relationships; people=assignees. Follow section cursors. This never changes read state.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "card_uid": {
+            "type": "string"
+          },
+          "comments_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "comments_limit": {
+            "default": 5,
+            "maximum": 20,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "include": {
+            "anyOf": [
+              {
+                "items": {
+                  "enum": [
+                    "description",
+                    "people",
+                    "classification",
+                    "checklists",
+                    "comments",
+                    "attachments",
+                    "metadata",
+                    "automation"
+                  ],
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "project_uid": {
+            "type": "string"
+          },
+          "section_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "section_limit": {
+            "default": 10,
+            "maximum": 25,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "project_uid",
+          "card_uid"
+        ],
+        "type": "object"
+      },
+      "name": "get_card_bundle",
+      "outputSchema": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Get Card Bundle"
+    },
+    {
+      "_meta": {
+        "fastmcp": {
+          "tags": []
+        }
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "description": "Read active columns/descriptions; optionally include assignable members or valid relationship types.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "include": {
+            "anyOf": [
+              {
+                "items": {
+                  "enum": [
+                    "members",
+                    "relationship_types"
+                  ],
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "project_uid": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_uid"
+        ],
+        "type": "object"
+      },
+      "name": "get_project_identity",
+      "outputSchema": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Get Project Identity"
+    },
+    {
+      "_meta": {
+        "fastmcp": {
+          "tags": []
+        }
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "description": "List compact authorized projects. If a title is named, MUST pass it in query; copy project_link_markdown.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "query": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "type": "object"
+      },
+      "name": "get_projects",
+      "outputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "projects": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "current_auth_role_actions": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "project_link_markdown": {
+                  "type": "string"
+                },
+                "project_type": {
+                  "type": "string"
+                },
+                "project_url": {
+                  "format": "uri",
+                  "type": "string"
+                },
+                "starred": {
+                  "type": "boolean"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "uid": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "uid",
+                "title",
+                "project_url",
+                "project_link_markdown"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "projects"
+        ],
+        "type": "object"
+      },
+      "title": "Get Projects"
+    },
+    {
+      "_meta": {
+        "fastmcp": {
+          "tags": []
+        }
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "description": "Shared-board history; optional project_uid and timezone-aware since<=time<until.\n\nDetail: activity_uid+scope. Reuse refer_time; follow next_offset.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "activity_uid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "limit": {
+            "default": 20,
+            "maximum": 50,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "max_chars": {
+            "default": 4000,
+            "maximum": 8000,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "offset": {
+            "default": 0,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "page": {
+            "default": 1,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "project_uid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "refer_time": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "scope": {
+            "anyOf": [
+              {
+                "enum": [
+                  "project",
+                  "wiki"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "since": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "until": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "user_uid": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_uid"
+        ],
+        "type": "object"
+      },
+      "name": "get_shared_user_activities",
+      "outputSchema": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Get Shared User Activities"
+    },
+    {
+      "_meta": {
+        "fastmcp": {
+          "tags": []
+        }
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "description": "List the signed-in employee's unread notifications without marking them as read.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "limit": {
+            "default": 20,
+            "maximum": 50,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "page": {
+            "default": 1,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "time_range": {
+            "default": "all",
+            "enum": [
+              "3d",
+              "7d",
+              "1m",
+              "all"
+            ],
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "get_unread_notifications",
+      "outputSchema": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Get Unread Notifications"
+    },
+    {
+      "_meta": {
+        "fastmcp": {
+          "tags": []
+        }
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": false
+      },
+      "description": "Invite only confirmed external recipients; never use for employees or any existing Langboard account.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "external_emails": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 10,
+            "minItems": 1,
+            "type": "array"
+          },
+          "external_recipient_confirmed": {
+            "const": true,
+            "type": "boolean"
+          },
+          "project_uid": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_uid",
+          "external_emails",
+          "external_recipient_confirmed"
+        ],
+        "type": "object"
+      },
+      "name": "invite_external_people",
+      "outputSchema": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Invite External People"
+    },
+    {
+      "_meta": {
+        "fastmcp": {
+          "tags": []
+        }
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "description": "List newest-first cards; follow next_cursor. Project access does not imply assignment to me.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "limit": {
+            "default": 20,
+            "maximum": 25,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "project_uid": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_uid"
+        ],
+        "type": "object"
+      },
+      "name": "list_project_cards",
+      "outputSchema": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "List Project Cards"
+    },
+    {
+      "_meta": {
+        "fastmcp": {
+          "tags": []
+        }
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "description": "List or literal-search readable wikis. Follow next_cursor; filter inaccessible wikis before search.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "limit": {
+            "default": 20,
+            "maximum": 50,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "project_uid": {
+            "type": "string"
+          },
+          "query": {
+            "default": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_uid"
+        ],
+        "type": "object"
+      },
+      "name": "list_project_wikis",
+      "outputSchema": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "List Project Wikis"
+    },
+    {
+      "_meta": {
+        "fastmcp": {
+          "tags": []
+        }
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "description": "Mark only the explicitly requested notification scope read. one requires notification_uid; all forbids it.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "notification_uid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "scope": {
+            "enum": [
+              "one",
+              "all"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "scope"
+        ],
+        "type": "object"
+      },
+      "name": "mark_notifications_read",
+      "outputSchema": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Mark Notifications Read"
+    },
+    {
+      "_meta": {
+        "fastmcp": {
+          "tags": []
+        }
+      },
+      "annotations": {
+        "destructiveHint": true,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "description": "Apply one atomic multi-hunk body patch after native confirmation.\n\nFirst read get_card_bundle. Copy its core.description.revision\ninto expected_revision without computing or guessing it. If absent, stop and report that the\ndeployed Langboard API needs an upgrade. Never retry a rejected patch with a guessed revision.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "card_uid": {
+            "type": "string"
+          },
+          "edits": {
+            "anyOf": [
+              {
+                "items": {
+                  "description": "One exact Markdown fragment replacement in an atomic body patch.",
+                  "properties": {
+                    "new_text": {
+                      "type": "string"
+                    },
+                    "old_text": {
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "old_text",
+                    "new_text"
+                  ],
+                  "type": "object"
+                },
+                "maxItems": 20,
+                "minItems": 1,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "expected_revision": {
+            "pattern": "^[0-9a-fA-F]{64}$",
+            "type": "string"
+          },
+          "new_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "old_text": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "project_uid": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_uid",
+          "card_uid",
+          "expected_revision"
+        ],
+        "type": "object"
+      },
+      "name": "patch_card_description",
+      "outputSchema": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Patch Card Description"
+    },
+    {
+      "_meta": {
+        "fastmcp": {
+          "tags": []
+        },
+        "ui": {
+          "resourceUri": "ui://langboard/card-relationship-proposal-v4.html"
+        }
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "description": "Render a branching change plan or persisted relationship tree without changing Langboard.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "add_edges": {
+            "anyOf": [
+              {
+                "items": {
+                  "properties": {
+                    "child_ref": {
+                      "maxLength": 80,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "parent_ref": {
+                      "maxLength": 80,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "relationship_type_uid": {
+                      "maxLength": 80,
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "parent_ref",
+                    "child_ref",
+                    "relationship_type_uid"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "anchor_card_uid": {
+            "type": "string"
+          },
+          "cardify_checkitems": {
+            "anyOf": [
+              {
+                "items": {
+                  "properties": {
+                    "checkitem_uid": {
+                      "maxLength": 80,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "client_ref": {
+                      "maxLength": 80,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "project_column_uid": {
+                      "maxLength": 80,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "source_card_uid": {
+                      "maxLength": 80,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "title": {
+                      "maxLength": 500,
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "client_ref",
+                    "source_card_uid",
+                    "checkitem_uid",
+                    "title",
+                    "project_column_uid"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "existing_cards": {
+            "anyOf": [
+              {
+                "items": {
+                  "properties": {
+                    "title": {
+                      "maxLength": 500,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "uid": {
+                      "maxLength": 80,
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "uid",
+                    "title"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "existing_relationships": {
+            "anyOf": [
+              {
+                "items": {
+                  "properties": {
+                    "child_ref": {
+                      "maxLength": 80,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "parent_ref": {
+                      "maxLength": 80,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "relationship_type_uid": {
+                      "maxLength": 80,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "uid": {
+                      "maxLength": 80,
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "uid",
+                    "parent_ref",
+                    "child_ref",
+                    "relationship_type_uid"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "new_cards": {
+            "anyOf": [
+              {
+                "items": {
+                  "properties": {
+                    "client_ref": {
+                      "maxLength": 80,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "description": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null
+                    },
+                    "title": {
+                      "maxLength": 500,
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "client_ref",
+                    "title"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "new_checklists": {
+            "anyOf": [
+              {
+                "items": {
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "maxLength": 500,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "maxItems": 25,
+                      "minItems": 1,
+                      "type": "array"
+                    },
+                    "target_card_ref": {
+                      "maxLength": 80,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "title": {
+                      "maxLength": 500,
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "target_card_ref",
+                    "title",
+                    "items"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "project_uid": {
+            "type": "string"
+          },
+          "remove_relationship_uids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "title": {
+            "default": "Card relationship proposal",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_uid",
+          "anchor_card_uid"
+        ],
+        "type": "object"
+      },
+      "name": "propose_card_relationship_graph",
+      "outputSchema": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Propose Card Relationship Graph"
+    },
+    {
+      "_meta": {
+        "fastmcp": {
+          "tags": []
+        }
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "description": "Read body images plus selected attachments. For only selected attachments, set include_body_images=false.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "card_uid": {
+            "type": "string"
+          },
+          "include_attachment_uids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "include_body_images": {
+            "default": true,
+            "type": "boolean"
+          },
+          "project_uid": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_uid",
+          "card_uid"
+        ],
+        "type": "object"
+      },
+      "name": "read_card_images",
+      "outputSchema": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Read Card Images"
+    },
+    {
+      "_meta": {
+        "fastmcp": {
+          "tags": []
+        }
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "description": "Page exact Markdown, history (max 50), or a stored revision. Only revision view accepts revision_uid/side.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "limit": {
+            "anyOf": [
+              {
+                "maximum": 16000,
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "project_uid": {
+            "type": "string"
+          },
+          "revision_uid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "side": {
+            "anyOf": [
+              {
+                "enum": [
+                  "before",
+                  "after"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "view": {
+            "default": "content",
+            "enum": [
+              "content",
+              "history",
+              "revision"
+            ],
+            "type": "string"
+          },
+          "wiki_uid": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_uid",
+          "wiki_uid"
+        ],
+        "type": "object"
+      },
+      "name": "read_wiki",
+      "outputSchema": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Read Wiki"
+    },
+    {
+      "_meta": {
+        "fastmcp": {
+          "tags": []
+        }
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "description": "Search bounded card context inside one project readable by the signed-in employee.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "project_uid": {
+            "type": "string"
+          },
+          "query": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_uid",
+          "query"
+        ],
+        "type": "object"
+      },
+      "name": "search_project_cards",
+      "outputSchema": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Search Project Cards"
+    },
+    {
+      "_meta": {
+        "fastmcp": {
+          "tags": []
+        }
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "description": "Find employees/existing accounts for add_project_people, not email invitations. Results omit emails.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "project_uid": {
+            "type": "string"
+          },
+          "query": {
+            "maxLength": 100,
+            "minLength": 2,
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_uid",
+          "query"
+        ],
+        "type": "object"
+      },
+      "name": "search_project_people",
+      "outputSchema": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Search Project People"
+    },
+    {
+      "_meta": {
+        "fastmcp": {
+          "tags": []
+        }
+      },
+      "annotations": {
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "description": "Change one card field, lifecycle state, or attachment.\n\nFor deadline, pass an ISO 8601 timestamp or an empty string to clear it.\ndelete requires my archived card or admin access.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "enum": [
+              "assign",
+              "label",
+              "title",
+              "deadline",
+              "description_replace",
+              "move",
+              "archive",
+              "delete",
+              "attachment_update",
+              "attachment_delete",
+              "attachment_upload"
+            ],
+            "type": "string"
+          },
+          "assign_user_uids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "attachment_uid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "card_uid": {
+            "type": "string"
+          },
+          "column_uid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "deadline_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 32000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "expected_revision": {
+            "anyOf": [
+              {
+                "pattern": "^[0-9a-fA-F]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "file_data_base64": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "filename": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "label_uids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "order": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "project_uid": {
+            "type": "string"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "project_uid",
+          "card_uid",
+          "action"
+        ],
+        "type": "object"
+      },
+      "name": "update_card",
+      "outputSchema": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Update Card"
+    },
+    {
+      "_meta": {
+        "fastmcp": {
+          "tags": []
+        }
+      },
+      "annotations": {
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "description": "Create, update, delete, complete, or promote native checklist data.\nDo not retry automatically; after ambiguous promotion, read the checkitem's cardified_card link.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "enum": [
+              "create_list",
+              "add_item",
+              "update_list",
+              "delete_list",
+              "set_completed",
+              "update_item",
+              "delete_item",
+              "promote"
+            ],
+            "type": "string"
+          },
+          "card_uid": {
+            "type": "string"
+          },
+          "checkitem_uid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "checklist_uid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "deadline_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "is_checked": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "project_column_uid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "project_uid": {
+            "type": "string"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "project_uid",
+          "card_uid",
+          "action"
+        ],
+        "type": "object"
+      },
+      "name": "update_card_checklist",
+      "outputSchema": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Update Card Checklist"
+    },
+    {
+      "_meta": {
+        "fastmcp": {
+          "tags": []
+        }
+      },
+      "annotations": {
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "description": "Add, edit, delete, or react to a native card comment.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "enum": [
+              "add",
+              "edit",
+              "delete",
+              "react"
+            ],
+            "type": "string"
+          },
+          "card_uid": {
+            "type": "string"
+          },
+          "comment_uid": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "content": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "project_uid": {
+            "type": "string"
+          },
+          "reaction": {
+            "anyOf": [
+              {
+                "enum": [
+                  "check-mark",
+                  "confusing",
+                  "eyes",
+                  "heart",
+                  "laughing",
+                  "party-popper",
+                  "rocket",
+                  "thumbs-down",
+                  "thumbs-up"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "project_uid",
+          "card_uid",
+          "action"
+        ],
+        "type": "object"
+      },
+      "name": "update_card_comment",
+      "outputSchema": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Update Card Comment"
+    },
+    {
+      "_meta": {
+        "fastmcp": {
+          "tags": []
+        }
+      },
+      "annotations": {
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "description": "Change one revision-reviewed wiki.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "enum": [
+              "append",
+              "patch",
+              "replace",
+              "delete"
+            ],
+            "type": "string"
+          },
+          "edits": {
+            "anyOf": [
+              {
+                "items": {
+                  "description": "One exact Markdown fragment replacement in an atomic body patch.",
+                  "properties": {
+                    "new_text": {
+                      "type": "string"
+                    },
+                    "old_text": {
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "old_text",
+                    "new_text"
+                  ],
+                  "type": "object"
+                },
+                "maxItems": 20,
+                "minItems": 1,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "expected_revision": {
+            "type": "string"
+          },
+          "project_uid": {
+            "type": "string"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "maxLength": 32000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "wiki_uid": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_uid",
+          "wiki_uid",
+          "expected_revision",
+          "action"
+        ],
+        "type": "object"
+      },
+      "name": "update_wiki",
+      "outputSchema": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Update Wiki"
+    }
+  ],
+  "versions": {
+    "fastmcp": "4.0.2",
+    "langboard-chatgpt-plugin": "0.3.18"
+  }
+}

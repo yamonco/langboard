@@ -211,6 +211,7 @@ uploads
 !src/api/tests/
 !src/api/tests/**/
 !src/api/tests/**/*.py
+!src/api/tests/mcp_integration/fixtures/*.json
 src/api/tests/**/__pycache__/
 
 **/api/**/seeds/*

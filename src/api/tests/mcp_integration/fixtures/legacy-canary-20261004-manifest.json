@@ -1,0 +1,17 @@
+{
+  "files": {
+    "legacy-canary-20261004.json": "0b31b1e122cdfa800cf2230a2ab6a33f2f601cd1bdd7a0515267830b1cfe6611",
+    "plugin-legacy-catalog-20261004.json": "f19c84d4034b372994bf1aadbb333626f6d83ee42ab759fdaf054574554f3622",
+    "plugin-oauth-discovery-20261004.json": "1e61f505946253c9830258f000852c7c2b2d45e846d4a7eaffe9316611582595"
+  },
+  "limits": [
+    "Native catalog reconstructed from deployed source in a separate process; not authenticated live-process tools/list.",
+    "Native ToolGroup rows captured through readonly database access, with hashed group and owner IDs.",
+    "Plugin catalog reconstructed with synthetic settings and OAuth disabled; not authenticated discovery.",
+    "OAuth metadata captured from plugin pod loopback; external authenticated OAuth not verified.",
+    "Dual-run, domain alias parity, telemetry and simultaneous authenticated E2E remain incomplete."
+  ],
+  "native_image_id": "sha256:c9676f9b1e04f22efa9e662c00ad99cf47614091a94d93286c81bcc58a7931f0",
+  "plugin_image": "ghcr.io/yamonco/langboard-chatgpt-plugin@sha256:af646869f7726d3bf55e25fbed1fadff5a41c4ddb5953be14d92b0ed341fab58",
+  "source_revision": "c0d86f7aab29bc190c7d2f381d340d38cb418408"
+}

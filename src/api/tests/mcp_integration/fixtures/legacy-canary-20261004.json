@@ -1,0 +1,5300 @@
+{
+  "contract": {
+    "registered_runtime_mismatches": [],
+    "tool_groups": [
+      {
+        "active": true,
+        "key": "1d84edc2692dc1a36dafde00bf5c466fd303a46e4f479e50ea0fd73db84feb86",
+        "owner": null,
+        "scope": "global",
+        "tools": [
+          "get_card",
+          "get_card_checklists",
+          "get_card_metadata",
+          "get_card_metadata_by_key",
+          "get_cards",
+          "get_project",
+          "get_project_checklists",
+          "get_project_columns",
+          "get_project_labels",
+          "get_projects"
+        ]
+      },
+      {
+        "active": true,
+        "key": "331016d7b170973ef05fec86d3750f49fee3f144b513f4be09d26ddb2d187ac2",
+        "owner": null,
+        "scope": "global",
+        "tools": [
+          "archive_card",
+          "change_card_details",
+          "change_card_order_or_move_column",
+          "create_card",
+          "create_column",
+          "create_project",
+          "get_card",
+          "get_card_checklists",
+          "get_cards",
+          "get_global_relationships",
+          "get_project",
+          "get_project_assigned_users",
+          "get_project_checklists",
+          "get_project_columns",
+          "get_project_labels",
+          "get_projects",
+          "is_project_assignee",
+          "is_project_available",
+          "update_project_members",
+          "upload_card_attachment"
+        ]
+      },
+      {
+        "active": true,
+        "key": "8330d4eaaf5c02db0960282b7860ae6aa1e7f3b6001736166a20f74854d5d406",
+        "owner": "b22fea188d9fa4b1dc8fd8a39754efd8761fdcc2989580f1a745f16777973feb",
+        "scope": "user",
+        "tools": [
+          "add_card_comment",
+          "archive_card",
+          "change_card_details",
+          "change_card_order_or_move_column",
+          "change_column_name",
+          "change_column_order",
+          "create_card_checkitem",
+          "create_card_checklist",
+          "create_card_in_leftmost_column",
+          "create_column",
+          "create_project_board",
+          "get_card_bundle",
+          "get_project_activities",
+          "get_project_identity",
+          "get_public_card_metadata",
+          "get_public_card_metadata_by_key",
+          "invite_project_members",
+          "list_project_cards",
+          "list_project_members",
+          "reconcile_card_checklist_projection",
+          "save_public_card_metadata",
+          "set_card_people_and_labels",
+          "set_card_relationships",
+          "update_card_attachment",
+          "update_card_checkitem",
+          "update_card_checklist",
+          "update_card_comment"
+        ]
+      },
+      {
+        "active": true,
+        "key": "ced36e0bfaa67066053bea7b74b7ad3631d8fcea9656f664fc61c389d5891b3e",
+        "owner": null,
+        "scope": "global",
+        "tools": [
+          "change_card_details",
+          "create_card_in_leftmost_column",
+          "get_card_bundle",
+          "get_project_bot_scopes",
+          "list_project_cards",
+          "reconcile_card_checklist_projection",
+          "save_public_card_metadata"
+        ]
+      },
+      {
+        "active": true,
+        "key": "ea14377fd3c77ced74cbde6ff80cadddce6767b8d72cb92e51ea11d4fc90b0fa",
+        "owner": null,
+        "scope": "global",
+        "tools": [
+          "add_card_comment",
+          "add_project_people",
+          "append_wiki_content",
+          "apply_card_graph_patch",
+          "archive_card",
+          "assign_card_to_me",
+          "cardify_card_checkitem",
+          "change_card_checkitem_work",
+          "change_card_details",
+          "change_card_label",
+          "change_card_order_or_move_column",
+          "change_column_order",
+          "create_card",
+          "create_card_checkitem",
+          "create_card_checklist",
+          "create_card_in_leftmost_column",
+          "create_column",
+          "create_local_project_label",
+          "create_project",
+          "create_project_board",
+          "create_project_wiki",
+          "create_wiki_from_card",
+          "delete_card",
+          "delete_card_attachment",
+          "delete_card_checkitem",
+          "delete_card_checklist",
+          "delete_card_comment",
+          "delete_project_wiki",
+          "diagnose_connection",
+          "get_card",
+          "get_card_attachments",
+          "get_card_bundle",
+          "get_card_linked_wikis",
+          "get_global_relationships",
+          "get_project_identity",
+          "get_project_label_catalog",
+          "get_projects",
+          "get_shared_user_activities",
+          "get_unread_notifications",
+          "invite_project_members",
+          "list_my_work",
+          "list_project_cards",
+          "list_project_members",
+          "list_project_wikis",
+          "list_wiki_revisions",
+          "mark_all_notifications_read",
+          "mark_notification_read",
+          "patch_card_description",
+          "patch_wiki_content",
+          "read_card_attachment",
+          "read_wiki_content",
+          "read_wiki_revision",
+          "record_card_verification_evidence",
+          "replace_card_description",
+          "replace_wiki_content",
+          "search_project_cards",
+          "search_project_people",
+          "set_card_people_and_labels",
+          "toggle_card_comment_reaction",
+          "update_card_attachment",
+          "update_card_checkitem",
+          "update_card_checklist",
+          "update_card_comment",
+          "update_card_linked_wiki",
+          "upload_card_attachment",
+          "use_global_project_label"
+        ]
+      }
+    ],
+    "tools": [
+      {
+        "annotations": null,
+        "description": "Add a rich-text comment to a card.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "card_uid": {
+              "type": "string"
+            },
+            "content": {
+              "type": "string"
+            },
+            "project_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "card_uid",
+            "content"
+          ],
+          "type": "object"
+        },
+        "name": "add_card_comment",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Add existing people to a project without replacing current members.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "member_uids": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "project_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "member_uids"
+          ],
+          "type": "object"
+        },
+        "name": "add_project_people",
+        "output_schema": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string"
+              }
+            ]
+          },
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Append reviewed Markdown to a wiki, preserving existing text and rejecting stale revisions.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "expected_revision": {
+              "type": "string"
+            },
+            "project_uid": {
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            },
+            "wiki_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "wiki_uid",
+            "expected_revision",
+            "text"
+          ],
+          "type": "object"
+        },
+        "name": "append_wiki_content",
+        "output_schema": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Atomically create up to seven cards and add or remove typed parent-child relationships. References beginning with 'new:' address cards created by this same request.",
+        "input_schema": {
+          "$defs": {
+            "CardGraphEdge": {
+              "properties": {
+                "child_ref": {
+                  "type": "string"
+                },
+                "parent_ref": {
+                  "type": "string"
+                },
+                "relationship_type_uid": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "parent_ref",
+                "child_ref",
+                "relationship_type_uid"
+              ],
+              "type": "object"
+            },
+            "CardGraphNewCard": {
+              "properties": {
+                "client_ref": {
+                  "type": "string"
+                },
+                "description": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
+                },
+                "title": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "client_ref",
+                "title"
+              ],
+              "type": "object"
+            }
+          },
+          "additionalProperties": false,
+          "properties": {
+            "add_edges": {
+              "items": {
+                "$ref": "#/$defs/CardGraphEdge"
+              },
+              "type": "array"
+            },
+            "anchor_card_uid": {
+              "type": "string"
+            },
+            "new_cards": {
+              "items": {
+                "$ref": "#/$defs/CardGraphNewCard"
+              },
+              "type": "array"
+            },
+            "project_uid": {
+              "type": "string"
+            },
+            "remove_relationship_uids": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "project_uid",
+            "anchor_card_uid",
+            "new_cards",
+            "add_edges",
+            "remove_relationship_uids"
+          ],
+          "type": "object"
+        },
+        "name": "apply_card_graph_patch",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Archive a card.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "card_uid": {
+              "type": "string"
+            },
+            "project_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "card_uid"
+          ],
+          "type": "object"
+        },
+        "name": "archive_card",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Assign the authenticated user to this card, preserving every existing assignee.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "card_uid": {
+              "type": "string"
+            },
+            "project_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "card_uid"
+          ],
+          "type": "object"
+        },
+        "name": "assign_card_to_me",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Create a card from one existing checkitem in an explicit active project column. The checkitem remains linked to the resulting card.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "card_uid": {
+              "type": "string"
+            },
+            "checkitem_uid": {
+              "type": "string"
+            },
+            "project_column_uid": {
+              "type": "string"
+            },
+            "project_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "card_uid",
+            "checkitem_uid",
+            "project_column_uid"
+          ],
+          "type": "object"
+        },
+        "name": "cardify_card_checkitem",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Start, pause, resume, stop, or complete my checklist work timer.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "action": {
+              "enum": [
+                "start",
+                "pause",
+                "resume",
+                "stop",
+                "complete"
+              ],
+              "type": "string"
+            },
+            "card_uid": {
+              "type": "string"
+            },
+            "checkitem_uid": {
+              "type": "string"
+            },
+            "project_uid": {
+              "type": "string"
+            },
+            "replace_active": {
+              "default": false,
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "project_uid",
+            "card_uid",
+            "checkitem_uid",
+            "action"
+          ],
+          "type": "object"
+        },
+        "name": "change_card_checkitem_work",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Change a card title or deadline; use revision-bound description tools for body edits.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "card_uid": {
+              "type": "string"
+            },
+            "deadline_at": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "project_uid": {
+              "type": "string"
+            },
+            "title": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            }
+          },
+          "required": [
+            "project_uid",
+            "card_uid"
+          ],
+          "type": "object"
+        },
+        "name": "change_card_details",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Attach/detach an existing local label while preserving other card labels.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "action": {
+              "type": "string"
+            },
+            "card_uid": {
+              "type": "string"
+            },
+            "label_uid": {
+              "type": "string"
+            },
+            "project_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "card_uid",
+            "label_uid",
+            "action"
+          ],
+          "type": "object"
+        },
+        "name": "change_card_label",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Change card order or move to another project column.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "card_uid": {
+              "type": "string"
+            },
+            "column_uid": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "order": {
+              "type": "integer"
+            },
+            "project_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "card_uid",
+            "order"
+          ],
+          "type": "object"
+        },
+        "name": "change_card_order_or_move_column",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Change column name.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "column_uid": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "project_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "column_uid",
+            "name"
+          ],
+          "type": "object"
+        },
+        "name": "change_column_name",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Change column order.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "after_column_uid": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "before_column_uid": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "column_uid": {
+              "type": "string"
+            },
+            "order": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "position": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "project_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "column_uid",
+            "order"
+          ],
+          "type": "object"
+        },
+        "name": "change_column_order",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Create a card in an active project column; use column_uid='leftmost' for the first active column.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "assign_user_uids": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "column_uid": {
+              "type": "string"
+            },
+            "description": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "project_uid": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "column_uid",
+            "title",
+            "description",
+            "assign_user_uids"
+          ],
+          "type": "object"
+        },
+        "name": "create_card",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Create a checkitem in a card checklist.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "card_uid": {
+              "type": "string"
+            },
+            "checklist_uid": {
+              "type": "string"
+            },
+            "project_uid": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "card_uid",
+            "checklist_uid",
+            "title"
+          ],
+          "type": "object"
+        },
+        "name": "create_card_checkitem",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Create a checklist on a card.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "card_uid": {
+              "type": "string"
+            },
+            "project_uid": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "card_uid",
+            "title"
+          ],
+          "type": "object"
+        },
+        "name": "create_card_checklist",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Create a structured content block on a card. block_type must be 'code' (payload: language, source, optional title) or 'diagram' (payload: engine mermaid|plantuml|graphviz|flowchart, source, optional view_mode source|rendered|both) or 'rich_text' (payload: text). No Markdown delimiters are needed.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "after_block_uid": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "block_type": {
+              "type": "string"
+            },
+            "card_uid": {
+              "type": "string"
+            },
+            "order": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "payload": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "project_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "card_uid",
+            "block_type",
+            "payload"
+          ],
+          "type": "object"
+        },
+        "name": "create_card_content_block",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Compatibility entry for creating in the leftmost active column.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "assign_user_uids": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "description": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "project_uid": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "title"
+          ],
+          "type": "object"
+        },
+        "name": "create_card_in_leftmost_column",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Create a new column in a project.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "after_column_uid": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "before_column_uid": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "description": {
+              "default": "",
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "position": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "project_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "name"
+          ],
+          "type": "object"
+        },
+        "name": "create_column",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Create a board-local label only on explicit user instruction; never a global label.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "color": {
+              "default": "#4A90E2",
+              "type": "string"
+            },
+            "description": {
+              "default": "",
+              "type": "string"
+            },
+            "explicit_user_request": {
+              "default": false,
+              "type": "boolean"
+            },
+            "name": {
+              "type": "string"
+            },
+            "project_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "name"
+          ],
+          "type": "object"
+        },
+        "name": "create_local_project_label",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Create a new project with an optional named workflow template.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "description": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "infer_template_prefix": {
+              "default": false,
+              "type": "boolean"
+            },
+            "project_type": {
+              "type": "string"
+            },
+            "template_name": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "title": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "title",
+            "description",
+            "project_type"
+          ],
+          "type": "object"
+        },
+        "name": "create_project",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Compatibility entry for template-backed board creation.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "description": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "infer_template_prefix": {
+              "default": false,
+              "type": "boolean"
+            },
+            "template_name": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "title": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "title"
+          ],
+          "type": "object"
+        },
+        "name": "create_project_board",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Create a new project-visible wiki with reviewed title and Markdown content.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "content": {
+              "type": "string"
+            },
+            "project_uid": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "title",
+            "content"
+          ],
+          "type": "object"
+        },
+        "name": "create_project_wiki",
+        "output_schema": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Create a project wiki from a card and link it; preserve original card by default.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "archive_original": {
+              "default": false,
+              "type": "boolean"
+            },
+            "card_uid": {
+              "type": "string"
+            },
+            "include_attachments_as_references": {
+              "default": true,
+              "type": "boolean"
+            },
+            "include_checklists": {
+              "default": true,
+              "type": "boolean"
+            },
+            "include_comments": {
+              "default": false,
+              "type": "boolean"
+            },
+            "include_description": {
+              "default": true,
+              "type": "boolean"
+            },
+            "project_uid": {
+              "type": "string"
+            },
+            "wiki_title": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            }
+          },
+          "required": [
+            "project_uid",
+            "card_uid"
+          ],
+          "type": "object"
+        },
+        "name": "create_wiki_from_card",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Delete one Bot-owned event Hook inside a project.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "bot_uid": {
+              "type": "string"
+            },
+            "hook_uid": {
+              "type": "string"
+            },
+            "project_uid": {
+              "type": "string"
+            },
+            "target_table": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "bot_uid",
+            "target_table",
+            "hook_uid"
+          ],
+          "type": "object"
+        },
+        "name": "delete_bot_hook",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Delete an archived card when the signed-in actor is its original author or an administrator.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "card_uid": {
+              "type": "string"
+            },
+            "project_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "card_uid"
+          ],
+          "type": "object"
+        },
+        "name": "delete_card",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Delete a card attachment without exposing file bytes.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "attachment_uid": {
+              "type": "string"
+            },
+            "card_uid": {
+              "type": "string"
+            },
+            "project_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "card_uid",
+            "attachment_uid"
+          ],
+          "type": "object"
+        },
+        "name": "delete_card_attachment",
+        "output_schema": {
+          "additionalProperties": {
+            "type": "boolean"
+          },
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Delete a checkitem from a card checklist.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "card_uid": {
+              "type": "string"
+            },
+            "checkitem_uid": {
+              "type": "string"
+            },
+            "project_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "card_uid",
+            "checkitem_uid"
+          ],
+          "type": "object"
+        },
+        "name": "delete_card_checkitem",
+        "output_schema": {
+          "additionalProperties": {
+            "type": "boolean"
+          },
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Delete a checklist from a card.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "card_uid": {
+              "type": "string"
+            },
+            "checklist_uid": {
+              "type": "string"
+            },
+            "project_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "card_uid",
+            "checklist_uid"
+          ],
+          "type": "object"
+        },
+        "name": "delete_card_checklist",
+        "output_schema": {
+          "additionalProperties": {
+            "type": "boolean"
+          },
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Delete a card comment owned by the current actor.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "card_uid": {
+              "type": "string"
+            },
+            "comment_uid": {
+              "type": "string"
+            },
+            "project_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "card_uid",
+            "comment_uid"
+          ],
+          "type": "object"
+        },
+        "name": "delete_card_comment",
+        "output_schema": {
+          "additionalProperties": {
+            "type": "boolean"
+          },
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Delete a card content block by uid.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "block_uid": {
+              "type": "string"
+            },
+            "card_uid": {
+              "type": "string"
+            },
+            "project_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "card_uid",
+            "block_uid"
+          ],
+          "type": "object"
+        },
+        "name": "delete_card_content_block",
+        "output_schema": {
+          "additionalProperties": {
+            "type": "boolean"
+          },
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Delete card metadata.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "card_uid": {
+              "type": "string"
+            },
+            "keys": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "project_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "card_uid",
+            "keys"
+          ],
+          "type": "object"
+        },
+        "name": "delete_card_metadata",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Delete a column from a project.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "column_uid": {
+              "type": "string"
+            },
+            "project_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "column_uid"
+          ],
+          "type": "object"
+        },
+        "name": "delete_column",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Delete one exact project wiki after revision review; never infer by title.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "expected_revision": {
+              "type": "string"
+            },
+            "project_uid": {
+              "type": "string"
+            },
+            "wiki_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "wiki_uid",
+            "expected_revision"
+          ],
+          "type": "object"
+        },
+        "name": "delete_project_wiki",
+        "output_schema": {
+          "additionalProperties": {
+            "type": "boolean"
+          },
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Delete public card metadata keys; reserved keys are rejected.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "card_uid": {
+              "type": "string"
+            },
+            "keys": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "project_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "card_uid",
+            "keys"
+          ],
+          "type": "object"
+        },
+        "name": "delete_public_card_metadata",
+        "output_schema": {
+          "additionalProperties": {
+            "type": "boolean"
+          },
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Delete wiki metadata.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "keys": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "project_uid": {
+              "type": "string"
+            },
+            "wiki_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "wiki_uid",
+            "keys"
+          ],
+          "type": "object"
+        },
+        "name": "delete_wiki_metadata",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Inspect the active tool group, schema/runtime contract, and action permissions before invoking write tools. Supply project_uid when possible for concrete card permissions.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "card_uid": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "project_uid": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            }
+          },
+          "type": "object"
+        },
+        "name": "diagnose_connection",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Read one Bot-owned event Hook inside a project.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "bot_uid": {
+              "type": "string"
+            },
+            "hook_uid": {
+              "type": "string"
+            },
+            "project_uid": {
+              "type": "string"
+            },
+            "target_table": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "bot_uid",
+            "target_table",
+            "hook_uid"
+          ],
+          "type": "object"
+        },
+        "name": "get_bot_hook",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Get bot schedules for a card.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "bot_uid": {
+              "type": "string"
+            },
+            "card_uid": {
+              "type": "string"
+            },
+            "project_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "bot_uid",
+            "card_uid"
+          ],
+          "type": "object"
+        },
+        "name": "get_bot_schedules_by_card",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Get bot schedules for a column.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "bot_uid": {
+              "type": "string"
+            },
+            "column_uid": {
+              "type": "string"
+            },
+            "project_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "bot_uid",
+            "column_uid"
+          ],
+          "type": "object"
+        },
+        "name": "get_bot_schedules_by_column",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Get bot schedules for a project.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "bot_uid": {
+              "type": "string"
+            },
+            "project_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "bot_uid",
+            "project_uid"
+          ],
+          "type": "object"
+        },
+        "name": "get_bot_schedules_by_project",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Compatibility entry for the complete card image source.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "card_uid": {
+              "type": "string"
+            },
+            "project_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "card_uid"
+          ],
+          "type": "object"
+        },
+        "name": "get_card",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Get activities for a card.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "card_uid": {
+              "type": "string"
+            },
+            "limit": {
+              "default": 50,
+              "type": "integer"
+            },
+            "project_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "card_uid"
+          ],
+          "type": "object"
+        },
+        "name": "get_card_activities",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Compatibility entry for card attachment image selection.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "card_uid": {
+              "type": "string"
+            },
+            "project_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "card_uid"
+          ],
+          "type": "object"
+        },
+        "name": "get_card_attachments",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Get bot scopes for a card.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "card_uid": {
+              "type": "string"
+            },
+            "project_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "card_uid"
+          ],
+          "type": "object"
+        },
+        "name": "get_card_bot_scopes",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Read compact card core, public creator identity, and workflow fields. Request description, people, classification, checklists, comments, attachments, public metadata, or automation explicitly. Use returned opaque cursors for rich description and every collection.",
+        "input_schema": {
+          "$defs": {
+            "CardBundleInclude": {
+              "description": "Optional sections available in the bounded card aggregate.",
+              "enum": [
+                "description",
+                "people",
+                "classification",
+                "checklists",
+                "comments",
+                "attachments",
+                "metadata",
+                "automation",
+                "content_blocks"
+              ],
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "properties": {
+            "card_uid": {
+              "type": "string"
+            },
+            "comments_cursor": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "comments_limit": {
+              "default": 5,
+              "type": "integer"
+            },
+            "include": {
+              "anyOf": [
+                {
+                  "items": {
+                    "$ref": "#/$defs/CardBundleInclude"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "project_uid": {
+              "type": "string"
+            },
+            "section_cursor": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "section_limit": {
+              "default": 10,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "project_uid",
+            "card_uid"
+          ],
+          "type": "object"
+        },
+        "name": "get_card_bundle",
+        "output_schema": {
+          "$defs": {
+            "BoundedItemsDto": {
+              "additionalProperties": false,
+              "description": "One bounded collection projection with an opaque continuation.",
+              "properties": {
+                "items": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                "limit": {
+                  "type": "integer"
+                },
+                "next_cursor": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "total_count": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "items",
+                "total_count",
+                "next_cursor",
+                "limit"
+              ],
+              "type": "object"
+            },
+            "BoundedTextDto": {
+              "additionalProperties": false,
+              "description": "One bounded text fragment with an opaque continuation.",
+              "properties": {
+                "content": {
+                  "type": "string"
+                },
+                "format": {
+                  "type": "string"
+                },
+                "next_cursor": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "revision": {
+                  "type": "string"
+                },
+                "total_chars": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "content",
+                "format",
+                "total_chars",
+                "revision",
+                "next_cursor"
+              ],
+              "type": "object"
+            },
+            "CardBundleContinuationDto": {
+              "additionalProperties": false,
+              "description": "Continuation-only response for one selected card section.",
+              "properties": {
+                "page": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/BoundedItemsDto"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
+                },
+                "section": {
+                  "type": "string"
+                },
+                "text": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/BoundedTextDto"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
+                }
+              },
+              "required": [
+                "section"
+              ],
+              "type": "object"
+            },
+            "CardBundleDto": {
+              "additionalProperties": true,
+              "type": "object"
+            }
+          },
+          "additionalProperties": false,
+          "description": "Structured MCP output for one card bundle.",
+          "properties": {
+            "card": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/CardBundleDto"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "card_uid": {
+              "type": "string"
+            },
+            "continuation": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/CardBundleContinuationDto"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            }
+          },
+          "required": [
+            "card_uid"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "List wikis linked to a card that the current user may read.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "card_uid": {
+              "type": "string"
+            },
+            "project_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "card_uid"
+          ],
+          "type": "object"
+        },
+        "name": "get_card_linked_wikis",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Get card metadata.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "card_uid": {
+              "type": "string"
+            },
+            "project_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "card_uid"
+          ],
+          "type": "object"
+        },
+        "name": "get_card_metadata",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Get card metadata by key.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "card_uid": {
+              "type": "string"
+            },
+            "key": {
+              "type": "string"
+            },
+            "project_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "card_uid",
+            "key"
+          ],
+          "type": "object"
+        },
+        "name": "get_card_metadata_by_key",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Get bot schedules for all columns in a project.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "project_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid"
+          ],
+          "type": "object"
+        },
+        "name": "get_column_bot_schedules",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Get bot scopes for a column.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "column_uid": {
+              "type": "string"
+            },
+            "project_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "column_uid"
+          ],
+          "type": "object"
+        },
+        "name": "get_column_bot_scopes",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Get activities for the current user.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "limit": {
+              "default": 50,
+              "type": "integer"
+            }
+          },
+          "type": "object"
+        },
+        "name": "get_current_user_activities",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Get global card relationship types.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {},
+          "type": "object"
+        },
+        "name": "get_global_relationships",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "List the current user's active work across readable projects. Results are deduplicated and independent of notification read state.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "date_field": {
+              "default": "updated_at",
+              "enum": [
+                "created_at",
+                "updated_at"
+              ],
+              "type": "string"
+            },
+            "due_within_days": {
+              "default": 7,
+              "maximum": 30,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "limit": {
+              "default": 20,
+              "maximum": 50,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "project_uid": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "purposes": {
+              "anyOf": [
+                {
+                  "items": {
+                    "enum": [
+                      "assigned",
+                      "mentioned",
+                      "due_soon",
+                      "overdue",
+                      "created"
+                    ],
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "since": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "until": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            }
+          },
+          "type": "object"
+        },
+        "name": "get_my_work_cards",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Get project details.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "project_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid"
+          ],
+          "type": "object"
+        },
+        "name": "get_project",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Get activities for a project.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "limit": {
+              "default": 50,
+              "type": "integer"
+            },
+            "page": {
+              "default": 1,
+              "type": "integer"
+            },
+            "project_uid": {
+              "type": "string"
+            },
+            "refer_time": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            }
+          },
+          "required": [
+            "project_uid"
+          ],
+          "type": "object"
+        },
+        "name": "get_project_activities",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Get project assigned users.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "project_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid"
+          ],
+          "type": "object"
+        },
+        "name": "get_project_assigned_users",
+        "output_schema": {
+          "properties": {
+            "result": {
+              "items": {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "result"
+          ],
+          "type": "object",
+          "x-fastmcp-wrap-result": true
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Get bot scopes for a project.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "project_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid"
+          ],
+          "type": "object"
+        },
+        "name": "get_project_bot_scopes",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Get project checklists.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "project_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid"
+          ],
+          "type": "object"
+        },
+        "name": "get_project_checklists",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Get activities for a project column.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "column_uid": {
+              "type": "string"
+            },
+            "limit": {
+              "default": 50,
+              "type": "integer"
+            },
+            "project_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "column_uid"
+          ],
+          "type": "object"
+        },
+        "name": "get_project_column_activities",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Get project columns.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "project_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid"
+          ],
+          "type": "object"
+        },
+        "name": "get_project_columns",
+        "output_schema": {
+          "properties": {
+            "result": {
+              "items": {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "result"
+          ],
+          "type": "object",
+          "x-fastmcp-wrap-result": true
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Return a project's stable identity and bounded active workflow columns.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "project_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid"
+          ],
+          "type": "object"
+        },
+        "name": "get_project_identity",
+        "output_schema": {
+          "$defs": {
+            "AuthenticatedActorDto": {
+              "additionalProperties": false,
+              "description": "Minimal identity from the server-authenticated principal, never a client hint.",
+              "properties": {
+                "type": {
+                  "enum": [
+                    "user",
+                    "bot"
+                  ],
+                  "type": "string"
+                },
+                "uid": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "uid",
+                "type"
+              ],
+              "type": "object"
+            },
+            "BoundedItemsDto": {
+              "additionalProperties": false,
+              "description": "One bounded collection projection with an opaque continuation.",
+              "properties": {
+                "items": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                "limit": {
+                  "type": "integer"
+                },
+                "next_cursor": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "total_count": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "items",
+                "total_count",
+                "next_cursor",
+                "limit"
+              ],
+              "type": "object"
+            }
+          },
+          "additionalProperties": false,
+          "description": "Stable project identity plus its bounded active workflow columns.",
+          "properties": {
+            "authenticated_actor": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/AuthenticatedActorDto"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "columns": {
+              "$ref": "#/$defs/BoundedItemsDto"
+            },
+            "project_type": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            },
+            "uid": {
+              "type": "string"
+            },
+            "url": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "uid",
+            "title",
+            "project_type",
+            "url",
+            "columns"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Read existing labels, board-local first then global; no label creation.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "limit": {
+              "default": 25,
+              "type": "integer"
+            },
+            "offset": {
+              "default": 0,
+              "type": "integer"
+            },
+            "project_uid": {
+              "type": "string"
+            },
+            "query": {
+              "default": "",
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid"
+          ],
+          "type": "object"
+        },
+        "name": "get_project_label_catalog",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Get project labels.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "project_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid"
+          ],
+          "type": "object"
+        },
+        "name": "get_project_labels",
+        "output_schema": {
+          "properties": {
+            "result": {
+              "items": {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "result"
+          ],
+          "type": "object",
+          "x-fastmcp-wrap-result": true
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Get all projects for the current user.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {},
+          "type": "object"
+        },
+        "name": "get_projects",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "List bounded public card metadata; reserved and secret-like keys are hidden.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "card_uid": {
+              "type": "string"
+            },
+            "cursor": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "limit": {
+              "default": 20,
+              "type": "integer"
+            },
+            "project_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "card_uid"
+          ],
+          "type": "object"
+        },
+        "name": "get_public_card_metadata",
+        "output_schema": {
+          "additionalProperties": false,
+          "description": "One bounded collection projection with an opaque continuation.",
+          "properties": {
+            "items": {
+              "items": {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "limit": {
+              "type": "integer"
+            },
+            "next_cursor": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "total_count": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "items",
+            "total_count",
+            "next_cursor",
+            "limit"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Read one public card metadata entry by key.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "card_uid": {
+              "type": "string"
+            },
+            "key": {
+              "type": "string"
+            },
+            "project_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "card_uid",
+            "key"
+          ],
+          "type": "object"
+        },
+        "name": "get_public_card_metadata_by_key",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Read compact activity history in boards shared by viewer and target; fetch bounded details by activity UID and scope. Never changes read state.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "activity_uid": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "limit": {
+              "default": 20,
+              "type": "integer"
+            },
+            "max_chars": {
+              "default": 4000,
+              "type": "integer"
+            },
+            "offset": {
+              "default": 0,
+              "type": "integer"
+            },
+            "page": {
+              "default": 1,
+              "type": "integer"
+            },
+            "project_uid": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "refer_time": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "scope": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "project",
+                    "wiki"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "since": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "until": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "user_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "user_uid"
+          ],
+          "type": "object"
+        },
+        "name": "get_shared_user_activities",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Get starred projects for the current user.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {},
+          "type": "object"
+        },
+        "name": "get_starred_projects",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "List unread notifications for the current user without marking them as read.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "limit": {
+              "default": 20,
+              "type": "integer"
+            },
+            "page": {
+              "default": 1,
+              "type": "integer"
+            },
+            "time_range": {
+              "default": "all",
+              "enum": [
+                "3d",
+                "7d",
+                "1m",
+                "all"
+              ],
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "name": "get_unread_notifications",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Get activities for a wiki.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "limit": {
+              "default": 50,
+              "type": "integer"
+            },
+            "project_uid": {
+              "type": "string"
+            },
+            "wiki_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "wiki_uid"
+          ],
+          "type": "object"
+        },
+        "name": "get_wiki_activities",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Get wiki metadata.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "project_uid": {
+              "type": "string"
+            },
+            "wiki_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "wiki_uid"
+          ],
+          "type": "object"
+        },
+        "name": "get_wiki_metadata",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Get wiki metadata by key.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "key": {
+              "type": "string"
+            },
+            "project_uid": {
+              "type": "string"
+            },
+            "wiki_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "wiki_uid",
+            "key"
+          ],
+          "type": "object"
+        },
+        "name": "get_wiki_metadata_by_key",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Invite up to 10 project members without removing existing members.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "emails": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "project_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "emails"
+          ],
+          "type": "object"
+        },
+        "name": "invite_project_members",
+        "output_schema": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string"
+              }
+            ]
+          },
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Check if a user is assigned to a project.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "assignee_uid": {
+              "type": "string"
+            },
+            "project_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "assignee_uid"
+          ],
+          "type": "object"
+        },
+        "name": "is_project_assignee",
+        "output_schema": {
+          "additionalProperties": {
+            "type": "boolean"
+          },
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Check if the project is available.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "project_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid"
+          ],
+          "type": "object"
+        },
+        "name": "is_project_available",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "List current user's assigned cards across readable boards using one bounded card query.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "cursor": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "limit": {
+              "default": 20,
+              "maximum": 25,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "project_uid": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            }
+          },
+          "type": "object"
+        },
+        "name": "list_my_work",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "List a bounded newest-updated-first page of cards in a project.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "cursor": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "include_closed": {
+              "default": false,
+              "type": "boolean"
+            },
+            "limit": {
+              "default": 20,
+              "type": "integer"
+            },
+            "project_uid": {
+              "type": "string"
+            },
+            "workflow_stages": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            }
+          },
+          "required": [
+            "project_uid"
+          ],
+          "type": "object"
+        },
+        "name": "list_project_cards",
+        "output_schema": {
+          "$defs": {
+            "BoundedItemsDto": {
+              "additionalProperties": false,
+              "description": "One bounded collection projection with an opaque continuation.",
+              "properties": {
+                "items": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                "limit": {
+                  "type": "integer"
+                },
+                "next_cursor": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "total_count": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "items",
+                "total_count",
+                "next_cursor",
+                "limit"
+              ],
+              "type": "object"
+            }
+          },
+          "additionalProperties": false,
+          "description": "Bounded project card list.",
+          "properties": {
+            "cards": {
+              "$ref": "#/$defs/BoundedItemsDto"
+            },
+            "project_uid": {
+              "type": "string"
+            },
+            "workflow_stages": {
+              "additionalProperties": {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              "type": "object"
+            }
+          },
+          "required": [
+            "project_uid",
+            "cards"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "List compact project members without email addresses.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "project_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid"
+          ],
+          "type": "object"
+        },
+        "name": "list_project_members",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "List or literal-search readable project wikis, excluding private inaccessible content.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "cursor": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "limit": {
+              "default": 20,
+              "type": "integer"
+            },
+            "project_uid": {
+              "type": "string"
+            },
+            "query": {
+              "default": "",
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid"
+          ],
+          "type": "object"
+        },
+        "name": "list_project_wikis",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "List stored wiki revision activities under current wiki permissions.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "cursor": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "limit": {
+              "default": 20,
+              "type": "integer"
+            },
+            "project_uid": {
+              "type": "string"
+            },
+            "wiki_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "wiki_uid"
+          ],
+          "type": "object"
+        },
+        "name": "list_wiki_revisions",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Mark every unread notification for the current user as read after explicit user approval.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {},
+          "type": "object"
+        },
+        "name": "mark_all_notifications_read",
+        "output_schema": {
+          "additionalProperties": {
+            "type": "boolean"
+          },
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Mark one notification owned by the current user as read after explicit user approval.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "notification_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "notification_uid"
+          ],
+          "type": "object"
+        },
+        "name": "mark_notification_read",
+        "output_schema": {
+          "additionalProperties": {
+            "type": "boolean"
+          },
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Reposition a card content block using after_block_uid or an explicit order (not both).",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "after_block_uid": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "block_uid": {
+              "type": "string"
+            },
+            "card_uid": {
+              "type": "string"
+            },
+            "order": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "project_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "card_uid",
+            "block_uid"
+          ],
+          "type": "object"
+        },
+        "name": "move_card_content_block",
+        "output_schema": {
+          "additionalProperties": {
+            "type": "boolean"
+          },
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Atomically apply one or more exact edits to Plate-compatible Markdown. Pass edits for a multi-hunk patch, or old_text/new_text for backwards compatibility. Fails without writing when the revision or any reviewed fragment is stale or ambiguous.",
+        "input_schema": {
+          "$defs": {
+            "ExactTextReplacement": {
+              "properties": {
+                "new_text": {
+                  "type": "string"
+                },
+                "old_text": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "old_text",
+                "new_text"
+              ],
+              "type": "object"
+            }
+          },
+          "additionalProperties": false,
+          "properties": {
+            "card_uid": {
+              "type": "string"
+            },
+            "edits": {
+              "anyOf": [
+                {
+                  "items": {
+                    "$ref": "#/$defs/ExactTextReplacement"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "expected_revision": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "new_text": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "old_text": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "project_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "card_uid"
+          ],
+          "type": "object"
+        },
+        "name": "patch_card_description",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Atomically patch exact wiki fragments with a reviewed content revision.",
+        "input_schema": {
+          "$defs": {
+            "WikiTextEdit": {
+              "additionalProperties": false,
+              "description": "One exact fragment replacement in a reviewed wiki patch.",
+              "properties": {
+                "new_text": {
+                  "type": "string"
+                },
+                "old_text": {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "old_text",
+                "new_text"
+              ],
+              "type": "object"
+            }
+          },
+          "additionalProperties": false,
+          "properties": {
+            "edits": {
+              "items": {
+                "$ref": "#/$defs/WikiTextEdit"
+              },
+              "maxItems": 20,
+              "minItems": 1,
+              "type": "array"
+            },
+            "expected_revision": {
+              "type": "string"
+            },
+            "project_uid": {
+              "type": "string"
+            },
+            "wiki_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "wiki_uid",
+            "expected_revision",
+            "edits"
+          ],
+          "type": "object"
+        },
+        "name": "patch_wiki_content",
+        "output_schema": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Compatibility alias. Migrate to ProjectMcp.create_project with template_name, then get_project_columns; retire this tool after callers migrate.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "description": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "infer_template_prefix": {
+              "default": false,
+              "type": "boolean"
+            },
+            "template_name": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "title": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "title"
+          ],
+          "type": "object"
+        },
+        "name": "provision_project",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Read up to 8 MB of one attachment belonging to a readable card.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "attachment_uid": {
+              "type": "string"
+            },
+            "card_uid": {
+              "type": "string"
+            },
+            "project_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "card_uid",
+            "attachment_uid"
+          ],
+          "type": "object"
+        },
+        "name": "read_card_attachment",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Read exact wiki content page-by-page without changing content or read state.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "cursor": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "limit": {
+              "default": 8000,
+              "type": "integer"
+            },
+            "project_uid": {
+              "type": "string"
+            },
+            "wiki_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "wiki_uid"
+          ],
+          "type": "object"
+        },
+        "name": "read_wiki_content",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Read one stored before/after wiki revision as exact, bounded content pages.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "cursor": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "limit": {
+              "default": 8000,
+              "type": "integer"
+            },
+            "project_uid": {
+              "type": "string"
+            },
+            "revision_uid": {
+              "type": "string"
+            },
+            "side": {
+              "default": "after",
+              "enum": [
+                "before",
+                "after"
+              ],
+              "type": "string"
+            },
+            "wiki_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "wiki_uid",
+            "revision_uid"
+          ],
+          "type": "object"
+        },
+        "name": "read_wiki_revision",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Idempotently reconcile one bot-authored checklist by stable keys. The server checkpoints native identities and writes the content receipt last.",
+        "input_schema": {
+          "$defs": {
+            "ChecklistProjectionItem": {
+              "properties": {
+                "deadline_at": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
+                },
+                "is_checked": {
+                  "default": false,
+                  "type": "boolean"
+                },
+                "key": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "key",
+                "title"
+              ],
+              "type": "object"
+            }
+          },
+          "additionalProperties": false,
+          "properties": {
+            "card_uid": {
+              "type": "string"
+            },
+            "expected_receipt": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "items": {
+              "items": {
+                "$ref": "#/$defs/ChecklistProjectionItem"
+              },
+              "type": "array"
+            },
+            "project_uid": {
+              "type": "string"
+            },
+            "projection_key": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "card_uid",
+            "projection_key",
+            "title",
+            "items"
+          ],
+          "type": "object"
+        },
+        "name": "reconcile_card_checklist_projection",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Append reviewer evidence for the current card revision; never approve gates or move the card.",
+        "input_schema": {
+          "$defs": {
+            "VerificationEvidence": {
+              "additionalProperties": false,
+              "properties": {
+                "checkitem_uid": {
+                  "anyOf": [
+                    {
+                      "maxLength": 64,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
+                },
+                "environment": {
+                  "maxLength": 128,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "reference": {
+                  "maxLength": 2048,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "source_revision": {
+                  "maxLength": 128,
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "reference",
+                "source_revision",
+                "environment"
+              ],
+              "type": "object"
+            }
+          },
+          "additionalProperties": false,
+          "properties": {
+            "card_uid": {
+              "type": "string"
+            },
+            "decision": {
+              "enum": [
+                "verified",
+                "partial",
+                "unverified"
+              ],
+              "type": "string"
+            },
+            "evidence": {
+              "items": {
+                "$ref": "#/$defs/VerificationEvidence"
+              },
+              "type": "array"
+            },
+            "expected_change_seq": {
+              "type": "integer"
+            },
+            "expected_record_uid": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "project_uid": {
+              "type": "string"
+            },
+            "required_checkitem_uids": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            }
+          },
+          "required": [
+            "project_uid",
+            "card_uid",
+            "expected_change_seq",
+            "decision",
+            "evidence"
+          ],
+          "type": "object"
+        },
+        "name": "record_card_verification_evidence",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Replace a complete card description after reviewing its current revision.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "card_uid": {
+              "type": "string"
+            },
+            "description": {
+              "type": "string"
+            },
+            "expected_revision": {
+              "type": "string"
+            },
+            "project_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "card_uid",
+            "description",
+            "expected_revision"
+          ],
+          "type": "object"
+        },
+        "name": "replace_card_description",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Replace a complete wiki after reviewing its current content revision.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "content": {
+              "type": "string"
+            },
+            "expected_revision": {
+              "type": "string"
+            },
+            "project_uid": {
+              "type": "string"
+            },
+            "wiki_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "wiki_uid",
+            "expected_revision",
+            "content"
+          ],
+          "type": "object"
+        },
+        "name": "replace_wiki_content",
+        "output_schema": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Reschedule a bot cron schedule.",
+        "input_schema": {
+          "$defs": {
+            "BotScheduleRunningType": {
+              "enum": [
+                "infinite",
+                "duration",
+                "reserved",
+                "onetime"
+              ],
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "properties": {
+            "bot_uid": {
+              "type": "string"
+            },
+            "end_at": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "interval_str": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "project_uid": {
+              "type": "string"
+            },
+            "running_type": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/BotScheduleRunningType"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "schedule_uid": {
+              "type": "string"
+            },
+            "start_at": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "target_table": {
+              "type": "string"
+            },
+            "tz": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                }
+              ]
+            }
+          },
+          "required": [
+            "project_uid",
+            "bot_uid",
+            "schedule_uid",
+            "target_table",
+            "interval_str",
+            "running_type",
+            "start_at",
+            "end_at",
+            "tz"
+          ],
+          "type": "object"
+        },
+        "name": "reschedule_bot_cron",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Save card metadata.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "card_uid": {
+              "type": "string"
+            },
+            "key": {
+              "type": "string"
+            },
+            "old_key": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "project_uid": {
+              "type": "string"
+            },
+            "value": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "card_uid",
+            "key",
+            "value",
+            "old_key"
+          ],
+          "type": "object"
+        },
+        "name": "save_card_metadata",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Save one public card metadata entry; secret-like keys are rejected.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "card_uid": {
+              "type": "string"
+            },
+            "key": {
+              "type": "string"
+            },
+            "old_key": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "project_uid": {
+              "type": "string"
+            },
+            "value": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "card_uid",
+            "key",
+            "value"
+          ],
+          "type": "object"
+        },
+        "name": "save_public_card_metadata",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Save wiki metadata.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "key": {
+              "type": "string"
+            },
+            "old_key": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "project_uid": {
+              "type": "string"
+            },
+            "value": {
+              "type": "string"
+            },
+            "wiki_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "wiki_uid",
+            "key",
+            "value",
+            "old_key"
+          ],
+          "type": "object"
+        },
+        "name": "save_wiki_metadata",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Schedule a bot cron schedule.",
+        "input_schema": {
+          "$defs": {
+            "BotScheduleRunningType": {
+              "enum": [
+                "infinite",
+                "duration",
+                "reserved",
+                "onetime"
+              ],
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "properties": {
+            "bot_uid": {
+              "type": "string"
+            },
+            "end_at": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "interval_str": {
+              "type": "string"
+            },
+            "project_uid": {
+              "type": "string"
+            },
+            "running_type": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/BotScheduleRunningType"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "start_at": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "target_table": {
+              "type": "string"
+            },
+            "target_uid": {
+              "type": "string"
+            },
+            "tz": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "project_uid",
+            "bot_uid",
+            "target_table",
+            "target_uid",
+            "interval_str",
+            "running_type",
+            "start_at",
+            "end_at",
+            "tz"
+          ],
+          "type": "object"
+        },
+        "name": "schedule_bot_cron",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Search cards inside one readable project without changing view or read state.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "date_field": {
+              "default": "updated_at",
+              "enum": [
+                "created_at",
+                "updated_at"
+              ],
+              "type": "string"
+            },
+            "include_closed": {
+              "default": false,
+              "type": "boolean"
+            },
+            "project_uid": {
+              "type": "string"
+            },
+            "query": {
+              "type": "string"
+            },
+            "since": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "until": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "workflow_stages": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            }
+          },
+          "required": [
+            "project_uid",
+            "query"
+          ],
+          "type": "object"
+        },
+        "name": "search_project_cards",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Search existing people who can be added to a project without exposing email addresses.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "project_uid": {
+              "type": "string"
+            },
+            "query": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "query"
+          ],
+          "type": "object"
+        },
+        "name": "search_project_people",
+        "output_schema": {
+          "additionalProperties": {
+            "items": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Replace a card's assigned members and/or labels after validating every UID.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "assign_user_uids": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "card_uid": {
+              "type": "string"
+            },
+            "label_uids": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "project_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "card_uid"
+          ],
+          "type": "object"
+        },
+        "name": "set_card_people_and_labels",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Replace one direction of a card's typed relationships after full validation.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "card_uid": {
+              "type": "string"
+            },
+            "is_parent": {
+              "type": "boolean"
+            },
+            "project_uid": {
+              "type": "string"
+            },
+            "relationships": {
+              "items": {
+                "maxItems": 2,
+                "minItems": 2,
+                "prefixItems": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ],
+                "type": "array"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "project_uid",
+            "card_uid",
+            "is_parent",
+            "relationships"
+          ],
+          "type": "object"
+        },
+        "name": "set_card_relationships",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Toggle one reaction supported by Langboard on a card comment.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "card_uid": {
+              "type": "string"
+            },
+            "comment_uid": {
+              "type": "string"
+            },
+            "project_uid": {
+              "type": "string"
+            },
+            "reaction": {
+              "enum": [
+                "check-mark",
+                "confusing",
+                "eyes",
+                "heart",
+                "laughing",
+                "party-popper",
+                "rocket",
+                "thumbs-down",
+                "thumbs-up"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "card_uid",
+            "comment_uid",
+            "reaction"
+          ],
+          "type": "object"
+        },
+        "name": "toggle_card_comment_reaction",
+        "output_schema": {
+          "additionalProperties": {
+            "type": "boolean"
+          },
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Toggle star status for a project.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "project_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid"
+          ],
+          "type": "object"
+        },
+        "name": "toggle_star_project",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Unassign a member from a project.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "assignee_uid": {
+              "type": "string"
+            },
+            "project_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "assignee_uid"
+          ],
+          "type": "object"
+        },
+        "name": "unassign_project_member",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Unschedule a bot cron schedule.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "bot_uid": {
+              "type": "string"
+            },
+            "project_uid": {
+              "type": "string"
+            },
+            "schedule_uid": {
+              "type": "string"
+            },
+            "target_table": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "bot_uid",
+            "schedule_uid",
+            "target_table"
+          ],
+          "type": "object"
+        },
+        "name": "unschedule_bot_cron",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Update one Bot-owned event Hook inside a project.",
+        "input_schema": {
+          "$defs": {
+            "BotTriggerCondition": {
+              "enum": [
+                "project_updated",
+                "project_deleted",
+                "project_label_created",
+                "project_label_updated",
+                "project_label_deleted",
+                "project_wiki_created",
+                "project_wiki_updated",
+                "project_wiki_publicity_changed",
+                "project_wiki_deleted",
+                "project_column_created",
+                "project_column_name_changed",
+                "project_column_deleted",
+                "card_created",
+                "card_updated",
+                "card_moved",
+                "card_labels_updated",
+                "card_relationships_updated",
+                "card_deleted",
+                "card_attachment_uploaded",
+                "card_attachment_name_changed",
+                "card_attachment_deleted",
+                "card_comment_added",
+                "card_comment_updated",
+                "card_comment_deleted",
+                "card_comment_reacted",
+                "card_comment_unreacted",
+                "card_checklist_created",
+                "card_checklist_title_changed",
+                "card_checklist_checked",
+                "card_checklist_unchecked",
+                "card_checklist_deleted",
+                "card_checkitem_created",
+                "card_checkitem_title_changed",
+                "card_checkitem_timer_started",
+                "card_checkitem_timer_paused",
+                "card_checkitem_timer_stopped",
+                "card_checkitem_checked",
+                "card_checkitem_unchecked",
+                "card_checkitem_cardified",
+                "card_checkitem_deleted"
+              ],
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "properties": {
+            "active": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "bot_uid": {
+              "type": "string"
+            },
+            "events": {
+              "anyOf": [
+                {
+                  "items": {
+                    "$ref": "#/$defs/BotTriggerCondition"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "hook_uid": {
+              "type": "string"
+            },
+            "project_uid": {
+              "type": "string"
+            },
+            "target_table": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "bot_uid",
+            "target_table",
+            "hook_uid",
+            "events",
+            "active"
+          ],
+          "type": "object"
+        },
+        "name": "update_bot_hook",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Update attachment name and/or order without bytes or user email.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "attachment_uid": {
+              "type": "string"
+            },
+            "card_uid": {
+              "type": "string"
+            },
+            "name": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "order": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "project_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "card_uid",
+            "attachment_uid"
+          ],
+          "type": "object"
+        },
+        "name": "update_card_attachment",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Update checkitem title, deadline, and/or checked state after full validation.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "card_uid": {
+              "type": "string"
+            },
+            "checkitem_uid": {
+              "type": "string"
+            },
+            "deadline_at": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "is_checked": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "project_uid": {
+              "type": "string"
+            },
+            "title": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            }
+          },
+          "required": [
+            "project_uid",
+            "card_uid",
+            "checkitem_uid"
+          ],
+          "type": "object"
+        },
+        "name": "update_card_checkitem",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Update a card checklist title and/or checked state atomically validated.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "card_uid": {
+              "type": "string"
+            },
+            "checklist_uid": {
+              "type": "string"
+            },
+            "is_checked": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "project_uid": {
+              "type": "string"
+            },
+            "title": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            }
+          },
+          "required": [
+            "project_uid",
+            "card_uid",
+            "checklist_uid"
+          ],
+          "type": "object"
+        },
+        "name": "update_card_checklist",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Update a card comment owned by the current actor.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "card_uid": {
+              "type": "string"
+            },
+            "comment_uid": {
+              "type": "string"
+            },
+            "content": {
+              "type": "string"
+            },
+            "project_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "card_uid",
+            "comment_uid",
+            "content"
+          ],
+          "type": "object"
+        },
+        "name": "update_card_comment",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Partially update a card content block. Requires the block's current revision for optimistic locking; a mismatch fails with a conflict error.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "block_uid": {
+              "type": "string"
+            },
+            "card_uid": {
+              "type": "string"
+            },
+            "expected_revision": {
+              "type": "integer"
+            },
+            "payload": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "project_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "card_uid",
+            "block_uid",
+            "expected_revision",
+            "payload"
+          ],
+          "type": "object"
+        },
+        "name": "update_card_content_block",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Link or unlink a readable project wiki to a card without copying files.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "action": {
+              "enum": [
+                "link",
+                "unlink"
+              ],
+              "type": "string"
+            },
+            "card_uid": {
+              "type": "string"
+            },
+            "project_uid": {
+              "type": "string"
+            },
+            "wiki_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "card_uid",
+            "wiki_uid",
+            "action"
+          ],
+          "type": "object"
+        },
+        "name": "update_card_linked_wiki",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Update project members by inviting users via email.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "emails": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "project_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "emails"
+          ],
+          "type": "object"
+        },
+        "name": "update_project_members",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Upload a card attachment. Accepts base64 encoded file data.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "card_uid": {
+              "type": "string"
+            },
+            "file_data_base64": {
+              "type": "string"
+            },
+            "filename": {
+              "type": "string"
+            },
+            "project_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "card_uid",
+            "filename",
+            "file_data_base64"
+          ],
+          "type": "object"
+        },
+        "name": "upload_card_attachment",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Idempotently converge one Bot event Hook inside a project.",
+        "input_schema": {
+          "$defs": {
+            "BotTriggerCondition": {
+              "enum": [
+                "project_updated",
+                "project_deleted",
+                "project_label_created",
+                "project_label_updated",
+                "project_label_deleted",
+                "project_wiki_created",
+                "project_wiki_updated",
+                "project_wiki_publicity_changed",
+                "project_wiki_deleted",
+                "project_column_created",
+                "project_column_name_changed",
+                "project_column_deleted",
+                "card_created",
+                "card_updated",
+                "card_moved",
+                "card_labels_updated",
+                "card_relationships_updated",
+                "card_deleted",
+                "card_attachment_uploaded",
+                "card_attachment_name_changed",
+                "card_attachment_deleted",
+                "card_comment_added",
+                "card_comment_updated",
+                "card_comment_deleted",
+                "card_comment_reacted",
+                "card_comment_unreacted",
+                "card_checklist_created",
+                "card_checklist_title_changed",
+                "card_checklist_checked",
+                "card_checklist_unchecked",
+                "card_checklist_deleted",
+                "card_checkitem_created",
+                "card_checkitem_title_changed",
+                "card_checkitem_timer_started",
+                "card_checkitem_timer_paused",
+                "card_checkitem_timer_stopped",
+                "card_checkitem_checked",
+                "card_checkitem_unchecked",
+                "card_checkitem_cardified",
+                "card_checkitem_deleted"
+              ],
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "properties": {
+            "active": {
+              "type": "boolean"
+            },
+            "bot_uid": {
+              "type": "string"
+            },
+            "events": {
+              "items": {
+                "$ref": "#/$defs/BotTriggerCondition"
+              },
+              "type": "array"
+            },
+            "project_uid": {
+              "type": "string"
+            },
+            "target_table": {
+              "type": "string"
+            },
+            "target_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "bot_uid",
+            "target_table",
+            "target_uid",
+            "events",
+            "active"
+          ],
+          "type": "object"
+        },
+        "name": "upsert_bot_hook",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      {
+        "annotations": null,
+        "description": "Reuse an existing global label in a board; prefer an existing local name match. Never create a global label.",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "global_label_uid": {
+              "type": "string"
+            },
+            "project_uid": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_uid",
+            "global_label_uid"
+          ],
+          "type": "object"
+        },
+        "name": "use_global_project_label",
+        "output_schema": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      }
+    ]
+  },
+  "contract_sha256": "4fb057de0dd221d2d93a2827cdcf23cc75170f409a85d4040fc5d5dc87a7bcce",
+  "fastmcp_version": "4.0.0b3",
+  "format_version": 1,
+  "observed_at": "2026-10-03T15:59:52.569847+00:00",
+  "scope": "Deployed source registration and readonly ToolGroup rows; not authenticated discovery or tool invocation."
+}
