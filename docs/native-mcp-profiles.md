@@ -77,6 +77,14 @@ global identity or emoji fields. Output contracts never authorize creation;
 the explicit local-creation instruction guard and global-creation prohibition
 remain in force. Coverage is now 42 reviewed commands and one additional query.
 
+Membership additions/invitations, partial card people/label replacement,
+relationship replacement and checklist reconciliation also have typed outputs.
+Partial replacement preserves absent sections; an unchanged reconciliation
+retains its domain content receipt independently of the transport request ID.
+Membership counts do not expose recipient identities. Coverage is now 47
+reviewed commands and one additional query; 23 remaining commands still use
+their existing untyped output annotations.
+
 This delivery separates existing canonical entry points. It does not yet supply
 all planned action facades, atomic Work Plan handling,
 OAuth profile access, deprecation telemetry or representative installed-client
