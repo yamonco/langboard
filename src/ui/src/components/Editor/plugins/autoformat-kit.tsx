@@ -1,6 +1,6 @@
 "use client";
 
-import { CODE_DRAWING_TYPE_ARRAY, CodeDrawingType, VIEW_MODE } from "@platejs/code-drawing";
+import { CODE_DRAWING_TYPE_ARRAY, type CodeDrawingType, VIEW_MODE } from "@platejs/code-drawing";
 import { createBlockStartInputRule, createSlatePlugin, createTextSubstitutionInputRule, KEYS, type SlateEditor } from "platejs";
 
 const enabled = ({ editor }: { editor: SlateEditor }) => !editor.api.some({ match: { type: editor.getType(KEYS.codeBlock) } });
@@ -317,7 +317,7 @@ export const AutoformatKit = [
             createTextSubstitutionInputRule({ enabled, patterns: [{ match: "[[", format: "{{" }] }),
             createBlockStartInputRule({
                 enabled,
-                match: "$$eq",
+                match: "$$e",
                 trigger: "q",
                 node: KEYS.equation,
                 apply: ({ editor }, match) => {
@@ -327,10 +327,10 @@ export const AutoformatKit = [
                     return true;
                 },
             }),
-            ...CODE_DRAWING_TYPE_ARRAY.map((drawingType) =>
+            ...CODE_DRAWING_TYPE_ARRAY.map(({ value: drawingType }) =>
                 createBlockStartInputRule({
                     enabled,
-                    match: `$$${drawingType}`,
+                    match: `$$${drawingType.slice(0, -1)}`,
                     trigger: drawingType.slice(-1),
                     node: KEYS.codeDrawing,
                     apply: ({ editor }, match) => {
