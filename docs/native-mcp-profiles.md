@@ -47,13 +47,18 @@ Transport loss/cancellation can prevent any receipt from reaching a client.
 Such absence is not evidence that a write failed. Durable receipt lookup,
 idempotency keys and full typed command payloads remain separate work.
 
-Modern profiles use strict Pydantic output models for description patch/replace,
-self-assignment, and notification read commands. FastMCP derives their output
+Modern profiles use strict Pydantic output models for 31 reviewed commands:
+description patch/replace, self-assignment, notification read, project creation,
+wiki creation/revision/deletion, column naming, comment reactions, content-block
+movement, fixed deletion acknowledgements and message acknowledgements.
+FastMCP derives their output
 schemas from native return annotations; Raw search includes the same schemas.
 Compatibility retains its original return annotations and schema. Validation
 runs after the domain command, so a validation failure returns an unknown
 mutation receipt rather than claiming a rollback. No defaults or coercion hide
 missing or malformed domain fields. Remaining outputs are not yet typed.
+Boolean fields reject integers and strings explicitly, including `Literal[True]`
+fields that Pydantic otherwise accepts as `1` in strict mode.
 
 This delivery separates existing canonical entry points. It does not yet supply
 all planned action facades, atomic Work Plan handling,
