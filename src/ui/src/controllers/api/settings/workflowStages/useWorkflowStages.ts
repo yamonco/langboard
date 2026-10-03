@@ -19,9 +19,10 @@ export interface IWorkflowStage {
 }
 export type TWorkflowInput = Omit<IWorkflowStage, "uid" | "is_builtin" | "is_active" | "used_column_count"> & { uid?: string };
 export const useWorkflowStages = () => {
-    const { mutate } = useQueryMutation();
-    const load = mutate(["workflow-stages"], async () => (await api.get<{ stages: IWorkflowStage[] }>("/settings/workflow-stages")).data.stages, {
+    const { mutate, query } = useQueryMutation();
+    const load = query(["workflow-stages"], async () => (await api.get<{ stages: IWorkflowStage[] }>("/settings/workflow-stages")).data.stages, {
         retry: 0,
+        staleTime: 30000,
     });
     const save = mutate(
         ["save-workflow-stage"],

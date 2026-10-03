@@ -31,7 +31,7 @@ function ProjectTemplatesPage() {
     const { mutateAsync: setDefault, isPending } = useSetDefaultProjectTemplate({ interceptToast: true });
     const { mutateAsync: saveTemplate, isPending: isSaving } = useSaveProjectTemplate();
     const { load } = useWorkflowStages();
-    const [stages, setStages] = useState<Awaited<ReturnType<typeof load.mutateAsync>>>([]);
+    const stages = load.data ?? [];
     const [draft, setDraft] = useState<{
         uid?: string;
         name: string;
@@ -61,9 +61,6 @@ function ProjectTemplatesPage() {
             .catch(() => setBotsLoaded(false));
         getLabels({})
             .then(setLabels)
-            .catch(() => setError(true));
-        load.mutateAsync({})
-            .then(setStages)
             .catch(() => setError(true));
         getTemplates({})
             .then((items) => {

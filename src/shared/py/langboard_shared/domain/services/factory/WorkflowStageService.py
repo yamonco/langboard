@@ -2,6 +2,7 @@ import re
 from ....core.db import DbSession, SqlBuilder
 from ....core.domain import BaseDomainService
 from ....helpers import InfraHelper
+from ....publishers import AppSettingPublisher
 from ....tasks.webhooks.ExecutionReadinessUow import execution_readiness_uow
 from ...models import Project, WorkflowStageDefinition
 
@@ -98,16 +99,21 @@ class WorkflowStageService(BaseDomainService):
                 if policy_changed:
                     stage_key = stage.key
                     db.after_commit(lambda: self._publish_work_states(stage_key))
+                db.after_commit(AppSettingPublisher.workflow_stages_changed)
         else:
             stage = WorkflowStageDefinition(**values)
-            self.repo.workflow_stage.insert(stage)
+            with DbSession.atomic() as db:
+                self.repo.workflow_stage.insert(stage)
+                db.after_commit(AppSettingPublisher.workflow_stages_changed)
         return stage
 
     def deactivate(self, uid: str) -> WorkflowStageDefinition | None:
         stage = InfraHelper.get_by_id_like(WorkflowStageDefinition, uid)
         if stage:
-            stage.is_active = False
-            self.repo.workflow_stage.update(stage)
+            with DbSession.atomic() as db:
+                stage.is_active = False
+                self.repo.workflow_stage.update(stage)
+                db.after_commit(AppSettingPublisher.workflow_stages_changed)
         return stage
 
     def _publish_work_states(self, key: str) -> None:

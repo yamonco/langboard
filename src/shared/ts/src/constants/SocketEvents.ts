@@ -160,6 +160,7 @@ const SERVER = {
         DEACTIVATED: "user:deactivated:{uid}",
     },
     GLOBALS: {
+        WORKFLOW_STAGES_CHANGED: "workflow-stages:changed",
         BOTS: {
             CREATED: "bot:created",
             UPDATED: "bot:updated:{uid}",

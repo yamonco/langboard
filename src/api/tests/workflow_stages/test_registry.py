@@ -17,6 +17,7 @@ from langboard_shared.domain.services.factory.WorkflowStageService import Workfl
 from langboard_shared.infrastructure.repositories.factory.WorkflowStageRepository import (
     WorkflowStageRepository,  # noqa: E402
 )
+from langboard_shared.publishers import AppSettingPublisher
 
 
 def migration():
@@ -43,6 +44,7 @@ def registry(monkeypatch):
     repo = WorkflowStageRepository(lambda _: None, lambda _: None)
     service = WorkflowStageService(lambda _: None, lambda _: None, SimpleNamespace(workflow_stage=repo))
     monkeypatch.setattr(service, "_publish_work_states", Mock())
+    monkeypatch.setattr(AppSettingPublisher, "workflow_stages_changed", Mock())
     yield service, engine
     engine.dispose()
 
@@ -51,6 +53,33 @@ def form(**changes):
     return SaveWorkflowStageForm(
         key="released", name="Released", description="Accepted delivery", **changes
     ).model_dump()
+
+
+def test_registry_invalidation_publishes_after_commit_only(registry):
+    from langboard_shared.core.db import DbSession
+
+    service, _ = registry
+    publisher = AppSettingPublisher.workflow_stages_changed
+    with DbSession.atomic():
+        stage = service.save(form())
+        publisher.assert_not_called()
+    publisher.assert_called_once_with()
+    publisher.reset_mock()
+    with pytest.raises(RuntimeError):
+        with DbSession.atomic():
+            service.save({**form(), "name": "Rolled back"}, stage.get_uid())
+            publisher.assert_not_called()
+            raise RuntimeError("rollback")
+    publisher.assert_not_called()
+    with DbSession.atomic():
+        service.save({**form(), "description": "Updated guidance"}, stage.get_uid())
+        publisher.assert_not_called()
+    publisher.assert_called_once_with()
+    publisher.reset_mock()
+    with DbSession.atomic():
+        service.deactivate(stage.get_uid())
+        publisher.assert_not_called()
+    publisher.assert_called_once_with()
 
 
 def test_create_update_deactivate_preserve_key_and_translations(registry):
@@ -188,10 +217,16 @@ def test_policy_projection_targets_bound_cards_and_same_project_dependents(regis
     service, engine = registry
     with engine.begin() as connection:
         connection.execute(text("DROP TABLE card"))
-        connection.execute(text("CREATE TABLE card(id BIGINT, project_id BIGINT, project_column_id BIGINT, deleted_at TEXT)"))
-        connection.execute(text("INSERT INTO project_column VALUES (1, 'released', NULL, FALSE), (2, 'active', NULL, FALSE)"))
+        connection.execute(
+            text("CREATE TABLE card(id BIGINT, project_id BIGINT, project_column_id BIGINT, deleted_at TEXT)")
+        )
+        connection.execute(
+            text("INSERT INTO project_column VALUES (1, 'released', NULL, FALSE), (2, 'active', NULL, FALSE)")
+        )
         connection.execute(text("ALTER TABLE project_column ADD COLUMN project_id BIGINT DEFAULT 10"))
-        connection.execute(text("INSERT INTO card VALUES (1,10,1,NULL),(2,10,2,NULL),(3,20,2,NULL),(4,10,1,'deleted'),(5,10,2,NULL)"))
+        connection.execute(
+            text("INSERT INTO card VALUES (1,10,1,NULL),(2,10,2,NULL),(3,20,2,NULL),(4,10,1,'deleted'),(5,10,2,NULL)")
+        )
         connection.execute(text("INSERT INTO card_relationship VALUES (1,2),(1,3),(1,2),(4,5)"))
     assert set(service.repo.workflow_stage.get_policy_affected_cards("released")) == {(10, 1), (10, 2)}
     assert service.repo.workflow_stage.get_policy_affected_cards("missing") == []

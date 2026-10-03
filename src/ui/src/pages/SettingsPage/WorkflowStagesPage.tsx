@@ -48,15 +48,20 @@ export default function WorkflowStagesPage({ currentUser }: { currentUser: AuthU
     const reload = async () => {
         setError(false);
         try {
-            setStages(await load.mutateAsync({}));
+            const result = await load.refetch();
+            if (result.error) throw result.error;
+            setStages(result.data ?? []);
         } catch {
             setError(true);
         }
     };
     useEffect(() => {
         setPageAliasRef.current(t("settings.Workflow stages"));
-        void reload();
     }, []);
+    useEffect(() => {
+        if (load.data) setStages(load.data);
+        setError(load.isError);
+    }, [load.data, load.isError]);
     const applySelection = (stage?: IWorkflowStage) => {
         const { uid, key, name, description, color, order, counts_as_completed, active_queue_policy, overdue_policy, entry_effects, translations } =
             stage ?? { ...blank(), uid: undefined };
@@ -140,7 +145,7 @@ export default function WorkflowStagesPage({ currentUser }: { currentUser: AuthU
                         {t("common.Retry")}
                     </Button>
                 </div>
-            ) : load.isPending ? (
+            ) : load.isLoading ? (
                 <p>{t("common.Loading...")}</p>
             ) : (
                 <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
