@@ -2,17 +2,26 @@ import { expect, test } from "@playwright/test";
 for (const width of [1280, 390]) {
     test(`inline add, change, remove and failure retry at ${width}px`, async ({ page }) => {
         await page.setViewportSize({ width, height: 850 });
+        await page.clock.setFixedTime(new Date("2026-10-03T09:00:00Z"));
         page.on("pageerror", (error) => {
             throw error;
         });
         const writes: Record<string, unknown>[] = [];
         let fail = false;
         await page.route("**/board/fixture-board/card/fixture-card/details", async (route) => {
+            const headers = {
+                "Access-Control-Allow-Origin": "http://127.0.0.1:4204",
+                "Access-Control-Allow-Credentials": "true",
+                "Access-Control-Allow-Methods": "PUT,OPTIONS",
+                "Access-Control-Allow-Headers": "content-type,authorization,content-encoding",
+            };
+            if (route.request().method() === "OPTIONS") return route.fulfill({ status: 204, headers });
             expect(route.request().method()).toBe("PUT");
             writes.push(route.request().postDataJSON());
             await route.fulfill({
                 status: fail ? 500 : 200,
                 contentType: "application/json",
+                headers,
                 body: fail ? JSON.stringify({ detail: "Save failed" }) : "{}",
             });
         });
@@ -50,6 +59,11 @@ for (const width of [1280, 390]) {
     });
 }
 test("reader cannot mutate a deadline", async ({ page }) => {
+    let writes = 0;
+    await page.route("**/board/fixture-board/card/fixture-card/details", async (route) => {
+        if (route.request().method() === "PUT") writes++;
+        await route.fulfill({ status: 403, json: { code: "PE1001" } });
+    });
     page.on("pageerror", (error) => {
         throw error;
     });
@@ -58,4 +72,5 @@ test("reader cannot mutate a deadline", async ({ page }) => {
     await expect(page.getByRole("button", { name: "Remove deadline", exact: true })).toHaveCount(0);
     await page.goto("/src/pages/BoardPage/components/card/inline-deadline.fixture.html?readonly");
     await expect(page.getByRole("button", { name: "Add deadline", exact: true })).toHaveCount(0);
+    expect(writes).toBe(0);
 });

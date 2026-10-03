@@ -79,6 +79,8 @@ jobs:
         working-directory: src/ui
       - run: yarn playwright test -c playwright.workflow-stages.config.ts
         working-directory: src/ui
+      - run: yarn playwright test -c playwright.inline-deadline.config.ts
+        working-directory: src/ui
 
       - run: yarn playwright test -c playwright.auth-api.config.ts
         working-directory: src/ui
