@@ -6,7 +6,6 @@ import IconComponent from "@/components/base/IconComponent";
 import Skeleton from "@/components/base/Skeleton";
 import Tooltip from "@/components/base/Tooltip";
 import DateDistance from "@/components/DateDistance";
-import { CollapsibleVersionHistoryPlate } from "@/components/Editor/version-history-plate";
 import UserAvatar from "@/components/UserAvatar";
 import { usePageNavigateRef } from "@/core/hooks/usePageNavigate";
 import { ActivityModel, AuthUser, ProjectCard } from "@/core/models";
@@ -25,6 +24,10 @@ import { Utils } from "@langboard/core/utils";
 import { cloneDeep } from "lodash";
 import React from "react";
 import { Trans, useTranslation } from "react-i18next";
+
+const CollapsibleVersionHistoryPlate = React.lazy(() =>
+    import("@/components/Editor/version-history-plate").then((module) => ({ default: module.CollapsibleVersionHistoryPlate }))
+);
 
 export type TActivityViewType = "user" | "default";
 
@@ -254,16 +257,17 @@ const useCreateActivityTimeline = (currentUser: AuthUser.TModel, viewType: TActi
                     const mentionables = [...(before?.mentionables ?? []), ...(after?.mentionables ?? [])];
 
                     newElements.push(
-                        <CollapsibleVersionHistoryPlate
-                            mentionables={mentionables}
-                            currentUser={currentUser}
-                            form={{
-                                project_uid: history?.project?.uid,
-                            }}
-                            oldValue={before}
-                            newValue={after}
-                            key={Utils.String.Token.shortUUID()}
-                        />
+                        <React.Suspense fallback={<Skeleton h="20" className="w-full" />} key={Utils.String.Token.shortUUID()}>
+                            <CollapsibleVersionHistoryPlate
+                                mentionables={mentionables}
+                                currentUser={currentUser}
+                                form={{
+                                    project_uid: history?.project?.uid,
+                                }}
+                                oldValue={before}
+                                newValue={after}
+                            />
+                        </React.Suspense>
                     );
                     return;
                 }
