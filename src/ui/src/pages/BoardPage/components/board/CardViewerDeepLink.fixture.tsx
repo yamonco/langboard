@@ -12,6 +12,8 @@ import { BoardController } from "@/core/providers/BoardController";
 import BoardCardPage from "@/pages/BoardPage/BoardCardPage";
 import useAuthStore from "@/core/stores/AuthStore";
 import { AuthUser } from "@/core/models";
+import Floating from "@/components/base/Floating";
+import CardFlipTray from "@/pages/BoardPage/components/card/CardFlipTray";
 import { SkeletonBoard } from "@/pages/BoardPage/components/board/Board";
 
 /**
@@ -75,9 +77,9 @@ const fixtureUser = AuthUser.Model.fromOne({
     lastname: "User",
     email: "fixture@example.com",
     username: "fixture",
-    api_key_role_actions: ["all"],
-    setting_role_actions: ["all"],
-    mcp_role_actions: ["all"],
+    api_key_role_actions: ["*"],
+    setting_role_actions: ["*"],
+    mcp_role_actions: ["*"],
     user_groups: [],
     subemails: [],
     preferred_lang: "en",
@@ -185,6 +187,9 @@ function BoardRouteFixture(): React.JSX.Element {
             {hasUser ? (
                 <div className="relative min-w-0 flex-1">
                     <div className="relative size-full" />
+                    {!isCardPage && (
+                        <Floating.Nav fixed items={[]} trailing={<CardFlipTray userUID={fixtureUser.uid} projectUID={projectUID ?? PROJECT_UID} />} />
+                    )}
                     {isCardPage && <BoardCardPage key={pageRoute} projectUID={projectUID ?? PROJECT_UID} cardUID={pageRoute} embedded />}
                 </div>
             ) : (

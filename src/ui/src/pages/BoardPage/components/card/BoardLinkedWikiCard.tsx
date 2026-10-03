@@ -2,6 +2,8 @@ import Box from "@/components/base/Box";
 import Button from "@/components/base/Button";
 import Dialog from "@/components/base/Dialog";
 import Flex from "@/components/base/Flex";
+import Floating from "@/components/base/Floating";
+import CardFlipTray from "./CardFlipTray";
 import IconComponent from "@/components/base/IconComponent";
 import Popover from "@/components/base/Popover";
 import SubmitButton from "@/components/base/SubmitButton";
@@ -20,9 +22,10 @@ interface IBoardLinkedWikiCardProps {
     isExpanded: boolean;
     setIsExpanded?: React.Dispatch<React.SetStateAction<boolean>>;
     onClose?: () => void;
+    onFlip?: () => void;
 }
 
-export default function BoardLinkedWikiCard({ isExpanded, setIsExpanded, onClose }: IBoardLinkedWikiCardProps) {
+export default function BoardLinkedWikiCard({ isExpanded, setIsExpanded, onClose, onFlip }: IBoardLinkedWikiCardProps) {
     const { card, projectUID, currentUser, canEditCard } = useBoardCard();
     const resource = card.useField("linked_resource");
     const columnName = card.useField("project_column_name");
@@ -62,6 +65,7 @@ export default function BoardLinkedWikiCard({ isExpanded, setIsExpanded, onClose
     return (
         <Flex direction="col" className="h-full min-h-0 gap-2">
             <Box
+                data-card-surface=""
                 className={cn(
                     "relative min-h-0 min-w-0 flex-1 overflow-hidden border bg-background px-4 py-4 sm:px-6 sm:py-6",
                     isExpanded ? "border-0 shadow-none" : "rounded-2xl shadow-2xl"
@@ -86,6 +90,19 @@ export default function BoardLinkedWikiCard({ isExpanded, setIsExpanded, onClose
                                     onClick={() => setIsExpanded((value) => !value)}
                                 >
                                     <IconComponent icon={isExpanded ? "minimize-2" : "maximize-2"} size="4" />
+                                </Button>
+                            )}
+                            {!!onFlip && (
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="size-8"
+                                    title={t("card.Flip card")}
+                                    aria-label={t("card.Flip card")}
+                                    onClick={onFlip}
+                                >
+                                    <IconComponent icon="layers" size="4" />
                                 </Button>
                             )}
                             {isExpanded ? (
@@ -148,6 +165,12 @@ export default function BoardLinkedWikiCard({ isExpanded, setIsExpanded, onClose
                     </Flex>
                 </Flex>
             </Box>
+            <Floating.Nav
+                items={[]}
+                trailing={
+                    <CardFlipTray userUID={currentUser.uid} projectUID={projectUID} currentCard={{ uid: card.uid, title: title ?? card.title }} />
+                }
+            />
         </Flex>
     );
 }

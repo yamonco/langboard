@@ -6,6 +6,8 @@ import { useAuth } from "@/core/providers/AuthProvider";
 import { ROUTES } from "@/core/routing/constants";
 import { getEditorStore } from "@/core/stores/EditorStore";
 import { cn } from "@/core/utils/ComponentUtils";
+import { ProjectCard } from "@/core/models";
+import { useCardFlipStore } from "@/pages/BoardPage/components/card/CardFlipStore";
 import BoardCard from "@/pages/BoardPage/components/card/BoardCard";
 import { BoardCardSectionSaveProvider } from "@/pages/BoardPage/components/card/BoardCardSectionSaveProvider";
 import { EHttpStatus } from "@langboard/core/enums";
@@ -374,6 +376,15 @@ const BoardCardPageComponent = ({
                                 isExpanded={isExpanded}
                                 setIsExpanded={setIsExpanded}
                                 onClose={handleCloseRequest}
+                                onFlip={() => {
+                                    if (isCardEditingRef.current || isComposing || !currentUser) return;
+                                    const card = ProjectCard.Model.getModel(cardUID);
+                                    if (!card) return;
+                                    useCardFlipStore
+                                        .getState()
+                                        .flip(currentUser.uid, projectUID, { uid: cardUID, title: card.linked_resource?.title ?? card.title });
+                                    close();
+                                }}
                                 onEditModeStateChange={handleEditModeStateChange}
                             />
                         </Dialog.Content>

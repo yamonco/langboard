@@ -56,7 +56,9 @@ const useGetCards = (params: IGetCardsForm, options?: TQueryOptions<unknown, IGe
         ProjectChecklist.Model.fromArray(res.data.checklists, true);
 
         ProjectCard.Model.getModels((model) => model.project_uid === params.project_uid && !cardUIDs.has(model.uid)).forEach((model) => {
-            deleteCardModel(model.uid, true);
+            // A card omitted from this projection may still be available in the archive.
+            // The tray availability endpoint owns deletion and authorization validation.
+            deleteCardModel(model.uid, true, false);
         });
         ProjectColumn.Model.deleteModels((model) => model.project_uid === params.project_uid && !columnUIDs.has(model.uid));
 

@@ -162,5 +162,9 @@
   "{{days, number}} days_other": "{{days, number}}일",
   "{{days, number}} days_one": "{{days, number}}일",
   "Checklist progress": "체크리스트 진행률: {{total, number}}개 중 {{completed, number}}개 완료",
-  "Comments panel width": "댓글 패널 너비"
+  "Comments panel width": "댓글 패널 너비",
+  "Flip card": "카드 접어두기",
+  "Flipped cards": "접힌 카드 {{count}}",
+  "Restore flipped card": "{{title}} 다시 열기",
+  "Remove flipped card": "{{title}} 트레이에서 제거"
 }

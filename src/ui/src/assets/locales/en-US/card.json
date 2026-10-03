@@ -162,5 +162,9 @@
   "{{days, number}} days_other": "{{days, number}} days",
   "{{days, number}} days_one": "{{days, number}} day",
   "Checklist progress": "Checklist progress: {{completed, number}} of {{total, number}} complete",
-  "Comments panel width": "Comments panel width"
+  "Comments panel width": "Comments panel width",
+  "Flip card": "Flip card",
+  "Flipped cards": "Flipped cards · {{count}}",
+  "Restore flipped card": "Restore {{title}}",
+  "Remove flipped card": "Remove {{title}} from tray"
 }

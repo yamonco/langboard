@@ -1,3 +1,5 @@
+import CardFlipTray from "./CardFlipTray";
+import { useCardFlipStore } from "./CardFlipStore";
 import Box from "@/components/base/Box";
 import Button from "@/components/base/Button";
 import Dialog from "@/components/base/Dialog";
@@ -93,6 +95,7 @@ export interface IBoardCardProps {
     isExpanded?: bool;
     setIsExpanded?: React.Dispatch<React.SetStateAction<bool>>;
     onClose?: () => void;
+    onFlip?: () => void;
     onEditModeStateChange?: (isEditing: bool, cancelEdit: (() => void) | null) => void;
 }
 
@@ -105,11 +108,15 @@ const BoardCard = memo(
         isExpanded = false,
         setIsExpanded,
         onClose,
+        onFlip,
         onEditModeStateChange,
     }: IBoardCardProps): React.JSX.Element => {
         const { setPageAliasRef } = usePageHeader();
         const { data: cardData, isFetching, error, refetch } = useGetCardDetails({ project_uid: projectUID, card_uid: cardUID });
         const focusedCardRef = useRef("");
+        useEffect(() => {
+            if (cardData?.card) useCardFlipStore.getState().remove(currentUser.uid, projectUID, cardUID);
+        }, [cardData?.card, currentUser.uid, projectUID, cardUID]);
         const [t] = useTranslation();
         const socket = useSocket();
         const queryClient = useQueryClient();
@@ -258,6 +265,7 @@ const BoardCard = memo(
                             isExpanded={isExpanded}
                             setIsExpanded={setIsExpanded}
                             onClose={onClose}
+                            onFlip={onFlip}
                             onEditModeStateChange={onEditModeStateChange}
                         />
                     </BoardCardProvider>
@@ -344,6 +352,7 @@ interface IBoardCardResultProps {
     isExpanded: bool;
     setIsExpanded?: React.Dispatch<React.SetStateAction<bool>>;
     onClose?: () => void;
+    onFlip?: () => void;
     onEditModeStateChange?: (isEditing: bool, cancelEdit: (() => void) | null) => void;
 }
 
@@ -361,6 +370,7 @@ function BoardTaskCardResult({
     isExpanded,
     setIsExpanded,
     onClose,
+    onFlip,
     onEditModeStateChange,
     executionReceipts = [],
     linkedWikis = [],
@@ -479,7 +489,7 @@ function BoardTaskCardResult({
                                             <IconComponent icon={completed ? "check" : "circle"} size="5" />
                                         </Button>
                                     )}
-                                    <BoardCardTitle key={`board-card-title-${card.uid}`} className={isExpanded ? "sm:mr-44" : undefined} />
+                                    <BoardCardTitle key={`board-card-title-${card.uid}`} className={isExpanded ? "mr-28 sm:mr-52" : "mr-28"} />
                                 </Flex>
                                 <Flex gap="3" wrap items="center" className="min-w-0">
                                     {isExpanded ? (
@@ -514,6 +524,20 @@ function BoardTaskCardResult({
                                             onClick={() => setIsExpanded((value) => !value)}
                                         >
                                             <IconComponent icon={isExpanded ? "minimize-2" : "maximize-2"} size="4" />
+                                        </Button>
+                                    )}
+                                    {!!onFlip && (
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="icon"
+                                            className="size-8"
+                                            title={t("card.Flip card")}
+                                            aria-label={t("card.Flip card")}
+                                            disabled={isCardEditing}
+                                            onClick={onFlip}
+                                        >
+                                            <IconComponent icon="layers" size="4" />
                                         </Button>
                                     )}
                                     {isExpanded ? (
@@ -876,7 +900,7 @@ function BoardCardExpandedChatScope({ isExpanded }: { isExpanded: bool }): null 
 }
 
 function BoardCardFloatingNav({ isExpanded }: { isExpanded: bool }): React.JSX.Element {
-    const { projectUID, card } = useBoardCard();
+    const { projectUID, card, currentUser } = useBoardCard();
     const { isCommentPanelOpen, toggleCommentPanel, isActionPanelOpen, toggleActionPanel } = useBoardCardPanel();
     const { canEditCard, isCardEditing, enterCardEditMode, leaveCardEditMode } = useBoardCard();
     const { boardChat, chatResizableSidebar, setChatResizableSidebar } = useBoardController();
@@ -960,6 +984,14 @@ function BoardCardFloatingNav({ isExpanded }: { isExpanded: bool }): React.JSX.E
     return (
         <>
             <Floating.Nav
+                trailing={
+                    <CardFlipTray
+                        userUID={currentUser.uid}
+                        projectUID={projectUID}
+                        currentCard={{ uid: card.uid, title: card.title }}
+                        disabled={isCardEditing}
+                    />
+                }
                 className={cn("z-[110]", !isExpanded && "mx-auto max-w-[100vw] sm:max-w-[90vw] lg:max-w-[1120px]")}
                 contentClassName="bg-background"
                 itemClassName="h-10 px-3"
