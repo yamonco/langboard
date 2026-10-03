@@ -4,7 +4,7 @@ for (const width of [1280, 390]) {
         await page.setViewportSize({ width, height: 850 });
         await page.route("**/account/preferred-language", (route) => route.fulfill({ status: 200, contentType: "application/json", body: "{}" }));
         await page.goto("/src/pages/AccountPage/components/preference/PreferenceLanguage.fixture.html");
-        await page.getByRole("button", { name: "Open user menu" }).click();
+        await page.getByRole("button", { name: "Language Fixture" }).click();
         await page.getByRole("dialog").getByRole("button", { name: "English (US)" }).click();
         await page.mouse.move(1, 1);
         await page.waitForTimeout(700);
@@ -77,3 +77,25 @@ test("keyboard selection saves all supported default languages", async ({ page }
     }
     expect(writes).toEqual(["ja-JP", "zh-CN", "ko-KR", "en-US"]);
 });
+
+for (const width of [1280, 390]) {
+    test(`default avatar and account action support keyboard at ${width}px`, async ({ page }) => {
+        await page.setViewportSize({ width, height: 850 });
+        await page.goto("/src/pages/AccountPage/components/preference/PreferenceLanguage.fixture.html");
+        const avatar = page.getByRole("button", { name: "Language Fixture" });
+        await page.keyboard.press("Tab");
+        for (let index = 0; index < 8 && !(await avatar.evaluate((element) => element === document.activeElement)); index++) {
+            await page.keyboard.press("Tab");
+        }
+        await expect(avatar).toBeFocused();
+        await page.keyboard.press("Enter");
+        const action = page.getByRole("button", { name: "Open account action" });
+        await expect(action).toBeFocused();
+        await page.keyboard.press("Space");
+        await expect(page).toHaveTitle("Account action selected");
+        await page.keyboard.press("Escape");
+        await expect(avatar).toBeFocused();
+        await page.keyboard.press("Space");
+        await expect(page.getByRole("dialog")).toBeVisible();
+    });
+}

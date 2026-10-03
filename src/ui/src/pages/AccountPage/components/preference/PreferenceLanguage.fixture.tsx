@@ -31,8 +31,15 @@ function Fixture() {
             <AccountSettingProvider currentUser={user}>
                 <PreferenceLanguage />
             </AccountSettingProvider>
-            <UserAvatar.Root userOrBot={user} customTrigger={<button>Open user menu</button>}>
+            <UserAvatar.Root userOrBot={user}>
                 <UserAvatar.List>
+                    <UserAvatar.ListItem
+                        onClick={() => {
+                            document.title = "Account action selected";
+                        }}
+                    >
+                        Open account action
+                    </UserAvatar.ListItem>
                     <UserPreferenceLanguageSwitcher currentUser={user} variant="outline" triggerType="text" />
                 </UserAvatar.List>
             </UserAvatar.Root>
