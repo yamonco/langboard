@@ -18,6 +18,7 @@ from ..middlewares import McpAuthMiddleware
 from ..middlewares.McpAuthMiddleware import mcp_auth_context
 from .Annotations import ToolAnnotationTransform
 from .Providers import create_agent_core_provider, create_compatibility_provider, create_raw_primitive_provider
+from .Receipts import MutationReceiptMiddleware
 from .Tool import McpTool
 from .ToolGroupMiddleware import ToolGroupMiddleware
 
@@ -45,6 +46,8 @@ class McpServer:
 
         allowed_hosts, allowed_origins = _get_transport_security_allowlists()
         app = _create_fastmcp(RAW_DISCOVERY_TOOLS if profile == "raw" else frozenset())
+        if profile in {"agent", "raw"}:
+            app.add_middleware(MutationReceiptMiddleware())
 
         providers = {
             "compatibility": create_compatibility_provider,
