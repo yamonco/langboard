@@ -448,6 +448,9 @@ export const BoardProvider = memo(({ project, currentUser, children }: IBoardPro
             {columns.map((column) => (
                 <ColumnFilterSubscription key={column.uid} column={column} refresh={refreshColumnFilters} />
             ))}
+            {cards.map((card) => (
+                <CardPolicySubscription key={card.uid} card={card} refresh={refreshColumnFilters} />
+            ))}
             {children}
         </BoardContext.Provider>
     );
@@ -466,5 +469,11 @@ function ColumnFilterSubscription({ column, refresh }: { column: ProjectColumn.T
     column.useField("workflow_stage", refresh);
     column.useField("is_archive", refresh);
     column.useField("name", refresh);
+    return null;
+}
+
+/** Refresh board filters when the server reinterprets a global workflow policy. */
+function CardPolicySubscription({ card, refresh }: { card: ProjectCard.TModel; refresh: () => void }) {
+    card.useField("work_state", refresh);
     return null;
 }

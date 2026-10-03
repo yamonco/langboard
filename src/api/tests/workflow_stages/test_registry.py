@@ -2,6 +2,7 @@ import importlib.util
 import os
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import Mock
 import pytest
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
@@ -41,6 +42,7 @@ def registry(monkeypatch):
     monkeypatch.setattr(DbEngine, "get_readonly_engine", lambda: engine)
     repo = WorkflowStageRepository(lambda _: None, lambda _: None)
     service = WorkflowStageService(lambda _: None, lambda _: None, SimpleNamespace(workflow_stage=repo))
+    monkeypatch.setattr(service, "_publish_work_states", Mock())
     yield service, engine
     engine.dispose()
 
@@ -159,3 +161,37 @@ def test_column_usage_counts_explicit_non_deleted_non_archive_bindings(registry)
             )
         )
     assert service.get_api_list()[0]["used_column_count"] == 1
+
+
+def test_policy_update_publishes_after_commit_without_replaying_effects(registry):
+    from langboard_shared.core.db import DbSession
+
+    service, _ = registry
+    fields = form(entry_effects=["complete_checkitems"])
+    stage = service.save(fields)
+    service._publish_work_states.assert_not_called()
+    with DbSession.atomic():
+        service.save({**fields, "overdue_policy": "suppress"}, stage.get_uid())
+        service._publish_work_states.assert_not_called()
+    service._publish_work_states.assert_called_once_with("released")
+    service._publish_work_states.reset_mock()
+    with pytest.raises(RuntimeError):
+        with DbSession.atomic():
+            service.save({**fields, "active_queue_policy": "exclude"}, stage.get_uid())
+            raise RuntimeError("rollback")
+    service._publish_work_states.assert_not_called()
+    service.save({**fields, "name": "Renamed", "overdue_policy": "suppress"}, stage.get_uid())
+    service._publish_work_states.assert_not_called()
+
+
+def test_policy_projection_targets_bound_cards_and_same_project_dependents(registry):
+    service, engine = registry
+    with engine.begin() as connection:
+        connection.execute(text("DROP TABLE card"))
+        connection.execute(text("CREATE TABLE card(id BIGINT, project_id BIGINT, project_column_id BIGINT, deleted_at TEXT)"))
+        connection.execute(text("INSERT INTO project_column VALUES (1, 'released', NULL, FALSE), (2, 'active', NULL, FALSE)"))
+        connection.execute(text("ALTER TABLE project_column ADD COLUMN project_id BIGINT DEFAULT 10"))
+        connection.execute(text("INSERT INTO card VALUES (1,10,1,NULL),(2,10,2,NULL),(3,20,2,NULL),(4,10,1,'deleted'),(5,10,2,NULL)"))
+        connection.execute(text("INSERT INTO card_relationship VALUES (1,2),(1,3),(1,2),(4,5)"))
+    assert set(service.repo.workflow_stage.get_policy_affected_cards("released")) == {(10, 1), (10, 2)}
+    assert service.repo.workflow_stage.get_policy_affected_cards("missing") == []

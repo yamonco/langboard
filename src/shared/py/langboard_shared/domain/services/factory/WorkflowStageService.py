@@ -3,7 +3,7 @@ from ....core.db import DbSession, SqlBuilder
 from ....core.domain import BaseDomainService
 from ....helpers import InfraHelper
 from ....tasks.webhooks.ExecutionReadinessUow import execution_readiness_uow
-from ...models import WorkflowStageDefinition
+from ...models import Project, WorkflowStageDefinition
 
 
 class WorkflowStageService(BaseDomainService):
@@ -77,6 +77,14 @@ class WorkflowStageService(BaseDomainService):
                 ).first()
                 if stage is None:
                     return None
+                policy_changed = any(
+                    getattr(stage, field) != values[field]
+                    for field in (
+                        "counts_as_completed",
+                        "active_queue_policy",
+                        "overdue_policy",
+                    )
+                )
                 if stage.counts_as_completed != values["counts_as_completed"]:
                     with execution_readiness_uow() as execution:
                         execution.watch_workflow_stage(stage.key)
@@ -87,6 +95,9 @@ class WorkflowStageService(BaseDomainService):
                     for field, value in values.items():
                         setattr(stage, field, value)
                     self.repo.workflow_stage.update(stage)
+                if policy_changed:
+                    stage_key = stage.key
+                    db.after_commit(lambda: self._publish_work_states(stage_key))
         else:
             stage = WorkflowStageDefinition(**values)
             self.repo.workflow_stage.insert(stage)
@@ -98,3 +109,15 @@ class WorkflowStageService(BaseDomainService):
             stage.is_active = False
             self.repo.workflow_stage.update(stage)
         return stage
+
+    def _publish_work_states(self, key: str) -> None:
+        """Refresh native card projections after commit; never replay entry effects."""
+        from .CardService import CardService
+
+        grouped = {}
+        for project_id, card_id in self.repo.workflow_stage.get_policy_affected_cards(key):
+            grouped.setdefault(project_id, []).append(card_id)
+        for project_id, card_ids in grouped.items():
+            project = InfraHelper.get_by_id_like(Project, project_id)
+            if project is not None:
+                self._get_service(CardService).publish_work_states(project, card_ids)
