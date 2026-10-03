@@ -115,6 +115,13 @@ emails. Wiki links retain the visibility-filtered result and archive flag.
 Coverage is now 64 commands and one additional query; six commands and remaining
 query contracts still require reviewed output models.
 
+Native card creation and its leftmost-column compatibility entry now retain
+their full typed card result, including creator, completion-checklist flags and
+source revision. Checkitem cardification keeps its smaller public card summary;
+provisioning reuses the typed template-board result. Coverage is now 68 commands
+and one additional query. Graph patch and legacy project-detail results remain
+untyped, alongside the remaining query contracts.
+
 This delivery separates existing canonical entry points. It does not yet supply
 all planned action facades, atomic Work Plan handling,
 OAuth profile access, deprecation telemetry or representative installed-client
