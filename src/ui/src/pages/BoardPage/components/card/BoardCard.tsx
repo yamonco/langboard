@@ -42,6 +42,7 @@ import { useSocket } from "@/core/providers/SocketProvider";
 import BoardCardLabelList from "@/pages/BoardPage/components/card/label/BoardCardLabelList";
 import { AuthUser, ProjectCardAttachment, ProjectChecklist } from "@/core/models";
 import useCardDeletedHandlers from "@/controllers/socket/card/useCardDeletedHandlers";
+import { SocketEvents } from "@langboard/core/constants";
 import { EHttpStatus, ESocketTopic } from "@langboard/core/enums";
 import { getEditorStore } from "@/core/stores/EditorStore";
 import { useHasRunningBot } from "@/core/stores/BotStatusStore";
@@ -122,6 +123,22 @@ const BoardCard = memo(
                 navigate(ROUTES.BOARD.MAIN(projectUID), { replace: true });
             },
         });
+        useEffect(() => {
+            const listener = {
+                topic: ESocketTopic.Board,
+                topicId: projectUID,
+                event: SocketEvents.SERVER.BOARD.CARD.DETAILS_CHANGED.replace("{uid}", cardUID),
+                eventKey: `card-execution-receipt-${projectUID}-${cardUID}`,
+                callback: (data: { execution_receipt_changed?: boolean }) => {
+                    if (data.execution_receipt_changed) {
+                        void queryClient.invalidateQueries({ queryKey: [`get-card-details-${projectUID}-${cardUID}`] });
+                    }
+                },
+            };
+            socket.on(listener);
+            return () => socket.off(listener);
+        }, [cardUID, projectUID, queryClient, socket]);
+
         const linkedResourceChangedHandler = useMemo(
             () =>
                 useCardLinkedResourceChangedHandlers({

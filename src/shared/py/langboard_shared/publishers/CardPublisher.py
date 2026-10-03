@@ -17,6 +17,19 @@ class CardPublisher(BaseSocketPublisher):
         )
 
     @staticmethod
+    def execution_receipt_changed(card: Card):
+        """Invalidate committed receipt history without broadcasting execution evidence."""
+        CardPublisher.put_dispather(
+            {"execution_receipt_changed": True},
+            SocketPublishModel(
+                topic=SocketTopic.Board,
+                topic_id=card.project_id.to_short_code(),
+                event=f"board:card:details:changed:{card.get_uid()}",
+                data_keys="execution_receipt_changed",
+            ),
+        )
+
+    @staticmethod
     def metadata_changed(card: Card):
         """Publish persisted timestamps after nested card mutations."""
         CardPublisher.put_dispather(

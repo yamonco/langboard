@@ -25,6 +25,7 @@ from langboard_shared.domain.services import DomainService
 from langboard_shared.filter import RoleFilter
 from langboard_shared.helpers import InfraHelper
 from langboard_shared.infrastructure.repositories import Repository
+from langboard_shared.publishers import CardPublisher
 from langboard_shared.security import Auth, RoleFinder
 from langboard_shared.tasks.webhooks.ExecutionReadinessUow import current_execution, execution_readiness_uow
 from pydantic import Field, field_validator
@@ -279,6 +280,8 @@ def put_execution_receipt(
         _reconcile_machine_checklist(db, card.id, generation, saved[2])
         if created and payload["status"] in {"review_ready", "completed", "success"}:
             _move_to_review(db, card.id, project.id, user_or_bot)
+        if created:
+            db.after_commit(lambda: CardPublisher.execution_receipt_changed(card))
     return JsonResponse(content={"receipt": saved[2], "created": created, "generation": generation})
 
 

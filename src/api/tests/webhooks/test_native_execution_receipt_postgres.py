@@ -88,6 +88,14 @@ def test_native_receipt_is_idempotent_and_never_writes_user_description(monkeypa
     monkeypatch.setattr(receipt_api, "execution_readiness_uow", receipt_uow)
     actor = SimpleNamespace(id=44)
     moves = []
+    receipt_notifications = []
+
+    def notify_receipt(card):
+        with engine.connect() as connection:
+            committed = connection.execute(text("SELECT count(*) FROM execution_receipt")).scalar()
+        receipt_notifications.append((card.id, committed))
+
+    monkeypatch.setattr(receipt_api.CardPublisher, "execution_receipt_changed", notify_receipt)
 
     def notify_move(received_actor, project_id, card_id, old_column_id, new_column_id):
         with engine.connect() as connection:
@@ -119,6 +127,7 @@ def test_native_receipt_is_idempotent_and_never_writes_user_description(monkeypa
         with pytest.raises(RuntimeError, match="before commit"):
             receipt_api.put_execution_receipt("board", "card", 5, form, key, actor)
         assert moves == []
+        assert receipt_notifications == []
         with engine.connect() as connection:
             assert connection.execute(text("SELECT count(*) FROM execution_receipt")).scalar() == 0
             assert connection.execute(text("SELECT project_column_id FROM card WHERE id=100")).scalar() == 1
@@ -132,6 +141,7 @@ def test_native_receipt_is_idempotent_and_never_writes_user_description(monkeypa
         assert json.loads(first.body)["created"] is True
         assert json.loads(second.body)["created"] is False
         assert moves == [(actor, 10, 100, 1, 2, 1)]
+        assert receipt_notifications == [(100, 1)]
         with engine.connect() as connection:
             assert connection.execute(text("SELECT count(*) FROM execution_receipt")).scalar() == 1
             projected = connection.execute(
@@ -158,6 +168,7 @@ def test_native_receipt_is_idempotent_and_never_writes_user_description(monkeypa
         with pytest.raises(receipt_api.ApiException.Conflict_409):
             receipt_api.put_execution_receipt("board", "card", 5, changed, key, actor)
         assert len(moves) == 1
+        assert receipt_notifications == [(100, 1)]
         with engine.connect() as connection:
             assert connection.execute(text("SELECT count(*) FROM execution_receipt")).scalar() == 1
     finally:

@@ -31,6 +31,7 @@ on:
       - src/ui/src/controllers/socket/card/checklist/useBoardChecklistProgressChangedHandlers.ts
       - src/ui/src/pages/BoardPage/components/board/BoardColumnCardCollapsible.tsx
       - src/ui/src/pages/BoardPage/components/board/BoardColumnCardStatus.*
+      - src/ui/src/pages/BoardPage/components/card/BoardCard.tsx
       - src/ui/src/pages/BoardPage/components/card/BoardCardDeadline.tsx
       - src/ui/src/pages/BoardPage/components/card/CardColumnHistory.tsx
   workflow_dispatch:
@@ -61,7 +62,7 @@ jobs:
       - run: corepack enable
       - run: yarn install --frozen-lockfile
         working-directory: src/ui
-      - run: yarn eslint src/core/models/ProjectCard.ts src/core/providers/BoardProvider.tsx src/controllers/socket/card/useCardDetailsChangedHandlers.ts src/controllers/socket/card/checklist/useBoardChecklistProgressChangedHandlers.ts src/pages/BoardPage/components/board/BoardColumnCardCollapsible.tsx src/pages/BoardPage/components/board/BoardColumnCardStatus.ts src/pages/BoardPage/components/board/BoardColumnCardStatus.test.ts src/pages/BoardPage/components/card/BoardCardDeadline.tsx src/pages/BoardPage/components/card/CardColumnHistory.tsx --max-warnings 0
+      - run: yarn eslint src/core/models/ProjectCard.ts src/core/providers/BoardProvider.tsx src/controllers/socket/card/useCardDetailsChangedHandlers.ts src/controllers/socket/card/checklist/useBoardChecklistProgressChangedHandlers.ts src/pages/BoardPage/components/board/BoardColumnCardCollapsible.tsx src/pages/BoardPage/components/board/BoardColumnCardStatus.ts src/pages/BoardPage/components/board/BoardColumnCardStatus.test.ts src/pages/BoardPage/components/card/BoardCard.tsx src/pages/BoardPage/components/card/BoardCardDeadline.tsx src/pages/BoardPage/components/card/CardColumnHistory.tsx --max-warnings 0
         working-directory: src/ui
       - run: node --experimental-strip-types --test src/pages/BoardPage/components/board/BoardColumnCardStatus.test.ts
         working-directory: src/ui
