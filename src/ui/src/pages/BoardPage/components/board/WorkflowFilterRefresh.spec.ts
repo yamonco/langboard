@@ -26,3 +26,23 @@ for (const unfinished of [true, false]) {
         });
     }
 }
+
+test("projected completion updates reapply unfinished filters while retaining card identity and order", async ({ page }) => {
+    await page.goto("/src/pages/BoardPage/components/board/WorkflowFilterRefresh.fixture.html?count=500&filters=unfinished%3Ayes");
+    const rows = page.getByRole("region", { name: "Results" }).locator("p");
+    await expect(rows).toHaveCount(500);
+    const initial = await rows.evaluateAll((elements) =>
+        elements.map((element) => [element.getAttribute("data-card-uid"), element.getAttribute("data-order")])
+    );
+    for (let iteration = 0; iteration < 3; iteration++) {
+        await page.getByRole("button", { name: "Toggle completion policy" }).click();
+        await expect(rows).toHaveCount(0);
+        await page.getByRole("button", { name: "Toggle completion policy" }).click();
+        await expect(rows).toHaveCount(500);
+        expect(
+            await rows.evaluateAll((elements) =>
+                elements.map((element) => [element.getAttribute("data-card-uid"), element.getAttribute("data-order")])
+            )
+        ).toEqual(initial);
+    }
+});

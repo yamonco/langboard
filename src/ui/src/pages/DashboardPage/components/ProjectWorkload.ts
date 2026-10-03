@@ -42,11 +42,14 @@ export function matchesWorkload(
         project_column_uid: string;
         source_type?: string | null;
         archived_at?: unknown;
-        work_state?: { checklist_progress: { total: number; completed: number } };
+        work_state?: { completed?: boolean | null; checklist_progress: { total: number; completed: number } };
     },
     column: Pick<WorkloadColumn, "name" | "is_archive" | "workflow_stage"> | undefined
 ): boolean {
-    if (!column || !isUnfinishedColumn(column) || card.archived_at || card.source_type === "project_wiki") return false;
+    if (!column || column.is_archive || column.workflow_stage === "reference" || card.archived_at || card.source_type === "project_wiki")
+        return false;
+    if (card.work_state?.completed === true) return false;
+    if (typeof card.work_state?.completed !== "boolean" && !isUnfinishedColumn(column)) return false;
     const progress = card.work_state?.checklist_progress;
     return !progress || progress.total === 0 || progress.completed < progress.total;
 }

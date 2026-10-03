@@ -60,3 +60,15 @@ test("open total retains completed checklists but excludes terminal and referenc
     assert.equal(openWorkTotal([column({ open_count: -1 })]), undefined);
     assert.equal(openWorkTotal([column({ open_count: 0 })]), 0);
 });
+
+test("custom workflow completion policy hides cards without changing their column or checklist", () => {
+    const custom = column({ name: "Released", workflow_stage: "custom_release" });
+    const card = { project_column_uid: "open", work_state: { completed: false, checklist_progress: { total: 0, completed: 0 } } };
+    assert.equal(matchesWorkload(card, custom), true);
+    assert.equal(matchesWorkload({ ...card, work_state: { ...card.work_state, completed: true } }, custom), false);
+    assert.equal(matchesWorkload({ ...card, work_state: { ...card.work_state, completed: null } }, custom), true);
+    assert.equal(matchesWorkload(card, custom), true);
+    assert.equal(matchesWorkload(card, column({ workflow_stage: "closed" })), true);
+    assert.equal(matchesWorkload(card, column({ workflow_stage: "reference" })), false);
+    assert.equal(matchesWorkload(card, column({ is_archive: true })), false);
+});

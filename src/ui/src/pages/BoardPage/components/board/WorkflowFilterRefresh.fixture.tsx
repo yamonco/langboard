@@ -57,22 +57,49 @@ ProjectCard.Model.fromArray(
 );
 function Controls() {
     return (
-        <label>
-            Stage
-            <select
-                aria-label="Stage"
-                defaultValue="ready"
-                onChange={(event) => {
-                    column.workflow_stage = event.target.value || null;
+        <>
+            <button
+                onClick={() => {
+                    for (let index = 0; index < count; index++) {
+                        const card = ProjectCard.Model.getModel(`card${index}`)!;
+                        card.work_state = {
+                            version: 1,
+                            workflow_stage: column.workflow_stage ?? null,
+                            completed: !card.work_state?.completed,
+                            verification_state: "unverified",
+                            verification_source_change_seq: 0,
+                            verification: null,
+                            execution_state: null,
+                            blocker_state: null,
+                            material_kind: "work",
+                            lifecycle: "active",
+                            active_queue_eligible: null,
+                            checklist_progress: { total: 0, completed: 0 },
+                            reasons: [],
+                            state_inconsistency: [],
+                        };
+                    }
                 }}
             >
-                {["ready", "active", "closed", "reference", ""].map((stage) => (
-                    <option key={stage} value={stage}>
-                        {stage || "unclassified"}
-                    </option>
-                ))}
-            </select>
-        </label>
+                Toggle completion policy
+            </button>
+            <label>
+                Stage
+                <select
+                    aria-label="Stage"
+                    defaultValue="ready"
+                    onChange={(event) => {
+                        column.workflow_stage = event.target.value || null;
+                    }}
+                >
+                    {["ready", "active", "closed", "reference", ""].map((stage) => (
+                        <option key={stage} value={stage}>
+                            {stage || "unclassified"}
+                        </option>
+                    ))}
+                </select>
+            </label>
+        </>
     );
 }
 function Result() {
