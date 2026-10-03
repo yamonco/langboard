@@ -236,6 +236,9 @@ const BoardCardDeadlineDraft = memo(() => {
                     />
                     {draftDeadline && (
                         <Button
+                            type="button"
+                            title={t("card.Remove deadline")}
+                            aria-label={t("card.Remove deadline")}
                             variant="default"
                             className="h-8 gap-2 rounded-l-none border-l border-l-secondary/70 px-2 lg:h-10"
                             onClick={handleClearDeadline}
