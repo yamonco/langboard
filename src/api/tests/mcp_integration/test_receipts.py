@@ -27,6 +27,8 @@ async def test_receipt_does_not_claim_failure_rolled_back_or_change_legacy(monke
         effects.append(value)
         if mode == "after_write":
             raise RuntimeError("private internal failure details")
+        if profile == "agent":
+            return {"changed": True, "description_revision": "a" * 64, "description_chars": value, "applied_edits": 1}
         return {"value": value}
 
     metadata = {"handler": command, "description": "Patch", "exclude": [], "accessible_type": "all"}
@@ -63,7 +65,11 @@ async def test_receipt_does_not_claim_failure_rolled_back_or_change_legacy(monke
                 assert receipt["revision_conflict"] is (mode == "conflict")
                 assert "private internal failure" not in str(result.content)
             if mode == "success":
-                assert result.structured_content == {"value": 3}
+                assert result.structured_content == (
+                    {"changed": True, "description_revision": "a" * 64, "description_chars": 3, "applied_edits": 1}
+                    if profile == "agent"
+                    else {"value": 3}
+                )
             assert effects == ([3] if mode in {"success", "after_write"} else [])
     finally:
         mcp_auth_context.reset(token)

@@ -10,6 +10,7 @@ from fastmcp.server.providers.local_provider import LocalProvider
 from fastmcp.server.transforms import Visibility
 from fastmcp.tools import Tool
 from .Annotations import tool_annotations
+from .Outputs import with_typed_output
 from .Tool import McpTool
 from .ToolGroupMiddleware import ToolGroupMiddleware
 
@@ -59,9 +60,12 @@ def create_native_domain_provider(
     """Adapt the native registry once; every profile uses identical domain wrappers."""
     provider = LocalProvider(on_duplicate="error")
     for name, metadata in McpTool.get_tools().items():
+        handler = wrap_tool(name, metadata["handler"])
+        if modern_annotations:
+            handler = with_typed_output(name, handler)
         provider.add_tool(
             Tool.from_function(
-                wrap_tool(name, metadata["handler"]),
+                handler,
                 name=name,
                 description=metadata["description"],
                 annotations=tool_annotations(name) if modern_annotations else None,

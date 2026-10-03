@@ -35,7 +35,7 @@ replace authorization, approval or mutation outcome receipts.
 
 Modern command results include `_meta.mutation_receipt`, a typed envelope with
 `request_id`, `tool`, `outcome`, `revision_conflict`, `retryable` and `next_action`.
-Domain payloads and schemas remain unchanged. Normal command completion is
+Domain payload fields remain unchanged. Normal command completion is
 `applied`; this acknowledges the command and is not workflow approval or proof
 of checklist completion. Known pre-save card/wiki revision conflicts return
 `not_applied` with `read_and_review`. Other failures, including a failure after
@@ -46,6 +46,14 @@ the target receipt and does not overwrite it with a proxy receipt.
 Transport loss/cancellation can prevent any receipt from reaching a client.
 Such absence is not evidence that a write failed. Durable receipt lookup,
 idempotency keys and full typed command payloads remain separate work.
+
+Modern profiles use strict Pydantic output models for description patch/replace,
+self-assignment, and notification read commands. FastMCP derives their output
+schemas from native return annotations; Raw search includes the same schemas.
+Compatibility retains its original return annotations and schema. Validation
+runs after the domain command, so a validation failure returns an unknown
+mutation receipt rather than claiming a rollback. No defaults or coercion hide
+missing or malformed domain fields. Remaining outputs are not yet typed.
 
 This delivery separates existing canonical entry points. It does not yet supply
 all planned action facades, atomic Work Plan handling,
