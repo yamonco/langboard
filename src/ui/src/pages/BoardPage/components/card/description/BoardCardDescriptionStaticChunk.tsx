@@ -1,5 +1,5 @@
 import { MarkdownPlugin } from "@platejs/markdown";
-import { usePlateEditor } from "platejs/react";
+import { createSlateEditor } from "platejs";
 import { memo, useMemo } from "react";
 
 import { BaseEditorKit } from "@/components/Editor/editor-base-kit";
@@ -28,9 +28,7 @@ interface IStaticChunkBodyProps {
 }
 
 const StaticChunkBody = memo(({ chunk }: IStaticChunkBodyProps): React.JSX.Element => {
-    const editor = usePlateEditor({
-        plugins: DescriptionStaticKit,
-    });
+    const editor = useMemo(() => createSlateEditor({ plugins: DescriptionStaticKit }), []);
 
     const value = useMemo(() => editor.getApi(MarkdownPlugin).markdown.deserialize(chunk.content), [chunk.content, editor]);
 
