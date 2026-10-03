@@ -10,6 +10,7 @@ from langboard.mcp_tools import CardMcp
 from langboard.middlewares.McpAuthMiddleware import mcp_auth_context
 from langboard_shared.domain.models import Card, CardRelationship
 from pydantic import TypeAdapter
+from langboard.card_workspace.domain import CardGraphNewCard
 
 
 def native_graph():
@@ -47,7 +48,7 @@ async def test_actual_graph_handler_preserves_domain_call_and_unknown_receipt(mo
 
     def handler(title: str) -> dict:
         return CardMcp.apply_card_graph_patch(
-            "board", "anchor", [{"client_ref": "new:child", "title": title}], [], ["removed"], object(), service
+            "board", "anchor", [CardGraphNewCard("new:child", title)], [], ["removed"], object(), service
         )
 
     name = "apply_card_graph_patch"
