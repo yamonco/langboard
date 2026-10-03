@@ -39,7 +39,7 @@ ProjectColumn.Model.fromArray(
         name: uid,
         order,
         is_archive: false,
-        workflow_stage: uid,
+        workflow_stage: `custom_${uid}`,
         count: 2,
     }))
 );

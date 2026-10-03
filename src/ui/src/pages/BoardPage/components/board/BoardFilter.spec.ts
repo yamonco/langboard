@@ -6,8 +6,8 @@ for (const width of [1280, 390])
         await page.route("**/board/fixture/workflow-stages", async (route) => {
             requests++;
             await route.fulfill({ json: { stages: [
-                { key: "ready", name: "Custom queue", color: "#123456", is_active: true, translations: {} },
-                { key: "active", name: "Custom execution", color: "#654321", is_active: true, translations: {} },
+                { key: "custom_ready", name: "Custom queue", color: "#123456", is_active: true, translations: {} },
+                { key: "custom_active", name: "Custom execution", color: "#654321", is_active: true, translations: {} },
             ] } });
         });
         await page.setViewportSize({ width, height: 844 });
