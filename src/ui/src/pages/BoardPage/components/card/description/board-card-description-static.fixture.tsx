@@ -2,6 +2,9 @@ import { createRoot } from "react-dom/client";
 import { MemoryRouter } from "react-router";
 
 import BoardCardDescriptionStaticChunk from "./BoardCardDescriptionStaticChunk";
+import { AIChatEditor } from "@/components/plate-ui/ai-chat-editor";
+import { AIChatPlugin, AIPlugin } from "@platejs/ai/react";
+import { createPlateEditor, Plate } from "platejs/react";
 import "@/assets/styles/main.css";
 
 const chunk = {
@@ -28,6 +31,9 @@ root.render(
                 projectUID="fixture-project"
                 cardUID="fixture-card-owner"
             />
+            <Plate editor={createPlateEditor({ plugins: [AIPlugin, AIChatPlugin] })}>
+                <AIChatEditor content="**Static AI preview**" />
+            </Plate>
         </main>
     </MemoryRouter>
 );
