@@ -7,18 +7,23 @@ from urllib.parse import urlsplit
 from fastmcp import FastMCP
 from fastmcp.exceptions import AuthorizationError
 from fastmcp.server.transforms.search import RegexSearchTransform
-from mcp.types import Icon
 from langboard_shared.core.types import Factory
 from langboard_shared.core.utils.decorators import class_instance
 from langboard_shared.domain.models import Bot, User
 from langboard_shared.domain.services import DomainService
 from langboard_shared.Env import Env
 from langboard_shared.infrastructure.repositories import Repository
+from mcp.types import Icon
 from ..mcp_tools.RoleChecker import McpRoleChecker
 from ..middlewares import McpAuthMiddleware
 from ..middlewares.McpAuthMiddleware import mcp_auth_context
 from .Annotations import ToolAnnotationTransform
-from .Providers import create_agent_core_provider, create_compatibility_provider, create_native_domain_provider, create_raw_primitive_provider
+from .Providers import (
+    create_agent_core_provider,
+    create_compatibility_provider,
+    create_native_domain_provider,
+    create_raw_primitive_provider,
+)
 from .Receipts import MutationReceiptMiddleware
 from .ResponseBudget import ReadResponseBudgetMiddleware
 from .Telemetry import ToolTelemetryMiddleware
@@ -100,7 +105,13 @@ class McpServer:
             auth=auth,
             strict_input_validation=True,
             mask_error_details=True,
-            middleware=[NativeOAuthMiddleware(), AuthMiddleware(auth=require_scopes("mcp:access")), ToolTelemetryMiddleware(), MutationReceiptMiddleware(), ReadResponseBudgetMiddleware()],
+            middleware=[
+                NativeOAuthMiddleware(),
+                AuthMiddleware(auth=require_scopes("mcp:access")),
+                ToolTelemetryMiddleware(),
+                MutationReceiptMiddleware(),
+                ReadResponseBudgetMiddleware(),
+            ],
         )
         app.add_provider(create_native_domain_provider(self._wrap_tool, modern_annotations=True))
         hosts, origins = _get_transport_security_allowlists()

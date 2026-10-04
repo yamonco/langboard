@@ -112,7 +112,9 @@ def create_native_domain_provider(
         async def card_workflow(project_uid: str, card_uid: str) -> str:
             """Read current card workflow using the same grants and domain query as the tool."""
             auth = mcp_auth_context.get()
-            if (not auth or auth.get("transport") != "oauth") and "get_card_bundle" not in ToolGroupMiddleware._allowed_tools():
+            if (
+                not auth or auth.get("transport") != "oauth"
+            ) and "get_card_bundle" not in ToolGroupMiddleware._allowed_tools():
                 raise AuthorizationError("get_card_bundle is not allowed")
             result = await read_bundle(project_uid=project_uid, card_uid=card_uid, include=[])
             data = result.model_dump(mode="json") if hasattr(result, "model_dump") else result

@@ -6,6 +6,42 @@ from langboard.mcp_integration import OAuth
 from langboard.middlewares.McpAuthMiddleware import mcp_auth_context
 
 
+@pytest.mark.parametrize("authorized", [True, False])
+async def test_oauth_workflow_resource_uses_domain_authorization_without_legacy_group(monkeypatch, authorized):
+    from fastmcp import Client, FastMCP
+    from langboard.mcp_integration.Providers import create_native_domain_provider
+    from langboard.mcp_integration.Tool import McpTool
+
+    calls = []
+
+    async def bundle(**kwargs):
+        calls.append(kwargs)
+        if not authorized:
+            raise AuthorizationError("Board access denied")
+        return {"card": {"workflow": {"workflow_guidance": "Review first"}, "work_state": {}}}
+
+    monkeypatch.setattr(McpTool, "get_tools", lambda: {})
+    monkeypatch.setattr(McpTool, "get_tool", lambda name: {"handler": bundle} if name == "get_card_bundle" else None)
+    server = FastMCP("OAuth resource fixture")
+    server.add_provider(create_native_domain_provider(lambda name, handler: handler, modern_annotations=True))
+    token = mcp_auth_context.set({"transport": "oauth", "user_or_bot": object()})
+    try:
+        async with Client(server) as client:
+            if authorized:
+                assert "Review first" in str(
+                    await client.read_resource("langboard://projects/project/cards/card/workflow")
+                )
+                assert "Review first" in str(
+                    await client.get_prompt("apply_card_workflow", {"project_uid": "project", "card_uid": "card"})
+                )
+            else:
+                with pytest.raises(Exception, match="Board access denied"):
+                    await client.read_resource("langboard://projects/project/cards/card/workflow")
+        assert calls and calls[0] == {"project_uid": "project", "card_uid": "card", "include": []}
+    finally:
+        mcp_auth_context.reset(token)
+
+
 def test_mounted_discovery_and_callback_urls_use_native_fastmcp_routes(monkeypatch):
     from fastmcp.server.auth.oidc_proxy import OIDCConfiguration
     from key_value.aio.stores.memory import MemoryStore
@@ -72,7 +108,7 @@ def test_mounted_discovery_and_callback_urls_use_native_fastmcp_routes(monkeypat
         assert consent.status_code == 200
         assert "&lt;example-client&gt;" in consent.text
         assert "/images/favicon.ico" in consent.text
-        assert "name=\"csrf_token\"" in consent.text
+        assert 'name="csrf_token"' in consent.text
         from html import unescape
 
         assert "default-src 'none'" in unescape(consent.text)
@@ -105,8 +141,8 @@ def settings(**changes):
 
 
 async def test_native_storage_preserves_registration_and_encrypts_state(monkeypatch, tmp_path):
-    from fastmcp.server.auth.oidc_proxy import OIDCConfiguration
     from fastmcp.server.auth.oauth_proxy import proxy
+    from fastmcp.server.auth.oidc_proxy import OIDCConfiguration
     from mcp.shared.auth import OAuthClientInformationFull
     from pydantic import AnyUrl
 
@@ -190,9 +226,7 @@ def test_incomplete_configuration_fails_closed(monkeypatch, changes):
 def test_principal_uses_issuer_subject_without_toolgroup_dependency(monkeypatch, issuer):
     monkeypatch.setattr(OAuth, "Env", settings())
     user, service = service_fixture()
-    token = SimpleNamespace(
-        claims={"iss": issuer, "sub": "stable-sub", "email": "ignored@example.invalid"}
-    )
+    token = SimpleNamespace(claims={"iss": issuer, "sub": "stable-sub", "email": "ignored@example.invalid"})
     result = OAuth.resolve_principal(token, service)
     assert result["user_or_bot"] is user
     assert "tool_group" not in result

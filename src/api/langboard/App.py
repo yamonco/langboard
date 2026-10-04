@@ -130,5 +130,7 @@ class App:
             for app in (self.mcp_http_app, *self.mcp_profile_apps.values()):
                 await stack.enter_async_context(app.router.lifespan_context(app))
             if self.mcp_oauth_http_app is not None:
-                await stack.enter_async_context(self.mcp_oauth_http_app.router.lifespan_context(self.mcp_oauth_http_app))
+                await stack.enter_async_context(
+                    self.mcp_oauth_http_app.router.lifespan_context(self.mcp_oauth_http_app)
+                )
             yield
