@@ -4,14 +4,12 @@ import { useTranslation } from "react-i18next";
 import { Navigate, useLocation } from "react-router";
 import { DashboardStyledLayout } from "@/components/Layout";
 import Box from "@/components/base/Box";
-import Button from "@/components/base/Button";
 import Skeleton from "@/components/base/Skeleton";
 import Flex from "@/components/base/Flex";
 import BoardFloatingNavigation from "@/pages/BoardPage/components/board/BoardFloatingNavigation";
 import IconComponent from "@/components/base/IconComponent";
 import Toast from "@/components/base/Toast";
 import { ROUTES } from "@/core/routing/constants";
-import ChatSidebar from "@/pages/BoardPage/components/chat/ChatSidebar";
 import setupApiErrorHandler from "@/core/helpers/setupApiErrorHandler";
 import useIsBoardChatAvailableHandlers from "@/controllers/socket/board/chat/useIsBoardChatAvailableHandlers";
 import { useSocket } from "@/core/providers/SocketProvider";
@@ -54,7 +52,6 @@ import useBoardBotCronUnscheduledHandlers from "@/controllers/socket/board/botSc
 import useBoardGraphApprovalDeletedHandlers from "@/controllers/socket/board/graphApprovals/useBoardGraphApprovalDeletedHandlers";
 import useBoardGraphApprovalRequestedHandlers from "@/controllers/socket/board/graphApprovals/useBoardGraphApprovalRequestedHandlers";
 import useBoardGraphApprovalUpdatedHandlers from "@/controllers/socket/board/graphApprovals/useBoardGraphApprovalUpdatedHandlers";
-import { getBoardChatStore } from "@/core/stores/BoardChatStore";
 import { useWorkbenchContextOpen } from "@/core/stores/UserSettingsStore";
 import ProjectExplorerSidebar from "@/pages/DashboardPage/components/ProjectExplorerSidebar";
 import {
@@ -65,6 +62,7 @@ import {
 } from "@/pages/DashboardPage/components/WorkbenchCommands";
 import { closeProject } from "@/pages/DashboardPage/components/OpenCardsStore";
 
+const ChatSidebar = lazy(() => import("@/pages/BoardPage/components/chat/ChatSidebar"));
 const BoardCardPage = lazy(() => import("@/pages/BoardPage/BoardCardPage"));
 const BoardSettingsPage = lazy(() => import("@/pages/BoardPage/BoardSettingsPage"));
 const BoardGraphPage = lazy(() => import("@/pages/BoardPage/BoardGraphPage"));
@@ -92,7 +90,7 @@ const getCurrentPage = (pageRoute?: string): TBoardViewType => {
 };
 
 type TBoardSidePanel = "botScope" | "switchProject";
-type TWorkbenchContext = "explorer" | "my-work" | "changes" | "activity" | "relations" | "outline" | "wiki";
+type TWorkbenchContext = "explorer" | "my-work" | "changes" | "activity" | "relations" | "outline" | "wiki" | "chat";
 
 const BoardProxy = memo((): React.JSX.Element => {
     const { setPageAliasRef } = usePageHeader();
@@ -196,6 +194,7 @@ function BoardProxyDisplay({ pageRoute, isFetching, isProjectLoading, project }:
     const navigate = usePageNavigateRef();
     const [isCardExpanded, setIsCardExpanded] = useState(false);
     const [activeSidePanel, setActiveSidePanel] = useState<TBoardSidePanel>();
+    const [chatPanelOpened, setChatPanelOpened] = useState(false);
     const [workbenchContextMode, setWorkbenchContextMode] = useState<TWorkbenchContext>("explorer");
     const workbenchContextTitle = {
         explorer: t("common.Explorer"),
@@ -205,6 +204,7 @@ function BoardProxyDisplay({ pageRoute, isFetching, isProjectLoading, project }:
         relations: t("dashboard.Relations"),
         outline: t("dashboard.Outline"),
         wiki: t("board.Wiki"),
+        chat: t("project.Chat with AI"),
     }[workbenchContextMode];
     const [isContextOpen, setIsContextOpen] = useWorkbenchContextOpen(currentUser?.uid);
     const [isMobile, setIsMobile] = useState(window.innerWidth < ScreenMap.size.md);
@@ -227,6 +227,7 @@ function BoardProxyDisplay({ pageRoute, isFetching, isProjectLoading, project }:
     const showWorkbenchContext = useCallback(
         (mode: TWorkbenchContext) => {
             setWorkbenchContextMode(mode);
+            if (mode === "chat") setChatPanelOpened(true);
             if (!isMobile) setIsContextOpen(true);
             setActiveSidePanel(isMobile ? "switchProject" : undefined);
         },
@@ -248,16 +249,8 @@ function BoardProxyDisplay({ pageRoute, isFetching, isProjectLoading, project }:
             window.removeEventListener(WORKBENCH_OPEN_RELATIONS_EVENT, openRelations);
         };
     }, [toggleSwitchProject, showWorkbenchContext]);
-    const {
-        boardViewType,
-        selectCardViewType,
-        chatResizableSidebar,
-        chatSidebarRef,
-        boardChat,
-        setBoardViewType,
-        setChatResizableSidebar,
-        setBoardChat,
-    } = useBoardController();
+    const { boardViewType, selectCardViewType, chatSidebarRef, boardChat, setBoardViewType, setChatResizableSidebar, setBoardChat } =
+        useBoardController();
     const isCardPage = !!pageRoute && !["graph", "wiki", "settings"].includes(pageRoute);
     // BoardPage owns fetching; the shell only observes its snapshot for the card title.
     const { data: boardCardsData } = useGetCards({ project_uid: project.uid }, { enabled: false });
@@ -283,18 +276,14 @@ function BoardProxyDisplay({ pageRoute, isFetching, isProjectLoading, project }:
                             projectUID: project.uid,
                         });
                         setChatResizableSidebar(() => ({
-                            children: (
-                                <Suspense>
-                                    <ChatSidebar ref={chatSidebarRef} />
-                                </Suspense>
-                            ),
+                            children: null,
                             initialWidth: 280,
                             collapsableWidth: 210,
                             floatingIcon: "message-circle",
                             floatingTitle: t("project.Chat with AI"),
                             floatingFullScreen: true,
                             widthCssVariable: "--board-chat-sidebar-width",
-                            hidden: window.innerWidth < ScreenMap.size.md || getBoardChatStore().isChatHidden(project.uid),
+                            hidden: true,
                         }));
                     } else {
                         setBoardChat(undefined);
@@ -496,17 +485,8 @@ function BoardProxyDisplay({ pageRoute, isFetching, isProjectLoading, project }:
     }, [pageRoute]);
 
     useEffect(() => {
-        setChatResizableSidebar((prev) => {
-            if (!prev) {
-                return prev;
-            }
-
-            return {
-                ...prev,
-                hidden: isMobile ? true : getBoardChatStore().isChatHidden(project.uid),
-            };
-        });
-    }, [isMobile, project, setChatResizableSidebar]);
+        if (!boardChat && workbenchContextMode === "chat") setWorkbenchContextMode("explorer");
+    }, [boardChat, workbenchContextMode]);
 
     const headerNavs: IHeaderNavItem[] = [
         {
@@ -558,33 +538,6 @@ function BoardProxyDisplay({ pageRoute, isFetching, isProjectLoading, project }:
             hidden: !!selectCardViewType && !!currentUser && currentUser.is_admin,
         },
     ];
-    const floatingNavs: IBoardFloatingNavItem[] = [
-        ...(boardChat && chatResizableSidebar
-            ? [
-                  {
-                      name: t("project.Chat with AI"),
-                      icon: "message-circle",
-                      active: !chatResizableSidebar.hidden,
-                      hidden: !!selectCardViewType,
-                      onClick: () => {
-                          setChatResizableSidebar((prev) => {
-                              if (!prev) {
-                                  return prev;
-                              }
-
-                              const hidden = !prev.hidden;
-                              if (!isMobile) {
-                                  getBoardChatStore().setChatVisible(project.uid, !hidden);
-                              }
-
-                              return { ...prev, hidden };
-                          });
-                      },
-                  } satisfies IBoardFloatingNavItem,
-              ]
-            : []),
-    ];
-
     let PageComponent;
     let SkeletonComponent;
     // Route-backed pages must win during the render that observes a location
@@ -682,6 +635,13 @@ function BoardProxyDisplay({ pageRoute, isFetching, isProjectLoading, project }:
                         onClick: () => showWorkbenchContext("wiki"),
                         active: isWorkbenchContextVisible && workbenchContextMode === "wiki",
                     },
+                    {
+                        label: t("project.Chat with AI"),
+                        icon: "message-circle",
+                        onClick: () => showWorkbenchContext("chat"),
+                        active: workbenchContextMode === "chat" && isWorkbenchContextVisible,
+                        hidden: !boardChat || !!selectCardViewType,
+                    },
                     ...headerNavs.map((nav, index) => ({
                         icon: ["columns-3", "notebook-pen", "network", "history", "settings", "bot"][index],
                         label: String(nav.name),
@@ -692,51 +652,67 @@ function BoardProxyDisplay({ pageRoute, isFetching, isProjectLoading, project }:
                     })),
                 ]}
                 workbenchContext={
-                    isBotScopeOpened ? (
-                        <BoardBotScopeSidebar project={project} />
-                    ) : workbenchContextMode === "explorer" ? (
-                        <ProjectExplorerSidebar currentProject={project} onNavigate={() => setActiveSidePanel(undefined)} />
-                    ) : (
-                        <div
-                            data-workbench-command-context={workbenchContextMode}
-                            tabIndex={-1}
-                            role="region"
-                            aria-label={workbenchContextTitle}
-                            className="h-full outline-none"
-                        >
-                            <Suspense fallback={<Skeleton className="m-3 h-24" />}>
-                                {workbenchContextMode === "my-work" ? (
-                                    <div className="h-full overflow-y-auto">
-                                        <MyWorkSidebar
-                                            compact
-                                            projectUID={project.uid}
+                    <div className="size-full">
+                        {chatPanelOpened && boardChat && (
+                            <div
+                                data-workbench-command-context="chat"
+                                hidden={workbenchContextMode !== "chat" || isBotScopeOpened}
+                                role="region"
+                                aria-label={t("project.Chat with AI")}
+                                className="h-full"
+                            >
+                                <Suspense fallback={<Skeleton className="m-3 h-24" />}>
+                                    <ChatSidebar ref={chatSidebarRef} />
+                                </Suspense>
+                            </div>
+                        )}
+                        {isBotScopeOpened ? (
+                            <BoardBotScopeSidebar project={project} />
+                        ) : workbenchContextMode === "explorer" ? (
+                            <ProjectExplorerSidebar currentProject={project} onNavigate={() => setActiveSidePanel(undefined)} />
+                        ) : (
+                            <div
+                                data-workbench-command-context={workbenchContextMode}
+                                hidden={workbenchContextMode === "chat"}
+                                tabIndex={-1}
+                                role="region"
+                                aria-label={workbenchContextTitle}
+                                className="h-full outline-none"
+                            >
+                                <Suspense fallback={<Skeleton className="m-3 h-24" />}>
+                                    {workbenchContextMode === "chat" ? null : workbenchContextMode === "my-work" ? (
+                                        <div className="h-full overflow-y-auto">
+                                            <MyWorkSidebar
+                                                compact
+                                                projectUID={project.uid}
+                                                onNavigate={() => isMobile && setActiveSidePanel(undefined)}
+                                            />
+                                        </div>
+                                    ) : workbenchContextMode === "changes" ? (
+                                        <BoardChangesSidebar projectUID={project.uid} onNavigate={() => isMobile && setActiveSidePanel(undefined)} />
+                                    ) : workbenchContextMode === "activity" && currentUser ? (
+                                        <ActivityList
+                                            key={project.uid}
+                                            className="h-full"
+                                            form={{ listType: "ActivityModel", type: "project", project_uid: project.uid }}
+                                            currentUser={currentUser}
+                                            outerClassName="h-full px-3"
+                                        />
+                                    ) : workbenchContextMode === "relations" ? (
+                                        <BoardRelationsSidebar projectUID={project.uid} cardUID={activeCard?.uid} />
+                                    ) : workbenchContextMode === "outline" ? (
+                                        <BoardOutlineSidebar
+                                            cardUID={activeCard?.uid}
+                                            onRelations={() => showWorkbenchContext("relations")}
                                             onNavigate={() => isMobile && setActiveSidePanel(undefined)}
                                         />
-                                    </div>
-                                ) : workbenchContextMode === "changes" ? (
-                                    <BoardChangesSidebar projectUID={project.uid} onNavigate={() => isMobile && setActiveSidePanel(undefined)} />
-                                ) : workbenchContextMode === "activity" && currentUser ? (
-                                    <ActivityList
-                                        key={project.uid}
-                                        className="h-full"
-                                        form={{ listType: "ActivityModel", type: "project", project_uid: project.uid }}
-                                        currentUser={currentUser}
-                                        outerClassName="h-full px-3"
-                                    />
-                                ) : workbenchContextMode === "relations" ? (
-                                    <BoardRelationsSidebar projectUID={project.uid} cardUID={activeCard?.uid} />
-                                ) : workbenchContextMode === "outline" ? (
-                                    <BoardOutlineSidebar
-                                        cardUID={activeCard?.uid}
-                                        onRelations={() => showWorkbenchContext("relations")}
-                                        onNavigate={() => isMobile && setActiveSidePanel(undefined)}
-                                    />
-                                ) : (
-                                    <BoardWikiSidebar projectUID={project.uid} onNavigate={() => setActiveSidePanel(undefined)} />
-                                )}
-                            </Suspense>
-                        </div>
-                    )
+                                    ) : (
+                                        <BoardWikiSidebar projectUID={project.uid} onNavigate={() => setActiveSidePanel(undefined)} />
+                                    )}
+                                </Suspense>
+                            </div>
+                        )}
+                    </div>
                 }
                 workbenchContextHidden={!isContextOpen || isMobile || !!selectCardViewType}
                 mobileWorkbenchContext={
@@ -753,20 +729,12 @@ function BoardProxyDisplay({ pageRoute, isFetching, isProjectLoading, project }:
                                         relations: "network",
                                         outline: "list-tree",
                                         wiki: "notebook-pen",
+                                        chat: "message-circle",
                                     }[workbenchContextMode],
                               onClose: () => setActiveSidePanel(undefined),
                           }
                         : undefined
                 }
-                resizableSidebar={{
-                    // Keep the workspace mounted while the socket resolves chat availability.
-                    children: null,
-                    initialWidth: 280,
-                    collapsableWidth: 210,
-                    ...chatResizableSidebar,
-                    floatingHidden: true,
-                    hidden: isMobile || !!selectCardViewType || !chatResizableSidebar || !!chatResizableSidebar.hidden,
-                }}
                 className="!p-0"
             >
                 {!isProjectLoading && currentUser && project ? (
@@ -811,25 +779,9 @@ function BoardProxyDisplay({ pageRoute, isFetching, isProjectLoading, project }:
                                     project={project}
                                     currentUser={currentUser}
                                     dockEnabled={renderedViewType === "board"}
-                                    items={floatingNavs.map((nav, index) => ({
-                                        key: index,
-                                        label: nav.name,
-                                        icon: nav.icon,
-                                        badge: nav.badge,
-                                        active: nav.active,
-                                        hidden: nav.hidden,
-                                        onClick: nav.onClick,
-                                    }))}
+                                    items={[]}
                                 />
                             )}
-                            <BoardMobileChatOverlay
-                                isOpened={isMobile && !selectCardViewType && !!chatResizableSidebar && !chatResizableSidebar.hidden}
-                                onClose={() => {
-                                    setChatResizableSidebar((prev) => (prev ? { ...prev, hidden: true } : prev));
-                                }}
-                            >
-                                {chatResizableSidebar?.children}
-                            </BoardMobileChatOverlay>
                         </Box>
                     </Flex>
                 ) : (
@@ -837,29 +789,6 @@ function BoardProxyDisplay({ pageRoute, isFetching, isProjectLoading, project }:
                 )}
             </DashboardStyledLayout>
         </>
-    );
-}
-
-function BoardMobileChatOverlay({
-    children,
-    isOpened,
-    onClose,
-}: {
-    children: React.ReactNode;
-    isOpened: bool;
-    onClose: () => void;
-}): React.JSX.Element | null {
-    if (!isOpened) {
-        return null;
-    }
-
-    return (
-        <Box className="fixed inset-x-0 bottom-[4.75rem] top-11 z-50 overflow-hidden border-t bg-background shadow-2xl md:hidden">
-            <Button variant="ghost" size="icon-sm" className="absolute right-2 top-2 z-10" onClick={onClose}>
-                <IconComponent icon="x" size="5" />
-            </Button>
-            {children}
-        </Box>
     );
 }
 
@@ -876,11 +805,6 @@ function BoardBotScopeSidebar({ project }: { project: Project.TModel }): React.J
             <BoardBotScopeList target={{ target_table: "project", target: project }} className="h-full pb-3" />
         </Box>
     );
-}
-
-interface IBoardFloatingNavItem extends IHeaderNavItem {
-    icon: string;
-    badge?: React.ReactNode;
 }
 
 export default BoardProxy;
