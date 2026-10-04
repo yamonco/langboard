@@ -322,6 +322,7 @@ function DefaultSelectInput({ input, disabled }: { input: ISelectAgentFormInput;
 }
 
 function DefaultIntegerInput({ input, disabled }: { input: IIntegerAgentFormInput; disabled?: bool }) {
+    const [t] = useTranslation();
     const { selectedProvider, valuesRef, setValue, required, isValidating, setInputRef, collaborationType, uid, section } = useBotValueDefaultInput();
     const inputID = useId();
     const collaborationField = `${selectedProvider}:${input.name}`;
