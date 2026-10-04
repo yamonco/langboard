@@ -309,28 +309,44 @@ async def test_card_policy_resource_reuses_current_query_and_rejects_ungranted_r
         mcp_auth_context.reset(token)
 
 
-async def test_modern_page_bounds_reject_invalid_arguments_before_domain_dispatch(monkeypatch):
+@pytest.mark.parametrize(
+    ("name", "parameter", "maximum"),
+    [
+        ("list_project_cards", "limit", 25),
+        ("list_project_wikis", "limit", 50),
+        ("list_wiki_revisions", "limit", 50),
+        ("read_wiki_content", "limit", 16000),
+        ("read_wiki_revision", "limit", 16000),
+        ("get_shared_user_activities", "limit", 50),
+        ("get_shared_user_activities", "max_chars", 8000),
+    ],
+)
+async def test_modern_page_bounds_reject_invalid_arguments_before_domain_dispatch(name, parameter, maximum):
+    from inspect import Parameter, Signature
     from fastmcp.tools import Tool
     from langboard.mcp_integration.Providers import with_read_page_bounds
 
     calls = []
 
-    async def read(limit: int = 20) -> dict:
-        calls.append(limit)
-        return {"limit": limit}
+    async def read(**kwargs) -> dict:
+        calls.append(kwargs[parameter])
+        return kwargs
+
+    read.__signature__ = Signature([Parameter(parameter, Parameter.KEYWORD_ONLY, default=20, annotation=int)])
+    read.__annotations__ = {parameter: int, "return": dict}
 
     server = _create_fastmcp()
-    server.add_tool(Tool.from_function(with_read_page_bounds("list_project_cards", read), name="list_project_cards"))
-    token = mcp_auth_context.set({"tool_group": SimpleNamespace(activated_at=object(), tools=["list_project_cards"])})
+    server.add_tool(Tool.from_function(with_read_page_bounds(name, read), name=name))
+    token = mcp_auth_context.set({"tool_group": SimpleNamespace(activated_at=object(), tools=[name])})
     try:
         async with Client(server) as client:
-            for invalid in (0, 26, True, 1.5):
+            for invalid in (0, maximum + 1, True, 1.5):
                 with pytest.raises(ToolError):
-                    await client.call_tool("list_project_cards", {"limit": invalid})
+                    await client.call_tool(name, {parameter: invalid})
             assert calls == []
-            for valid in (1, 25):
-                result = await client.call_tool("list_project_cards", {"limit": valid})
-                assert result.structured_content == {"limit": valid}
-            assert calls == [1, 25]
+            for valid in (1, maximum):
+                result = await client.call_tool(name, {parameter: valid})
+                assert result.structured_content == {parameter: valid}
+            assert calls == [1, maximum]
     finally:
         mcp_auth_context.reset(token)
