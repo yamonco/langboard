@@ -103,6 +103,8 @@ jobs:
 
       - run: yarn playwright test -c playwright.workbench.config.ts
         working-directory: src/ui
+      - run: node --experimental-strip-types --test src/controllers/api/dashboard/projectWorkloadSubscriptions.test.ts
+        working-directory: src/ui
       - run: yarn playwright test -c playwright.explorer-recovery.config.ts
         working-directory: src/ui
       - run: yarn playwright test -c playwright.card-description-static.config.ts

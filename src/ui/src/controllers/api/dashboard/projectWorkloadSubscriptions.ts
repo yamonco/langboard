@@ -24,8 +24,8 @@ export function acquireProjectWorkload(client: QueryClient, uids: string[], sock
         state = {
             projects,
             offOpen: socket.listenOpen(() => {
-                socket.subscribe([...projects.keys()]);
-                void client.invalidateQueries({ queryKey: ["get-dashboard-projects"] });
+                // Close the reconnect gap only after the server confirms topic ownership.
+                if (projects.size) socket.subscribe([...projects.keys()], () => refresh());
             }),
         };
         clients.set(client, state);
