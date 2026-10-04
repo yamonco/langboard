@@ -85,7 +85,7 @@ const BoardColumnCardRelationship = memo(({ attributes, compact = false }: IBoar
                         )}
                         onClick={(event) => {
                             event.stopPropagation();
-                            event.currentTarget.dispatchEvent(new CustomEvent(BOARD_CARD_RELATIONSHIP_PREVIEW_EVENT, { bubbles: true }));
+                            target.dispatchEvent(new CustomEvent(BOARD_CARD_RELATIONSHIP_PREVIEW_EVENT, { bubbles: true }));
                         }}
                         {...attributes}
                     >
@@ -177,7 +177,7 @@ const BoardColumnCardRelationshipButton = memo(({ type, attributes, compact, has
     const [isSaving, setIsSaving] = useState(false);
     const [holdProgress, setHoldProgress] = useState(0);
     const [isHoldArmed, setIsHoldArmed] = useState(false);
-    const holdRafRef = useRef<number>();
+    const holdRafRef = useRef<number | undefined>(undefined);
     const { mutateAsync: updateCardRelationships } = useUpdateCardRelationships({ interceptToast: true });
 
     const stopHold = useCallback(() => {
@@ -193,6 +193,7 @@ const BoardColumnCardRelationshipButton = memo(({ type, attributes, compact, has
             if (event.pointerType === "touch") return;
             stopHold();
             setIsHoldArmed(true);
+            const target = event.currentTarget;
             const startTime = performance.now();
             const advance = (now: number) => {
                 const elapsed = now - startTime;
@@ -208,6 +209,10 @@ const BoardColumnCardRelationshipButton = memo(({ type, attributes, compact, has
         },
         [stopHold]
     );
+
+    useEffect(() => () => {
+        if (holdRafRef.current !== undefined) cancelAnimationFrame(holdRafRef.current);
+    }, []);
 
     useEffect(() => {
         const button = buttonRef.current;
