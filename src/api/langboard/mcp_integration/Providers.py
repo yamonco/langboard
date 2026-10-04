@@ -223,6 +223,11 @@ READ_PAGE_BOUNDS = {
     "get_card_bundle": {"comments_limit": MAX_COMMENT_LIMIT, "section_limit": MAX_SECTION_LIMIT},
     "list_project_cards": {"limit": 25},
     "get_public_card_metadata": {"limit": 25},
+    "list_project_wikis": {"limit": 50},
+    "list_wiki_revisions": {"limit": 50},
+    "read_wiki_content": {"limit": 16000},
+    "read_wiki_revision": {"limit": 16000},
+    "get_shared_user_activities": {"limit": 50, "max_chars": 8000},
 }
 
 
