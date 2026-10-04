@@ -31,13 +31,11 @@ function Conversation(): React.JSX.Element {
         }
 
         isFetchingRef.current = true;
-        await new Promise((resolve) => {
-            setTimeout(async () => {
-                await mutateAsync({ session_uid: currentSessionUID });
-                isFetchingRef.current = false;
-                resolve(null);
-            }, 2500);
-        });
+        try {
+            await mutateAsync({ session_uid: currentSessionUID });
+        } finally {
+            isFetchingRef.current = false;
+        }
     };
 
     useEffect(() => {
@@ -87,8 +85,13 @@ function Conversation(): React.JSX.Element {
 
             lastChatListHeightRef.current = conversationRef.current!.scrollHeight;
             if (conversationRef.current!.scrollTop <= LOADING_ELEMENT_MIDDLE_Y) {
-                await nextPage();
-                setIsFetched(true);
+                try {
+                    await nextPage();
+                    setIsFetched(true);
+                } catch {
+                    // The API error handler reports the failure; the next scroll can retry.
+                    setIsFetched(false);
+                }
             }
         };
 
