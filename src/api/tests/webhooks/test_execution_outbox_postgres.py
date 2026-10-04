@@ -178,8 +178,10 @@ def test_delivery_lifecycle_reaches_terminal_states_and_recovers(monkeypatch: py
     monkeypatch.setattr(DbEngine, "get_readonly_engine", lambda: engine)
 
     outcomes: list[Exception | None] = []
+    posted_webhooks: list[str] = []
 
     async def fake_post(model, webhook_uid):
+        posted_webhooks.append(webhook_uid)
         if outcomes:
             failure = outcomes.pop(0)
             if failure is not None:
@@ -251,13 +253,14 @@ def test_delivery_lifecycle_reaches_terminal_states_and_recovers(monkeypatch: py
                     )
                 },
             )
-        binding_row = None
-        with engine.connect() as connection:
-            binding_row = connection.execute(
-                text("SELECT id, updated_at, webhook_uid FROM project_execution_binding WHERE id = 8")
-            ).one()
-        frozen_binding = SimpleNamespace(id=binding_row[0], updated_at=binding_row[1], webhook_uid=binding_row[2])
-        monkeypatch.setattr(worker, "binding_for_project", lambda uid: frozen_binding)
+        def read_current_binding(uid):
+            with engine.connect() as connection:
+                row = connection.execute(
+                    text("SELECT id, updated_at, webhook_uid FROM project_execution_binding WHERE project_id = 7")
+                ).one()
+            return SimpleNamespace(id=row[0], updated_at=row[1], webhook_uid=row[2])
+
+        monkeypatch.setattr(worker, "binding_for_project", read_current_binding)
 
         # Completion 1: success reaches the terminal delivered state.
         assert asyncio_run(worker.drain_one())
@@ -340,6 +343,34 @@ def test_delivery_lifecycle_reaches_terminal_states_and_recovers(monkeypatch: py
             ).one()
         assert state == "pending"
         assert attempts == 0
+
+        # Changing a committed destination must persist a block, never POST to either target.
+        for assignment in (
+            "id = 9",
+            "updated_at = '2026-09-24T01:00:00+00:00'",
+            "webhook_uid = 'hook-41'",
+        ):
+            with engine.begin() as connection:
+                connection.execute(text(
+                    "UPDATE project_execution_binding SET id = 8, "
+                    "updated_at = '2026-09-24T00:00:00+00:00', webhook_uid = 'hook-40'"
+                ))
+                connection.execute(text(f"UPDATE project_execution_binding SET {assignment}"))
+                connection.execute(text(
+                    "UPDATE execution_outbox SET state = 'pending', last_error = NULL, "
+                    "attempt_count = 0, lease_until = NULL"
+                ))
+                frozen_payload = connection.execute(text("SELECT payload_json FROM execution_outbox")).scalar_one()
+            posts_before = len(posted_webhooks)
+            assert asyncio_run(worker.drain_one())
+            with engine.connect() as connection:
+                state, error, attempts, payload = connection.execute(text(
+                    "SELECT state, last_error, attempt_count, payload_json FROM execution_outbox"
+                )).one()
+            assert (state, error, attempts) == ("blocked", "stale_binding", 0)
+            assert payload == frozen_payload
+            assert len(posted_webhooks) == posts_before
+            assert not asyncio_run(worker.drain_one())
     finally:
         engine.dispose()
         with admin.begin() as connection:
