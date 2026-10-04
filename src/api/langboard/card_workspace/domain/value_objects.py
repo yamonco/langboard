@@ -424,3 +424,7 @@ def require_public_metadata_key(key: str) -> str:
     if not is_public_metadata_key(normalized):
         raise ValueError("Metadata key is reserved or secret-like")
     return normalized
+
+
+class CardUnavailableError(ValueError):
+    """The requested card is absent from the authorized project query."""

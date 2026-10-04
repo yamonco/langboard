@@ -52,6 +52,7 @@ from ..card_workspace.domain import (
     CardBundleSection,
     CardGraphEdge,
     CardGraphNewCard,
+    CardUnavailableError,
     ChecklistProjectionItem,
     CommentPage,
     DescriptionPatchConflict,
@@ -584,15 +585,18 @@ def get_card_bundle(
 ) -> CardBundleResponse:
     """Read an agent-friendly card bundle with bounded continuation."""
 
-    result = query_card_bundle(
-        _adapter(user_or_bot, service),
-        project_uid,
-        card_uid,
-        CommentPage(limit=comments_limit, cursor=comments_cursor),
-        SectionPage(limit=section_limit, cursor=section_cursor),
-        include,
-        profile,
-    )
+    try:
+        result = query_card_bundle(
+            _adapter(user_or_bot, service),
+            project_uid,
+            card_uid,
+            CommentPage(limit=comments_limit, cursor=comments_cursor),
+            SectionPage(limit=section_limit, cursor=section_cursor),
+            include,
+            profile,
+        )
+    except CardUnavailableError as exc:
+        raise ValidationError("CARD_UNAVAILABLE: Card not found in this project. Do not retry unchanged.") from exc
     if result.card is not None:
         params = _get_card_in_project(project_uid, card_uid)
         if params and not params[1].is_linked_resource:
