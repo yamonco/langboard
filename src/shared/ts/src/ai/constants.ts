@@ -24,6 +24,7 @@ export const ALLOWED_ALL_IPS_BY_PLATFORMS: Record<EBotPlatform, EBotPlatformRunn
 export const AGENT_MODELS = [
     "OpenAI",
     "OpenAI Compatible",
+    "Z.ai",
     "Z.ai Coding Plan",
     "OpenRouter",
     "LiteLLM",
@@ -87,6 +88,7 @@ export const AGENT_PERMISSION_LEVEL_APPROVAL_POLICY: Record<EAgentPermissionLeve
 export const OPENAI_COMPATIBLE_PROVIDERS = {
     OpenAI: "https://api.openai.com/v1",
     "OpenAI Compatible": "",
+    "Z.ai": "https://api.z.ai/api/paas/v4",
     "Z.ai Coding Plan": "https://api.z.ai/api/coding/paas/v4",
     OpenRouter: "https://openrouter.ai/api/v1",
     LiteLLM: "",

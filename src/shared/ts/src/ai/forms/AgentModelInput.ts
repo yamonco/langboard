@@ -51,6 +51,7 @@ export const getAgentModelInputForm = (model: TAgentModelName, envs: Record<stri
             break;
         case "OpenAI":
         case "OpenAI Compatible":
+        case "Z.ai":
         case "Z.ai Coding Plan":
         case "OpenRouter":
         case "LiteLLM":

@@ -59,6 +59,15 @@ function DefaultStringInput({ input, disabled }: { input: IStringAgentFormInput;
     const [isLoadingModels, setIsLoadingModels] = useState(false);
     const [modelError, setModelError] = useState(false);
     const [catalogValue, setCatalogValue] = useState("");
+    const { updateValue: updateModelValue } = useCollaborativeText({
+        collaborationType,
+        uid,
+        section,
+        field: collaborationField,
+        defaultValue,
+        disabled: disabled || !canDiscoverModels,
+        onValueChange: canDiscoverModels ? setValue(input.name) : undefined,
+    });
     const refreshModels = async () => {
         setIsLoadingModels(true);
         setModelError(false);
@@ -119,12 +128,7 @@ function DefaultStringInput({ input, disabled }: { input: IStringAgentFormInput;
                             const value = event.target.value;
                             setCatalogValue(value);
                             setValue(input.name)(value);
-                            const control = document.getElementById(inputID) as HTMLInputElement | null;
-                            if (control) {
-                                const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-                                setter?.call(control, value);
-                                control.dispatchEvent(new Event("input", { bubbles: true }));
-                            }
+                            updateModelValue(value);
                         }}
                     >
                         <option value="">{t("bot.agent.Choose a model")}</option>
