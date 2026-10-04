@@ -92,7 +92,10 @@ async def execute_mcp_tool(tool_name: str, request: Request):
             {"user_or_bot": user_or_bot, "api_key": request.scope.get("api_key"), "tool_group": tool_group}
         )
         try:
-            result = await McpServer.mcp.call_tool(tool_name, arguments)
+            server = McpServer.agent_mcp if tool_name == "list_project_cards" else McpServer.mcp
+            if server is None:
+                raise RuntimeError("Modern MCP provider is unavailable")
+            result = await server.call_tool(tool_name, arguments)
         except ValidationError as exc:
             raise ApiException.BadRequest_400(ApiErrorCode.VA0000) from exc
         except AuthorizationError as exc:

@@ -41,6 +41,7 @@ def _create_fastmcp(discovery_tools: frozenset[str] = frozenset()) -> FastMCP:
 class McpServer:
     def __init__(self):
         self.mcp = _create_fastmcp()
+        self.agent_mcp = None
         self._streamable_http_app = None
 
     def get_http_app(self, profile: str = "compatibility") -> tuple[Any, FastMCP]:
@@ -74,6 +75,8 @@ class McpServer:
         )
         http_app.add_middleware(McpAuthMiddleware)
 
+        if profile == "agent":
+            self.agent_mcp = app
         if profile == "compatibility":
             self.mcp = app
         return http_app, app
