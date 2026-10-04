@@ -789,13 +789,13 @@ class CardService(BaseDomainService):
         states = self.get_work_states([card for card, _ in records]) if include_work_state else {}
         for card, column in records:
             description = card.description.content
-            if len(description) > self.CONTEXT_DESCRIPTION_MAX_LENGTH:
+            if not include_work_state and len(description) > self.CONTEXT_DESCRIPTION_MAX_LENGTH:
                 description = f"{description[: self.CONTEXT_DESCRIPTION_MAX_LENGTH - 3]}..."
             cards.append(
                 {
                     "uid": card.get_uid(),
                     "title": card.title,
-                    "description": {"content": description},
+                    "description": description if include_work_state else {"content": description},
                     "project_column_name": column.name,
                     **(
                         {"project_column_uid": column.get_uid(), "work_state": states[card.id]}
