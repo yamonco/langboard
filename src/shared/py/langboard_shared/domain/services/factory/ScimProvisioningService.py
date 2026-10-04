@@ -34,6 +34,54 @@ class ScimProvisioningService(BaseDomainService):
     def SCIM_LIST_SCHEMA(self) -> str:
         return "urn:ietf:params:scim:api:messages:2.0:ListResponse"
 
+    def employee_policy_status(self) -> str:
+        """Return configured only when an operator explicitly selected SCIM groups."""
+        return "configured" if Env.MCP_EMPLOYEE_GROUP_IDS and (Env.SCIM_ISSUER or "").strip() else "unknown"
+
+    def is_employee(self, user: User) -> bool | None:
+        """Classify a user from explicit SCIM group membership; never infer from email/name."""
+        if self.employee_policy_status() != "configured" or user.deleted_at is not None or not user.activated_at:
+            return None if self.employee_policy_status() != "configured" else False
+        identity_link = self.repo.user_identity_link.get_by_user_provider(user, IdentityProvider.Scim, consistent=True)
+        expected_issuer = (Env.SCIM_ISSUER or "").strip().rstrip("/")
+        if not identity_link or (identity_link.issuer or "").strip().rstrip("/") != expected_issuer:
+            return False
+        groups = self.repo.scim_group_member.get_groups_by_user(user, consistent=True)
+        configured = set(Env.MCP_EMPLOYEE_GROUP_IDS)
+        return any((group.external_id or "") in configured for _, group in groups)
+
+    def list_employees(self, *, page: int = 1, limit: int = 50) -> dict[str, Any]:
+        """Return bounded public fields for members of configured employee groups."""
+        if not 1 <= page <= 10000 or not 1 <= limit <= 50:
+            raise ValueError("page must be between 1 and 10000 and limit between 1 and 50")
+        if self.employee_policy_status() != "configured":
+            return {"policy_status": "unknown", "items": [], "page": page, "limit": limit, "has_more": False}
+        selected = self.repo.scim_group_member.get_employee_users(
+            Env.MCP_EMPLOYEE_GROUP_IDS,
+            (Env.SCIM_ISSUER or "").strip().rstrip("/"),
+            offset=(page - 1) * limit,
+            limit=limit + 1,
+        )
+        return {
+            "policy_status": "configured",
+            "items": [
+                {
+                    key: value
+                    for key, value in {
+                        "uid": user.get_uid(),
+                        "username": user.username,
+                        "firstname": user.firstname,
+                        "lastname": user.lastname,
+                    }.items()
+                    if value is not None
+                }
+                for user in selected[:limit]
+            ],
+            "page": page,
+            "limit": limit,
+            "has_more": len(selected) > limit,
+        }
+
     def resolve_user(self, identifier: str) -> User | None:
         identity_link = self._get_service(IdentityLinkService)
         user = identity_link.get_user_by_provider_external_id(

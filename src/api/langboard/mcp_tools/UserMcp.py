@@ -21,6 +21,25 @@ from ..card_workspace.application.projections import (
 from ..mcp_integration import McpRoleFilter, McpTool
 
 
+@McpTool.add(
+    "user", description="Read the current user's employee status from explicit SCIM policy; unknown if unconfigured."
+)
+def get_employee_status(user: User, service: DomainService) -> dict[str, bool | str | None]:
+    """Classification never grants authorization."""
+    return {
+        "policy_status": service.scim_provisioning.employee_policy_status(),
+        "is_employee": service.scim_provisioning.is_employee(user),
+    }
+
+
+@McpTool.add("user", description="List a bounded admin-only employee directory without email addresses.")
+def list_employees(user: User, service: DomainService, page: int = 1, limit: int = 50) -> dict:
+    """A login or employee classification alone never grants directory access."""
+    if not user.is_admin:
+        raise PermissionError("Employee directory requires administrator access")
+    return service.scim_provisioning.list_employees(page=page, limit=limit)
+
+
 NotificationTimeRange = Literal["3d", "7d", "1m", "all"]
 MyWorkPurpose = Literal["assigned", "mentioned", "due_soon", "overdue", "created"]
 

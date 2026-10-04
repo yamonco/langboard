@@ -48,6 +48,8 @@ READ_ONLY_TOOLS = frozenset(
         "list_wiki_revisions",
         "read_wiki_revision",
         "get_unread_notifications",
+        "get_employee_status",
+        "list_employees",
         "get_shared_user_activities",
         "search_project_people",
         "get_project_activities",
