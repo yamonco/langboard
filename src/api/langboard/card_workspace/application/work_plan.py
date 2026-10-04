@@ -4,7 +4,15 @@ from hashlib import sha256
 from json import dumps, loads
 from typing import Annotated
 from langboard_shared.core.db import DbSession
-from langboard_shared.domain.models import Card, CardMetadata, Checkitem, Checklist, Project
+from langboard_shared.domain.models import (
+    Card,
+    CardMetadata,
+    Checkitem,
+    Checklist,
+    GlobalCardRelationshipType,
+    Project,
+    ProjectColumn,
+)
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import select
 
@@ -145,7 +153,31 @@ class WorkPlanService:
             uid: {"card": c.api_response(), "checklists": service.checklist.get_api_list_by_card(c)}
             for uid, c in cards.items()
         }
+        column_ids = {cards[plan.anchor_card_uid].project_column_id} if plan.new_cards else set()
+        for proposed in plan.cardify_checkitems:
+            column = service.project_column.get_by_id_like(proposed.project_column_uid)
+            if not column or column.project_id != project.id:
+                raise ValueError("Cardification changed after review")
+            column_ids.add(column.id)
+        if column_ids:
+            with DbSession.use(readonly=False) as db:
+                db.exec(
+                    select(ProjectColumn.column("id"))
+                    .where(ProjectColumn.column("id").in_(sorted(column_ids)))
+                    .order_by(ProjectColumn.column("id"))
+                    .with_for_update()
+                ).all()
         columns = []
+        if plan.new_cards:
+            anchor_column = service.project_column.get_by_id_like(cards[plan.anchor_card_uid].project_column_id)
+            if (
+                not anchor_column
+                or anchor_column.project_id != project.id
+                or anchor_column.is_archive
+                or anchor_column.deleted_at
+            ):
+                raise ValueError("Anchor column is unavailable")
+            columns.append(anchor_column.api_response())
         cardification_items = []
         for proposed in plan.cardify_checkitems:
             item = service.checkitem.get_by_id_like(proposed.checkitem_uid)
@@ -169,11 +201,20 @@ class WorkPlanService:
             columns.append(column.api_response())
             cardification_items.append(item.api_response())
         graph = self._graph_args(plan, preview=True)
-        if plan.new_cards or plan.add_edges or plan.remove_relationship_uids:
-            service.card_relationship.preview_graph_patch(self.actor, *graph)
         graph_snapshot = sorted(service.card_relationship.repo.card_relationship.get_graph_snapshot(project))
         type_uids = [e.relationship_type_uid for e in plan.add_edges] + [row[3] for row in graph_snapshot]
         types = service.card_relationship.repo.card_relationship.get_global_relationship_types_map(type_uids)
+        if types:
+            with DbSession.use(readonly=False) as db:
+                db.exec(
+                    select(GlobalCardRelationshipType.column("id"))
+                    .where(GlobalCardRelationshipType.column("id").in_(sorted(t.id for t in types.values())))
+                    .order_by(GlobalCardRelationshipType.column("id"))
+                    .with_for_update()
+                ).all()
+            types = service.card_relationship.repo.card_relationship.get_global_relationship_types_map(type_uids)
+        if plan.new_cards or plan.add_edges or plan.remove_relationship_uids:
+            service.card_relationship.preview_graph_patch(self.actor, *graph)
         snapshot = {
             "relationship_types": [t.api_response() for _, t in sorted(types.items())],
             "cardification_items": cardification_items,
