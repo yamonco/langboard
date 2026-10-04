@@ -907,3 +907,20 @@ def test_project_card_page_resolves_policies_once_for_only_visible_stages():
     resolve.reset_mock()
     assert NativeCardWorkspaceAdapter(object(), service).get_project_card_page("p", 3, None, None).workflow_stages == {}
     resolve.assert_not_called()
+
+
+def test_project_page_resolves_only_visible_column_guidance_once():
+    items = [{"uid": str(i), "project_column_uid": "column", "project_column_name": "Doing"} for i in range(20)]
+    context = {"column": {"workflow_guidance": "Work now", "workflow_index": "unclassified | Doing"}}
+    resolve = Mock(return_value=context)
+    service = SimpleNamespace(
+        card=SimpleNamespace(get_api_page_by_project=Mock(return_value=(items, 20, None))),
+        project_column=SimpleNamespace(get_api_workflow_context=resolve),
+    )
+    page = NativeCardWorkspaceAdapter(object(), service).get_project_card_page("p", 20, None, None)
+    resolve.assert_called_once_with("p", {"column"})
+    assert page.columns == context
+    service.card.get_api_page_by_project.return_value = ([], 0, None)
+    resolve.reset_mock()
+    assert NativeCardWorkspaceAdapter(object(), service).get_project_card_page("p", 20, None, None).columns == {}
+    resolve.assert_not_called()

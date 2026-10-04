@@ -444,3 +444,18 @@ def test_project_list_compacts_repeated_workflow_without_inventing_completion():
     assert len(json.dumps(response.model_dump())) < len(json.dumps(items)) / 10
     items[0]["work_state"] = {"workflow_stage": None, "completed": None}
     assert list_project_cards(port, "p1").cards.items[0]["work_state"]["completed"] is None
+
+
+def test_project_list_column_guidance_is_not_repeated_per_card():
+    from unittest.mock import Mock
+
+    port = FakeQueryPort()
+    guidance = {"column": {"name": "Doing", "workflow_stage": None, "workflow_index": "unclassified | Doing", "workflow_guidance": "Only once"}}
+    items = [{"uid": str(i), "project_column_uid": "column", "project_column_name": "Doing"} for i in range(20)]
+    port.get_project_card_page = Mock(return_value=ProjectCardPageSource(items, 20, ("2026-01-01T00:00:00Z", "last"), {}, guidance))
+    response = list_project_cards(port, "p1", limit=20)
+    assert response.columns == guidance
+    assert response.cards.next_cursor
+    assert len(response.cards.items) == 20
+    assert response.model_dump_json().count("Only once") == 1
+    assert all(item["project_column_uid"] == "column" and "project_column_name" not in item for item in response.cards.items)

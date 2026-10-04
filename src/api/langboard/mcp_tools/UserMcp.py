@@ -12,7 +12,7 @@ from langboard_shared.domain.services import DomainService
 from langboard_shared.helpers import InfraHelper
 from langboard_shared.security import RoleFinder
 from pydantic import Field
-from ..card_workspace.application.projections import public_card_summary, public_workflow_stages
+from ..card_workspace.application.projections import pick, public_card_summary, public_column_context, public_workflow_stages
 from ..mcp_integration import McpRoleFilter, McpTool
 
 
@@ -118,8 +118,12 @@ def search_project_cards(
     keys = {card["work_state"]["workflow_stage"] for card in cards if card.get("work_state", {}).get("workflow_stage")}
     stages = service.workflow_stage.get_api_by_keys(keys) if keys else {}
     return {
-        "cards": [{**public_card_summary(card), "description": card["description"]} for card in cards],
+        "cards": [
+            {**public_card_summary(card, compact_workflow=True), **pick(card, ("description",), max_field_chars=500)}
+            for card in cards
+        ],
         "workflow_stages": public_workflow_stages(stages),
+        "columns": public_column_context(service, project_uid, cards),
     }
 
 

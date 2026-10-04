@@ -55,6 +55,8 @@ jobs:
       - run: uv sync --frozen
       - name: Registry, guidance, policy and SQLite transitions
         run: uv run --no-sync pytest -q src/api/tests/workflow_stages
+      - name: Distinct column context for card list and search
+        run: uv run --no-sync pytest -q src/api/tests/card_workspace/test_queries.py src/api/tests/card_workspace/test_native_adapter.py src/api/tests/mcp_integration/test_user_mcp.py src/shared/py/langboard_shared/domain/services/factory/ProjectColumnService_test.py
       - name: PostgreSQL transitions and rollback
         env:
           LANGBOARD_EFFECT_TEST_DATABASE: postgresql+psycopg://postgres:postgres@localhost:5432/langboard_test

@@ -66,6 +66,29 @@ class ProjectColumnService(BaseDomainService):
 
         return columns
 
+    def get_api_workflow_context(self, project: TProjectParam, column_uids: set[str]) -> dict[str, dict[str, Any]]:
+        """Resolve only referenced columns in one batch, preserving canonical guidance."""
+        if not column_uids:
+            return {}
+        project_id = InfraHelper.convert_id(project)
+        columns = [
+            column
+            for column in InfraHelper.get_all_by(
+                ProjectColumn, "id", [InfraHelper.convert_id(uid) for uid in column_uids]
+            )
+            if column.project_id == project_id
+        ]
+        guidance = self.get_workflow_guidance(columns)
+        return {
+            column.get_uid(): {
+                "name": column.name,
+                "workflow_stage": column.workflow_stage,
+                "workflow_index": f"{column.workflow_stage or 'unclassified'} | {column.name}",
+                **guidance[column.id],
+            }
+            for column in columns
+        }
+
     def get_workflow_guidance(self, columns: Sequence[ProjectColumn]) -> dict[SnowflakeID, dict[str, Any]]:
         """Resolve canonical registry guidance once per batch, retaining both sources.
 

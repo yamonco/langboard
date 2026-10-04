@@ -18,7 +18,7 @@ from ..application.ports import (
     CommentPageSource,
     ProjectCardPageSource,
 )
-from ..application.projections import public_workflow_stages
+from ..application.projections import public_column_context, public_workflow_stages
 from ..domain import (
     MAX_METADATA_VALUE_CHARS,
     CardDescriptionPatch,
@@ -295,7 +295,9 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
         }
         stages = self._service.workflow_stage.get_api_by_keys(keys) if keys else {}
         dictionary = public_workflow_stages(stages)
-        return ProjectCardPageSource(items, total_count, next_fields, dictionary)
+        return ProjectCardPageSource(
+            items, total_count, next_fields, dictionary, public_column_context(self._service, project_uid, items)
+        )
 
     def get_public_card_metadata(self, project_uid: str, card_uid: str) -> dict[str, str] | None:
         card = self._ensure_card(project_uid, card_uid, required=False)

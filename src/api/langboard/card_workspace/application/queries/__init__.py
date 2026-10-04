@@ -197,8 +197,9 @@ def list_project_cards(
     return ProjectCardListResponse(
         project_uid=project_uid,
         workflow_stages=page.workflow_stages,
+        columns=page.columns,
         cards=BoundedItemsDto(
-            items=[public_card_summary(item) for item in page.items],
+            items=[public_card_summary(item, compact_workflow=True) for item in page.items],
             total_count=page.total_count,
             next_cursor=next_cursor,
             limit=limit,

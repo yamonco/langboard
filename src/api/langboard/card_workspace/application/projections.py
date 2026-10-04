@@ -185,10 +185,19 @@ def public_bot_schedule(schedule: dict[str, Any]) -> dict[str, Any]:
     return pick(schedule, _BOT_SCHEDULE_KEYS)
 
 
-def public_card_summary(card: dict[str, Any]) -> dict[str, Any]:
+def public_column_context(service: Any, project_uid: str, cards: Sequence[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Share native column guidance once per distinct visible column across list and search."""
+    uids = {str(card["project_column_uid"]) for card in cards if card.get("project_column_uid")}
+    if not uids:
+        return {}
+    return service.project_column.get_api_workflow_context(project_uid, uids)
+
+
+def public_card_summary(card: dict[str, Any], *, compact_workflow: bool = False) -> dict[str, Any]:
     """Project one minimal card list item."""
 
-    result = pick(card, _CARD_KEYS + _WORKFLOW_KEYS)
+    workflow_keys = tuple(key for key in _WORKFLOW_KEYS if not compact_workflow or key != "project_column_name")
+    result = pick(card, _CARD_KEYS + workflow_keys)
     if isinstance(card.get("work_state"), dict):
         state = card["work_state"]
         result["work_state"] = pick(

@@ -99,6 +99,7 @@ def test_project_search_reuses_native_bounded_search() -> None:
     assert UserMcp.search_project_cards("project-1", "  release  ", service) == {
         "cards": [{"uid": "c1", "description": "Example card"}],
         "workflow_stages": {},
+        "columns": {},
     }
     assert calls == [("project-1", "release")]
 
@@ -204,3 +205,23 @@ def test_project_search_rejects_empty_or_oversized_queries(query: str) -> None:
 
     with pytest.raises(ValueError):
         UserMcp.search_project_cards("project-1", query, SimpleNamespace())
+
+
+def test_project_search_reuses_distinct_column_context():
+    from unittest.mock import Mock
+
+    cards = [{"uid": str(i), "project_column_uid": "c", "project_column_name": "Custom", "description": "x" * 2000} for i in range(20)]
+    context = {"c": {"workflow_index": "unclassified | Custom", "workflow_guidance": "Column advice"}}
+    resolve = Mock(return_value=context)
+    service = SimpleNamespace(
+        card=SimpleNamespace(search_context_by_project=Mock(return_value=cards)),
+        project_column=SimpleNamespace(get_api_workflow_context=resolve),
+    )
+    result = UserMcp.search_project_cards("p", "text", service)
+    resolve.assert_called_once_with("p", {"c"})
+    assert result["columns"] == context
+    assert all("project_column_name" not in card for card in result["cards"])
+    assert all(card["project_column_uid"] == "c" for card in result["cards"])
+
+    assert all(len(card["description"]) == 500 for card in result["cards"])
+    assert all(card["description_total_chars"] == 2000 and card["description_truncated"] is True for card in result["cards"])

@@ -39,7 +39,7 @@ def test_workflow_edit_fences_readiness_and_publishes_after_commit(monkeypatch):
     from importlib import import_module
 
     module = import_module(ProjectColumnService.__module__)
-    column = SimpleNamespace(id=2, project_id=1, workflow_stage="active", is_archive=False)
+    column = SimpleNamespace(id=2, project_id=1, workflow_stage="active", is_archive=False, description="")
     project = SimpleNamespace(id=1)
     events = []
     execution = SimpleNamespace(
@@ -62,7 +62,7 @@ def test_workflow_edit_fences_readiness_and_publishes_after_commit(monkeypatch):
         SimpleNamespace(
             project_column=SimpleNamespace(update=lambda item: events.append(("update", item.workflow_stage))),
             workflow_stage=SimpleNamespace(
-                get_by_keys=lambda keys: {key: SimpleNamespace(is_active=True) for key in keys}
+                get_by_keys=lambda keys: {key: SimpleNamespace(is_active=True, description="", counts_as_completed=key == "closed") for key in keys}
             ),
         ),
     )
@@ -109,3 +109,27 @@ def test_options_include_active_and_existing_inactive_but_not_unbound_inactive(m
     ])
     service = ProjectColumnService(None, None, SimpleNamespace())
     assert service.get_workflow_stage_options(1) == [{"key": "released"}, {"key": "retired"}]
+
+
+def test_workflow_context_batches_columns_and_excludes_other_projects(monkeypatch):
+    rows = [
+        SimpleNamespace(id=2, project_id=1, name="Custom", workflow_stage="released", description="Column advice", get_uid=lambda: "2"),
+        SimpleNamespace(id=3, project_id=1, name="Done", workflow_stage=None, description="Unmapped advice", get_uid=lambda: "3"),
+        SimpleNamespace(id=4, project_id=9, name="Private", workflow_stage=None, description="Secret", get_uid=lambda: "4"),
+    ]
+    fetch = Mock(return_value=rows)
+    monkeypatch.setattr(InfraHelper, "get_all_by", fetch)
+    monkeypatch.setattr(InfraHelper, "convert_id", lambda value: int(value))
+    stages = Mock(return_value={"released": SimpleNamespace(description="Stage advice", counts_as_completed=True, is_active=True)})
+    service = ProjectColumnService(lambda _: None, lambda _: None, SimpleNamespace(workflow_stage=SimpleNamespace(get_by_keys=stages)))
+    result = service.get_api_workflow_context("1", {"2", "3", "4"})
+    fetch.assert_called_once()
+    stages.assert_called_once_with({"released"})
+    assert set(result) == {"2", "3"}
+    assert result["2"]["workflow_guidance"] == "Workflow stage:\nStage advice\n\nColumn:\nColumn advice"
+    assert result["2"]["workflow_counts_as_completed"] is True
+    assert result["3"]["workflow_index"] == "unclassified | Done"
+    assert result["3"]["workflow_counts_as_completed"] is None
+    fetch.reset_mock()
+    assert service.get_api_workflow_context("1", set()) == {}
+    fetch.assert_not_called()
