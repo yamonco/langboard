@@ -6,7 +6,7 @@ import mimetypes
 from binascii import Error as Base64Error
 from typing import Annotated, Any, Literal
 from fastmcp.exceptions import ValidationError
-from langboard_shared.core.db import EditorContentModel
+from langboard_shared.core.db import DbSession, EditorContentModel
 from langboard_shared.core.exceptions.CardDeleteForbidden import CardDeleteForbidden
 from langboard_shared.core.exceptions.RelationshipCycle import RelationshipCycle
 from langboard_shared.core.storage import Storage, StorageName
@@ -1079,20 +1079,21 @@ def change_card_checkitem_work(
         ]
         if other_active:
             raise ValueError("Another work timer is active; set replace_active to pause it")
-    if not service.checkitem.change_status(user, project_uid, card_uid, item, target, from_api=action == "complete"):
-        raise ValueError("Work timer transition failed")
-    if action == "complete" and item.status == CheckitemStatus.Stopped and not item.is_checked:
-        if not service.checkitem.toggle_checked(user, project_uid, card_uid, item, desired_checked=True):
-            raise ValueError("Work item could not be completed")
-    current = service.checkitem.get_by_id_like(checkitem_uid)
-    if current is None:
-        raise ValueError("Checkitem not found after transition")
-    return {
-        "checkitem_uid": current.get_uid(),
-        "status": current.status.value,
-        "is_checked": current.is_checked,
-        "user_uid": user.get_uid(),
-    }
+    with DbSession.atomic():
+        if not service.checkitem.change_status(user, project_uid, card_uid, item, target, from_api=action == "complete"):
+            raise ValueError("Work timer transition failed")
+        if action == "complete" and item.status == CheckitemStatus.Stopped and not item.is_checked:
+            if not service.checkitem.toggle_checked(user, project_uid, card_uid, item, desired_checked=True):
+                raise ValueError("Work item could not be completed")
+        current = service.checkitem.get_by_id_like(checkitem_uid)
+        if current is None:
+            raise ValueError("Checkitem not found after transition")
+        return {
+            "checkitem_uid": current.get_uid(),
+            "status": current.status.value,
+            "is_checked": current.is_checked,
+            "user_uid": user.get_uid(),
+        }
 
 
 @McpTool.add(description="Delete a checkitem from a card checklist.")

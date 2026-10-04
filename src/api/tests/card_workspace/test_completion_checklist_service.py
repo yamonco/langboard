@@ -176,8 +176,8 @@ def test_explicit_checked_state_emits_once_across_replay(monkeypatch: pytest.Mon
         "checklist_activity",
         "checklist_bot",
         "checkitem_update",
-        "checkitem_publish",
         "checkitem_unread",
+        "checkitem_publish",
         "checkitem_activity",
         "checkitem_bot",
     ]

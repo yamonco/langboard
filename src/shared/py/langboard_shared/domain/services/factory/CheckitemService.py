@@ -451,6 +451,17 @@ class CheckitemService(BaseDomainService):
         checkitem: TCheckitemParam,
         desired_checked: bool | None = None,
     ) -> bool | None:
+        with DbSession.atomic():
+            return self._toggle_checked(user_or_bot, project, card, checkitem, desired_checked)
+
+    def _toggle_checked(
+        self,
+        user_or_bot: TUserOrBot,
+        project: TProjectParam,
+        card: TCardParam,
+        checkitem: TCheckitemParam,
+        desired_checked: bool | None = None,
+    ) -> bool | None:
         params = self.__get_records_by_params(project, card, checkitem)
         if not params:
             return None
@@ -461,20 +472,29 @@ class CheckitemService(BaseDomainService):
         checkitem.is_checked = desired_checked if desired_checked is not None else not checkitem.is_checked
 
         if checkitem.status != CheckitemStatus.Stopped:
-            self.change_status(user_or_bot, project, card, checkitem, CheckitemStatus.Stopped)
+            if not self.change_status(user_or_bot, project, card, checkitem, CheckitemStatus.Stopped):
+                raise ValueError("Work timer transition failed")
+            publish_checked = False
         else:
             self.repo.checkitem.update(checkitem)
-
-            CheckitemPublisher.checked_changed(project, card, checkitem)
-            CheckitemPublisher.board_progress_changed(project, card)
             self._mark_card_changed_for_unread(card, "checkitem", checkitem.id)
+            publish_checked = True
 
-        if checkitem.is_checked:
-            CardCheckitemActivityTask.card_checkitem_checked(user_or_bot, project, card, checkitem)
-            CardCheckitemBotTask.card_checkitem_checked(user_or_bot, project, card, checkitem)
-        else:
-            CardCheckitemActivityTask.card_checkitem_unchecked(user_or_bot, project, card, checkitem)
-            CardCheckitemBotTask.card_checkitem_unchecked(user_or_bot, project, card, checkitem)
+        changed_item = checkitem.model_copy(deep=True)
+
+        def publish():
+            if publish_checked:
+                CheckitemPublisher.checked_changed(project, card, changed_item)
+                CheckitemPublisher.board_progress_changed(project, card)
+            if changed_item.is_checked:
+                CardCheckitemActivityTask.card_checkitem_checked(user_or_bot, project, card, changed_item)
+                CardCheckitemBotTask.card_checkitem_checked(user_or_bot, project, card, changed_item)
+            else:
+                CardCheckitemActivityTask.card_checkitem_unchecked(user_or_bot, project, card, changed_item)
+                CardCheckitemBotTask.card_checkitem_unchecked(user_or_bot, project, card, changed_item)
+
+        with DbSession.use(readonly=False) as db:
+            db.after_commit(publish)
 
         return True
 
