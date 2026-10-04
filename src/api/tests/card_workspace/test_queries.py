@@ -450,12 +450,106 @@ def test_project_list_column_guidance_is_not_repeated_per_card():
     from unittest.mock import Mock
 
     port = FakeQueryPort()
-    guidance = {"column": {"name": "Doing", "workflow_stage": None, "workflow_index": "unclassified | Doing", "workflow_guidance": "Only once"}}
+    guidance = {
+        "column": {
+            "name": "Doing",
+            "workflow_stage": None,
+            "workflow_index": "unclassified | Doing",
+            "workflow_guidance": "Only once",
+        }
+    }
     items = [{"uid": str(i), "project_column_uid": "column", "project_column_name": "Doing"} for i in range(20)]
-    port.get_project_card_page = Mock(return_value=ProjectCardPageSource(items, 20, ("2026-01-01T00:00:00Z", "last"), {}, guidance))
+    port.get_project_card_page = Mock(
+        return_value=ProjectCardPageSource(items, 20, ("2026-01-01T00:00:00Z", "last"), {}, guidance)
+    )
     response = list_project_cards(port, "p1", limit=20)
     assert response.columns == guidance
     assert response.cards.next_cursor
     assert len(response.cards.items) == 20
     assert response.model_dump_json().count("Only once") == 1
-    assert all(item["project_column_uid"] == "column" and "project_column_name" not in item for item in response.cards.items)
+    assert all(
+        item["project_column_uid"] == "column" and "project_column_name" not in item for item in response.cards.items
+    )
+
+
+def test_execute_context_prioritizes_open_acceptance_and_retains_source():
+    port = FakeQueryPort()
+    port.source.checklists[0]["checkitems"] = [
+        {"uid": str(i), "title": f"Acceptance {i}", "is_checked": i < 7} for i in range(8)
+    ]
+    bundle = get_card_bundle(port, "p1", "c1", CommentPage(), SectionPage(limit=1), profile="execute")
+    assert [item["uid"] for item in bundle.card.checklists.items[0]["checkitems"]] == ["7"]
+    assert "open_checkitems" in port.requested_sections[-1]
+    assert len(port.source.checklists[0]["checkitems"]) == 8
+    assert bundle.card.comments is None and bundle.card.attachments is None
+    context = bundle.card.core["context"]
+    assert context["approval"] == "not_granted_by_read"
+    assert any(item["field"] == "execution_contract" for item in context["unavailable_fields"])
+    assert bundle.card.core["description"]["next_cursor"]
+    assert context["truncated"] is True
+    assert context["required_action"] == "read_continuations"
+    assert context["continuations"][0]["cursor"] == bundle.card.core["description"]["next_cursor"]
+    assert context["continuation_profile"] == "execute"
+
+
+def test_execute_nested_cursor_retains_profile_and_rejects_full_projection():
+    port = FakeQueryPort()
+    port.source.checklists[0]["checkitems"] = [
+        {"uid": str(i), "title": f"Acceptance {i}", "is_checked": i < 7} for i in range(40)
+    ]
+    first = get_card_bundle(port, "p1", "c1", CommentPage(), SectionPage(), profile="execute")
+    checklist = first.card.checklists.items[0]
+    assert checklist["checkitems_total_count"] == 33
+    cursor = checklist["checkitems_next_cursor"]
+    assert cursor
+    page = get_card_bundle(port, "p1", "c1", CommentPage(), SectionPage(cursor=cursor), profile="execute")
+    assert all(int(item["uid"]) >= 7 for item in page.continuation.page.items)
+    with pytest.raises(ValueError):
+        get_card_bundle(port, "p1", "c1", CommentPage(), SectionPage(cursor=cursor), profile="full")
+
+
+def test_review_context_excludes_stale_verification_and_history():
+    port = FakeQueryPort()
+    port.source.details["work_state"] = {"verification_state": "stale", "verification": {"evidence": ["old"]}}
+    result = get_card_bundle(port, "p1", "c1", CommentPage(), SectionPage(), profile="review")
+    assert result.card.core["context"]["current_verification"] is None
+    assert result.card.core["context"]["verification_state"] == "stale"
+    assert "description" not in result.card.core
+    assert result.card.comments is None
+    assert result.card.attachments is None
+
+
+def test_full_context_matches_explicit_sections_and_triage_does_not_invent_decisions():
+    port = FakeQueryPort()
+    full = get_card_bundle(port, "p1", "c1", CommentPage(), SectionPage(), profile="full")
+    explicit = get_card_bundle(port, "p1", "c1", CommentPage(), SectionPage(), list(CardBundleInclude))
+    actual = full.model_dump()
+    actual["card"]["core"].pop("context")
+    assert actual == explicit.model_dump()
+    triage = get_card_bundle(port, "p1", "c1", CommentPage(), SectionPage(), profile="triage")
+    assert triage.card.classification is not None and triage.card.comments is None
+    assert any(field["field"] == "proposed_decision" for field in triage.card.core["context"]["unavailable_fields"])
+
+
+def test_profile_preserves_workflow_constraints_and_exposes_nested_continuations():
+    port = FakeQueryPort()
+    port.source.details["description"] = "Short request"
+    guidance = "constraint " * 2000
+    port.source.details["workflow_guidance"] = guidance
+    result = get_card_bundle(port, "p1", "c1", CommentPage(), SectionPage(), profile="execute")
+    assert result.card.workflow["workflow_guidance"] == guidance
+    context = result.card.core["context"]
+    assert context["truncated"]
+    assert any(item["section"].startswith("checklists.items[0]") for item in context["continuations"])
+    assert all(item["cursor"] for item in context["continuations"])
+
+
+def test_profile_distinguishes_permission_denial_from_selection_omission():
+    from dataclasses import replace
+
+    port = FakeQueryPort()
+    port.source = replace(
+        port.source, omitted_sections=[{"section": "automation.bot_scopes", "reason": "permission_denied"}]
+    )
+    result = get_card_bundle(port, "p1", "c1", CommentPage(), SectionPage(), profile="full")
+    assert result.card.core["context"]["omitted_sections"] == port.source.omitted_sections

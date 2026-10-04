@@ -17,6 +17,7 @@ class CardBundleSource:
     bot_scopes: list[dict[str, Any]]
     bot_schedules: list[dict[str, Any]]
     content_blocks: list[dict[str, Any]] = field(default_factory=list)
+    omitted_sections: list[dict[str, str]] = field(default_factory=list)
 
 
 @dataclass(frozen=True)

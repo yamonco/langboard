@@ -35,6 +35,7 @@ from ..card_workspace.application import patch_card_description as replace_descr
 from ..card_workspace.application import reconcile_card_checklist_projection as reconcile_checklist
 from ..card_workspace.application import replace_card_description as replace_description
 from ..card_workspace.application import set_card_relationships as replace_relationships
+from ..card_workspace.application.context_profiles import ContextProfile
 from ..card_workspace.application.dtos import BoundedItemsDto
 from ..card_workspace.application.projections import (
     bounded_items,
@@ -561,11 +562,12 @@ def apply_card_graph_patch(
 
 
 @McpTool.add(
+    modern_only=("profile",),
     description=(
         "Read compact card core, public creator identity, and workflow fields. Request description, people, classification, checklists, "
         "comments, attachments, public metadata, or automation explicitly. Use returned opaque cursors for "
         "rich description and every collection."
-    )
+    ),
 )
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
 def get_card_bundle(
@@ -578,6 +580,7 @@ def get_card_bundle(
     section_limit: int = 10,
     section_cursor: str | None = None,
     include: list[JsonCardBundleInclude] | None = None,
+    profile: ContextProfile | None = None,
 ) -> CardBundleResponse:
     """Read an agent-friendly card bundle with bounded continuation."""
 
@@ -588,6 +591,7 @@ def get_card_bundle(
         CommentPage(limit=comments_limit, cursor=comments_cursor),
         SectionPage(limit=section_limit, cursor=section_cursor),
         include,
+        profile,
     )
     if result.card is not None:
         params = _get_card_in_project(project_uid, card_uid)
@@ -596,7 +600,9 @@ def get_card_bundle(
     return result
 
 
-@McpTool.add("user", description="Append reviewer evidence for the current card revision; never approve gates or move the card.")
+@McpTool.add(
+    "user", description="Append reviewer evidence for the current card revision; never approve gates or move the card."
+)
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
 def record_card_verification_evidence(
     project_uid: str,

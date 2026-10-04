@@ -1,3 +1,4 @@
+from sqlalchemy import exists, select
 from ....core.db import DbSession, SqlBuilder
 from ....core.domain import BaseOrderRepository
 from ....core.types import SafeDateTime
@@ -24,6 +25,8 @@ class ChecklistRepository(BaseOrderRepository[Checklist, Card]):
         card: TCardParam,
         limit: int | None = None,
         is_system: bool | None = None,
+        *,
+        open_only: bool = False,
     ) -> list[Checklist]:
         """Return card checklists, optionally enforcing a database row limit."""
 
@@ -35,6 +38,16 @@ class ChecklistRepository(BaseOrderRepository[Checklist, Card]):
         )
         if is_system is not None:
             query = query.where(Checklist.column("is_system") == is_system)
+        if open_only:
+            query = query.where(
+                exists(
+                    select(Checkitem.id).where(
+                        Checkitem.checklist_id == Checklist.id,
+                        Checkitem.is_checked == False,  # noqa: E712
+                        Checkitem.deleted_at.is_(None),
+                    )
+                )
+            )
         if limit is not None:
             query = query.limit(limit)
         with DbSession.use(readonly=True) as db:

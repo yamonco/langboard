@@ -101,7 +101,11 @@ async def test_registered_profiles_partition_catalog_without_changing_schemas():
                 catalogs[profile] = {tool.name: tool.input_schema for tool in await client.list_tools()}
         assert set(catalogs["agent"]) == AGENT_CORE_TOOLS
         assert set(catalogs["raw"]) == registered - AGENT_CORE_TOOLS
-        assert {**catalogs["agent"], **catalogs["raw"]} == catalogs["compatibility"]
+        modern = {**catalogs["agent"], **catalogs["raw"]}
+        assert "profile" in modern["get_card_bundle"]["properties"]
+        assert "profile" not in catalogs["compatibility"]["get_card_bundle"]["properties"]
+        modern["get_card_bundle"]["properties"].pop("profile")
+        assert modern == catalogs["compatibility"]
     finally:
         mcp_auth_context.reset(token)
 

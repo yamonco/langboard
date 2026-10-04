@@ -40,7 +40,13 @@ def test_project_identity_returns_real_guidance_without_inventing_legacy_descrip
     """Active destinations include their guidance; absent legacy guidance stays empty."""
     project = SimpleNamespace(get_uid=lambda: "p1", title="Workflow", project_type="Other")
     columns = [
-        {"uid": "doing", "name": "Execution", "order": 2, "description": "Work has started", "workflow_stage": "active"},
+        {
+            "uid": "doing",
+            "name": "Execution",
+            "order": 2,
+            "description": "Work has started",
+            "workflow_stage": "active",
+        },
         {"uid": "ready", "name": "Queue", "order": 1},
         {"uid": "archive", "name": "Archive", "order": 0, "is_archive": True, "description": "Hidden"},
     ]
@@ -51,7 +57,13 @@ def test_project_identity_returns_real_guidance_without_inventing_legacy_descrip
     result = NativeCardWorkspaceAdapter(object(), service).get_project_identity("p1")
     assert result and result["columns"]["items"] == [
         {"uid": "ready", "name": "Queue", "order": 1, "description": "", "workflow_stage": None},
-        {"uid": "doing", "name": "Execution", "order": 2, "description": "Work has started", "workflow_stage": "active"},
+        {
+            "uid": "doing",
+            "name": "Execution",
+            "order": 2,
+            "description": "Work has started",
+            "workflow_stage": "active",
+        },
     ]
 
 
@@ -162,12 +174,17 @@ def test_card_bundle_automation_requires_update_access(monkeypatch: pytest.Monke
 
     denied = adapter.get_card_bundle_source("p1", "c1", sections)
     assert denied is not None and denied.bot_scopes == [] and denied.bot_schedules == []
+    assert denied.omitted_sections == [
+        {"section": section, "reason": "permission_denied"}
+        for section in ("automation.bot_scopes", "automation.bot_schedules")
+    ]
     service.card.get_api_bot_scope_list.assert_not_called()
     service.card.get_api_bot_schedule_list.assert_not_called()
 
     service.project.get_user_role_actions_by_project.return_value = [native_module.ProjectRoleAction.Update.value]
     allowed = adapter.get_card_bundle_source("p1", "c1", sections)
     assert allowed is not None
+    assert allowed.omitted_sections == []
     assert allowed.bot_scopes == [{"uid": "scope"}]
     assert allowed.bot_schedules == [{"uid": "schedule"}]
 
@@ -247,7 +264,9 @@ def test_native_checkitem_continuation_reads_only_the_requested_checklist() -> N
     calls: list[tuple[Any, Any, int]] = []
     service = SimpleNamespace(
         project=SimpleNamespace(get_by_id_like=lambda _uid: project),
-        project_column=SimpleNamespace(get_by_id_like=lambda _uid: column, get_workflow_guidance=lambda _: {column.id: {}}),
+        project_column=SimpleNamespace(
+            get_by_id_like=lambda _uid: column, get_workflow_guidance=lambda _: {column.id: {}}
+        ),
         card=SimpleNamespace(
             get_by_id_like=lambda _uid: card,
             get_work_states=lambda cards: {item.id: {"version": 1} for item in cards},
@@ -730,7 +749,9 @@ def test_description_repository_rejects_stale_writer_and_preserves_other_fields(
     assert repository.update_description_if_current(second, "original") is False
     with engine.connect() as connection:
         row = connection.execute(
-            select(NativeCard.__table__.c.title, NativeCard.__table__.c.description, NativeCard.__table__.c.last_change_seq)
+            select(
+                NativeCard.__table__.c.title, NativeCard.__table__.c.description, NativeCard.__table__.c.last_change_seq
+            )
         ).one()
     assert row.title == "preserved title"
     assert row.description.content == "first edit"
@@ -880,13 +901,18 @@ def test_created_card_projects_authenticated_creator_before_publish(
         dispatched.append(model)
 
     service.dispatch_created = publish
-    card, payload = service.create(actor, project, column, "Work", EditorContentModel(content="Body"), dispatch_effects=dispatch_effects)
+    card, payload = service.create(
+        actor, project, column, "Work", EditorContentModel(content="Body"), dispatch_effects=dispatch_effects
+    )
     expected_type = "user" if actor_type is native_module.User else "bot"
     assert card.created_by_user_id == (42 if expected_type == "user" else None)
     assert card.created_by_bot_id == (42 if expected_type == "bot" else None)
     assert payload["member_uids"] == []
     assert payload["creator"] == {
-        "uid": actor.get_uid(), "type": expected_type, "name": "Creator", "avatar": None,
+        "uid": actor.get_uid(),
+        "type": expected_type,
+        "name": "Creator",
+        "avatar": None,
         "created_at": card.created_at.isoformat(),
     }
     assert dispatched == ([{"card": payload}] if dispatch_effects else [])
@@ -898,11 +924,26 @@ def test_project_card_page_resolves_policies_once_for_only_visible_stages():
         {"uid": "2", "work_state": {"workflow_stage": "released", "completed": True}},
         {"uid": "3", "work_state": {"workflow_stage": None, "completed": None}},
     ]
-    resolve = Mock(return_value={"released": {"key": "released", "counts_as_completed": True, "entry_effects": ["stop_running_timers"], "translations": {"ko": {"name": "완료"}}, "private": "hidden"}})
-    service = SimpleNamespace(card=SimpleNamespace(get_api_page_by_project=Mock(return_value=(items, 3, None))), workflow_stage=SimpleNamespace(get_api_by_keys=resolve))
+    resolve = Mock(
+        return_value={
+            "released": {
+                "key": "released",
+                "counts_as_completed": True,
+                "entry_effects": ["stop_running_timers"],
+                "translations": {"ko": {"name": "완료"}},
+                "private": "hidden",
+            }
+        }
+    )
+    service = SimpleNamespace(
+        card=SimpleNamespace(get_api_page_by_project=Mock(return_value=(items, 3, None))),
+        workflow_stage=SimpleNamespace(get_api_by_keys=resolve),
+    )
     page = NativeCardWorkspaceAdapter(object(), service).get_project_card_page("p", 3, None, None)
     resolve.assert_called_once_with({"released"})
-    assert page.workflow_stages == {"released": {"key": "released", "counts_as_completed": True, "entry_effects": ["stop_running_timers"]}}
+    assert page.workflow_stages == {
+        "released": {"key": "released", "counts_as_completed": True, "entry_effects": ["stop_running_timers"]}
+    }
     service.card.get_api_page_by_project.return_value = ([], 0, None)
     resolve.reset_mock()
     assert NativeCardWorkspaceAdapter(object(), service).get_project_card_page("p", 3, None, None).workflow_stages == {}
@@ -924,3 +965,17 @@ def test_project_page_resolves_only_visible_column_guidance_once():
     resolve.reset_mock()
     assert NativeCardWorkspaceAdapter(object(), service).get_project_card_page("p", 20, None, None).columns == {}
     resolve.assert_not_called()
+
+
+def test_native_execute_source_filters_open_items_before_loading_limits():
+    service, _ = _service()
+    service.checklist.get_api_list_by_card = Mock(return_value=[])
+    source = NativeCardWorkspaceAdapter(object(), service).get_card_bundle_source(
+        "p1", "c1", frozenset({"checklists", "open_checkitems"})
+    )
+    assert source is not None
+    assert service.checklist.get_api_list_by_card.call_args.kwargs == {
+        "limit": MAX_NATIVE_SECTION_SOURCE + 1,
+        "checkitems_limit": MAX_NATIVE_SECTION_SOURCE + 1,
+        "open_only": True,
+    }

@@ -11,6 +11,13 @@ from ...domain import (
     SectionPage,
     require_public_metadata_key,
 )
+from ..context_profiles import (
+    ContextProfile,
+    profile_context,
+    profile_continuations,
+    profile_source,
+    select_profile_sections,
+)
 from ..dtos import (
     AutomationDto,
     BoundedItemsDto,
@@ -49,15 +56,21 @@ def get_card_bundle(
     comment_page: CommentPage,
     section_page: SectionPage,
     include: list[CardBundleInclude] | None = None,
+    profile: ContextProfile | None = None,
 ) -> CardBundleResponse:
     """Return one bounded and sanitized card aggregate or one continuation page."""
 
+    include = select_profile_sections(profile, include)
     section_cursor = SectionCursor.decode(section_page.cursor) if section_page.cursor else None
     requested_sections = _requested_source_sections(include, section_cursor, comment_page.cursor is not None)
+    if profile == "execute":
+        requested_sections |= frozenset({"open_checkitems"})
     source = port.get_card_bundle_source(project_uid, card_uid, requested_sections)
     if source is None:
         raise ValueError("Card not found in project")
 
+    original_source = source
+    source = profile_source(source, profile)
     if section_cursor:
         return _section_continuation(card_uid, source, section_cursor, section_page.limit)
 
@@ -86,8 +99,14 @@ def get_card_bundle(
     core = pick(
         details,
         (
-            "uid", "title", "created_at", "updated_at", "can_delete",
-            "last_change_seq", "last_change_target_type", "last_change_at",
+            "uid",
+            "title",
+            "created_at",
+            "updated_at",
+            "can_delete",
+            "last_change_seq",
+            "last_change_target_type",
+            "last_change_at",
         ),
     )
     if isinstance(details.get("creator"), dict):
@@ -96,14 +115,30 @@ def get_card_bundle(
         core["description"] = bounded_text(details.get("description"), CardBundleSection.CoreDescription).model_dump(
             mode="json"
         )
+    if profile is not None:
+        core["context"] = profile_context(profile, original_source, include or [])
     bundle = CardBundleDto(
         core=core,
         workflow={
-            **pick(details, ("project_column_uid", "project_column_name", "workflow_stage", "order", "deadline_at", "archived_at")),
-            **pick(details, ("workflow_stage_description", "column_description", "workflow_guidance", "workflow_stage_status"), 8192),
+            **pick(
+                details,
+                ("project_column_uid", "project_column_name", "workflow_stage", "order", "deadline_at", "archived_at"),
+            ),
+            **pick(
+                details,
+                ("workflow_stage_description", "column_description", "workflow_guidance", "workflow_stage_status"),
+                8192,
+            ),
         },
         work_state=details.get("work_state"),
     )
+    if profile in {"execute", "review", "triage"} and bundle.work_state is not None:
+        bundle.work_state = dict(bundle.work_state)
+        if bundle.work_state.get("verification_state") == "stale":
+            bundle.work_state["verification"] = None
+            core["context"]["omitted_sections"].append(
+                {"section": "stale_verification", "reason": "not_current_revision"}
+            )
     if CardBundleInclude.People in requested:
         assignees = bounded_items(assigned_people(details), CardBundleSection.People, section_page.limit)
         workers = [
@@ -155,6 +190,16 @@ def get_card_bundle(
                 section_page.limit,
             ),
         )
+    if profile is not None:
+        # Workflow guidance may contain mandatory constraints; retain it without clipping.
+        for field in ("workflow_stage_description", "column_description", "workflow_guidance"):
+            if field in details:
+                bundle.workflow[field] = details[field]
+        context = core["context"]
+        context["continuation_profile"] = profile
+        context["continuations"] = profile_continuations(bundle.model_dump())
+        context["truncated"] = bool(context["continuations"])
+        context["required_action"] = "read_continuations" if context["truncated"] else "resolve_unavailable_fields"
     return CardBundleResponse(card_uid=card_uid, card=bundle)
 
 

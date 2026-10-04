@@ -123,6 +123,7 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
             details["relationships"] = []
 
         checklists = []
+        open_filter = {"open_only": True} if "open_checkitems" in requested_sections else {}
         checkitem_sections = [
             section.removeprefix("checkitems:") for section in requested_sections if section.startswith("checkitems:")
         ]
@@ -137,6 +138,7 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
                         card,
                         checklist,
                         _SOURCE_QUERY_LIMIT,
+                        **open_filter,
                     ),
                     "checkitems",
                 )
@@ -147,6 +149,7 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
                     card,
                     limit=_SOURCE_QUERY_LIMIT,
                     checkitems_limit=_SOURCE_QUERY_LIMIT,
+                    **open_filter,
                 ),
                 "checklists",
             )
@@ -206,6 +209,11 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
                 if "content_blocks" in requested_sections
                 else []
             ),
+            omitted_sections=[
+                {"section": section, "reason": "permission_denied"}
+                for section in ("automation.bot_scopes", "automation.bot_schedules")
+                if section in requested_sections and not can_read_automation
+            ],
         )
 
     def get_comment_page(
@@ -235,7 +243,12 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
                     "workflow_stage": column.get("workflow_stage"),
                     **{
                         key: column[key]
-                        for key in ("workflow_stage_description", "column_description", "workflow_guidance", "workflow_stage_status")
+                        for key in (
+                            "workflow_stage_description",
+                            "column_description",
+                            "workflow_guidance",
+                            "workflow_stage_status",
+                        )
                         if key in column
                     },
                     "order": int(column["order"]),

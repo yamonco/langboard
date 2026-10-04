@@ -92,7 +92,7 @@ async def execute_mcp_tool(tool_name: str, request: Request):
             {"user_or_bot": user_or_bot, "api_key": request.scope.get("api_key"), "tool_group": tool_group}
         )
         try:
-            server = McpServer.agent_mcp if tool_name == "list_project_cards" else McpServer.mcp
+            server = McpServer.agent_mcp if tool_name in {"list_project_cards", "get_card_bundle"} else McpServer.mcp
             if server is None:
                 raise RuntimeError("Modern MCP provider is unavailable")
             result = await server.call_tool(tool_name, arguments)

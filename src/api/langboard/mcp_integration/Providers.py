@@ -3,6 +3,7 @@
 import json
 from collections.abc import Callable
 from functools import wraps
+from inspect import signature
 from typing import Any
 from fastmcp.exceptions import AuthorizationError
 from fastmcp.prompts import Prompt
@@ -72,6 +73,8 @@ def create_native_domain_provider(
     provider = LocalProvider(on_duplicate="error")
     for name, metadata in McpTool.get_tools().items():
         handler = wrap_tool(name, metadata["handler"])
+        if not modern_annotations and metadata.get("modern_only"):
+            handler = without_modern_parameters(handler, metadata["modern_only"])
         if modern_annotations:
             handler = with_typed_output(
                 name,
@@ -178,6 +181,7 @@ def _workflow_policy_prompt() -> str:
 
 def with_legacy_card_list(handler):
     """Retain the legacy list schema and repeated column names on compatibility transport."""
+
     @wraps(handler)
     async def legacy(**kwargs):
         result = await handler(**kwargs)
@@ -189,4 +193,18 @@ def with_legacy_card_list(handler):
                 card["project_column_name"] = column["name"]
         return ProjectCardListResponse.model_validate(payload)
 
+    return legacy
+
+
+def without_modern_parameters(handler, names):
+    """Preserve compatibility input schemas while modern profiles evolve."""
+
+    @wraps(handler)
+    async def legacy(**kwargs):
+        if set(kwargs) & set(names):
+            raise ValueError("Parameter requires modern MCP")
+        return await handler(**kwargs)
+
+    sig = signature(handler)
+    legacy.__signature__ = sig.replace(parameters=[param for key, param in sig.parameters.items() if key not in names])
     return legacy
