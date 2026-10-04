@@ -11,3 +11,7 @@ if (Routing.API.ACTIVITIY.CARD_COLUMN_HISTORY !== "/activity/project/{uid}/card/
 if (Routing.API.BOARD.COLUMN.CHANGE_WORKFLOW_STAGE !== "/board/{uid}/column/{project_column_uid}/workflow-stage") {
     throw new Error("@langboard/core is stale: workflow stage route missing. Build src/shared/ts and reinstall or relink it before building the UI.");
 }
+
+if (Routing.API.BOARD.CARD.CONTENT_BLOCKS !== "/board/{uid}/card/{card_uid}/content-blocks") {
+    throw new Error("@langboard/core is stale: structured card content save route missing. Build src/shared/ts and relink it before building the UI.");
+}
