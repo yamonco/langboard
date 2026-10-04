@@ -26,6 +26,7 @@ on:
       - src/ui/playwright.locale-format.config.ts
       - src/ui/playwright.error-locale.config.ts
       - src/ui/playwright.workbench.config.ts
+      - src/ui/playwright.explorer-recovery.config.ts
       - src/ui/playwright.card-description-static.config.ts
       - src/ui/playwright.command-context.config.ts
       - src/ui/playwright.default-language.config.ts
@@ -101,6 +102,8 @@ jobs:
         working-directory: src/ui
 
       - run: yarn playwright test -c playwright.workbench.config.ts
+        working-directory: src/ui
+      - run: yarn playwright test -c playwright.explorer-recovery.config.ts
         working-directory: src/ui
       - run: yarn playwright test -c playwright.card-description-static.config.ts
         working-directory: src/ui

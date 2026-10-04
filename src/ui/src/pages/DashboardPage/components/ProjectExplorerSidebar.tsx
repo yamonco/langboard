@@ -7,6 +7,7 @@ import { retainProjects, useOpenCards } from "./OpenCardsStore";
 import { recentOpenCards } from "./OpenCardsData";
 import RecentCardsSection from "./RecentCardsSection";
 import Input from "@/components/base/Input";
+import Button from "@/components/base/Button";
 import IconComponent from "@/components/base/IconComponent";
 import useGetProjects from "@/controllers/api/dashboard/useGetProjects";
 import { Project } from "@/core/models";
@@ -28,7 +29,7 @@ export default function ProjectExplorerSidebar({ currentProject, onNavigate }: {
     const navigate = usePageNavigateRef();
     const location = useLocation();
     const [query, setQuery] = useState("");
-    const { data } = useGetProjects({ refetchOnWindowFocus: true });
+    const { data, isPending, isError, isFetching, refetch } = useGetProjects({ refetchOnWindowFocus: true });
     const authorizedProjectUIDs = useMemo(() => new Set(data?.projects.map((project) => project.uid) ?? []), [data]);
     const [showOlderCards, setShowOlderCards] = useState(false);
     useEffect(() => setShowOlderCards(false), [userUID]);
@@ -137,6 +138,19 @@ export default function ProjectExplorerSidebar({ currentProject, onNavigate }: {
                     />
                 )}
                 <div className="min-h-24 flex-1 overflow-y-auto" data-explorer-project-list="">
+                    {isPending && (
+                        <p role="status" className="px-2 py-3 text-xs text-muted-foreground">
+                            {t("common.Loading...")}
+                        </p>
+                    )}
+                    {isError && (
+                        <div role="alert" className="flex flex-wrap items-center gap-2 px-2 py-3">
+                            <span className="text-xs text-muted-foreground">{t("dashboard.Could not load projects")}</span>
+                            <Button type="button" size="sm" variant="outline" disabled={isFetching} onClick={() => void refetch()}>
+                                {t("dashboard.Retry")}
+                            </Button>
+                        </div>
+                    )}
                     {groups.map((group) =>
                         group.projects.length ? (
                             <section key={group.title} className="mb-3">
