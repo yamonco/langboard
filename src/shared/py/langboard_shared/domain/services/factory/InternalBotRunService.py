@@ -355,6 +355,9 @@ class InternalBotRunService(BaseDomainService):
     def renew_board_chat_lease(self, run_id: SnowflakeID, attempt: int, lease_seconds: int) -> bool:
         return self.repo.internal_bot_run.renew_lease(run_id, attempt, lease_seconds)
 
+    def save_board_chat_progress(self, run_id: SnowflakeID, attempt: int, lease_seconds: int, output_text: str) -> bool:
+        return self.repo.internal_bot_run.save_board_chat_progress(run_id, attempt, lease_seconds, output_text)
+
     def claim_board_chat_resume(
         self,
         project_id: SnowflakeID,

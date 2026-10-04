@@ -22,6 +22,23 @@ foreach ($item in Get-ChildItem Env:) {
     $values[$item.Name] = $item.Value
 }
 
+foreach ($name in @(
+    "SOCKET_PHOENIX_KAFKA_ENABLED",
+    "SOCKET_PHOENIX_BOARD_CHAT_SEND_ENABLED",
+    "SOCKET_PHOENIX_BOARD_CHAT_RESUME_ENABLED",
+    "SOCKET_PHOENIX_BOARD_CHAT_RECOVERY_ENABLED",
+    "SOCKET_PHOENIX_EDITOR_AI_ENABLED",
+    "SOCKET_PHOENIX_EDITOR_SYNC_ENABLED"
+)) {
+    if (-not $values.ContainsKey($name)) { $values[$name] = "true" }
+}
+if (-not $values.ContainsKey("NOTIFICATION_EMAIL_OUTBOX_ENABLED")) {
+    $values["NOTIFICATION_EMAIL_OUTBOX_ENABLED"] = "true"
+}
+if (-not $values.ContainsKey("SOCKET_PHOENIX_EDITOR_SYNC_EXPECTED_NODES")) {
+    $values["SOCKET_PHOENIX_EDITOR_SYNC_EXPECTED_NODES"] = "1"
+}
+
 function Get-Value {
     param([string]$Name)
 
@@ -123,61 +140,22 @@ if ([string]::IsNullOrEmpty($projectName)) {
     throw "PROJECT_NAME is required."
 }
 
-$socketOwner = Get-Value "SOCKET_OWNER"
-if ([string]::IsNullOrEmpty($socketOwner)) { $socketOwner = "node" }
-$socketRuntime = Get-Value "SOCKET_RUNTIME"
-if ([string]::IsNullOrEmpty($socketRuntime)) { $socketRuntime = $socketOwner }
-$editorOwner = Get-Value "EDITOR_SYNC_OWNER"
-if ([string]::IsNullOrEmpty($editorOwner)) { $editorOwner = "node" }
-
-switch ($socketOwner) {
-    "node" {
-        $values["SOCKET_HOST"] = "${projectName}_socket"
-        $values["SOCKET_PORT"] = Get-Value "SOCKET_PORT"
-    }
-    "phoenix" {
-        if ($socketRuntime -ne "phoenix") { throw "SOCKET_RUNTIME must be phoenix when SOCKET_OWNER is phoenix." }
-        if ((Get-Value "SOCKET_PHOENIX_KAFKA_ENABLED") -ne "true") { throw "SOCKET_PHOENIX_KAFKA_ENABLED must be true before Phoenix can own the socket ingress." }
-        if ((Get-Value "NOTIFICATION_EMAIL_OUTBOX_ENABLED") -ne "true") { throw "NOTIFICATION_EMAIL_OUTBOX_ENABLED must be true before Phoenix can own the socket ingress." }
-        Require-Value "MAIL_SERVER"
-        Require-Value "MAIL_FROM"
-        Test-PositiveInteger "MAIL_PORT"
-        Require-Value "BROADCAST_PHOENIX_FANOUT_CONSUMER_GROUP"
-        foreach ($name in @("BROADCAST_NODE_FANOUT_CONSUMER_GROUP", "BROADCAST_NODE_SIDE_EFFECT_CONSUMER_GROUP")) {
-            $nodeGroup = Get-Value $name
-            if (-not [string]::IsNullOrEmpty($nodeGroup) -and (Get-Value "BROADCAST_PHOENIX_FANOUT_CONSUMER_GROUP") -eq $nodeGroup) {
-                throw "BROADCAST_PHOENIX_FANOUT_CONSUMER_GROUP must differ from $name."
-            }
-        }
-        foreach ($name in @("SOCKET_PHOENIX_BOARD_CHAT_SEND_ENABLED", "SOCKET_PHOENIX_BOARD_CHAT_RESUME_ENABLED", "SOCKET_PHOENIX_BOARD_CHAT_RECOVERY_ENABLED", "SOCKET_PHOENIX_EDITOR_AI_ENABLED")) {
-            if ((Get-Value $name) -ne "true") { throw "$name must be true before Phoenix can own the socket ingress." }
-        }
-        if ($editorOwner -ne "phoenix") { throw "EDITOR_SYNC_OWNER must be phoenix before Phoenix can own the socket ingress." }
-        if ((Get-Value "SOCKET_PHOENIX_EDITOR_SYNC_ENABLED") -ne "true") { throw "SOCKET_PHOENIX_EDITOR_SYNC_ENABLED must be true before Phoenix can own the socket ingress." }
-        Test-PositiveInteger "SOCKET_PHOENIX_EDITOR_SYNC_EXPECTED_NODES"
-        $values["SOCKET_HOST"] = "${projectName}_socket_phoenix"
-        $values["SOCKET_PORT"] = "5690"
-    }
-    default { throw "SOCKET_OWNER must be node or phoenix." }
+if ((Get-Value "SOCKET_PHOENIX_INTERNAL_SECRET").Length -lt 32) {
+    throw "SOCKET_PHOENIX_INTERNAL_SECRET must contain at least 32 characters."
 }
-
-switch ($editorOwner) {
-    "node" {
-        $values["SOCKET_EDITOR_HOST"] = "${projectName}_socket"
-        $values["SOCKET_EDITOR_PORT"] = Get-Value "SOCKET_PORT"
-    }
-    "phoenix" {
-        if ((Get-Value "SOCKET_PHOENIX_EDITOR_SYNC_ENABLED") -ne "true") { throw "SOCKET_PHOENIX_EDITOR_SYNC_ENABLED must be true before Phoenix can own editor sync." }
-        Test-PositiveInteger "SOCKET_PHOENIX_EDITOR_SYNC_EXPECTED_NODES"
-        $values["SOCKET_EDITOR_HOST"] = "${projectName}_socket_phoenix"
-        $values["SOCKET_EDITOR_PORT"] = "5690"
-    }
-    default { throw "EDITOR_SYNC_OWNER must be node or phoenix." }
+if ((Get-Value "SOCKET_PHOENIX_KAFKA_ENABLED") -ne "true" -or (Get-Value "NOTIFICATION_EMAIL_OUTBOX_ENABLED") -ne "true") {
+    throw "Phoenix Kafka and notification email outbox must be enabled."
 }
-
-$values["SOCKET_OWNER"] = $socketOwner
-$values["SOCKET_RUNTIME"] = $socketRuntime
-$values["EDITOR_SYNC_OWNER"] = $editorOwner
+Require-Value "MAIL_SERVER"
+Require-Value "MAIL_FROM"
+Test-PositiveInteger "MAIL_PORT"
+Require-Value "BROADCAST_PHOENIX_FANOUT_CONSUMER_GROUP"
+foreach ($name in @("SOCKET_PHOENIX_BOARD_CHAT_SEND_ENABLED", "SOCKET_PHOENIX_BOARD_CHAT_RESUME_ENABLED", "SOCKET_PHOENIX_BOARD_CHAT_RECOVERY_ENABLED", "SOCKET_PHOENIX_EDITOR_AI_ENABLED", "SOCKET_PHOENIX_EDITOR_SYNC_ENABLED")) {
+    if ((Get-Value $name) -ne "true") { throw "$name must be true." }
+}
+Test-PositiveInteger "SOCKET_PHOENIX_EDITOR_SYNC_EXPECTED_NODES"
+$values["SOCKET_HOST"] = "${projectName}_socket_phoenix"
+$values["SOCKET_PORT"] = "5690"
 
 if ((Get-Value "KEY_PROVIDER_TYPE") -eq "openbao-local") {
     $values["KEY_PROVIDER_OPENBAO_URL"] = "http://${projectName}_vault:8200"

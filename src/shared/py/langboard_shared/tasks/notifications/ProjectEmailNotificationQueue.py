@@ -8,6 +8,9 @@ from ...core.types import SnowflakeID
 PROJECT_EMAIL_FANOUT_TASK = (
     "langboard_shared.tasks.notifications.ProjectEmailNotificationTask.fanout_project_activity_email"
 )
+PROJECT_EMAIL_DELIVERY_TASK = (
+    "langboard_shared.tasks.notifications.ProjectEmailNotificationTask.deliver_project_activity_email"
+)
 
 _fanout_task: Callable[[str, SnowflakeID], Any] | None = None
 

@@ -5,6 +5,7 @@ import { prepareRichDraftPatch } from "@/components/Editor/prepareRichDraftPatch
 import { RemoteCursorOverlay } from "@/components/plate-ui/remote-cursor-overlay";
 import { ISocketContext } from "@/core/providers/SocketProvider";
 import { Utils } from "@langboard/core/utils";
+import { getEditorWebSocketAuth } from "@/core/stores/socket/transport";
 
 export interface ICreateYjsKit {
     socket: ISocketContext;
@@ -15,7 +16,8 @@ export interface ICreateYjsKit {
 
 export const createYjsKit = ({ socket, userName, documentID, onSyncChange }: ICreateYjsKit): ReturnType<typeof YjsPlugin.configure> | null => {
     const url = socket.getAuthorizedWebSocketUrl("editor-sync");
-    if (!url) {
+    const auth = url ? getEditorWebSocketAuth(url, documentID) : null;
+    if (!auth) {
         return null;
     }
 
@@ -35,7 +37,8 @@ export const createYjsKit = ({ socket, userName, documentID, onSyncChange }: ICr
                     type: "hocuspocus",
                     options: {
                         name: documentID,
-                        url,
+                        url: auth.url,
+                        token: auth.token,
                         onStateless: ({ payload }) => {
                             const response = prepareRichDraftPatch(payload, (markdown) =>
                                 editor.getApi(MarkdownPlugin).markdown.deserialize(markdown)

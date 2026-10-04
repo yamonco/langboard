@@ -154,6 +154,7 @@ def test_notification_service_changes_owners_records(monkeypatch: MonkeyPatch, m
     assert mutation["action"] == method
     assert mutation["notification_uid"] == notification.get_uid()
     assert mutation["unread_count"] == 3
+    notification_repo.count_unread.assert_called_once_with(user, readonly=False)
     publish.assert_called_once_with(user, mutation)
 
     if method == "read":
@@ -180,6 +181,7 @@ def test_bulk_notification_service_publishes_authoritative_state(monkeypatch: Mo
 
     assert mutation["action"] == method
     assert mutation["unread_count"] == 0
+    notification_repo.count_unread.assert_called_once_with(user, readonly=False)
     publish.assert_called_once_with(user, mutation)
     if method == "read_all":
         read_at = notification_repo.read_all_by_user.call_args.args[1]

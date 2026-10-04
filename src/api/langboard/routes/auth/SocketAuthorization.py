@@ -116,16 +116,12 @@ def is_subscription_authorized(
         card = service.card.get_by_id_like(topic_id)
         if not card:
             return False
+        project = service.project.get_by_id_like(card.project_id)
+        if not project:
+            return False
         if user.is_admin:
             return True
-        project = service.project.get_by_id_like(card.project_id)
-        return bool(
-            project
-            and (
-                service.project.is_assigned(user, project)[0]
-                or _has_project_action(service, user, project, ProjectRoleAction.CardUpdate)
-            )
-        )
+        return service.project.is_assigned(user, project)[0]
 
     if topic == SocketTopic.BoardWikiPrivate:
         wiki = service.project_wiki.get_by_id_like(topic_id)
@@ -202,12 +198,13 @@ def is_editor_document_write_authorized(
         card = service.card.get_by_id_like(topic_id)
         if not card:
             return False
+        project = service.project.get_by_id_like(card.project_id)
+        if not project:
+            return False
         if user.is_admin:
             return True
-        project = service.project.get_by_id_like(card.project_id)
         return bool(
-            project
-            and service.project.is_assigned(user, project)[0]
+            service.project.is_assigned(user, project)[0]
             and _has_project_action(service, user, project, ProjectRoleAction.CardUpdate)
         )
 

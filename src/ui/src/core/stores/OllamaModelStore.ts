@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { IPullOllamaModelResponse } from "@/controllers/socket/settings/ollama/usePullOllamaModelHandlers";
 import { Utils } from "@langboard/core/utils";
 import { useEffect, useState } from "react";
@@ -58,22 +57,19 @@ interface IOllamaModelStore {
 }
 
 const useOllamaModelStore = create(
-    immer<IOllamaModelStore>((set, get) => {
+    immer<IOllamaModelStore>((set) => {
         return {
             models: {},
             pullingModels: {},
             upsertModel: (model: TBaseOllamaModel) => {
-                const currentModels = get().models;
-                currentModels[model.name] = {
-                    ...(currentModels[model.name] || {}),
-                    ...model,
-                } as any;
-                set({ models: currentModels });
+                set((state) => {
+                    state.models[model.name] = { ...state.models[model.name], ...model };
+                });
             },
             deleteModel: (name: string) => {
-                const currentModels = get().models;
-                delete currentModels[name];
-                set({ models: currentModels });
+                set((state) => {
+                    delete state.models[name];
+                });
             },
             replaceModels: (models: TBaseOllamaModel[]) => {
                 const newModels: Record<string, TBaseOllamaModel> = {};
@@ -83,17 +79,14 @@ const useOllamaModelStore = create(
                 set({ models: newModels });
             },
             upsertPullingModel: (model: TOllamaPullingModel) => {
-                const currentModels = get().pullingModels;
-                currentModels[model.name] = {
-                    ...(currentModels[model.name] || {}),
-                    ...model,
-                } as any;
-                set({ pullingModels: currentModels });
+                set((state) => {
+                    state.pullingModels[model.name] = model;
+                });
             },
             deletePullingModel: (name: string) => {
-                const currentModels = get().pullingModels;
-                delete currentModels[name];
-                set({ pullingModels: currentModels });
+                set((state) => {
+                    delete state.pullingModels[name];
+                });
             },
             replacePullingModels: (models: (string | TOllamaPullingModel)[]) => {
                 const newModels: Record<string, TOllamaPullingModel> = {};

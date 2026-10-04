@@ -1,0 +1,9 @@
+exporters:
+  otlp_http/traces:
+    traces_endpoint: ${env:SOCKET_PHOENIX_OTEL_TRACES_ENDPOINT}
+
+service:
+  pipelines:
+    traces:
+      exporters:
+        - otlp_http/traces

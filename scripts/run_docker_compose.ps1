@@ -34,11 +34,8 @@ foreach ($arg in $args) {
     }
 }
 
-# Get compose args from script
-$COMPOSE_ARGS = & ".\scripts\utils\get-compose-args.ps1"
-
-# Run docker compose
-docker compose $COMPOSE_ARGS up -d --build
+& make start_docker "WITH_DOCS=$env:WITH_DOCS" "WITH_UI_WATCHER=$env:WITH_UI_WATCHER" "WITH_OLLAMA_CPU=$env:WITH_OLLAMA_CPU" "WITH_OLLAMA_GPU=$env:WITH_OLLAMA_GPU" "WITH_OTEL=true"
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 Write-Host ""
 Pause

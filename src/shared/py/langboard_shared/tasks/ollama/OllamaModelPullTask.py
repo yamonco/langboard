@@ -32,6 +32,7 @@ def pull_model(pull_id: int, attempt: int) -> None:
             with requests.post(
                 f"{ollama_url.rstrip('/')}/api/pull",
                 json={"model": pull.model_name, "stream": True},
+                headers={"Accept-Encoding": "identity"},
                 stream=True,
                 timeout=(10, Env.AI_REQUEST_TIMEOUT),
             ) as response:
@@ -51,7 +52,7 @@ def pull_model(pull_id: int, attempt: int) -> None:
 
 def _consume_stream(response: requests.Response, pull: OllamaModelPull, service: DomainService) -> bool | None:
     buffer = bytearray()
-    for chunk in response.iter_content(chunk_size=8192):
+    for chunk in response.iter_content(chunk_size=1):
         if not chunk:
             continue
         buffer.extend(chunk)

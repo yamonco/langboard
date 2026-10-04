@@ -152,14 +152,23 @@ def test_socket_capabilities_require_internal_auth_and_report_contract_version(m
     monkeypatch.setitem(
         get_socket_capabilities.__globals__,
         "Env",
-        Mock(SOCKET_PHOENIX_INTERNAL_SECRET=secret),
+        Mock(SOCKET_PHOENIX_INTERNAL_SECRET=secret, NOTIFICATION_EMAIL_OUTBOX_ENABLED=True),
     )
 
     response = get_socket_capabilities(create_internal_request(secret))
 
     assert orjson.loads(response.body) == {
         "contract_version": SOCKET_INTERNAL_API_CONTRACT_VERSION,
+        "notification_email_outbox_enabled": True,
     }
+
+    monkeypatch.setitem(
+        get_socket_capabilities.__globals__,
+        "Env",
+        Mock(SOCKET_PHOENIX_INTERNAL_SECRET=secret, NOTIFICATION_EMAIL_OUTBOX_ENABLED=False),
+    )
+    response = get_socket_capabilities(create_internal_request(secret))
+    assert orjson.loads(response.body)["notification_email_outbox_enabled"] is False
 
     with pytest.raises(ApiException.Unauthorized_401):
         get_socket_capabilities(create_internal_request("wrong-secret"))
@@ -985,7 +994,7 @@ def test_board_settings_requires_update_role_for_non_admin() -> None:
     assert _is_subscription_authorized(service, user, SocketTopic.BoardSettings, project.get_uid())
 
 
-def test_board_card_allows_project_member_or_card_update_role() -> None:
+def test_board_card_requires_current_membership_even_with_stale_card_update_role() -> None:
     user = create_user()
     project = Project.model_construct(id=SnowflakeID(2))
     card = Card.model_construct(id=SnowflakeID(3), project_id=project.id)
@@ -1001,7 +1010,34 @@ def test_board_card_allows_project_member_or_card_update_role() -> None:
     assert not _is_subscription_authorized(service, user, SocketTopic.BoardCard, card.get_uid())
 
     service.project.get_user_role_actions_by_project.return_value = [ProjectRoleAction.CardUpdate.value]
+    assert not _is_subscription_authorized(service, user, SocketTopic.BoardCard, card.get_uid())
+    assert not _is_editor_document_write_authorized(service, user, (SocketTopic.BoardCard, card.get_uid()))
+
+    service.project.is_assigned.return_value = (True, object())
     assert _is_subscription_authorized(service, user, SocketTopic.BoardCard, card.get_uid())
+    assert _is_editor_document_write_authorized(service, user, (SocketTopic.BoardCard, card.get_uid()))
+
+
+def test_card_editor_admin_access_requires_live_card_and_project() -> None:
+    admin = create_user(is_admin=True)
+    project = Project.model_construct(id=SnowflakeID(2))
+    card = Card.model_construct(id=SnowflakeID(3), project_id=project.id)
+    service = create_authorization_service()
+    service.card.get_by_id_like.return_value = card
+    service.project.get_by_id_like.return_value = project
+    subscription = (SocketTopic.BoardCard, card.get_uid())
+
+    assert _is_subscription_authorized(service, admin, *subscription)
+    assert _is_editor_document_write_authorized(service, admin, subscription)
+
+    service.project.get_by_id_like.return_value = None
+    assert not _is_subscription_authorized(service, admin, *subscription)
+    assert not _is_editor_document_write_authorized(service, admin, subscription)
+
+    service.project.get_by_id_like.return_value = project
+    service.card.get_by_id_like.return_value = None
+    assert not _is_subscription_authorized(service, admin, *subscription)
+    assert not _is_editor_document_write_authorized(service, admin, subscription)
 
 
 def test_private_wiki_allows_assignment_or_project_update_role() -> None:
@@ -1086,6 +1122,17 @@ def test_app_settings_preserves_existing_role_categories() -> None:
         SocketTopic.AppSettings,
         SettingSocketTopicID.Bot.value,
     )
+
+
+def test_app_settings_accepts_all_granted_setting_role_categories() -> None:
+    admin = create_user(is_admin=True)
+    service = create_authorization_service()
+    service.user.get_setting_role.return_value = SettingRole.model_construct(actions=["*"])
+
+    for topic_id in (SettingSocketTopicID.User.value, SettingSocketTopicID.Bot.value, SettingSocketTopicID.Webhook.value):
+        assert _is_subscription_authorized(service, admin, SocketTopic.AppSettings, topic_id)
+
+    assert not _is_subscription_authorized(service, create_user(), SocketTopic.AppSettings, SettingSocketTopicID.Bot.value)
 
 
 def test_fixed_scope_topics_reject_forged_topic_ids() -> None:

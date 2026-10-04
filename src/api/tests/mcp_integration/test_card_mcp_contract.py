@@ -2,6 +2,7 @@ import importlib
 import os
 from types import SimpleNamespace
 from typing import Any
+from unittest.mock import MagicMock
 import pytest
 
 
@@ -238,3 +239,28 @@ def test_native_move_rejects_column_from_another_project(
     )
 
     assert CardService.change_order(SimpleNamespace(), object(), project, card, 0, foreign_column) is None
+
+
+def test_same_column_card_reorder_does_not_publish_move(monkeypatch: pytest.MonkeyPatch) -> None:
+    module = importlib.import_module("langboard_shared.domain.services.factory.CardService")
+    project = SimpleNamespace(id=1)
+    card = SimpleNamespace(project_id=1, project_column_id=10, order=1, archived_at=None)
+    column = SimpleNamespace(id=10, project_id=1, is_archive=False)
+    repository = SimpleNamespace(card=MagicMock())
+    published = MagicMock()
+    moved = MagicMock()
+    monkeypatch.setattr(module.InfraHelper, "get_records_with_foreign_by_params", lambda *args: (project, card))
+    monkeypatch.setattr(module.InfraHelper, "get_by_id_like", lambda model, value: column)
+    monkeypatch.setattr(module.CardPublisher, "order_changed", published)
+    monkeypatch.setattr(module.CardBotTask, "enqueue_card_moved_webhook", moved)
+    monkeypatch.setattr(module.CardActivityTask, "card_moved", moved)
+    monkeypatch.setattr(module.CardBotTask, "card_moved", moved)
+
+    service = CardService(lambda _: None, lambda _: None, repository)
+    assert service.change_order(object(), project, card, 0, column) is True
+
+    assert card.order == 0
+    assert card.archived_at is None
+    assert repository.card.update_row_order.call_args.args[-1] is None
+    published.assert_called_once_with(project, card, column, None)
+    moved.assert_not_called()

@@ -3,7 +3,7 @@
     "composite": true,
     "useDefineForClassFields": true,
     "target": "ESNext",
-    "lib": ["ESNext"],
+    "lib": ["ESNext", "DOM"],
     "module": "ESNext",
     "skipLibCheck": true,
     "outDir": "dist",

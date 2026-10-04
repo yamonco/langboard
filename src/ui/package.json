@@ -10,6 +10,8 @@
     "lint": "eslint . -c eslint.config.js --ignore-pattern node_modules/ --ignore-pattern dist/ --report-unused-disable-directives --max-warnings 0",
     "test:card-hierarchy": "node --experimental-strip-types src/pages/BoardPage/components/board/BoardColumnCardHierarchy.test.ts",
     "test:board-chat-store": "node --experimental-strip-types src/core/stores/BoardChatStore.test.ts",
+    "test:socket-runtime": "esbuild src/core/providers/socket/streamErrorCallbacks.test.ts --bundle --platform=node --format=esm --packages=external --tsconfig=tsconfig.app.json --outfile=test-results/socket-runtime.mjs && node --test test-results/socket-runtime.mjs",
+    "test:ollama-model-store": "esbuild src/core/stores/OllamaModelStore.test.ts --bundle --platform=node --format=esm --packages=external --tsconfig=tsconfig.app.json --outfile=test-results/ollama-model-store.mjs && node --test test-results/ollama-model-store.mjs",
     "preview": "vite preview",
     "format": "prettier --write \"{tests,src}/**/*.{js,jsx,ts,tsx,json,md}\" --ignore-path .prettierignore",
     "check-format": "prettier --check \"{tests,src}/**/*.{js,jsx,ts,tsx,json,md}\" --ignore-path .prettierignore"

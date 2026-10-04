@@ -1,5 +1,6 @@
 import { SOCKET_URL } from "@/constants";
 import { ESocketTopic } from "@langboard/core/enums";
+import { Utils } from "@langboard/core/utils";
 import {
     canCloseSocket,
     getSocket,
@@ -139,6 +140,18 @@ export const createAuthorizedWebSocketUrl = (accessToken: string, path: string =
     return socketUrl.toString();
 };
 
+export const getEditorWebSocketAuth = (authorizedUrl: string, documentID: string) => {
+    const url = new URL(authorizedUrl);
+    const token = url.searchParams.get("authorization");
+    if (!token) {
+        return null;
+    }
+
+    url.searchParams.delete("authorization");
+    url.searchParams.set("route_key", Utils.String.createEditorDocumentRouteKey(documentID));
+    return { url: url.toString(), token };
+};
+
 export const createSocketConnection = <TResponse>({
     props,
     subscribe,
@@ -150,7 +163,7 @@ export const createSocketConnection = <TResponse>({
     onSubscribed: (topic: ESocketTopic, topicIds: string[]) => void;
     onUnsubscribed: (topic: ESocketTopic, topicIds: string[]) => void;
 }) => {
-    const { accessToken, onOpen, onMessage, onError, onClose } = props;
+    const { accessToken, userUID, onOpen, onMessage, onError, onClose } = props;
     const currentSocket = getSocket();
 
     if (currentSocket) {
@@ -161,12 +174,15 @@ export const createSocketConnection = <TResponse>({
         clearSocketHandlers(currentSocket);
     }
 
-    const nextSocket = new WebSocket(createAuthorizedWebSocketUrl(accessToken));
+    const url = new URL(createAuthorizedWebSocketUrl(accessToken));
+    url.searchParams.set("socket_route_key", userUID);
+    const nextSocket = new WebSocket(url.toString());
     setSocket(nextSocket);
 
     nextSocket.onopen = async (event) => {
         await onOpen(event);
         restoreTopicSubscriptions(subscribe, getSocketMap().restorableTopics);
+        flushSocketQueue();
     };
 
     nextSocket.onmessage = async (event) => {
@@ -219,11 +235,14 @@ export const flushSocketQueue = () => {
     }
 };
 
-export const sendSocketMessage = (json: string) => {
+export const sendSocketMessage = (json: string, queueIfDisconnected = true) => {
     const socketMap = getSocketMap();
     const currentSocket = getSocket();
 
     if (!currentSocket || currentSocket.readyState !== WebSocket.OPEN) {
+        if (!queueIfDisconnected) {
+            return false;
+        }
         socketMap.sendingQueue.push(json);
         scheduleSocketQueueFlush();
         return true;
@@ -276,21 +295,10 @@ export const unsubscribeFromTopics = (
     topicIds: string[],
     callback?: () => void
 ) => {
-    const socketMap = getSocketMap();
-    const topicSubscriptions = socketMap.subscriptions[topic];
-
     removeRestorableTopicIds(topic, topicIds);
 
     if (!isSocketOpenOrConnecting()) {
         return;
-    }
-
-    for (let i = 0; i < topicIds.length; ++i) {
-        const topicId = topicIds[i];
-
-        if (topicSubscriptions?.[topicId]) {
-            delete topicSubscriptions[topicId];
-        }
     }
 
     queueUnsubscribedCallback(topic, topicIds, callback);

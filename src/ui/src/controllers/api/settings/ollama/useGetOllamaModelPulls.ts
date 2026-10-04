@@ -10,7 +10,7 @@ const useGetOllamaModelPulls = () => {
 
     return mutate<Record<string, never>, IOllamaModelPull[]>(["get-ollama-model-pulls"], async () => {
         const res = await api.get<{ pulls: IOllamaModelPull[] }>(Routing.API.SETTINGS.OLLAMA.PULL_MODEL, {
-            env: { interceptToast: false } as never,
+            env: { interceptToast: true } as never,
         });
         const pulls = res.data.pulls;
         getOllamaModelStore().replacePullingModels(

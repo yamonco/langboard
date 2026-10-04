@@ -95,7 +95,9 @@ def test_active_pull_remains_visible_after_newer_completed_pulls(pull_repository
     assert [pull.model_name for pull in recent] == ["active:latest", "completed:second"]
 
 
-def test_accepted_pull_survives_queue_failure(monkeypatch: MonkeyPatch, pull_repository: OllamaModelPullRepository) -> None:
+def test_accepted_pull_survives_queue_failure(
+    monkeypatch: MonkeyPatch, pull_repository: OllamaModelPullRepository
+) -> None:
     monkeypatch.setattr(Broker.celery, "send_task", Mock(side_effect=RuntimeError("queue unavailable")))
     with DomainService.use() as service:
         pull = service.ollama_model_pull.request_pull("  model:latest  ")
@@ -175,14 +177,17 @@ class _PullResponse:
         return None
 
     def iter_content(self, chunk_size: int):
-        assert chunk_size == 8192
+        assert chunk_size == 1
         yield from self.chunks
 
 
 @pytest.mark.parametrize(
     ("chunks", "expected_status"),
     [
-        ([b'{"status":"pull', b'ing","completed":1,"total":2}\n', b'{"status":"success"}\n'], OllamaModelPullStatus.Success),
+        (
+            [b'{"status":"pull', b'ing","completed":1,"total":2}\n', b'{"status":"success"}\n'],
+            OllamaModelPullStatus.Success,
+        ),
         ([b'{"status":"pulling"}\n{"error":"upstream failed"}\n'], OllamaModelPullStatus.Failed),
         ([b'{"status":"pulling"}\n'], OllamaModelPullStatus.Failed),
         ([b'{"status":"' + b"x" * (64 * 1024) + b'"}\n'], OllamaModelPullStatus.Failed),

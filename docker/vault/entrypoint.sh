@@ -7,6 +7,11 @@ echo "ENTRYPOINT.SH STARTED"
 echo "ROOT_TOKEN: ${ROOT_TOKEN:+SET}"
 echo "=========================================="
 
+if [ -s /openbao/vault-secret.json ] && [ ! -s /openbao/file/core/_seal-config ]; then
+    echo "Existing OpenBao credentials found, but the data volume is empty or incomplete. Restore the Vault data before starting." >&2
+    exit 1
+fi
+
 # Start OpenBao server in background for initialization/check
 echo "🔧 Starting OpenBao server..."
 docker-entrypoint.sh server &
@@ -164,4 +169,3 @@ echo ""
 echo "🔄 OpenBao server is already running (PID: $SERVER_PID)"
 
 wait $SERVER_PID
-

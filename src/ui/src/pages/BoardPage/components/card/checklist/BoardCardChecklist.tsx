@@ -152,6 +152,7 @@ const BoardCardChecklistDisplay = memo(({ checklist, draggableRef, canReorder }:
                                 size="icon-sm"
                                 className="h-8 w-6 transition-all sm:size-8 [&[data-state=open]>svg]:rotate-180"
                                 title={t(`common.${isOpenedInBoardCard ? "Collapse" : "Expand"}`)}
+                                aria-label={t(`common.${isOpenedInBoardCard ? "Collapse" : "Expand"}`)}
                             >
                                 <IconComponent icon="chevron-down" size="4" />
                             </Button>

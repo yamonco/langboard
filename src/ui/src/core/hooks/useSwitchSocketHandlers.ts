@@ -63,12 +63,7 @@ const useSwitchSocketHandlers = ({ socket, handlers, dependencies }: IUseSwitchS
     useEffect(() => {
         const offs: (() => void)[] = [];
         for (let i = 0; i < handlerList.length; ++i) {
-            const { topic, on } = handlerList[i];
-            if (!topic || !subscribedTopics.includes(topic)) {
-                continue;
-            }
-
-            offs.push(on());
+            offs.push(handlerList[i].on());
         }
 
         return () => {
@@ -76,7 +71,7 @@ const useSwitchSocketHandlers = ({ socket, handlers, dependencies }: IUseSwitchS
                 offs[i]();
             }
         };
-    }, [handlerList, subscribedTopics, ...(dependencies ?? [])]);
+    }, [handlerList, ...(dependencies ?? [])]);
 
     return { subscribedTopics };
 };

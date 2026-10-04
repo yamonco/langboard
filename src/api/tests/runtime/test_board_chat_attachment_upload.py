@@ -1,5 +1,6 @@
 from asyncio import run
 from io import BytesIO
+from threading import Event, Thread
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 from uuid import uuid4
@@ -32,6 +33,7 @@ def make_service() -> Mock:
     assignment = SimpleNamespace(project_id=SnowflakeID(2))
     service.project.get_by_id_like.return_value = project
     service.project.get_assigned_internal_bot_by_type.return_value = (bot, assignment)
+    service.internal_bot_run.get_owned_board_chat_status.return_value = None
     return service
 
 
@@ -128,6 +130,7 @@ def test_cleanup_keeps_completed_attachment_for_history(monkeypatch: pytest.Monk
         lambda token: {"run_uid": "run-uid", "file_id": "file-id"},
     )
     monkeypatch.setattr(LangflowBoardChatAttachmentCleanupTask, "delete_board_chat_attachment_ticket", delete_ticket)
+    monkeypatch.setattr(LangflowBoardChatAttachmentCleanupTask, "set_board_chat_attachment_ticket", Mock())
     monkeypatch.setattr(LangflowBoardChatAttachmentCleanupTask.LangflowFileClient, "delete", delete_file)
 
     LangflowBoardChatAttachmentCleanupTask.cleanup_board_chat_attachment("opaque-token")
@@ -137,9 +140,13 @@ def test_cleanup_keeps_completed_attachment_for_history(monkeypatch: pytest.Monk
     service.close.assert_called_once()
 
 
-def test_cleanup_retries_active_run_and_deletes_failed_attachment(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize(
+    "run_status",
+    [InternalBotRunStatus.Failed, InternalBotRunStatus.Cancelled, InternalBotRunStatus.Uncertain],
+)
+def test_cleanup_deletes_terminal_attachment(monkeypatch: pytest.MonkeyPatch, run_status: InternalBotRunStatus) -> None:
     service = make_service()
-    service.internal_bot_run.get_board_chat_run.return_value = SimpleNamespace(status=InternalBotRunStatus.Failed)
+    service.internal_bot_run.get_board_chat_run.return_value = SimpleNamespace(status=run_status)
     service.internal_bot.get_by_id_like.return_value = SimpleNamespace(id=SnowflakeID(3))
     schedule_cleanup = Mock()
     delete_ticket = Mock()
@@ -154,6 +161,7 @@ def test_cleanup_retries_active_run_and_deletes_failed_attachment(monkeypatch: p
         LangflowBoardChatAttachmentCleanupTask, "schedule_board_chat_attachment_cleanup", schedule_cleanup
     )
     monkeypatch.setattr(LangflowBoardChatAttachmentCleanupTask, "delete_board_chat_attachment_ticket", delete_ticket)
+    monkeypatch.setattr(LangflowBoardChatAttachmentCleanupTask, "set_board_chat_attachment_ticket", Mock())
     monkeypatch.setattr(LangflowBoardChatAttachmentCleanupTask.LangflowFileClient, "delete", delete_file)
 
     LangflowBoardChatAttachmentCleanupTask.cleanup_board_chat_attachment("opaque-token")
@@ -167,6 +175,7 @@ def test_cleanup_reschedules_an_active_run(monkeypatch: pytest.MonkeyPatch) -> N
     service = make_service()
     service.internal_bot_run.get_board_chat_run.return_value = SimpleNamespace(status=InternalBotRunStatus.Streaming)
     schedule_cleanup = Mock()
+    refresh_ticket = Mock()
     monkeypatch.setattr(LangflowBoardChatAttachmentCleanupTask, "DomainService", lambda: service)
     monkeypatch.setattr(
         LangflowBoardChatAttachmentCleanupTask,
@@ -176,18 +185,116 @@ def test_cleanup_reschedules_an_active_run(monkeypatch: pytest.MonkeyPatch) -> N
     monkeypatch.setattr(
         LangflowBoardChatAttachmentCleanupTask, "schedule_board_chat_attachment_cleanup", schedule_cleanup
     )
+    monkeypatch.setattr(LangflowBoardChatAttachmentCleanupTask, "set_board_chat_attachment_ticket", refresh_ticket)
 
     LangflowBoardChatAttachmentCleanupTask.cleanup_board_chat_attachment("opaque-token")
 
     schedule_cleanup.assert_called_once_with("opaque-token", 60)
+    refresh_ticket.assert_called_once_with(
+        "opaque-token", {"run_uid": "run-uid", "file_id": "file-id", "expires_at": 0}
+    )
+
+
+def test_cleanup_keeps_unconsumed_attachment_ticket_during_external_outage(monkeypatch: pytest.MonkeyPatch) -> None:
+    service = make_service()
+    service.internal_bot.get_by_id_like.return_value = SimpleNamespace(id=SnowflakeID(3))
+    ticket = {"bot_id": 3, "file_id": "file-id"}
+    refresh_ticket = Mock()
+    schedule_cleanup = Mock()
+    delete_ticket = Mock()
+    monkeypatch.setattr(LangflowBoardChatAttachmentCleanupTask, "DomainService", lambda: service)
+    monkeypatch.setattr(
+        LangflowBoardChatAttachmentCleanupTask, "get_board_chat_attachment_ticket", lambda token: ticket
+    )
+    monkeypatch.setattr(LangflowBoardChatAttachmentCleanupTask, "set_board_chat_attachment_ticket", refresh_ticket)
+    monkeypatch.setattr(
+        LangflowBoardChatAttachmentCleanupTask, "schedule_board_chat_attachment_cleanup", schedule_cleanup
+    )
+    monkeypatch.setattr(LangflowBoardChatAttachmentCleanupTask, "delete_board_chat_attachment_ticket", delete_ticket)
+    monkeypatch.setattr(LangflowBoardChatAttachmentCleanupTask.LangflowFileClient, "delete", Mock(return_value=False))
+
+    LangflowBoardChatAttachmentCleanupTask.cleanup_board_chat_attachment("opaque-token")
+
+    refresh_ticket.assert_called_once_with("opaque-token", {**ticket, "expires_at": 0})
+    schedule_cleanup.assert_called_once_with("opaque-token", 60)
+    delete_ticket.assert_not_called()
+
+
+def test_cleanup_recovers_accepted_run_when_ticket_link_was_not_written(monkeypatch: pytest.MonkeyPatch) -> None:
+    service = make_service()
+    task_id = uuid4()
+    run = SimpleNamespace(
+        status=InternalBotRunStatus.Streaming,
+        request_payload={"attachment": {"token": "opaque-token", "file_id": "file-id"}},
+    )
+    service.internal_bot_run.get_owned_board_chat_status.return_value = (run, None, None, None)
+    delete_file = Mock()
+    schedule_cleanup = Mock()
+    monkeypatch.setattr(LangflowBoardChatAttachmentCleanupTask, "DomainService", lambda: service)
+    monkeypatch.setattr(
+        LangflowBoardChatAttachmentCleanupTask,
+        "get_board_chat_attachment_ticket",
+        lambda token: {
+            "task_id": str(task_id),
+            "user_id": 1,
+            "project_id": 2,
+            "bot_id": 3,
+            "file_id": "file-id",
+        },
+    )
+    monkeypatch.setattr(LangflowBoardChatAttachmentCleanupTask, "set_board_chat_attachment_ticket", Mock())
+    monkeypatch.setattr(
+        LangflowBoardChatAttachmentCleanupTask, "schedule_board_chat_attachment_cleanup", schedule_cleanup
+    )
+    monkeypatch.setattr(LangflowBoardChatAttachmentCleanupTask.LangflowFileClient, "delete", delete_file)
+
+    LangflowBoardChatAttachmentCleanupTask.cleanup_board_chat_attachment("opaque-token")
+
+    service.internal_bot_run.get_owned_board_chat_status.assert_called_once_with(
+        task_id, SnowflakeID(1), SnowflakeID(2)
+    )
+    schedule_cleanup.assert_called_once_with("opaque-token", 60)
+    delete_file.assert_not_called()
+
+
+def test_attachment_ticket_lock_serializes_local_workers(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(BoardChatAttachment, "Env", SimpleNamespace(CACHE_TYPE="memory"))
+    entered = Event()
+    release = Event()
+    second_entered = Event()
+
+    def first() -> None:
+        with BoardChatAttachment.lock_board_chat_attachment_ticket("opaque-token"):
+            entered.set()
+            assert release.wait(2)
+
+    def second() -> None:
+        with BoardChatAttachment.lock_board_chat_attachment_ticket("opaque-token"):
+            second_entered.set()
+
+    first_thread = Thread(target=first)
+    second_thread = Thread(target=second)
+    first_thread.start()
+    assert entered.wait(2)
+    second_thread.start()
+    assert not second_entered.wait(0.05)
+    release.set()
+    first_thread.join(2)
+    second_thread.join(2)
+    assert second_entered.is_set()
 
 
 def test_attachment_ticket_outlives_its_first_cleanup_attempt(monkeypatch: pytest.MonkeyPatch) -> None:
     cache_set = Mock()
     monkeypatch.setattr(BoardChatAttachment.Cache, "set", cache_set)
+    monkeypatch.setattr(BoardChatAttachment, "time", lambda: 1000)
 
     BoardChatAttachment.create_board_chat_attachment_token({"file_id": "file-id"})
 
+    assert cache_set.call_args.args[1] == {
+        "file_id": "file-id",
+        "expires_at": 1000 + BoardChatAttachment._TICKET_USE_TTL_SECONDS,
+    }
     assert cache_set.call_args.args[2] > BoardChatAttachment._TICKET_USE_TTL_SECONDS
 
 

@@ -29,6 +29,10 @@ const useGetCards = (params: IGetCardsForm, options?: TQueryOptions<unknown, IGe
     const { query } = useQueryMutation();
 
     const getCards = async (): Promise<IGetCardsResponse> => {
+        const existingCardUIDs = new Set(ProjectCard.Model.getModels((model) => model.project_uid === params.project_uid).map((model) => model.uid));
+        const existingColumnUIDs = new Set(
+            ProjectColumn.Model.getModels((model) => model.project_uid === params.project_uid).map((model) => model.uid)
+        );
         const url = Utils.String.format(Routing.API.BOARD.GET_CARDS, { uid: params.project_uid });
         const res = await api.get(url, {
             env: {
@@ -58,10 +62,14 @@ const useGetCards = (params: IGetCardsForm, options?: TQueryOptions<unknown, IGe
         ProjectColumn.Model.fromArray(res.data.columns, true);
         ProjectChecklist.Model.fromArray(res.data.checklists, true);
 
-        ProjectCard.Model.getModels((model) => model.project_uid === params.project_uid && !cardUIDs.has(model.uid)).forEach((model) => {
+        ProjectCard.Model.getModels(
+            (model) => model.project_uid === params.project_uid && existingCardUIDs.has(model.uid) && !cardUIDs.has(model.uid)
+        ).forEach((model) => {
             deleteCardModel(model.uid, true);
         });
-        ProjectColumn.Model.deleteModels((model) => model.project_uid === params.project_uid && !columnUIDs.has(model.uid));
+        ProjectColumn.Model.deleteModels(
+            (model) => model.project_uid === params.project_uid && existingColumnUIDs.has(model.uid) && !columnUIDs.has(model.uid)
+        );
 
         ProjectColumnBotScope.Model.fromArray(res.data.column_bot_scopes, true);
         ProjectColumnBotSchedule.Model.fromArray(res.data.column_bot_schedules, true);

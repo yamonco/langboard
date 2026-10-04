@@ -48,8 +48,8 @@ const useSocketStore = create<ISocketStore>(() => {
         return getSocketMap();
     };
 
-    const send: ISocketStore["send"] = (json) => {
-        return sendSocketMessage(json);
+    const send: ISocketStore["send"] = (json, queueIfDisconnected) => {
+        return sendSocketMessage(json, queueIfDisconnected);
     };
 
     const subscribe: ISocketStore["subscribe"] = (topic, topicIds, callback) => {

@@ -1,5 +1,6 @@
 import { useAuth } from "@/core/providers/AuthProvider";
 import { useSocket } from "@/core/providers/SocketProvider";
+import { getEditorWebSocketAuth } from "@/core/stores/socket/transport";
 import { TEditorCollaborationType } from "@langboard/core/constants";
 import { Utils } from "@langboard/core/utils";
 import { HocuspocusProvider } from "@hocuspocus/provider";
@@ -197,7 +198,8 @@ export const useCollaborativeText = ({
         }
 
         const url = socket.getAuthorizedWebSocketUrl("editor-sync");
-        if (!url) {
+        const auth = url ? getEditorWebSocketAuth(url, resolvedDocumentID) : null;
+        if (!auth) {
             hasLocalDirtyValueRef.current = false;
             valueRef.current = fallbackValueRef.current;
             setValue(fallbackValueRef.current);
@@ -208,8 +210,7 @@ export const useCollaborativeText = ({
             return;
         }
 
-        const token = new URL(url).searchParams.get("authorization");
-        const providerKey = `${resolvedDocumentID}:${token || ""}`;
+        const providerKey = `${resolvedDocumentID}:${auth.token}`;
         let sharedEntry = sharedProviderEntries.get(providerKey);
 
         if (!sharedEntry) {
@@ -228,8 +229,8 @@ export const useCollaborativeText = ({
             const provider = new HocuspocusProvider({
                 document,
                 name: resolvedDocumentID,
-                token,
-                url,
+                token: auth.token,
+                url: auth.url,
                 onAuthenticated: () => {},
                 onConnect: () => {
                     sharedEntry!.state = {

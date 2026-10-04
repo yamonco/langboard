@@ -727,6 +727,40 @@ def test_board_chat_cancel_hides_empty_response_and_rejects_late_finish(
     assert persisted.deleted_at is not None
 
 
+def test_board_chat_cancel_keeps_persisted_stream_progress(run_repository: InternalBotRunRepository) -> None:
+    service = InternalBotRunService(lambda service_type: None, lambda name: None, Mock(internal_bot_run=run_repository))
+    task_id = uuid4()
+    run, _, _, _, _ = service.accept_board_chat(
+        task_id=task_id,
+        user_id=SnowflakeID(10),
+        project_id=SnowflakeID(20),
+        internal_bot_id=SnowflakeID(30),
+        project_chat_session_id=None,
+        message="Prepare the graph",
+        permission_level="read",
+        scope_table="project",
+        scope_uid=None,
+    )
+    claimed = run_repository.claim(run.id, lease_seconds=30)
+    assert claimed is not None
+    ai_message = run_repository.set_graph_identity(run.id, claimed.attempt, "session", "thread")
+    assert ai_message is not None
+
+    assert service.save_board_chat_progress(run.id, claimed.attempt, 30, "Partial")
+    assert service.save_board_chat_progress(run.id, claimed.attempt, 30, "Partial answer")
+    assert service.save_board_chat_progress(run.id, claimed.attempt, 30, "Revised answer")
+    cancelled = service.cancel_board_chat(task_id, SnowflakeID(10), SnowflakeID(20))
+    assert cancelled is not None
+    assert cancelled.status == InternalBotRunStatus.Cancelled
+    assert cancelled.output_text == "Revised answer"
+    assert not service.save_board_chat_progress(run.id, claimed.attempt, 30, "Late answer")
+
+    with DbSession.use(readonly=True) as db:
+        saved = db.exec(SqlBuilder.select.table(ChatHistory).where(ChatHistory.column("id") == ai_message.id)).first()
+    assert saved is not None
+    assert saved.message.content == "Revised answer"
+
+
 def test_board_chat_cancel_cannot_rewrite_completed_result(run_repository: InternalBotRunRepository) -> None:
     service = InternalBotRunService(lambda service_type: None, lambda name: None, Mock(internal_bot_run=run_repository))
     task_id = uuid4()

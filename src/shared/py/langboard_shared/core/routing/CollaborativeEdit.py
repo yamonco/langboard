@@ -3,6 +3,7 @@ from typing import Any, Callable, Literal, TypedDict, TypeVar
 
 
 _TRoute = TypeVar("_TRoute", bound=Callable[..., Any])
+EDITOR_ROUTE_KEY_HEADER = "X-Editor-Route-Key"
 
 
 class CollaborativeEditTarget(TypedDict, total=False):
@@ -29,6 +30,13 @@ def create_editor_collaboration_document_id(
     return ":".join(
         str(value) for value in (collaboration_type.value, uid, section) if value is not None and len(str(value)) > 0
     )
+
+
+def create_editor_document_route_key(document_name: str) -> str:
+    value = 0x811C9DC5
+    for byte in document_name.encode("utf-8"):
+        value = ((value ^ byte) * 0x01000193) & 0xFFFFFFFF
+    return f"{value:08x}"
 
 
 def collaborative_edit(*targets: CollaborativeEditTarget):

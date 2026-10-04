@@ -7,7 +7,6 @@ import { TChatScope } from "@langboard/core/types";
 
 export interface IBoardChatSendRequest {
     message: string;
-    file_path?: string;
     file_token?: string;
     task_id: string;
     session_uid?: string;

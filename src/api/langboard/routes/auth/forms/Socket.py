@@ -139,6 +139,7 @@ class SocketBoardChatLeaseForm(BaseFormModel):
     model_config = ConfigDict(extra="forbid")
 
     attempt: int = Field(ge=1)
+    output_text: str | None = Field(default=None, max_length=Env.AI_STREAM_MAX_BUFFER_MB * 1024 * 1024)
 
 
 @form_model

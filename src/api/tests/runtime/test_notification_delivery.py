@@ -8,11 +8,19 @@ from langboard_shared import FastAPIRunner
 from langboard_shared.ai import BotScheduleHelper
 from langboard_shared.core.db import DbSession
 from langboard_shared.core.db.DbEngine import DbEngine
-from langboard_shared.core.publisher import NotificationPublisher
 from langboard_shared.core.resources.locales.EmailTemplateNames import TEmailTemplateName
 from langboard_shared.core.routing import SocketTopic
 from langboard_shared.core.types import SafeDateTime, SnowflakeID
-from langboard_shared.domain.models import NotificationEmailDelivery, User, UserNotification
+from langboard_shared.domain.models import (
+    Card,
+    CardComment,
+    Checklist,
+    NotificationEmailDelivery,
+    Project,
+    ProjectWiki,
+    User,
+    UserNotification,
+)
 from langboard_shared.domain.models.NotificationEmailDelivery import NotificationEmailDeliveryStatus
 from langboard_shared.domain.models.UserNotification import NotificationType
 from langboard_shared.domain.models.UserNotificationUnsubscription import NotificationChannel, NotificationScope
@@ -37,6 +45,69 @@ from sqlalchemy import create_engine, select
 
 def _user(user_id: int) -> User:
     return User.model_construct(id=SnowflakeID(user_id), email=f"user-{user_id}@example.test", preferred_lang="en-US")
+
+
+@pytest.mark.parametrize(
+    ("notification_method", "template_name"),
+    [
+        ("notify_mentioned_in_card", "mentioned_in_card"),
+        ("notify_mentioned_in_comment", "mentioned_in_comment"),
+        ("notify_mentioned_in_wiki", "mentioned_in_wiki"),
+        ("notify_assigned_to_card", "assigned_to_card"),
+        ("notify_reacted_to_comment", "reacted_to_comment"),
+        ("notify_checklist", "notified_from_checklist"),
+    ],
+)
+def test_notification_email_titles_render_all_templates(
+    monkeypatch: MonkeyPatch, notification_method: str, template_name: TEmailTemplateName
+) -> None:
+    service = NotificationService(lambda service_type: None, lambda name: None, Mock())
+    project = Project.model_construct(title="Project <one>")
+    card = Card.model_construct(title="Card <two>", description=None)
+    comment = CardComment.model_construct(user_id=SnowflakeID(2), content=None)
+    wiki = ProjectWiki.model_construct(title="Wiki <three>", content=None)
+    checklist = Checklist.model_construct(title="Checklist <four>")
+    notifier = _user(1)
+    captured: dict[str, str] = {}
+
+    def capture(*args, **kwargs) -> None:
+        captured.update(args[-1])
+
+    monkeypatch.setattr(service, "_NotificationService__get_column_by_card", lambda card: Mock())
+    monkeypatch.setattr(
+        service, "_NotificationService__create_redirect_url", lambda *args: "https://board.example.test"
+    )
+    monkeypatch.setattr(service, "_NotificationService__notify", capture)
+    monkeypatch.setattr(service, "_NotificationService__notify_mentioned", capture)
+
+    if notification_method == "notify_mentioned_in_wiki":
+        service.notify_mentioned_in_wiki(notifier, project, wiki)
+    elif notification_method == "notify_mentioned_in_comment":
+        service.notify_mentioned_in_comment(notifier, project, card, comment)
+    elif notification_method == "notify_reacted_to_comment":
+        service.notify_reacted_to_comment(notifier, project, card, comment, "like")
+    elif notification_method == "notify_checklist":
+        service.notify_checklist(notifier, _user(2), project, card, checklist)
+    elif notification_method == "notify_assigned_to_card":
+        service.notify_assigned_to_card(notifier, _user(2), project, card)
+    else:
+        service.notify_mentioned_in_card(notifier, project, card)
+
+    email_service = EmailService(lambda service_type: None, lambda name: None, Mock())
+    message = email_service.prepare_template_message(
+        "en-US", "recipient@example.test", template_name, {**captured, "recipient": "Recipient", "sender": "Sender"}
+    )
+    body = message.get_content()
+    expected_titles = {
+        "mentioned_in_card": ("Card &lt;two&gt;", "Project &lt;one&gt;"),
+        "mentioned_in_comment": ("Card &lt;two&gt;",),
+        "mentioned_in_wiki": ("Wiki &lt;three&gt;",),
+        "assigned_to_card": ("Card &lt;two&gt;", "Project &lt;one&gt;"),
+        "reacted_to_comment": ("Card &lt;two&gt;",),
+        "notified_from_checklist": ("Card &lt;two&gt;", "Checklist &lt;four&gt;"),
+    }
+    assert all(title in body for title in expected_titles[template_name])
+    assert not any(title in body for title in ("<one>", "<two>", "<three>", "<four>"))
 
 
 @pytest.mark.parametrize("unsubscribed", [False, True])
@@ -84,8 +155,6 @@ def test_new_notification_has_one_python_web_owner(
     repository.notification_email_delivery.accept.side_effect = accept
     monkeypatch.setattr(service, "convert_to_api_response", api_response)
     monkeypatch.setattr(UserPublisher, "notified", notified)
-    legacy_publish = Mock()
-    monkeypatch.setattr(NotificationPublisher, "put_dispather", legacy_publish)
 
     assert service._NotificationService__notify(
         notifier,
@@ -108,7 +177,6 @@ def test_new_notification_has_one_python_web_owner(
     assert events == expected
     assert repository.user_notification.complete_web_fanout.call_count == (0 if unsubscribed else 1)
     assert repository.notification_email_delivery.accept.call_count == int(email_template is not None)
-    legacy_publish.assert_not_called()
 
 
 def test_failed_web_publish_remains_pending_and_does_not_block_email(monkeypatch: MonkeyPatch) -> None:
@@ -133,8 +201,6 @@ def test_failed_web_publish_remains_pending_and_does_not_block_email(monkeypatch
         lambda notification, references, sender: {"uid": notification.get_uid()},
     )
     monkeypatch.setattr(UserPublisher, "notified", Mock(side_effect=RuntimeError("broker unavailable")))
-    legacy_publish = Mock()
-    monkeypatch.setattr(NotificationPublisher, "put_dispather", legacy_publish)
 
     assert service._NotificationService__notify(
         notifier,
@@ -149,16 +215,50 @@ def test_failed_web_publish_remains_pending_and_does_not_block_email(monkeypatch
     assert delivery.notification_id == persisted.id
     assert persisted.web_fanout_pending is True
     repository.user_notification.complete_web_fanout.assert_not_called()
-    legacy_publish.assert_not_called()
 
 
-def test_email_outbox_defaults_to_legacy_node_owner(monkeypatch: MonkeyPatch) -> None:
+def test_disabled_email_outbox_rejects_email_before_persisting(monkeypatch: MonkeyPatch) -> None:
     notifier = _user(1)
     target = _user(2)
     repository = Mock()
-    repository.user_notification.insert.side_effect = lambda notification: setattr(notification, "id", SnowflakeID(3))
     settings = Mock()
     settings.has_unsubscription.return_value = False
+    service = NotificationService(lambda service_type: settings, lambda name: None, repository)
+    monkeypatch.setattr(type(Env), "NOTIFICATION_EMAIL_OUTBOX_ENABLED", property(lambda self: False))
+    monkeypatch.setattr(InfraHelper, "get_by_id_like", lambda model, identifier: target)
+
+    with pytest.raises(RuntimeError, match="Notification email outbox must be enabled"):
+        service._NotificationService__notify(
+            notifier, target, NotificationType.ProjectInvited, None, [], email_template_name="assigned_to_card"
+        )
+
+    repository.user_notification.insert.assert_not_called()
+    repository.notification_email_delivery.accept.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("email_template_name", "recipient_email", "email_unsubscribed"),
+    [
+        (None, "user-2@example.test", False),
+        ("assigned_to_card", "", False),
+        ("assigned_to_card", "user-2@example.test", True),
+    ],
+)
+def test_disabled_email_outbox_keeps_web_only_notifications(
+    monkeypatch: MonkeyPatch,
+    email_template_name: TEmailTemplateName | None,
+    recipient_email: str,
+    email_unsubscribed: bool,
+) -> None:
+    notifier = _user(1)
+    target = _user(2)
+    target.email = recipient_email
+    repository = Mock()
+    repository.user_notification.insert.side_effect = lambda notification: setattr(notification, "id", SnowflakeID(3))
+    settings = Mock()
+    settings.has_unsubscription.side_effect = lambda user, kind, scopes, channel: (
+        email_unsubscribed if channel == NotificationChannel.Email else False
+    )
     service = NotificationService(lambda service_type: settings, lambda name: None, repository)
     monkeypatch.setattr(type(Env), "NOTIFICATION_EMAIL_OUTBOX_ENABLED", property(lambda self: False))
     monkeypatch.setattr(InfraHelper, "get_by_id_like", lambda model, identifier: target)
@@ -166,17 +266,13 @@ def test_email_outbox_defaults_to_legacy_node_owner(monkeypatch: MonkeyPatch) ->
         service, "convert_to_api_response", lambda notification, references, sender: {"uid": notification.get_uid()}
     )
     monkeypatch.setattr(UserPublisher, "notified", Mock())
-    legacy_publish = Mock()
-    monkeypatch.setattr(NotificationPublisher, "put_dispather", legacy_publish)
 
     assert service._NotificationService__notify(
-        notifier, target, NotificationType.ProjectInvited, None, [], email_template_name="assigned_to_card"
+        notifier, target, NotificationType.ProjectInvited, None, [], email_template_name=email_template_name
     )
 
+    repository.user_notification.insert.assert_called_once()
     repository.notification_email_delivery.accept.assert_not_called()
-    legacy_model = legacy_publish.call_args.args[0]
-    assert legacy_model.web_handled_by_python is True
-    assert legacy_model.email_template_name == "assigned_to_card"
 
 
 def test_recovery_command_attempts_email_after_web_failure(monkeypatch: MonkeyPatch) -> None:
@@ -601,6 +697,88 @@ def test_email_review_resolution_requires_current_state_and_records_decision(mon
     assert persisted.failure_reason == "SMTP acceptance could not be confirmed"
     assert persisted.review_note.startswith("Operator retry under ticket OPS-123")
     assert repository.claim_pending(1)[0].id == delivery.id
+    engine.dispose()
+
+
+def test_failed_reaction_email_retry_requires_approved_current_card_title(monkeypatch: MonkeyPatch) -> None:
+    delivery = NotificationEmailDelivery.model_construct(
+        id=SnowflakeID(4),
+        status=NotificationEmailDeliveryStatus.Failed,
+        template_name="reacted_to_comment",
+        formats={"recipient": "Recipient", "sender": "Sender", "url": "https://board.example.test"},
+        scope_models=[("project", 1), ("card", 2)],
+        failure_reason="Email template rendering failed",
+    )
+    repository = Mock()
+    repository.notification_email_delivery.get_review_item.return_value = delivery
+    repository.notification_email_delivery.resolve_review_item.return_value = True
+    service = NotificationService(lambda service_type: None, lambda name: None, repository)
+
+    with pytest.raises(ValueError, match="explicit approval"):
+        service.resolve_email_delivery_review(delivery.id, "retry", "OPS-123")
+    repository.notification_email_delivery.resolve_review_item.assert_not_called()
+
+    card = Card.model_construct(title="Current <title>")
+    monkeypatch.setattr(InfraHelper, "get_by_id_like", lambda model, card_id, **kwargs: card)
+    assert service.resolve_email_delivery_review(delivery.id, "retry", "OPS-123", use_current_card_title=True)
+    call_args = repository.notification_email_delivery.resolve_review_item.call_args
+    assert call_args.kwargs["formats"] == {
+        **delivery.formats,
+        "card_name": "Current &lt;title&gt;",
+    }
+    assert call_args.args[2] == NotificationEmailDeliveryStatus.Pending
+    assert "current Card title approved" in call_args.args[3]
+
+    delivery.template_name = "assigned_to_card"
+    with pytest.raises(ValueError, match="only to missing reaction email titles"):
+        service.resolve_email_delivery_review(delivery.id, "retry", "OPS-123", use_current_card_title=True)
+
+    delivery.template_name = "reacted_to_comment"
+    delivery.status = NotificationEmailDeliveryStatus.Uncertain
+    with pytest.raises(ValueError, match="only to missing reaction email titles"):
+        service.resolve_email_delivery_review(
+            delivery.id, "retry", "OPS-123", acknowledge_uncertain=True, use_current_card_title=True
+        )
+
+
+def test_email_review_updates_status_and_repaired_formats_atomically(monkeypatch: MonkeyPatch) -> None:
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    User.__table__.create(engine)
+    NotificationEmailDelivery.__table__.create(engine)
+    monkeypatch.setattr(DbEngine, "get_main_engine", lambda: engine)
+    monkeypatch.setattr(DbEngine, "get_readonly_engine", lambda: engine)
+    repository = NotificationEmailDeliveryRepository(lambda repository_type: None, lambda name: None)
+    delivery = NotificationEmailDelivery(
+        notification_id=SnowflakeID(3),
+        receiver_id=SnowflakeID(2),
+        notification_type=NotificationType.ReactedToComment,
+        recipient_email="recipient@example.test",
+        preferred_lang="en-US",
+        template_name="reacted_to_comment",
+        formats={"url": "https://board.example.test"},
+        status=NotificationEmailDeliveryStatus.Failed,
+    )
+    repository.insert(delivery)
+    repaired_formats = {**delivery.formats, "card_name": "Current &lt;title&gt;"}
+
+    assert repository.resolve_review_item(
+        delivery.id,
+        NotificationEmailDeliveryStatus.Failed,
+        NotificationEmailDeliveryStatus.Pending,
+        "Operator-approved current title",
+        formats=repaired_formats,
+    )
+    assert not repository.resolve_review_item(
+        delivery.id,
+        NotificationEmailDeliveryStatus.Failed,
+        NotificationEmailDeliveryStatus.Pending,
+        "stale retry",
+        formats={"card_name": "stale"},
+    )
+    with engine.connect() as connection:
+        persisted = connection.execute(select(NotificationEmailDelivery.__table__)).one()
+    assert persisted.status == NotificationEmailDeliveryStatus.Pending
+    assert persisted.formats == repaired_formats
     engine.dispose()
 
 

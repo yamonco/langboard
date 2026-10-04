@@ -1,6 +1,8 @@
 """Verify that the local OTel Collector receives Phoenix metrics and traces."""
 
 import argparse
+import json
+from pathlib import Path
 from time import monotonic, sleep
 from scripts.phoenix_otel_metrics import (
     MetricSample,
@@ -12,9 +14,16 @@ from scripts.phoenix_otel_metrics import (
 
 
 OTelCheckError = PrometheusMetricsError
+CONTRACT_PATH = Path(__file__).resolve().parents[1] / "src" / "shared" / "realtime" / "contract.json"
+
+
+def authorization_route_label() -> str:
+    contract = json.loads(CONTRACT_PATH.read_text(encoding="utf-8"))
+    return f'route="{contract["internal_api"]["capabilities_path"]}"'
 
 
 def verify_forwarded_metrics(samples: dict[str, list[MetricSample]]) -> None:
+    route_label = authorization_route_label()
     if require_sample(samples, "up", label='job="langboard_socket_phoenix"').value != 1:
         raise OTelCheckError("Phoenix Prometheus scrape target is not up")
 
@@ -53,15 +62,15 @@ def verify_forwarded_metrics(samples: dict[str, list[MetricSample]]) -> None:
     authorization_count = require_sample(
         samples,
         "langboard_socket_authorization_request_count_total",
-        label='route="/health"',
+        label=route_label,
     )
     if authorization_count.value < 1 or 'result="success"' not in authorization_count.labels:
-        raise OTelCheckError("Phoenix authorization request metrics do not include a successful health check")
+        raise OTelCheckError("Phoenix authorization request metrics do not include a successful capabilities check")
 
     authorization_duration = require_sample(
         samples,
         "langboard_socket_authorization_request_duration_microseconds_total",
-        label='route="/health"',
+        label=route_label,
     )
     if authorization_duration.value < 0 or 'result="success"' not in authorization_duration.labels:
         raise OTelCheckError("Phoenix authorization duration metrics are invalid")
@@ -94,7 +103,7 @@ def verify_collector_metrics(samples: dict[str, list[MetricSample]]) -> None:
             raise OTelCheckError(f"Collector reports rejected telemetry: {name}")
 
 
-def wait_for_delivery(
+def wait_for_collector_receipt(
     metrics_url: str,
     collector_metrics_url: str,
     request_timeout_seconds: float,
@@ -126,7 +135,7 @@ def main() -> int:
     try:
         if args.timeout_seconds <= 0 or args.wait_seconds < 0 or args.retry_interval_seconds <= 0:
             raise OTelCheckError("Timeouts must be positive and wait-seconds must not be negative")
-        wait_for_delivery(
+        wait_for_collector_receipt(
             args.metrics_url,
             args.collector_metrics_url,
             args.timeout_seconds,
@@ -136,7 +145,7 @@ def main() -> int:
     except OTelCheckError as error:
         parser.error(str(error))
 
-    print("Phoenix OTel delivery passed: metrics=accepted traces=accepted rejected=0")
+    print("Phoenix OTel Collector receipt passed: metrics=accepted traces=accepted rejected=0")
     return 0
 
 

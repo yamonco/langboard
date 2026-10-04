@@ -7,9 +7,16 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/utils.sh"
 
+# Keep an explicitly supplied trace sink ahead of an empty .env default.
+trace_endpoint_from_environment="${SOCKET_PHOENIX_OTEL_TRACES_ENDPOINT:-}"
+
 # Load .env file if it exists
 if [ -f .env ]; then
     source .env
+fi
+
+if [ -n "${trace_endpoint_from_environment}" ]; then
+    SOCKET_PHOENIX_OTEL_TRACES_ENDPOINT="${trace_endpoint_from_environment}"
 fi
 
 # Validate external postgres URLs if they are set
@@ -40,12 +47,6 @@ fi
 
 COMPOSE_ARGS+=" -f ${COMPOSE_PREFIX}.redis.yaml -f ${COMPOSE_PREFIX}.server.yaml --env-file ./.env"
 
-if [ "${SOCKET_OWNER:-node}" = "phoenix" ]; then
-    COMPOSE_ARGS+=" -f ${COMPOSE_PREFIX}.phoenix-owner.yaml --profile socket-phoenix"
-elif [ "${EDITOR_SYNC_OWNER:-node}" = "phoenix" ]; then
-    COMPOSE_ARGS+=" -f ${COMPOSE_PREFIX}.phoenix-editor-owner.yaml --profile socket-phoenix"
-fi
-
 # Optional compose args
 VAULT_COMPOSE_ARGS="-f ${COMPOSE_PREFIX}.vault.yaml"
 DOCS_COMPOSE_ARGS="-f ${COMPOSE_PREFIX}.docs.yaml"
@@ -74,6 +75,10 @@ fi
 
 if [ "${WITH_OTEL}" = "true" ]; then
     COMPOSE_ARGS+=" ${OTEL_COMPOSE_ARGS}"
+fi
+
+if [ "${WITH_OTEL}" = "true" ] && [ -n "${SOCKET_PHOENIX_OTEL_TRACES_ENDPOINT:-}" ]; then
+    COMPOSE_ARGS+=" -f ${COMPOSE_PREFIX}.phoenix-otel-traces.yaml"
 fi
 
 # Check if vault is needed based on KEY_PROVIDER_TYPE in .env file

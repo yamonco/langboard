@@ -56,6 +56,7 @@ class CheckitemRepository(BaseOrderRepository[Checkitem, Checklist]):
                 .outerjoin(Card, Card.column("id") == Checkitem.column("cardified_id"))
                 .outerjoin(User, User.column("id") == Checkitem.column("user_id"))
                 .where(Checklist.column("card_id") == card_id)
+                .order_by(Checkitem.column("order").asc(), Checkitem.column("id").asc())
             )
             records = result.all()
         return list(records)

@@ -17,12 +17,6 @@ upstream socket_server {
     keepalive 32;
 }
 
-upstream editor_sync_server {
-    zone editor_sync_server 64k;
-    server ${SOCKET_EDITOR_HOST}:${SOCKET_EDITOR_PORT} resolve;
-    keepalive 32;
-}
-
 server {
     listen 8000;
 
@@ -60,7 +54,7 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header Host $host;
 
-        proxy_pass http://editor_sync_server;
+        proxy_pass http://socket_server;
 
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;

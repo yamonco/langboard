@@ -7,7 +7,7 @@ case "$(uname -s)" in
     *)        CURRENT_OS="linux" ;;
 esac
 
-if ! command -v docker >/dev/null 2>&1 || ! command -v docker-compose >/dev/null 2>&1; then
+if ! command -v docker >/dev/null 2>&1 || ! docker compose version >/dev/null 2>&1; then
     echo Docker is not installed or not found in PATH. Please install Docker to proceed.
     if [ "$CURRENT_OS" = "linux" ]; then
         DOCKER_URL="https://docs.docker.com/desktop/setup/install/linux/"
@@ -43,8 +43,9 @@ for arg in "$@"; do
     fi
 done
 
-# Get compose args from script
-COMPOSE_ARGS=$(bash scripts/utils/get-compose-args.sh)
-
-# Run docker compose
-docker compose $COMPOSE_ARGS up -d --build
+make start_docker \
+    WITH_DOCS="$WITH_DOCS" \
+    WITH_UI_WATCHER="$WITH_UI_WATCHER" \
+    WITH_OLLAMA_CPU="$WITH_OLLAMA_CPU" \
+    WITH_OLLAMA_GPU="$WITH_OLLAMA_GPU" \
+    WITH_OTEL=true

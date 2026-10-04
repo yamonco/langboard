@@ -6,6 +6,7 @@ import json
 import math
 import os
 import re
+import subprocess
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -20,6 +21,7 @@ RUNTIME_IMAGE_PATTERN = re.compile(r"^sha256:[0-9a-f]{64}$")
 WORKER_KINDS = ("board_chat", "editor_ai", "editor_document")
 TASK_KINDS = ("command", "graph_stream")
 SCALAR_THRESHOLDS = (
+    "memory_peak_bytes",
     "memory_growth_bytes",
     "memory_slope_bytes_per_hour",
     "mailbox_total",
@@ -39,6 +41,7 @@ AUTHORIZATION_RESULTS = (
     "transport_error",
 )
 AUTHORIZATION_ERROR_RESULTS = ("server_error", "invalid_response", "unexpected_status", "transport_error")
+TRACE_EXPORTER_LABEL = 'exporter="otlp_http/traces"'
 
 
 class SoakConfigurationError(ValueError):
@@ -73,6 +76,9 @@ class SoakSample(TypedDict):
     task_availability: dict[str, float]
     scrape_up: float
     accepted_spans: float
+    exported_spans: float
+    export_failed_spans: float
+    export_enqueue_failed_spans: float
     accepted_metric_points: float
     failed_spans: float
     refused_spans: float
@@ -100,6 +106,7 @@ class SoakObservations(TypedDict):
     worker_active_max: dict[str, float]
     task_active_max: dict[str, float]
     accepted_spans_end: float
+    exported_spans_end: float
     accepted_metric_points_end: float
 
 
@@ -247,6 +254,7 @@ def _authorization_value(
 def collect_sample(metrics_url: str, collector_metrics_url: str, timeout_seconds: float) -> SoakSample:
     metrics = parse_samples(read_metrics(metrics_url, timeout_seconds))
     collector = parse_samples(read_metrics(collector_metrics_url, timeout_seconds))
+    _ = require_sample(collector, "otelcol_exporter_queue_capacity", label=TRACE_EXPORTER_LABEL)
     workers = {
         kind: _value(metrics, "langboard_socket_runtime_workers_active", f'kind="{kind}"') for kind in WORKER_KINDS
     }
@@ -288,6 +296,13 @@ def collect_sample(metrics_url: str, collector_metrics_url: str, timeout_seconds
         task_availability=task_availability,
         scrape_up=_value(metrics, "up", 'job="langboard_socket_phoenix"'),
         accepted_spans=_value(collector, "otelcol_receiver_accepted_spans", 'receiver="otlp"'),
+        exported_spans=_optional_value(collector, "otelcol_exporter_sent_spans", label=TRACE_EXPORTER_LABEL),
+        export_failed_spans=_optional_value(
+            collector, "otelcol_exporter_send_failed_spans", label=TRACE_EXPORTER_LABEL
+        ),
+        export_enqueue_failed_spans=_optional_value(
+            collector, "otelcol_exporter_enqueue_failed_spans", label=TRACE_EXPORTER_LABEL
+        ),
         accepted_metric_points=_value(
             collector,
             "otelcol_receiver_accepted_metric_points",
@@ -370,11 +385,14 @@ def evaluate_samples(samples: list[SoakSample], configuration: SoakConfiguration
         worker_active_max=worker_maxima,
         task_active_max=task_maxima,
         accepted_spans_end=samples[-1]["accepted_spans"],
+        exported_spans_end=samples[-1]["exported_spans"],
         accepted_metric_points_end=samples[-1]["accepted_metric_points"],
     )
 
     memory_bounded = (
-        memory_growth <= thresholds["memory_growth_bytes"] and memory_slope <= thresholds["memory_slope_bytes_per_hour"]
+        observations["memory_max_bytes"] <= thresholds["memory_peak_bytes"]
+        and memory_growth <= thresholds["memory_growth_bytes"]
+        and memory_slope <= thresholds["memory_slope_bytes_per_hour"]
     )
     mailboxes_bounded = (
         observations["mailbox_total_max"] <= thresholds["mailbox_total"]
@@ -427,19 +445,27 @@ def evaluate_samples(samples: list[SoakSample], configuration: SoakConfiguration
     )
     telemetry_healthy = all(sample["scrape_up"] == 1 for sample in samples)
     telemetry_healthy = telemetry_healthy and samples[-1]["accepted_spans"] > samples[0]["accepted_spans"]
+    telemetry_healthy = telemetry_healthy and samples[-1]["exported_spans"] > samples[0]["exported_spans"]
     telemetry_healthy = (
         telemetry_healthy and samples[-1]["accepted_metric_points"] > samples[0]["accepted_metric_points"]
     )
     telemetry_healthy = telemetry_healthy and all(
         sample[field] == 0
         for sample in samples
-        for field in ("failed_spans", "refused_spans", "failed_metric_points", "refused_metric_points")
+        for field in (
+            "failed_spans",
+            "refused_spans",
+            "export_failed_spans",
+            "export_enqueue_failed_spans",
+            "failed_metric_points",
+            "refused_metric_points",
+        )
     )
     telemetry_healthy = telemetry_healthy and authorization_metrics_monotonic
     telemetry_healthy = telemetry_healthy and all(
         current[metric] >= previous[metric]
         for previous, current in pairwise(samples)
-        for metric in ("accepted_spans", "accepted_metric_points")
+        for metric in ("accepted_spans", "exported_spans", "accepted_metric_points")
     )
     runtime_continuity = all(
         current["runtime_uptime_seconds"] >= previous["runtime_uptime_seconds"]
@@ -484,11 +510,51 @@ def _write_report(path: Path, report: dict[str, Any]) -> None:
     os.replace(temporary_path, path)
 
 
+def inspect_runtime(container: str, runtime_image: str) -> tuple[str, str, str]:
+    try:
+        result = subprocess.run(
+            ["docker", "inspect", "--type", "container", container],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        records: object = json.loads(result.stdout)
+        if not isinstance(records, list) or len(records) != 1:
+            raise ValueError("Expected exactly one runtime container")
+        raw_record: object = cast(list[object], records)[0]
+        if not isinstance(raw_record, dict):
+            raise ValueError("Invalid runtime container")
+        record = cast(dict[str, object], raw_record)
+        raw_state = record.get("State")
+        if not isinstance(raw_state, dict):
+            raise ValueError("Invalid runtime state")
+        state = cast(dict[str, object], raw_state)
+        container_id = record.get("Id")
+        image = record.get("Image")
+        started_at = state.get("StartedAt")
+        if not (
+            isinstance(container_id, str)
+            and container_id
+            and isinstance(image, str)
+            and image
+            and isinstance(started_at, str)
+            and started_at
+        ):
+            raise ValueError("Incomplete runtime identity")
+        if state.get("Running") is not True or image != runtime_image:
+            raise ValueError("Runtime is stopped or does not match the requested image")
+        return container_id, image, started_at
+    except (OSError, subprocess.SubprocessError, ValueError, KeyError, TypeError) as error:
+        raise SoakConfigurationError("Cannot verify the running soak container identity") from error
+
+
 def record_soak(
     *,
     metrics_url: str,
     collector_metrics_url: str,
     runtime_image: str,
+    runtime_container: str,
     output_path: Path,
     configuration: SoakConfiguration,
     duration_seconds: float,
@@ -498,10 +564,15 @@ def record_soak(
 ) -> dict[str, Any]:
     if RUNTIME_IMAGE_PATTERN.fullmatch(runtime_image) is None:
         raise SoakConfigurationError("runtime-image must be an exact sha256 image ID")
-    if duration_seconds <= 0 or sample_interval_seconds <= 0 or request_timeout_seconds <= 0:
+    if any(
+        not math.isfinite(value) or value <= 0
+        for value in (duration_seconds, sample_interval_seconds, request_timeout_seconds)
+    ):
         raise SoakConfigurationError("Duration, sample interval, and request timeout must be positive")
-    if warmup_seconds < 0 or warmup_seconds >= duration_seconds:
+    if not math.isfinite(warmup_seconds) or warmup_seconds < 0 or warmup_seconds >= duration_seconds:
         raise SoakConfigurationError("Warm-up must be nonnegative and shorter than the duration")
+
+    runtime_identity = inspect_runtime(runtime_container, runtime_image)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     samples_path = output_path.with_suffix(".samples.jsonl")
@@ -517,7 +588,11 @@ def record_soak(
             now = monotonic()
             if now < next_sample_at:
                 sleep(next_sample_at - now)
+            if inspect_runtime(runtime_container, runtime_image) != runtime_identity:
+                raise SoakConfigurationError("Runtime container changed or restarted during the soak")
             sample = collect_sample(metrics_url, collector_metrics_url, request_timeout_seconds)
+            if inspect_runtime(runtime_container, runtime_image) != runtime_identity:
+                raise SoakConfigurationError("Runtime container changed or restarted during the soak")
             samples_file.write(json.dumps(sample, separators=(",", ":"), sort_keys=True) + "\n")
             samples_file.flush()
             raw_sample_count += 1
@@ -530,9 +605,11 @@ def record_soak(
     finished_at = datetime.now(UTC)
     evaluation = evaluate_samples(post_warmup_samples, configuration)
     report = {
-        "format_version": 3,
+        "format_version": 5,
         "evidence_type": "phoenix_otel_soak",
         "runtime_image": runtime_image,
+        "runtime_container_id": runtime_identity[0],
+        "runtime_started_at": runtime_identity[2],
         "started_at": started_at.isoformat(),
         "finished_at": finished_at.isoformat(),
         "duration_seconds": (finished_at - started_at).total_seconds(),
@@ -563,10 +640,11 @@ def main() -> int:
     _ = parser.add_argument("--metrics-url", required=True)
     _ = parser.add_argument("--collector-metrics-url", required=True)
     _ = parser.add_argument("--runtime-image", required=True)
+    _ = parser.add_argument("--runtime-container", required=True)
     _ = parser.add_argument("--thresholds", type=Path, required=True)
     _ = parser.add_argument("--load-profile", type=Path, required=True)
     _ = parser.add_argument("--output", type=Path, required=True)
-    _ = parser.add_argument("--duration-seconds", type=float, default=24 * 60 * 60)
+    _ = parser.add_argument("--duration-seconds", type=float, default=25 * 60 * 60)
     _ = parser.add_argument("--warmup-seconds", type=float, default=60 * 60)
     _ = parser.add_argument("--sample-interval-seconds", type=float, default=10.0)
     _ = parser.add_argument("--request-timeout-seconds", type=float, default=5.0)
@@ -577,6 +655,7 @@ def main() -> int:
             metrics_url=args.metrics_url,
             collector_metrics_url=args.collector_metrics_url,
             runtime_image=args.runtime_image,
+            runtime_container=args.runtime_container,
             output_path=args.output,
             configuration=configuration,
             duration_seconds=args.duration_seconds,

@@ -24,12 +24,6 @@ jobs:
           path: src/shared/ts/.yarn/cache
           key: ${{ runner.os }}-yarncache-core-${{ hashFiles('src/shared/ts/yarn.lock') }}
           restore-keys: ${{ runner.os }}-yarncache-core-
-      - name: Cache Socket cache
-        uses: actions/cache@v4
-        with:
-          path: src/socket/.yarn/cache
-          key: ${{ runner.os }}-yarncache-socket-${{ hashFiles('src/socket/yarn.lock') }}
-          restore-keys: ${{ runner.os }}-yarncache-socket-
       - name: Cache UI cache
         uses: actions/cache@v4
         with:
@@ -39,17 +33,11 @@ jobs:
       - name: Install deps (Core)
         working-directory: src/shared/ts
         run: yarn install --immutable
-      - name: Install deps (Socket)
-        working-directory: src/socket
-        run: yarn install --immutable
       - name: Install deps (UI)
         working-directory: src/ui
         run: yarn install --immutable
       - name: Check Core Formatting
         working-directory: src/shared/ts
-        run: yarn run check-format
-      - name: Check Socket Formatting
-        working-directory: src/socket
         run: yarn run check-format
       - name: Check UI Formatting
         working-directory: src/ui

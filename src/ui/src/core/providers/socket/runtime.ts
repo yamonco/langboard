@@ -1,7 +1,8 @@
 import { refresh } from "@/core/helpers/Api";
-import { getTopicWithId, ISocketCreateSocketProps, ISocketStore, TEventName } from "@/core/stores/SocketStore";
+import { getTopicWithId, ISocketStore, TEventName } from "@/core/stores/SocketStore";
 import { ESocketStatus, ESocketTopic } from "@langboard/core/enums";
 import type { TSocketEventKeyMap } from "@/core/stores/socket/types";
+import { runStreamErrorCallbacks } from "@/core/providers/socket/streamErrorCallbacks";
 
 interface IRunEventsProps {
     topic?: ESocketTopic;
@@ -9,49 +10,10 @@ interface IRunEventsProps {
     eventName: TEventName;
     data?: unknown;
 }
-type TStreamErrorCallback = ISocketCreateSocketProps<unknown>["onError"];
 type TCloseStatusHandler = () => Promise<bool>;
-
-const streamErrorCallbacks: Partial<Record<ESocketTopic, Record<string, TStreamErrorCallback>>> = {};
 
 const isSocketTopic = (value: unknown): value is ESocketTopic => {
     return typeof value === "string" && Object.values<string>(ESocketTopic).includes(value);
-};
-
-export const setStreamErrorCallback = (topic: ESocketTopic, event: string, callback: TStreamErrorCallback) => {
-    if (!streamErrorCallbacks[topic]) {
-        streamErrorCallbacks[topic] = {};
-    }
-
-    if (!streamErrorCallbacks[topic][event]) {
-        streamErrorCallbacks[topic][event] = callback;
-    }
-};
-
-export const removeStreamErrorCallback = (topic: ESocketTopic, event: string) => {
-    if (streamErrorCallbacks[topic]?.[event]) {
-        delete streamErrorCallbacks[topic][event];
-    }
-};
-
-const runStreamErrorCallbacks = async (event: Event) => {
-    const topics = Object.values(ESocketTopic);
-    for (let i = 0; i < topics.length; ++i) {
-        const topic = topics[i];
-        const callbacks = streamErrorCallbacks[topic];
-
-        if (!callbacks) {
-            continue;
-        }
-
-        const eventNames = Object.keys(callbacks);
-        for (let j = 0; j < eventNames.length; ++j) {
-            const callback = callbacks[eventNames[j]];
-            await callback(event);
-        }
-
-        delete streamErrorCallbacks[topic];
-    }
 };
 
 export interface ICreateSocketRuntimeProps {
@@ -59,6 +21,7 @@ export interface ICreateSocketRuntimeProps {
     getStore: ISocketStore["getStore"];
     closeSocket: ISocketStore["close"];
     getAccessToken: () => string | undefined;
+    getUserUID: () => string | undefined;
     removeAccessToken: () => void;
     reconnect: () => void;
     shouldReconnect: () => bool;
@@ -69,6 +32,7 @@ export const createSocketRuntime = ({
     getStore,
     closeSocket,
     getAccessToken,
+    getUserUID,
     removeAccessToken,
     reconnect,
     shouldReconnect,
@@ -80,8 +44,8 @@ export const createSocketRuntime = ({
 
         const eventKeys = Object.keys(eventMap);
         for (let i = 0; i < eventKeys.length; ++i) {
-            const callbacks = eventMap[eventKeys[i]];
-            if (!callbacks?.length) {
+            const callbacks = [...(eventMap[eventKeys[i]] ?? [])];
+            if (!callbacks.length) {
                 continue;
             }
 
@@ -106,6 +70,11 @@ export const createSocketRuntime = ({
     const runTopicEvents = async (props: IRunEventsProps) => {
         const socketMap = getStore();
         const { topic, topicId } = getTopicWithId(props);
+        if (topic !== ESocketTopic.None && topic !== ESocketTopic.Global) {
+            if (!socketMap.restorableTopics[topic]?.includes(topicId) || !socketMap.subscribedTopics[topic]?.includes(topicId)) {
+                return;
+            }
+        }
         await runEventCallbacks(socketMap.subscriptions[topic]?.[topicId]?.[props.eventName], props.data);
     };
 
@@ -207,12 +176,14 @@ export const createSocketRuntime = ({
 
     const connect = () => {
         const accessToken = getAccessToken();
-        if (!accessToken) {
+        const userUID = getUserUID();
+        if (!accessToken || !userUID) {
             return;
         }
 
         createSocket<unknown>({
             accessToken,
+            userUID,
             onOpen: handleSocketOpen,
             onMessage: handleSocketMessage,
             onError: handleSocketError,

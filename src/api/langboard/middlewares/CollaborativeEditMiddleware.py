@@ -8,7 +8,12 @@ from urllib.parse import parse_qsl
 import requests
 from fastapi import status
 from langboard_shared.core.logger import Logger
-from langboard_shared.core.routing import AppRouter, JsonResponse
+from langboard_shared.core.routing import (
+    EDITOR_ROUTE_KEY_HEADER,
+    AppRouter,
+    JsonResponse,
+    create_editor_document_route_key,
+)
 from langboard_shared.core.routing.ApiSchemaHelper import ApiSchemaMap
 from langboard_shared.core.security import AuthSecurity
 from langboard_shared.core.utils.Converter import json_default
@@ -330,14 +335,15 @@ class CollaborativeEditMiddleware:
             return
 
         try:
-            requests.post(
+            response = requests.post(
                 f"{Env.SOCKET_EDITOR_INTERNAL_URL}/editor-sync/clear",
                 json={"document_names": inactive_document_names},
                 headers=request_headers,
                 timeout=10,
             )
+            response.raise_for_status()
         except requests.RequestException:
-            return
+            _logger.exception("Unable to clear inactive collaborative documents.")
 
     @staticmethod
     def _get_active_collaborative_document_names(headers: Headers, document_names: list[str]) -> list[str] | None:
@@ -355,30 +361,20 @@ class CollaborativeEditMiddleware:
                 headers=request_headers,
                 timeout=10,
             )
-        except requests.RequestException:
-            return None
-
-        if not (status.HTTP_200_OK <= response.status_code < 300):
-            return None
-
-        try:
+            if not (status.HTTP_200_OK <= response.status_code < 300):
+                return None
             content = response.json()
-        except ValueError:
+        except (requests.RequestException, ValueError):
             return None
 
         if not isinstance(content, dict):
             return None
-
         active_document_names = content.get("active_document_names")
         if not isinstance(active_document_names, list):
             return None
 
-        document_name_set = set(document_names)
-        return [
-            document_name
-            for document_name in active_document_names
-            if isinstance(document_name, str) and document_name in document_name_set
-        ]
+        active_set = {name for name in active_document_names if isinstance(name, str)}
+        return [name for name in document_names if name in active_set]
 
     @staticmethod
     def _get_collaborative_text_patch_payloads(
@@ -503,11 +499,15 @@ class CollaborativeEditMiddleware:
     def _patch_collaborative_document(
         path: str, patch_payload: dict[str, str], headers: dict[str, str]
     ) -> _BatchResponse | None:
+        request_headers = dict(headers)
+        document_name = patch_payload.get("document_name")
+        if document_name:
+            request_headers[EDITOR_ROUTE_KEY_HEADER] = create_editor_document_route_key(document_name)
         try:
             response = requests.post(
                 f"{Env.SOCKET_EDITOR_INTERNAL_URL}{path}",
                 json=patch_payload,
-                headers=headers,
+                headers=request_headers,
                 timeout=10,
             )
         except requests.RequestException as error:

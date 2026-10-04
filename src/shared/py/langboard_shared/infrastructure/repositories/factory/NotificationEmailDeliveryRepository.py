@@ -69,19 +69,19 @@ class NotificationEmailDeliveryRepository(BaseRepository[NotificationEmailDelive
         expected_status: NotificationEmailDeliveryStatus,
         target_status: NotificationEmailDeliveryStatus,
         note: str,
+        formats: dict[str, str] | None = None,
     ) -> bool:
+        query = SqlBuilder.update.table(NotificationEmailDelivery).values(
+            status=target_status,
+            claimed_at=None,
+            review_note=note,
+            updated_at=SafeDateTime.now(),
+        )
+        if formats is not None:
+            query = query.values(formats=formats)
         with DbSession.use(readonly=False) as db:
             updated = db.exec(
-                SqlBuilder.update.table(NotificationEmailDelivery)
-                .values(
-                    {
-                        NotificationEmailDelivery.column("status"): target_status,
-                        NotificationEmailDelivery.column("claimed_at"): None,
-                        NotificationEmailDelivery.column("review_note"): note,
-                        NotificationEmailDelivery.column("updated_at"): SafeDateTime.now(),
-                    }
-                )
-                .where(
+                query.where(
                     (NotificationEmailDelivery.column("id") == delivery_id)
                     & (NotificationEmailDelivery.column("status") == expected_status)
                 )

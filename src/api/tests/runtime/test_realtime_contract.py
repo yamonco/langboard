@@ -35,7 +35,7 @@ def test_runtime_inventory_is_scoped_and_unique() -> None:
     assert all(method in {"GET", "POST"} and path.startswith("/") for method, path in routes)
     assert len(routes) == len(set(routes))
     broker_consumers = [(consumer["event"], consumer["purpose"]) for consumer in runtime["broker_consumers"]]
-    assert {purpose for _, purpose in broker_consumers} == {"fanout", "side_effect"}
+    assert broker_consumers == [("socket_publish", "fanout")]
     assert len(broker_consumers) == len(set(broker_consumers))
     assert runtime["editor_sync"]["websocket_path"].startswith("/")
     assert len(runtime["editor_sync"]["lifecycle_hooks"]) == len(set(runtime["editor_sync"]["lifecycle_hooks"]))

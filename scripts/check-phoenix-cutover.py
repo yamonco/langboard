@@ -1,5 +1,6 @@
 import argparse
-import os
+import socket
+from crontab import CronTab
 from kafka import KafkaAdminClient, KafkaConsumer
 from kafka.structs import TopicPartition
 from langboard_shared.ai.BoardChatAttachment import (
@@ -9,15 +10,70 @@ from langboard_shared.ai.BoardChatAttachment import (
 from langboard_shared.core.broker import Broker
 from langboard_shared.domain.services.factory.OllamaModelPullService import PULL_TASK
 from langboard_shared.Env import Env
-from langboard_shared.tasks.notifications.ProjectEmailNotificationQueue import PROJECT_EMAIL_FANOUT_TASK
+from langboard_shared.tasks.notifications.ProjectEmailNotificationQueue import (
+    PROJECT_EMAIL_DELIVERY_TASK,
+    PROJECT_EMAIL_FANOUT_TASK,
+)
+from psutil import process_iter
 
 
 REQUIRED_CELERY_TASKS = (
     LANGFLOW_BOARD_CHAT_ATTACHMENT_CLEANUP_TASK,
     LANGFLOW_BOARD_CHAT_ATTACHMENT_RECONCILIATION_TASK,
     PROJECT_EMAIL_FANOUT_TASK,
+    PROJECT_EMAIL_DELIVERY_TASK,
     PULL_TASK,
 )
+
+LEGACY_CONSUMERS = (
+    ("socket-node-fanout", "socket_publish", False),
+    ("notification-node-owner", "notification_publish", True),
+)
+
+
+def check_legacy_consumers_drained() -> None:
+    admin = KafkaAdminClient(bootstrap_servers=Env.BROADCAST_URLS)
+    try:
+        consumer = KafkaConsumer(
+            bootstrap_servers=Env.BROADCAST_URLS,
+            enable_auto_commit=False,
+            allow_auto_create_topics=False,
+        )
+        try:
+            for suffix, topic, require_drained in LEGACY_CONSUMERS:
+                group_id = f"{Env.PROJECT_NAME}-{suffix}"
+                state = admin.describe_consumer_groups([group_id])[0].state
+                if state not in {"Dead", "Empty"}:
+                    raise RuntimeError(f"Legacy consumer group is active: {group_id} ({state})")
+
+                if not require_drained:
+                    print(f"Legacy fanout consumer group is inactive: {group_id}")
+                    continue
+
+                offsets = admin.list_consumer_group_offsets(group_id)
+                partitions = consumer.partitions_for_topic(topic)
+                if not partitions:
+                    if offsets:
+                        raise RuntimeError(f"Legacy consumer topic is missing with retained offsets: {topic}")
+                    print(f"Legacy side-effect consumer group and topic never existed: {group_id}")
+                    continue
+                assignments = [TopicPartition(topic, partition) for partition in sorted(partitions)]
+                beginnings = consumer.beginning_offsets(assignments)
+                ends = consumer.end_offsets(assignments)
+                for partition in assignments:
+                    committed = offsets.get(partition)
+                    beginning = beginnings[partition]
+                    end = ends[partition]
+                    if committed is None:
+                        if beginning != end:
+                            raise RuntimeError(f"Legacy consumer has uncommitted records: {group_id} {partition}")
+                    elif not beginning <= committed.offset <= end or committed.offset != end:
+                        raise RuntimeError(f"Legacy consumer has undrained records: {group_id} {partition}")
+                print(f"Legacy side-effect consumer group is inactive and drained: {group_id}")
+        finally:
+            consumer.close()
+    finally:
+        admin.close()
 
 
 def check_required_celery_tasks() -> None:
@@ -25,72 +81,26 @@ def check_required_celery_tasks() -> None:
     print(f"Required Celery tasks are registered on {len(workers)} worker(s)")
 
 
-def check_consumer_group_stopped(
-    admin: KafkaAdminClient,
-    label: str,
-    environment_key: str,
-    default_suffix: str,
-) -> str:
-    group_id = os.getenv(environment_key) or f"{Env.PROJECT_NAME}-{default_suffix}"
-    description = admin.describe_consumer_groups([group_id])[0]
-    if description.state not in {"Dead", "Empty"}:
-        raise RuntimeError(f"{label} consumer group is still active: {group_id} ({description.state})")
-    print(f"{label} consumer group is stopped: {group_id}")
-    return group_id
-
-
-def check_consumer_group_drained(
-    admin: KafkaAdminClient,
-    consumer: KafkaConsumer,
-    label: str,
-    environment_key: str,
-    topic: str,
-    default_suffix: str,
-) -> None:
-    group_id = check_consumer_group_stopped(admin, label, environment_key, default_suffix)
-
-    partitions = consumer.partitions_for_topic(topic)
-    if not partitions:
-        raise RuntimeError(f"Source topic is missing: {topic}")
-
-    assignments = [TopicPartition(topic, partition) for partition in sorted(partitions)]
-    beginnings = consumer.beginning_offsets(assignments)
-    ends = consumer.end_offsets(assignments)
-    offsets = admin.list_consumer_group_offsets(group_id)
-    missing = [
-        partition.partition
-        for partition in assignments
-        if partition not in offsets and ends[partition] > beginnings[partition]
-    ]
-    behind = [
-        partition.partition
-        for partition in assignments
-        if partition in offsets and offsets[partition].offset < ends[partition]
-    ]
-    if missing or behind:
-        raise RuntimeError(
-            f"{label} consumer group is not drained: group={group_id} topic={topic} missing={missing} behind={behind}"
-        )
-
-    print(f"{label} consumer group is drained: {group_id}")
-
-
-def check_legacy_consumer_groups() -> None:
-    admin = KafkaAdminClient(bootstrap_servers=Env.BROADCAST_URLS)
-    consumer = KafkaConsumer(bootstrap_servers=Env.BROADCAST_URLS)
+def check_email_delivery_owner() -> None:
+    if not Env.NOTIFICATION_EMAIL_OUTBOX_ENABLED:
+        raise RuntimeError("Notification email outbox must be enabled")
+    if not Env.MAIL_SERVER or not Env.MAIL_FROM:
+        raise RuntimeError("Notification email delivery requires MAIL_SERVER and MAIL_FROM")
+    jobs = list(CronTab(user=True).find_comment("notification-web-fanout-recovery"))
+    if (
+        len(jobs) != 1
+        or str(jobs[0].slices) != "* * * * *"
+        or str(jobs[0].command) != ("/bin/bash /app/scripts/run_notification_recovery.sh")
+    ):
+        raise RuntimeError("Notification email outbox recovery cron is not registered")
+    if not any(process.info.get("name") == "cron" for process in process_iter(["name"])):
+        raise RuntimeError("Notification email outbox recovery cron is not running")
     try:
-        check_consumer_group_stopped(admin, "Node fanout", "BROADCAST_NODE_FANOUT_CONSUMER_GROUP", "socket-node-fanout")
-        check_consumer_group_drained(
-            admin,
-            consumer,
-            "Node notification side effect",
-            "BROADCAST_NODE_SIDE_EFFECT_CONSUMER_GROUP",
-            "notification_publish",
-            "notification-node-owner",
-        )
-    finally:
-        consumer.close()
-        admin.close()
+        with socket.create_connection((Env.MAIL_SERVER, Env.MAIL_PORT), timeout=3):
+            pass
+    except OSError as exc:
+        raise RuntimeError("Notification SMTP server is unreachable from the API runtime") from exc
+    print("Notification email outbox is enabled")
 
 
 if __name__ == "__main__":
@@ -99,4 +109,5 @@ if __name__ == "__main__":
     args = parser.parse_args()
     check_required_celery_tasks()
     if not args.celery_only:
-        check_legacy_consumer_groups()
+        check_email_delivery_owner()
+        check_legacy_consumers_drained()

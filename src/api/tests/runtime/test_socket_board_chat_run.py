@@ -173,6 +173,69 @@ def test_board_chat_run_binds_a_server_owned_attachment_ticket(monkeypatch: Monk
     set_ticket.assert_called_once_with(token, {**ticket, "run_uid": "run-uid"})
 
 
+def test_board_chat_run_rejects_expired_attachment_ticket(monkeypatch: MonkeyPatch) -> None:
+    allow_user(monkeypatch)
+    service = make_service()
+    task_id = uuid4()
+    service.project.get_assigned_internal_bot_by_type.return_value[0].platform = BotPlatform.Langflow
+    service.project.get_assigned_internal_bot_by_type.return_value[
+        0
+    ].platform_running_type = BotPlatformRunningType.Endpoint
+    monkeypatch.setattr(SocketAuthApi, "time", lambda: 1000)
+    monkeypatch.setattr(
+        SocketAuthApi,
+        "get_board_chat_attachment_ticket",
+        lambda token: {
+            "user_id": 1,
+            "project_id": 2,
+            "bot_id": 3,
+            "task_id": str(task_id),
+            "file_id": "file-id",
+            "path": "user/file.txt",
+            "expires_at": 1000,
+        },
+    )
+
+    with pytest.raises(ApiException.NotFound_404):
+        SocketAuthApi.accept_socket_board_chat_run(
+            make_request(), PROJECT_UID, make_form(task_id=task_id, file_token="t" * 32), service
+        )
+    service.internal_bot_run.accept_board_chat.assert_not_called()
+
+
+def test_board_chat_run_allows_retry_of_accepted_attachment_after_upload_expiry(monkeypatch: MonkeyPatch) -> None:
+    allow_user(monkeypatch)
+    service = make_service()
+    task_id = uuid4()
+    service.project.get_assigned_internal_bot_by_type.return_value[0].platform = BotPlatform.Langflow
+    service.project.get_assigned_internal_bot_by_type.return_value[
+        0
+    ].platform_running_type = BotPlatformRunningType.Endpoint
+    monkeypatch.setattr(SocketAuthApi, "time", lambda: 1000)
+    monkeypatch.setattr(
+        SocketAuthApi,
+        "get_board_chat_attachment_ticket",
+        lambda token: {
+            "user_id": 1,
+            "project_id": 2,
+            "bot_id": 3,
+            "task_id": str(task_id),
+            "file_id": "file-id",
+            "path": "user/file.txt",
+            "expires_at": 900,
+            "run_uid": "run-uid",
+        },
+    )
+    monkeypatch.setattr(SocketAuthApi, "set_board_chat_attachment_ticket", Mock())
+
+    response = SocketAuthApi.accept_socket_board_chat_run(
+        make_request(), PROJECT_UID, make_form(task_id=task_id, file_token="t" * 32), service
+    )
+
+    assert orjson.loads(response.body)["status"] == "accepted"
+    service.internal_bot_run.accept_board_chat.assert_called_once()
+
+
 def test_board_chat_run_rejects_an_attachment_ticket_from_another_project(monkeypatch: MonkeyPatch) -> None:
     allow_user(monkeypatch)
     service = make_service()
@@ -996,6 +1059,17 @@ def test_board_chat_lease_renews_only_current_project_and_attempt(monkeypatch: M
     )
     assert orjson.loads(response.body) == {"run_uid": run_uid, "attempt": 1, "status": "streaming"}
     service.internal_bot_run.renew_board_chat_lease.assert_called_once_with(SnowflakeID(6), 1, 150)
+
+    service.internal_bot_run.save_board_chat_progress.return_value = True
+    response = SocketAuthApi.renew_socket_board_chat_run_lease(
+        make_request(bearer=None),
+        PROJECT_UID,
+        run_uid,
+        SocketBoardChatLeaseForm(attempt=1, output_text="Partial"),
+        service,
+    )
+    assert orjson.loads(response.body) == {"run_uid": run_uid, "attempt": 1, "status": "streaming"}
+    service.internal_bot_run.save_board_chat_progress.assert_called_once_with(SnowflakeID(6), 1, 150, "Partial")
 
     service.internal_bot_run.get_board_chat_run.return_value = SimpleNamespace(
         project_id=SnowflakeID(99), status=InternalBotRunStatus.Streaming

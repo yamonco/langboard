@@ -400,17 +400,10 @@ export const subscribedCallback = (topic: ESocketTopic, topicIds: string[]) => {
 };
 
 export const unsubscribedCallback = (topic: ESocketTopic, topicIds: string[]) => {
-    const socketMap = getSocketMap();
-
     for (let i = 0; i < topicIds.length; ++i) {
         const topicId = topicIds[i];
 
         removeSubscribedTopicId(topic, topicId);
-        removeRestorableTopicIds(topic, [topicId]);
-
-        if (socketMap.subscriptions[topic]) {
-            delete socketMap.subscriptions[topic][topicId];
-        }
 
         clearQueuedCallbacks("subscribedCallbackQueue", topic, topicId);
 
@@ -419,10 +412,6 @@ export const unsubscribedCallback = (topic: ESocketTopic, topicIds: string[]) =>
         clearQueuedCallbacks("unsubscribedCallbackQueue", topic, topicId);
 
         notifyTopicNotifiers(topic, topicId, false);
-
-        if (isEmptyRecord(socketMap.subscriptions[topic])) {
-            delete socketMap.subscriptions[topic];
-        }
     }
 };
 

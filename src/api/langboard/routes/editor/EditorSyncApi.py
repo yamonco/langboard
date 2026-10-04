@@ -3,11 +3,13 @@ import requests
 from fastapi import Request, status
 from langboard_shared.core.filter import AuthFilter
 from langboard_shared.core.routing import (
+    EDITOR_ROUTE_KEY_HEADER,
     ApiException,
     ApiPermission,
     AppRouter,
     BaseFormModel,
     JsonResponse,
+    create_editor_document_route_key,
     form_model,
 )
 from langboard_shared.core.schema import OpenApiSchema
@@ -85,10 +87,12 @@ def _create_socket_headers(request: Request) -> dict[str, str]:
 
 
 def _forward_to_socket(request: Request, path: str, data: dict[str, Any]) -> JsonResponse:
+    headers = _create_socket_headers(request)
+    document_name = data.get("document_name")
+    if isinstance(document_name, str):
+        headers[EDITOR_ROUTE_KEY_HEADER] = create_editor_document_route_key(document_name)
     try:
-        response = requests.post(
-            f"{_get_socket_url()}{path}", json=data, headers=_create_socket_headers(request), timeout=10
-        )
+        response = requests.post(f"{_get_socket_url()}{path}", json=data, headers=headers, timeout=10)
     except requests.RequestException as error:
         return JsonResponse(content={"message": str(error)}, status_code=status.HTTP_503_SERVICE_UNAVAILABLE)
 

@@ -11,7 +11,7 @@ services:
       - PROJECT_NAME=${PROJECT_NAME}
     volumes:
       - ./vault/entrypoint.sh:/entrypoint.sh:ro
-      - ./volumes/vault/file:/openbao/file
+      - ${VAULT_DATA_MOUNT:-./volumes/vault/file}:/openbao/file
       - ./volumes/vault/logs:/openbao/logs
       - ./volumes/vault/config:/bao/config
       - ./volumes/.vault-credentials:/openbao/.vault-credentials
@@ -32,3 +32,8 @@ services:
     networks:
       - net
     restart: always
+
+volumes:
+  vault_data:
+    external: true
+    name: ${PROJECT_NAME}_vault_data

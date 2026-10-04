@@ -85,6 +85,8 @@ class SettingRole(BaseRoleModel, table=True):
         ]
 
     def has_category_permission(self, category: SettingRoleCategory) -> bool:
+        if self.is_all_granted():
+            return True
         category_prefix = f"{category.value}_"
         for action in self.actions:
             action_value = action.value if isinstance(action, Enum) else action

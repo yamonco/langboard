@@ -1,5 +1,8 @@
+from contextlib import nullcontext
 from datetime import timezone
+from math import isfinite
 from secrets import compare_digest
+from time import time
 from typing import Any
 import requests
 from fastapi import Query, Request, status
@@ -12,6 +15,7 @@ from langboard.routes.settings.OllamaApi import copy_ollama_model, delete_ollama
 from langboard_shared.ai.BoardChatAttachment import (
     delete_board_chat_attachment_ticket,
     get_board_chat_attachment_ticket,
+    lock_board_chat_attachment_ticket,
     schedule_board_chat_attachment_reconciliation,
     set_board_chat_attachment_ticket,
 )
@@ -179,7 +183,12 @@ def _authenticate_internal_socket(request: Request) -> None:
 @AppRouter.api.get("/auth/socket/capabilities", tags=["Auth"])
 def get_socket_capabilities(request: Request) -> JsonResponse:
     _authenticate_internal_socket(request)
-    return JsonResponse({"contract_version": SOCKET_INTERNAL_API_CONTRACT_VERSION})
+    return JsonResponse(
+        {
+            "contract_version": SOCKET_INTERNAL_API_CONTRACT_VERSION,
+            "notification_email_outbox_enabled": Env.NOTIFICATION_EMAIL_OUTBOX_ENABLED,
+        }
+    )
 
 
 def _cleanup_board_chat_attachment(service: DomainService, run: InternalBotRun, *, delete_external: bool) -> None:
@@ -302,48 +311,59 @@ def accept_socket_board_chat_run(
     _authorize_board_chat_scope(service, user, project, form.scope_table, form.scope_uid)
     _authorize_board_chat_permission_level(service, user, project, form.api_permission_level)
 
-    attachment: dict[str, str] | None = None
-    attachment_ticket = None
     file_token = form.file_token
-    if file_token:
-        attachment_ticket = get_board_chat_attachment_ticket(file_token)
-        if (
-            attachment_ticket is None
-            or attachment_ticket.get("user_id") != int(user.id)
-            or attachment_ticket.get("project_id") != int(project.id)
-            or attachment_ticket.get("bot_id") != int(bot.id)
-            or attachment_ticket.get("task_id") != str(form.task_id)
-            or not all(isinstance(attachment_ticket.get(key), str) for key in ("file_id", "path"))
-        ):
-            raise ApiException.NotFound_404(ApiErrorCode.NF2021)
-        attachment = {
-            "file_id": attachment_ticket["file_id"],
-            "path": attachment_ticket["path"],
-            "token": file_token,
-        }
+    with lock_board_chat_attachment_ticket(file_token) if file_token else nullcontext():
+        attachment: dict[str, str] | None = None
+        attachment_ticket = None
+        if file_token:
+            attachment_ticket = get_board_chat_attachment_ticket(file_token)
+            expires_at = attachment_ticket.get("expires_at") if attachment_ticket is not None else None
+            if (
+                attachment_ticket is None
+                or (
+                    expires_at is not None
+                    and (
+                        isinstance(expires_at, bool)
+                        or not isinstance(expires_at, (int, float))
+                        or not isfinite(expires_at)
+                        or (time() >= expires_at and not attachment_ticket.get("run_uid"))
+                    )
+                )
+                or attachment_ticket.get("user_id") != int(user.id)
+                or attachment_ticket.get("project_id") != int(project.id)
+                or attachment_ticket.get("bot_id") != int(bot.id)
+                or attachment_ticket.get("task_id") != str(form.task_id)
+                or not all(isinstance(attachment_ticket.get(key), str) for key in ("file_id", "path"))
+            ):
+                raise ApiException.NotFound_404(ApiErrorCode.NF2021)
+            attachment = {
+                "file_id": attachment_ticket["file_id"],
+                "path": attachment_ticket["path"],
+                "token": file_token,
+            }
 
-    try:
-        run, accepted, chat_session, project_session, user_message = service.internal_bot_run.accept_board_chat(
-            task_id=form.task_id,
-            user_id=user.id,
-            project_id=project.id,
-            internal_bot_id=bot.id,
-            project_chat_session_id=_decode_socket_uid(form.session_uid) if form.session_uid else None,
-            message=form.message,
-            permission_level=form.api_permission_level,
-            scope_table=form.scope_table,
-            scope_uid=form.scope_uid,
-            attachment=attachment,
-        )
-    except ValueError as error:
-        raise ApiException.Conflict_409() from error
-    except PermissionError as error:
-        raise ApiException.Forbidden_403() from error
-    if attachment_ticket is not None and file_token is not None:
-        set_board_chat_attachment_ticket(
-            file_token,
-            {**attachment_ticket, "run_uid": run.get_uid()},
-        )
+        try:
+            run, accepted, chat_session, project_session, user_message = service.internal_bot_run.accept_board_chat(
+                task_id=form.task_id,
+                user_id=user.id,
+                project_id=project.id,
+                internal_bot_id=bot.id,
+                project_chat_session_id=_decode_socket_uid(form.session_uid) if form.session_uid else None,
+                message=form.message,
+                permission_level=form.api_permission_level,
+                scope_table=form.scope_table,
+                scope_uid=form.scope_uid,
+                attachment=attachment,
+            )
+        except ValueError as error:
+            raise ApiException.Conflict_409() from error
+        except PermissionError as error:
+            raise ApiException.Forbidden_403() from error
+        if attachment_ticket is not None and file_token is not None:
+            set_board_chat_attachment_ticket(
+                file_token,
+                {**attachment_ticket, "run_uid": run.get_uid()},
+            )
     return JsonResponse(
         {
             "run_uid": run.get_uid(),
@@ -649,7 +669,14 @@ def renew_socket_board_chat_run_lease(
     _authorize_board_chat_run_lease(service, project_uid, run)
     if run.status not in (InternalBotRunStatus.Streaming, InternalBotRunStatus.Resuming):
         raise ApiException.Conflict_409()
-    if not service.internal_bot_run.renew_board_chat_lease(run_id, form.attempt, Env.AI_REQUEST_TIMEOUT + 30):
+    renewed = (
+        service.internal_bot_run.save_board_chat_progress(
+            run_id, form.attempt, Env.AI_REQUEST_TIMEOUT + 30, form.output_text
+        )
+        if form.output_text is not None
+        else service.internal_bot_run.renew_board_chat_lease(run_id, form.attempt, Env.AI_REQUEST_TIMEOUT + 30)
+    )
+    if not renewed:
         raise ApiException.Conflict_409()
     return JsonResponse({"run_uid": run_uid, "attempt": form.attempt, "status": run.status.value})
 

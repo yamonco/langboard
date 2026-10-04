@@ -101,9 +101,9 @@ class UserNotificationRepository(BaseRepository[UserNotification]):
                 .where(UserNotification.column("id") == notification.id)
             )
 
-    def count_unread(self, user: TUserParam) -> int:
+    def count_unread(self, user: TUserParam, readonly: bool = True) -> int:
         user_id = InfraHelper.convert_id(user)
-        with DbSession.use(readonly=True) as db:
+        with DbSession.use(readonly=readonly) as db:
             result = db.exec(
                 SqlBuilder.select.count(UserNotification, UserNotification.column("id")).where(
                     (UserNotification.column("receiver_id") == user_id) & (UserNotification.column("read_at") == None)  # noqa

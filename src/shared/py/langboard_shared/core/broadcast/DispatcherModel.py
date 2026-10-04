@@ -33,4 +33,3 @@ class DispatcherEnvelope(BaseModel):
     event: str
     occurred_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     data: dict[str, Any]
-    cache_key: str | None = None

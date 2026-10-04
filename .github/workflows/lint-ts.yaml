@@ -38,12 +38,6 @@ jobs:
           path: src/shared/ts/.yarn/cache
           key: ${{ runner.os }}-yarncache-core-${{ hashFiles('src/shared/ts/yarn.lock') }}
           restore-keys: ${{ runner.os }}-yarncache-core-
-      - name: Cache Socket cache
-        uses: actions/cache@v4
-        with:
-          path: src/socket/.yarn/cache
-          key: ${{ runner.os }}-yarncache-socket-${{ hashFiles('src/socket/yarn.lock') }}
-          restore-keys: ${{ runner.os }}-yarncache-socket-
       - name: Cache UI cache
         uses: actions/cache@v4
         with:
@@ -53,17 +47,11 @@ jobs:
       - name: Install deps (Core)
         working-directory: src/shared/ts
         run: yarn install --immutable
-      - name: Install deps (Socket)
-        working-directory: src/socket
-        run: yarn install --immutable
       - name: Install deps (UI)
         working-directory: src/ui
         run: yarn install --immutable
       - name: Run Core Linter
         working-directory: src/shared/ts
-        run: yarn run lint
-      - name: Run Socket Linter
-        working-directory: src/socket
         run: yarn run lint
       - name: Run UI Linter
         working-directory: src/ui

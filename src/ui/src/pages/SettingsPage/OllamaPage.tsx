@@ -21,6 +21,7 @@ function OllamaPage() {
     const { setPageAliasRef } = usePageHeader();
     const [t] = useTranslation();
     const { mutateAsync: getOllamaModelListMutateAsync } = useGetOllamaModelList();
+    const { mutateAsync: refreshOllamaModelListMutateAsync } = useGetOllamaModelList({ interceptToast: true });
     const { mutateAsync: getOllamaModelPullsMutateAsync } = useGetOllamaModelPulls();
     const { mutateAsync: getOllamaRunningModelListMutateAsync } = useGetOllamaRunningModelList();
     const handlers = usePullOllamaModelHandlers({
@@ -74,13 +75,28 @@ function OllamaPage() {
         };
 
         void fetchModels();
+        socket.subscribeTopicNotifier({
+            topic: ESocketTopic.OllamaManager,
+            topicId: GLOBAL_TOPIC_ID,
+            key: "ollama-page-model-list-reconcile",
+            notifier: (_, isSubscribed) => {
+                if (isSubscribed) {
+                    void fetchModels();
+                }
+            },
+        });
         const interval = setInterval(() => {
             void reconcilePulls();
         }, 5000);
+        const modelListInterval = setInterval(() => {
+            void refreshOllamaModelListMutateAsync({}).catch(() => undefined);
+        }, 20000);
 
         return () => {
             isMounted = false;
             clearInterval(interval);
+            clearInterval(modelListInterval);
+            socket.unsubscribeTopicNotifier({ topic: ESocketTopic.OllamaManager, topicId: GLOBAL_TOPIC_ID, key: "ollama-page-model-list-reconcile" });
             socket.unsubscribe(ESocketTopic.OllamaManager, [GLOBAL_TOPIC_ID]);
         };
     }, []);

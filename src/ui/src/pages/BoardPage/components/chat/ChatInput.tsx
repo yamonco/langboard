@@ -13,7 +13,7 @@ import { Utils } from "@langboard/core/utils";
 import ChatTemplateListDialog from "@/pages/BoardPage/components/chat/ChatTemplateListDialog";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { IS_PHOENIX_SOCKET_RUNTIME, MAX_FILE_SIZE_MB } from "@/constants";
+import { MAX_FILE_SIZE_MB } from "@/constants";
 import useBoardChatSentHandlers from "@/controllers/socket/board/chat/useBoardChatSentHandlers";
 import useUpdateProjectChatSession from "@/controllers/api/board/chat/useUpdateProjectChatSession";
 import { ChatSessionModel } from "@/core/models";
@@ -108,7 +108,6 @@ function ChatInputDisplay() {
         setIsSending(true);
 
         const taskId = Utils.String.Token.uuid();
-        let filePath: string | undefined = undefined;
         let fileToken: string | undefined = undefined;
         const attachment = file ?? chatAttachmentRef.current?.files?.[0];
         if (attachment) {
@@ -133,13 +132,9 @@ function ChatInputDisplay() {
             }
 
             setIsUploading(false);
-            if (IS_PHOENIX_SOCKET_RUNTIME) {
-                fileToken = result.file_token;
-            } else {
-                filePath = result.file_path;
-            }
+            fileToken = result.file_token;
 
-            if (!filePath && !fileToken) {
+            if (!fileToken) {
                 Toast.Add.error(
                     t("errors.Failed to upload attachment. File size may be too large (Max size is {size}MB).", { size: MAX_FILE_SIZE_MB })
                 );
@@ -150,7 +145,7 @@ function ChatInputDisplay() {
 
         const chatMessage = chatInputRef.current.value.trim();
 
-        if (!chatMessage.length && !filePath && !fileToken) {
+        if (!chatMessage.length && !fileToken) {
             setIsSending(false);
             return;
         }
@@ -181,7 +176,6 @@ function ChatInputDisplay() {
             return (
                 sendChat({
                     message: chatMessage,
-                    file_path: filePath,
                     file_token: fileToken,
                     task_id: taskId,
                     session_uid: currentSessionUID,

@@ -17,6 +17,7 @@ SHA256_FILE_PATTERN = re.compile(r"^[0-9a-f]{64}\.ydoc$")
 WORKER_KINDS = ("board_chat", "editor_ai", "editor_document")
 TASK_KINDS = ("command", "graph_stream")
 SCALAR_THRESHOLDS = (
+    "memory_peak_bytes",
     "memory_growth_bytes",
     "memory_slope_bytes_per_hour",
     "mailbox_total",
@@ -83,7 +84,9 @@ def _validate_document(record: object, *, named: bool) -> str:
     return file_name
 
 
-def validate_editor_manifest(manifest: dict[str, Any]) -> int:
+def validate_editor_manifest(
+    manifest: dict[str, Any], *, source_directory: Path | None = None, destination_directory: Path | None = None
+) -> int:
     if manifest.get("format_version") != 2 or manifest.get("verified") is not True:
         raise EvidenceValidationError("Editor manifest must be a verified format-version 2 audit")
     _parse_utc_timestamp(manifest.get("generated_at"), "Editor manifest generated_at")
@@ -106,7 +109,51 @@ def validate_editor_manifest(manifest: dict[str, Any]) -> int:
         raise EvidenceValidationError("Editor manifest does not contain any restored documents")
     if len(file_names) != len(set(file_names)):
         raise EvidenceValidationError("Editor manifest contains duplicate document files")
+    if (source_directory is None) != (destination_directory is None):
+        raise EvidenceValidationError("Both editor source and restore directories must be specified together")
+    _validate_editor_files(
+        source_directory or Path(source), destination_directory or Path(destination), manifest, file_names
+    )
     return len(file_names)
+
+
+def _validate_editor_files(source: Path, destination: Path, manifest: dict[str, Any], file_names: list[str]) -> None:
+    if source.is_symlink() or destination.is_symlink() or not source.is_dir() or not destination.is_dir():
+        raise EvidenceValidationError("Editor manifest directories must be accessible real directories")
+    try:
+        if source.samefile(destination):
+            raise EvidenceValidationError("Editor manifest source and destination refer to the same directory")
+        expected_files = set(file_names)
+        if {entry.name for entry in source.iterdir()} != expected_files or {
+            entry.name for entry in destination.iterdir()
+        } != expected_files:
+            raise EvidenceValidationError("Editor manifest file inventory no longer matches the directories")
+        for record in [*manifest["documents"], *manifest["opaque_documents"]]:
+            file_name = record["file_name"]
+            source_file = source / file_name
+            destination_file = destination / file_name
+            if (
+                source_file.is_symlink()
+                or destination_file.is_symlink()
+                or not source_file.is_file()
+                or not destination_file.is_file()
+                or source_file.stat().st_nlink != 1
+                or destination_file.stat().st_nlink != 1
+                or source_file.samefile(destination_file)
+            ):
+                raise EvidenceValidationError(f"Editor document is not an independent regular copy: {file_name}")
+            if (
+                source_file.stat().st_size != record["source_bytes"]
+                or destination_file.stat().st_size != record["source_bytes"]
+            ):
+                raise EvidenceValidationError(f"Editor document size changed after the manifest: {file_name}")
+            if (
+                _sha256(source_file) != record["source_checksum"]
+                or _sha256(destination_file) != record["destination_checksum"]
+            ):
+                raise EvidenceValidationError(f"Editor document checksum changed after the manifest: {file_name}")
+    except OSError as error:
+        raise EvidenceValidationError(f"Cannot inspect editor manifest files: {error}") from error
 
 
 def _finite_nonnegative(value: object, field: str) -> float:
@@ -133,7 +180,7 @@ def _sha256(path: Path) -> str:
             for chunk in iter(lambda: file.read(1024 * 1024), b""):
                 digest.update(chunk)
     except OSError as error:
-        raise EvidenceValidationError(f"Cannot read OTel sample evidence {path}: {error}") from error
+        raise EvidenceValidationError(f"Cannot read evidence file {path}: {error}") from error
     return digest.hexdigest()
 
 
@@ -177,8 +224,21 @@ def _read_soak_samples(
         raise EvidenceValidationError("OTel soak requires at least two raw samples")
 
     timestamps = [_parse_utc_timestamp(sample.get("captured_at"), "OTel sample captured_at") for sample in samples]
-    if timestamps != sorted(timestamps) or timestamps[0] < started_at or timestamps[-1] > finished_at:
+    if (
+        any(current <= previous for previous, current in pairwise(timestamps))
+        or timestamps[0] < started_at
+        or timestamps[-1] > finished_at
+    ):
         raise EvidenceValidationError("OTel sample timestamps are outside the ordered soak interval")
+
+    sample_interval = report["sample_interval_seconds"]
+    coverage_tolerance = timedelta(seconds=sample_interval * 2)
+    if (
+        timestamps[0] - started_at > coverage_tolerance
+        or finished_at - timestamps[-1] > coverage_tolerance
+        or any(current - previous > coverage_tolerance for previous, current in pairwise(timestamps))
+    ):
+        raise EvidenceValidationError("OTel sample coverage contains a gap longer than two sample intervals")
 
     warmup_seconds = _finite_nonnegative(report.get("warmup_seconds"), "OTel soak warmup_seconds")
     warmup_finished_at = started_at + timedelta(seconds=warmup_seconds)
@@ -236,8 +296,8 @@ def _validate_thresholds(report: dict[str, Any]) -> tuple[dict[str, float], dict
 
 
 def validate_otel_soak(report: dict[str, Any], report_path: Path, expected_runtime_image: str) -> float:
-    if report.get("format_version") != 3 or report.get("evidence_type") != "phoenix_otel_soak":
-        raise EvidenceValidationError("OTel evidence must be a format-version 3 Phoenix soak report")
+    if report.get("format_version") != 5 or report.get("evidence_type") != "phoenix_otel_soak":
+        raise EvidenceValidationError("OTel evidence must be a format-version 5 Phoenix soak report")
     runtime_image = report.get("runtime_image")
     if not isinstance(runtime_image, str) or SHA256_PATTERN.fullmatch(runtime_image.removeprefix("sha256:")) is None:
         raise EvidenceValidationError("OTel soak runtime_image is missing")
@@ -250,9 +310,6 @@ def validate_otel_soak(report: dict[str, Any], report_path: Path, expected_runti
     duration_seconds = report.get("duration_seconds")
     if not isinstance(duration_seconds, (int, float)) or isinstance(duration_seconds, bool):
         raise EvidenceValidationError("OTel soak duration_seconds is invalid")
-    if elapsed_seconds < MINIMUM_SOAK_SECONDS or duration_seconds < MINIMUM_SOAK_SECONDS:
-        raise EvidenceValidationError("OTel soak must cover at least 24 hours")
-
     sample_interval_seconds = report.get("sample_interval_seconds")
     if (
         not isinstance(sample_interval_seconds, (int, float))
@@ -270,6 +327,8 @@ def validate_otel_soak(report: dict[str, Any], report_path: Path, expected_runti
     warmup_seconds = _finite_nonnegative(report.get("warmup_seconds"), "OTel soak warmup_seconds")
     if warmup_seconds >= elapsed_seconds:
         raise EvidenceValidationError("OTel soak warm-up must be shorter than its duration")
+    if elapsed_seconds - warmup_seconds < MINIMUM_SOAK_SECONDS:
+        raise EvidenceValidationError("OTel soak must cover at least 24 hours after warm-up")
     minimum_raw_samples = math.floor(elapsed_seconds / sample_interval_seconds * 0.9)
     minimum_samples = math.floor((elapsed_seconds - warmup_seconds) / sample_interval_seconds * 0.9)
     if len(raw_samples) < minimum_raw_samples or len(samples) < minimum_samples:
@@ -323,6 +382,7 @@ def validate_otel_soak(report: dict[str, Any], report_path: Path, expected_runti
         "editor_authorization_error_ratio": authorization_error_ratio,
         "editor_authorization_average_microseconds": authorization_average,
         "accepted_spans_end": _sample_number(samples[-1], "accepted_spans"),
+        "exported_spans_end": _sample_number(samples[-1], "exported_spans"),
         "accepted_metric_points_end": _sample_number(samples[-1], "accepted_metric_points"),
     }
     for field, expected in expected_observations.items():
@@ -331,7 +391,8 @@ def validate_otel_soak(report: dict[str, Any], report_path: Path, expected_runti
         raise EvidenceValidationError("OTel soak activity observations do not match raw samples")
 
     memory_bounded = (
-        expected_observations["memory_growth_bytes"] <= thresholds["memory_growth_bytes"]
+        expected_observations["memory_max_bytes"] <= thresholds["memory_peak_bytes"]
+        and expected_observations["memory_growth_bytes"] <= thresholds["memory_growth_bytes"]
         and expected_observations["memory_slope_bytes_per_hour"] <= thresholds["memory_slope_bytes_per_hour"]
     )
     mailboxes_bounded = (
@@ -367,7 +428,15 @@ def validate_otel_soak(report: dict[str, Any], report_path: Path, expected_runti
     load_profile = report.get("load_profile")
     if not isinstance(load_profile, dict):
         raise EvidenceValidationError("OTel soak load profile is missing")
+    for field in ("profile_id", "source"):
+        value = load_profile.get(field)
+        if not isinstance(value, str) or not value.strip():
+            raise EvidenceValidationError(f"OTel load {field} is required")
+    if _parse_utc_timestamp(load_profile.get("measured_at"), "OTel load measured_at") > started_at:
+        raise EvidenceValidationError("OTel load measured_at must precede the soak")
     target_sockets = _finite_nonnegative(load_profile.get("target_sockets"), "OTel load target_sockets")
+    if not target_sockets.is_integer() or target_sockets < 1:
+        raise EvidenceValidationError("OTel load target_sockets must be a positive integer")
     minimum_authorization_requests = _finite_nonnegative(
         load_profile.get("minimum_editor_authorization_requests"),
         "OTel load minimum_editor_authorization_requests",
@@ -377,12 +446,14 @@ def validate_otel_soak(report: dict[str, Any], report_path: Path, expected_runti
     if (
         not isinstance(required_workers, list)
         or not isinstance(required_tasks, list)
-        or any(kind not in WORKER_KINDS for kind in required_workers)
-        or any(kind not in TASK_KINDS for kind in required_tasks)
+        or any(not isinstance(kind, str) or kind not in WORKER_KINDS for kind in required_workers)
+        or any(not isinstance(kind, str) or kind not in TASK_KINDS for kind in required_tasks)
+        or len(required_workers) != len(set(required_workers))
+        or len(required_tasks) != len(set(required_tasks))
         or not minimum_authorization_requests.is_integer()
         or minimum_authorization_requests < 1
     ):
-        raise EvidenceValidationError("OTel soak required activity profile is invalid")
+        raise EvidenceValidationError("OTel load required activity profile is invalid")
     representative_load = all(_sample_number(sample, "sockets") >= target_sockets for sample in samples)
     representative_load = representative_load and authorization_requests >= minimum_authorization_requests
     representative_load = representative_load and all(worker_maxima[kind] >= 1 for kind in required_workers)
@@ -393,19 +464,29 @@ def validate_otel_soak(report: dict[str, Any], report_path: Path, expected_runti
     telemetry_healthy = telemetry_healthy and _sample_number(samples[-1], "accepted_spans") > _sample_number(
         samples[0], "accepted_spans"
     )
+    telemetry_healthy = telemetry_healthy and _sample_number(samples[-1], "exported_spans") > _sample_number(
+        samples[0], "exported_spans"
+    )
     telemetry_healthy = telemetry_healthy and _sample_number(samples[-1], "accepted_metric_points") > _sample_number(
         samples[0], "accepted_metric_points"
     )
     telemetry_healthy = telemetry_healthy and all(
         _sample_number(sample, field) == 0
         for sample in samples
-        for field in ("failed_spans", "refused_spans", "failed_metric_points", "refused_metric_points")
+        for field in (
+            "failed_spans",
+            "refused_spans",
+            "export_failed_spans",
+            "export_enqueue_failed_spans",
+            "failed_metric_points",
+            "refused_metric_points",
+        )
     )
     telemetry_healthy = telemetry_healthy and authorization_metrics_monotonic
     telemetry_healthy = telemetry_healthy and all(
         _sample_number(current, field) >= _sample_number(previous, field)
         for previous, current in pairwise(samples)
-        for field in ("accepted_spans", "accepted_metric_points")
+        for field in ("accepted_spans", "exported_spans", "accepted_metric_points")
     )
     runtime_continuity = all(
         _sample_number(current, "runtime_uptime_seconds") >= _sample_number(previous, "runtime_uptime_seconds")
@@ -433,8 +514,19 @@ def validate_otel_soak(report: dict[str, Any], report_path: Path, expected_runti
     return elapsed_seconds
 
 
-def validate(editor_manifest_path: Path, otel_soak_path: Path, expected_runtime_image: str) -> tuple[int, float]:
-    editor_document_count = validate_editor_manifest(_read_object(editor_manifest_path))
+def validate(
+    editor_manifest_path: Path,
+    otel_soak_path: Path,
+    expected_runtime_image: str,
+    *,
+    source_directory: Path | None = None,
+    destination_directory: Path | None = None,
+) -> tuple[int, float]:
+    editor_document_count = validate_editor_manifest(
+        _read_object(editor_manifest_path),
+        source_directory=source_directory,
+        destination_directory=destination_directory,
+    )
     soak_seconds = validate_otel_soak(_read_object(otel_soak_path), otel_soak_path, expected_runtime_image)
     return editor_document_count, soak_seconds
 
@@ -444,11 +536,19 @@ def main() -> int:
     _ = parser.add_argument("editor_manifest", type=Path)
     _ = parser.add_argument("otel_soak_report", type=Path)
     _ = parser.add_argument("runtime_image", help="Exact sha256 image ID selected for deployment")
+    _ = parser.add_argument("--editor-source-dir", type=Path)
+    _ = parser.add_argument("--editor-restore-dir", type=Path)
     args = parser.parse_args()
     editor_manifest = cast(Path, args.editor_manifest).resolve()
     otel_soak_report = cast(Path, args.otel_soak_report).resolve()
     try:
-        editor_document_count, soak_seconds = validate(editor_manifest, otel_soak_report, args.runtime_image)
+        editor_document_count, soak_seconds = validate(
+            editor_manifest,
+            otel_soak_report,
+            args.runtime_image,
+            source_directory=cast(Path | None, args.editor_source_dir),
+            destination_directory=cast(Path | None, args.editor_restore_dir),
+        )
     except EvidenceValidationError as error:
         parser.error(str(error))
     print(

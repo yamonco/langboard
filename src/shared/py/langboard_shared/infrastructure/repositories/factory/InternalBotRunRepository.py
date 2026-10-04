@@ -1062,6 +1062,42 @@ class InternalBotRunRepository(BaseRepository[InternalBotRun]):
                 == 1
             )
 
+    def save_board_chat_progress(self, run_id: SnowflakeID, attempt: int, lease_seconds: int, output_text: str) -> bool:
+        if lease_seconds <= 0:
+            raise ValueError("The AI run lease must be positive")
+        with DbSession.use(readonly=False) as db:
+            run = db.exec(
+                SqlBuilder.select.table(InternalBotRun)
+                .where((InternalBotRun.column("id") == run_id) & (InternalBotRun.column("attempt") == attempt))
+                .with_for_update()
+            ).first()
+            if (
+                run is None
+                or run.kind != InternalBotRunKind.BoardChat
+                or run.status != InternalBotRunStatus.Streaming
+                or run.ai_chat_history_id is None
+            ):
+                return False
+
+            ai_message = db.exec(
+                SqlBuilder.select.table(ChatHistory)
+                .where(
+                    (ChatHistory.column("id") == run.ai_chat_history_id)
+                    & (ChatHistory.column("chat_session_id") == run.chat_session_id)
+                    & ChatHistory.column("is_received").is_(True)
+                )
+                .with_for_update()
+            ).first()
+            if ai_message is None:
+                raise RuntimeError("The AI run has no bound response message")
+
+            run.output_text = output_text
+            run.lease_expires_at = SafeDateTime.now() + timedelta(seconds=lease_seconds)
+            ai_message.message = ChatContentModel(content=output_text)
+            db.update(ai_message)
+            db.update(run)
+            return True
+
     def pause_board_chat(
         self,
         run_id: SnowflakeID,

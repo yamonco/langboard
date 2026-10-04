@@ -1,11 +1,11 @@
 from collections.abc import Sequence
 from datetime import timedelta
+from html import escape
 from typing import Any, Literal, NotRequired, TypedDict, TypeGuard, TypeVar, cast, get_args, overload
 from urllib.parse import urlparse
 from ....core.db import BaseDbModel, EditorContentModel
 from ....core.domain import BaseDomainService
 from ....core.logger import Logger
-from ....core.publisher import NotificationPublisher, NotificationPublishModel
 from ....core.resources.locales.EmailTemplateNames import TEmailTemplateName
 from ....core.types import SafeDateTime, SnowflakeID
 from ....core.types.ParamTypes import TNotificationParam, TUserOrBot, TUserParam
@@ -215,7 +215,7 @@ class NotificationService(BaseDomainService):
     ) -> NotificationMutation:
         mutation: NotificationMutation = {
             "action": action,
-            "unread_count": self.repo.user_notification.count_unread(user),
+            "unread_count": self.repo.user_notification.count_unread(user, readonly=False),
         }
         if notification_uid is not None:
             mutation["notification_uid"] = notification_uid
@@ -335,6 +335,7 @@ class NotificationService(BaseDomainService):
         action: str,
         ticket: str,
         acknowledge_uncertain: bool = False,
+        use_current_card_title: bool = False,
     ) -> bool:
         if action not in ("retry", "confirm-sent", "close"):
             raise ValueError("Invalid email review action")
@@ -352,14 +353,35 @@ class NotificationService(BaseDomainService):
         if action == "confirm-sent" and delivery.status != NotificationEmailDeliveryStatus.Uncertain:
             raise ValueError("Only an uncertain delivery can be confirmed as sent")
 
+        formats = None
+        if (
+            action == "retry"
+            and delivery.status == NotificationEmailDeliveryStatus.Failed
+            and delivery.template_name == "reacted_to_comment"
+            and "card_name" not in delivery.formats
+        ):
+            if not use_current_card_title:
+                raise ValueError("Retry requires explicit approval to use the current Card title")
+            card_ids = [record_id for model_name, record_id in (delivery.scope_models or []) if model_name == "card"]
+            if len(card_ids) != 1:
+                raise ValueError("Cannot identify the Card for email template repair")
+            card = InfraHelper.get_by_id_like(Card, card_ids[0], with_deleted=True)
+            if card is None:
+                raise ValueError("Card is unavailable for email template repair")
+            formats = {**delivery.formats, "card_name": escape(card.title)}
+        elif use_current_card_title:
+            raise ValueError("Current Card title approval applies only to missing reaction email titles")
+
         target_status = {
             "retry": NotificationEmailDeliveryStatus.Pending,
             "confirm-sent": NotificationEmailDeliveryStatus.ConfirmedSent,
             "close": NotificationEmailDeliveryStatus.Closed,
         }[action]
         note = f"Operator {action} under ticket {ticket}; previous outcome: {delivery.failure_reason or 'none'}"
+        if formats is not None:
+            note += "; current Card title approved for template repair"
         return self.repo.notification_email_delivery.resolve_review_item(
-            delivery_id, delivery.status, target_status, note[:1000]
+            delivery_id, delivery.status, target_status, note[:1000], formats=formats
         )
 
     def _publish_web_notification(
@@ -398,7 +420,11 @@ class NotificationService(BaseDomainService):
             [project, column, card],
             [project, card],
             "mentioned_in_card",
-            {"url": self.__create_redirect_url(project, card)},
+            {
+                "url": self.__create_redirect_url(project, card),
+                "card_name": escape(card.title),
+                "project_name": escape(project.title),
+            },
         )
 
     def notify_mentioned_in_comment(self, notifier: TUserOrBot, project: Project, card: Card, comment: CardComment):
@@ -410,7 +436,7 @@ class NotificationService(BaseDomainService):
             [project, column, card],
             [project, card, comment],
             "mentioned_in_comment",
-            {"url": self.__create_redirect_url(project, card)},
+            {"url": self.__create_redirect_url(project, card), "card_name": escape(card.title)},
         )
 
     def notify_mentioned_in_wiki(self, notifier: TUserOrBot, project: Project, wiki: ProjectWiki):
@@ -421,7 +447,7 @@ class NotificationService(BaseDomainService):
             [project, wiki],
             [project, wiki],
             "mentioned_in_wiki",
-            {"url": self.__create_redirect_url(project, wiki)},
+            {"url": self.__create_redirect_url(project, wiki), "wiki_title": escape(wiki.title)},
         )
 
     def notify_assigned_to_card(
@@ -440,7 +466,11 @@ class NotificationService(BaseDomainService):
             [project, card],
             {},
             "assigned_to_card",
-            {"url": self.__create_redirect_url(project, card)},
+            {
+                "url": self.__create_redirect_url(project, card),
+                "card_name": escape(card.title),
+                "project_name": escape(project.title),
+            },
         )
 
     def notify_reacted_to_comment(
@@ -464,7 +494,7 @@ class NotificationService(BaseDomainService):
             [project, card, comment],
             {"reaction_type": reaction_type, "line": first_line},
             "reacted_to_comment",
-            {"url": self.__create_redirect_url(project, card)},
+            {"url": self.__create_redirect_url(project, card), "card_name": escape(card.title)},
         )
 
     def notify_checklist(
@@ -484,7 +514,11 @@ class NotificationService(BaseDomainService):
             [project, card, checklist],
             None,
             "notified_from_checklist",
-            {"url": self.__create_redirect_url(project, card)},
+            {
+                "url": self.__create_redirect_url(project, card),
+                "card_name": escape(card.title),
+                "checklist_title": escape(checklist.title),
+            },
         )
 
     def notify_notification_schedule_rule(
@@ -610,6 +644,16 @@ class NotificationService(BaseDomainService):
             else None
         )
 
+        email_enabled = bool(
+            email_template_name
+            and target_user.email
+            and not self._get_service(UserNotificationSettingService).has_unsubscription(
+                target_user, notification_type, scope_model_tuples, NotificationChannel.Email
+            )
+        )
+        if email_enabled and not Env.NOTIFICATION_EMAIL_OUTBOX_ENABLED:
+            raise RuntimeError("Notification email outbox must be enabled")
+
         if email_formats:
             email_formats["recipient"] = target_user.firstname
             email_formats["sender"] = notifier.get_fullname()
@@ -632,14 +676,7 @@ class NotificationService(BaseDomainService):
             notification.web_fanout_pending = True
 
         email_delivery = None
-        if (
-            Env.NOTIFICATION_EMAIL_OUTBOX_ENABLED
-            and email_template_name
-            and target_user.email
-            and not self._get_service(UserNotificationSettingService).has_unsubscription(
-                target_user, notification_type, scope_model_tuples, NotificationChannel.Email
-            )
-        ):
+        if email_enabled and email_template_name:
             email_delivery = NotificationEmailDelivery(
                 notification_id=notification.id,
                 receiver_id=target_user.id,
@@ -659,18 +696,6 @@ class NotificationService(BaseDomainService):
         api_notification = self.convert_to_api_response(notification, references, notifier)
         if web_enabled:
             self._publish_web_notification(notification, target_user, api_notification)
-        if email_template_name and not Env.NOTIFICATION_EMAIL_OUTBOX_ENABLED:
-            NotificationPublisher.put_dispather(
-                NotificationPublishModel(
-                    notification=notification,
-                    api_notification=api_notification,
-                    target_user=target_user,
-                    scope_models=scope_model_tuples,
-                    web_handled_by_python=True,
-                    email_template_name=email_template_name,
-                    email_formats=email_formats,
-                )
-            )
         return True
 
     def __create_redirect_url(self, project: Project, card_or_wiki: ProjectWiki | Card | None = None):

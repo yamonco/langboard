@@ -111,7 +111,7 @@ function OllamaModelListItemCopyButton({ name }: { name: string }) {
     return (
         <Popover.Root modal open={isOpened} onOpenChange={setIsOpened}>
             <Popover.Trigger asChild>
-                <Button size="icon-sm" variant="outline" title={t("common.Copy")}>
+                <Button size="icon-sm" variant="outline" title={t("common.Copy")} aria-label={t("common.Copy")}>
                     <IconComponent icon="copy" size="4" />
                 </Button>
             </Popover.Trigger>
@@ -129,24 +129,16 @@ function OllamaModelListItemCopyButton({ name }: { name: string }) {
 
 function OllamaModelListItemDeleteButton({ name }: { name: string }) {
     const [t] = useTranslation();
-    const inputRef = useRef<HTMLInputElement>(null);
     const [isOpened, setIsOpened] = useState(false);
     const { mutateAsync: command } = useOllamaModelCommand();
     const { mutateAsync: getOllamaModelList } = useGetOllamaModelList();
     const [isValidating, setIsValidating] = useState(false);
     const deleteModel = async () => {
-        if (isValidating || !inputRef.current) {
+        if (isValidating) {
             return;
         }
 
         setIsValidating(true);
-
-        const value = inputRef.current.value.trim();
-        if (!value) {
-            setIsValidating(false);
-            inputRef.current.focus();
-            return;
-        }
 
         try {
             await command({ action: "delete", model: name });
@@ -162,7 +154,7 @@ function OllamaModelListItemDeleteButton({ name }: { name: string }) {
     return (
         <Popover.Root modal open={isOpened} onOpenChange={setIsOpened}>
             <Popover.Trigger asChild>
-                <Button size="icon-sm" variant="destructive" title={t("common.Delete")}>
+                <Button size="icon-sm" variant="destructive" title={t("common.Delete")} aria-label={t("common.Delete")}>
                     <IconComponent icon="trash" size="4" />
                 </Button>
             </Popover.Trigger>

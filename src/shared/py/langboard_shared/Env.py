@@ -431,7 +431,7 @@ class Env:
 
     @property
     def NOTIFICATION_EMAIL_OUTBOX_ENABLED(self) -> bool:
-        return self.__get_from_cache("NOTIFICATION_EMAIL_OUTBOX_ENABLED", "false") == "true"
+        return self.__get_from_cache("NOTIFICATION_EMAIL_OUTBOX_ENABLED", "true") == "true"
 
     @property
     def NOTIFICATION_EMAIL_OUTBOX_RETENTION_DAYS(self) -> int:

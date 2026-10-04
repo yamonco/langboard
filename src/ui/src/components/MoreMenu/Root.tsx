@@ -41,7 +41,7 @@ function MoreMenuRoot({
         <MoreMenuProvider isValidating={isValidating} setIsValidating={setIsValidating} isOpened={isOpened} setIsOpened={setIsOpened}>
             <DropdownMenu.Root modal={modal} open={isOpened} onOpenChange={changeOpenedState}>
                 <DropdownMenu.Trigger asChild>
-                    <Button type="button" variant={variant} size={size} title={t("common.More")} {...triggerProps}>
+                    <Button type="button" variant={variant} size={size} title={t("common.More")} aria-label={t("common.More")} {...triggerProps}>
                         <IconComponent icon={triggerIcon} size={triggerIconSize} />
                     </Button>
                 </DropdownMenu.Trigger>

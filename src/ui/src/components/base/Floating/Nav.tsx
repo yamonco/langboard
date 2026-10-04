@@ -65,6 +65,7 @@ function Nav({
                         type="button"
                         variant={item.variant ?? (item.active ? "default" : "ghost")}
                         disabled={item.disabled}
+                        aria-pressed={item.active}
                         className={cn(
                             "relative h-11 min-w-0 flex-1 gap-1 rounded-xl px-2 md:flex-none md:rounded-full md:px-4",
                             itemClassName,

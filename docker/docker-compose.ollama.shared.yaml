@@ -10,7 +10,3 @@ services:
   celeryworker:
     environment:
       - OLLAMA_API_URL=http://${PROJECT_NAME}_ollama:11434
-
-  socket:
-    environment:
-      - OLLAMA_API_URL=http://${PROJECT_NAME}_ollama:11434

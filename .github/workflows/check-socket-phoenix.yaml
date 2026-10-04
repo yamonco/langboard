@@ -10,10 +10,9 @@ on:
       - "src/api/langboard/**"
       - "src/api/tests/**"
       - "src/shared/py/**"
-      - "src/socket_phoenix/**"
+      - "src/socket/**"
       - "src/shared/realtime/**"
       - "src/shared/ts/**"
-      - "src/socket/**"
       - "src/ui/**"
       - ".github/workflows/check-socket-phoenix.yaml"
   pull_request:
@@ -32,7 +31,7 @@ jobs:
     timeout-minutes: 60
     defaults:
       run:
-        working-directory: src/socket_phoenix
+        working-directory: src/socket
     steps:
       - uses: actions/checkout@v4
       - uses: erlef/setup-beam@v1
@@ -42,8 +41,8 @@ jobs:
           elixir-version: "1.19.5"
       - uses: actions/cache@v4
         with:
-          path: src/socket_phoenix/deps
-          key: phoenix-deps-${{ runner.os }}-${{ steps.beam.outputs.otp-version }}-${{ steps.beam.outputs.elixir-version }}-${{ hashFiles('src/socket_phoenix/mix.lock') }}
+          path: src/socket/deps
+          key: phoenix-deps-${{ runner.os }}-${{ steps.beam.outputs.otp-version }}-${{ steps.beam.outputs.elixir-version }}-${{ hashFiles('src/socket/mix.lock') }}
       - name: Install Phoenix dependencies
         run: mix deps.get --check-locked
       - uses: actions/setup-node@v4
@@ -75,31 +74,33 @@ jobs:
         run: |
           yarn install --frozen-lockfile --ignore-scripts
           yarn build
-      - name: Install Socket dependencies
-        working-directory: src/socket
-        run: yarn install --frozen-lockfile --ignore-scripts
       - name: Install UI dependencies
         working-directory: src/ui
         run: yarn install --frozen-lockfile --ignore-scripts
       - name: Run the cross-runtime migration gate
         run: make test_socket_phoenix
         working-directory: .
+      - name: Build the Phoenix release image
+        run: |
+          cp .env.example .env
+          make build_socket_phoenix_image
+        working-directory: .
       - name: Distributed editor recovery
-        run: elixir --sname editor_cluster_probe -S mix run scripts/editor_cluster_probe.exs
+        run: elixir --sname editor_cluster_probe -S mix run test/integration/editor_cluster_probe.exs
       - name: Strict code analysis
         run: mix credo --strict
       - uses: actions/cache/restore@v4
         id: plt
         with:
-          path: src/socket_phoenix/_build/plts
-          key: phoenix-plt-${{ runner.os }}-${{ steps.beam.outputs.otp-version }}-${{ steps.beam.outputs.elixir-version }}-${{ hashFiles('src/socket_phoenix/mix.lock') }}
+          path: src/socket/_build/plts
+          key: phoenix-plt-${{ runner.os }}-${{ steps.beam.outputs.otp-version }}-${{ steps.beam.outputs.elixir-version }}-${{ hashFiles('src/socket/mix.lock') }}
           restore-keys: phoenix-plt-${{ runner.os }}-${{ steps.beam.outputs.otp-version }}-${{ steps.beam.outputs.elixir-version }}-
       - name: Build analysis cache
         run: mix dialyzer --plt
       - uses: actions/cache/save@v4
         if: steps.plt.outputs.cache-hit != 'true'
         with:
-          path: src/socket_phoenix/_build/plts
-          key: phoenix-plt-${{ runner.os }}-${{ steps.beam.outputs.otp-version }}-${{ steps.beam.outputs.elixir-version }}-${{ hashFiles('src/socket_phoenix/mix.lock') }}
+          path: src/socket/_build/plts
+          key: phoenix-plt-${{ runner.os }}-${{ steps.beam.outputs.otp-version }}-${{ steps.beam.outputs.elixir-version }}-${{ hashFiles('src/socket/mix.lock') }}
       - name: Type analysis
         run: mix dialyzer --format github --format dialyxir

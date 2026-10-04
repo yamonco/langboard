@@ -12,7 +12,8 @@ import useSocketStore, {
 } from "@/core/stores/SocketStore";
 import useAuthStore from "@/core/stores/AuthStore";
 import { ESocketTopic } from "@langboard/core/enums";
-import { createSocketRuntime, removeStreamErrorCallback, setStreamErrorCallback } from "@/core/providers/socket/runtime";
+import { createSocketRuntime } from "@/core/providers/socket/runtime";
+import { removeStreamErrorCallback, setStreamErrorCallback } from "@/core/providers/socket/streamErrorCallbacks";
 import { createAuthorizedWebSocketUrl } from "@/core/stores/socket/transport";
 
 interface IBaseSocketSendProps {
@@ -107,7 +108,7 @@ const createSharedSocketHandlers = () => {
 
     const isConnected = () => {
         const socket = getSocket();
-        return !!socket && socket.readyState !== WebSocket.CLOSING && socket.readyState !== WebSocket.CLOSED;
+        return !!socket && socket.readyState === WebSocket.OPEN;
     };
 
     const getAuthorizedWebSocketUrl: ISocketContext["getAuthorizedWebSocketUrl"] = (path) => {
@@ -153,7 +154,7 @@ const createSharedSocketHandlers = () => {
         addStreamEvent("buffer", callbacks.buffer);
         addStreamEvent("end", callbacks.end);
 
-        setStreamErrorCallback(props.topic, props.event, callbacks.error);
+        setStreamErrorCallback(props.topic, props.event, props.eventKey, callbacks.error);
     };
 
     const streamOff: ISocketContext["streamOff"] = (props) => {
@@ -185,7 +186,7 @@ const createSharedSocketHandlers = () => {
         removeStreamEvent("buffer", props.callbacks.buffer);
         removeStreamEvent("end", props.callbacks.end);
 
-        removeStreamErrorCallback(props.topic, props.event);
+        removeStreamErrorCallback(props.topic, props.event, props.eventKey);
     };
 
     const send = (props: TSocketSendProps) => {
@@ -195,7 +196,7 @@ const createSharedSocketHandlers = () => {
 
         const { topic, topicId, eventName, data } = props;
 
-        return { isConnected: sendSocket(JSON.stringify({ event: eventName, topic, topic_id: topicId, data })) };
+        return { isConnected: sendSocket(JSON.stringify({ event: eventName, topic, topic_id: topicId, data }), false) };
     };
 
     return {
@@ -234,6 +235,7 @@ export const SocketProvider = ({ children }: ISocketProviderProps): React.ReactN
                 getStore,
                 closeSocket: close,
                 getAccessToken: () => useAuthStore.getState().getToken() ?? undefined,
+                getUserUID: () => currentUserRef.current?.uid,
                 removeAccessToken: () => useAuthStore.getState().removeToken(),
                 reconnect,
                 shouldReconnect: () => !!currentUserRef.current,

@@ -1,0 +1,9 @@
+services:
+  socket-phoenix-otel-collector:
+    command:
+      - --config=/etc/otelcol-contrib/config.yaml
+      - --config=/etc/otelcol-contrib/production.yaml
+    environment:
+      SOCKET_PHOENIX_OTEL_TRACES_ENDPOINT: ${SOCKET_PHOENIX_OTEL_TRACES_ENDPOINT:-}
+    volumes:
+      - ./otel/socket-phoenix-collector-production.yaml:/etc/otelcol-contrib/production.yaml:ro

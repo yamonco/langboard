@@ -65,7 +65,7 @@ const BoardCardCheckitemTimer = memo(() => {
     return (
         <Popover.Root>
             <Popover.Trigger asChild>
-                <Button variant="ghost" size="sm" className="gap-2 px-2" title={t("card.Manage timer")}>
+                <Button variant="ghost" size="sm" className="gap-2 px-2" title={t("card.Manage timer")} aria-label={t("card.Manage timer")}>
                     {(!!accumulatedSeconds || status === ProjectCheckitem.ECheckitemStatus.Started) && (
                         <Box textSize={{ initial: "xs", sm: "sm" }}>{Utils.String.formatTimerDuration(duration)}</Box>
                     )}

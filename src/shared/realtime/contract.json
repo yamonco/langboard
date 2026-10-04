@@ -253,10 +253,6 @@
     ],
     "broker_consumers": [
       {
-        "event": "notification_publish",
-        "purpose": "side_effect"
-      },
-      {
         "event": "socket_publish",
         "purpose": "fanout"
       }

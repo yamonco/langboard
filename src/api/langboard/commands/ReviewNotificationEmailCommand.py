@@ -12,10 +12,13 @@ class ReviewNotificationEmailCommandOptions(BaseCommandOptions):
     acknowledge_uncertain: bool = Field(
         default=False, description="Acknowledge that an uncertain email may already have been sent"
     )
+    use_current_card_title: bool = Field(
+        default=False, description="Approve using the current Card title to repair a failed reaction email"
+    )
     limit: int = Field(default=20, description="Maximum review rows to list (1-100)")
 
 
-class ReviewNotificationEmailCommand(BaseCommand):
+class ReviewNotificationEmailCommand(BaseCommand[ReviewNotificationEmailCommandOptions]):
     @staticmethod
     def is_only_in_dev() -> bool:
         return False
@@ -78,6 +81,7 @@ class ReviewNotificationEmailCommand(BaseCommand):
                 options.action,
                 options.ticket,
                 options.acknowledge_uncertain,
+                options.use_current_card_title,
             )
             if not resolved:
                 raise ValueError("Delivery is no longer awaiting review")

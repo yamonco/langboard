@@ -6,6 +6,7 @@ from .AppExceptionHandlingRoute import AppExceptionHandlingRoute
 from .AppRouter import AppRouter, TApiRouteMap
 from .BaseMiddleware import BaseMiddleware
 from .CollaborativeEdit import (
+    EDITOR_ROUTE_KEY_HEADER,
     CollaborativeEditTarget,
     EEditorCollaborationType,
     collaborative_block,
@@ -13,6 +14,7 @@ from .CollaborativeEdit import (
     collaborative_rich,
     collaborative_text,
     create_editor_collaboration_document_id,
+    create_editor_document_route_key,
 )
 from .Form import BaseFormModel, form_model
 from .JsonResponse import JsonResponse
@@ -33,11 +35,13 @@ __all__ = [
     "BaseMiddleware",
     "CollaborativeEditTarget",
     "EEditorCollaborationType",
+    "EDITOR_ROUTE_KEY_HEADER",
     "collaborative_block",
     "collaborative_edit",
     "collaborative_rich",
     "collaborative_text",
     "create_editor_collaboration_document_id",
+    "create_editor_document_route_key",
     "form_model",
     "JsonResponse",
     "GLOBAL_TOPIC_ID",

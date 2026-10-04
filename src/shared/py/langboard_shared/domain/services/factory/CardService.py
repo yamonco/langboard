@@ -368,14 +368,13 @@ class CardService(BaseDomainService):
         project: TProjectParam | None,
         card: TCardParam | None,
         order: int,
-        new_column: TColumnParam | None | None,
+        new_column: TColumnParam | None,
     ) -> bool | None:
         params = InfraHelper.get_records_with_foreign_by_params((Project, project), (Card, card))
         if not params:
             return None
         project, card = params
 
-        old_column = None
         old_column = InfraHelper.get_by_id_like(ProjectColumn, card.project_column_id)
         if not old_column or old_column.project_id != project.id:
             return None
@@ -385,12 +384,11 @@ class CardService(BaseDomainService):
             if not new_column or new_column.project_id != card.project_id:
                 return None
 
-            card.project_column_id = new_column.id
-
-            if new_column.is_archive:
-                card.archived_at = SafeDateTime.now()
+            if new_column.id == old_column.id:
+                new_column = None
             else:
-                card.archived_at = None
+                card.project_column_id = new_column.id
+                card.archived_at = SafeDateTime.now() if new_column.is_archive else None
 
         old_order = card.order
         card.order = order

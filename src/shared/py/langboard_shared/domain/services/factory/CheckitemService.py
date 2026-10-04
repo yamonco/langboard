@@ -176,6 +176,8 @@ class CheckitemService(BaseDomainService):
             new_checklist = InfraHelper.get_by_id_like(Checklist, checklist_uid)
             if not new_checklist or old_checklist.card_id != card.id or new_checklist.card_id != card.id:
                 return None
+            if new_checklist.id == old_checklist.id:
+                new_checklist = None
 
         old_order = checkitem.order
         checkitem.order = order

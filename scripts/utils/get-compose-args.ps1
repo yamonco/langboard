@@ -10,6 +10,9 @@ param(
 # Get Docker Compose arguments based on environment variables
 # Usage: .\scripts\get-compose-args.ps1
 
+# Keep an explicitly supplied trace sink ahead of an empty .env default.
+$traceEndpointFromEnvironment = $env:SOCKET_PHOENIX_OTEL_TRACES_ENDPOINT
+
 # Load .env file
 if (Test-Path ".env") {
     Get-Content ".env" | ForEach-Object {
@@ -19,6 +22,10 @@ if (Test-Path ".env") {
             Set-Item -Path "env:$name" -Value $value
         }
     }
+}
+
+if (-not [string]::IsNullOrEmpty($traceEndpointFromEnvironment)) {
+    $env:SOCKET_PHOENIX_OTEL_TRACES_ENDPOINT = $traceEndpointFromEnvironment
 }
 
 $env:WITH_DOCS = $WithDocs
@@ -84,13 +91,6 @@ if ($withDbBackup -eq "true") {
 
 $COMPOSE_ARGS += " -f ${COMPOSE_PREFIX}.redis.yaml -f ${COMPOSE_PREFIX}.server.yaml --env-file ./.env"
 
-if ($env:SOCKET_OWNER -eq "phoenix") {
-    $COMPOSE_ARGS += " -f ${COMPOSE_PREFIX}.phoenix-owner.yaml --profile socket-phoenix"
-}
-elseif ($env:EDITOR_SYNC_OWNER -eq "phoenix") {
-    $COMPOSE_ARGS += " -f ${COMPOSE_PREFIX}.phoenix-editor-owner.yaml --profile socket-phoenix"
-}
-
 # Optional compose args
 $VAULT_COMPOSE_ARGS = "-f ${COMPOSE_PREFIX}.vault.yaml"
 $DOCS_COMPOSE_ARGS = "-f ${COMPOSE_PREFIX}.docs.yaml"
@@ -119,6 +119,10 @@ if ($env:WITH_OLLAMA_GPU -eq "true") {
 
 if ($env:WITH_OTEL -eq "true") {
     $COMPOSE_ARGS += " ${OTEL_COMPOSE_ARGS}"
+}
+
+if ($env:WITH_OTEL -eq "true" -and -not [string]::IsNullOrEmpty($env:SOCKET_PHOENIX_OTEL_TRACES_ENDPOINT)) {
+    $COMPOSE_ARGS += " -f ${COMPOSE_PREFIX}.phoenix-otel-traces.yaml"
 }
 
 # Check if vault is needed based on KEY_PROVIDER_TYPE in .env file

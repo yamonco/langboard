@@ -84,6 +84,7 @@ const BoardProxy = memo((): React.JSX.Element => {
 
     const { data, isFetching, error, refetch } = useGetProject({ uid: projectUID });
     const { send: sendBoardBotStatusMap } = useBoardBotStatusMapHandlers({ projectUID });
+    const hasCurrentProject = !!data && data.project.uid === projectUID;
 
     useEffect(() => {
         if (!error) {
@@ -117,13 +118,19 @@ const BoardProxy = memo((): React.JSX.Element => {
     }, [error]);
 
     useEffect(() => {
-        if (!data || isFetching) {
+        if (!data || !hasCurrentProject) {
             setPageAliasRef.current();
             return;
         }
 
         if (pageRoute !== "card") {
             setPageAliasRef.current(data.project.title);
+        }
+    }, [data, hasCurrentProject, pageRoute]);
+
+    useEffect(() => {
+        if (!hasCurrentProject) {
+            return;
         }
 
         socket.subscribe(ESocketTopic.Board, [projectUID], () => {
@@ -135,7 +142,7 @@ const BoardProxy = memo((): React.JSX.Element => {
             socket.unsubscribe(ESocketTopic.Board, [projectUID]);
             socket.unsubscribe(ESocketTopic.BoardSettings, [projectUID]);
         };
-    }, [data, isFetching, pageRoute, projectUID]);
+    }, [hasCurrentProject, projectUID]);
 
     if (!data || data.project.uid !== projectUID) {
         return <SkeletonBoard />;

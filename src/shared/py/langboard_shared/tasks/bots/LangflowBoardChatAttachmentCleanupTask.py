@@ -1,9 +1,12 @@
 from typing import Any
+from uuid import UUID
 from ...ai.BoardChatAttachment import (
     delete_board_chat_attachment_ticket,
     get_board_chat_attachment_ticket,
+    lock_board_chat_attachment_ticket,
     schedule_board_chat_attachment_cleanup,
     schedule_board_chat_attachment_reconciliation,
+    set_board_chat_attachment_ticket,
 )
 from ...ai.LangflowFileClient import LangflowFileClient
 from ...core.broker import Broker
@@ -20,35 +23,37 @@ _RETRY_SECONDS = 60
 
 @Broker.wrap_sync_task_decorator
 def cleanup_board_chat_attachment(token: str) -> None:
-    ticket = get_board_chat_attachment_ticket(token)
-    if ticket is None:
-        return
-
     service = DomainService()
     try:
-        run = _get_run(service, ticket)
-        if run is not None and run.status == InternalBotRunStatus.Completed:
-            delete_board_chat_attachment_ticket(token)
-            return
+        with lock_board_chat_attachment_ticket(token):
+            ticket = get_board_chat_attachment_ticket(token)
+            if ticket is None:
+                return
+            set_board_chat_attachment_ticket(token, {**ticket, "expires_at": ticket.get("expires_at", 0)})
 
-        if run is not None and run.status not in {
-            InternalBotRunStatus.Failed,
-            InternalBotRunStatus.Cancelled,
-            InternalBotRunStatus.Uncertain,
-        }:
-            schedule_board_chat_attachment_cleanup(token, _RETRY_SECONDS)
-            return
+            run = _get_run(service, token, ticket)
+            if run is not None and run.status == InternalBotRunStatus.Completed:
+                delete_board_chat_attachment_ticket(token)
+                return
 
-        bot = _get_bot(service, ticket)
-        file_id = ticket.get("file_id")
-        if bot is None or not isinstance(file_id, str) or not file_id:
-            schedule_board_chat_attachment_cleanup(token, _RETRY_SECONDS)
-            return
+            if run is not None and run.status not in {
+                InternalBotRunStatus.Failed,
+                InternalBotRunStatus.Cancelled,
+                InternalBotRunStatus.Uncertain,
+            }:
+                schedule_board_chat_attachment_cleanup(token, _RETRY_SECONDS)
+                return
 
-        if LangflowFileClient.delete(bot, file_id):
-            delete_board_chat_attachment_ticket(token)
-        else:
-            schedule_board_chat_attachment_cleanup(token, _RETRY_SECONDS)
+            bot = _get_bot(service, ticket)
+            file_id = ticket.get("file_id")
+            if bot is None or not isinstance(file_id, str) or not file_id:
+                schedule_board_chat_attachment_cleanup(token, _RETRY_SECONDS)
+                return
+
+            if LangflowFileClient.delete(bot, file_id):
+                delete_board_chat_attachment_ticket(token)
+            else:
+                schedule_board_chat_attachment_cleanup(token, _RETRY_SECONDS)
     except Exception:
         _logger.exception("Langflow board chat attachment cleanup failed")
         schedule_board_chat_attachment_cleanup(token, _RETRY_SECONDS)
@@ -97,14 +102,39 @@ def reconcile_board_chat_attachment(run_uid: str) -> None:
         service.close()
 
 
-def _get_run(service: DomainService, ticket: dict[str, Any]) -> InternalBotRun | None:
+def _get_run(service: DomainService, token: str, ticket: dict[str, Any]) -> InternalBotRun | None:
     run_uid = ticket.get("run_uid")
-    if not isinstance(run_uid, str) or not run_uid:
+    if isinstance(run_uid, str) and run_uid:
+        try:
+            return service.internal_bot_run.get_board_chat_run(SnowflakeID.from_short_code(run_uid))
+        except ValueError:
+            return None
+
+    task_id = ticket.get("task_id")
+    user_id = ticket.get("user_id")
+    project_id = ticket.get("project_id")
+    if not isinstance(task_id, str) or not all(
+        isinstance(value, int) and not isinstance(value, bool) for value in (user_id, project_id)
+    ):
         return None
     try:
-        return service.internal_bot_run.get_board_chat_run(SnowflakeID.from_short_code(run_uid))
+        task_uuid = UUID(task_id)
     except ValueError:
         return None
+    status = service.internal_bot_run.get_owned_board_chat_status(
+        task_uuid, SnowflakeID(user_id), SnowflakeID(project_id)
+    )
+    if status is None:
+        return None
+    run = status[0]
+    attachment = run.request_payload.get("attachment")
+    if (
+        not isinstance(attachment, dict)
+        or attachment.get("token") != token
+        or attachment.get("file_id") != ticket.get("file_id")
+    ):
+        return None
+    return run
 
 
 def _get_bot(service: DomainService, ticket: dict[str, Any]) -> InternalBot | None:
