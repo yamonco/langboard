@@ -28,6 +28,7 @@ from .ResourceOutputs import RESOURCE_OUTPUTS
 from .Tool import McpTool
 from .ToolGroupMiddleware import ToolGroupMiddleware
 from .WorkOutputs import WORK_OUTPUTS
+from .WorkPlanOutputs import WORK_PLAN_OUTPUTS
 
 
 # Existing canonical entry points; profile selection never grants permission.
@@ -44,6 +45,8 @@ AGENT_CORE_TOOLS = frozenset(
         "patch_card_description",
         "assign_card_to_me",
         "apply_card_graph_patch",
+        "preview_card_work_plan",
+        "apply_card_work_plan",
         "record_card_verification_evidence",
         "change_card_checkitem_work",
         "list_my_work",
@@ -86,6 +89,7 @@ def create_native_domain_provider(
                 name,
                 handler,
                 (ProjectCardIndexResponse if name == "list_project_cards" else None)
+                or WORK_PLAN_OUTPUTS.get(name)
                 or WORK_OUTPUTS.get(name)
                 or CONTENT_OUTPUTS.get(name)
                 or BOT_OUTPUTS.get(name)
