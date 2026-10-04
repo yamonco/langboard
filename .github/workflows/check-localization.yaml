@@ -28,6 +28,7 @@ on:
       - src/ui/playwright.workbench.config.ts
       - src/ui/playwright.explorer-recovery.config.ts
       - src/ui/playwright.card-description-static.config.ts
+      - src/ui/playwright.table-selection.config.ts
       - src/ui/playwright.command-context.config.ts
       - src/ui/playwright.default-language.config.ts
       - src/ui/playwright.auth-language.config.ts
@@ -108,6 +109,8 @@ jobs:
       - run: yarn playwright test -c playwright.explorer-recovery.config.ts
         working-directory: src/ui
       - run: yarn playwright test -c playwright.card-description-static.config.ts
+        working-directory: src/ui
+      - run: yarn playwright test -c playwright.table-selection.config.ts
         working-directory: src/ui
       - run: node --experimental-strip-types --test src/pages/BoardPage/components/card/CardFlipStore.test.ts src/pages/BoardPage/components/card/CardFlipDraftStore.test.ts
         working-directory: src/ui

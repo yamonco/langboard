@@ -4,7 +4,7 @@ import type { SlateElementProps } from "platejs/static";
 import { SlateElement } from "platejs/static";
 import React from "react";
 
-import type { TInternalLinkElement } from "@/components/Editor/plugins/customs/internal-link/InternalLinkPlugin";
+import type { TInternalLinkElement, TInternalLinkableModel } from "@/components/Editor/plugins/customs/internal-link/InternalLinkPlugin";
 import IconComponent from "@/components/base/IconComponent";
 import { ProjectCard, ProjectWiki } from "@/core/models";
 import { isModel } from "@/core/models/ModelRegistry";
@@ -57,7 +57,7 @@ export function InternalLinkInputElementStatic(props: SlateElementProps<TCombobo
     );
 }
 
-const InternalLinkLabelStatic = ({ linkable, toLink }: { linkable: TInternalLinkElement | TInternalLinkElement["uid"]; toLink: string }) => {
+const InternalLinkLabelStatic = ({ linkable, toLink }: { linkable: TInternalLinkElement | TInternalLinkableModel; toLink: () => void }) => {
     if (isModel(linkable, "ProjectCard")) {
         return <InternalLinkCardLabel linkable={linkable} toLink={toLink} />;
     }
@@ -69,18 +69,18 @@ const InternalLinkLabelStatic = ({ linkable, toLink }: { linkable: TInternalLink
     return <>{(linkable as TInternalLinkElement).uid || "Unknown"}</>;
 };
 
-const InternalLinkCardLabel = ({ linkable, toLink }: { linkable: ProjectCard.TModel; toLink: string }) => {
+const InternalLinkCardLabel = ({ linkable, toLink }: { linkable: ProjectCard.TModel; toLink: () => void }) => {
     return (
-        <a className="text-primary underline decoration-primary underline-offset-4" href={toLink}>
+        <button type="button" className="text-primary underline decoration-primary underline-offset-4" onClick={toLink}>
             {linkable.useField("title")}
-        </a>
+        </button>
     );
 };
 
-const InternalLinkWikiLabel = ({ linkable, toLink }: { linkable: ProjectWiki.TModel; toLink: string }) => {
+const InternalLinkWikiLabel = ({ linkable, toLink }: { linkable: ProjectWiki.TModel; toLink: () => void }) => {
     return (
-        <a className="text-primary underline decoration-primary underline-offset-4" href={toLink}>
+        <button type="button" className="text-primary underline decoration-primary underline-offset-4" onClick={toLink}>
             {linkable.useField("title")}
-        </a>
+        </button>
     );
 };
