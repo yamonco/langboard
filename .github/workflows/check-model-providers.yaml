@@ -1,0 +1,26 @@
+name: Check Model Providers
+on:
+  pull_request:
+    paths:
+      - .github/workflows/check-model-providers.yaml
+      - src/api/langboard/routes/settings/ModelProviderSettingsApi.py
+      - src/api/tests/model_providers/**
+      - src/graph/langboard_graph/core/graph/default/chat_model.py
+      - src/graph/langboard_graph/core/graph/default/tooling.py
+  workflow_dispatch:
+jobs:
+  catalog-contract:
+    runs-on: ubuntu-latest
+    env:
+      PROJECT_NAME: langboard
+      PYTHONPATH: src/api:src/shared/py
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: uv sync --frozen
+      - run: uv run --no-sync pytest -q src/api/tests/model_providers

@@ -10,6 +10,11 @@ from langchain.chat_models.base import BaseChatModel, _ConfigurableModel
 
 PROVIDER_MAP = {
     "OpenAI": "openai",
+    "OpenAI Compatible": "openai",
+    "Z.ai Coding Plan": "openai",
+    "OpenRouter": "openai",
+    "LiteLLM": "openai",
+    "Kimi": "openai",
     "Azure OpenAI": "azure_openai",
     "Groq": "groq",
     "Anthropic": "anthropic",
@@ -37,7 +42,8 @@ def create_default_chat_model(agent_llm: str | None, settings: dict[str, Any]):
     if not agent_llm:
         return None
     try:
-        settings_json = json_dumps(settings, sort_keys=True, separators=(",", ":"))
+        model_settings = {key: value for key, value in settings.items() if key not in NON_MODEL_SETTING_KEYS}
+        settings_json = json_dumps(model_settings, sort_keys=True, separators=(",", ":"))
     except (TypeError, ValueError) as exc:
         Logger.main.exception(exc)
         return None

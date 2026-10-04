@@ -149,6 +149,11 @@
         "model_id": "Model is required.",
         "region_name": "Region is required."
       }
-    }
+    },
+    "Refresh models": "Refresh models",
+    "Model list unavailable": "Model list unavailable. Enter a model ID manually.",
+    "Choose a model": "Choose a model",
+    "Provider": "Provider",
+    "Model": "Model"
   }
 }

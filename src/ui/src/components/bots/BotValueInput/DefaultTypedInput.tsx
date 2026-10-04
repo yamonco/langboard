@@ -1,3 +1,4 @@
+import { OPENAI_COMPATIBLE_PROVIDERS } from "@langboard/core/ai";
 import Button from "@/components/base/Button";
 import Checkbox from "@/components/base/Checkbox";
 import Flex from "@/components/base/Flex";
@@ -53,6 +54,26 @@ function DefaultStringInput({ input, disabled }: { input: IStringAgentFormInput;
     const collaborationField = `${selectedProvider}:${input.name}`;
     const [isDefault, setIsDefault] = useState(!!input.checkDefault && valuesRef.current[input.name] === input.checkDefault);
     const defaultValue = valuesRef.current[input.name] ?? input.defaultValue ?? "";
+    const canDiscoverModels = input.name === "model_name" && selectedProvider in OPENAI_COMPATIBLE_PROVIDERS;
+    const [models, setModels] = useState<string[]>([]);
+    const [isLoadingModels, setIsLoadingModels] = useState(false);
+    const [modelError, setModelError] = useState(false);
+    const [catalogValue, setCatalogValue] = useState("");
+    const refreshModels = async () => {
+        setIsLoadingModels(true);
+        setModelError(false);
+        try {
+            const form = new FormData();
+            form.append("base_url", valuesRef.current.base_url ?? "");
+            form.append("api_key", valuesRef.current.api_key ?? "");
+            const response = await api.post("/settings/model-providers/models", form);
+            setModels(response.data.models);
+        } catch {
+            setModelError(true);
+        } finally {
+            setIsLoadingModels(false);
+        }
+    };
 
     useEffect(() => {
         if (Utils.Type.isNullOrUndefined(valuesRef.current[input.name]) && !Utils.Type.isNullOrUndefined(input.defaultValue)) {
@@ -79,11 +100,53 @@ function DefaultStringInput({ input, disabled }: { input: IStringAgentFormInput;
             ref={setInputRef(input.name)}
         >
             <Floating.Label className="select-none" htmlFor={inputID} required={required && !input.nullable}>
-                {input.label}
+                {t(`bot.agent.${input.label}`, { defaultValue: input.label })}
             </Floating.Label>
         </Collaborative.Input>
     );
 
+    if (canDiscoverModels) {
+        return (
+            <div className="space-y-2">
+                {inputComp}
+                {!!models.length && (
+                    <select
+                        aria-label={t("bot.agent.Choose a model")}
+                        className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                        value={catalogValue}
+                        disabled={disabled || isValidating}
+                        onChange={(event) => {
+                            const value = event.target.value;
+                            setCatalogValue(value);
+                            setValue(input.name)(value);
+                            const control = document.getElementById(inputID) as HTMLInputElement | null;
+                            if (control) {
+                                const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+                                setter?.call(control, value);
+                                control.dispatchEvent(new Event("input", { bubbles: true }));
+                            }
+                        }}
+                    >
+                        <option value="">{t("bot.agent.Choose a model")}</option>
+                        {models.map((model) => (
+                            <option key={model} value={model}>
+                                {model}
+                            </option>
+                        ))}
+                    </select>
+                )}
+                <Button type="button" variant="outline" size="sm" disabled={disabled || isValidating || isLoadingModels} onClick={refreshModels}>
+                    <IconComponent icon={isLoadingModels ? "loader-circle" : "refresh-cw"} size="3" />
+                    {t("bot.agent.Refresh models", { defaultValue: "Refresh models" })}
+                </Button>
+                {modelError && (
+                    <p role="status" className="text-sm text-muted-foreground">
+                        {t("bot.agent.Model list unavailable", { defaultValue: "Model list unavailable. You can enter a model ID manually." })}
+                    </p>
+                )}
+            </div>
+        );
+    }
     if (!Utils.Type.isString(input.checkDefault)) {
         return inputComp;
     }
@@ -217,7 +280,7 @@ function DefaultSelectInput({ input, disabled }: { input: ISelectAgentFormInput;
                 />
             ) : null}
             <Floating.LabelSelect
-                label={input.label}
+                label={t(`bot.agent.${input.label}`, { defaultValue: input.label })}
                 value={currentValue}
                 onValueChange={changeCurrentValue}
                 required={required && !input.nullable}
@@ -287,7 +350,7 @@ function DefaultIntegerInput({ input, disabled }: { input: IIntegerAgentFormInpu
             ref={setInputRef(input.name)}
         >
             <Floating.Label className="select-none" htmlFor={inputID} required={required && !input.nullable}>
-                {input.label}
+                {t(`bot.agent.${input.label}`, { defaultValue: input.label })}
             </Floating.Label>
         </Collaborative.Input>
     );
