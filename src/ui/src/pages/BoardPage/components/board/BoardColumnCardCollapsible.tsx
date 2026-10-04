@@ -286,14 +286,10 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
                 {upcomingDays !== null && (
                     <div
                         className="board-card-due-banner"
-                        aria-label={
-                            upcomingDays === 0 ? t("card.D-Day") : t("card.D-{{count}}", { count: upcomingDays, lng: i18n.language })
-                        }
+                        aria-label={upcomingDays === 0 ? t("card.D-Day") : t("card.D-{{count}}", { count: upcomingDays, lng: i18n.language })}
                     >
                         <IconComponent icon="clock-3" size="3.5" aria-hidden="true" />
-                        <strong>
-                            {upcomingDays === 0 ? t("card.D-Day") : t("card.D-{{count}}", { count: upcomingDays, lng: i18n.language })}
-                        </strong>
+                        <strong>{upcomingDays === 0 ? t("card.D-Day") : t("card.D-{{count}}", { count: upcomingDays, lng: i18n.language })}</strong>
                     </div>
                 )}
                 <BoardCardProgressTrace progress={checklistProgress} />
