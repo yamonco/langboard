@@ -233,6 +233,14 @@ class CardRelationshipService(BaseDomainService):
                 dispatch_effects=dispatch_effects,
             )
 
+    def preview_graph_patch(self, user_or_bot, project, anchor_card, new_cards, add_edges, remove_relationship_uids):
+        """Validate the current graph without allocating or persisting records."""
+        with DbSession.atomic():
+            return self._apply_graph_patch(
+                user_or_bot, project, anchor_card, new_cards, add_edges, remove_relationship_uids,
+                dispatch_effects=False, dry_run=True,
+            )
+
     def _apply_graph_patch(
         self,
         user_or_bot: TUserOrBot,
@@ -243,6 +251,7 @@ class CardRelationshipService(BaseDomainService):
         remove_relationship_uids: list[str],
         *,
         dispatch_effects: bool = True,
+        dry_run: bool = False,
     ) -> dict[str, Any] | None:
         params = InfraHelper.get_records_with_foreign_by_params((Project, project), (Card, anchor_card))
         if not params:
@@ -334,6 +343,9 @@ class CardRelationshipService(BaseDomainService):
             anchor_id = anchor_card.id
             if new_refs and not self._all_connected(symbolic_edges, anchor_id, new_refs):
                 raise ValueError("Every new card must connect to the anchor card")
+
+            if dry_run:
+                return {"new_cards": len(new_cards), "added_edges": len(add_edges), "removed_edges": len(remove_relationships)}
 
             next_order = self.repo.card.get_next_order(column, {"project_id": project.id}) if new_cards else 0
             cards_to_create = {

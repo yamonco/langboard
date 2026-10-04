@@ -16,7 +16,7 @@ from langboard_shared.tasks.bots import CardBotTask
 from sqlalchemy import create_engine, text
 
 
-@pytest.mark.parametrize("mode", ["commit", "repository_failure", "outer_rollback", "silent"])
+@pytest.mark.parametrize("mode", ["commit", "repository_failure", "outer_rollback", "silent", "preview"])
 def test_graph_events_follow_outer_commit(monkeypatch, mode):
     module = importlib.import_module(CardRelationshipService.__module__)
     engine = create_engine("sqlite://")
@@ -32,7 +32,11 @@ def test_graph_events_follow_outer_commit(monkeypatch, mode):
     anchor = Card(id=1, project_id=1, project_column_id=3, title="Anchor", order=0)
     child = Card(id=2, project_id=1, project_column_id=3, title="Child", order=1)
     monkeypatch.setattr(InfraHelper, "get_records_with_foreign_by_params", lambda *_: (project, anchor))
-    monkeypatch.setattr(InfraHelper, "get_by_id_like", lambda cls, uid: column if cls is ProjectColumn else anchor if uid == anchor.get_uid() else child)
+    monkeypatch.setattr(
+        InfraHelper,
+        "get_by_id_like",
+        lambda cls, uid: column if cls is ProjectColumn else anchor if uid == anchor.get_uid() else child,
+    )
 
     @contextmanager
     def readiness():
@@ -51,20 +55,30 @@ def test_graph_events_follow_outer_commit(monkeypatch, mode):
         return []
 
     service = CardRelationshipService(
-        lambda _: SimpleNamespace(publish_work_states=states), lambda _: None,
-        SimpleNamespace(card_relationship=SimpleNamespace(
-            get_graph_snapshot=lambda _: [(10, 1, 2, 20)],
-            get_global_relationship_types_map=lambda _: {},
-            apply_graph_patch=persist,
-        )),
+        lambda _: SimpleNamespace(publish_work_states=states),
+        lambda _: None,
+        SimpleNamespace(
+            card_relationship=SimpleNamespace(
+                get_graph_snapshot=lambda _: [(10, 1, 2, 20)],
+                get_global_relationship_types_map=lambda _: {},
+                apply_graph_patch=persist,
+            )
+        ),
     )
     monkeypatch.setattr(service, "get_api_list_by_card", lambda _: [])
 
     def apply():
         with DbSession.atomic():
-            result = service.apply_graph_patch(
-                None, project, anchor, [], [], [SnowflakeID(10).to_short_code()],
-                dispatch_effects=mode != "silent",
+            method = service.preview_graph_patch if mode == "preview" else service.apply_graph_patch
+            extra = {} if mode == "preview" else {"dispatch_effects": mode != "silent"}
+            result = method(
+                None,
+                project,
+                anchor,
+                [],
+                [],
+                [SnowflakeID(10).to_short_code()],
+                **extra,
             )
             assert result and not published.called and not bot.called and not states.called
             if mode == "outer_rollback":
@@ -76,7 +90,9 @@ def test_graph_events_follow_outer_commit(monkeypatch, mode):
     else:
         apply()
     with engine.connect() as c:
-        assert c.execute(text("SELECT count(*) FROM edges")).scalar() == int(mode in {"repository_failure", "outer_rollback"})
+        assert c.execute(text("SELECT count(*) FROM edges")).scalar() == int(
+            mode in {"repository_failure", "outer_rollback", "preview"}
+        )
     assert published.call_count == bot.call_count == (2 if mode == "commit" else 0)
     assert states.call_count == int(mode == "commit")
     engine.dispose()
