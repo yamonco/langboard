@@ -157,7 +157,7 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
         () => getBoardCardWidgetVisibility({ has_description: hasDescription, count_comment: commentCount }),
         [hasDescription, commentCount]
     );
-    const { mutateAsync: setCardCompletedAsync } = useSetCardCompleted({ interceptToast: true });
+    const { mutateAsync: setCardCompletedAsync, isPending: isCompletionPending } = useSetCardCompleted({ interceptToast: true });
     const hasUnreadChange = card.useField("has_unread_change") ?? false;
     const labels = card.useForeignFieldArray("labels");
     const cardRelationships = card.useForeignFieldArray("relationships");
@@ -196,11 +196,9 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
         (e: React.MouseEvent<HTMLButtonElement>) => {
             e.preventDefault();
             e.stopPropagation();
-            const nextCompleted = !completed;
-            // Optimistic toggle; the hidden completion checklist persists the real state.
-            card.update({ completed: nextCompleted });
+            const nextCompleted = !(card.completed ?? false);
             setCardCompletedAsync({ project_uid: project.uid, card_uid: card.uid, completed: nextCompleted }).catch(() => {
-                card.update({ completed });
+                // The shared mutation restores the model and reports the API error.
             });
         },
         [card, completed, project.uid, setCardCompletedAsync]
@@ -389,6 +387,8 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
                                 size="icon-sm"
                                 title={t(completed ? "card.Mark as not done" : "card.Mark as done")}
                                 titleSide="top"
+                                disabled={isCompletionPending}
+                                aria-pressed={completed}
                                 onClick={handleToggleCompleted}
                                 {...attributes}
                             >

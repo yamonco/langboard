@@ -243,6 +243,13 @@ class ProjectCard extends BaseModel<IStore> {
         this.update({ project_column_uid: value });
     }
 
+    public get completed() {
+        return this.getValue("completed");
+    }
+    public set completed(value) {
+        this.update({ completed: value });
+    }
+
     public get title() {
         return this.getValue("title");
     }

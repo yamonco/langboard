@@ -385,12 +385,11 @@ function BoardTaskCardResult({
     const deadlineAt = card.useField("deadline_at");
     const isCheckCard = card.useField("is_check_card") ?? false;
     const completed = card.useField("completed") ?? false;
-    const { mutateAsync: setCardCompletedAsync } = useSetCardCompleted({ interceptToast: true });
+    const { mutateAsync: setCardCompletedAsync, isPending: isCompletionPending } = useSetCardCompleted({ interceptToast: true });
     const toggleCompleted = useCallback(() => {
-        const nextCompleted = !completed;
-        card.update({ completed: nextCompleted });
+        const nextCompleted = !(card.completed ?? false);
         setCardCompletedAsync({ project_uid: projectUID, card_uid: card.uid, completed: nextCompleted }).catch(() => {
-            card.update({ completed });
+            // The shared mutation restores the model and reports the API error.
         });
     }, [card, completed, projectUID, setCardCompletedAsync]);
     // Check-card view: no body and no user checklist. Comments, members, and deadlines never affect it.
@@ -483,6 +482,8 @@ function BoardTaskCardResult({
                                             className="shrink-0"
                                             aria-label={t(completed ? "card.Mark as not done" : "card.Mark as done")}
                                             title={t(completed ? "card.Mark as not done" : "card.Mark as done")}
+                                            disabled={isCompletionPending}
+                                            aria-pressed={completed}
                                             onClick={toggleCompleted}
                                         >
                                             <IconComponent icon={completed ? "check" : "circle"} size="5" />
