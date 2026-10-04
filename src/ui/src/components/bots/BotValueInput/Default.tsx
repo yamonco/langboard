@@ -3,7 +3,6 @@ import { AGENT_MODELS, OPENAI_COMPATIBLE_PROVIDERS, TAgentModelName } from "@lan
 import Box from "@/components/base/Box";
 import Flex from "@/components/base/Flex";
 import Floating from "@/components/base/Floating";
-import IconComponent from "@/components/base/IconComponent";
 import Select from "@/components/base/Select";
 import SubmitButton from "@/components/base/SubmitButton";
 import Tooltip from "@/components/base/Tooltip";
@@ -21,7 +20,7 @@ import CollaborativeUserLabel from "@/components/Collaborative/UserLabel";
 import { useCollaborativeText } from "@/components/Collaborative";
 import { BotValueDefaultInputProvider, useBotValueDefaultInput } from "@/components/bots/BotValueInput/DefaultProvider";
 import DefaultTypedInput from "@/components/bots/BotValueInput/DefaultTypedInput";
-import { providerIconMap } from "@/components/bots/BotValueInput/utils";
+import ProviderIcon from "@/components/bots/BotValueInput/ProviderIcon";
 import { ApiComfortToolModel } from "@/core/models";
 import { Utils } from "@langboard/core/utils";
 import BotPromptEditor from "@/components/bots/BotValueInput/BotPromptEditor";
@@ -420,7 +419,7 @@ function BotValueDefaultInputDisplay({
                         options={AGENT_MODELS.map((option) => (
                             <Select.Item key={`default-bot-json-input-agent-${option}`} value={option}>
                                 <Flex items="center" gap="2">
-                                    <IconComponent icon={providerIconMap[option]} size="4" />
+                                    <ProviderIcon provider={option} />
                                     {option}
                                 </Flex>
                             </Select.Item>
