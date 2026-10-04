@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Navigate, useLocation } from "react-router";
 import { DashboardStyledLayout } from "@/components/Layout";
 import Box from "@/components/base/Box";
+import Button from "@/components/base/Button";
 import Skeleton from "@/components/base/Skeleton";
 import Flex from "@/components/base/Flex";
 import BoardFloatingNavigation from "@/pages/BoardPage/components/board/BoardFloatingNavigation";
@@ -484,10 +485,6 @@ function BoardProxyDisplay({ pageRoute, isFetching, isProjectLoading, project }:
         setIsCardExpanded(false);
     }, [pageRoute]);
 
-    useEffect(() => {
-        if (!boardChat && workbenchContextMode === "chat") setWorkbenchContextMode("explorer");
-    }, [boardChat, workbenchContextMode]);
-
     const headerNavs: IHeaderNavItem[] = [
         {
             name: t("board.Board"),
@@ -640,7 +637,7 @@ function BoardProxyDisplay({ pageRoute, isFetching, isProjectLoading, project }:
                         icon: "message-circle",
                         onClick: () => showWorkbenchContext("chat"),
                         active: workbenchContextMode === "chat" && isWorkbenchContextVisible,
-                        hidden: !boardChat || !!selectCardViewType,
+                        hidden: !!selectCardViewType,
                     },
                     ...headerNavs.map((nav, index) => ({
                         icon: ["columns-3", "notebook-pen", "network", "history", "settings", "bot"][index],
@@ -673,14 +670,23 @@ function BoardProxyDisplay({ pageRoute, isFetching, isProjectLoading, project }:
                         ) : (
                             <div
                                 data-workbench-command-context={workbenchContextMode}
-                                hidden={workbenchContextMode === "chat"}
+                                hidden={workbenchContextMode === "chat" && !!boardChat}
                                 tabIndex={-1}
                                 role="region"
                                 aria-label={workbenchContextTitle}
                                 className="h-full outline-none"
                             >
                                 <Suspense fallback={<Skeleton className="m-3 h-24" />}>
-                                    {workbenchContextMode === "chat" ? null : workbenchContextMode === "my-work" ? (
+                                    {workbenchContextMode === "chat" ? (
+                                        !boardChat && (
+                                            <div role="status" className="space-y-3 p-4 text-sm text-muted-foreground">
+                                                <p>{t("errors.Server has been temporarily disabled. Please try again later.")}</p>
+                                                <Button variant="outline" size="sm" onClick={() => isBoardChatAvailableHandlers.send({})}>
+                                                    {t("common.Retry")}
+                                                </Button>
+                                            </div>
+                                        )
+                                    ) : workbenchContextMode === "my-work" ? (
                                         <div className="h-full overflow-y-auto">
                                             <MyWorkSidebar
                                                 compact
