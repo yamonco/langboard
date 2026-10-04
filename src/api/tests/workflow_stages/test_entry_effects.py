@@ -8,7 +8,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 from uuid import uuid4
 import pytest
-from langboard_shared.core.db import DbSession
+from langboard_shared.core.db import DbSession, SqlBuilder
 from langboard_shared.core.db.DbEngine import DbEngine
 from langboard_shared.core.types import SafeDateTime
 from langboard_shared.domain.models import (
@@ -259,8 +259,12 @@ def test_retry_same_column_does_not_complete_new_unchecked_item(flow):
     f = flow
     f.service.change_order(None, f.project, f.card, 0, f.new)
     with DbSession.atomic() as db:
-        f.items[2].is_checked = False
-        db.update(f.items[2])
+        # The fixture's detached item predates the first transition.
+        item = db.exec(SqlBuilder.select.table(Checkitem).where(Checkitem.column("id") == f.items[2].id)).first()
+        assert item.is_checked is True
+        item.is_checked = False
+        db.update(item)
+    assert snapshot(f.engine, f.card.id)[1][2][1] is False
     f.service.change_order(None, f.project, f.card, 0, f.new)
     assert snapshot(f.engine, f.card.id)[1][2][1] is False
     f.summary.assert_called_once()
