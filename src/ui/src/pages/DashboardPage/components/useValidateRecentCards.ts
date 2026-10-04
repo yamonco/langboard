@@ -49,9 +49,11 @@ export default function useValidateRecentCards(userUID: string, cards: IOpenCard
         };
         void validate();
         window.addEventListener("focus", validate);
+        window.addEventListener("online", validate);
         return () => {
             controller.abort();
             window.removeEventListener("focus", validate);
+            window.removeEventListener("online", validate);
         };
     }, [userUID, identities]);
 }

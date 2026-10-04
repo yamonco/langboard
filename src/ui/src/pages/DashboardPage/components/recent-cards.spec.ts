@@ -67,3 +67,47 @@ test("offline deletion and permission loss remove only confirmed unavailable his
     await page.evaluate(() => window.dispatchEvent(new Event("focus")));
     await expect(recent.getByRole("button", { name: /^Card \d+$/ })).toHaveCount(0);
 });
+
+test("online recovery prunes inaccessible cards while preserving pins and close actions", async ({ page }) => {
+    let available = false;
+    let calls = 0;
+    await page.route("**/board/fixture/cards/available", async (route) => {
+        const headers = {
+            "Access-Control-Allow-Origin": "http://127.0.0.1:4188",
+            "Access-Control-Allow-Credentials": "true",
+            "Access-Control-Allow-Methods": "POST, OPTIONS",
+            "Access-Control-Allow-Headers": "content-type, content-encoding, authorization",
+        };
+        if (route.request().method() === "OPTIONS") {
+            await route.fulfill({ status: 204, headers });
+            return;
+        }
+        calls++;
+        const uids = route.request().postDataJSON().card_uids as string[];
+        await route.fulfill({
+            status: available ? 200 : 503,
+            headers,
+            contentType: "application/json",
+            body: JSON.stringify({ card_uids: uids.filter((uid) => uid !== "13") }),
+        });
+    });
+    await page.goto("/src/pages/DashboardPage/components/recent-cards.fixture.html");
+    const recent = page.getByRole("region", { name: "Recent cards", exact: true });
+    await expect.poll(() => calls).toBeGreaterThan(0);
+    await expect(recent.getByRole("button", { name: "Card 13", exact: true })).toBeVisible();
+    available = true;
+    const previous = calls;
+    await page.evaluate(() => window.dispatchEvent(new Event("online")));
+    await expect.poll(() => calls).toBeGreaterThan(previous);
+    await expect(recent.getByRole("button", { name: "Card 13", exact: true })).toHaveCount(0);
+    await expect(recent.getByRole("button", { name: "Card 12", exact: true })).toBeVisible();
+    await recent.getByRole("button", { name: "Show older cards (3)", exact: true }).click();
+    const oldest = recent.locator(".group").filter({ has: page.getByRole("button", { name: "Card 0", exact: true }) });
+    await expect(oldest.getByRole("button", { name: "Unpin card", exact: true })).toBeVisible();
+    await oldest.getByRole("button", { name: "Unpin card", exact: true }).click();
+    await expect(oldest.getByRole("button", { name: "Pin card", exact: true })).toBeVisible();
+    await oldest.getByRole("button", { name: "Pin card", exact: true }).click();
+    await oldest.getByRole("button", { name: "Close card from list", exact: true }).click();
+    await expect(recent.getByRole("button", { name: "Card 0", exact: true })).toHaveCount(0);
+    await expect(recent.getByRole("button", { name: /^Card \d+$/ })).toHaveCount(12);
+});
