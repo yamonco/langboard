@@ -294,7 +294,7 @@ class WorkPlanService:
             ):
                 raise ValueError("Project is unavailable")
             anchor = self._card(plan.anchor_card_uid, project)
-            receipt = self.service.metadata.get_by_key_as_api(CardMetadata, anchor, receipt_key)
+            receipt = self.service.metadata.get_by_key_as_api(CardMetadata, anchor, receipt_key, internal=True)
             if receipt:
                 stored = loads(receipt["value"])
                 if stored.get("payload_digest") != payload_digest or stored.get("revision") != expected_revision:
@@ -361,6 +361,6 @@ class WorkPlanService:
                 {"version": 1, "payload_digest": payload_digest, "revision": expected_revision, "result": result},
                 default=str,
             )
-            if self.service.metadata.save(CardMetadata, anchor, receipt_key, value) is None:
+            if self.service.metadata.save(CardMetadata, anchor, receipt_key, value, internal=True) is None:
                 raise ValueError("Work plan receipt persistence failed")
             return result
