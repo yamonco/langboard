@@ -473,7 +473,7 @@ class CheckitemService(BaseDomainService):
             return False
 
         target_column = InfraHelper.get_by_id_like(ProjectColumn, column_uid or card.project_column_id)
-        if not target_column or target_column.is_archive:
+        if not target_column or target_column.is_archive or target_column.project_id != card.project_id:
             return False
 
         if checkitem.status != CheckitemStatus.Stopped:
@@ -494,11 +494,17 @@ class CheckitemService(BaseDomainService):
 
             card_service = self._get_service_by_name("card")
             card_service.ensure_completion_checklist(new_card)
-        api_card = new_card.board_api_response(0, [], [], [], completed=False, is_check_card=True)
-        CheckitemPublisher.cardified(card, checkitem, target_column, api_card)
-        CardCheckitemActivityTask.card_checkitem_cardified(user_or_bot, project, card, checkitem)
-        CardCheckitemBotTask.card_checkitem_cardified(user_or_bot, project, card, checkitem, new_card)
-        CardBotTask.card_created(user_or_bot, project, new_card)
+            api_card = new_card.board_api_response(0, [], [], [], completed=False, is_check_card=True)
+            changed_item = checkitem.model_copy(deep=True)
+            created_card = new_card.model_copy(deep=True)
+
+            def publish():
+                CheckitemPublisher.cardified(card, changed_item, target_column, api_card)
+                CardCheckitemActivityTask.card_checkitem_cardified(user_or_bot, project, card, changed_item)
+                CardCheckitemBotTask.card_checkitem_cardified(user_or_bot, project, card, changed_item, created_card)
+                CardBotTask.card_created(user_or_bot, project, created_card)
+
+            execution.db.after_commit(publish)
 
         return True
 
