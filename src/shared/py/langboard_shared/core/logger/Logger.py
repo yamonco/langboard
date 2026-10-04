@@ -75,6 +75,7 @@ class Logger:
             "version": 1,
             "disable_existing_loggers": False,
             "formatters": {
+                "mcp_telemetry": {"format": "%(message)s"},
                 "default": {
                     "()": "uvicorn.logging.DefaultFormatter",
                     "fmt": f"{Env.PROJECT_NAME}: %(message)s",
@@ -89,6 +90,12 @@ class Logger:
                 },
             },
             "handlers": {
+                "mcp_telemetry": {
+                    "class": "logging.StreamHandler",
+                    "formatter": "mcp_telemetry",
+                    "level": "INFO",
+                    "stream": "ext://sys.stdout",
+                },
                 "default": {
                     "formatter": "default",
                     "class": "rich.logging.RichHandler",
@@ -120,6 +127,11 @@ class Logger:
                 },
             },
             "loggers": {
+                f"{Env.PROJECT_NAME}.mcp.telemetry": {
+                    "handlers": ["mcp_telemetry"],
+                    "level": "INFO",
+                    "propagate": False,
+                },
                 "uvicorn": {"handlers": ["default", "file"], "level": self.terminal_level, "propagate": False},
                 "uvicorn.error": {"handlers": ["default", "file"], "level": self.terminal_level, "propagate": False},
                 "uvicorn.access": {"handlers": ["access", "file"], "level": self.terminal_level, "propagate": False},

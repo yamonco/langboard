@@ -7,10 +7,11 @@ from time import perf_counter
 from uuid import uuid4
 from fastmcp.exceptions import AuthorizationError
 from fastmcp.server.middleware import Middleware
+from langboard_shared.Env import Env
 from .Tool import McpTool
 
 
-logger = logging.getLogger("langboard.mcp.telemetry")
+logger = logging.getLogger(f"{Env.PROJECT_NAME}.mcp.telemetry")
 _recording = ContextVar("mcp_telemetry_recording", default=False)
 
 
