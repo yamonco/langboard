@@ -95,6 +95,9 @@ class App:
         self.api.include_router(AppRouter.api)
         for profile, profile_app in self.mcp_profile_apps.items():
             self.api.mount(f"/mcp/{profile}", cast(Any, profile_app))
+        if self.mcp_oauth_http_app is not None:
+            self.api.router.routes.extend(McpServer.oauth_discovery_routes)
+            self.api.mount("/mcp/oauth", cast(Any, self.mcp_oauth_http_app))
         self.api.mount("/mcp", cast(Any, self.mcp_http_app))
 
     def _init_mcp_server(self):
@@ -103,6 +106,7 @@ class App:
         self.mcp_http_app = mcp_http_app
         self.mcp_app = mcp_app
         self.mcp_profile_apps = {profile: McpServer.get_http_app(profile)[0] for profile in ("agent", "raw")}
+        self.mcp_oauth_http_app = McpServer.get_oauth_http_app()
 
     def _openapi_json(self):
         with open(Env.SCHEMA_DIR / AppRouter.open_api_schema_file, "r") as f:
@@ -125,4 +129,6 @@ class App:
         async with AsyncExitStack() as stack:
             for app in (self.mcp_http_app, *self.mcp_profile_apps.values()):
                 await stack.enter_async_context(app.router.lifespan_context(app))
+            if self.mcp_oauth_http_app is not None:
+                await stack.enter_async_context(self.mcp_oauth_http_app.router.lifespan_context(self.mcp_oauth_http_app))
             yield

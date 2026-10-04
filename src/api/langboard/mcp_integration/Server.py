@@ -7,6 +7,7 @@ from urllib.parse import urlsplit
 from fastmcp import FastMCP
 from fastmcp.exceptions import AuthorizationError
 from fastmcp.server.transforms.search import RegexSearchTransform
+from mcp.types import Icon
 from langboard_shared.core.types import Factory
 from langboard_shared.core.utils.decorators import class_instance
 from langboard_shared.domain.models import Bot, User
@@ -17,7 +18,7 @@ from ..mcp_tools.RoleChecker import McpRoleChecker
 from ..middlewares import McpAuthMiddleware
 from ..middlewares.McpAuthMiddleware import mcp_auth_context
 from .Annotations import ToolAnnotationTransform
-from .Providers import create_agent_core_provider, create_compatibility_provider, create_raw_primitive_provider
+from .Providers import create_agent_core_provider, create_compatibility_provider, create_native_domain_provider, create_raw_primitive_provider
 from .Receipts import MutationReceiptMiddleware
 from .ResponseBudget import ReadResponseBudgetMiddleware
 from .Telemetry import ToolTelemetryMiddleware
@@ -43,6 +44,7 @@ class McpServer:
         self.mcp = _create_fastmcp()
         self.agent_mcp = None
         self._streamable_http_app = None
+        self.oauth_discovery_routes = []
 
     def get_http_app(self, profile: str = "compatibility") -> tuple[Any, FastMCP]:
         """Build the MCP transport or fail application startup."""
@@ -80,6 +82,30 @@ class McpServer:
         if profile == "compatibility":
             self.mcp = app
         return http_app, app
+
+    def get_oauth_http_app(self):
+        """Expose an opt-in OAuth transport beside the unchanged legacy transport."""
+        from fastmcp.server.auth import require_scopes
+        from fastmcp.server.middleware import AuthMiddleware
+        from .OAuth import NativeOAuthMiddleware, create_oauth_provider
+
+        auth = create_oauth_provider()
+        if auth is None:
+            self.oauth_discovery_routes = []
+            return None
+        app = FastMCP(
+            Env.PROJECT_NAME,
+            icons=[Icon(src=f"{Env.PUBLIC_UI_URL}/images/favicon.ico")],
+            website_url=Env.PUBLIC_UI_URL,
+            auth=auth,
+            strict_input_validation=True,
+            mask_error_details=True,
+            middleware=[NativeOAuthMiddleware(), AuthMiddleware(auth=require_scopes("mcp:access")), ToolTelemetryMiddleware(), MutationReceiptMiddleware(), ReadResponseBudgetMiddleware()],
+        )
+        app.add_provider(create_native_domain_provider(self._wrap_tool, modern_annotations=True))
+        hosts, origins = _get_transport_security_allowlists()
+        self.oauth_discovery_routes = auth.get_well_known_routes(mcp_path="/stream")
+        return app.http_app(path="/stream", stateless_http=True, allowed_hosts=hosts, allowed_origins=origins)
 
     def _wrap_tool(self, tool_name: str, handler: Callable[..., Any]):
         sig = signature(handler)
