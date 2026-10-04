@@ -105,6 +105,13 @@ async def test_registered_profiles_partition_catalog_without_changing_schemas():
         assert "profile" in modern["get_card_bundle"]["properties"]
         assert "profile" not in catalogs["compatibility"]["get_card_bundle"]["properties"]
         modern["get_card_bundle"]["properties"].pop("profile")
+        from langboard.mcp_integration.Providers import READ_PAGE_BOUNDS
+
+        for name, bounds in READ_PAGE_BOUNDS.items():
+            for parameter, maximum in bounds.items():
+                schema = modern[name]["properties"][parameter]
+                assert schema.pop("minimum") == 1
+                assert schema.pop("maximum") == maximum
         assert modern == catalogs["compatibility"]
     finally:
         mcp_auth_context.reset(token)
@@ -298,5 +305,32 @@ async def test_card_policy_resource_reuses_current_query_and_rejects_ungranted_r
                 with pytest.raises(Exception, match="get_card_bundle is not allowed"):
                     await client.get_prompt("apply_card_workflow", {"project_uid": "project", "card_uid": "card"})
                 assert calls == []
+    finally:
+        mcp_auth_context.reset(token)
+
+
+async def test_modern_page_bounds_reject_invalid_arguments_before_domain_dispatch(monkeypatch):
+    from fastmcp.tools import Tool
+    from langboard.mcp_integration.Providers import with_read_page_bounds
+
+    calls = []
+
+    async def read(limit: int = 20) -> dict:
+        calls.append(limit)
+        return {"limit": limit}
+
+    server = _create_fastmcp()
+    server.add_tool(Tool.from_function(with_read_page_bounds("list_project_cards", read), name="list_project_cards"))
+    token = mcp_auth_context.set({"tool_group": SimpleNamespace(activated_at=object(), tools=["list_project_cards"])})
+    try:
+        async with Client(server) as client:
+            for invalid in (0, 26, True, 1.5):
+                with pytest.raises(ToolError):
+                    await client.call_tool("list_project_cards", {"limit": invalid})
+            assert calls == []
+            for valid in (1, 25):
+                result = await client.call_tool("list_project_cards", {"limit": valid})
+                assert result.structured_content == {"limit": valid}
+            assert calls == [1, 25]
     finally:
         mcp_auth_context.reset(token)

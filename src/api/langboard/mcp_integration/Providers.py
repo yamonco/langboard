@@ -4,14 +4,16 @@ import json
 from collections.abc import Callable
 from functools import wraps
 from inspect import signature
-from typing import Any
+from typing import Annotated, Any
 from fastmcp.exceptions import AuthorizationError
 from fastmcp.prompts import Prompt
 from fastmcp.resources import Resource, ResourceTemplate
 from fastmcp.server.providers.local_provider import LocalProvider
 from fastmcp.server.transforms import Visibility
 from fastmcp.tools import Tool
+from pydantic import Field
 from ..card_workspace.application.dtos import ProjectCardIndexResponse, ProjectCardListResponse
+from ..card_workspace.domain.value_objects import MAX_COMMENT_LIMIT, MAX_SECTION_LIMIT
 from ..middlewares.McpAuthMiddleware import mcp_auth_context
 from .Annotations import tool_annotations
 from .BoardOutputs import BOARD_OUTPUTS
@@ -79,6 +81,7 @@ def create_native_domain_provider(
         if not modern_annotations and metadata.get("modern_only"):
             handler = without_modern_parameters(handler, metadata["modern_only"])
         if modern_annotations:
+            handler = with_read_page_bounds(name, handler)
             handler = with_typed_output(
                 name,
                 handler,
@@ -214,3 +217,36 @@ def without_modern_parameters(handler, names):
     sig = signature(handler)
     legacy.__signature__ = sig.replace(parameters=[param for key, param in sig.parameters.items() if key not in names])
     return legacy
+
+
+READ_PAGE_BOUNDS = {
+    "get_card_bundle": {"comments_limit": MAX_COMMENT_LIMIT, "section_limit": MAX_SECTION_LIMIT},
+    "list_project_cards": {"limit": 25},
+    "get_public_card_metadata": {"limit": 25},
+}
+
+
+def with_read_page_bounds(name, handler):
+    """Expose existing native page limits only on modern transports."""
+    bounds = READ_PAGE_BOUNDS.get(name)
+    if not bounds:
+        return handler
+
+    @wraps(handler)
+    async def bounded(**kwargs):
+        return await handler(**kwargs)
+
+    current = signature(handler)
+    bounded.__signature__ = current.replace(
+        parameters=[
+            parameter.replace(annotation=Annotated[int, Field(ge=1, le=bounds[parameter.name], strict=True)])
+            if parameter.name in bounds
+            else parameter
+            for parameter in current.parameters.values()
+        ]
+    )
+    bounded.__annotations__ = dict(handler.__annotations__)
+    for parameter in bounded.__signature__.parameters.values():
+        if parameter.name in bounds:
+            bounded.__annotations__[parameter.name] = parameter.annotation
+    return bounded
