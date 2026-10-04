@@ -81,9 +81,6 @@ class WorkPlan(PlanModel):
         referenced |= {r for e in self.add_edges for r in (e.parent_ref, e.child_ref)}
         if any(r.startswith(("new:", "cardify:")) and r not in declared for r in referenced):
             raise ValueError("Unknown created card reference")
-        promoted = {c.client_ref for c in self.cardify_checkitems}
-        if any(e.parent_ref in promoted or e.child_ref in promoted for e in self.add_edges):
-            raise ValueError("Cardified cards cannot participate in this graph patch")
         edges = [(e.parent_ref, e.child_ref, e.relationship_type_uid) for e in self.add_edges]
         if len(edges) != len(set(edges)) or len(self.remove_relationship_uids) != len(
             set(self.remove_relationship_uids)
@@ -147,7 +144,7 @@ class WorkPlanService:
                 raise ValueError("Cardification changed after review")
             columns.append(column.api_response())
             cardification_items.append(item.api_response())
-        graph = self._graph_args(plan)
+        graph = self._graph_args(plan, preview=True)
         if plan.new_cards or plan.add_edges or plan.remove_relationship_uids:
             service.card_relationship.preview_graph_patch(self.actor, *graph)
         graph_snapshot = sorted(service.card_relationship.repo.card_relationship.get_graph_snapshot(project))
@@ -177,12 +174,31 @@ class WorkPlanService:
         )
 
     @staticmethod
-    def _graph_args(plan):
+    def _graph_args(plan, mapped=None, *, preview=False):
+        promoted = {c.client_ref: c for c in plan.cardify_checkitems}
+        referenced = {r for e in plan.add_edges for r in (e.parent_ref, e.child_ref)}
+        aliases = {}
+        used = {c.client_ref for c in plan.new_cards}
+        for ref in sorted(set(promoted) & referenced):
+            alias = "new:promoted:" + ref[8:]
+            while alias in used:
+                alias += ":"
+            used.add(alias)
+            aliases[ref] = alias
+
+        def resolve(ref):
+            if ref not in promoted:
+                return ref
+            return aliases[ref] if preview else mapped[ref].get_uid()
+
+        new_cards = [(c.client_ref, c.title, c.description) for c in plan.new_cards]
+        if preview:
+            new_cards.extend((alias, promoted[ref].title, None) for ref, alias in aliases.items())
         return (
             plan.project_uid,
             plan.anchor_card_uid,
-            [(c.client_ref, c.title, c.description) for c in plan.new_cards],
-            [(e.parent_ref, e.child_ref, e.relationship_type_uid) for e in plan.add_edges],
+            new_cards,
+            [(resolve(e.parent_ref), resolve(e.child_ref), e.relationship_type_uid) for e in plan.add_edges],
             plan.remove_relationship_uids,
         )
 
@@ -198,13 +214,6 @@ class WorkPlanService:
             service = self.service
             mapped = dict(cards)
             result = {"graph": None, "cardifications": [], "checklists": []}
-            if plan.new_cards or plan.add_edges or plan.remove_relationship_uids:
-                graph = service.card_relationship.apply_graph_patch(self.actor, *self._graph_args(plan))
-                if graph is None:
-                    raise ValueError("Graph application failed")
-                result["graph"] = graph
-                for proposed, created in zip(plan.new_cards, graph["created_cards"], strict=True):
-                    mapped[proposed.client_ref] = self._card(created["uid"], project)
             for proposed in plan.cardify_checkitems:
                 item = service.checkitem.get_by_id_like(proposed.checkitem_uid)
                 if not service.checkitem.cardify(
@@ -219,6 +228,13 @@ class WorkPlanService:
                 result["cardifications"].append(
                     {"card": card.api_response(), "source_checkitem_uid": proposed.checkitem_uid}
                 )
+            if plan.new_cards or plan.add_edges or plan.remove_relationship_uids:
+                graph = service.card_relationship.apply_graph_patch(self.actor, *self._graph_args(plan, mapped))
+                if graph is None:
+                    raise ValueError("Graph application failed")
+                result["graph"] = graph
+                for proposed, created in zip(plan.new_cards, graph["created_cards"], strict=True):
+                    mapped[proposed.client_ref] = self._card(created["uid"], project)
             for proposed in plan.new_checklists:
                 card = mapped[proposed.target_card_ref]
                 checklist = service.checklist.create(self.actor, project, card, proposed.title, dispatch_effects=False)
