@@ -139,4 +139,9 @@ class ProjectCardListResponse(BaseModel):
     project_uid: str
     cards: BoundedItemsDto
     workflow_stages: dict[str, dict[str, Any]] = Field(default_factory=dict)
+
+
+class ProjectCardIndexResponse(ProjectCardListResponse):
+    """Workflow-aware index for modern MCP and native query consumers."""
+
     columns: dict[str, dict[str, Any]] = Field(default_factory=dict)

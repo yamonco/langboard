@@ -225,3 +225,21 @@ def test_project_search_reuses_distinct_column_context():
 
     assert all(len(card["description"]) == 500 for card in result["cards"])
     assert all(card["description_total_chars"] == 2000 and card["description_truncated"] is True for card in result["cards"])
+
+
+@pytest.mark.asyncio
+async def test_legacy_card_list_preserves_schema_and_column_names():
+    from langboard.card_workspace.application.dtos import (
+        BoundedItemsDto,
+        ProjectCardIndexResponse,
+        ProjectCardListResponse,
+    )
+    from langboard.mcp_integration.Providers import with_legacy_card_list
+
+    async def handler(**kwargs):
+        return ProjectCardIndexResponse(project_uid="p", cards=BoundedItemsDto(items=[{"uid": "x", "project_column_uid": "c"}], total_count=1, next_cursor=None, limit=20), columns={"c": {"name": "Custom"}})
+
+    result = await with_legacy_card_list(handler)()
+    assert type(result) is ProjectCardListResponse
+    assert "columns" not in result.model_dump()
+    assert result.cards.items[0]["project_column_name"] == "Custom"

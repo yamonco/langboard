@@ -2,6 +2,7 @@
 
 import json
 from collections.abc import Callable
+from functools import wraps
 from typing import Any
 from fastmcp.exceptions import AuthorizationError
 from fastmcp.prompts import Prompt
@@ -9,6 +10,7 @@ from fastmcp.resources import Resource, ResourceTemplate
 from fastmcp.server.providers.local_provider import LocalProvider
 from fastmcp.server.transforms import Visibility
 from fastmcp.tools import Tool
+from ..card_workspace.application.dtos import ProjectCardIndexResponse, ProjectCardListResponse
 from .Annotations import tool_annotations
 from .BoardOutputs import BOARD_OUTPUTS
 from .BotOutputs import BOT_OUTPUTS
@@ -74,7 +76,8 @@ def create_native_domain_provider(
             handler = with_typed_output(
                 name,
                 handler,
-                WORK_OUTPUTS.get(name)
+                (ProjectCardIndexResponse if name == "list_project_cards" else None)
+                or WORK_OUTPUTS.get(name)
                 or CONTENT_OUTPUTS.get(name)
                 or BOT_OUTPUTS.get(name)
                 or BOARD_OUTPUTS.get(name)
@@ -84,6 +87,8 @@ def create_native_domain_provider(
                 or NOTIFICATION_OUTPUTS.get(name)
                 or PROJECT_OUTPUTS.get(name),
             )
+        elif name == "list_project_cards":
+            handler = with_legacy_card_list(handler)
         provider.add_tool(
             Tool.from_function(
                 handler,
@@ -169,3 +174,19 @@ def _workflow_policy() -> str:
 def _workflow_policy_prompt() -> str:
     """Tell an agent how to apply the server-owned workflow policy."""
     return _workflow_policy()
+
+
+def with_legacy_card_list(handler):
+    """Retain the legacy list schema and repeated column names on compatibility transport."""
+    @wraps(handler)
+    async def legacy(**kwargs):
+        result = await handler(**kwargs)
+        payload = result.model_dump(mode="json") if hasattr(result, "model_dump") else dict(result)
+        columns = payload.pop("columns", {})
+        for card in payload["cards"]["items"]:
+            column = columns.get(card.get("project_column_uid"))
+            if column is not None:
+                card["project_column_name"] = column["name"]
+        return ProjectCardListResponse.model_validate(payload)
+
+    return legacy

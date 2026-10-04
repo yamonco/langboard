@@ -19,6 +19,7 @@ from ..dtos import (
     CardBundleResponse,
     ClassificationDto,
     PeopleDto,
+    ProjectCardIndexResponse,
     ProjectCardListResponse,
     ProjectIdentityResponse,
 )
@@ -194,7 +195,7 @@ def list_project_cards(
         workflow_stages=workflow_stages,
     )
     next_cursor = ProjectCardCursor(*page.next_cursor_fields).encode() if page.next_cursor_fields else None
-    return ProjectCardListResponse(
+    return ProjectCardIndexResponse(
         project_uid=project_uid,
         workflow_stages=page.workflow_stages,
         columns=page.columns,
