@@ -398,6 +398,15 @@ class Env:
         return self.__get_from_cache("SCIM_ISSUER", "")
 
     @property
+    def MCP_EMPLOYEE_GROUP_IDS(self) -> list[str]:
+        """Explicit SCIM group external IDs whose members are employees.
+
+        Empty means the deployment has no employee classification policy.
+        """
+        raw = self.__get_from_cache("MCP_EMPLOYEE_GROUP_IDS", "")
+        return list(dict.fromkeys(value.strip() for value in raw.split(",") if value.strip()))
+
+    @property
     def REFRESH_TOKEN_NAME(self) -> str:
         return f"refresh_token_{self.PROJECT_SHORT_NAME}"
 

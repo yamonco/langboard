@@ -34,3 +34,20 @@ Implementation acceptance is not yet proven by unit tests. Mounted metadata and
 callbacks, real browser consent, restart/refresh persistence and independent
 authenticated client read/write must be verified before enabling this transport
 in a deployment.
+
+## Employee classification
+
+Set `MCP_EMPLOYEE_GROUP_IDS` to comma-separated SCIM **external group IDs** and
+set `SCIM_ISSUER` to the provisioning authority. There are no built-in company,
+email-domain or group-name assumptions. An empty policy returns `unknown`.
+SCIM provisioning and OAuth authentication alone do not prove employment.
+
+`get_employee_status` classifies only the current linked user from current
+primary-database identity and group membership. Inactive/deleted accounts,
+foreign issuers and removed memberships do not qualify. Classification grants
+no permissions. `list_employees` currently requires a Langboard administrator;
+regular authenticated employees cannot enumerate the directory. The query
+filters issuer, configured groups and active users before pagination (1–50
+records per page), deduplicates overlapping memberships, and exposes public
+UID/name fields only. Non-admin directory access needs an explicit future
+permission policy; it is not inferred from organization membership.

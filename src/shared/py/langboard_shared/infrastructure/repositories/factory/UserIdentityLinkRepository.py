@@ -35,6 +35,8 @@ class UserIdentityLinkRepository(BaseRepository[UserIdentityLink]):
         user: TUserParam,
         provider: IdentityProvider,
         issuer: str | None = None,
+        *,
+        consistent: bool = False,
     ) -> UserIdentityLink | None:
         user_id = InfraHelper.convert_id(user)
         condition = (UserIdentityLink.column("user_id") == user_id) & (
@@ -42,7 +44,7 @@ class UserIdentityLinkRepository(BaseRepository[UserIdentityLink]):
         )
         if issuer is not None:
             condition &= UserIdentityLink.column("issuer") == issuer.strip().rstrip("/")
-        with DbSession.use(readonly=True) as db:
+        with DbSession.use(readonly=not consistent) as db:
             result = db.exec(
                 SqlBuilder.select.table(UserIdentityLink)
                 .where(condition)

@@ -2,7 +2,7 @@ from ....core.db import DbSession, SqlBuilder
 from ....core.domain import BaseRepository
 from ....core.types import SnowflakeID
 from ....core.types.ParamTypes import TScimGroupParam, TUserParam
-from ....domain.models import ScimGroup, ScimGroupMember, User
+from ....domain.models import IdentityProvider, ScimGroup, ScimGroupMember, User, UserIdentityLink
 from ....helpers import InfraHelper
 
 
@@ -14,6 +14,28 @@ class ScimGroupMemberRepository(BaseRepository[ScimGroupMember]):
     @staticmethod
     def name() -> str:
         return "scim_group_member"
+
+    def get_employee_users(self, group_external_ids: list[str], issuer: str, *, offset: int, limit: int) -> list[User]:
+        """Filter current linked users before bounded pagination on the primary database."""
+        query = (
+            SqlBuilder.select.table(User)
+            .join(UserIdentityLink, UserIdentityLink.column("user_id") == User.column("id"))
+            .join(ScimGroupMember, ScimGroupMember.column("user_id") == User.column("id"))
+            .join(ScimGroup, ScimGroup.column("id") == ScimGroupMember.column("group_id"))
+            .where(
+                UserIdentityLink.column("provider") == IdentityProvider.Scim,
+                UserIdentityLink.column("issuer") == issuer,
+                ScimGroup.column("external_id").in_(group_external_ids),
+                User.column("activated_at").is_not(None),
+                User.column("deleted_at").is_(None),
+            )
+            .distinct()
+            .order_by(User.column("id").asc())
+            .offset(offset)
+            .limit(limit)
+        )
+        with DbSession.use(readonly=False) as db:
+            return db.exec(query).all()
 
     def get_users_by_group(
         self, group: TScimGroupParam, *, consistent: bool = False

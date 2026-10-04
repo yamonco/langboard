@@ -53,6 +53,8 @@ AGENT_CORE_TOOLS = frozenset(
         "patch_wiki_content",
         "create_project_wiki",
         "get_unread_notifications",
+        "get_employee_status",
+        "list_employees",
         "mark_notification_read",
         "read_card_attachment",
         "get_project_label_catalog",
