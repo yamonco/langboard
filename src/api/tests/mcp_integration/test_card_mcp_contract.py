@@ -80,9 +80,7 @@ def test_verification_evidence_tool_binds_reviewer_and_hides_identity_from_schem
     append = Mock(return_value={"uid": "receipt", "decision": "partial"})
     service = SimpleNamespace(card=SimpleNamespace(record_verification_evidence=append))
     evidence = [VerificationEvidence(reference="run:1", source_revision="commit", environment="canary")]
-    result = CardMcp.record_card_verification_evidence(
-        "board", "card", 7, "partial", evidence, reviewer, service
-    )
+    result = CardMcp.record_card_verification_evidence("board", "card", 7, "partial", evidence, reviewer, service)
     assert result == {"verification": {"uid": "receipt", "decision": "partial"}}
     assert append.call_args.args[:3] == (reviewer, "board", "card")
     assert append.call_args.args[3].expected_change_seq == 7
@@ -720,3 +718,64 @@ def test_graph_cycle_rejection_is_validation_error_not_unknown_mutation() -> Non
             "project", "root", [], [CardGraphEdge("root", "existing", "blocks")], [], object(), service
         )
     assert apply.call_count == 1
+
+
+@pytest.mark.parametrize("missing", [True, False])
+def test_card_bundle_distinguishes_unavailable_card_from_unexpected_failure(monkeypatch, missing):
+    from fastmcp.exceptions import ValidationError
+    from langboard.card_workspace.domain import CardUnavailableError
+
+    def fail(*args, **kwargs):
+        if missing:
+            raise CardUnavailableError("Card not found in project")
+        raise RuntimeError("database failure")
+
+    monkeypatch.setattr(CardMcp, "_adapter", lambda *args: object())
+    monkeypatch.setattr(CardMcp, "query_card_bundle", fail)
+    expected = ValidationError if missing else RuntimeError
+    message = "CARD_UNAVAILABLE" if missing else "database failure"
+    with pytest.raises(expected, match=message):
+        CardMcp.get_card_bundle("project", "missing", None, None)
+
+
+@pytest.mark.asyncio
+async def test_missing_card_bundle_http_response_is_bad_request(monkeypatch):
+    from fastapi import FastAPI, Request
+    from fastmcp import FastMCP
+    from httpx import ASGITransport, AsyncClient
+    from langboard.card_workspace.domain import CardUnavailableError
+
+    route = importlib.import_module("langboard.routes.mcp.McpApi")
+    group = SimpleNamespace(activated_at=True, tools=["get_card_bundle"], user_id=None)
+    service = SimpleNamespace(mcp_tool_group=SimpleNamespace(get_by_id_like=lambda _: group), close=lambda: None)
+    monkeypatch.setattr(route, "DomainService", lambda: service)
+    monkeypatch.setattr(route, "User", SimpleNamespace)
+    monkeypatch.setattr(CardMcp, "_adapter", lambda *args: object())
+
+    def missing(*args, **kwargs):
+        raise CardUnavailableError("Card not found in project")
+
+    monkeypatch.setattr(CardMcp, "query_card_bundle", missing)
+    mcp = FastMCP("missing-card-http-test")
+
+    @mcp.tool(name="get_card_bundle")
+    def bundle():
+        return CardMcp.get_card_bundle("project", "missing", None, None)
+
+    monkeypatch.setattr(route.McpServer, "agent_mcp", mcp)
+    app = FastAPI()
+
+    @app.post("/mcp/tools/{tool_name}")
+    async def dispatch(tool_name: str, request: Request):
+        request.scope["auth"] = SimpleNamespace(id=1)
+        return await route.execute_mcp_tool(tool_name, request)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app, raise_app_exceptions=False), base_url="http://test"
+    ) as client:
+        response = await client.post(
+            "/mcp/tools/get_card_bundle", json={}, headers={route.AuthSecurity.MCP_TOOL_GROUP_UID_HEADER: "group"}
+        )
+    assert response.status_code == 400
+    assert "unknown" not in response.text
+    assert route.mcp_auth_context.get() is None

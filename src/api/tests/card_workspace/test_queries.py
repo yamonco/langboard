@@ -553,3 +553,12 @@ def test_profile_distinguishes_permission_denial_from_selection_omission():
     )
     result = get_card_bundle(port, "p1", "c1", CommentPage(), SectionPage(), profile="full")
     assert result.card.core["context"]["omitted_sections"] == port.source.omitted_sections
+
+
+def test_missing_card_is_a_distinct_domain_query_outcome():
+    from types import SimpleNamespace
+    from langboard.card_workspace.domain import CardUnavailableError
+
+    port = SimpleNamespace(get_card_bundle_source=lambda *args: None)
+    with pytest.raises(CardUnavailableError, match="Card not found in project"):
+        get_card_bundle(port, "project", "missing", CommentPage(), SectionPage())

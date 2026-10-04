@@ -4,6 +4,7 @@ from typing import Any
 from ...domain import (
     CardBundleInclude,
     CardBundleSection,
+    CardUnavailableError,
     CommentCursor,
     CommentPage,
     ProjectCardCursor,
@@ -67,7 +68,7 @@ def get_card_bundle(
         requested_sections |= frozenset({"open_checkitems"})
     source = port.get_card_bundle_source(project_uid, card_uid, requested_sections)
     if source is None:
-        raise ValueError("Card not found in project")
+        raise CardUnavailableError("Card not found in project")
 
     original_source = source
     source = profile_source(source, profile)
