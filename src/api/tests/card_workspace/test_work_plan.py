@@ -79,14 +79,16 @@ def test_composed_plan_transaction(monkeypatch, mode, promote):
             db.after_commit(cardify_event)
         return True
 
-    def read_receipt(_, __, key):
+    def read_receipt(_, __, key, *, internal=False):
+        assert internal
         with DbSession.use(readonly=True) as db:
             row = db.exec(
                 select(text("value")).select_from(text("receipts")).where(text("key=:k").bindparams(k=key))
             ).first()
             return {"value": row[0]} if row else None
 
-    def save_receipt(_, __, key, value):
+    def save_receipt(_, __, key, value, *, internal=False):
+        assert internal
         with DbSession.use(readonly=False) as db:
             db.exec(text("INSERT INTO receipts VALUES (:k,:v)").bindparams(k=key, v=value))
         return None if mode == "receipt_failure" else object()
