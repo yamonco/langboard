@@ -88,3 +88,57 @@ def test_stop_timer_state_and_dispatch_are_atomic(monkeypatch, mode):
         assert c.execute(text("SELECT count(*) FROM timer_history")).scalar() == int(mode == "commit")
     assert all(cb.call_count == int(mode == "commit") for cb in callbacks)
     engine.dispose()
+
+
+@pytest.mark.parametrize("mode", ["commit", "unread_failure", "outer_rollback"])
+def test_checked_state_and_events_commit_together(monkeypatch, mode):
+    engine = create_engine("sqlite://")
+    with engine.begin() as c:
+        c.execute(text("CREATE TABLE checked_state (checked INTEGER)"))
+        c.execute(text("INSERT INTO checked_state VALUES (0)"))
+    monkeypatch.setattr(DbEngine, "get_main_engine", lambda: engine)
+    monkeypatch.setattr(DbEngine, "get_readonly_engine", lambda: engine)
+    item = SimpleNamespace(id=1, status=CheckitemStatus.Stopped, is_checked=False)
+    item.model_copy = lambda **_: SimpleNamespace(is_checked=item.is_checked)
+    monkeypatch.setattr(
+        CheckitemService, "_CheckitemService__get_records_by_params", lambda *a: (object(), object(), item)
+    )
+
+    def unread(*_):
+        if mode == "unread_failure":
+            raise RuntimeError("Unread write failed")
+
+    monkeypatch.setattr(CheckitemService, "_mark_card_changed_for_unread", unread)
+    callbacks = []
+    for cls, name in (
+        (CheckitemPublisher, "checked_changed"),
+        (CheckitemPublisher, "board_progress_changed"),
+        (CardCheckitemActivityTask, "card_checkitem_checked"),
+        (CardCheckitemBotTask, "card_checkitem_checked"),
+    ):
+        cb = Mock()
+        monkeypatch.setattr(cls, name, cb)
+        callbacks.append(cb)
+
+    def update(m):
+        with DbSession.use(readonly=False) as db:
+            db.exec(text("UPDATE checked_state SET checked=:v").bindparams(v=int(m.is_checked)))
+
+    service = CheckitemService(lambda _: None, lambda _: None, SimpleNamespace(checkitem=SimpleNamespace(update=update)))
+
+    def complete():
+        with DbSession.atomic():
+            assert service.toggle_checked(object(), "project", "card", "item", desired_checked=True)
+            assert not any(cb.called for cb in callbacks)
+            if mode == "outer_rollback":
+                raise RuntimeError("Plan failed")
+
+    if mode == "commit":
+        complete()
+    else:
+        with pytest.raises(RuntimeError):
+            complete()
+    with engine.connect() as c:
+        assert c.execute(text("SELECT checked FROM checked_state")).scalar() == int(mode == "commit")
+    assert all(cb.call_count == int(mode == "commit") for cb in callbacks)
+    engine.dispose()
