@@ -1,10 +1,10 @@
 """One server-owned, revision-bound graph/cardification/checklist work plan."""
 
 from hashlib import sha256
-from json import dumps
+from json import dumps, loads
 from typing import Annotated
 from langboard_shared.core.db import DbSession
-from langboard_shared.domain.models import Project
+from langboard_shared.domain.models import CardMetadata, Project
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import select
 
@@ -206,8 +206,35 @@ class WorkPlanService:
         with DbSession.atomic():
             return self._preview(plan)[0]
 
-    def apply(self, plan: WorkPlan, expected_revision: str):
+    def apply(self, plan: WorkPlan, expected_revision: str, request_id: str):
+        if (
+            not request_id
+            or len(request_id) > 80
+            or any(not (c.isascii() and (c.isalnum() or c in "-_")) for c in request_id)
+        ):
+            raise ValueError("Invalid work plan request ID")
+        if len(expected_revision) != 64 or any(c not in "0123456789abcdef" for c in expected_revision):
+            raise ValueError("Invalid work plan revision")
+        actor_uid = self.actor.get_uid()
+        receipt_key = "internal.work_plan." + sha256((actor_uid + ":" + request_id).encode()).hexdigest()
+        payload_digest = sha256(dumps(plan.model_dump(mode="json"), sort_keys=True).encode()).hexdigest()
         with DbSession.atomic() as db:
+            project = self.service.project.get_by_id_like(plan.project_uid)
+            if (
+                not project
+                or db.exec(
+                    select(Project.column("id")).where(Project.column("id") == project.id).with_for_update()
+                ).first()
+                is None
+            ):
+                raise ValueError("Project is unavailable")
+            anchor = self._card(plan.anchor_card_uid, project)
+            receipt = self.service.metadata.get_by_key_as_api(CardMetadata, anchor, receipt_key)
+            if receipt:
+                stored = loads(receipt["value"])
+                if stored.get("payload_digest") != payload_digest or stored.get("revision") != expected_revision:
+                    raise ValueError("Work plan request ID reused with another plan")
+                return {**stored["result"], "replayed": True}
             preview, cards, project = self._preview(plan)
             if preview["revision"] != expected_revision:
                 raise ValueError("Work plan changed after review; preview again")
@@ -264,4 +291,11 @@ class WorkPlanService:
                 )
             result["applied_revision"] = expected_revision
             result["all_succeeded"] = True
+            result["replayed"] = False
+            value = dumps(
+                {"version": 1, "payload_digest": payload_digest, "revision": expected_revision, "result": result},
+                default=str,
+            )
+            if self.service.metadata.save(CardMetadata, anchor, receipt_key, value) is None:
+                raise ValueError("Work plan receipt persistence failed")
             return result

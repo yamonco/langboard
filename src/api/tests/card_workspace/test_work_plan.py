@@ -7,10 +7,10 @@ from langboard.card_workspace.application.work_plan import WorkPlan, WorkPlanSer
 from langboard_shared.core.db import DbSession
 from langboard_shared.core.db.DbEngine import DbEngine
 from langboard_shared.domain.models import Card, Checkitem, Checklist, Project, ProjectColumn
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, select, text
 
 
-@pytest.mark.parametrize("mode", ["commit", "item_failure", "conflict", "outer_rollback"])
+@pytest.mark.parametrize("mode", ["commit", "item_failure", "conflict", "outer_rollback", "receipt_failure"])
 @pytest.mark.parametrize("promote", [False, True])
 def test_composed_plan_transaction(monkeypatch, mode, promote):
     engine = create_engine("sqlite://")
@@ -18,6 +18,7 @@ def test_composed_plan_transaction(monkeypatch, mode, promote):
         c.execute(text(f'CREATE TABLE "{Project.__tablename__}" (id INTEGER PRIMARY KEY)'))
         c.execute(text(f'INSERT INTO "{Project.__tablename__}" VALUES (1)'))
         c.execute(text("CREATE TABLE created (kind TEXT)"))
+        c.execute(text("CREATE TABLE receipts (key TEXT PRIMARY KEY, value TEXT)"))
     monkeypatch.setattr(DbEngine, "get_main_engine", lambda: engine)
     monkeypatch.setattr(DbEngine, "get_readonly_engine", lambda: engine)
     project = Project(id=1, owner_id=1, title="Board")
@@ -57,7 +58,20 @@ def test_composed_plan_transaction(monkeypatch, mode, promote):
             db.after_commit(cardify_event)
         return True
 
+    def read_receipt(_, __, key):
+        with DbSession.use(readonly=True) as db:
+            row = db.exec(
+                select(text("value")).select_from(text("receipts")).where(text("key=:k").bindparams(k=key))
+            ).first()
+            return {"value": row[0]} if row else None
+
+    def save_receipt(_, __, key, value):
+        with DbSession.use(readonly=False) as db:
+            db.exec(text("INSERT INTO receipts VALUES (:k,:v)").bindparams(k=key, v=value))
+        return None if mode == "receipt_failure" else object()
+
     service = SimpleNamespace(
+        metadata=SimpleNamespace(get_by_key_as_api=read_receipt, save=save_receipt),
         project=SimpleNamespace(get_by_id_like=lambda _: project),
         card=SimpleNamespace(get_by_id_like=lambda uid: anchor if uid == anchor.get_uid() else child),
         project_column=SimpleNamespace(get_by_id_like=lambda _: column),
@@ -104,7 +118,7 @@ def test_composed_plan_transaction(monkeypatch, mode, promote):
             add_edges=[{"parent_ref": anchor.get_uid(), "child_ref": "cardify:child", "relationship_type_uid": "type"}],
             new_checklists=[{"target_card_ref": "cardify:child", "title": "Steps", "items": ["Verify"]}],
         )
-    plans = WorkPlanService(None, service)
+    plans = WorkPlanService(SimpleNamespace(get_uid=lambda: "actor"), service)
     reviewed = plans.preview(plan)
     with engine.connect() as c:
         assert c.execute(text("SELECT count(*) FROM created")).scalar() == 0
@@ -114,7 +128,7 @@ def test_composed_plan_transaction(monkeypatch, mode, promote):
 
     def apply():
         with DbSession.atomic():
-            result = plans.apply(plan, reviewed["revision"])
+            result = plans.apply(plan, reviewed["revision"], "request-one")
             assert result["all_succeeded"] and len(result["checklists"]) == 1
             assert not any(cb.called for cb in (graph_event, list_event, item_event))
             if mode == "outer_rollback":
@@ -122,6 +136,9 @@ def test_composed_plan_transaction(monkeypatch, mode, promote):
 
     if mode == "commit":
         apply()
+        assert plans.apply(plan, reviewed["revision"], "request-one")["replayed"]
+        with pytest.raises(ValueError, match="reused"):
+            plans.apply(plan.model_copy(update={"new_checklists": []}), reviewed["revision"], "request-one")
     else:
         with pytest.raises((ValueError, RuntimeError)):
             apply()
@@ -129,6 +146,8 @@ def test_composed_plan_transaction(monkeypatch, mode, promote):
         assert c.execute(text("SELECT count(*) FROM created")).scalar() == (
             (4 if promote else 3) if mode == "commit" else 0
         )
+    with engine.connect() as c:
+        assert c.execute(text("SELECT count(*) FROM receipts")).scalar() == int(mode == "commit")
     assert all(cb.call_count == int(mode == "commit") for cb in (graph_event, list_event, item_event))
     assert cardify_event.call_count == int(mode == "commit" and promote)
     engine.dispose()
