@@ -1,4 +1,5 @@
 import { flipDraftKey, useCardFlipDraftStore } from "./CardFlipDraftStore";
+import { formatNumber } from "@/core/utils/LocaleFormat";
 import { useEffect, useRef, useState } from "react";
 import { isAxiosError } from "axios";
 import { Reorder } from "framer-motion";
@@ -108,7 +109,7 @@ export default function CardFlipTray({
         !!Object.keys(suspendedDrafts[flipDraftKey(userUID, projectUID, card.uid)] ?? {}).length ||
         !!(drafts[`comment-${projectUID}-${card.uid}`] ?? useCardCommentDraftStore.getState().getDraft(projectUID, card.uid)).trim();
     const navigate = usePageNavigateRef();
-    const [t] = useTranslation();
+    const [t, i18n] = useTranslation();
     const didDrag = useRef(false);
     const host = useRef<HTMLDivElement>(null);
     const overflowTrigger = useRef<HTMLButtonElement>(null);
@@ -264,7 +265,7 @@ export default function CardFlipTray({
                             aria-label={t("card.Flipped cards", { count: cards.length })}
                         >
                             <IconComponent icon="layers" size="4" />
-                            <span>{capacity ? `+${overflow.length}` : cards.length}</span>
+                            <span>{capacity ? `+${formatNumber(overflow.length, i18n.language)}` : formatNumber(cards.length, i18n.language)}</span>
                         </Button>
                     </Popover.Trigger>
                     <Popover.Content
