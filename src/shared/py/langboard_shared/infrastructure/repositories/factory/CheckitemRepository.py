@@ -19,14 +19,26 @@ class CheckitemRepository(BaseOrderRepository[Checkitem, Checklist]):
                 Checklist.column("card_id"),
                 func.count(Checkitem.column("id")),
                 func.sum(case((Checkitem.column("is_checked") == True, 1), else_=0)),  # noqa: E712
-                func.sum(case(
-                    ((Checkitem.column("status") == CheckitemStatus.Started) & Checkitem.column("user_id").is_not(None), 1),
-                    else_=0,
-                )),
-                func.sum(case(
-                    ((Checkitem.column("status") == CheckitemStatus.Paused) & Checkitem.column("user_id").is_not(None), 1),
-                    else_=0,
-                )),
+                func.sum(
+                    case(
+                        (
+                            (Checkitem.column("status") == CheckitemStatus.Started)
+                            & Checkitem.column("user_id").is_not(None),
+                            1,
+                        ),
+                        else_=0,
+                    )
+                ),
+                func.sum(
+                    case(
+                        (
+                            (Checkitem.column("status") == CheckitemStatus.Paused)
+                            & Checkitem.column("user_id").is_not(None),
+                            1,
+                        ),
+                        else_=0,
+                    )
+                ),
             )
             .join(Checklist, Checkitem.column("checklist_id") == Checklist.column("id"))
             .where(Checklist.column("card_id").in_(card_ids))
@@ -131,7 +143,7 @@ class CheckitemRepository(BaseOrderRepository[Checkitem, Checklist]):
         return "checkitem"
 
     def get_all_by_checklist(
-        self, checklist: TChecklistParam, limit: int | None = None
+        self, checklist: TChecklistParam, limit: int | None = None, *, open_only: bool = False
     ) -> list[tuple[Checkitem, Card | None, User | None]]:
         """Return checklist items, optionally enforcing a database row limit."""
 
@@ -145,6 +157,8 @@ class CheckitemRepository(BaseOrderRepository[Checkitem, Checklist]):
             .where(Checkitem.column("checklist_id") == checklist_id)
             .order_by(Checkitem.column("order").asc(), Checkitem.column("id").asc())
         )
+        if open_only:
+            query = query.where(Checkitem.column("is_checked") == False)  # noqa: E712
         if limit is not None:
             query = query.limit(limit)
         with DbSession.use(readonly=True) as db:

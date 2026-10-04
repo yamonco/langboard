@@ -32,7 +32,7 @@ class CheckitemService(BaseDomainService):
         return checkitem
 
     def get_api_list_by_checklist(
-        self, card: TCardParam, checklist: TChecklistParam, limit: int | None = None
+        self, card: TCardParam, checklist: TChecklistParam, limit: int | None = None, *, open_only: bool = False
     ) -> list[dict[str, Any]]:
         """Return checkitems, optionally enforcing a repository row limit."""
 
@@ -41,7 +41,8 @@ class CheckitemService(BaseDomainService):
             return []
         card, checklist = params
 
-        records = self.repo.checkitem.get_all_by_checklist(checklist, limit=limit)
+        open_filter = {"open_only": True} if open_only else {}
+        records = self.repo.checkitem.get_all_by_checklist(checklist, limit=limit, **open_filter)
 
         checkitems = [self.__convert_api_response(card, record) for record in records]
         return checkitems

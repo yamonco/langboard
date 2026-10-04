@@ -25,7 +25,18 @@ from sqlalchemy import create_engine
 @pytest.fixture
 def work_db(monkeypatch):
     engine = create_engine("sqlite://")
-    for model in (User, Project, ProjectColumn, Card, CardAssignedUser, CardComment, CardAttachment, Checklist, Checkitem, WorkflowStageDefinition):
+    for model in (
+        User,
+        Project,
+        ProjectColumn,
+        Card,
+        CardAssignedUser,
+        CardComment,
+        CardAttachment,
+        Checklist,
+        Checkitem,
+        WorkflowStageDefinition,
+    ):
         model.__table__.create(engine)
     monkeypatch.setattr(DbEngine, "get_main_engine", lambda: engine)
     monkeypatch.setattr(DbEngine, "get_readonly_engine", lambda: engine)
@@ -150,16 +161,53 @@ def test_project_page_and_search_filter_registry_completion_before_limit(work_db
     assert data.cards["active"].id in ids  # Display name Done is not completion.
     assert data.cards[None].id in ids
     assert repo.count_by_project(data.project, include_closed=False) == len(page)
-    assert data.cards["released"].id in {card.id for card, _ in repo.get_page_by_project(data.project, 25, include_closed=True)}
+    assert data.cards["released"].id in {
+        card.id for card, _ in repo.get_page_by_project(data.project, 25, include_closed=True)
+    }
     assert repo.get_page_by_project(data.project, 25, include_closed=False, workflow_stages=["released"]) == []
-    assert {card.id for card, _ in repo.get_page_by_project(data.project, 25, include_closed=True, workflow_stages=["released"])} == {data.cards["released"].id}
+    assert {
+        card.id
+        for card, _ in repo.get_page_by_project(data.project, 25, include_closed=True, workflow_stages=["released"])
+    } == {data.cards["released"].id}
     assert repo.count_by_project(data.project, include_closed=True, workflow_stages=["released"]) == 1
     assert repo.get_page_by_project(data.project, 25, workflow_stages=[]) == []
     assert repo.search_context_by_project(data.project, "Still", include_closed=False) == []
-    assert {card.id for card, _ in repo.search_context_by_project(data.project, "Still", include_closed=True)} == {data.cards["released"].id}
-    assert {card.id for card, _ in repo.search_context_by_project(data.project, "Done", include_closed=False, workflow_stages=["active"])} == {data.cards["active"].id}
+    assert {card.id for card, _ in repo.search_context_by_project(data.project, "Still", include_closed=True)} == {
+        data.cards["released"].id
+    }
+    assert {
+        card.id
+        for card, _ in repo.search_context_by_project(
+            data.project, "Done", include_closed=False, workflow_stages=["active"]
+        )
+    } == {data.cards["active"].id}
     with DbSession.use(readonly=False) as db:
         data.definitions["released"].counts_as_completed = False
         data.definitions["released"].is_active = False
         db.update(data.definitions["released"])
-    assert data.cards["released"].id in {card.id for card, _ in repo.get_page_by_project(data.project, 25, include_closed=False)}
+    assert data.cards["released"].id in {
+        card.id for card, _ in repo.get_page_by_project(data.project, 25, include_closed=False)
+    }
+
+
+def test_open_acceptance_is_filtered_before_both_repository_limits(work_db):
+    from langboard_shared.infrastructure.repositories.factory.CheckitemRepository import CheckitemRepository
+    from langboard_shared.infrastructure.repositories.factory.ChecklistRepository import ChecklistRepository
+
+    card = work_db.cards["active"]
+    with DbSession.use(readonly=False) as db:
+        closed = Checklist(card_id=card.id, title="Old completed acceptance", order=0)
+        active = Checklist(card_id=card.id, title="Current acceptance", order=1)
+        db.insert(closed)
+        db.insert(active)
+        db.insert(Checkitem(checklist_id=closed.id, title="Already done", is_checked=True))
+        for i in range(105):
+            db.insert(Checkitem(checklist_id=active.id, title=f"History {i}", is_checked=True, order=i))
+        remaining = Checkitem(checklist_id=active.id, title="Only open item", order=105)
+        db.insert(remaining)
+    checklists = ChecklistRepository(None, None).get_all_by_card(card, limit=1, is_system=False, open_only=True)
+    assert [item.id for item in checklists] == [active.id]
+    items = CheckitemRepository(None, None).get_all_by_checklist(active, limit=1, open_only=True)
+    assert [item.id for item, *_ in items] == [remaining.id]
+    legacy = CheckitemRepository(None, None).get_all_by_checklist(active, limit=1)
+    assert legacy[0][0].is_checked is True

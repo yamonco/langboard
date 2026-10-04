@@ -14,6 +14,7 @@ class McpToolMetadata(TypedDict):
     input_schema: dict
     accessible_type: _TAccessibleType
     exclude: list[str]
+    modern_only: tuple[str, ...]
 
 
 @class_instance()
@@ -23,7 +24,10 @@ class McpTool:
         self._tools: dict[str, McpToolMetadata] = {}
 
     def add(
-        self, accessible_type: _TAccessibleType = "all", description: str | None = None
+        self,
+        accessible_type: _TAccessibleType = "all",
+        description: str | None = None,
+        modern_only: tuple[str, ...] = (),
     ) -> Callable[[Callable], Callable]:
         """Register a model-visible MCP tool and derive its input schema."""
 
@@ -37,7 +41,7 @@ class McpTool:
                 return func(*args, **kwargs)
 
             visible_handler.__signature__ = sig.replace(
-                parameters=[param for name, param in params.items() if name not in exclude]
+                parameters=[param for name, param in params.items() if name not in exclude and name not in modern_only]
             )
             tool = Tool.from_function(
                 visible_handler,
@@ -51,6 +55,7 @@ class McpTool:
                 "input_schema": tool.parameters,
                 "accessible_type": accessible_type,
                 "exclude": exclude,
+                "modern_only": modern_only,
             }
 
             return func

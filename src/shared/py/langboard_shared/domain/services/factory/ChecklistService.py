@@ -34,6 +34,8 @@ class ChecklistService(BaseDomainService):
         card: TCardParam | None,
         limit: int | None = None,
         checkitems_limit: int | None = None,
+        *,
+        open_only: bool = False,
     ) -> list[dict[str, Any]]:
         """Return checklists, optionally bounding both nesting levels in the repository query."""
 
@@ -41,16 +43,19 @@ class ChecklistService(BaseDomainService):
         if not card:
             return []
 
-        raw_checklists = self.repo.checklist.get_all_by_card(card, limit=limit, is_system=False)
+        open_filter = {"open_only": True} if open_only else {}
+        raw_checklists = self.repo.checklist.get_all_by_card(card, limit=limit, is_system=False, **open_filter)
         if not raw_checklists:
             return []
 
         checkitem_service = self._get_service(CheckitemService)
         checkitems_map = (
             checkitem_service.get_api_map_by_card(card)
-            if checkitems_limit is None
+            if checkitems_limit is None and not open_only
             else {
-                checklist.id: checkitem_service.get_api_list_by_checklist(card, checklist, limit=checkitems_limit)
+                checklist.id: checkitem_service.get_api_list_by_checklist(
+                    card, checklist, limit=checkitems_limit, **open_filter
+                )
                 for checklist in raw_checklists
             }
         )
