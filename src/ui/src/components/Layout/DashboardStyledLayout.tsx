@@ -30,7 +30,7 @@ interface IBaseDashboardStyledLayoutProps {
     workbench?: boolean;
     workbenchContext?: React.ReactNode;
     workbenchContextHidden?: boolean;
-    mobileWorkbenchContext?: { title: string; icon: string; onClose: () => void };
+    mobileWorkbenchContext?: { title: string; icon: string; onClose: () => void; immersive?: boolean };
 }
 
 interface IHeaderDashboardStyledLayoutProps extends IBaseDashboardStyledLayoutProps {
@@ -102,6 +102,24 @@ export const DashboardStyledLayoutFrame = forwardRef<HTMLDivElement, TDashboardS
             panel.addEventListener("keydown", handleEscape);
             return () => panel.removeEventListener("keydown", handleEscape);
         }, [mobileWorkbenchContext]);
+        useLayoutEffect(() => {
+            const panel = mobileContext.current;
+            const viewport = window.visualViewport;
+            if (!panel || !mobileWorkbenchContext?.immersive || !viewport) return;
+            const updateViewport = () => {
+                panel.style.top = `${viewport.offsetTop + 8}px`;
+                panel.style.height = `${Math.max(0, viewport.height - 16)}px`;
+            };
+            updateViewport();
+            viewport.addEventListener("resize", updateViewport);
+            viewport.addEventListener("scroll", updateViewport);
+            return () => {
+                viewport.removeEventListener("resize", updateViewport);
+                viewport.removeEventListener("scroll", updateViewport);
+                panel.style.removeProperty("top");
+                panel.style.removeProperty("height");
+            };
+        }, [mobileWorkbenchContext?.immersive]);
         const hasWorkbench = workbench || !!activityRailItems;
         const { scrollableRef, isAtTop, scrollToTop } = useScrollToTop({});
 
@@ -188,7 +206,8 @@ export const DashboardStyledLayoutFrame = forwardRef<HTMLDivElement, TDashboardS
                         tabIndex={-1}
                         data-workbench-context=""
                         className={cn(
-                            "fixed bottom-[4.75rem] left-2 right-2 z-[120] h-[60dvh] max-h-[calc(100dvh-7rem)]",
+                            "fixed left-2 right-2 z-[120]",
+                            mobileWorkbenchContext.immersive ? "top-2 h-[calc(100dvh-1rem)]" : "bottom-[4.75rem] h-[60dvh] max-h-[calc(100dvh-7rem)]",
                             "overflow-hidden rounded-2xl border bg-background shadow-lg md:hidden"
                         )}
                     >
