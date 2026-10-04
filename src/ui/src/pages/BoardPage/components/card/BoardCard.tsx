@@ -50,7 +50,6 @@ import { getEditorStore } from "@/core/stores/EditorStore";
 import { useHasRunningBot } from "@/core/stores/BotStatusStore";
 import { cn } from "@/core/utils/ComponentUtils";
 import { useBoardChat } from "@/core/providers/BoardChatProvider";
-import { useIsMobile } from "@/core/hooks/useIsMobile";
 import BoardTaskMetadataSection from "@/pages/BoardPage/components/task/BoardTaskMetadataSection";
 import BoardLinkedWikiCard from "@/pages/BoardPage/components/card/BoardLinkedWikiCard";
 import useCardLinkedResourceChangedHandlers from "@/controllers/socket/card/useCardLinkedResourceChangedHandlers";
@@ -902,14 +901,11 @@ function BoardCardFloatingNav({ isExpanded }: { isExpanded: bool }): React.JSX.E
     const { projectUID, card, currentUser } = useBoardCard();
     const { isCommentPanelOpen, toggleCommentPanel, isActionPanelOpen, toggleActionPanel } = useBoardCardPanel();
     const { canEditCard, isCardEditing, enterCardEditMode, leaveCardEditMode } = useBoardCard();
-    const { boardChat, chatResizableSidebar, setChatResizableSidebar } = useBoardController();
     const { cancelSections, saveSections } = useBoardCardSectionSaveActions();
     const [t] = useTranslation();
     const [isSaving, setIsSaving] = useState(false);
-    const isMobile = useIsMobile();
     const { mutateAsync: changeCardDetailsMutateAsync } = useChangeCardDetails({ interceptToast: true });
     const { mutateAsync: replaceContentBlocksAsync } = useReplaceCardContentBlocks({ interceptToast: true });
-    const shouldShowChatButton = !!boardChat && !!chatResizableSidebar && (isExpanded || isMobile);
 
     const handleSaveEditing = useCallback(async () => {
         if (isSaving) {
@@ -996,14 +992,6 @@ function BoardCardFloatingNav({ isExpanded }: { isExpanded: bool }): React.JSX.E
                 itemClassName="h-10 px-3"
                 labelClassName="hidden md:inline"
                 items={[
-                    {
-                        key: "chat",
-                        label: t("project.Chat with AI"),
-                        icon: "message-circle",
-                        hidden: !shouldShowChatButton,
-                        active: !chatResizableSidebar?.hidden,
-                        onClick: () => setChatResizableSidebar((prev) => (prev ? { ...prev, hidden: !prev.hidden } : prev)),
-                    },
                     ...(!canEditCard
                         ? []
                         : !isCardEditing
