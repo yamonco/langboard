@@ -12,7 +12,12 @@ from langboard_shared.domain.services import DomainService
 from langboard_shared.helpers import InfraHelper
 from langboard_shared.security import RoleFinder
 from pydantic import Field
-from ..card_workspace.application.projections import pick, public_card_summary, public_column_context, public_workflow_stages
+from ..card_workspace.application.projections import (
+    pick,
+    public_card_summary,
+    public_column_context,
+    public_workflow_stages,
+)
 from ..mcp_integration import McpRoleFilter, McpTool
 
 
