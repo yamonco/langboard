@@ -189,9 +189,28 @@ class DbSession:
         if not obj.is_new():
             return
 
-        obj.id = SnowflakeID()
         obj.updated_at = obj.created_at
-        self.__session.execute(insert(obj.__table__).values(self.__get_model_column_values(obj)))  # type: ignore[attr-defined]
+        dialect = self.__session.get_bind().dialect.name
+        if dialect == "postgresql":
+            from sqlalchemy.dialects.postgresql import insert as insert_with_conflict
+        elif dialect == "sqlite":
+            from sqlalchemy.dialects.sqlite import insert as insert_with_conflict
+        else:
+            obj.id = SnowflakeID()
+            self.__session.execute(insert(obj.__table__).values(self.__get_model_column_values(obj)))
+            return
+        # A hash cannot uniquely assign all processes/replicas. Arbitrate only ID
+        # conflicts in the DB; every other constraint error must propagate.
+        for _ in range(32):
+            obj.id = SnowflakeID()
+            statement = insert_with_conflict(obj.__table__).values(self.__get_model_column_values(obj))
+            result = self.__session.execute(
+                statement.on_conflict_do_nothing(index_elements=[obj.__table__.c.id]).returning(obj.__table__.c.id)
+            )
+            if result.scalar_one_or_none() is not None:
+                return
+        obj.id = SnowflakeID(0)
+        raise RuntimeError("Snowflake ID allocation exhausted; no row inserted")
 
     def insert_all(self, objs: Iterable[BaseDbModel]):
         """Inserts new objects into the database if they are new.
