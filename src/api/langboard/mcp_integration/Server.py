@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from contextlib import ExitStack
 from functools import wraps
 from inspect import Parameter, iscoroutinefunction, signature
 from types import UnionType
@@ -138,17 +139,13 @@ class McpServer:
             if not self._validate_role(auth_value, handler, **kwargs):
                 raise AuthorizationError("Insufficient permissions")
 
-            factories: list[Factory] = []
-            try:
+            with ExitStack() as resources:
                 for param_name, param in sig.parameters.items():
                     kwargs, factory = self._inject_kwargs(param_name, param, auth_value, kwargs)
                     if factory:
-                        factories.append(factory)
+                        resources.callback(factory.close)
 
                 return await handler(**kwargs) if iscoroutinefunction(handler) else handler(**kwargs)
-            finally:
-                for factory in factories:
-                    factory.close()
 
         # Use the filtered signature so FastMCP only sees the non-excluded parameters
         setattr(wrapper, "__signature__", filtered_sig)
