@@ -173,23 +173,32 @@ class CheckitemService(BaseDomainService):
             return None
         project, card, checkitem = params
 
-        old_title = checkitem.title
-        checkitem.title = title
-        cardified_card = None
-        if checkitem.cardified_id:
-            cardified_card = InfraHelper.get_by(Card, "id", checkitem.cardified_id)
-            if not cardified_card:
-                checkitem.cardified_id = None
-            else:
-                cardified_card.title = title
-                self.repo.card.update(cardified_card)
+        with DbSession.atomic() as db:
+            old_title = checkitem.title
+            checkitem.title = title
+            cardified_card = None
+            if checkitem.cardified_id:
+                cardified_card = InfraHelper.get_by(Card, "id", checkitem.cardified_id)
+                if not cardified_card:
+                    checkitem.cardified_id = None
+                else:
+                    cardified_card.title = title
+                    self.repo.card.update(cardified_card)
 
-        self.repo.checkitem.update(checkitem)
+            self.repo.checkitem.update(checkitem)
+            self._mark_card_changed_for_unread(card, "checkitem", checkitem.id)
+            # Freeze this operation before another mutation in the same transaction.
+            changed_item = checkitem.model_copy(deep=True)
+            changed_card = cardified_card.model_copy(deep=True) if cardified_card else None
 
-        CheckitemPublisher.title_changed(project, card, checkitem, cardified_card)
-        self._mark_card_changed_for_unread(card, "checkitem", checkitem.id)
-        CardCheckitemActivityTask.card_checkitem_title_changed(user_or_bot, project, card, old_title, checkitem)
-        CardCheckitemBotTask.card_checkitem_title_changed(user_or_bot, project, card, checkitem)
+            def publish():
+                CheckitemPublisher.title_changed(project, card, changed_item, changed_card)
+                CardCheckitemActivityTask.card_checkitem_title_changed(
+                    user_or_bot, project, card, old_title, changed_item
+                )
+                CardCheckitemBotTask.card_checkitem_title_changed(user_or_bot, project, card, changed_item)
+
+            db.after_commit(publish)
 
         return True
 
