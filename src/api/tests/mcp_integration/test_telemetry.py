@@ -111,3 +111,29 @@ async def test_native_transport_record_matches_mutation_receipt(monkeypatch, cap
                 assert record["outcome"] == receipt["outcome"] == "applied"
     finally:
         mcp_auth_context.reset(token)
+
+
+def test_production_telemetry_formatter_keeps_complete_record_on_one_line():
+    import io
+    from langboard_shared.core.logger import Logger
+    from langboard_shared.Env import Env
+
+    config = Logger.get_config()
+    policy = config["loggers"][f"{Env.PROJECT_NAME}.mcp.telemetry"]
+    assert policy == {"handlers": ["mcp_telemetry"], "level": "INFO", "propagate": False}
+    handler_config = config["handlers"]["mcp_telemetry"]
+    assert handler_config["class"] == "logging.StreamHandler"
+    stream = io.StringIO()
+    handler = logging.StreamHandler(stream)
+    handler.setFormatter(logging.Formatter(config["formatters"]["mcp_telemetry"]["format"]))
+    payload = {
+        "event": "mcp_tool_execution",
+        "request_id": "a" * 32,
+        "tool": "get_card_bundle",
+        "duration_ms": 1.25,
+        "outcome": "success",
+    }
+    handler.emit(logging.LogRecord("langboard.mcp.telemetry", logging.INFO, "", 0, json.dumps(payload), (), None))
+    lines = stream.getvalue().splitlines()
+    assert len(lines) == 1
+    assert json.loads(lines[0]) == payload
