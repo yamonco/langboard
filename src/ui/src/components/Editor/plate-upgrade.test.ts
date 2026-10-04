@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import * as Y from "yjs";
+import { Awareness } from "y-protocols/awareness";
 import { createRequire } from "node:module";
 import { createPlateEditor } from "platejs/react";
 import { YjsPlugin } from "@platejs/yjs/react";
@@ -8,10 +10,25 @@ import { BaseBlockquotePlugin, BaseBoldPlugin, BaseH1Plugin, BoldRules, HeadingR
 import { MarkdownPlugin } from "@platejs/markdown";
 
 test("resetting an editor clears the shared document rather than only its visible children", async () => {
+    const providerDocument = new Y.Doc();
+    const providerAwareness = new Awareness(providerDocument);
     const editor = createPlateEditor({
         plugins: [
             YjsPlugin.configure({
-                options: { providers: [{ type: "test", connect() {}, disconnect() {}, destroy() {}, isConnected: true, isSynced: true }] },
+                options: {
+                    providers: [
+                        {
+                            type: "test",
+                            document: providerDocument,
+                            awareness: providerAwareness,
+                            connect() {},
+                            disconnect() {},
+                            destroy() {},
+                            isConnected: true,
+                            isSynced: true,
+                        },
+                    ],
+                },
             }),
         ],
     });
@@ -28,6 +45,8 @@ test("resetting an editor clears the shared document rather than only its visibl
         api.destroy();
         editor.getOptions(YjsPlugin).awareness?.destroy();
         doc.destroy();
+        providerAwareness.destroy();
+        providerDocument.destroy();
     }
 });
 

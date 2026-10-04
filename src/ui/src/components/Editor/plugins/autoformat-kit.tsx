@@ -1,12 +1,19 @@
 "use client";
 
 import { CODE_DRAWING_TYPE_ARRAY, type CodeDrawingType, VIEW_MODE } from "@platejs/code-drawing";
-import { createBlockStartInputRule, createSlatePlugin, createTextSubstitutionInputRule, KEYS, type SlateEditor } from "platejs";
+import {
+    createBlockStartInputRule,
+    createSlatePlugin,
+    createTextSubstitutionInputRule,
+    KEYS,
+    type SlateEditor,
+    type TextSubstitutionPattern,
+} from "platejs";
 
 const enabled = ({ editor }: { editor: SlateEditor }) => !editor.api.some({ match: { type: editor.getType(KEYS.codeBlock) } });
 
 // Preserve the existing symbol substitutions using Plate's native input-rule runtime.
-const patterns = [
+const patterns: TextSubstitutionPattern[] = [
     {
         match: String.fromCharCode(34),
         format: ["“", "”"],

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createSlateEditor, ElementApi } from "platejs";
+import { createSlateEditor, ElementApi, NodeApi } from "platejs";
 import { MarkdownPlugin } from "@platejs/markdown";
 import { BaseListPlugin } from "@platejs/list";
 import { BaseCodeBlockPlugin, BaseCodeLinePlugin } from "@platejs/code-block";
@@ -54,7 +54,7 @@ test("plain underscores survive serializer escaping", () => {
     const source = "purpose=test\nexpires_at=2026-09-16";
     const { saved, reloaded } = roundTrip(source);
     assert.equal(saved.trim(), source.replace("\n", "\\\n"));
-    assert.equal(reloaded.map((node) => node.children?.map((child) => child.text).join("")).join("\n"), source);
+    assert.equal(reloaded.map((node) => NodeApi.string(node)).join("\n"), source);
 });
 
 test("nested markers use their own widths and levels", () => {
