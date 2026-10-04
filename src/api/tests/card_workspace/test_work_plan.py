@@ -6,12 +6,13 @@ import pytest
 from langboard.card_workspace.application.work_plan import WorkPlan, WorkPlanService
 from langboard_shared.core.db import DbSession
 from langboard_shared.core.db.DbEngine import DbEngine
-from langboard_shared.domain.models import Card, Checkitem, Checklist, Project
+from langboard_shared.domain.models import Card, Checkitem, Checklist, Project, ProjectColumn
 from sqlalchemy import create_engine, text
 
 
 @pytest.mark.parametrize("mode", ["commit", "item_failure", "conflict", "outer_rollback"])
-def test_composed_plan_transaction(monkeypatch, mode):
+@pytest.mark.parametrize("promote", [False, True])
+def test_composed_plan_transaction(monkeypatch, mode, promote):
     engine = create_engine("sqlite://")
     with engine.begin() as c:
         c.execute(text(f'CREATE TABLE "{Project.__tablename__}" (id INTEGER PRIMARY KEY)'))
@@ -24,17 +25,22 @@ def test_composed_plan_transaction(monkeypatch, mode):
     child = Card(id=2, project_id=1, project_column_id=3, title="Child", order=1)
     checklist = Checklist(id=3, card_id=2, title="Steps")
     item = Checkitem(id=4, checklist_id=3, title="Verify")
-    graph_event, list_event, item_event = Mock(), Mock(), Mock()
+    source_list = Checklist(id=5, card_id=1, title="Source")
+    source_item = Checkitem(id=6, checklist_id=5, title="Child")
+    column = ProjectColumn(id=3, project_id=1, name="Backlog", order=0)
+    graph_event, list_event, item_event, cardify_event = Mock(), Mock(), Mock(), Mock()
 
     def write(kind):
         with DbSession.use(readonly=False) as db:
             db.exec(text("INSERT INTO created VALUES (:v)").bindparams(v=kind))
 
-    def graph(*_):
+    def graph(*args):
+        if promote:
+            assert args[4][0][1] == child.get_uid()
         write("card-and-edge")
         with DbSession.use(readonly=False) as db:
             db.after_commit(graph_event)
-        return {"created_cards": [child.api_response()]}
+        return {"created_cards": [] if promote else [child.api_response()]}
 
     def create_list(*_, **__):
         write("checklist")
@@ -44,11 +50,26 @@ def test_composed_plan_transaction(monkeypatch, mode):
         write("item")
         return None if mode == "item_failure" else item
 
+    def cardify(*_):
+        write("cardification")
+        source_item.cardified_id = child.id
+        with DbSession.use(readonly=False) as db:
+            db.after_commit(cardify_event)
+        return True
+
     service = SimpleNamespace(
         project=SimpleNamespace(get_by_id_like=lambda _: project),
         card=SimpleNamespace(get_by_id_like=lambda uid: anchor if uid == anchor.get_uid() else child),
-        checklist=SimpleNamespace(get_api_list_by_card=lambda _: [], create=create_list, dispatch_created=list_event),
-        checkitem=SimpleNamespace(create=create_item, dispatch_created=item_event),
+        project_column=SimpleNamespace(get_by_id_like=lambda _: column),
+        checklist=SimpleNamespace(
+            get_api_list_by_card=lambda _: [],
+            get_by_id_like=lambda _: source_list,
+            create=create_list,
+            dispatch_created=list_event,
+        ),
+        checkitem=SimpleNamespace(
+            create=create_item, dispatch_created=item_event, get_by_id_like=lambda _: source_item, cardify=cardify
+        ),
         card_relationship=SimpleNamespace(
             preview_graph_patch=Mock(return_value={}),
             apply_graph_patch=graph,
@@ -67,6 +88,22 @@ def test_composed_plan_transaction(monkeypatch, mode):
         add_edges=[{"parent_ref": anchor.get_uid(), "child_ref": "new:child", "relationship_type_uid": "type"}],
         new_checklists=[{"target_card_ref": "new:child", "title": "Steps", "items": ["Verify"]}],
     )
+    if promote:
+        plan = WorkPlan(
+            project_uid=project.get_uid(),
+            anchor_card_uid=anchor.get_uid(),
+            cardify_checkitems=[
+                {
+                    "client_ref": "cardify:child",
+                    "source_card_uid": anchor.get_uid(),
+                    "checkitem_uid": source_item.get_uid(),
+                    "title": "Child",
+                    "project_column_uid": column.get_uid(),
+                }
+            ],
+            add_edges=[{"parent_ref": anchor.get_uid(), "child_ref": "cardify:child", "relationship_type_uid": "type"}],
+            new_checklists=[{"target_card_ref": "cardify:child", "title": "Steps", "items": ["Verify"]}],
+        )
     plans = WorkPlanService(None, service)
     reviewed = plans.preview(plan)
     with engine.connect() as c:
@@ -89,8 +126,11 @@ def test_composed_plan_transaction(monkeypatch, mode):
         with pytest.raises((ValueError, RuntimeError)):
             apply()
     with engine.connect() as c:
-        assert c.execute(text("SELECT count(*) FROM created")).scalar() == (3 if mode == "commit" else 0)
+        assert c.execute(text("SELECT count(*) FROM created")).scalar() == (
+            (4 if promote else 3) if mode == "commit" else 0
+        )
     assert all(cb.call_count == int(mode == "commit") for cb in (graph_event, list_event, item_event))
+    assert cardify_event.call_count == int(mode == "commit" and promote)
     engine.dispose()
 
 
