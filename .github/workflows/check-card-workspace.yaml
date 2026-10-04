@@ -9,6 +9,9 @@ on:
       - src/api/langboard/routes/board/BoardCardApi.py
       - src/api/langboard/routes/mcp/McpApi.py
       - src/api/tests/card_workspace/**
+      - src/api/tests/core/test_snowflake_storage_safety.py
+      - src/shared/py/langboard_shared/core/types/SnowflakeID.py
+      - src/shared/py/langboard_shared/core/db/DbSession.py
       - src/api/tests/mcp_integration/test_card_mcp_contract.py
       - src/api/tests/mcp_integration/test_card_workspace_transport.py
       - src/shared/py/langboard_shared/domain/services/factory/CardService.py
@@ -52,3 +55,5 @@ jobs:
       - run: uv run --no-sync pytest -q src/api/tests/card_workspace/test_checklist_projection.py src/api/tests/card_workspace/test_native_adapter.py -k checklist_projection
       - run: uv run --no-sync pytest -q src/api/tests/card_workspace/test_linked_wikis.py
       - run: uv run --no-sync pytest -q src/api/tests/card_workspace/test_recent_card_availability.py src/shared/py/langboard_shared/infrastructure/repositories/factory/CardRepository_test.py
+
+      - run: uv run --no-sync pytest -q src/api/tests/core/test_snowflake_storage_safety.py src/api/tests/project_labels/test_builtin_global_labels.py
