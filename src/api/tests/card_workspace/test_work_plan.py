@@ -6,11 +6,21 @@ import pytest
 from langboard.card_workspace.application.work_plan import WorkPlan, WorkPlanService
 from langboard_shared.core.db import DbSession
 from langboard_shared.core.db.DbEngine import DbEngine
-from langboard_shared.domain.models import Card, Checkitem, Checklist, Project, ProjectColumn
+from langboard_shared.domain.models import (
+    Card,
+    Checkitem,
+    Checklist,
+    GlobalCardRelationshipType,
+    Project,
+    ProjectColumn,
+)
 from sqlalchemy import create_engine, select, text
 
 
-@pytest.mark.parametrize("mode", ["commit", "item_failure", "conflict", "outer_rollback", "receipt_failure"])
+@pytest.mark.parametrize(
+    "mode",
+    ["commit", "item_failure", "conflict", "column_conflict", "type_conflict", "outer_rollback", "receipt_failure"],
+)
 @pytest.mark.parametrize("promote", [False, True])
 def test_composed_plan_transaction(monkeypatch, mode, promote):
     engine = create_engine("sqlite://")
@@ -23,6 +33,10 @@ def test_composed_plan_transaction(monkeypatch, mode, promote):
         c.execute(text(f'INSERT INTO "{Checklist.__tablename__}" VALUES (5, 1)'))
         c.execute(text(f'CREATE TABLE "{Checkitem.__tablename__}" (id INTEGER PRIMARY KEY, checklist_id INTEGER)'))
         c.execute(text(f'INSERT INTO "{Checkitem.__tablename__}" VALUES (6, 5)'))
+        c.execute(text(f'CREATE TABLE "{ProjectColumn.__tablename__}" (id INTEGER PRIMARY KEY)'))
+        c.execute(text(f'INSERT INTO "{ProjectColumn.__tablename__}" VALUES (3)'))
+        c.execute(text(f'CREATE TABLE "{GlobalCardRelationshipType.__tablename__}" (id INTEGER PRIMARY KEY)'))
+        c.execute(text(f'INSERT INTO "{GlobalCardRelationshipType.__tablename__}" VALUES (7)'))
         c.execute(text("CREATE TABLE created (kind TEXT)"))
         c.execute(text("CREATE TABLE receipts (key TEXT PRIMARY KEY, value TEXT)"))
     monkeypatch.setattr(DbEngine, "get_main_engine", lambda: engine)
@@ -35,6 +49,7 @@ def test_composed_plan_transaction(monkeypatch, mode, promote):
     source_list = Checklist(id=5, card_id=1, title="Source")
     source_item = Checkitem(id=6, checklist_id=5, title="Child")
     column = ProjectColumn(id=3, project_id=1, name="Backlog", order=0)
+    relationship_type = GlobalCardRelationshipType(id=7, parent_name="Contains", child_name="Part of")
     graph_event, list_event, item_event, cardify_event = Mock(), Mock(), Mock(), Mock()
 
     def write(kind):
@@ -96,7 +111,7 @@ def test_composed_plan_transaction(monkeypatch, mode, promote):
             repo=SimpleNamespace(
                 card_relationship=SimpleNamespace(
                     get_graph_snapshot=lambda _: [],
-                    get_global_relationship_types_map=lambda _: {},
+                    get_global_relationship_types_map=lambda _: {7: relationship_type},
                 )
             ),
         ),
@@ -131,6 +146,11 @@ def test_composed_plan_transaction(monkeypatch, mode, promote):
     assert not any(cb.called for cb in (graph_event, list_event, item_event))
     if mode == "conflict":
         anchor.title = "Changed after preview"
+
+    if mode == "column_conflict":
+        column.name = "Changed after preview"
+    if mode == "type_conflict":
+        relationship_type.machine_semantic = "blocks_execution"
 
     def apply():
         with DbSession.atomic():
