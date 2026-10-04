@@ -1,4 +1,3 @@
-import { formatNumber } from "@/core/utils/LocaleFormat";
 import Button from "@/components/base/Button";
 import Avatar from "@/components/base/Avatar";
 import Card from "@/components/base/Card";
@@ -290,12 +289,12 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
                     <div
                         className="board-card-due-banner"
                         aria-label={
-                            upcomingDays === 0 ? t("card.D-Day") : t("card.D-{{count}}", { count: formatNumber(upcomingDays, i18n.language) })
+                            upcomingDays === 0 ? t("card.D-Day") : t("card.D-{{count}}", { count: upcomingDays, lng: i18n.language })
                         }
                     >
                         <IconComponent icon="clock-3" size="3.5" aria-hidden="true" />
                         <strong>
-                            {upcomingDays === 0 ? t("card.D-Day") : t("card.D-{{count}}", { count: formatNumber(upcomingDays, i18n.language) })}
+                            {upcomingDays === 0 ? t("card.D-Day") : t("card.D-{{count}}", { count: upcomingDays, lng: i18n.language })}
                         </strong>
                     </div>
                 )}

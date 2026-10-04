@@ -11,7 +11,6 @@ import { useBoard } from "@/core/providers/BoardProvider";
 import { ProjectRole } from "@/core/models/roles";
 import { cn } from "@/core/utils/ComponentUtils";
 import { Utils } from "@langboard/core/utils";
-import { formatNumber } from "@/core/utils/LocaleFormat";
 import {
     getDeadlinePressureLevel,
     getOverdueDays,
@@ -139,7 +138,7 @@ export default function BoardCardInlineDeadline() {
         : upcoming !== null
           ? upcoming === 0
               ? t("card.D-Day")
-              : t("card.D-{{count}}", { count: formatNumber(upcoming, i18n.language) })
+              : t("card.D-{{count}}", { count: upcoming, lng: i18n.language })
           : undefined;
     return (
         <InlineDeadlineField

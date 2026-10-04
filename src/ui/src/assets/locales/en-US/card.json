@@ -144,7 +144,7 @@
   "Global labels unavailable": "Global labels could not be loaded. Close and reopen to retry.",
   "Overdue by {{count}} day_one": "Overdue by {{count, number}} day",
   "Overdue by {{count}} day_other": "Overdue by {{count, number}} days",
-  "D-{{count}}": "D-{{count}}",
+  "D-{{count}}": "D-{{count, number}}",
   "Format code": "Format code",
   "Execution records": "Execution records",
   "Execution evidence checklist": "Execution evidence checklist",
