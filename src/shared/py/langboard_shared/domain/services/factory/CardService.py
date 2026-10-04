@@ -106,7 +106,9 @@ class CardService(BaseDomainService):
         card.last_change_target_id = target_id
         card.last_change_at = SafeDateTime.now()
         self.repo.card.update(card)
-        CardPublisher.metadata_changed(card)
+        changed_card = card.model_copy(deep=True)
+        with DbSession.use(readonly=False) as db:
+            db.after_commit(lambda: CardPublisher.metadata_changed(changed_card))
 
     def get_card_read_state(self, project: TProjectParam, card: TCardParam) -> dict[str, Any] | None:
         records = InfraHelper.get_records_with_foreign_by_params((Project, project), (Card, card))
