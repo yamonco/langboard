@@ -11,24 +11,15 @@ import { useTranslation } from "react-i18next";
 
 function ChatSessionList(): React.JSX.Element {
     const [t] = useTranslation();
-    const { chatSessions, setCurrentSessionUID, isSessionListOpened } = useBoardChat();
+    const { chatSessions, setCurrentSessionUID, isSessionListOpened, setIsSessionListOpened } = useBoardChat();
 
     const handleClickNewChat = () => {
         setCurrentSessionUID(undefined);
+        setIsSessionListOpened(false);
     };
 
     return (
-        <Box
-            position={{ initial: "absolute", md: "relative" }}
-            w="full"
-            h="full"
-            left={isSessionListOpened ? "0" : "-6"}
-            maxW={{ initial: isSessionListOpened ? "full" : "0", md: isSessionListOpened ? "60" : "0" }}
-            pt={isSessionListOpened ? "2" : undefined}
-            pr={isSessionListOpened ? "1" : undefined}
-            z="20"
-            className={cn(isSessionListOpened && "border-r border-border", "bg-background/95 transition-all duration-200 ease-in-out")}
-        >
+        <Box w="full" h="full" className={cn("min-w-0 bg-background p-2", !isSessionListOpened && "hidden")}>
             <Button
                 size="sm"
                 variant="ghost"
@@ -49,11 +40,12 @@ function ChatSessionList(): React.JSX.Element {
 
 function ChatSession({ session }: { session: ChatSessionModel.TModel }) {
     const [t] = useTranslation();
-    const { currentSessionUID, setCurrentSessionUID } = useBoardChat();
+    const { currentSessionUID, setCurrentSessionUID, setIsSessionListOpened } = useBoardChat();
     const title = session.useField("title");
 
     const handleClick = () => {
         setCurrentSessionUID(session.uid);
+        setIsSessionListOpened(false);
     };
 
     return (
@@ -61,7 +53,7 @@ function ChatSession({ session }: { session: ChatSessionModel.TModel }) {
             items="center"
             justify="between"
             w="full"
-            h="8"
+            h="11"
             rounded="md"
             pl="2"
             textSize="xs"

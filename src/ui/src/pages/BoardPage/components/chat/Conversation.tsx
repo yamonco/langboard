@@ -116,23 +116,19 @@ function Conversation(): React.JSX.Element {
 
     return (
         <Box className="min-h-0 flex-1">
-            <ChatMessageList scrollToBottomRef={scrollToBottomRef} isAtBottomRef={isAtBottomRef} ref={conversationRef}>
+            <ChatMessageList
+                className="overscroll-contain bg-background"
+                scrollToBottomRef={scrollToBottomRef}
+                isAtBottomRef={isAtBottomRef}
+                ref={conversationRef}
+            >
                 {!isLastPage && <Loading size="3" variant="secondary" spacing="1" animate="bounce" my="3" />}
                 {sortedMessages.map((chatMessage) => (
                     <ChatMessage key={`chat-bubble-${chatMessage.uid}`} chatMessage={chatMessage} />
                 ))}
                 {!messages.length && (
-                    <Box
-                        mx="auto"
-                        mt="8"
-                        w="full"
-                        rounded="2xl"
-                        border
-                        px="4"
-                        py="6"
-                        className="max-w-md border-dashed border-border bg-card/60 text-center shadow-sm"
-                    >
-                        <h2 className="truncate text-nowrap text-sm font-medium text-accent-foreground">{t("project.Ask anything to {app} AI!")}</h2>
+                    <Box mx="auto" mt="8" w="full" px="4" py="6" className="max-w-md text-center text-muted-foreground">
+                        <h2 className="text-sm font-medium leading-relaxed">{t("project.Ask anything to {app} AI!")}</h2>
                     </Box>
                 )}
             </ChatMessageList>

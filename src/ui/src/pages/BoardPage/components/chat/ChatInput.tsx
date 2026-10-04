@@ -77,7 +77,7 @@ function ChatInputDisplay() {
         const selectionEnd = chatInputRef.current.selectionEnd;
         let measuredHeight = measureTextAreaHeight(chatInputRef.current);
         measuredHeight = Math.max(measuredHeight, CHAT_INPUT_MIN_HEIGHT);
-        const maxHeight = window.innerHeight * 0.2;
+        const maxHeight = Math.max(CHAT_INPUT_MIN_HEIGHT, (window.visualViewport?.height ?? window.innerHeight) * 0.25);
         if (measuredHeight > maxHeight) {
             measuredHeight = maxHeight;
         }
@@ -234,7 +234,11 @@ function ChatInputDisplay() {
     }, []);
 
     const handleTextAreaKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-        if (e.shiftKey && e.key === "Enter") {
+        if (e.nativeEvent.isComposing || e.keyCode === 229) {
+            return;
+        }
+
+        if ((e.shiftKey || window.matchMedia("(pointer: coarse)").matches) && e.key === "Enter") {
             return;
         }
 
@@ -246,11 +250,11 @@ function ChatInputDisplay() {
     };
 
     return (
-        <Flex direction="col" w="full" position="relative" className="shrink-0 border-t bg-background">
+        <Flex direction="col" w="full" position="relative" className="shrink-0 bg-background px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2">
             <Flex
                 direction="col"
                 className={cn(
-                    "relative w-full overflow-hidden border border-transparent bg-card",
+                    "relative w-full overflow-hidden rounded-xl border border-border/60 bg-muted/30",
                     "transition-colors focus-within:border-primary/60"
                 )}
             >
@@ -258,7 +262,7 @@ function ChatInputDisplay() {
                 <Textarea
                     placeholder={t("project.Enter a message")}
                     className={cn(
-                        "max-h-[20vh] min-h-20 resize-none overflow-y-auto rounded-none",
+                        "max-h-[25dvh] min-h-20 resize-none overflow-y-auto rounded-none text-base md:text-sm",
                         "border-0 bg-transparent px-3 pb-11 pt-2 shadow-none focus-visible:ring-0"
                     )}
                     resize="none"
@@ -277,7 +281,7 @@ function ChatInputDisplay() {
                     py="1"
                     justify="between"
                     items="center"
-                    className="pointer-events-none inset-x-0 bg-card/95 backdrop-blur"
+                    className="pointer-events-none inset-x-0 bg-background/95"
                 >
                     <Flex items="center" gap="1" className="pointer-events-auto min-w-0">
                         {actionsMode === "more" ? (

@@ -90,22 +90,22 @@ function ChatSidebarDisplay() {
 
     return (
         <>
-            <Box position="relative" h="16" className="border-b border-border">
-                <Flex items="center" justify="center" h="full" textSize={{ initial: "base", md: "lg" }} className="truncate text-nowrap">
+            <Box position="relative" h="12" className="shrink-0 border-b border-border/50">
+                <Flex
+                    items="center"
+                    justify="center"
+                    h="full"
+                    textSize={{ initial: "base", md: "lg" }}
+                    className="hidden truncate text-nowrap text-sm font-medium md:flex"
+                >
                     {t("project.Chat with AI")}
                 </Flex>
                 <ChatSidebarSessionListButton />
                 <ChatSessionMoreMenuButton />
             </Box>
-            <Flex justify="between" position="relative" h="full" minH="0" className="max-h-[calc(100%_-_theme(spacing.16))] overflow-hidden">
+            <Flex position="relative" minH="0" className="flex-1 overflow-hidden">
                 <ChatSessionList />
-                <Box
-                    h="full"
-                    className={cn(
-                        "flex w-full max-w-full flex-col overflow-hidden transition-all duration-200 ease-in-out",
-                        isSessionListOpened && "overflow-hidden md:max-w-[calc(100%_-_theme(spacing.60))]"
-                    )}
-                >
+                <Box h="full" className={cn("flex min-h-0 w-full min-w-0 flex-col overflow-hidden", isSessionListOpened && "hidden")}>
                     <Conversation />
                     <ChatInput height={height} setHeight={setHeight} />
                 </Box>
@@ -148,7 +148,7 @@ function ChatSessionMoreMenuButton() {
             menuButtonProps={{
                 variant: "ghost",
                 size: "icon",
-                className: "absolute left-12 right-[unset] top-1/2 -translate-y-1/2 transform md:left-[unset] md:right-1",
+                className: "absolute right-1 top-1/2 -translate-y-1/2 transform",
             }}
             session={session}
         />

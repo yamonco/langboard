@@ -725,6 +725,7 @@ function BoardProxyDisplay({ pageRoute, isFetching, isProjectLoading, project }:
                     isMobile && !selectCardViewType && activeSidePanel
                         ? {
                               title: isBotScopeOpened ? t("settings.Bots") : workbenchContextTitle,
+                              immersive: !isBotScopeOpened && workbenchContextMode === "chat",
                               icon: isBotScopeOpened
                                   ? "bot"
                                   : {
