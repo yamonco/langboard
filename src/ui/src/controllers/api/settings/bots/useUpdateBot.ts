@@ -49,17 +49,7 @@ const useUpdateBot = (bot: BotModel.TModel, options?: TMutationOptions<IUpdateBo
         });
 
         if (Utils.Type.isObject(res.data)) {
-            Object.entries(res.data).forEach(([key, value]) => {
-                if (key === "platform" && Utils.Type.isString(value)) {
-                    value = EBotPlatform[new Utils.String.Case(value).toPascal() as keyof typeof EBotPlatform];
-                }
-
-                if (key === "platform_running_type" && Utils.Type.isString(value)) {
-                    value = EBotPlatformRunningType[new Utils.String.Case(value).toPascal() as keyof typeof EBotPlatformRunningType];
-                }
-
-                bot[key] = value as never;
-            });
+            BotModel.Model.fromOne({ created_at: bot.created_at, updated_at: bot.updated_at, ...res.data, uid: bot.uid });
         }
 
         return res.data;

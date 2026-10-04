@@ -107,8 +107,8 @@ export const DashboardStyledLayoutFrame = forwardRef<HTMLDivElement, TDashboardS
             const viewport = window.visualViewport;
             if (!panel || !mobileWorkbenchContext?.immersive || !viewport) return;
             const updateViewport = () => {
-                panel.style.top = `${viewport.offsetTop + 8}px`;
-                panel.style.height = `${Math.max(0, viewport.height - 16)}px`;
+                panel.style.top = `${viewport.offsetTop}px`;
+                panel.style.height = `${Math.max(0, viewport.height)}px`;
             };
             updateViewport();
             viewport.addEventListener("resize", updateViewport);
@@ -124,7 +124,12 @@ export const DashboardStyledLayoutFrame = forwardRef<HTMLDivElement, TDashboardS
         const { scrollableRef, isAtTop, scrollToTop } = useScrollToTop({});
 
         const main = (
-            <ScrollArea.Root viewportId="main" mutable={scrollAreaMutable} className="relative size-full overflow-y-auto" viewportRef={scrollableRef}>
+            <ScrollArea.Root
+                viewportId="main"
+                mutable={scrollAreaMutable}
+                className="relative size-full overflow-y-auto"
+                viewportRef={scrollableRef}
+            >
                 <main className={cn("relative size-full overflow-y-auto p-4 md:p-6 lg:p-8", className)}>
                     {children}
                     {!isAtTop && (
@@ -203,29 +208,39 @@ export const DashboardStyledLayoutFrame = forwardRef<HTMLDivElement, TDashboardS
                     <aside
                         aria-label={mobileWorkbenchContext.title}
                         ref={mobileContext}
+                        onClick={(event) => {
+                            if (event.target instanceof Element && event.target.closest("[data-workbench-context-close]")) {
+                                mobileNavigationTrigger.current?.focus({ preventScroll: true });
+                            }
+                        }}
                         tabIndex={-1}
                         data-workbench-context=""
                         className={cn(
-                            "fixed left-2 right-2 z-[120]",
-                            mobileWorkbenchContext.immersive ? "top-2 h-[calc(100dvh-1rem)]" : "bottom-[4.75rem] h-[60dvh] max-h-[calc(100dvh-7rem)]",
-                            "overflow-hidden rounded-2xl border bg-background shadow-lg md:hidden"
+                            "fixed z-[120]",
+                            mobileWorkbenchContext.immersive
+                                ? "inset-x-0 top-0 h-dvh"
+                                : "left-2 right-2 bottom-[4.75rem] h-[60dvh] max-h-[calc(100dvh-7rem)]",
+                            "overflow-hidden bg-background md:hidden",
+                            !mobileWorkbenchContext.immersive && "rounded-2xl border shadow-lg"
                         )}
                     >
                         <Flex direction="col" h="full">
-                            <Flex items="center" gap="2" className="shrink-0 border-b px-4 py-3" weight="semibold">
-                                <IconComponent icon={mobileWorkbenchContext.icon} size="4" />
-                                <span>{mobileWorkbenchContext.title}</span>
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon-sm"
-                                    className="ml-auto"
-                                    aria-label={t("common.Close")}
-                                    onClick={closeMobileContext}
-                                >
-                                    <IconComponent icon="x" size="4" />
-                                </Button>
-                            </Flex>
+                            {!mobileWorkbenchContext.immersive && (
+                                <Flex items="center" gap="2" className="shrink-0 border-b px-4 py-3" weight="semibold">
+                                    <IconComponent icon={mobileWorkbenchContext.icon} size="4" />
+                                    <span>{mobileWorkbenchContext.title}</span>
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon-sm"
+                                        className="ml-auto"
+                                        aria-label={t("common.Close")}
+                                        onClick={closeMobileContext}
+                                    >
+                                        <IconComponent icon="x" size="4" />
+                                    </Button>
+                                </Flex>
+                            )}
                             <Box className="min-h-0 flex-1">{workbenchContext}</Box>
                         </Flex>
                     </aside>

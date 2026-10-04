@@ -1,5 +1,4 @@
 import { flipDraftKey, useCardFlipDraftStore } from "./CardFlipDraftStore";
-import { formatNumber } from "@/core/utils/LocaleFormat";
 import BoardCardInlineDeadline from "@/pages/BoardPage/components/card/BoardCardInlineDeadline";
 import Button from "@/components/base/Button";
 import { useCollaborativeText } from "@/components/Collaborative/useCollaborativeText";
@@ -204,7 +203,7 @@ const BoardCardDeadlineDraft = memo(() => {
                     )}
                     {upcomingDays !== null && (
                         <span className="font-semibold">
-                            {upcomingDays === 0 ? t("card.D-Day") : t("card.D-{{count}}", { count: formatNumber(upcomingDays, i18n.language) })}
+                            {upcomingDays === 0 ? t("card.D-Day") : t("card.D-{{count}}", { count: upcomingDays, lng: i18n.language })}
                         </span>
                     )}
                 </span>

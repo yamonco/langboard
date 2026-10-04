@@ -144,7 +144,7 @@
   "Global labels unavailable": "无法加载全局标签。请关闭后重新打开以重试。",
   "Overdue by {{count}} day_one": "已逾期{{count, number}}天",
   "Overdue by {{count}} day_other": "已逾期{{count, number}}天",
-  "D-{{count}}": "D-{{count}}",
+  "D-{{count}}": "D-{{count, number}}",
   "Format code": "格式化代码",
   "Execution records": "执行记录",
   "Execution evidence checklist": "执行证据检查清单",

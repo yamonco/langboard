@@ -38,10 +38,12 @@ const useAuthStore = create(
 
                 accessToken = token;
                 tokenUpdateVersion += 1;
+                const sessionVersion = tokenUpdateVersion;
 
                 const tryGetUser = async () => {
                     const MAX_ATTEMPTS = 5;
                     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
+                        if (sessionVersion !== tokenUpdateVersion) return undefined;
                         try {
                             const response = await api.get<{
                                 user: AuthUser.Interface;
@@ -59,6 +61,7 @@ const useAuthStore = create(
 
                             return response.data;
                         } catch {
+                            if (sessionVersion !== tokenUpdateVersion) return undefined;
                             if (attempt === MAX_ATTEMPTS - 1) {
                                 return undefined;
                             }
@@ -71,6 +74,8 @@ const useAuthStore = create(
                 };
 
                 const data = await tryGetUser();
+                // Logout or another login owns the current identity, even if this request succeeds.
+                if (sessionVersion !== tokenUpdateVersion) return;
                 if (!data) {
                     set({ currentUser: null, state: "loaded" });
                     return;

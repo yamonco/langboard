@@ -129,6 +129,7 @@ const API = {
             CHANGE_ORDER: "/board/{uid}/card/{card_uid}/order",
             GET_DETAILS: "/board/{uid}/card/{card_uid}",
             GET_CONTEXT: "/board/{uid}/card/{card_uid}/context",
+            CONTENT_BLOCKS: "/board/{uid}/card/{card_uid}/content-blocks",
             CHANGE_DETAILS: "/board/{uid}/card/{card_uid}/details",
             UPDATE_ASSIGNED_USERS: "/board/{uid}/card/{card_uid}/assigned-users",
             ADD_ASSIGNED_USER: "/board/{uid}/card/{card_uid}/assigned-users/{assignee_uid}",

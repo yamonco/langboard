@@ -24,9 +24,10 @@ import { TChatScope } from "@langboard/core/types";
 
 export interface IChatSidebarProps {
     ref: React.RefObject<HTMLDivElement | null>;
+    onClose?: () => void;
 }
 
-const ChatSidebar = memo(({ ref }: IChatSidebarProps): React.JSX.Element => {
+const ChatSidebar = memo(({ ref, onClose }: IChatSidebarProps): React.JSX.Element => {
     const [t] = useTranslation();
     const { chatResizableSidebar } = useBoardController();
     const [state, setState] = useState<TDroppableAreaState>(DROPPABLE_AREA_IDLE);
@@ -78,30 +79,42 @@ const ChatSidebar = memo(({ ref }: IChatSidebarProps): React.JSX.Element => {
                     {t("project.Drop here to add")}
                 </Flex>
             </Box>
-            <ChatSidebarDisplay />
+            <ChatSidebarDisplay onClose={onClose} />
         </Flex>
     );
 });
 
-function ChatSidebarDisplay() {
+function ChatSidebarDisplay({ onClose }: { onClose?: () => void }) {
     const [t] = useTranslation();
     const [height, setHeight] = useState(CHAT_INPUT_MIN_HEIGHT);
     const { isSessionListOpened } = useBoardChat();
 
     return (
         <>
-            <Box position="relative" h="12" className="shrink-0 border-b border-border/50">
+            <Box position="relative" className="relative h-[calc(3rem+env(safe-area-inset-top))] shrink-0 border-b border-border/50">
                 <Flex
                     items="center"
                     justify="center"
                     h="full"
                     textSize={{ initial: "base", md: "lg" }}
-                    className="hidden truncate text-nowrap text-sm font-medium md:flex"
+                    className="truncate text-nowrap pl-14 pr-24 text-sm font-medium md:px-14"
                 >
                     {t("project.Chat with AI")}
                 </Flex>
                 <ChatSidebarSessionListButton />
-                <ChatSessionMoreMenuButton />
+                <ChatSessionMoreMenuButton hasCloseButton={!!onClose} />
+                {onClose && (
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className="absolute right-1 top-1/2 size-11 -translate-y-1/2"
+                        data-workbench-context-close=""
+                        aria-label={t("common.Close")}
+                        onClick={onClose}
+                    >
+                        <IconComponent icon="x" size="5" />
+                    </Button>
+                )}
             </Box>
             <Flex position="relative" minH="0" className="flex-1 overflow-hidden">
                 <ChatSessionList />
@@ -126,7 +139,9 @@ function ChatSidebarSessionListButton() {
         <Button
             variant="ghost"
             size="icon"
-            className={cn("absolute left-1 top-1/2 -translate-y-1/2 transform", isSessionListOpened && "bg-accent/50")}
+            className={cn("absolute left-1 top-1/2 size-11 -translate-y-1/2 transform", isSessionListOpened && "bg-accent/50")}
+            aria-label={t("project.Session list")}
+            aria-expanded={isSessionListOpened}
             title={t("project.Session list")}
             titleAlign="start"
             titleSide="bottom"
@@ -137,7 +152,7 @@ function ChatSidebarSessionListButton() {
     );
 }
 
-function ChatSessionMoreMenuButton() {
+function ChatSessionMoreMenuButton({ hasCloseButton }: { hasCloseButton: boolean }) {
     const { currentSessionUID } = useBoardChat();
     const session = ChatSessionModel.Model.useModel((model) => model.uid === currentSessionUID, [currentSessionUID]);
 
@@ -148,7 +163,7 @@ function ChatSessionMoreMenuButton() {
             menuButtonProps={{
                 variant: "ghost",
                 size: "icon",
-                className: "absolute right-1 top-1/2 -translate-y-1/2 transform",
+                className: cn("absolute top-1/2 size-11 -translate-y-1/2 transform", hasCloseButton ? "right-12" : "right-1"),
             }}
             session={session}
         />
