@@ -11,6 +11,7 @@ from langchain.chat_models.base import BaseChatModel, _ConfigurableModel
 PROVIDER_MAP = {
     "OpenAI": "openai",
     "OpenAI Compatible": "openai",
+    "Z.ai": "openai",
     "Z.ai Coding Plan": "openai",
     "OpenRouter": "openai",
     "LiteLLM": "openai",
