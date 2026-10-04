@@ -19,6 +19,7 @@ from ..middlewares.McpAuthMiddleware import mcp_auth_context
 from .Annotations import ToolAnnotationTransform
 from .Providers import create_agent_core_provider, create_compatibility_provider, create_raw_primitive_provider
 from .Receipts import MutationReceiptMiddleware
+from .Telemetry import ToolTelemetryMiddleware
 from .Tool import McpTool
 from .ToolGroupMiddleware import ToolGroupMiddleware
 
@@ -31,7 +32,7 @@ def _create_fastmcp(discovery_tools: frozenset[str] = frozenset()) -> FastMCP:
         Env.PROJECT_NAME,
         strict_input_validation=True,
         mask_error_details=True,
-        middleware=[ToolGroupMiddleware(discovery_tools)],
+        middleware=[ToolTelemetryMiddleware(), ToolGroupMiddleware(discovery_tools)],
     )
 
 
