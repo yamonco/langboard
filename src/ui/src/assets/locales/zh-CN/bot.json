@@ -149,6 +149,11 @@
         "model_id": "必须选择模型。",
         "region_name": "必须选择区域。"
       }
-    }
+    },
+    "Refresh models": "刷新模型列表",
+    "Model list unavailable": "无法获取模型列表。可手动输入模型 ID。",
+    "Choose a model": "选择模型",
+    "Provider": "提供商",
+    "Model": "模型"
   }
 }

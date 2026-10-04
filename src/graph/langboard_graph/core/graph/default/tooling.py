@@ -40,9 +40,9 @@ def create_langboard_context_prompt(tweaks: dict[str, Any]) -> str:
 
     current_runner_data = variables.get("current_runner_data")
     if current_runner_data:
-        lines.append(f"- current_runner_data: {json_dumps(current_runner_data, ensure_ascii=False)}")
+        lines.append(f"- current_runner_data: {json_dumps(current_runner_data, ensure_ascii=False, sort_keys=True)}")
     if rest_data:
-        lines.append(f"- rest_data: {json_dumps(rest_data, ensure_ascii=False)}")
+        lines.append(f"- rest_data: {json_dumps(rest_data, ensure_ascii=False, sort_keys=True)}")
 
     return "\n".join(lines)
 
@@ -87,7 +87,7 @@ async def create_langboard_api_tool_context(
 
     tools: list[StructuredTool] = []
     tool_context: dict[str, dict[str, Any]] = {}
-    for api_name in api_names:
+    for api_name in sorted(set(api_names)):
         schema = schemas.get(api_name)
         if not isinstance(schema, dict):
             continue

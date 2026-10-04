@@ -149,6 +149,11 @@
         "model_id": "モデルが必要です。",
         "region_name": "リージョンが必要です。"
       }
-    }
+    },
+    "Refresh models": "モデル一覧を更新",
+    "Model list unavailable": "モデル一覧を取得できません。モデル ID を直接入力できます。",
+    "Choose a model": "モデルを選択",
+    "Provider": "プロバイダー",
+    "Model": "モデル"
   }
 }

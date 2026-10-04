@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { AGENT_MODELS, TAgentModelName } from "@langboard/core/ai";
+import { AGENT_MODELS, OPENAI_COMPATIBLE_PROVIDERS, TAgentModelName } from "@langboard/core/ai";
 import Box from "@/components/base/Box";
 import Flex from "@/components/base/Flex";
 import Floating from "@/components/base/Floating";
@@ -309,6 +309,15 @@ function BotValueDefaultInputDisplay({
     };
 
     const changeSelectedProvider = (nextProvider: TAgentModelName) => {
+        if (nextProvider !== selectedProvider) {
+            setValue("api_key")("");
+            setValue("model_name")("");
+            if (nextProvider in OPENAI_COMPATIBLE_PROVIDERS) {
+                setValue("base_url")(OPENAI_COMPATIBLE_PROVIDERS[nextProvider as keyof typeof OPENAI_COMPATIBLE_PROVIDERS]);
+            } else {
+                setValue("base_url")("");
+            }
+        }
         const updatedAt = Date.now();
         providerCollaboration.updateMeta({
             provider: nextProvider,
@@ -392,6 +401,43 @@ function BotValueDefaultInputDisplay({
             <Box position="absolute" className="start-2 top-2.5 z-10 origin-[0] -translate-y-6 bg-background px-2">
                 {t("bot.agent.Agent settings")}
             </Box>
+            {showableInputs.includes("provider") && (
+                <Box mt="4" position="relative">
+                    {remoteProviderMeta ? (
+                        <CollaborativeControlOverlay
+                            color={remoteProviderMeta.borderColor}
+                            labelClassName="absolute right-2 z-[9999] max-w-32 truncate"
+                            labelStyle={{ top: "-0.75rem" }}
+                            name={remoteProviderMeta.actorName}
+                        />
+                    ) : null}
+                    <Floating.LabelSelect
+                        label={t("bot.agent.Select a provider")}
+                        value={selectedProvider}
+                        onValueChange={changeSelectedProvider as (value: string) => void}
+                        required={required}
+                        disabled={isValidating || disabled}
+                        options={AGENT_MODELS.map((option) => (
+                            <Select.Item key={`default-bot-json-input-agent-${option}`} value={option}>
+                                <Flex items="center" gap="2">
+                                    <IconComponent icon={providerIconMap[option]} size="4" />
+                                    {option}
+                                </Flex>
+                            </Select.Item>
+                        ))}
+                        ref={setInputRef("agent_llm")}
+                    />
+                    {errors.agent_llm && <FormErrorMessage error={errors.agent_llm} notInForm />}
+                </Box>
+            )}
+            <div className="grid gap-4 sm:grid-cols-2">
+                {inputs.map((input) => (
+                    <Box mt="4" key={`default-bot-json-input-${selectedProvider}-${input.name}`}>
+                        <DefaultTypedInput input={input} disabled={disabled} />
+                        {errors[input.name] && <FormErrorMessage error={errors[input.name]} notInForm />}
+                    </Box>
+                ))}
+            </div>
             {showableInputs.includes("api_names") && (
                 <Box>
                     <Box mb="4">
@@ -648,35 +694,6 @@ function BotValueDefaultInputDisplay({
                     )}
                 </Box>
             )}
-            {showableInputs.includes("provider") && (
-                <Box mt="4" position="relative">
-                    {remoteProviderMeta ? (
-                        <CollaborativeControlOverlay
-                            color={remoteProviderMeta.borderColor}
-                            labelClassName="absolute right-2 z-[9999] max-w-32 truncate"
-                            labelStyle={{ top: "-0.75rem" }}
-                            name={remoteProviderMeta.actorName}
-                        />
-                    ) : null}
-                    <Floating.LabelSelect
-                        label={t("bot.agent.Select a provider")}
-                        value={selectedProvider}
-                        onValueChange={changeSelectedProvider as (value: string) => void}
-                        required={required}
-                        disabled={isValidating || disabled}
-                        options={AGENT_MODELS.map((option) => (
-                            <Select.Item key={`default-bot-json-input-agent-${option}`} value={option}>
-                                <Flex items="center" gap="2">
-                                    <IconComponent icon={providerIconMap[option]} size="4" />
-                                    {option}
-                                </Flex>
-                            </Select.Item>
-                        ))}
-                        ref={setInputRef("agent_llm")}
-                    />
-                    {errors.agent_llm && <FormErrorMessage error={errors.agent_llm} notInForm />}
-                </Box>
-            )}
             {showableInputs.includes("prompt") && (
                 <Box mt="4">
                     <BotPromptEditor
@@ -700,12 +717,6 @@ function BotValueDefaultInputDisplay({
                     ) : null}
                 </Box>
             )}
-            {inputs.map((input) => (
-                <Box mt="4" key={`default-bot-json-input-${selectedProvider}-${input.name}`}>
-                    <DefaultTypedInput input={input} disabled={disabled} />
-                    {errors[input.name] && <FormErrorMessage error={errors[input.name]} notInForm />}
-                </Box>
-            ))}
 
             {change && (
                 <Flex mt="4" justify="center" gap="1">
