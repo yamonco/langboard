@@ -227,6 +227,23 @@ class CardRelationshipService(BaseDomainService):
     ) -> dict[str, Any] | None:
         """Atomically create cards and patch typed relationships around an anchor card."""
 
+        with DbSession.atomic():
+            return self._apply_graph_patch(
+                user_or_bot, project, anchor_card, new_cards, add_edges, remove_relationship_uids,
+                dispatch_effects=dispatch_effects,
+            )
+
+    def _apply_graph_patch(
+        self,
+        user_or_bot: TUserOrBot,
+        project: TProjectParam | None,
+        anchor_card: TCardParam | None,
+        new_cards: list[tuple[str, str, str | None]],
+        add_edges: list[tuple[str, str, str]],
+        remove_relationship_uids: list[str],
+        *,
+        dispatch_effects: bool = True,
+    ) -> dict[str, Any] | None:
         params = InfraHelper.get_records_with_foreign_by_params((Project, project), (Card, anchor_card))
         if not params:
             return None
@@ -349,10 +366,6 @@ class CardRelationshipService(BaseDomainService):
         for card in cards_to_create.values():
             api_card = card.board_api_response(0, [], [], [])
             created_cards.append(api_card)
-            if dispatch_effects:
-                CardPublisher.created(project, column, {"card": api_card})
-                CardActivityTask.card_created(user_or_bot, project, card)
-                CardBotTask.card_created(user_or_bot, project, card)
 
         affected_ids = {parent_id for _, parent_id, _ in remove_relationships} | {
             child_id for _, _, child_id in remove_relationships
@@ -370,11 +383,27 @@ class CardRelationshipService(BaseDomainService):
         if dispatch_effects:
             from .CardService import CardService
 
-            self._get_service(CardService).publish_work_states(project, [card.id for card in affected_cards])
-            for card in {card.id: card for card in affected_cards}.values():
-                relationships = self.get_api_list_by_card(card)
-                CardRelationshipPublisher.updated(project, card, relationships)
-                CardBotTask.card_relationship_updated(user_or_bot, project, card)
+            created_snapshots = [
+                (card.model_copy(deep=True), api_card)
+                for card, api_card in zip(cards_to_create.values(), created_cards, strict=True)
+            ]
+            affected_snapshots = [
+                (card.model_copy(deep=True), self.get_api_list_by_card(card))
+                for card in {card.id: card for card in affected_cards}.values()
+            ]
+
+            def publish():
+                for card, api_card in created_snapshots:
+                    CardPublisher.created(project, column, {"card": api_card})
+                    CardActivityTask.card_created(user_or_bot, project, card)
+                    CardBotTask.card_created(user_or_bot, project, card)
+                self._get_service(CardService).publish_work_states(project, [card.id for card, _ in affected_snapshots])
+                for card, relationships in affected_snapshots:
+                    CardRelationshipPublisher.updated(project, card, relationships)
+                    CardBotTask.card_relationship_updated(user_or_bot, project, card)
+
+            with DbSession.use(readonly=False) as db:
+                db.after_commit(publish)
 
         return {
             "anchor_card_uid": anchor_card.get_uid(),
