@@ -47,6 +47,7 @@ from ..card_workspace.application.projections import (
     public_label,
     public_metadata,
 )
+from ..card_workspace.application.work_plan import WorkPlan, WorkPlanService
 from ..card_workspace.domain import (
     CardBundleInclude,
     CardBundleSection,
@@ -560,6 +561,38 @@ def apply_card_graph_patch(
     if result is None:
         raise ValueError("Anchor card not found in project")
     return result
+
+
+def _require_work_plan_project(project_uid: str, plan: WorkPlan) -> None:
+    if plan.project_uid != project_uid:
+        raise ValueError("Work plan project does not match authorized project")
+
+
+@McpTool.add(
+    description="Preview a bounded atomic card work plan without saving; return the reviewed revision for apply."
+)
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+def preview_card_work_plan(
+    project_uid: str, plan: WorkPlan, user_or_bot: User | Bot, service: DomainService
+) -> dict[str, Any]:
+    _require_work_plan_project(project_uid, plan)
+    return WorkPlanService(user_or_bot, service).preview(plan)
+
+
+@McpTool.add(
+    description="Apply one reviewed card work plan atomically. Reuse request_id only for the identical plan and revision."
+)
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read, ProjectRoleAction.CardUpdate], RoleFinder.project)
+def apply_card_work_plan(
+    project_uid: str,
+    plan: WorkPlan,
+    expected_revision: str,
+    request_id: str,
+    user_or_bot: User | Bot,
+    service: DomainService,
+) -> dict[str, Any]:
+    _require_work_plan_project(project_uid, plan)
+    return WorkPlanService(user_or_bot, service).apply(plan, expected_revision, request_id)
 
 
 @McpTool.add(
@@ -1080,7 +1113,9 @@ def change_card_checkitem_work(
         if other_active:
             raise ValueError("Another work timer is active; set replace_active to pause it")
     with DbSession.atomic():
-        if not service.checkitem.change_status(user, project_uid, card_uid, item, target, from_api=action == "complete"):
+        if not service.checkitem.change_status(
+            user, project_uid, card_uid, item, target, from_api=action == "complete"
+        ):
             raise ValueError("Work timer transition failed")
         if action == "complete" and item.status == CheckitemStatus.Stopped and not item.is_checked:
             if not service.checkitem.toggle_checked(user, project_uid, card_uid, item, desired_checked=True):
