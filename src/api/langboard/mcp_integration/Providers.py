@@ -15,6 +15,7 @@ from .BotOutputs import BOT_OUTPUTS
 from .ContentOutputs import CONTENT_OUTPUTS
 from .CreationOutputs import CREATION_OUTPUTS
 from .GraphOutputs import GRAPH_OUTPUTS
+from .NotificationOutputs import NOTIFICATION_OUTPUTS
 from .Outputs import with_typed_output
 from .ProjectOutputs import PROJECT_OUTPUTS
 from .ResourceOutputs import RESOURCE_OUTPUTS
@@ -80,6 +81,7 @@ def create_native_domain_provider(
                 or RESOURCE_OUTPUTS.get(name)
                 or CREATION_OUTPUTS.get(name)
                 or GRAPH_OUTPUTS.get(name)
+                or NOTIFICATION_OUTPUTS.get(name)
                 or PROJECT_OUTPUTS.get(name),
             )
         provider.add_tool(
