@@ -23,7 +23,10 @@ function ChatSessionList(): React.JSX.Element {
             <Button
                 size="sm"
                 variant="ghost"
-                className={cn("mb-2 ml-2 mr-1 w-[calc(100%_-_theme(spacing.4)_-_1px)] justify-start gap-2", !isSessionListOpened && "hidden")}
+                className={cn(
+                    "mb-2 ml-2 mr-1 w-[calc(100%_-_theme(spacing.4)_-_1px)] justify-start gap-2",
+                    !isSessionListOpened && "hidden"
+                )}
                 onClick={handleClickNewChat}
             >
                 <IconComponent icon="square-pen" size="4" />
@@ -63,16 +66,14 @@ function ChatSession({ session }: { session: ChatSessionModel.TModel }) {
         >
             <Tooltip.Root>
                 <Tooltip.Trigger asChild>
-                    <Box
-                        position="relative"
-                        z="10"
-                        h="full"
-                        py="2"
-                        className="peer w-[calc(100%_-_theme(spacing.8))] truncate text-nowrap hover:text-accent-foreground"
+                    <button
+                        type="button"
+                        aria-current={currentSessionUID === session.uid ? "true" : undefined}
+                        className="peer relative z-10 h-full w-[calc(100%_-_theme(spacing.8))] truncate py-2 text-left text-sm hover:text-accent-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
                         onClick={handleClick}
                     >
                         {title || t("project.Untitled")}
-                    </Box>
+                    </button>
                 </Tooltip.Trigger>
                 <Tooltip.Content align="start" side="bottom">
                     {title || t("project.Untitled")}

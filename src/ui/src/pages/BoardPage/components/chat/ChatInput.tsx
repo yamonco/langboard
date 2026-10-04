@@ -250,7 +250,12 @@ function ChatInputDisplay() {
     };
 
     return (
-        <Flex direction="col" w="full" position="relative" className="shrink-0 bg-background px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2">
+        <Flex
+            direction="col"
+            w="full"
+            position="relative"
+            className="shrink-0 bg-background px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2"
+        >
             <Flex
                 direction="col"
                 className={cn(
@@ -263,7 +268,7 @@ function ChatInputDisplay() {
                     placeholder={t("project.Enter a message")}
                     className={cn(
                         "max-h-[25dvh] min-h-20 resize-none overflow-y-auto rounded-none text-base md:text-sm",
-                        "border-0 bg-transparent px-3 pb-11 pt-2 shadow-none focus-visible:ring-0"
+                        "border-0 bg-transparent px-3 pb-2 pt-2 shadow-none focus-visible:ring-0"
                     )}
                     resize="none"
                     disabled={isSending}
@@ -272,31 +277,21 @@ function ChatInputDisplay() {
                     onChange={updateHeight}
                     ref={chatInputRef}
                 />
-                <Flex
-                    ref={actionsContainerRef}
-                    position="absolute"
-                    bottom="0"
-                    minW="0"
-                    px="2"
-                    py="1"
-                    justify="between"
-                    items="center"
-                    className="pointer-events-none inset-x-0 bg-background/95"
-                >
-                    <Flex items="center" gap="1" className="pointer-events-auto min-w-0">
+                <Flex ref={actionsContainerRef} minW="0" px="2" py="1" justify="between" items="center" className="min-h-12 bg-transparent">
+                    <Flex items="center" gap="1" className="min-w-0">
                         {actionsMode === "more" ? (
                             <ChatInputMoreActions className="shrink-0" chatInputRef={chatInputRef} updateHeight={updateHeight} />
                         ) : (
                             <ChatInputActions chatInputRef={chatInputRef} updateHeight={updateHeight} />
                         )}
                     </Flex>
-                    <Flex items="center" gap="2" className="pointer-events-auto shrink-0">
+                    <Flex items="center" gap="2" className="shrink-0">
                         <ChatInputPermissionLevel showLabel={actionsMode === "full"} />
                         <Button
                             type="button"
                             variant={isSending ? "secondary" : "default"}
                             size={isSending || actionsMode === "more" ? "icon-sm" : "sm"}
-                            className={cn("gap-1.5 rounded-full", actionsMode === "more" ? "px-0" : "px-3")}
+                            className={cn("min-h-11 gap-1.5 rounded-full md:min-h-0", actionsMode === "more" ? "px-0" : "px-3")}
                             title={t(isSending ? "project.Stop" : "project.Send a message")}
                             titleSide="top"
                             onClick={send}
@@ -377,7 +372,7 @@ function ChatInputPermissionLevel({ showLabel }: { showLabel: bool }) {
             <Select.Trigger
                 disabled={isSending}
                 className={cn(
-                    "h-8 min-w-0 gap-2 px-2 py-1 text-xs [&>span]:min-w-0",
+                    "h-11 min-w-0 gap-2 md:h-8 px-2 py-1 text-xs [&>span]:min-w-0",
                     showLabel ? "w-36" : "w-16",
                     isFullAccess && "border-warning-border bg-warning text-warning-foreground focus:ring-warning-border"
                 )}
