@@ -75,9 +75,9 @@ class WorkPlan(PlanModel):
         refs = [c.client_ref for c in self.new_cards] + [c.client_ref for c in self.cardify_checkitems]
         if len(refs) != len(set(refs)):
             raise ValueError("Duplicate created card reference")
-        if any(not c.client_ref.startswith("new:") for c in self.new_cards):
+        if any(not c.client_ref.startswith("new:") or not c.client_ref[4:] for c in self.new_cards):
             raise ValueError("New card references must start with new:")
-        if any(not c.client_ref.startswith("cardify:") for c in self.cardify_checkitems):
+        if any(not c.client_ref.startswith("cardify:") or not c.client_ref[8:] for c in self.cardify_checkitems):
             raise ValueError("Cardification references must start with cardify:")
         ids = [c.checkitem_uid for c in self.cardify_checkitems]
         if len(ids) != len(set(ids)):

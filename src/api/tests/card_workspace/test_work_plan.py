@@ -187,6 +187,19 @@ def test_composed_plan_transaction(monkeypatch, mode, promote):
     "changes",
     [
         {},
+        {"new_cards": [{"client_ref": "new:", "title": "Empty suffix"}]},
+        {"new_cards": [{"client_ref": "new:   ", "title": "Whitespace suffix"}]},
+        {
+            "cardify_checkitems": [
+                {
+                    "client_ref": "cardify:",
+                    "source_card_uid": "anchor",
+                    "checkitem_uid": "item",
+                    "project_column_uid": "column",
+                    "title": "Empty suffix",
+                }
+            ]
+        },
         {"new_checklists": [{"target_card_ref": "new:missing", "title": "Tasks", "items": ["Verify"]}]},
         {"new_cards": [{"client_ref": "new:a", "title": "One"}, {"client_ref": "new:a", "title": "Two"}]},
         {"remove_relationship_uids": ["same", "same"]},
