@@ -264,6 +264,22 @@ class CheckitemService(BaseDomainService):
         should_publish: bool = True,
         from_api: bool = False,
     ) -> bool | None:
+        with DbSession.atomic():
+            return self._change_status(
+                user_or_bot, project, card, checkitem, status, current_time, should_publish, from_api
+            )
+
+    def _change_status(
+        self,
+        user_or_bot: TUserOrBot,
+        project: TProjectParam,
+        card: TCardParam,
+        checkitem: TCheckitemParam,
+        status: CheckitemStatus,
+        current_time: SafeDateTime | None = None,
+        should_publish: bool = True,
+        from_api: bool = False,
+    ) -> bool | None:
         params = self.__get_records_by_params(project, card, checkitem)
         if not params:
             return None
@@ -324,20 +340,26 @@ class CheckitemService(BaseDomainService):
             target_user = InfraHelper.get_by(User, "id", checkitem.user_id)
 
         if should_publish:
-            CheckitemPublisher.status_changed(project, card, checkitem, timer_record, target_user)
-            CheckitemPublisher.board_progress_changed(project, card)
             self._mark_card_changed_for_unread(card, "checkitem", checkitem.id)
+        changed_item = checkitem.model_copy(deep=True)
 
-        if status == CheckitemStatus.Started:
-            CardCheckitemActivityTask.card_checkitem_timer_started(user_or_bot, project, card, checkitem)
-            CardCheckitemBotTask.card_checkitem_timer_started(user_or_bot, project, card, checkitem)
-        elif status == CheckitemStatus.Paused:
-            CardCheckitemActivityTask.card_checkitem_timer_paused(user_or_bot, project, card, checkitem)
-            CardCheckitemBotTask.card_checkitem_timer_paused(user_or_bot, project, card, checkitem)
-        elif status == CheckitemStatus.Stopped:
-            CardCheckitemActivityTask.card_checkitem_timer_stopped(user_or_bot, project, card, checkitem)
-            CardCheckitemBotTask.card_checkitem_timer_stopped(user_or_bot, project, card, checkitem)
+        def publish():
+            if should_publish:
+                CheckitemPublisher.status_changed(project, card, changed_item, timer_record, target_user)
+                CheckitemPublisher.board_progress_changed(project, card)
 
+            if status == CheckitemStatus.Started:
+                CardCheckitemActivityTask.card_checkitem_timer_started(user_or_bot, project, card, changed_item)
+                CardCheckitemBotTask.card_checkitem_timer_started(user_or_bot, project, card, changed_item)
+            elif status == CheckitemStatus.Paused:
+                CardCheckitemActivityTask.card_checkitem_timer_paused(user_or_bot, project, card, changed_item)
+                CardCheckitemBotTask.card_checkitem_timer_paused(user_or_bot, project, card, changed_item)
+            elif status == CheckitemStatus.Stopped:
+                CardCheckitemActivityTask.card_checkitem_timer_stopped(user_or_bot, project, card, changed_item)
+                CardCheckitemBotTask.card_checkitem_timer_stopped(user_or_bot, project, card, changed_item)
+
+        with DbSession.use(readonly=False) as db:
+            db.after_commit(publish)
         return True
 
     def complete_unchecked_by_card(
@@ -457,6 +479,17 @@ class CheckitemService(BaseDomainService):
         return True
 
     def cardify(
+        self,
+        user_or_bot: TUserOrBot,
+        project: TProjectParam,
+        card: TCardParam,
+        checkitem: TCheckitemParam,
+        column_uid: str | None = None,
+    ) -> bool | None:
+        with DbSession.atomic():
+            return self._cardify(user_or_bot, project, card, checkitem, column_uid)
+
+    def _cardify(
         self,
         user_or_bot: TUserOrBot,
         project: TProjectParam,
