@@ -777,5 +777,10 @@ async def test_missing_card_bundle_http_response_is_bad_request(monkeypatch):
             "/mcp/tools/get_card_bundle", json={}, headers={route.AuthSecurity.MCP_TOOL_GROUP_UID_HEADER: "group"}
         )
     assert response.status_code == 400
+    assert response.json() == {
+        "code": "CARD_UNAVAILABLE",
+        "message": "Card not found in this project.",
+        "retryable": False,
+    }
     assert "unknown" not in response.text
     assert route.mcp_auth_context.get() is None

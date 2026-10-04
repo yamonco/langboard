@@ -14,6 +14,7 @@ from langboard_shared.domain.services import DomainService
 from langboard_shared.filter import RoleFilter
 from langboard_shared.security import RoleFinder
 from pydantic import BaseModel
+from ...card_workspace.domain import CardUnavailableError
 from ...mcp_integration import McpServer, McpTool
 from ...middlewares.McpAuthMiddleware import mcp_auth_context
 
@@ -97,6 +98,15 @@ async def execute_mcp_tool(tool_name: str, request: Request):
                 raise RuntimeError("Modern MCP provider is unavailable")
             result = await server.call_tool(tool_name, arguments)
         except ValidationError as exc:
+            if isinstance(exc.__cause__, CardUnavailableError):
+                return JsonResponse(
+                    status_code=400,
+                    content={
+                        "code": "CARD_UNAVAILABLE",
+                        "message": "Card not found in this project.",
+                        "retryable": False,
+                    },
+                )
             raise ApiException.BadRequest_400(ApiErrorCode.VA0000) from exc
         except AuthorizationError as exc:
             raise ApiException.Forbidden_403(ApiErrorCode.PE1001) from exc
