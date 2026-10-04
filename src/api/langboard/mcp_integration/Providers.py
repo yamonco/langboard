@@ -156,7 +156,7 @@ def create_compatibility_provider(wrap_tool: Callable[[str, Callable[..., Any]],
 def create_agent_core_provider(wrap_tool: Callable[[str, Callable[..., Any]], Callable[..., Any]]) -> LocalProvider:
     """Expose canonical entry points using FastMCP's native visibility transform."""
     provider = create_native_domain_provider(wrap_tool, modern_annotations=True)
-    provider.add_transform(Visibility(False, components={"tool"}, match_all=True))
+    provider.add_transform(Visibility(False, components={"tool"}))
     provider.add_transform(Visibility(True, names=set(AGENT_CORE_TOOLS), components={"tool"}))
     return provider
 
