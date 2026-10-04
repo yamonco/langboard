@@ -161,10 +161,12 @@ def test_composed_plan_transaction(monkeypatch, mode, promote):
             assert not any(cb.called for cb in (graph_event, list_event, item_event))
             if mode == "outer_rollback":
                 raise RuntimeError("Outer plan failed")
+        return result
 
     if mode == "commit":
-        apply()
-        assert plans.apply(plan, reviewed["revision"], "request-one")["replayed"]
+        initial = apply()
+        replay = plans.apply(plan, reviewed["revision"], "request-one")
+        assert replay == {**initial, "replayed": True}
         with pytest.raises(ValueError, match="reused"):
             plans.apply(plan.model_copy(update={"new_checklists": []}), reviewed["revision"], "request-one")
     else:

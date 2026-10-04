@@ -13,7 +13,7 @@ from langboard_shared.domain.models import (
     Project,
     ProjectColumn,
 )
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_validator
 from sqlalchemy import select
 
 
@@ -357,6 +357,7 @@ class WorkPlanService:
             result["applied_revision"] = expected_revision
             result["all_succeeded"] = True
             result["replayed"] = False
+            result = TypeAdapter(dict).dump_python(result, mode="json")
             value = dumps(
                 {"version": 1, "payload_digest": payload_digest, "revision": expected_revision, "result": result},
                 default=str,
