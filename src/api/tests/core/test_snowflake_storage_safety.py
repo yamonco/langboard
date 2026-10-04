@@ -115,7 +115,13 @@ def test_real_fork_while_parent_lock_is_held(fixed_clock):
 
 
 def make_user(email):
-    return User(firstname="ID", lastname="Fixture", email=email, password="test-only")
+    return User(
+        firstname="ID",
+        lastname="Fixture",
+        email=email,
+        username="fixture-" + email.split("@", 1)[0],
+        password="test-only",
+    )
 
 
 def test_database_retries_only_id_conflicts_and_keeps_transaction_usable(monkeypatch, storage_engine):

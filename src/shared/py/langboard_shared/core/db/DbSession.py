@@ -204,8 +204,10 @@ class DbSession:
         for _ in range(32):
             obj.id = SnowflakeID()
             statement = insert_with_conflict(obj.__table__).values(self.__get_model_column_values(obj))
-            result = self.__session.execute(statement.on_conflict_do_nothing(index_elements=[obj.__table__.c.id]))
-            if result.rowcount == 1:
+            result = self.__session.execute(
+                statement.on_conflict_do_nothing(index_elements=[obj.__table__.c.id]).returning(obj.__table__.c.id)
+            )
+            if result.scalar_one_or_none() is not None:
                 return
         obj.id = SnowflakeID(0)
         raise RuntimeError("Snowflake ID allocation exhausted; no row inserted")
