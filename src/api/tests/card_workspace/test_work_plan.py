@@ -17,6 +17,12 @@ def test_composed_plan_transaction(monkeypatch, mode, promote):
     with engine.begin() as c:
         c.execute(text(f'CREATE TABLE "{Project.__tablename__}" (id INTEGER PRIMARY KEY)'))
         c.execute(text(f'INSERT INTO "{Project.__tablename__}" VALUES (1)'))
+        c.execute(text(f'CREATE TABLE "{Card.__tablename__}" (id INTEGER PRIMARY KEY)'))
+        c.execute(text(f'INSERT INTO "{Card.__tablename__}" VALUES (1)'))
+        c.execute(text(f'CREATE TABLE "{Checklist.__tablename__}" (id INTEGER PRIMARY KEY, card_id INTEGER)'))
+        c.execute(text(f'INSERT INTO "{Checklist.__tablename__}" VALUES (5, 1)'))
+        c.execute(text(f'CREATE TABLE "{Checkitem.__tablename__}" (id INTEGER PRIMARY KEY, checklist_id INTEGER)'))
+        c.execute(text(f'INSERT INTO "{Checkitem.__tablename__}" VALUES (6, 5)'))
         c.execute(text("CREATE TABLE created (kind TEXT)"))
         c.execute(text("CREATE TABLE receipts (key TEXT PRIMARY KEY, value TEXT)"))
     monkeypatch.setattr(DbEngine, "get_main_engine", lambda: engine)

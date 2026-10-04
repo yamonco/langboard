@@ -4,7 +4,7 @@ from hashlib import sha256
 from json import dumps, loads
 from typing import Annotated
 from langboard_shared.core.db import DbSession
-from langboard_shared.domain.models import CardMetadata, Project
+from langboard_shared.domain.models import Card, CardMetadata, Checkitem, Checklist, Project
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import select
 
@@ -116,6 +116,30 @@ class WorkPlanService:
         refs = {plan.anchor_card_uid} | {c.source_card_uid for c in plan.cardify_checkitems}
         refs |= {c.target_card_ref for c in plan.new_checklists if c.target_card_ref not in symbolic}
         refs |= {ref for e in plan.add_edges for ref in (e.parent_ref, e.child_ref) if ref not in symbolic}
+        cards = {uid: self._card(uid, project) for uid in refs}
+        with DbSession.use(readonly=False) as db:
+            card_ids = sorted(c.id for c in cards.values())
+            db.exec(
+                select(Card.column("id"))
+                .where(Card.column("id").in_(card_ids))
+                .order_by(Card.column("id"))
+                .with_for_update()
+            ).all()
+            checklist_rows = db.exec(
+                select(Checklist.column("id"))
+                .where(Checklist.column("card_id").in_(card_ids))
+                .order_by(Checklist.column("id"))
+                .with_for_update()
+            ).all()
+            checklist_ids = [r[0] if isinstance(r, tuple) else r for r in checklist_rows]
+            if checklist_ids:
+                db.exec(
+                    select(Checkitem.column("id"))
+                    .where(Checkitem.column("checklist_id").in_(checklist_ids))
+                    .order_by(Checkitem.column("id"))
+                    .with_for_update()
+                ).all()
+        # Re-read after any lock wait; pre-lock objects may describe an older revision.
         cards = {uid: self._card(uid, project) for uid in refs}
         state = {
             uid: {"card": c.api_response(), "checklists": service.checklist.get_api_list_by_card(c)}
