@@ -49,8 +49,12 @@ def test_archive_page_index_upgrade_and_downgrade() -> None:
         }
 
 
-def test_archive_page_index_is_the_only_migration_head() -> None:
+def test_archive_page_index_is_reachable_from_the_single_migration_head() -> None:
     config = Config(str(ROOT / "alembic.ini"))
     config.set_main_option("script_location", str(ROOT / "src/api/langboard/migrations"))
 
-    assert ScriptDirectory.from_config(config).get_heads() == ["canary_integration_20260917"]
+    script = ScriptDirectory.from_config(config)
+    heads = script.get_heads()
+    assert len(heads) == 1, f"Expected one upgrade path, found heads: {heads}"
+    ancestors = {revision.revision for revision in script.iterate_revisions(heads[0], "base")}
+    assert _migration().revision in ancestors
