@@ -257,11 +257,14 @@ async def test_profiles_preserve_domain_dispatch_and_deny_hidden_or_ungranted_ca
         mcp_auth_context.reset(token)
 
 
-async def test_provider_exposes_server_owned_workflow_resource_and_prompt(monkeypatch):
+@pytest.mark.parametrize(
+    "factory", [create_compatibility_provider, create_agent_core_provider, create_raw_primitive_provider]
+)
+async def test_provider_exposes_server_owned_workflow_resource_and_prompt(monkeypatch, factory):
     monkeypatch.setattr(McpTool, "get_tools", lambda: {})
     monkeypatch.setattr(McpTool, "get_tool", lambda name: None)
     server = _create_fastmcp()
-    server.add_provider(create_compatibility_provider(McpServer._wrap_tool))
+    server.add_provider(factory(McpServer._wrap_tool))
     async with Client(server) as client:
         resources = await client.list_resources()
         assert [str(resource.uri) for resource in resources] == ["langboard://policy/workflow"]
@@ -274,7 +277,10 @@ async def test_provider_exposes_server_owned_workflow_resource_and_prompt(monkey
 
 
 @pytest.mark.parametrize("granted", [True, False])
-async def test_card_policy_resource_reuses_current_query_and_rejects_ungranted_reads(monkeypatch, granted):
+@pytest.mark.parametrize(
+    "factory", [create_compatibility_provider, create_agent_core_provider, create_raw_primitive_provider]
+)
+async def test_card_policy_resource_reuses_current_query_and_rejects_ungranted_reads(monkeypatch, granted, factory):
     state = {"workflow": {"workflow_guidance": "Review first"}, "work_state": {"verification_state": "unverified"}}
     calls = []
 
@@ -285,7 +291,7 @@ async def test_card_policy_resource_reuses_current_query_and_rejects_ungranted_r
     monkeypatch.setattr(McpTool, "get_tools", lambda: {})
     monkeypatch.setattr(McpTool, "get_tool", lambda name: {"handler": bundle} if name == "get_card_bundle" else None)
     server = _create_fastmcp()
-    server.add_provider(create_compatibility_provider(lambda name, handler: handler))
+    server.add_provider(factory(lambda name, handler: handler))
     token = mcp_auth_context.set(
         {"tool_group": SimpleNamespace(activated_at=object(), tools=["get_card_bundle"] if granted else [])}
     )
