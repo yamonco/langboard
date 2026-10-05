@@ -71,3 +71,22 @@ def test_generation_swap_is_atomic_and_retains_previous_when_provider_fails(tmp_
             replace_attachment_generation(store, text=" ", **source)
         with pytest.raises(ValueError):
             delete_attachment_generation(store, {**second, "chunk_count": 10_000})
+
+
+def test_staging_never_changes_the_active_pointer(tmp_path):
+    source = dict(
+        board_uid="board",
+        card_uid="card",
+        attachment_uid="attachment",
+        content_hash="hash",
+        fingerprint="fingerprint",
+        splitter=DocumentSplitterSettings(chunk_size=64, chunk_overlap=8),
+    )
+    with open_document_store(tmp_path / "stage.sqlite", FixtureEmbeddings(), dimensions=3) as store:
+        first = replace_attachment_generation(store, text="prior searchable text", **source)
+        staged = replace_attachment_generation(store, text="replacement text", publish_pointer=False, **source)
+        assert store.get(("document_active", "board"), "attachment").value == first
+        assert store.search(tuple(staged["namespace"]), query="replacement", limit=1)
+        delete_attachment_generation(store, staged)
+        assert store.get(("document_active", "board"), "attachment").value == first
+        assert not store.search(tuple(staged["namespace"]), query="replacement", limit=1)
