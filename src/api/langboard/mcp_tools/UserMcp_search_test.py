@@ -11,6 +11,7 @@ os.environ.setdefault("PROJECT_NAME", "langboard")
 
 from langboard.mcp_tools import UserMcp  # noqa: E402
 from langboard_shared.core.types import SnowflakeID  # noqa: E402
+from langboard_shared.domain.services.factory.CardService import CardService  # noqa: E402
 
 
 def test_search_passes_timezone_aware_half_open_period_to_native_query() -> None:
@@ -27,7 +28,7 @@ def test_search_passes_timezone_aware_half_open_period_to_native_query() -> None
         "created_at",
         "2026-09-15T00:00:00+09:00",
         "2026-09-16T00:00:00+09:00",
-    ) == {"cards": [], "workflow_stages": {}}
+    ) == {"cards": [], "workflow_stages": {}, "columns": {}}
     project, query, filters = calls[0]
     assert (project, query) == ("project", "release")
     assert filters["date_field"] == "created_at"
@@ -60,6 +61,8 @@ def test_my_work_scopes_projects_and_round_trips_keyset_cursor() -> None:
         card=SimpleNamespace(get_assigned_work_page=page),
     )
     user = SimpleNamespace(id=1)
+    service.card._get_service = lambda _: service.project
+    service.card.list_assigned_work = lambda *args: CardService.list_assigned_work(service.card, *args)
     first = UserMcp.list_my_work(user, service, limit=1)
     assert first["items"] == [{"card_uid": card_uid}]
     assert page.call_args.args[1:3] == ([project_uid], 1)
@@ -75,9 +78,15 @@ def test_search_resolves_distinct_workflow_once_and_keeps_bounded_description():
     state = {"workflow_stage": "released", "completed": True, "reasons": [{"code": "recorded", "message": "verbose"}]}
     cards = [{"uid": str(i), "description": {"content": "match"}, "project_column_uid": "c", "work_state": state} for i in range(3)]
     resolve = Mock(return_value={"released": {"key": "released", "counts_as_completed": True, "entry_effects": ["stop_running_timers"], "translations": {"ko": {"name": "완료"}}}})
-    service = SimpleNamespace(card=SimpleNamespace(search_context_by_project=Mock(return_value=cards)), workflow_stage=SimpleNamespace(get_api_by_keys=resolve))
+    columns = Mock(return_value={})
+    service = SimpleNamespace(
+        card=SimpleNamespace(search_context_by_project=Mock(return_value=cards)),
+        workflow_stage=SimpleNamespace(get_api_by_keys=resolve),
+        project_column=SimpleNamespace(get_api_workflow_context=columns),
+    )
     response = UserMcp.search_project_cards("p", "match", service)
     resolve.assert_called_once_with({"released"})
+    columns.assert_called_once_with("p", {"c"})
     assert service.card.search_context_by_project.call_args.kwargs["include_work_state"] is True
     assert response["workflow_stages"]["released"]["entry_effects"] == ["stop_running_timers"]
     assert "translations" not in response["workflow_stages"]["released"]
