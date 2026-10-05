@@ -15,7 +15,7 @@ api.defaults.adapter = async (config) => {
 };
 function Page() {
     const { setBoardChat } = useBoardController();
-    const { bot } = useBoardChat();
+    const { bot, requestSessionList } = useBoardChat();
     const [mount, setMount] = useState(0),
         [value, setValue] = useState("");
     useEffect(() => {
@@ -31,6 +31,7 @@ function Page() {
             <output data-testid="draft-state">{value}</output>
             <button onClick={() => setBoardChat({ projectUID: "fixture", bot: { uid: "bot" } as InternalBotModel.TModel })}>Enable chat</button>
             <button onClick={() => setBoardChat(undefined)}>Disable chat</button>
+            <button onClick={requestSessionList}>Open chat panel</button>
             <button onClick={() => setValue(String(requests))}>Read requests</button>
         </>
     );

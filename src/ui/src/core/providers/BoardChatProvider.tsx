@@ -32,6 +32,7 @@ export interface IBoardChatContext {
     lockedScope?: [TChatScope, string] | undefined;
     setLockedScope: React.Dispatch<React.SetStateAction<[TChatScope, string] | undefined>>;
     chatSessions: ChatSessionModel.TModel[];
+    requestSessionList: () => void;
     currentSessionUID?: string;
     setCurrentSessionUID: React.Dispatch<React.SetStateAction<string | undefined>>;
     chatTaskIdRef: React.RefObject<string | null>;
@@ -62,6 +63,7 @@ const initialContext = {
     lockedScope: undefined,
     setLockedScope: () => {},
     chatSessions: [],
+    requestSessionList: () => {},
     currentSessionUID: undefined,
     setCurrentSessionUID: () => {},
     chatTaskIdRef: { current: null },
@@ -105,6 +107,14 @@ export const BoardChatProvider = ({ projectUID, bot, children }: IBoardChatProvi
         [flatChatSessions]
     );
     const { mutateAsync } = useGetProjectChatSessions(projectUID);
+    const requestedProjectRef = useRef<string | undefined>(undefined);
+    const requestSessionList = useCallback(() => {
+        if (!enabled || requestedProjectRef.current === projectUID) return;
+        requestedProjectRef.current = projectUID;
+        void mutateAsync({}).catch(() => {
+            if (requestedProjectRef.current === projectUID) requestedProjectRef.current = undefined;
+        });
+    }, [enabled, projectUID, mutateAsync]);
     const isInitialMountedRef = useRef(false);
     const [currentSessionUID, setCurrentSessionUIDState] = useState<string | undefined>(() => getBoardChatStore().getCurrentSessionUID(projectUID));
     const currentSessionUIDRef = useRef(currentSessionUID);
@@ -267,11 +277,6 @@ export const BoardChatProvider = ({ projectUID, bot, children }: IBoardChatProvi
     });
 
     useEffect(() => {
-        if (!enabled) return;
-        mutateAsync({});
-    }, [projectUID, enabled]);
-
-    useEffect(() => {
         const storedSessionUID = getBoardChatStore().getCurrentSessionUID(projectUID);
         currentSessionUIDRef.current = storedSessionUID;
         setCurrentSessionUIDState(storedSessionUID);
@@ -314,6 +319,7 @@ export const BoardChatProvider = ({ projectUID, bot, children }: IBoardChatProvi
                 lockedScope,
                 setLockedScope,
                 chatSessions,
+                requestSessionList,
                 currentSessionUID,
                 setCurrentSessionUID,
                 chatTaskIdRef,

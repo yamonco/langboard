@@ -28,10 +28,14 @@ test("chat availability retains page state and avoids inactive session reads", a
         console.log("Navigation receipts", navigations);
         expect(navigations).toHaveLength(1);
         await expect(page.getByRole("textbox", { name: "Draft" })).toHaveValue("unsaved draft");
+        await page.getByRole("button", { name: "Read requests" }).click();
+        await expect(page.getByRole("textbox", { name: "Draft" })).toHaveValue("0");
+        await page.getByRole("button", { name: "Open chat panel" }).click();
+        await page.getByRole("button", { name: "Open chat panel" }).click();
         await page.getByRole("button", { name: "Disable chat" }).click();
         await expect(page.getByTestId("chat")).toHaveText("disabled");
         await expect(page.getByTestId("mounts")).toHaveText("1");
-        await expect(page.getByRole("textbox", { name: "Draft" })).toHaveValue("unsaved draft");
+        await expect(page.getByRole("textbox", { name: "Draft" })).toHaveValue("0");
         await page.getByRole("button", { name: "Read requests" }).click();
         await expect(page.getByRole("textbox", { name: "Draft" })).toHaveValue("1");
     } finally {
