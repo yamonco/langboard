@@ -1,3 +1,4 @@
+from ....core.db import DbSession
 from ....core.domain import BaseDomainService
 from ....core.types.ParamTypes import TUserParam
 from ....domain.models import IdentityProvider, User, UserIdentityLink
@@ -41,7 +42,13 @@ class IdentityLinkService(BaseDomainService):
         provider: IdentityProvider | str,
         external_id: str,
         issuer: str | None = None,
+        *,
+        consistent: bool = False,
     ) -> User | None:
+        if consistent:
+            # Both identity and account status must bypass lagging read replicas.
+            with DbSession.atomic():
+                return self.get_user_by_provider_external_id(provider, external_id, issuer)
         link = self.get_by_provider_external_id(provider, external_id, issuer)
         if not link:
             return None
