@@ -34,3 +34,23 @@ export function parseDoclingMetadata(metadata: Record<string, string> | undefine
         return [];
     }
 }
+
+export function documentDisplayTags(content: Record<string, unknown> | undefined, preferredLanguage?: string): string[] {
+    const keywords = content?.search_keywords;
+    if (!keywords || typeof keywords !== "object" || Array.isArray(keywords)) return [];
+    const language = (preferredLanguage || "en").toLowerCase().split(/[-_]/)[0];
+    const attributes = keywords as Record<string, unknown>;
+    const clean = (value: unknown): string[] =>
+        Array.isArray(value)
+            ? [
+                  ...new Set(
+                      value
+                          .filter((word): word is string => typeof word === "string")
+                          .map((word) => word.trim().replace(/^#+/, ""))
+                          .filter((word) => word.length > 0 && word.length <= 80)
+                  ),
+              ].slice(0, 5)
+            : [];
+    const localized = clean(attributes[language]);
+    return localized.length ? localized : clean(attributes.en);
+}

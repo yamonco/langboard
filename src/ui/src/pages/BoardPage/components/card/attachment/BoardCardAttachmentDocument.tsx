@@ -2,10 +2,11 @@ import MoreMenu from "@/components/MoreMenu";
 import Toast from "@/components/base/Toast";
 import { api } from "@/core/helpers/Api";
 import setupApiErrorHandler from "@/core/helpers/setupApiErrorHandler";
-import { EDoclingIndexStatus, parseDoclingMetadata } from "@/core/constants/DoclingMetadata";
+import { documentDisplayTags, EDoclingIndexStatus, parseDoclingMetadata } from "@/core/constants/DoclingMetadata";
 import { MetadataModel } from "@/core/models";
 import { ModelRegistry } from "@/core/models/ModelRegistry";
 import { useBoardCard } from "@/core/providers/BoardCardProvider";
+import { useAppSetting } from "@/core/providers/AppSettingProvider";
 import { ProjectRole } from "@/core/models/roles";
 import { Routing } from "@langboard/core/constants";
 import { Utils } from "@langboard/core/utils";
@@ -57,6 +58,8 @@ export function BoardCardAttachmentDocumentProgress({
 
 function DocumentProgress({ record, attachmentUID }: { record: MetadataModel.TModel; attachmentUID?: string }): React.JSX.Element | null {
     const [t] = useTranslation();
+    const { currentUser } = useAppSetting();
+    const preferredLanguage = currentUser.useField("preferred_lang");
     const metadata = record.useField("metadata");
     const document = parseDoclingMetadata(metadata).find((entry) =>
         attachmentUID
@@ -64,6 +67,7 @@ function DocumentProgress({ record, attachmentUID }: { record: MetadataModel.TMo
             : entry.status === EDoclingIndexStatus.Pending || entry.status === EDoclingIndexStatus.Processing
     );
     if (!document) return null;
+    const tags = attachmentUID ? documentDisplayTags(document.content, preferredLanguage) : [];
     const running = document.status === EDoclingIndexStatus.Processing;
     const label = running
         ? t("card.Processing document")
@@ -87,6 +91,15 @@ function DocumentProgress({ record, attachmentUID }: { record: MetadataModel.TMo
                 {running && percent !== undefined ? ` · ${percent}%` : ""}
             </span>
             {running && <progress className="mt-1 block h-1 w-full accent-primary" max={100} value={percent} aria-label={label} />}
+            {tags.length > 0 && (
+                <div className="mt-1 flex max-w-full flex-wrap gap-x-2 gap-y-0.5 text-primary/70">
+                    {tags.map((tag) => (
+                        <span key={tag} className="max-w-full break-words">
+                            #{tag}
+                        </span>
+                    ))}
+                </div>
+            )}
         </div>
     );
 }
