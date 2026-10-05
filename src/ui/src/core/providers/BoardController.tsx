@@ -398,12 +398,8 @@ export const BoardController = memo(({ children, projectUID }: IBoardControllerP
         </BoardControllerContext.Provider>
     );
 
-    if (!boardChat) {
-        return content;
-    }
-
     return (
-        <BoardChatProvider projectUID={boardChat.projectUID} bot={boardChat.bot}>
+        <BoardChatProvider projectUID={boardChat?.projectUID ?? projectUID ?? ""} bot={boardChat?.bot}>
             {content}
         </BoardChatProvider>
     );

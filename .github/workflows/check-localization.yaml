@@ -33,6 +33,8 @@ on:
       - src/ui/playwright.command-context.config.ts
       - src/ui/playwright.chat-recovery.config.ts
       - src/ui/vite.chat-recovery.config.ts
+      - src/ui/playwright.board-chat-stability.config.ts
+      - src/ui/vite.board-chat-stability.config.ts
       - src/ui/playwright.default-language.config.ts
       - src/ui/playwright.auth-language.config.ts
       - src/ui/playwright.filter.config.ts
@@ -126,4 +128,6 @@ jobs:
       - run: yarn playwright test -c playwright.command-context.config.ts
         working-directory: src/ui
       - run: yarn playwright test -c playwright.chat-recovery.config.ts
+        working-directory: src/ui
+      - run: yarn playwright test -c playwright.board-chat-stability.config.ts
         working-directory: src/ui
