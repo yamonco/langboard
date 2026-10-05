@@ -659,7 +659,11 @@ function BoardProxyDisplay({ pageRoute, isFetching, isProjectLoading, project }:
                                 className="h-full"
                             >
                                 <Suspense fallback={<Skeleton className="m-3 h-24" />}>
-                                    <ChatSidebar ref={chatSidebarRef} onClose={isMobile ? () => setActiveSidePanel(undefined) : undefined} />
+                                    <ChatSidebar
+                                        ref={chatSidebarRef}
+                                        active={workbenchContextMode === "chat" && isWorkbenchContextVisible}
+                                        onClose={isMobile ? () => setActiveSidePanel(undefined) : undefined}
+                                    />
                                 </Suspense>
                             </div>
                         )}
