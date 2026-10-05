@@ -64,7 +64,9 @@ def resolve_principal(access_token, service):
     issuer = issuer.strip().rstrip("/")
     if not issuer:
         raise AuthorizationError("A verified OIDC identity is required")
-    user = service.identity_link.get_user_by_provider_external_id(IdentityProvider.Oidc, subject, issuer)
+    user = service.identity_link.get_user_by_provider_external_id(
+        IdentityProvider.Oidc, subject, issuer, consistent=True
+    )
     if not user or not user.activated_at or user.deleted_at:
         raise AuthorizationError("An active linked user is required")
     return {"user_or_bot": user, "api_key": None, "transport": "oauth"}
