@@ -38,6 +38,7 @@ async def main():
         MCP_OAUTH_PROMPT="select_account",
     )
     provider = OAuth.create_oauth_provider()
+    assert (await provider.storage_readiness())["status"] == "ready"
     upstream_key = "isolated-upstream-test-key-at-least-32-characters"
     provider._token_validator = JWTVerifier(
         public_key=upstream_key, algorithm="HS256", issuer="https://id.example", audience="native-fixture"
