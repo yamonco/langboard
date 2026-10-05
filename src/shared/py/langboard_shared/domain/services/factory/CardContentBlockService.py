@@ -26,17 +26,25 @@ class CardContentBlockService(BaseDomainService):
     def api_blocks_by_card(self, card: TCardParam) -> list[dict[str, Any]]:
         """Public projection of a card's blocks (bounded payloads)."""
 
-        return [
-            {
-                "block_uid": block.get_uid(),
-                "type": block.block_type,
-                "order": block.order,
-                "revision": block.revision,
-                "payload": block.payload,
-                "updated_at": block.updated_at.isoformat() if block.updated_at else None,
-            }
-            for block in self.get_blocks_by_card(card)
-        ]
+        return [self._public_block(block) for block in self.get_blocks_by_card(card)]
+
+    def api_blocks_by_cards(self, card_ids: list[int]) -> dict[int, list[dict[str, Any]]]:
+        """Project the authorized batch without querying per card."""
+        result: dict[int, list[dict[str, Any]]] = {}
+        for block in self.repo.card_content_block.get_all_by_cards(card_ids):
+            result.setdefault(block.card_id, []).append(self._public_block(block))
+        return result
+
+    @staticmethod
+    def _public_block(block: CardContentBlock) -> dict[str, Any]:
+        return {
+            "block_uid": block.get_uid(),
+            "type": block.block_type,
+            "order": block.order,
+            "revision": block.revision,
+            "payload": block.payload,
+            "updated_at": block.updated_at.isoformat() if block.updated_at else None,
+        }
 
     def create(
         self,
@@ -59,9 +67,7 @@ class CardContentBlockService(BaseDomainService):
         siblings = self.repo.card_content_block.get_all_by_card(card)
         insert_at = len(siblings)
         if after_block_uid is not None:
-            anchor_index = next(
-                (i for i, s in enumerate(siblings) if s.get_uid() == after_block_uid), None
-            )
+            anchor_index = next((i for i, s in enumerate(siblings) if s.get_uid() == after_block_uid), None)
             if anchor_index is None:
                 raise ValueError(f"after_block_uid {after_block_uid} not found")
             insert_at = anchor_index + 1
