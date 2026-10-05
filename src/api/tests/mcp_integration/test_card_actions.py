@@ -17,6 +17,8 @@ from langboard.middlewares.McpAuthMiddleware import mcp_auth_context
         ({"action": "label", "label_uids": ["label"]}, "set_card_people_and_labels", {"label_uids": ["label"]}),
         ({"action": "title", "title": " New title "}, "change_card_details", {"title": "New title"}),
         ({"action": "deadline", "deadline_at": ""}, "change_card_details", {"deadline_at": ""}),
+        ({"action": "completion", "completed": True}, "set_card_completed", {"completed": True}),
+        ({"action": "completion", "completed": False}, "set_card_completed", {"completed": False}),
         (
             {"action": "move", "column_uid": "column", "order": 0},
             "change_card_order_or_move_column",
@@ -88,6 +90,8 @@ async def test_native_card_action_catalog_and_dispatch_without_tool_group(monkey
         {"action": "move", "column_uid": "column", "order": True},
         {"action": "description_replace", "description": "body"},
         {"action": "attachment_update", "attachment_uid": "file"},
+        {"action": "completion", "completed": "true"},
+        {"action": "completion", "completed": 1},
     ],
 )
 async def test_invalid_actions_never_dispatch(change):
