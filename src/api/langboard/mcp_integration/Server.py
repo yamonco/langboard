@@ -110,8 +110,8 @@ class McpServer:
             strict_input_validation=True,
             mask_error_details=True,
             middleware=[
-                NativeOAuthMiddleware(),
                 AuthMiddleware(auth=require_scopes("mcp:access")),
+                NativeOAuthMiddleware(),
                 ToolTelemetryMiddleware(),
                 MutationReceiptMiddleware(),
                 ReadResponseBudgetMiddleware(),
