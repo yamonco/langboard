@@ -80,12 +80,23 @@ class CardAttachmentService(BaseDomainService):
         return card_attachment
 
     def dispatch_created(
-        self, user: User, project: Project, card: Card, card_attachment: CardAttachment, *, include_bot: bool = True
+        self,
+        user: User,
+        project: Project,
+        card: Card,
+        card_attachment: CardAttachment,
+        *,
+        include_bot: bool = True,
+        include_document_processing: bool = True,
     ) -> None:
         """Dispatch effects after a persisted attachment is available."""
         docling_metadata = self._get_service(DoclingMetadataService)
         internal_bot = self._get_service(InternalBotService)
-        binding = internal_bot.get_document_vision_binding()
+        binding = (
+            internal_bot.get_document_vision_binding()
+            if include_document_processing and docling_metadata.detect_document_type(card_attachment.filename)
+            else None
+        )
         vision_config = None
         if binding and internal_bot.is_document_processing_enabled():
             config = loads(binding.value)

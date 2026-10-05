@@ -40,5 +40,5 @@ jobs:
         with:
           python-version: "3.12"
       - run: uv sync --frozen
-      - run: uv run --no-sync ruff check src/api/langboard/external_import src/api/tests/external_import src/api/tests/card_workspace/test_completion_checklist_migration.py src/api/tests/card_workspace/test_completion_checklist_service.py src/shared/py/langboard_shared/domain/services/factory/CardService.py src/shared/py/langboard_shared/domain/services/factory/CheckitemService.py
-      - run: uv run --no-sync pytest -q src/api/tests/external_import src/api/tests/card_workspace/test_completion_checklist_migration.py src/api/tests/card_workspace/test_completion_checklist_service.py
+      - run: uv run --no-sync ruff check src/api/langboard/external_import src/shared/py/langboard_shared/domain/services/factory/CardAttachmentService_document_test.py src/api/tests/external_import src/api/tests/card_workspace/test_completion_checklist_migration.py src/api/tests/card_workspace/test_completion_checklist_service.py src/shared/py/langboard_shared/domain/services/factory/CardService.py src/shared/py/langboard_shared/domain/services/factory/CheckitemService.py
+      - run: uv run --no-sync pytest -q src/shared/py/langboard_shared/domain/services/factory/CardAttachmentService_document_test.py src/api/tests/external_import src/api/tests/card_workspace/test_completion_checklist_migration.py src/api/tests/card_workspace/test_completion_checklist_service.py
