@@ -38,6 +38,10 @@ class NotificationReadOutput(CommandOutput):
     read: Literal[True]
 
 
+class CardCompletionOutput(CommandOutput):
+    completed: bool
+
+
 class MessageOutput(CommandOutput):
     message: str
 
@@ -74,6 +78,7 @@ class WikiRevisionOutput(CommandOutput):
 
 
 COMMAND_OUTPUTS = {
+    "set_card_completed": CardCompletionOutput,
     "patch_card_description": DescriptionPatchOutput,
     "replace_card_description": DescriptionReplacementOutput,
     "assign_card_to_me": AssignmentOutput,

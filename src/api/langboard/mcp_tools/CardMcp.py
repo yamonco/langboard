@@ -19,7 +19,7 @@ from langboard_shared.domain.services.DomainService import DomainService
 from langboard_shared.Env import Env
 from langboard_shared.helpers import InfraHelper
 from langboard_shared.security import RoleFinder
-from pydantic import BeforeValidator
+from pydantic import BeforeValidator, Field
 from ..card_workspace.application import (
     CardBundleResponse,
     ProjectCardListResponse,
@@ -334,6 +334,21 @@ def change_card_details(
             response["deadline_at"] = deadline_at
         return response
     return result
+
+
+@McpTool.add(description="Set the card's own completion checkbox explicitly. Requires core.is_check_card=true; does not approve work, move columns or complete user checklists.")
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+def set_card_completed(
+    project_uid: str,
+    card_uid: str,
+    completed: Annotated[bool, Field(strict=True)],
+    user_or_bot: User | Bot,
+    service: DomainService,
+) -> dict[str, bool]:
+    _require_task_card(project_uid, card_uid)
+    if not service.card.set_card_completed(user_or_bot, project_uid, card_uid, completed):
+        raise ValueError("Card completion checkbox is unavailable; read the card bundle")
+    return {"completed": completed}
 
 
 @McpTool.add(description="Archive a card.")
