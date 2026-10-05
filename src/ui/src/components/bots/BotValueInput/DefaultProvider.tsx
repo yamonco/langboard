@@ -83,6 +83,7 @@ export const BotValueDefaultInputProvider = ({
     isValidating,
     required,
     ref,
+    purpose = "chat",
     children,
 }: IBotValueDefaultInputProviderProps): React.ReactNode => {
     const [t] = useTranslation();
@@ -126,8 +127,9 @@ export const BotValueDefaultInputProvider = ({
     };
     const [apiList, setApiList] = useState<Record<string, string>>({});
     const showableInputs = useMemo(() => {
+        if (purpose === "embedding") return ["provider"] as ("provider" | "api_names" | "prompt")[];
         return showableDefaultInputs[platform]?.[platformRunningType] ?? [];
-    }, [platform, platformRunningType]);
+    }, [platform, platformRunningType, purpose]);
 
     useEffect(() => {
         if (!disabled) {
@@ -242,15 +244,14 @@ export const BotValueDefaultInputProvider = ({
             syncValue();
         }
 
-        setInputs(
-            Agent.getInputForm({
-                platform,
-                platformRunningType,
-                model: selectedProvider,
-                envs: { IS_OLLAMA_RUNNING, API_URL },
-            })
-        );
-    }, [platform, platformRunningType, selectedProvider, setValue, showableInputs, syncValue]);
+        const form = Agent.getInputForm({
+            platform,
+            platformRunningType,
+            model: selectedProvider,
+            envs: { IS_OLLAMA_RUNNING, API_URL },
+        });
+        setInputs(purpose === "embedding" ? form.filter((input) => ["base_url", "api_key", "model_name"].includes(input.name)) : form);
+    }, [platform, platformRunningType, selectedProvider, setValue, showableInputs, syncValue, purpose]);
 
     return (
         <BotValueDefaultInputContext.Provider

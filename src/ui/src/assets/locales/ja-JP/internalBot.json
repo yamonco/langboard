@@ -3,7 +3,8 @@
     "project_chat": "プロジェクトチャット",
     "editor_chat": "エディターチャット",
     "editor_copilot": "エディターCopilot",
-    "document_vision": "ドキュメントビジョン · document-vision"
+    "document_vision": "ドキュメントビジョン · document-vision",
+    "document_embedding": "ドキュメント埋め込み · document-embedding"
   },
   "Process new uploads": "新しい文書アップロードを自動処理",
   "Existing attachments require explicit processing": "アップロード時に適用します。既存の添付はカードから個別に処理してください。設定変更で古いファイルは再処理しません。",

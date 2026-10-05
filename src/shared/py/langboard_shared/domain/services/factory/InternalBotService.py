@@ -26,6 +26,22 @@ class InternalBotService(BaseDomainService):
         """Resolve the global document-vision alias independently of project bots."""
         return self.repo.internal_bot.get_default_by_type(InternalBotType.DocumentVision)
 
+    def get_document_embedding_binding(self) -> InternalBot | None:
+        """Global embedding configuration is independent of executable project bots."""
+        return self.repo.internal_bot.get_default_by_type(InternalBotType.DocumentEmbedding)
+
+    def is_document_embedding_enabled(self) -> bool:
+        binding = self.get_document_embedding_binding()
+        if not binding:
+            return False
+        from ....tasks.docling.DocumentEmbedding import validate_embedding_config
+
+        try:
+            _, settings = validate_embedding_config(binding.value)
+            return settings.enabled
+        except (ValueError, TypeError):
+            return False
+
     def is_document_processing_enabled(self) -> bool:
         binding = self.get_document_vision_binding()
         if not binding:

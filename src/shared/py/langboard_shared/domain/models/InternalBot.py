@@ -10,6 +10,7 @@ class InternalBotType(Enum):
     EditorChat = "editor_chat"
     EditorCopilot = "editor_copilot"
     DocumentVision = "document_vision"
+    DocumentEmbedding = "document_embedding"
 
 
 class InternalBot(BaseBotModel, table=True):
