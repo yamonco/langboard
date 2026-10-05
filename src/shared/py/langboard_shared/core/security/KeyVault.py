@@ -1,13 +1,7 @@
 from ...Env import Env
 from ..utils.decorators.ClassInstance import class_instance
-from .vault import (
-    AwsKmsVaultProvider,
-    AzureVaultProvider,
-    HashiCorpVaultProvider,
-    LocalDevVaultProvider,
-    OpenBaoVaultProvider,
-    VaultProvider,
-)
+from .vault.LocalDevVaultProvider import LocalDevVaultProvider
+from .vault.VaultProvider import VaultProvider
 
 
 @class_instance()
@@ -23,12 +17,20 @@ class KeyVault(VaultProvider):
 
         try:
             if self.provider_type.startswith("openbao"):
+                from .vault.OpenBaoVaultProvider import OpenBaoVaultProvider
+
                 self.provider = OpenBaoVaultProvider()
             elif self.provider_type == "hashicorp":
+                from .vault.HashiCorpVaultProvider import HashiCorpVaultProvider
+
                 self.provider = HashiCorpVaultProvider()
             elif self.provider_type == "aws":
+                from .vault.AwsKmsVaultProvider import AwsKmsVaultProvider
+
                 self.provider = AwsKmsVaultProvider()
             elif self.provider_type == "azure":
+                from .vault.AzureVaultProvider import AzureVaultProvider
+
                 self.provider = AzureVaultProvider()
             else:
                 raise ValueError(f"Unsupported key provider type: {self.provider_type}")
