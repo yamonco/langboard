@@ -37,8 +37,12 @@ class ChecklistService(BaseDomainService):
         checkitems_limit: int | None = None,
         *,
         open_only: bool = False,
+        max_checklists: int | None = None,
     ) -> list[dict[str, Any]]:
         """Return checklists, optionally bounding both nesting levels in the repository query."""
+
+        if max_checklists is not None and (max_checklists < 1 or limit != max_checklists + 1):
+            raise ValueError("Checklist source bound requires a positive maximum and sentinel query limit")
 
         card = InfraHelper.get_by_id_like(Card, card)
         if not card:
@@ -46,6 +50,8 @@ class ChecklistService(BaseDomainService):
 
         open_filter = {"open_only": True} if open_only else {}
         raw_checklists = self.repo.checklist.get_all_by_card(card, limit=limit, is_system=False, **open_filter)
+        if max_checklists is not None and len(raw_checklists) > max_checklists:
+            raise ValueError(f"checklists exceeds the safe {max_checklists}-item MCP source bound")
         if not raw_checklists:
             return []
 
