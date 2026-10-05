@@ -17,6 +17,8 @@ def test_card_batch_uses_bounded_queries_and_no_actor_or_editable_metadata(monke
     monkeypatch.setattr(import_module(CardService.__module__).DbSession, "use", use)
     dependency_query = Mock(return_value={2: []})
     monkeypatch.setattr(import_module(CardService.__module__), "dependency_blockers", dependency_query)
+    approval_query = Mock(return_value={2: 1})
+    monkeypatch.setattr(import_module(CardService.__module__), "pending_card_approvals", approval_query)
     generation_query = Mock(return_value={2: 7})
     monkeypatch.setattr(import_module(CardService.__module__), "execution_generations", generation_query)
     counts = Mock(return_value={2: (2, 2, 1, 0)})
@@ -59,6 +61,10 @@ def test_card_batch_uses_bounded_queries_and_no_actor_or_editable_metadata(monke
     dependency_query.assert_called_once_with([2])
     verifications.assert_called_once_with([2])
     generation_query.assert_called_once_with([2])
+    approval_query.assert_called_once_with([2])
+    assert result[2]["pending_approval_count"] == 1
+    assert result[2]["blocker_state"] == "needs_approval"
+    assert result[2]["active_queue_eligible"] is False
     assert result[2]["execution_generation"] == 7
     assert result[2]["workflow_stage"] == "review"
     assert result[2]["execution_state"] == "human_active"

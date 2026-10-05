@@ -209,6 +209,7 @@ def public_card_summary(card: dict[str, Any], *, compact_workflow: bool = False)
                 "execution_state",
                 "execution_generation",
                 "blocker_state",
+                "pending_approval_count",
                 "material_kind",
                 "lifecycle",
                 "active_queue_eligible",

@@ -116,7 +116,13 @@ def card_context_delta(bundle: dict, *, project_uid: str, actor_uid: str, profil
         "card_change_seq": int(core.get("last_change_seq") or 0),
         "hashes": {name: _hash(value) for name, value in sections.items()},
         "refs": {name: _refs(value, name) for name, value in sections.items()},
-        "blockers": _hash(state.get("dependency_state")),
+        "blockers": _hash(
+            {
+                "dependency_state": state.get("dependency_state"),
+                "blocker_state": state.get("blocker_state"),
+                "pending_approval_count": state.get("pending_approval_count"),
+            }
+        ),
         "verification": _hash(verification),
         "verification_state": state.get("verification_state"),
         "evidence_refs": _refs(verification.get("evidence", []), "evidence") or _refs(verification, "verification"),

@@ -142,3 +142,15 @@ def test_missing_registry_policy_stays_unknown_even_for_former_builtin_key():
     assert result["overdue_suppressed"] is None
     assert result["active_queue_eligible"] is None
     assert any(reason["code"] == "workflow_policy_unavailable" for reason in result["reasons"])
+
+
+def test_native_pending_approval_blocks_without_inventing_clear_or_verified_state():
+    result = state(pending_approval_count=2, direct_blockers=[])
+    assert result["blocker_state"] == "needs_approval"
+    assert result["active_queue_eligible"] is False
+    assert result["verification_state"] == "unverified"
+    assert any(reason["code"] == "approval_pending" for reason in result["reasons"])
+    assert state(pending_approval_count=0, direct_blockers=[])["blocker_state"] is None
+    result = state(pending_approval_count=1, direct_blockers=[{"accessible": False}])
+    assert result["blocker_state"] == "blocked"
+    assert any(reason["code"] == "approval_pending" for reason in result["reasons"])
