@@ -6,7 +6,6 @@ import { documentDisplayTags, EDoclingIndexStatus, parseDoclingMetadata } from "
 import { MetadataModel } from "@/core/models";
 import { ModelRegistry } from "@/core/models/ModelRegistry";
 import { useBoardCard } from "@/core/providers/BoardCardProvider";
-import { useAppSetting } from "@/core/providers/AppSettingProvider";
 import { ProjectRole } from "@/core/models/roles";
 import { Routing } from "@langboard/core/constants";
 import { Utils } from "@langboard/core/utils";
@@ -58,7 +57,7 @@ export function BoardCardAttachmentDocumentProgress({
 
 function DocumentProgress({ record, attachmentUID }: { record: MetadataModel.TModel; attachmentUID?: string }): React.JSX.Element | null {
     const [t] = useTranslation();
-    const { currentUser } = useAppSetting();
+    const { currentUser } = useBoardCard();
     const preferredLanguage = currentUser.useField("preferred_lang");
     const metadata = record.useField("metadata");
     const document = parseDoclingMetadata(metadata).find((entry) =>
