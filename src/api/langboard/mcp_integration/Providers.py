@@ -18,6 +18,7 @@ from ..middlewares.McpAuthMiddleware import mcp_auth_context
 from .Annotations import tool_annotations
 from .BoardOutputs import BOARD_OUTPUTS
 from .BotOutputs import BOT_OUTPUTS
+from .CardLinks import with_card_links
 from .ContentOutputs import CONTENT_OUTPUTS
 from .CreationOutputs import CREATION_OUTPUTS
 from .GraphOutputs import GRAPH_OUTPUTS
@@ -85,6 +86,8 @@ def create_native_domain_provider(
             handler = without_modern_parameters(handler, metadata["modern_only"])
         if modern_annotations:
             handler = with_read_page_bounds(name, handler)
+            if name == "get_card_bundle":
+                handler = with_card_links(handler)
             handler = with_typed_output(
                 name,
                 handler,
