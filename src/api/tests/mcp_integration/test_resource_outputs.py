@@ -42,7 +42,11 @@ def test_link_handler_retains_only_currently_readable_wikis(monkeypatch):
     private = SimpleNamespace(project_id=1, title="Private", get_uid=lambda: "private")
     foreign = SimpleNamespace(project_id=2, title="Foreign", get_uid=lambda: "foreign")
     writes = []
-    monkeypatch.setattr(linked_wikis, "User", SimpleNamespace)
+    monkeypatch.setattr(
+        linked_wikis,
+        "visible_linked_wikis",
+        lambda *args: [{"wiki_uid": "visible", "title": "Visible"}],
+    )
     monkeypatch.setattr(CardMcp, "_require_task_card", lambda *args: (project, card))
     service = SimpleNamespace(
         metadata=SimpleNamespace(
