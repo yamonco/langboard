@@ -47,6 +47,7 @@ READ_ONLY_TOOLS = frozenset(
         "get_wiki_metadata_by_key",
         "list_project_wikis",
         "read_wiki_content",
+        "read_wiki",
         "list_wiki_revisions",
         "read_wiki_revision",
         "get_unread_notifications",
