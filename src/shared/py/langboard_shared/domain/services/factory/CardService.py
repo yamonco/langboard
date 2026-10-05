@@ -365,9 +365,9 @@ class CardService(BaseDomainService):
         card_relationship_service = self._get_service(CardRelationshipService)
         api_card["relationships"] = card_relationship_service.get_api_list_by_card(card)
 
-        blocks = self._get_service(CardContentBlockService).get_blocks_by_card(card)
+        blocks = self._get_service(CardContentBlockService).api_blocks_by_card(card)
         if blocks:
-            api_card["content_blocks"] = self._get_service(CardContentBlockService).api_blocks_by_card(card)
+            api_card["content_blocks"] = blocks
             api_card["description_content_source"] = "blocks"
         return api_card
 
@@ -756,7 +756,7 @@ class CardService(BaseDomainService):
             [card for card, _ in records if card.is_linked_resource],
             include_content=False,
         )
-        block_service = self._get_service(CardContentBlockService)
+        blocks_by_card = self._get_service(CardContentBlockService).api_blocks_by_cards([card.id for card, _ in records])
         cards = []
         for card, column in records:
             api_card = card.api_response()
@@ -764,9 +764,9 @@ class CardService(BaseDomainService):
             api_card["work_state"] = work_states[card.id]
             if card.is_linked_resource:
                 api_card["linked_resource"] = resource_payloads[card.get_uid()]
-            blocks = block_service.get_blocks_by_card(card)
+            blocks = blocks_by_card.get(card.id, [])
             if blocks:
-                api_card["content_blocks"] = block_service.api_blocks_by_card(card)
+                api_card["content_blocks"] = blocks
                 api_card["description_content_source"] = "blocks"
             cards.append(api_card)
         return cards
