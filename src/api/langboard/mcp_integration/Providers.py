@@ -17,6 +17,7 @@ from ..card_workspace.application.dtos import ProjectCardIndexResponse, ProjectC
 from ..card_workspace.domain.value_objects import MAX_COMMENT_LIMIT, MAX_SECTION_LIMIT
 from ..middlewares.McpAuthMiddleware import mcp_auth_context
 from .Annotations import ToolAnnotationTransform, tool_annotations
+from .Apps import WORK_PLAN_TOOL_META, add_native_app_resources
 from .BoardOutputs import BOARD_OUTPUTS
 from .BotOutputs import BOT_OUTPUTS
 from .CardLinks import with_card_links
@@ -122,8 +123,11 @@ def create_native_domain_provider(
                 name=name,
                 description=metadata["description"],
                 annotations=tool_annotations(name) if modern_annotations else None,
+                meta=WORK_PLAN_TOOL_META if modern_annotations and name == "preview_card_work_plan" else None,
             )
         )
+    if modern_annotations and McpTool.get_tool("preview_card_work_plan"):
+        add_native_app_resources(provider)
     provider.add_resource(
         Resource.from_function(_workflow_policy, uri="langboard://policy/workflow", name="workflow_policy")
     )
