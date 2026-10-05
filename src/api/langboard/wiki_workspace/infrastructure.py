@@ -4,6 +4,7 @@ from typing import Any
 from fastmcp.exceptions import AuthorizationError
 from langboard_shared.core.db import DbSession, EditorContentModel, SqlBuilder
 from langboard_shared.core.db.DbEngine import DbEngine
+from langboard_shared.core.exceptions.WikiContentConflict import WikiContentConflict
 from langboard_shared.domain.models import ProjectWiki, ProjectWikiActivity, ProjectWikiAssignedUser, User
 from langboard_shared.domain.services import DomainService
 from langboard_shared.helpers import InfraHelper
@@ -53,7 +54,7 @@ class NativeWikiRepository(WikiRepository):
 
         wiki = self._wiki(project_uid, wiki_uid)
         if wiki.content.content != before:
-            raise ValueError("Wiki changed after review; read it again before deleting")
+            raise WikiContentConflict("Wiki changed after review; read it again before deleting")
         if not self.service.project_wiki.delete(self.user, project_uid, wiki):
             raise ValueError("Wiki not found")
 
