@@ -22,6 +22,7 @@ def image_card(monkeypatch):
     service = SimpleNamespace(
         card=SimpleNamespace(get_details=lambda *args: pytest.fail("Image reads must not load the complete card")),
         source_card=card,
+        card_content_block=SimpleNamespace(get_blocks_by_card=lambda card: []),
         card_attachment=SimpleNamespace(get_by_id_like=rows.get),
     )
     calls = []
@@ -47,8 +48,30 @@ def test_native_images_return_content_deduplicate_and_reject_foreign_attachment(
 
 def test_attachment_only_does_not_read_body_image(image_card):
     service, calls = image_card
+    service.card_content_block.get_blocks_by_card = lambda card: pytest.fail("Attachment-only must not query blocks")
     result = images.read_card_images("project", "card", object(), service, [], False)
     assert result.structured_content["included"] == [] and calls == []
+
+
+def test_blocks_own_body_and_only_rich_text_images_are_read(image_card):
+    service, calls = image_card
+    service.card_content_block.get_blocks_by_card = lambda card: [
+        SimpleNamespace(block_type="rich_text", payload={"text": "![image](/file/key/card_attachment/block.png)"}),
+        SimpleNamespace(block_type="code", payload={"source": "![image](/file/key/card_attachment/code.png)"}),
+        SimpleNamespace(block_type="diagram", payload={"source": '<img src="/file/key/card_attachment/diagram.png">'}),
+    ]
+    result = images.read_card_images("project", "card", object(), service)
+    assert calls == [("key", "card_attachment", "block.png")]
+    assert len(result.structured_content["included"]) == 1
+
+
+def test_code_only_blocks_do_not_revive_legacy_body(image_card):
+    service, calls = image_card
+    service.card_content_block.get_blocks_by_card = lambda card: [
+        SimpleNamespace(block_type="code", payload={"source": "![image](/file/key/card_attachment/code.png)"})
+    ]
+    result = images.read_card_images("project", "card", object(), service)
+    assert calls == [] and result.structured_content["included"] == []
 
 
 @pytest.mark.parametrize(
