@@ -1,4 +1,5 @@
 from typing import Any
+from ....core.db import DbSession
 from ....core.domain import BaseDomainService
 from ....core.types import SafeDateTime
 from ....core.types.ParamTypes import TCardParam, TChecklistParam, TProjectParam, TUserOrBot
@@ -182,13 +183,15 @@ class ChecklistService(BaseDomainService):
             return None
         project, card, checklist = params
 
-        old_order = checklist.order
-        checklist.order = order
-
-        self.repo.checklist.update_column_order(checklist, card, old_order, order)
-
-        ChecklistPublisher.order_changed(card, checklist)
-
+        if checklist.order == order:
+            return True
+        with DbSession.atomic() as db:
+            old_order = checklist.order
+            checklist.order = order
+            self.repo.checklist.update_column_order(checklist, card, old_order, order)
+            self._mark_card_changed_for_unread(card, "checklist", checklist.id)
+            changed_checklist = checklist.model_copy(deep=True)
+            db.after_commit(lambda: ChecklistPublisher.order_changed(card, changed_checklist))
         return True
 
     def toggle_checked(
