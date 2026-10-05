@@ -18,6 +18,7 @@ from mcp.types import Icon
 from ..mcp_tools.RoleChecker import McpRoleChecker
 from ..middlewares import McpAuthMiddleware
 from ..middlewares.McpAuthMiddleware import mcp_auth_context
+from .AgentPolicy import AGENT_POLICY
 from .Annotations import ToolAnnotationTransform
 from .Providers import (
     create_agent_core_provider,
@@ -38,6 +39,7 @@ RAW_DISCOVERY_TOOLS = frozenset({"search_raw_tools", "call_raw_tool"})
 def _create_fastmcp(discovery_tools: frozenset[str] = frozenset()) -> FastMCP:
     return FastMCP(
         Env.PROJECT_NAME,
+        instructions=AGENT_POLICY,
         strict_input_validation=True,
         mask_error_details=True,
         middleware=[ToolTelemetryMiddleware(), ToolGroupMiddleware(discovery_tools)],
@@ -101,6 +103,7 @@ class McpServer:
             return None
         app = FastMCP(
             Env.PROJECT_NAME,
+            instructions=AGENT_POLICY,
             icons=[Icon(src=f"{Env.PUBLIC_UI_URL}/images/favicon.ico")],
             website_url=Env.PUBLIC_UI_URL,
             auth=auth,
