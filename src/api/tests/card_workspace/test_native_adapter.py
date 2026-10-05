@@ -73,8 +73,11 @@ def _service(people: list[dict[str, Any]] | None = None) -> tuple[Any, list[tupl
     card = Card()
     column = SimpleNamespace(id=2, project_id=1, name="Backlog", workflow_stage=None)
 
-    def checklists(target: Any, limit: int, checkitems_limit: int, *, max_checklists: int) -> list[dict[str, Any]]:
+    def checklists(
+        target: Any, limit: int, checkitems_limit: int, *, max_checklists: int, max_checkitems: int
+    ) -> list[dict[str, Any]]:
         assert max_checklists == MAX_NATIVE_SECTION_SOURCE
+        assert max_checkitems == MAX_NATIVE_SECTION_SOURCE
         calls.append(("checklists", limit, checkitems_limit))
         return []
 
@@ -303,7 +306,7 @@ def test_native_checkitem_continuation_reads_only_the_requested_checklist() -> N
             get_api_list_by_card=lambda *_args, **_kwargs: pytest.fail("bulk checklist query used"),
         ),
         checkitem=SimpleNamespace(
-            get_api_list_by_checklist=lambda target_card, target_checklist, limit: (
+            get_api_list_by_checklist=lambda target_card, target_checklist, limit, *, max_checkitems: (
                 calls.append((target_card, target_checklist, limit)),
                 [{"uid": "ci1", "title": "Item"}],
             )[1]
@@ -1004,5 +1007,6 @@ def test_native_execute_source_filters_open_items_before_loading_limits():
         "limit": MAX_NATIVE_SECTION_SOURCE + 1,
         "checkitems_limit": MAX_NATIVE_SECTION_SOURCE + 1,
         "max_checklists": MAX_NATIVE_SECTION_SOURCE,
+        "max_checkitems": MAX_NATIVE_SECTION_SOURCE,
         "open_only": True,
     }

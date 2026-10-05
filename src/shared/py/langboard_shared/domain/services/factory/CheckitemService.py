@@ -32,10 +32,17 @@ class CheckitemService(BaseDomainService):
         return checkitem
 
     def get_api_list_by_checklist(
-        self, card: TCardParam, checklist: TChecklistParam, limit: int | None = None, *, open_only: bool = False
+        self,
+        card: TCardParam,
+        checklist: TChecklistParam,
+        limit: int | None = None,
+        *,
+        open_only: bool = False,
+        max_checkitems: int | None = None,
     ) -> list[dict[str, Any]]:
         """Return checkitems, optionally enforcing a repository row limit."""
 
+        self._validate_source_limit(limit, max_checkitems)
         params = InfraHelper.get_records_with_foreign_by_params((Card, card), (Checklist, checklist))
         if not params:
             return []
@@ -43,6 +50,7 @@ class CheckitemService(BaseDomainService):
 
         open_filter = {"open_only": True} if open_only else {}
         records = self.repo.checkitem.get_all_by_checklist(checklist, limit=limit, **open_filter)
+        self._check_source_bound(records, max_checkitems)
 
         timer_arcs = self.repo.checkitem_timer_record.get_arc_map_by_checkitems([record[0] for record in records])
         checkitems = [self.__convert_api_response(card, record, timer_arcs) for record in records]
@@ -66,15 +74,38 @@ class CheckitemService(BaseDomainService):
         return checkitems_map
 
     def get_api_map_by_checklists(
-        self, card: Card, checklist_ids: list[int], limit: int | None, *, open_only: bool = False
+        self,
+        card: Card,
+        checklist_ids: list[int],
+        limit: int | None,
+        *,
+        open_only: bool = False,
+        max_checkitems: int | None = None,
     ) -> dict[int, list[dict[str, Any]]]:
         """Project bounded checklist rows with one shared timer batch."""
+        self._validate_source_limit(limit, max_checkitems)
         records = self.repo.checkitem.get_all_by_checklists(card, checklist_ids, limit, open_only=open_only)
+        self._check_source_bound(records, max_checkitems)
         timer_arcs = self.repo.checkitem_timer_record.get_arc_map_by_checkitems([record[0] for record in records])
         result: dict[int, list[dict[str, Any]]] = {}
         for record in records:
             result.setdefault(record[0].checklist_id, []).append(self.__convert_api_response(card, record, timer_arcs))
         return result
+
+    @staticmethod
+    def _validate_source_limit(limit: int | None, maximum: int | None) -> None:
+        if maximum is not None and (maximum < 1 or limit != maximum + 1):
+            raise ValueError("Checkitem source bound requires a positive maximum and sentinel query limit")
+
+    @staticmethod
+    def _check_source_bound(records: list, maximum: int | None) -> None:
+        if maximum is None:
+            return
+        counts: dict[int, int] = {}
+        for checkitem, _, _ in records:
+            counts[checkitem.checklist_id] = counts.get(checkitem.checklist_id, 0) + 1
+            if counts[checkitem.checklist_id] > maximum:
+                raise ValueError(f"checkitems exceeds the safe {maximum}-item MCP source bound")
 
     def get_active_work(self, user: User) -> list[dict[str, Any]]:
         records = self.repo.checkitem.get_started_work_by_user(user)

@@ -103,6 +103,10 @@ def test_hundred_lists_preserve_point_projection_with_five_queries(monkeypatch, 
         assert "timer_started_at" not in projected["3"]
         assert projected["4"]["user"]["uid"] == actor.get_uid()
         assert projected["4"]["timer_started_at"] is not None
+        # Valid sources retain all rows/timers and the unchanged projection.
+        assert service.get_api_list_by_card(
+            card, 101, 101, open_only=open_only, max_checklists=100, max_checkitems=100
+        ) == service.get_api_list_by_card(card, 101, 101, open_only=open_only)
         # The repository enforces card ancestry even for a supplied foreign ID.
         assert repo.checkitem.get_all_by_checklists(card, [502], 5) == []
         assert repo.checkitem.get_all_by_checklists(card, [], 5) == []
@@ -151,3 +155,58 @@ def test_source_bound_requires_sentinel_query(maximum, limit):
     service = ChecklistService(lambda _: None, lambda _: None, SimpleNamespace())
     with pytest.raises(ValueError, match="sentinel query limit"):
         service.get_api_list_by_card(None, limit=limit, max_checklists=maximum)
+
+
+@pytest.mark.parametrize("view", ["single", "nested"])
+@pytest.mark.parametrize("open_only", [False, True])
+def test_overbound_checkitems_reject_before_timer_projection(monkeypatch, view, open_only):
+    engine = create_engine("sqlite://")
+    # Omit the timer table intentionally: any hydration query would fail.
+    for model in (Card, User, Checklist, Checkitem):
+        model.__table__.create(engine)
+    monkeypatch.setattr(DbEngine, "get_main_engine", lambda: engine)
+    monkeypatch.setattr(DbEngine, "get_readonly_engine", lambda: engine)
+    card = Card(id=2, project_id=1, project_column_id=1, created_by_user_id=1, title="Source")
+    lists = [Checklist(id=100, card_id=2, title="Valid"), Checklist(id=101, card_id=2, title="Overbound")]
+    items = [Checkitem(id=1000 + i, checklist_id=100, title="Valid", order=i) for i in range(100)]
+    items += [Checkitem(id=2000 + i, checklist_id=101, title="Overbound", order=i) for i in range(101)]
+    if open_only:
+        items.append(Checkitem(id=3000, checklist_id=101, title="Checked", is_checked=True, order=-1))
+    with engine.begin() as db:
+        for model, rows in [(Card, [card]), (Checklist, lists), (Checkitem, items)]:
+            db.execute(model.__table__.insert(), [{k: getattr(row, k) for k in row.model_fields} for row in rows])
+    repo = SimpleNamespace(
+        checklist=ChecklistRepository(None, None),
+        checkitem=CheckitemRepository(None, None),
+        checkitem_timer_record=CheckitemTimerRecordRepository(None, None),
+    )
+    item_service = CheckitemService(lambda _: None, lambda _: None, repo)
+    service = ChecklistService(lambda _: item_service, lambda _: None, repo)
+    queries = []
+
+    def listener(conn, cursor, statement, *args):
+        queries.append(statement)
+
+    event.listen(engine, "before_cursor_execute", listener)
+    try:
+        with pytest.raises(ValueError, match="checkitems exceeds the safe 100-item MCP source bound"):
+            if view == "single":
+                item_service.get_api_list_by_checklist(card, lists[1], 101, open_only=open_only, max_checkitems=100)
+            else:
+                service.get_api_list_by_card(
+                    card, 101, 101, open_only=open_only, max_checklists=100, max_checkitems=100
+                )
+        assert len(queries) == (1 if view == "single" else 2), queries
+        assert not any("checkitem_timer_record" in query for query in queries)
+    finally:
+        event.remove(engine, "before_cursor_execute", listener)
+        engine.dispose()
+
+
+@pytest.mark.parametrize("maximum,limit", [(0, 1), (100, 100), (100, None)])
+def test_checkitem_source_bound_requires_sentinel_query(maximum, limit):
+    service = CheckitemService(lambda _: None, lambda _: None, SimpleNamespace())
+    with pytest.raises(ValueError, match="sentinel query limit"):
+        service.get_api_list_by_checklist(None, None, limit, max_checkitems=maximum)
+    with pytest.raises(ValueError, match="sentinel query limit"):
+        service.get_api_map_by_checklists(None, [], limit, max_checkitems=maximum)
