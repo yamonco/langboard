@@ -745,7 +745,6 @@ dependencies = [
     { name = "anyio" },
     { name = "argcomplete" },
     { name = "bcrypt" },
-    { name = "boto3" },
     { name = "celery" },
     { name = "cryptocode" },
     { name = "email-validator" },
@@ -773,6 +772,9 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+aws = [
+    { name = "boto3" },
+]
 azure-vault = [
     { name = "azure-identity" },
     { name = "azure-keyvault-keys" },
@@ -796,7 +798,7 @@ requires-dist = [
     { name = "azure-identity", marker = "extra == 'azure-vault'", specifier = ">=1.25.1" },
     { name = "azure-keyvault-keys", marker = "extra == 'azure-vault'", specifier = ">=4.11.0" },
     { name = "bcrypt", specifier = "<=5.0.0" },
-    { name = "boto3", specifier = ">=1.40.61" },
+    { name = "boto3", marker = "extra == 'aws'", specifier = ">=1.40.61" },
     { name = "celery", specifier = ">=5.5.3" },
     { name = "cryptocode", specifier = ">=0.1" },
     { name = "email-validator", specifier = ">=2.3.0" },
@@ -822,7 +824,7 @@ requires-dist = [
     { name = "sqlalchemy", specifier = ">=2.0.41,<2.0.50" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.38.0" },
 ]
-provides-extras = ["azure-vault"]
+provides-extras = ["aws", "azure-vault"]
 
 [package.metadata.requires-dev]
 dev = [

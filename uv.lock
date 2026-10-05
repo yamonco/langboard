@@ -1417,7 +1417,6 @@ dependencies = [
     { name = "anyio" },
     { name = "argcomplete" },
     { name = "bcrypt" },
-    { name = "boto3" },
     { name = "celery" },
     { name = "cryptocode" },
     { name = "fastapi" },
@@ -1445,6 +1444,9 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+aws = [
+    { name = "langboard-shared", extra = ["aws"] },
+]
 azure-vault = [
     { name = "langboard-shared", extra = ["azure-vault"] },
 ]
@@ -1466,7 +1468,6 @@ requires-dist = [
     { name = "anyio", specifier = ">=4.11.0" },
     { name = "argcomplete", specifier = ">=3.6.3" },
     { name = "bcrypt", specifier = "<=5.0.0" },
-    { name = "boto3", specifier = ">=1.40.61" },
     { name = "celery", specifier = ">=5.5.3" },
     { name = "cryptocode", specifier = ">=0.1" },
     { name = "docling", marker = "extra == 'document-processing'", specifier = ">=2.105.0" },
@@ -1478,6 +1479,7 @@ requires-dist = [
     { name = "inflect", specifier = ">=7.5.0" },
     { name = "kafka-python", specifier = ">=2.2.15" },
     { name = "langboard-shared", editable = "src/shared/py" },
+    { name = "langboard-shared", extras = ["aws"], marker = "extra == 'aws'", editable = "src/shared/py" },
     { name = "langboard-shared", extras = ["azure-vault"], marker = "extra == 'azure-vault'", editable = "src/shared/py" },
     { name = "orjson", specifier = ">=3.11.0" },
     { name = "psutil", specifier = ">=7.1.2" },
@@ -1494,7 +1496,7 @@ requires-dist = [
     { name = "sqlalchemy", specifier = ">=2.0.41,<2.0.50" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.38.0" },
 ]
-provides-extras = ["azure-vault", "document-processing"]
+provides-extras = ["aws", "azure-vault", "document-processing"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -1514,7 +1516,6 @@ dependencies = [
     { name = "anyio" },
     { name = "argcomplete" },
     { name = "bcrypt" },
-    { name = "boto3" },
     { name = "celery" },
     { name = "cryptocode" },
     { name = "email-validator" },
@@ -1542,6 +1543,9 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+aws = [
+    { name = "boto3" },
+]
 azure-vault = [
     { name = "azure-identity" },
     { name = "azure-keyvault-keys" },
@@ -1556,7 +1560,7 @@ requires-dist = [
     { name = "azure-identity", marker = "extra == 'azure-vault'", specifier = ">=1.25.1" },
     { name = "azure-keyvault-keys", marker = "extra == 'azure-vault'", specifier = ">=4.11.0" },
     { name = "bcrypt", specifier = "<=5.0.0" },
-    { name = "boto3", specifier = ">=1.40.61" },
+    { name = "boto3", marker = "extra == 'aws'", specifier = ">=1.40.61" },
     { name = "celery", specifier = ">=5.5.3" },
     { name = "cryptocode", specifier = ">=0.1" },
     { name = "email-validator", specifier = ">=2.3.0" },
@@ -1582,7 +1586,7 @@ requires-dist = [
     { name = "sqlalchemy", specifier = ">=2.0.41,<2.0.50" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.38.0" },
 ]
-provides-extras = ["azure-vault"]
+provides-extras = ["aws", "azure-vault"]
 
 [package.metadata.requires-dev]
 dev = [
