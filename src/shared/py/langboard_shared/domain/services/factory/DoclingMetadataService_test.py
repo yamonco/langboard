@@ -135,6 +135,7 @@ def test_progress_publish_reads_primary_when_replica_is_unavailable(monkeypatch)
     monkeypatch.setattr(MetadataPublisher, "updated_metadata", publish)
     service = DomainService()
     try:
+        assert service.docling_metadata.load_documents(CardMetadata, card)[0]["status"] == "indexed"
         service.docling_metadata.publish_update(CardMetadata, card, SocketTopic.BoardCard)
         publish.assert_called_once_with(SocketTopic.BoardCard, card.get_uid(), DOCLING_DOCUMENTS_METADATA_KEY, value)
     finally:

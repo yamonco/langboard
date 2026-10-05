@@ -386,5 +386,8 @@ class DoclingMetadataService(BaseDomainService):
         MetadataPublisher.deleted_metadata(topic, topic_uid, [DOCLING_DOCUMENTS_METADATA_KEY])
 
     def _load_metadata(self, model_cls: type[BaseMetadataModel], foreign_model: BaseDbModel) -> dict[str, str]:
-        metadata = self.repo.metadata.get_by_key(model_cls, foreign_model, DOCLING_DOCUMENTS_METADATA_KEY)
+        # Claims and generation fences need read-after-write consistency too.
+        metadata = self.repo.metadata.get_by_key(
+            model_cls, foreign_model, DOCLING_DOCUMENTS_METADATA_KEY, readonly=False
+        )
         return {metadata.key: metadata.value} if metadata else {}
