@@ -103,6 +103,31 @@ def test_hundred_lists_preserve_point_projection_with_five_queries(monkeypatch, 
         assert "timer_started_at" not in projected["3"]
         assert projected["4"]["user"]["uid"] == actor.get_uid()
         assert projected["4"]["timer_started_at"] is not None
+        queries.clear()
+        event.listen(engine, "before_cursor_execute", listener)
+        try:
+            compact = service.get_api_list_by_card(card, 101, 5, open_only=open_only, include_work_tracking=False)
+        finally:
+            event.remove(engine, "before_cursor_execute", listener)
+        assert len(queries) == 2, queries
+        assert not any("checkitem_timer_record" in query or 'JOIN "user"' in query for query in queries)
+        assert compact == [
+            {
+                **row,
+                "checkitems": [
+                    {key: value for key, value in item.items() if key not in {"user", "timer_started_at"}}
+                    for item in row["checkitems"]
+                ],
+            }
+            for row in result
+        ]
+        from langboard.card_workspace.application.projections import public_checklist
+
+        assert [public_checklist(row) for row in compact] == [public_checklist(row) for row in result]
+        assert (
+            item_service.get_api_list_by_checklist(card, lists[0], 5, open_only=open_only, include_work_tracking=False)
+            == compact[0]["checkitems"]
+        )
         # Valid sources retain all rows/timers and the unchanged projection.
         assert service.get_api_list_by_card(
             card, 101, 101, open_only=open_only, max_checklists=100, max_checkitems=100

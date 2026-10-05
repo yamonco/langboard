@@ -39,6 +39,7 @@ class ChecklistService(BaseDomainService):
         open_only: bool = False,
         max_checklists: int | None = None,
         max_checkitems: int | None = None,
+        include_work_tracking: bool = True,
     ) -> list[dict[str, Any]]:
         """Return checklists, optionally bounding both nesting levels in the repository query."""
 
@@ -60,13 +61,14 @@ class ChecklistService(BaseDomainService):
         checkitem_service = self._get_service(CheckitemService)
         checkitems_map = (
             checkitem_service.get_api_map_by_card(card)
-            if checkitems_limit is None and not open_only
+            if checkitems_limit is None and not open_only and include_work_tracking
             else checkitem_service.get_api_map_by_checklists(
                 card,
                 [checklist.id for checklist in raw_checklists],
                 checkitems_limit,
                 open_only=open_only,
                 **({"max_checkitems": max_checkitems} if max_checkitems is not None else {}),
+                **({"include_work_tracking": False} if not include_work_tracking else {}),
             )
         )
         checklists = []
