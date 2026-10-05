@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Iterator
 
 
 if TYPE_CHECKING:
+    from langchain_core.embeddings import Embeddings
     from langgraph.store.sqlite import SqliteStore
 
 
