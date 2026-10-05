@@ -53,12 +53,9 @@ class ChecklistService(BaseDomainService):
         checkitems_map = (
             checkitem_service.get_api_map_by_card(card)
             if checkitems_limit is None and not open_only
-            else {
-                checklist.id: checkitem_service.get_api_list_by_checklist(
-                    card, checklist, limit=checkitems_limit, **open_filter
-                )
-                for checklist in raw_checklists
-            }
+            else checkitem_service.get_api_map_by_checklists(
+                card, [checklist.id for checklist in raw_checklists], checkitems_limit, open_only=open_only
+            )
         )
         checklists = []
         for raw_checklist in raw_checklists:
