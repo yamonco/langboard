@@ -63,6 +63,7 @@ AGENT_CORE_TOOLS = frozenset(
         "get_employee_status",
         "list_employees",
         "mark_notification_read",
+        "mark_notifications_read",
         "read_card_attachment",
         "read_card_images",
         "get_project_label_catalog",
