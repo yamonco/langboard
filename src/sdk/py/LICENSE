@@ -1,0 +1,200 @@
+Langboard License Agreement (Elastic License v2 Inspired)
+
+1. Preamble
+
+This License Agreement (“Agreement”) governs the use of the Langboard software (the “Software”), developed and maintained by the Langboard team (the “Licensor”). By downloading, installing, copying, modifying, or otherwise using the Software, you agree to the terms and conditions set forth in this Agreement.
+
+The Software is made available under a source-available, fair-use license: the source code is accessible for inspection, learning, modification, and internal use, but certain commercial uses—particularly those involving resale or the provision of hosted services—require a commercial license agreement with the Licensor.
+
+2. Definitions
+
+- Software: The Langboard source code, binaries, documentation, and related materials.
+- Organization: A legal entity such as a company, institution, or non-profit body identified by a business registration number or equivalent.
+- Instance: A deployed copy of the Software running in an isolated execution environment (e.g., server, virtual machine, container, or cloud service).
+- Internal Use: Use of the Software solely within an Organization for its own business processes, research, or operations, without offering the Software as a service to third parties.
+- Commercial Use: Any use of the Software that generates direct or indirect revenue, including but not limited to SaaS offerings, resale, redistribution, or bundled commercial solutions.
+- GitHub Sponsors: The official GitHub funding platform ([https://github.com/sponsors/yamonco](https://github.com/sponsors/yamonco)) through which supporters may contribute financially to the Licensor.
+
+3. Permissions
+
+Subject to the conditions of this Agreement, you are granted the following rights:
+
+1. Source Code Access: You may freely view, download, and study the source code of the Software.
+
+2. Modification: You may modify, fork, and adapt the Software for your own purposes.
+
+3. Internal Deployment: You may run the Software internally within your Organization for unlimited use cases and unlimited Instances, provided that such use does not constitute a Commercial Use.
+
+4. Contribution: You may contribute code, bug reports, or documentation back to the Licensor under open contribution guidelines.
+
+5. Community Sharing: You may share knowledge, tutorials, and derivative works, provided you do not misrepresent such works as official Langboard distributions.
+
+6. Limitations
+
+The following activities are expressly prohibited under this Agreement without a separate commercial license:
+
+1. No SaaS Offering: You may not offer the Software, directly or indirectly, as a hosted or managed service to third parties.
+
+2. No Competing Services: You may not use the Software to build, market, or provide services that are substantially similar to or competitive with Langboard.
+
+3. No Unauthorized Redistribution: You may not sell, sublicense, or otherwise redistribute the Software to third parties without explicit permission.
+
+4. No Trademark Misuse: The “Langboard” name, logo, and associated branding may not be used without prior written approval from the Licensor.
+
+5. Commercial License
+
+If you intend to use the Software for Commercial Use, you must obtain a commercial license agreement from the Licensor. Commercial licenses may include, but are not limited to:
+
+- Service-Level Agreements (SLAs)
+- Priority technical support
+- Security updates and long-term maintenance
+- Custom integrations and consulting
+- Enterprise deployment rights
+
+Please contact the Licensor at the official channels for details on commercial licensing.
+
+6. Special Terms: GitHub Sponsors
+
+- The Licensor accepts financial support through GitHub Sponsors.
+- Sponsorship does not in itself grant additional rights beyond those outlined in this License.
+- However, Sponsors may receive acknowledgements, early feature previews, or community benefits at the Licensor’s discretion.
+- Sponsorship contributions are considered voluntary support, not a substitute for a commercial license.
+
+7. Promotional Clause (Valid until April 30, 2025)
+
+As a limited-time offer, any Organization that:
+
+1. Subscribes through GitHub Sponsors, and
+2. Selects the lowest-tier paid Langboard plan (as defined in the official pricing documentation), and
+3. Completes payment on or before April 30, 2025,
+
+shall be eligible to enter into a three (3) year fixed-price commercial license contract at the current rate of the selected plan, with no price increases during the contract term.
+
+This promotional clause shall expire automatically after April 30, 2025, and shall not be renewed or extended without explicit written notice from the Licensor.
+
+8. Disclaimer of Warranty
+
+THE SOFTWARE IS PROVIDED “AS IS,” WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED. THE LICENSOR DISCLAIMS ALL WARRANTIES, INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT.
+
+9. Limitation of Liability
+
+TO THE MAXIMUM EXTENT PERMITTED BY LAW, THE LICENSOR SHALL NOT BE LIABLE FOR ANY DAMAGES, WHETHER DIRECT, INDIRECT, INCIDENTAL, OR CONSEQUENTIAL, ARISING OUT OF THE USE OR INABILITY TO USE THE SOFTWARE.
+
+10. Governing Law
+
+This Agreement shall be governed by and construed in accordance with the laws of the jurisdiction in which the Licensor is legally registered, without regard to its conflict of law provisions.
+
+11. Miscellaneous
+
+- This License may be updated or amended by the Licensor with prior notice.
+- In the event of any conflict between this License and a separate commercial license agreement, the commercial license shall prevail.
+- If any provision of this Agreement is held invalid, the remaining provisions shall continue in full force and effect.
+
+---
+
+This draft gives you:
+
+- Elastic-style restrictions (SaaS ban, commercial license required)
+- Langboard-specific definitions (Instance, Organization, Internal Use)
+- GitHub Sponsors clause
+- April 2025 promotional clause for 3-year contracts
+  Langboard License Agreement (Elastic License v2 Inspired)
+
+1. Preamble
+
+This License Agreement (“Agreement”) governs the use of the Langboard software (the “Software”), developed and maintained by the Langboard team (the “Licensor”). By downloading, installing, copying, modifying, or otherwise using the Software, you agree to the terms and conditions set forth in this Agreement.
+
+The Software is made available under a source-available, fair-use license: the source code is accessible for inspection, learning, modification, and internal use, but certain commercial uses—particularly those involving resale or the provision of hosted services—require a commercial license agreement with the Licensor.
+
+2. Definitions
+
+- Software: The Langboard source code, binaries, documentation, and related materials.
+- Organization: A legal entity such as a company, institution, or non-profit body identified by a business registration number or equivalent.
+- Instance: A deployed copy of the Software running in an isolated execution environment (e.g., server, virtual machine, container, or cloud service).
+- Internal Use: Use of the Software solely within an Organization for its own business processes, research, or operations, without offering the Software as a service to third parties.
+- Commercial Use: Any use of the Software that generates direct or indirect revenue, including but not limited to SaaS offerings, resale, redistribution, or bundled commercial solutions.
+- GitHub Sponsors: The official GitHub funding platform ([https://github.com/sponsors/yamonco](https://github.com/sponsors/yamonco)) through which supporters may contribute financially to the Licensor.
+
+3. Permissions
+
+Subject to the conditions of this Agreement, you are granted the following rights:
+
+1. Source Code Access: You may freely view, download, and study the source code of the Software.
+
+2. Modification: You may modify, fork, and adapt the Software for your own purposes.
+
+3. Internal Deployment: You may run the Software internally within your Organization for unlimited use cases and unlimited Instances, provided that such use does not constitute a Commercial Use.
+
+4. Contribution: You may contribute code, bug reports, or documentation back to the Licensor under open contribution guidelines.
+
+5. Community Sharing: You may share knowledge, tutorials, and derivative works, provided you do not misrepresent such works as official Langboard distributions.
+
+6. Limitations
+
+The following activities are expressly prohibited under this Agreement without a separate commercial license:
+
+1. No SaaS Offering: You may not offer the Software, directly or indirectly, as a hosted or managed service to third parties.
+
+2. No Competing Services: You may not use the Software to build, market, or provide services that are substantially similar to or competitive with Langboard.
+
+3. No Unauthorized Redistribution: You may not sell, sublicense, or otherwise redistribute the Software to third parties without explicit permission.
+
+4. No Trademark Misuse: The “Langboard” name, logo, and associated branding may not be used without prior written approval from the Licensor.
+
+5. Commercial License
+
+If you intend to use the Software for Commercial Use, you must obtain a commercial license agreement from the Licensor. Commercial licenses may include, but are not limited to:
+
+- Service-Level Agreements (SLAs)
+- Priority technical support
+- Security updates and long-term maintenance
+- Custom integrations and consulting
+- Enterprise deployment rights
+
+Please contact the Licensor at the official channels for details on commercial licensing.
+
+6. Special Terms: GitHub Sponsors
+
+- The Licensor accepts financial support through GitHub Sponsors.
+- Sponsorship does not in itself grant additional rights beyond those outlined in this License.
+- However, Sponsors may receive acknowledgements, early feature previews, or community benefits at the Licensor’s discretion.
+- Sponsorship contributions are considered voluntary support, not a substitute for a commercial license.
+
+7. Promotional Clause (Valid until April 30, 2025)
+
+As a limited-time offer, any Organization that:
+
+1. Subscribes through GitHub Sponsors, and
+2. Selects the lowest-tier paid Langboard plan (as defined in the official pricing documentation), and
+3. Completes payment on or before April 30, 2025,
+
+shall be eligible to enter into a three (3) year fixed-price commercial license contract at the current rate of the selected plan, with no price increases during the contract term.
+
+This promotional clause shall expire automatically after April 30, 2025, and shall not be renewed or extended without explicit written notice from the Licensor.
+
+8. Disclaimer of Warranty
+
+THE SOFTWARE IS PROVIDED “AS IS,” WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED. THE LICENSOR DISCLAIMS ALL WARRANTIES, INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT.
+
+9. Limitation of Liability
+
+TO THE MAXIMUM EXTENT PERMITTED BY LAW, THE LICENSOR SHALL NOT BE LIABLE FOR ANY DAMAGES, WHETHER DIRECT, INDIRECT, INCIDENTAL, OR CONSEQUENTIAL, ARISING OUT OF THE USE OR INABILITY TO USE THE SOFTWARE.
+
+10. Governing Law
+
+This Agreement shall be governed by and construed in accordance with the laws of the jurisdiction in which the Licensor is legally registered, without regard to its conflict of law provisions.
+
+11. Miscellaneous
+
+- This License may be updated or amended by the Licensor with prior notice.
+- In the event of any conflict between this License and a separate commercial license agreement, the commercial license shall prevail.
+- If any provision of this Agreement is held invalid, the remaining provisions shall continue in full force and effect.
+
+---
+
+This draft gives you:
+
+- Elastic-style restrictions (SaaS ban, commercial license required)
+- Langboard-specific definitions (Instance, Organization, Internal Use)
+- GitHub Sponsors clause
+- April 2025 promotional clause for 3-year contracts
