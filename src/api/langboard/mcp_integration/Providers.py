@@ -84,6 +84,42 @@ AGENT_CORE_TOOLS = frozenset(
 )
 
 
+def create_native_tool(name, metadata, wrap_tool, *, modern_annotations: bool = True) -> Tool:
+    """Build the same authorized native command for core and explicit extensions."""
+    handler = wrap_tool(name, metadata["handler"])
+    if not modern_annotations and metadata.get("modern_only"):
+        handler = without_modern_parameters(handler, metadata["modern_only"])
+    if modern_annotations:
+        handler = with_read_page_bounds(name, handler)
+        if name == "get_card_bundle":
+            handler = with_card_links(handler)
+        if name == "get_projects":
+            handler = with_project_discovery(handler)
+        handler = with_typed_output(
+            name,
+            handler,
+            (ProjectCardIndexResponse if name == "list_project_cards" else None)
+            or WORK_OUTPUTS.get(name)
+            or CONTENT_OUTPUTS.get(name)
+            or BOT_OUTPUTS.get(name)
+            or BOARD_OUTPUTS.get(name)
+            or RESOURCE_OUTPUTS.get(name)
+            or CREATION_OUTPUTS.get(name)
+            or GRAPH_OUTPUTS.get(name)
+            or NOTIFICATION_OUTPUTS.get(name)
+            or PROJECT_OUTPUTS.get(name),
+        )
+    elif name == "list_project_cards":
+        handler = with_legacy_card_list(handler)
+    return Tool.from_function(
+        handler,
+        name=name,
+        description=metadata["description"],
+        annotations=tool_annotations(name) if modern_annotations else None,
+        meta=WORK_PLAN_TOOL_META if modern_annotations and name == "preview_card_work_plan" else None,
+    )
+
+
 def create_native_domain_provider(
     wrap_tool: Callable[[str, Callable[..., Any]], Callable[..., Any]],
     *,
@@ -92,40 +128,7 @@ def create_native_domain_provider(
     """Adapt the native registry once; every profile uses identical domain wrappers."""
     provider = LocalProvider(on_duplicate="error")
     for name, metadata in McpTool.get_tools().items():
-        handler = wrap_tool(name, metadata["handler"])
-        if not modern_annotations and metadata.get("modern_only"):
-            handler = without_modern_parameters(handler, metadata["modern_only"])
-        if modern_annotations:
-            handler = with_read_page_bounds(name, handler)
-            if name == "get_card_bundle":
-                handler = with_card_links(handler)
-            if name == "get_projects":
-                handler = with_project_discovery(handler)
-            handler = with_typed_output(
-                name,
-                handler,
-                (ProjectCardIndexResponse if name == "list_project_cards" else None)
-                or WORK_OUTPUTS.get(name)
-                or CONTENT_OUTPUTS.get(name)
-                or BOT_OUTPUTS.get(name)
-                or BOARD_OUTPUTS.get(name)
-                or RESOURCE_OUTPUTS.get(name)
-                or CREATION_OUTPUTS.get(name)
-                or GRAPH_OUTPUTS.get(name)
-                or NOTIFICATION_OUTPUTS.get(name)
-                or PROJECT_OUTPUTS.get(name),
-            )
-        elif name == "list_project_cards":
-            handler = with_legacy_card_list(handler)
-        provider.add_tool(
-            Tool.from_function(
-                handler,
-                name=name,
-                description=metadata["description"],
-                annotations=tool_annotations(name) if modern_annotations else None,
-                meta=WORK_PLAN_TOOL_META if modern_annotations and name == "preview_card_work_plan" else None,
-            )
-        )
+        provider.add_tool(create_native_tool(name, metadata, wrap_tool, modern_annotations=modern_annotations))
     if modern_annotations and McpTool.get_tool("preview_card_work_plan"):
         add_native_app_resources(provider)
     provider.add_resource(
