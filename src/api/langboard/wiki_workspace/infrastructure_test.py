@@ -5,7 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier
 from types import SimpleNamespace
 import pytest
-from langboard_shared.core.db import DbSession, EditorContentModel
+from langboard_shared.core.db import DbSession, EditorContentModel, SqlBuilder
 from langboard_shared.core.db.DbEngine import DbEngine
 from langboard_shared.core.types import SafeDateTime
 from langboard_shared.domain.models import (
@@ -81,8 +81,20 @@ def test_literal_search_filters_private_and_deleted_wikis_before_paging(monkeypa
         assert native.update_content_if_current(records[0], original) is True
         records[0].content = EditorContentModel(content="STALE OVERWRITE")
         assert native.update_content_if_current(records[0], original) is False
+        # A shared transaction must compare the locked DB value, not its dirty ORM identity.
+        with DbSession.atomic() as db:
+            current = db.exec(
+                SqlBuilder.select.table(ProjectWiki).where(ProjectWiki.column("id") == records[0].id)
+            ).first()
+            before = current.content.content
+            current.content = EditorContentModel(content=before + "\nATOMIC")
+            assert native.update_content_if_current(current, before) is True
+            saved = db.exec(
+                SqlBuilder.select.columns(ProjectWiki.column("content")).where(ProjectWiki.column("id") == current.id)
+            ).first()
+            assert saved[0].content == before + "\nATOMIC"
         page = repository.list_wikis("project", "APPEND", None, 10)
-        assert page["items"][0]["snippet"] == original + "\n\nAPPEND"
+        assert page["items"][0]["snippet"] == original + "\n\nAPPEND\nATOMIC"
         activity = ProjectWikiActivity(
             user_id=user_id,
             bot_id=None,
