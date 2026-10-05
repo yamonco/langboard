@@ -27,17 +27,19 @@ class ProjectWikiRepository(BaseOrderRepository[ProjectWiki, Project]):
         """Lock the live row and persist only content if its reviewed value still matches."""
         with DbSession.use(readonly=False) as db:
             current = db.exec(
-                SqlBuilder.select.table(ProjectWiki)
+                SqlBuilder.select.columns(ProjectWiki.column("content"))
                 .where((ProjectWiki.column("id") == wiki.id) & (ProjectWiki.column("project_id") == wiki.project_id))
-                .with_for_update()
+                .with_for_update(),
+                execution_options={"autoflush": False},
             ).first()
-            if current is None or current.content.content != expected_content:
+            if current is None or current[0].content != expected_content:
                 return False
             updated_at = SafeDateTime.now()
             changed = db.exec(
                 update(ProjectWiki.__table__)
                 .where(ProjectWiki.column("id") == wiki.id)
-                .values(content=wiki.content, updated_at=updated_at)
+                .values(content=wiki.content, updated_at=updated_at),
+                execution_options={"autoflush": False},
             )
             if changed != 1:
                 return False
