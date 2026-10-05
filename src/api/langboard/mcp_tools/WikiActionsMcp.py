@@ -119,11 +119,15 @@ async def update_wiki(
     metadata = McpTool.get_tool(command)
     if metadata is None:
         raise RuntimeError("Native wiki command is unavailable")
+    arguments = change.model_dump(exclude={"action"})
+    if isinstance(change, PatchWiki):
+        # Internal wrappers receive validated edit models, not a new wire payload.
+        arguments["edits"] = change.edits
     result = await McpServer._wrap_tool(command, metadata["handler"])(
         project_uid=project_uid,
         wiki_uid=wiki_uid,
         expected_revision=expected_revision,
-        **change.model_dump(exclude={"action"}),
+        **arguments,
     )
     output = DeletedOutput if change.action == "delete" else WikiRevisionOutput
     return WikiActionOutput.model_validate(output.model_validate(result).model_dump())
