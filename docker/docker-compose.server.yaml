@@ -56,6 +56,7 @@ services:
       - ./envs/.api.env
     environment:
       WORKER: main
+      FASTMCP_HOME: /app/.fastmcp
     working_dir: /app
     command: uv run --no-sync ${PROJECT_NAME} run --workers ${API_WORKERS_COUNT:-1}
     stop_grace_period: 16m
@@ -63,6 +64,7 @@ services:
       - ../src/api/${PROJECT_NAME}:/app/src/api/${PROJECT_NAME}
       - ../src/shared/py:/app/src/shared/py
       - shared-py-venv:/app/shared/py/.venv
+      - mcp-oauth-state:/app/.fastmcp
       - ../src/resources:/app/src/resources
       - ../pyproject.toml:/app/pyproject.toml
       - ../uv.lock:/app/uv.lock
@@ -209,5 +211,7 @@ services:
     restart: always
 
 volumes:
+  mcp-oauth-state:
+    driver: local
   shared-py-venv:
     driver: local
