@@ -23,7 +23,7 @@ from .Annotations import ToolAnnotationTransform
 from .Providers import (
     create_agent_core_provider,
     create_compatibility_provider,
-    create_native_domain_provider,
+    create_native_agent_provider,
     create_raw_primitive_provider,
 )
 from .Receipts import MutationReceiptMiddleware
@@ -117,7 +117,7 @@ class McpServer:
                 ReadResponseBudgetMiddleware(),
             ],
         )
-        app.add_provider(create_native_domain_provider(self._wrap_tool, modern_annotations=True))
+        app.add_provider(create_native_agent_provider(self._wrap_tool))
         hosts, origins = _get_transport_security_allowlists()
         self.oauth_discovery_routes = auth.get_well_known_routes(mcp_path="/stream")
         return app.http_app(path="/stream", stateless_http=True, allowed_hosts=hosts, allowed_origins=origins)
