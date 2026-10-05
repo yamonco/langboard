@@ -31,6 +31,8 @@ on:
       - src/ui/playwright.table-selection.config.ts
       - src/ui/playwright.recent-cards.config.ts
       - src/ui/playwright.command-context.config.ts
+      - src/ui/playwright.chat-recovery.config.ts
+      - src/ui/vite.chat-recovery.config.ts
       - src/ui/playwright.default-language.config.ts
       - src/ui/playwright.auth-language.config.ts
       - src/ui/playwright.filter.config.ts
@@ -122,4 +124,6 @@ jobs:
         working-directory: src/ui
 
       - run: yarn playwright test -c playwright.command-context.config.ts
+        working-directory: src/ui
+      - run: yarn playwright test -c playwright.chat-recovery.config.ts
         working-directory: src/ui
