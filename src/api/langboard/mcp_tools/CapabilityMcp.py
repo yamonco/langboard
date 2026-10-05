@@ -21,8 +21,13 @@ def _action_permissions(actor, name, registered, arguments):
     """Report canonical action permissions rather than only the facade envelope."""
     from .CardActionsMcp import CARD_ACTION_COMMANDS
     from .ChecklistActionsMcp import CHECKLIST_ACTION_COMMANDS
+    from .CommentActionsMcp import COMMENT_ACTION_COMMANDS
 
-    commands = {"update_card": CARD_ACTION_COMMANDS, "change_card_checklist": CHECKLIST_ACTION_COMMANDS}.get(name)
+    commands = {
+        "update_card": CARD_ACTION_COMMANDS,
+        "change_card_checklist": CHECKLIST_ACTION_COMMANDS,
+        "change_card_comment": COMMENT_ACTION_COMMANDS,
+    }.get(name)
     if commands is None:
         return None
     return {

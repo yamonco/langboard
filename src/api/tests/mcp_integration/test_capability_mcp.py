@@ -154,5 +154,7 @@ def test_native_facade_diagnosis_reports_actual_command_roles(monkeypatch):
         assert card["actions"]["title"] == "allowed"
         checklist = next(tool for tool in result["tools"] if tool["name"] == "change_card_checklist")
         assert len(checklist["actions"]) == 8
+        comment = next(tool for tool in result["tools"] if tool["name"] == "change_card_comment")
+        assert set(comment["actions"]) == {"add", "edit", "delete", "react"}
     finally:
         CapabilityMcp.mcp_auth_context.reset(token)

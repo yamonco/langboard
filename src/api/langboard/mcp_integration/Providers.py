@@ -46,6 +46,7 @@ AGENT_CORE_TOOLS = frozenset(
         "create_card",
         "update_card",
         "change_card_checklist",
+        "change_card_comment",
         "patch_card_description",
         "assign_card_to_me",
         "apply_card_graph_patch",
