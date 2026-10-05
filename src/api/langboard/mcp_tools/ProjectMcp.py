@@ -1,9 +1,11 @@
 from re import fullmatch
+from typing import Annotated
 from langboard_shared.domain.models import Bot, ProjectRole, User
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.domain.services.DomainService import DomainService
 from langboard_shared.Env import Env
 from langboard_shared.security import RoleFinder
+from pydantic import StringConstraints
 from ..mcp_integration import McpRoleFilter, McpTool
 
 
@@ -24,9 +26,23 @@ def get_starred_projects(user: User, service: DomainService) -> dict:
     return {"projects": projects}
 
 
-@McpTool.add("user", description="Get all projects for the current user.")
-def get_projects(user: User, service: DomainService) -> dict:
+@McpTool.add(
+    "user",
+    description="Get authorized projects; modern clients may filter by title with query.",
+    modern_only=("query",),
+)
+def get_projects(
+    user: User,
+    service: DomainService,
+    query: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)] | None = None,
+) -> dict:
+    if query is not None:
+        if not isinstance(query, str) or not 1 <= len(query.strip()) <= 100:
+            raise ValueError("Project query must contain 1 to 100 characters")
+        query = query.strip().casefold()
     projects, _ = service.project.get_api_list(user)
+    if query is not None:
+        projects = [project for project in projects if query in project["title"].casefold()]
     return {"projects": projects}
 
 
