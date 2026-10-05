@@ -13,6 +13,9 @@ on:
       - src/api/langboard/mcp_integration/**
       - src/api/langboard/middlewares/McpAuthMiddleware.py
       - src/shared/py/langboard_shared/**
+      - src/shared/py/pyproject.toml
+      - src/shared/py/uv.lock
+      - Dockerfile
       - pyproject.toml
       - uv.lock
   workflow_dispatch:
@@ -21,6 +24,35 @@ permissions:
   contents: read
 
 jobs:
+  vault-dependencies:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Verify default installation excludes optional Azure SDK
+        run: |
+          uv sync --frozen --no-dev --no-install-project
+          uv run --no-sync python - <<'PY'
+          from importlib.metadata import PackageNotFoundError, distribution
+          for name in ("azure-identity", "azure-keyvault-keys"):
+              try:
+                  distribution(name)
+              except PackageNotFoundError:
+                  continue
+              raise AssertionError(f"{name} unexpectedly installed by default")
+          for name in ("boto3", "hvac"):
+              distribution(name)
+          PY
+      - name: Verify selected Azure provider installation
+        run: |
+          uv sync --frozen --no-dev --no-install-project --extra azure-vault
+          uv run --no-sync python - <<'PY'
+          from azure.identity import ClientSecretCredential
+          from azure.keyvault.keys import KeyClient
+          PY
   catalog:
     runs-on: ubuntu-latest
     env:

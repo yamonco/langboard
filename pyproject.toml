@@ -37,13 +37,12 @@ dependencies = [
     "rich<=14.2.0",
     "sentry-sdk[fastapi]>=2.68.1",
     "uvicorn[standard]>=0.38.0",
-    "azure-keyvault-keys>=4.11.0",
-    "azure-identity>=1.25.1",
     "hvac>=2.4.0",
 ]
 
 
 [project.optional-dependencies]
+azure-vault = ["langboard-shared[azure-vault]"]
 # Document conversion runs only in the broker worker. Keeping it out of the
 # API runtime avoids shipping Torch/CUDA into every web worker.
 document-processing = [

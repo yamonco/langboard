@@ -30,6 +30,10 @@ COPY ./src/api ./src/api
 
 RUN cd /app && uv sync --locked --no-dev
 
+FROM base AS with-azure-vault
+
+RUN cd /app && uv sync --locked --no-dev --extra azure-vault
+
 FROM base AS with-document-processing
 
 RUN cd /app && uv sync --locked --no-dev --extra document-processing
