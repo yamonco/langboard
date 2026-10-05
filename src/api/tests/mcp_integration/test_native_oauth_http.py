@@ -134,6 +134,7 @@ async def test_signed_bearer_http_checks_identity_scope_and_revocation(monkeypat
     monkeypatch.setattr(McpTool, "get_tool", lambda name: None)
     monkeypatch.setattr(Server.McpServer, "_wrap_tool", lambda name, handler: handler)
     before = mcp_auth_context.get()
+    monkeypatch.setattr(type(Server.Env), "MCP_OAUTH_ENABLED", property(lambda _: True))
     app = Server.McpServer.get_oauth_http_app()
     with TestClient(app, base_url="https://board.example") as client:
         response = client.post(
