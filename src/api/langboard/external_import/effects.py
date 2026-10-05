@@ -67,6 +67,8 @@ def dispatch_imported_effects(
     elif kind == "attachment" and isinstance(record, ExternalAttachment):
         card = targets[("card", record.card_source_id)]
         author, _ = principals[record.author_scim_external_id]
-        domain.card_attachment.dispatch_created(author, project, card, target, include_bot=False)
+        domain.card_attachment.dispatch_created(
+            author, project, card, target, include_bot=False, include_document_processing=False
+        )
     else:
         raise ValueError(f"unsupported side-effect record: {kind}")
