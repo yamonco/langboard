@@ -6,6 +6,7 @@ import { documentDisplayTags, EDoclingIndexStatus, parseDoclingMetadata } from "
 import { MetadataModel } from "@/core/models";
 import { ModelRegistry } from "@/core/models/ModelRegistry";
 import { useBoardCard } from "@/core/providers/BoardCardProvider";
+import { useAuth } from "@/core/providers/AuthProvider";
 import { ProjectRole } from "@/core/models/roles";
 import { Routing } from "@langboard/core/constants";
 import { Utils } from "@langboard/core/utils";
@@ -49,15 +50,15 @@ export function BoardCardAttachmentDocumentProgress({
     attachmentUID?: string;
     cardUID?: string;
 }): React.JSX.Element | null {
+    const { currentUser } = useAuth();
     const { card } = useBoardCard();
     const uid = cardUID ?? card.uid;
     const record = MetadataModel.Model.useModel(uid, [uid]);
-    return record ? <DocumentProgress record={record} attachmentUID={attachmentUID} /> : null;
+    return record && currentUser ? <DocumentProgress record={record} attachmentUID={attachmentUID} currentUser={currentUser} /> : null;
 }
 
-function DocumentProgress({ record, attachmentUID }: { record: MetadataModel.TModel; attachmentUID?: string }): React.JSX.Element | null {
+function DocumentProgress({ record, attachmentUID, currentUser }: { record: MetadataModel.TModel; attachmentUID?: string; currentUser: NonNullable<ReturnType<typeof useAuth>["currentUser"]> }): React.JSX.Element | null {
     const [t] = useTranslation();
-    const { currentUser } = useBoardCard();
     const preferredLanguage = currentUser.useField("preferred_lang");
     const metadata = record.useField("metadata");
     const document = parseDoclingMetadata(metadata).find((entry) =>
