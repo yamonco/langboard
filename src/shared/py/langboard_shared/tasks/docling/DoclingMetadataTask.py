@@ -1,4 +1,5 @@
 from hashlib import sha256
+from importlib.util import find_spec
 from os import unlink
 from pathlib import Path
 from subprocess import run
@@ -32,6 +33,10 @@ def _index_card_attachment(service: DomainService, attachment: CardAttachment) -
 
     temp_path = ""
     try:
+        if find_spec("docling") is None:
+            raise RuntimeError(
+                "Document processing unavailable: install the document-processing extra in the broker worker."
+            )
         with NamedTemporaryFile(delete=False, suffix=Path(current_attachment.filename).suffix) as temp_file:
             temp_path = temp_file.name
             downloaded = Storage.download_file(current_attachment.file, temp_file.file)
