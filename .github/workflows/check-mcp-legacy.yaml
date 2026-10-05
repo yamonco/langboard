@@ -38,7 +38,7 @@ jobs:
       - name: Verify immutable artifacts and rejection behavior
         run: uv run --no-sync python scripts/mcp_contracts/test_legacy.py
       - name: Verify native protocol and authorization contracts
-        run: uv run --no-sync pytest -q src/api/tests/mcp_integration src/api/tests/identity src/api/tests/scim/test_project_role_projection.py
+        run: uv run --no-sync pytest -q src/api/tests/mcp_integration src/api/tests/identity src/api/tests/scim/test_project_role_projection.py src/shared/py/langboard_shared/core/security/KeyVault_isolation_test.py
       - name: Capture candidate catalog without deployed database access
         run: uv run --no-sync python scripts/mcp_contracts/capture_native.py --catalog-only > candidate.json
       - name: Preserve all legacy tool schemas and annotations
