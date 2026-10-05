@@ -5,7 +5,10 @@ on:
     paths:
       - .github/workflows/check-mcp-legacy.yaml
       - scripts/mcp_contracts/**
-      - src/api/tests/mcp_integration/fixtures/**
+      - src/api/tests/mcp_integration/**
+      - docker/docker-compose.server.yaml
+      - docker/envs/server.env.template
+      - scripts/utils/update-docker-envs.sh
       - src/api/langboard/mcp_tools/**
       - src/api/langboard/mcp_integration/**
       - src/api/langboard/middlewares/McpAuthMiddleware.py
