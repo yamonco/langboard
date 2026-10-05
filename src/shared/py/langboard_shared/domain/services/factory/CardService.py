@@ -1,3 +1,6 @@
+import base64
+import json
+from binascii import Error as Base64Error
 from datetime import datetime, timedelta
 from typing import Any, Literal, Sequence, cast, overload
 from sqlalchemy import func, select
@@ -42,6 +45,7 @@ from ...models import (
     User,
 )
 from ...models.Checkitem import CheckitemStatus
+from ...models.ProjectRole import ProjectRoleAction
 from ..CardVerification import VerificationConflict, VerificationSubmission
 from ..CardWorkState import project_work_state
 from ..DependencyPolicy import dependency_blockers
@@ -860,6 +864,48 @@ class CardService(BaseDomainService):
                 }
             )
         return cards
+
+    def list_assigned_work(
+        self, user: User, project_uid: str | None = None, cursor: str | None = None, limit: int = 20
+    ) -> dict[str, Any]:
+        """Shared REST/MCP assigned-work query with current read grants and keyset pagination."""
+        if type(limit) is not int or not 1 <= limit <= 25:
+            raise ValueError("limit must be between 1 and 25")
+        projects, _ = self._get_service(ProjectService).get_api_list(user)
+        readable = {
+            project["uid"]
+            for project in projects
+            if "*" in project["current_auth_role_actions"]
+            or ProjectRoleAction.Read.value in project["current_auth_role_actions"]
+        }
+        if project_uid is not None:
+            if project_uid not in readable:
+                raise ValueError("Project not found or not readable")
+            readable = {project_uid}
+        before = None
+        if cursor is not None:
+            try:
+                if len(cursor) > 512:
+                    raise ValueError
+                raw = base64.urlsafe_b64decode(cursor + "=" * (-len(cursor) % 4))
+                fields = json.loads(raw)
+                if not isinstance(fields, list) or len(fields) != 3 or not all(isinstance(v, str) for v in fields):
+                    raise ValueError
+                timestamp = SafeDateTime.fromisoformat(fields[0])
+                if timestamp.utcoffset() is None:
+                    raise ValueError
+                before = (timestamp, InfraHelper.convert_id(fields[1]), InfraHelper.convert_id(fields[2]))
+            except (ValueError, TypeError, Base64Error) as exc:
+                raise ValueError("Invalid My Work cursor") from exc
+        if not readable:
+            return {"items": [], "next_cursor": None}
+        items, next_fields = self.get_assigned_work_page(user, sorted(readable), limit, before)
+        next_cursor = (
+            base64.urlsafe_b64encode(json.dumps(next_fields, separators=(",", ":")).encode()).decode().rstrip("=")
+            if next_fields
+            else None
+        )
+        return {"items": items, "next_cursor": next_cursor}
 
     def get_assigned_work_page(
         self,
