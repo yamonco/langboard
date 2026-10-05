@@ -30,6 +30,9 @@ async def test_native_wiki_mutation_dispatch_receipt_and_conflict(monkeypatch, d
     output = {"deleted": True} if change["action"] == "delete" else {"wiki_uid": "wiki", "revision": "b" * 64}
 
     def command(**kwargs):
+        if "edits" in kwargs:
+            assert all(hasattr(edit, "old_text") for edit in kwargs["edits"])
+            kwargs = {**kwargs, "edits": [edit.model_dump() for edit in kwargs["edits"]]}
         calls.append(kwargs)
         if conflict:
             raise WikiContentConflict("stale reviewed revision")
