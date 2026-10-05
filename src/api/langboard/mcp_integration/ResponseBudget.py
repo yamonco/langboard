@@ -26,7 +26,13 @@ class ReadResponseBudgetMiddleware(Middleware):
         if not isinstance(name, str) or name not in READ_ONLY_TOOLS:
             return result
         actual_bytes = len(to_json(result, fallback=str))
-        if actual_bytes <= self.max_bytes:
+        # Native image bytes have their own bounded 25 MiB source budget.
+        budget = (
+            36 * 1024 * 1024
+            if name == "read_card_images" and any(block.type == "image" for block in result.content)
+            else self.max_bytes
+        )
+        if actual_bytes <= budget:
             return result
         return ToolResult(
             content="Read response exceeds the size budget. Reduce limit, request fewer sections, "
@@ -34,7 +40,7 @@ class ReadResponseBudgetMiddleware(Middleware):
             is_error=True,
             meta={
                 "response_limit": {
-                    "max_bytes": self.max_bytes,
+                    "max_bytes": budget,
                     "actual_bytes": actual_bytes,
                     "next_action": "narrow_query",
                 }
