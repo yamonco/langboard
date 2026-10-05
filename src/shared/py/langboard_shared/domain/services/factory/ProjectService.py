@@ -575,6 +575,9 @@ class ProjectService(BaseDomainService):
         if not internal_bot:
             return False
 
+        if internal_bot.bot_type in (InternalBotType.DocumentVision, InternalBotType.DocumentEmbedding):
+            return False
+
         result = self.repo.project_assigned_internal_bot.find_with_internal_bot_by_project_and_type(
             project, internal_bot.bot_type
         )

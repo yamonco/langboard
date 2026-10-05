@@ -67,5 +67,11 @@ def get_project_template_bots(service: DomainService = DomainService.scope()) ->
     """Return selection identities only, excluding credentials and prompts."""
     bots = service.internal_bot.get_api_list(is_setting=False)
     return JsonResponse(
-        content={"bots": [{key: bot[key] for key in ("uid", "bot_type", "display_name")} for bot in bots]}
+        content={
+            "bots": [
+                {key: bot[key] for key in ("uid", "bot_type", "display_name")}
+                for bot in bots
+                if bot["bot_type"] not in ("document_vision", "document_embedding")
+            ]
+        }
     )

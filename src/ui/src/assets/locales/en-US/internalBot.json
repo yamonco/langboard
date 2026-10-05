@@ -3,7 +3,8 @@
     "project_chat": "Project Chat",
     "editor_chat": "Editor Chat",
     "editor_copilot": "Editor Copilot",
-    "document_vision": "Document Vision · document-vision"
+    "document_vision": "Document Vision · document-vision",
+    "document_embedding": "Document Embedding · document-embedding"
   },
   "Process new uploads": "Process new document uploads",
   "Existing attachments require explicit processing": "Applies at upload time. Process existing attachments explicitly from their card; changing this setting does not reprocess old files.",

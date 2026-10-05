@@ -75,6 +75,7 @@ function BotValueDefaultInputDisplay({
     startEditing,
     cancelEditing,
     initialActionSuggestions,
+    purpose = "chat",
 }: TSharedBotValueInputProps) {
     const [t] = useTranslation();
     const { mutateAsync: getApiListMutateAsync } = useGetApiList({ interceptToast: true });
@@ -416,7 +417,9 @@ function BotValueDefaultInputDisplay({
                         onValueChange={changeSelectedProvider as (value: string) => void}
                         required={required}
                         disabled={isValidating || disabled}
-                        options={AGENT_MODELS.map((option) => (
+                        options={AGENT_MODELS.filter(
+                            (option) => purpose !== "embedding" || ["OpenAI", "OpenAI Compatible", "LiteLLM"].includes(option)
+                        ).map((option) => (
                             <Select.Item key={`default-bot-json-input-agent-${option}`} value={option}>
                                 <Flex items="center" gap="2">
                                     <ProviderIcon provider={option} />

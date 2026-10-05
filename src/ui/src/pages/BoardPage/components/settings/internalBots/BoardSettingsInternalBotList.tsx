@@ -7,7 +7,10 @@ const BoardSettingsInternalBotList = memo(() => {
     return (
         <Flex direction="col" gap="2" py="4">
             {Object.values(InternalBotModel.EInternalBotType)
-                .filter((botType) => botType !== InternalBotModel.EInternalBotType.DocumentVision)
+                .filter(
+                    (botType) =>
+                        ![InternalBotModel.EInternalBotType.DocumentVision, InternalBotModel.EInternalBotType.DocumentEmbedding].includes(botType)
+                )
                 .map((botType) => {
                     return <BoardSettingsInternalBot key={`board-settings-internal-bot-${botType}`} botType={botType} />;
                 })}

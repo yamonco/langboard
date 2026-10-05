@@ -42,6 +42,7 @@ document-retrieval = [
     "tiktoken>=0.12,<1",
     "langgraph-checkpoint-sqlite==3.1.1",
     "sqlite-vec==0.1.9",
+    "langchain-openai==1.6.7",
 ]
 # Native remote VLM conversion; never select standard/models-local extras.
 # Transformers supplies import-time types in Docling's VLM module, without Torch.
