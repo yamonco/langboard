@@ -46,6 +46,7 @@ def test_mounted_discovery_and_callback_urls_use_native_fastmcp_routes(monkeypat
     from fastmcp.server.auth.oidc_proxy import OIDCConfiguration
     from key_value.aio.stores.memory import MemoryStore
     from langboard.mcp_integration import Server
+    from langboard.mcp_integration.AgentPolicy import AGENT_POLICY
     from starlette.applications import Starlette
     from starlette.routing import Mount
     from starlette.testclient import TestClient
@@ -63,7 +64,17 @@ def test_mounted_discovery_and_callback_urls_use_native_fastmcp_routes(monkeypat
     monkeypatch.setattr(OAuth.OIDCProxy, "get_oidc_configuration", lambda *args, **kwargs: configuration)
     provider = OAuth.create_oauth_provider(client_storage=MemoryStore())
     monkeypatch.setattr(OAuth, "create_oauth_provider", lambda: provider)
+    native_servers = []
+    fastmcp_factory = Server.FastMCP
+
+    def capture_server(*args, **kwargs):
+        server = fastmcp_factory(*args, **kwargs)
+        native_servers.append(server)
+        return server
+
+    monkeypatch.setattr(Server, "FastMCP", capture_server)
     app = Server.McpServer.get_oauth_http_app()
+    assert native_servers[0].instructions == AGENT_POLICY
     root = Starlette(routes=[*Server.McpServer.oauth_discovery_routes, Mount("/mcp/oauth", app=app)])
     with TestClient(root, base_url="https://board.example") as client:
         response = client.get("/.well-known/oauth-authorization-server/mcp/oauth")
