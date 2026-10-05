@@ -139,6 +139,44 @@ class CheckitemRepository(BaseOrderRepository[Checkitem, Checklist]):
             records = result.all()
         return list(records)
 
+    def get_all_by_checklists(
+        self, card: TCardParam, checklist_ids: list[int], limit: int | None, *, open_only: bool = False
+    ) -> list[tuple[Checkitem, Card | None, User | None]]:
+        """Read one authorized card batch with the existing per-checklist ordering and limit."""
+        if not checklist_ids:
+            return []
+        ranked = (
+            select(
+                Checkitem.column("id").label("item_id"),
+                func.row_number()
+                .over(
+                    partition_by=Checkitem.column("checklist_id"),
+                    order_by=(Checkitem.column("order").asc(), Checkitem.column("id").asc()),
+                )
+                .label("position"),
+            )
+            .join(Checklist, Checkitem.column("checklist_id") == Checklist.column("id"))
+            .where(Checklist.column("card_id") == InfraHelper.convert_id(card))
+            .where(Checklist.column("id").in_(checklist_ids))
+            .where(Checklist.column("is_system") == False)  # noqa: E712
+            .where(Checklist.column("deleted_at").is_(None))
+            .where(Checkitem.column("deleted_at").is_(None))
+        )
+        if open_only:
+            ranked = ranked.where(Checkitem.column("is_checked") == False)  # noqa: E712
+        ranked = ranked.subquery()
+        query = (
+            SqlBuilder.select.tables(Checkitem, Card, User)
+            .join(ranked, ranked.c.item_id == Checkitem.column("id"))
+            .outerjoin(Card, Card.column("id") == Checkitem.column("cardified_id"))
+            .outerjoin(User, User.column("id") == Checkitem.column("user_id"))
+            .order_by(Checkitem.column("checklist_id"), Checkitem.column("order"), Checkitem.column("id"))
+        )
+        if limit is not None:
+            query = query.where(ranked.c.position <= limit)
+        with DbSession.use(readonly=True) as db:
+            return list(db.exec(query).all())
+
     def get_all_by_card(self, card: TCardParam) -> list[tuple[Checkitem, Card | None, User | None]]:
         card_id = InfraHelper.convert_id(card)
 

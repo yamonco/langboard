@@ -65,6 +65,17 @@ class CheckitemService(BaseDomainService):
             checkitems_map[checkitem.checklist_id].append(api_checkitem)
         return checkitems_map
 
+    def get_api_map_by_checklists(
+        self, card: Card, checklist_ids: list[int], limit: int | None, *, open_only: bool = False
+    ) -> dict[int, list[dict[str, Any]]]:
+        """Project bounded checklist rows with one shared timer batch."""
+        records = self.repo.checkitem.get_all_by_checklists(card, checklist_ids, limit, open_only=open_only)
+        timer_arcs = self.repo.checkitem_timer_record.get_arc_map_by_checkitems([record[0] for record in records])
+        result: dict[int, list[dict[str, Any]]] = {}
+        for record in records:
+            result.setdefault(record[0].checklist_id, []).append(self.__convert_api_response(card, record, timer_arcs))
+        return result
+
     def get_active_work(self, user: User) -> list[dict[str, Any]]:
         records = self.repo.checkitem.get_started_work_by_user(user)
         timer_arcs = self.repo.checkitem_timer_record.get_arc_map_by_checkitems([record[0] for record in records])
