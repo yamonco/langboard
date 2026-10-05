@@ -635,40 +635,40 @@ def get_card_delta(
     since_context_cursor: str | None = None,
     profile: ContextProfile = "full",
 ) -> CardContextDelta:
-    bundle = get_card_bundle(
-        project_uid,
-        card_uid,
-        user_or_bot,
-        service,
-        comments_limit=20,
-        section_limit=25,
-        profile=profile,
-    )
-    payload = bundle.model_dump(mode="json")
-    if isinstance(user_or_bot, User):
-        from ..wiki_workspace.infrastructure import NativeWikiRepository
-
-        repository = NativeWikiRepository(user_or_bot, service)
-        for wiki in payload["card"]["core"].get("linked_wikis", []):
-            wiki["revision"] = repository.snapshot(project_uid, wiki["wiki_uid"]).revision
-    elif payload["card"]["core"].get("linked_wikis"):
-        from fastmcp.exceptions import AuthorizationError
-        from ..wiki_workspace.domain import WikiSnapshot
-
-        for link in payload["card"]["core"]["linked_wikis"]:
-            wiki = service.project_wiki.get_by_id_like(link["wiki_uid"])
-            if wiki is None or not wiki.is_public:
-                raise AuthorizationError("Linked wiki is no longer readable; purge cached card context")
-            link["revision"] = WikiSnapshot(wiki.get_uid(), wiki.title, wiki.content.content).revision
-    return card_context_delta(
-        payload,
-        project_uid=project_uid,
-        actor_uid=user_or_bot.get_uid(),
-        profile=profile,
-        cursor=since_context_cursor,
-        key=Env.JWT_SECRET_KEY,
-    )
-
+    with DbSession.atomic():
+        bundle = get_card_bundle(
+            project_uid,
+            card_uid,
+            user_or_bot,
+            service,
+            comments_limit=20,
+            section_limit=25,
+            profile=profile,
+        )
+        payload = bundle.model_dump(mode="json")
+        if isinstance(user_or_bot, User):
+            from ..wiki_workspace.infrastructure import NativeWikiRepository
+    
+            repository = NativeWikiRepository(user_or_bot, service)
+            for wiki in payload["card"]["core"].get("linked_wikis", []):
+                wiki["revision"] = repository.snapshot(project_uid, wiki["wiki_uid"]).revision
+        elif payload["card"]["core"].get("linked_wikis"):
+            from fastmcp.exceptions import AuthorizationError
+            from ..wiki_workspace.domain import WikiSnapshot
+    
+            for link in payload["card"]["core"]["linked_wikis"]:
+                wiki = service.project_wiki.get_by_id_like(link["wiki_uid"])
+                if wiki is None or not wiki.is_public:
+                    raise AuthorizationError("Linked wiki is no longer readable; purge cached card context")
+                link["revision"] = WikiSnapshot(wiki.get_uid(), wiki.title, wiki.content.content).revision
+        return card_context_delta(
+            payload,
+            project_uid=project_uid,
+            actor_uid=user_or_bot.get_uid(),
+            profile=profile,
+            cursor=since_context_cursor,
+            key=Env.JWT_SECRET_KEY,
+        )
 
 @McpTool.add(
     "user", description="Append reviewer evidence for the current card revision; never approve gates or move the card."
