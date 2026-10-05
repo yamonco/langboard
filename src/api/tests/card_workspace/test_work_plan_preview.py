@@ -140,6 +140,9 @@ def test_preview_plan_never_persists(monkeypatch, promote):
         )
     plans = WorkPlanService(SimpleNamespace(get_uid=lambda: "actor"), service)
     reviewed = plans.preview(plan)
+    assert reviewed["counts"]["cards"] == (0 if promote else 1)
+    assert reviewed["counts"]["cardifications"] == (1 if promote else 0)
+    assert reviewed["counts"]["checklists"] == 1
     with engine.connect() as c:
         assert c.execute(text("SELECT count(*) FROM created")).scalar() == 0
     assert not any(cb.called for cb in (graph_event, list_event, item_event))
