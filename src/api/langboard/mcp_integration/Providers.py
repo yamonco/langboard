@@ -36,6 +36,8 @@ from .WorkPlanOutputs import WORK_PLAN_OUTPUTS
 
 
 # Existing canonical entry points; profile selection never grants permission.
+# Optional employee directory commands remain searchable and directly callable,
+# without imposing an organization policy on the default work catalog.
 AGENT_CORE_TOOLS = frozenset(
     {
         "diagnose_connection",
@@ -70,8 +72,6 @@ AGENT_CORE_TOOLS = frozenset(
         "patch_wiki_content",
         "create_project_wiki",
         "get_unread_notifications",
-        "get_employee_status",
-        "list_employees",
         "mark_notification_read",
         "mark_notifications_read",
         "read_card_attachment",

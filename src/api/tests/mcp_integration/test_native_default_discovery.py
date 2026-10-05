@@ -28,7 +28,7 @@ async def test_native_default_search_and_direct_calls_preserve_acl(monkeypatch, 
 
     registry = {
         name: {"handler": handler, "description": name, "exclude": [], "accessible_type": "user"}
-        for name, handler in [("get_employee_status", core), ("fixture_primitive", primitive)]
+        for name, handler in [("diagnose_connection", core), ("fixture_primitive", primitive)]
     }
     monkeypatch.setattr(McpTool, "get_tools", lambda: registry)
     monkeypatch.setattr(McpTool, "get_tool", lambda name: registry.get(name))
@@ -40,14 +40,14 @@ async def test_native_default_search_and_direct_calls_preserve_acl(monkeypatch, 
     try:
         async with Client(server) as client:
             tools = {tool.name: tool for tool in await client.list_tools()}
-            assert set(tools) == {"get_employee_status", "search_raw_tools", "call_raw_tool"}
+            assert set(tools) == {"diagnose_connection", "search_raw_tools", "call_raw_tool"}
             assert tools["search_raw_tools"].annotations.read_only_hint
             assert not tools["call_raw_tool"].annotations.read_only_hint
             search = await client.call_tool("search_raw_tools", {"pattern": r"^fixture_primitive\b"})
             definition = json.loads(search.content[0].text)[0]
             assert definition["name"] == "fixture_primitive"
             assert definition["inputSchema"]["properties"]["value"]["type"] == "integer"
-            pinned = await client.call_tool("search_raw_tools", {"pattern": "get_employee_status"})
+            pinned = await client.call_tool("search_raw_tools", {"pattern": "diagnose_connection"})
             assert not pinned.content
             for name, arguments in [
                 ("fixture_primitive", {"value": 7}),
@@ -91,5 +91,47 @@ async def test_real_native_catalog_keeps_every_core_tool_and_reduces_initial_def
         assert set(initial) == (set(full) & AGENT_CORE_TOOLS) | {"search_raw_tools", "call_raw_tool"}
         assert len(initial) < len(full)
         assert len(json.dumps(initial)) < len(json.dumps(full))
+    finally:
+        mcp_auth_context.reset(token)
+
+
+@pytest.mark.parametrize("name", ["get_employee_status", "list_employees"])
+@pytest.mark.parametrize("denied", [False, True])
+async def test_optional_directory_remains_searchable_with_original_authorization(monkeypatch, name, denied):
+    calls = []
+
+    def directory() -> dict:
+        calls.append(name)
+        return {"policy_status": "unknown"}
+
+    registry = {name: {"handler": directory, "description": name, "exclude": [], "accessible_type": "user"}}
+    monkeypatch.setattr(McpTool, "get_tools", lambda: registry)
+    monkeypatch.setattr(McpTool, "get_tool", lambda key: registry.get(key))
+    monkeypatch.setattr(McpServer, "_validate_auth", lambda actor, key: actor == "user")
+    monkeypatch.setattr(McpServer, "_validate_role", lambda *args, **kwargs: not denied)
+    token = mcp_auth_context.set({"transport": "oauth", "user_or_bot": "user"})
+    try:
+        for compact in [False, True]:
+            server = FastMCP("Optional directory")
+            server.add_provider(
+                create_native_agent_provider(McpServer._wrap_tool)
+                if compact else create_native_domain_provider(McpServer._wrap_tool)
+            )
+            async with Client(server) as client:
+                visible = {tool.name for tool in await client.list_tools()}
+                assert (name in visible) is (not compact)
+                if compact:
+                    result = await client.call_tool("search_raw_tools", {"pattern": rf"^{name}\b"})
+                    assert json.loads(result.content[0].text)[0]["name"] == name
+                invocations = [(name, {})]
+                if compact:
+                    invocations.append(("call_raw_tool", {"name": name, "arguments": {}}))
+                for command, arguments in invocations:
+                    if denied:
+                        with pytest.raises(ToolError, match="Insufficient permissions"):
+                            await client.call_tool(command, arguments)
+                    else:
+                        assert not (await client.call_tool(command, arguments)).is_error
+        assert calls == ([] if denied else [name] * 3)
     finally:
         mcp_auth_context.reset(token)
