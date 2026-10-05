@@ -122,7 +122,1244 @@ class CardService(BaseDomainService):
         project, card = records
         if card.project_id != project.id:
             return None
-        return {"car…14180 tokens truncated…       items.append({"title": title, "is_checked": is_checked})
+        return {"card_uid": card.get_uid(), "readers": self.repo.user_card_read_state.get_readers(card)}
+
+    def mark_card_seen(self, user: User, card: TCardParam | None, project: TProjectParam) -> dict[str, Any] | None:
+        return self.set_card_read_state(user, project, card, True)
+
+    def set_card_read_state(self, user: User, project: TProjectParam, card: TCardParam | None, seen: bool) -> dict[str, Any] | None:
+        if not isinstance(user, User):
+            return None
+        records = InfraHelper.get_records_with_foreign_by_params((Project, project), (Card, card))
+        if not records:
+            return None
+        project, card = records
+        if card.project_id != project.id:
+            return None
+        state = self.repo.user_card_read_state.set_read_state(user, card, seen)
+        CardPublisher.read_state_changed(card)
+        return {"card_uid": card.get_uid(), "seen_change_seq": state.seen_change_seq}
+
+    def get_by_id_like(self, card: TCardParam | None) -> Card | None:
+        card = InfraHelper.get_by_id_like(Card, card)
+        return card
+
+    def get_existing_uids(self, project: TProjectParam, card_uids: list[str]) -> list[str]:
+        """Return only current cards in the already authorized project, without content."""
+        return self.repo.card.get_existing_uids(project, card_uids)
+
+    def get_by_project(self, project: TProjectParam | None) -> list[Card]:
+        project = InfraHelper.get_by_id_like(Project, project)
+        if not project:
+            return []
+
+        return [card for card, _ in self.repo.card.get_all_by_project(project)]
+
+    def get_work_states(self, cards: Sequence[Card]) -> dict[int, dict[str, Any]]:
+        """Project a permission-scoped card batch with bounded queries, never per-card reads.
+
+        Callers must supply cards from their existing authorized query. No hidden
+        related-card data, task metadata or user identities enter this projection.
+        """
+        if not cards:
+            return {}
+        column_ids = {card.project_column_id for card in cards}
+        with DbSession.use(readonly=True) as db:
+            columns = {
+                column.id: column
+                for column in db.exec(
+                    SqlBuilder.select.table(ProjectColumn).where(ProjectColumn.column("id").in_(column_ids))
+                ).all()
+            }
+        policies = self.repo.workflow_stage.get_by_keys(
+            {column.workflow_stage for column in columns.values() if column.workflow_stage}
+        )
+        counts = self.repo.checkitem.get_work_state_counts([card.id for card in cards])
+        verification_records = self.repo.card_verification.get_latest_by_card_ids([card.id for card in cards])
+        blockers = dependency_blockers([card.id for card in cards])
+        generations = execution_generations([card.id for card in cards])
+        states = {}
+        for card in cards:
+            column = columns.get(card.project_column_id)
+            stage = column.workflow_stage if column and column.project_id == card.project_id else None
+            policy = policies.get(stage)
+            total, completed, started, paused = counts.get(card.id, (0, 0, 0, 0))
+            record = verification_records.get(card.id)
+            states[card.id] = project_work_state(
+                card_uid=card.get_uid(),
+                workflow_stage=stage,
+                workflow_policy={
+                    "key": policy.key,
+                    "counts_as_completed": policy.counts_as_completed,
+                    "active_queue_policy": policy.active_queue_policy,
+                    "overdue_policy": policy.overdue_policy,
+                }
+                if policy
+                else None,
+                archived=card.archived_at is not None
+                or bool(column and column.project_id == card.project_id and column.is_archive),
+                linked_resource=card.is_linked_resource,
+                total=total,
+                completed=completed,
+                started=started,
+                paused=paused,
+                change_seq=card.last_change_seq,
+                execution_generation=generations.get(int(card.id)),
+                verification_record=self._verification_projection(record) if record else None,
+                direct_blockers=blockers.get(int(card.id), []),
+            )
+        return states
+
+    def publish_work_states(self, project: Project, card_ids: Sequence[SnowflakeID]) -> None:
+        """Refresh authorized card projections after dependency mutations."""
+        if not card_ids:
+            return
+        with DbSession.use(readonly=False) as db:
+            cards = db.exec(
+                SqlBuilder.select.table(Card)
+                .where(Card.column("id").in_(set(card_ids)))
+                .where(Card.column("project_id") == project.id)
+                .where(Card.column("deleted_at").is_(None))
+            ).all()
+        states = self.get_work_states(cards)
+        for card in cards:
+            CardPublisher.updated(project, card, None, {"work_state": states[card.id]})
+
+    def _dependency_children(self, card: Card) -> list[SnowflakeID]:
+        return [
+            child.id for _, relation_type, child in
+            self.repo.card_relationship.get_all_by_card_and_relation(card, relation="child")
+            if relation_type.machine_semantic == "blocks" and child.project_id == card.project_id
+        ]
+
+    @staticmethod
+    def _verification_projection(record: CardVerificationRecord) -> dict[str, Any]:
+        return {
+            "uid": record.get_uid(),
+            "source_change_seq": record.source_change_seq,
+            "decision": record.decision,
+            "recorded_at": record.created_at.isoformat(),
+            "recorded_by_user_uid": record.recorded_by_user_id.to_short_code() if record.recorded_by_user_id else None,
+            "recorded_by_bot_uid": record.recorded_by_bot_id.to_short_code() if record.recorded_by_bot_id else None,
+            "evidence": record.evidence,
+            "required_checkitem_uids": record.required_checkitem_uids,
+        }
+
+    def record_verification_evidence(
+        self, actor: User | Bot, project: TProjectParam, card: TCardParam, submission: VerificationSubmission
+    ) -> dict[str, Any] | None:
+        """Append reviewer evidence with a card lock and optimistic record fence.
+
+        Authorization belongs to the native route. This records declared scope,
+        never changes workflow/assignment/timers and never approves a release.
+        """
+        params = InfraHelper.get_records_with_foreign_by_params((Project, project), (Card, card))
+        if not params:
+            return None
+        project, card = params
+        with DbSession.atomic() as db:
+            current = db.exec(
+                SqlBuilder.select.table(Card)
+                .where((Card.column("id") == card.id) & (Card.column("project_id") == project.id))
+                .with_for_update()
+            ).first()
+            if current is None or current.deleted_at is not None or current.archived_at or current.is_linked_resource:
+                return None
+            if current.last_change_seq != submission.expected_change_seq:
+                raise VerificationConflict("Card changed; read current work_state before recording verification")
+            latest = self.repo.card_verification.get_latest_by_card_ids([current.id]).get(current.id)
+            if (latest.get_uid() if latest else None) != submission.expected_record_uid:
+                raise VerificationConflict("Verification changed; read its latest record before replacing it")
+            items = db.exec(
+                SqlBuilder.select.table(Checkitem)
+                .join(Checklist, Checkitem.column("checklist_id") == Checklist.column("id"))
+                .where(Checklist.column("card_id") == current.id)
+                .where(Checklist.column("is_system") == False)  # noqa: E712
+                .where(Checklist.column("deleted_at").is_(None))
+                .where(Checkitem.column("deleted_at").is_(None))
+            ).all()
+            by_uid = {item.get_uid(): item for item in items}
+            referenced = set(submission.required_checkitem_uids) | {
+                entry.checkitem_uid for entry in submission.evidence if entry.checkitem_uid is not None
+            }
+            if not referenced.issubset(by_uid):
+                raise ValueError("Evidence checkitem is not an active user checkitem of this card")
+            if submission.decision == "verified" and any(
+                not by_uid[uid].is_checked for uid in submission.required_checkitem_uids
+            ):
+                raise ValueError("Declared required checkitems are not complete")
+            if not isinstance(actor, (User, Bot)):
+                raise ValueError("Authenticated reviewer is required")
+            record = CardVerificationRecord(
+                card_id=current.id,
+                source_change_seq=current.last_change_seq,
+                decision=submission.decision,
+                recorded_by_user_id=actor.id if isinstance(actor, User) else None,
+                recorded_by_bot_id=actor.id if isinstance(actor, Bot) else None,
+                evidence=[entry.model_dump(mode="json") for entry in submission.evidence],
+                required_checkitem_uids=submission.required_checkitem_uids,
+            )
+            db.insert(record)
+            state = self.get_work_states([current])[current.id]
+        # Evidence is its own record revision, so it must not invalidate its
+        # subject by advancing the card's source cursor.
+        CardPublisher.updated(project, current, None, {"work_state": state})
+        return self._verification_projection(record)
+
+    def get_details(
+        self,
+        project: TProjectParam | None,
+        card: TCardParam | None,
+        user_or_bot: TUserOrBot | None = None,
+    ) -> dict[str, Any] | None:
+        params = InfraHelper.get_records_with_foreign_by_params((Project, project), (Card, card))
+        if not params:
+            return None
+        project, card = params
+
+        column = InfraHelper.get_by_id_like(ProjectColumn, card.project_column_id)
+        if not column:
+            return None
+
+        api_card = card.api_response()
+        api_card["project_column_name"] = column.name
+        api_card["work_state"] = self.get_work_states([card])[card.id]
+        progress = api_card["work_state"]["checklist_progress"]
+        api_card["checklist_total_count"] = progress["total"]
+        api_card["checklist_completed_count"] = progress["completed"]
+        if card.is_linked_resource:
+            api_card.update(
+                {
+                    "count_comment": 0,
+                    "project_members": [],
+                    "labels": [],
+                    "member_uids": [],
+                    "relationships": [],
+                    "linked_resource": self._get_linked_resource_payloads(
+                        user_or_bot,
+                        project,
+                        [card],
+                        include_content=True,
+                    )[card.get_uid()],
+                }
+            )
+            return api_card
+
+        api_card["count_comment"] = self.repo.card_comment.count_by_card(card)
+        api_card["is_check_card"] = self.is_check_card(card)
+        completion = self._get_completion_checklist(card)
+        api_card["completed"] = bool(completion and completion.is_checked)
+
+        project_service = self._get_service(ProjectService)
+        api_card["project_members"] = project_service.get_api_assigned_user_list(card.project_id)
+
+        project_label_service = self._get_service(ProjectLabelService)
+        api_card["labels"] = project_label_service.get_api_list_by_card(card)
+
+        api_card["member_uids"] = self.get_api_assigned_user_list(card, only_uids=True)
+        api_card["active_workers"] = self.get_active_workers(project, card).get(card.id, [])
+
+        card_relationship_service = self._get_service(CardRelationshipService)
+        api_card["relationships"] = card_relationship_service.get_api_list_by_card(card)
+
+        blocks = self._get_service(CardContentBlockService).get_blocks_by_card(card)
+        if blocks:
+            api_card["content_blocks"] = self._get_service(CardContentBlockService).api_blocks_by_card(card)
+            api_card["description_content_source"] = "blocks"
+        return api_card
+
+    def get_board_list(
+        self,
+        project: TProjectParam | None,
+        user_or_bot: TUserOrBot | None = None,
+        archive_visible_since: SafeDateTime | None = None,
+    ) -> list[dict[str, Any]]:
+        project = InfraHelper.get_by_id_like(Project, project)
+        if not project:
+            return []
+
+        if archive_visible_since is None:
+            archive_visible_since = SafeDateTime.now() - timedelta(days=project.archive_visible_days)
+        raw_cards = self.repo.card.get_board_list(project, archive_visible_since)
+        raw_members = self.repo.card_assigned_user.get_all_by_project(project, archive_visible_since)
+        members: dict[int, list[str]] = {}
+        for member, card_assigned_user in raw_members:
+            if card_assigned_user.card_id not in members:
+                members[card_assigned_user.card_id] = []
+            members[card_assigned_user.card_id].append(member.get_uid())
+
+        raw_relationships = self.repo.card_relationship.get_all_by_project(project, archive_visible_since)
+        relationships: dict[int, list[dict[str, Any]]] = {}
+        for relationship, relation_type in raw_relationships:
+            if relationship.card_id_parent not in relationships:
+                relationships[relationship.card_id_parent] = []
+            if relationship.card_id_child not in relationships:
+                relationships[relationship.card_id_child] = []
+            projection = CardRelationshipService.public_relationship(relationship, relation_type)
+            relationships[relationship.card_id_parent].append(projection)
+            relationships[relationship.card_id_child].append(projection)
+
+        raw_labels = self.repo.project_label.get_all_card_labels_by_project(project, archive_visible_since)
+        labels: dict[int, list[dict[str, Any]]] = {}
+        for label, card_label in raw_labels:
+            if card_label.card_id not in labels:
+                labels[card_label.card_id] = []
+            labels[card_label.card_id].append(label.api_response())
+
+        creators = self.repo.card.get_board_creators(project, archive_visible_since)
+        raw_checklists = self.repo.checklist.get_all_by_project(
+            project,
+            archive_visible_since=archive_visible_since,
+        )
+        completed_by_card = {
+            checklist.card_id: checklist.is_checked for checklist in raw_checklists if checklist.is_system
+        }
+        user_checklist_card_ids = {checklist.card_id for checklist in raw_checklists if not checklist.is_system}
+        checklist_progress_by_card = self.repo.checkitem.get_board_progress_by_project(project, archive_visible_since)
+        active_workers_by_card = self.get_active_workers(project)
+        work_states = self.get_work_states([card for card, _ in raw_cards])
+
+        user = user_or_bot if isinstance(user_or_bot, User) else None
+        seen_map: dict[int, int] = {}
+        baseline_seq = 0
+        if user is not None:
+            assigned = self.repo.project_assigned_user.get_by_user_and_project(user, project)
+            if assigned:
+                baseline_seq = assigned.card_unread_baseline_seq
+            seen_map = self.repo.user_card_read_state.get_seen_seq_map(user.id, [card.id for card, _ in raw_cards])
+            board_seq = max((card.last_change_seq for card, _ in raw_cards), default=0)
+            if assigned is not None and board_seq > (assigned.board_seen_seq or 0):
+                assigned.board_seen_seq = board_seq
+                self.repo.project_assigned_user.update(assigned)
+
+        cards = []
+        linked_cards = [card for card, _ in raw_cards if getattr(card, "is_linked_resource", False)]
+        resource_payloads = (
+            self._get_linked_resource_payloads(user_or_bot, project, linked_cards, include_content=False)
+            if linked_cards
+            else {}
+        )
+        for card, count_comment in raw_cards:
+            is_check_card = (bool(card.deadline_at) or not card.description.content.strip()) and card.id not in user_checklist_card_ids
+            api_card = card.board_api_response(
+                count_comment=count_comment,
+                member_uids=members.get(card.id, []),
+                relationships=relationships.get(card.id, []),
+                labels=labels.get(card.id, []),
+                creator=self._card_creator_projection(card, creators.get(card.id)),
+                completed=completed_by_card.get(card.id, False),
+                is_check_card=is_check_card,
+            )
+            checklist_total, checklist_completed = checklist_progress_by_card.get(card.id, (0, 0))
+            api_card["checklist_total_count"] = checklist_total
+            api_card["checklist_completed_count"] = checklist_completed
+            api_card["active_workers"] = active_workers_by_card.get(card.id, [])
+            api_card["work_state"] = work_states[card.id]
+            if getattr(card, "is_linked_resource", False):
+                api_card["linked_resource"] = resource_payloads[card.get_uid()]
+            if user is not None:
+                cursor = max(seen_map.get(card.id, 0), baseline_seq)
+                api_card["has_unread_change"] = seen_map.get(card.id, 0) < 0 or card.last_change_seq > cursor
+                api_card["latest_change"] = {
+                    "seq": card.last_change_seq,
+                    "target_type": card.last_change_target_type,
+                    "target_uid": card.last_change_target_id.to_short_code() if card.last_change_target_id else None,
+                    "at": card.last_change_at.isoformat() if card.last_change_at else None,
+                }
+            cards.append(api_card)
+
+        return cards
+
+    def get_active_workers(self, project: Project, card: Card | None = None) -> dict[int, list[dict[str, Any]]]:
+        """Project one avatar per timer owner without changing card assignment."""
+        grouped: dict[int, dict[str, dict[str, Any]]] = {}
+        now = SafeDateTime.now()
+        for checkitem, checklist, started_at in self.repo.checkitem.get_active_workers_by_project(project, card):
+            if checkitem.user_id is None:
+                continue
+            user_uid = checkitem.user_id.to_short_code()
+            worker = grouped.setdefault(checklist.card_id, {}).setdefault(
+                user_uid,
+                {"user_uid": user_uid, "status": "paused", "started_at": None, "elapsed_seconds": 0, "checkitems": []},
+            )
+            elapsed = checkitem.accumulated_seconds
+            if started_at is not None:
+                elapsed += max(0, int((now - started_at).total_seconds()))
+            worker["elapsed_seconds"] += elapsed
+            worker["checkitems"].append(
+                {
+                    "uid": checkitem.get_uid(),
+                    "title": checkitem.title,
+                    "status": checkitem.status.value,
+                    "started_at": started_at.isoformat() if started_at is not None else None,
+                    "elapsed_seconds": elapsed,
+                    "sampled_at": now.isoformat(),
+                }
+            )
+            if checkitem.status == CheckitemStatus.Started:
+                worker["status"] = "started"
+                if (
+                    worker["started_at"] is None
+                    or started_at is not None
+                    and started_at.isoformat() < worker["started_at"]
+                ):
+                    worker["started_at"] = started_at.isoformat() if started_at is not None else None
+        for workers in grouped.values():
+            for worker in workers.values():
+                first = worker["checkitems"][0]
+                worker["checkitem_uid"] = first["uid"]
+                worker["title"] = first["title"]
+        return {card_id: list(workers.values()) for card_id, workers in grouped.items()}
+
+    def _card_creator_projection(self, card: Card, creator: User | Bot | None) -> dict[str, Any] | None:
+        """Return only display-safe author data for the dense board list."""
+
+        if creator is None:
+            return None
+
+        return {
+            "uid": creator.get_uid(),
+            "type": User.USER_TYPE if isinstance(creator, User) else Bot.BOT_TYPE,
+            "name": creator.get_fullname(),
+            "avatar": creator.api_response().get("avatar"),
+            "created_at": card.created_at.isoformat(),
+        }
+
+    def _get_linked_resource_payloads(
+        self,
+        user_or_bot: TUserOrBot | None,
+        project: Project,
+        cards: Sequence[Card],
+        *,
+        include_content: bool,
+    ) -> dict[str, dict[str, Any]]:
+        payloads: dict[str, dict[str, Any]] = {
+            card.get_uid(): {
+                "type": card.source_type,
+                "uid": card.source_uid,
+                "status": "missing",
+            }
+            for card in cards
+            if card.source_type is not None and card.source_uid is not None
+        }
+        wiki_cards = [
+            card
+            for card in cards
+            if card.source_type == Card.LINKED_RESOURCE_PROJECT_WIKI and card.source_uid is not None
+        ]
+        wiki_uids = {cast(str, card.source_uid) for card in wiki_cards}
+        if not wiki_cards:
+            return payloads
+        if include_content:
+            wikis = self.repo.project_wiki.get_by_project_and_uids(project, wiki_uids)
+            wiki_map: dict[str, Any] = {wiki.get_uid(): wiki for wiki in wikis}
+            private_wiki_ids = {int(wiki.id) for wiki in wikis if not wiki.is_public}
+        else:
+            headers = self.repo.project_wiki.get_headers_by_project_and_uids(project, wiki_uids)
+            wiki_map = {
+                wiki_id.to_short_code(): {"id": wiki_id, "title": title, "is_public": is_public}
+                for wiki_id, title, is_public in headers
+            }
+            private_wiki_ids = {int(wiki_id) for wiki_id, _, is_public in headers if not is_public}
+
+        assigned_wiki_ids: set[int] = set()
+        can_view_all = isinstance(user_or_bot, Bot) or (
+            isinstance(user_or_bot, User) and (user_or_bot.is_admin or project.owner_id == user_or_bot.id)
+        )
+        if isinstance(user_or_bot, User) and not can_view_all:
+            assigned_wiki_ids = self.repo.project_wiki_assigned_user.get_assigned_wiki_ids(
+                user_or_bot,
+                private_wiki_ids,
+            )
+
+        for card in wiki_cards:
+            source_uid = cast(str, card.source_uid)
+            wiki = wiki_map.get(source_uid)
+            payload: dict[str, Any] = {
+                "type": Card.LINKED_RESOURCE_PROJECT_WIKI,
+                "uid": source_uid,
+                "status": "missing",
+            }
+            if wiki is not None:
+                wiki_id = wiki.id if include_content else wiki["id"]
+                is_public = wiki.is_public if include_content else wiki["is_public"]
+                title = wiki.title if include_content else wiki["title"]
+                can_view = is_public or can_view_all or int(wiki_id) in assigned_wiki_ids
+                if can_view:
+                    payload.update(
+                        {
+                            "status": "available",
+                            "title": title,
+                        }
+                    )
+                    if include_content:
+                        content = wiki.content.content if wiki.content else ""
+                        payload["preview"] = content[: self.LINKED_RESOURCE_PREVIEW_MAX_LENGTH]
+                        payload["content"] = convert_python_data(wiki.content)
+                else:
+                    payload["status"] = "forbidden"
+            payloads[card.get_uid()] = payload
+
+        return payloads
+
+    def create_linked_wiki_card(
+        self,
+        user_or_bot: TUserOrBot,
+        project: TProjectParam | None,
+        wiki: TWikiParam | None,
+        column: TColumnParam | None = None,
+    ) -> tuple[Card, dict[str, Any], bool] | None:
+        params = InfraHelper.get_records_with_foreign_by_params((Project, project), (ProjectWiki, wiki))
+        if not params:
+            return None
+        project, wiki = params
+        if wiki.project_id != project.id or not wiki.is_public:
+            return None
+        if column is None:
+            column = next(
+                (
+                    candidate
+                    for candidate, _ in self.repo.project_column.get_all_by_project(project)
+                    if not candidate.is_archive
+                ),
+                None,
+            )
+        else:
+            column = InfraHelper.get_by_id_like(ProjectColumn, column)
+        if column is None or column.project_id != project.id or column.is_archive:
+            return None
+        if isinstance(user_or_bot, User):
+            can_view = (
+                user_or_bot.is_admin
+                or project.owner_id == user_or_bot.id
+                or self._get_service(ProjectWikiService).is_assigned(user_or_bot, wiki)
+            )
+            if not can_view:
+                return None
+
+        source_uid = wiki.get_uid()
+        existing = self.repo.card.find_linked_resource(project, Card.LINKED_RESOURCE_PROJECT_WIKI, source_uid)
+        if existing is not None:
+            payload = existing.board_api_response(0, [], [], [])
+            payload["linked_resource"] = self._get_linked_resource_payloads(
+                user_or_bot, project, [existing], include_content=False
+            )[existing.get_uid()]
+            return existing, payload, False
+
+        card = Card(
+            created_by_user_id=user_or_bot.id if isinstance(user_or_bot, User) else None,
+            created_by_bot_id=user_or_bot.id if isinstance(user_or_bot, Bot) else None,
+            project_id=project.id,
+            project_column_id=column.id,
+            title="",
+            description=EditorContentModel(),
+            order=self.repo.card.get_next_order(column, {"project_id": project.id}),
+            source_type=Card.LINKED_RESOURCE_PROJECT_WIKI,
+            source_uid=source_uid,
+        )
+        try:
+            self.repo.card.insert(card)
+        except IntegrityError:
+            existing = self.repo.card.find_linked_resource(project, Card.LINKED_RESOURCE_PROJECT_WIKI, source_uid)
+            if existing is None:
+                raise
+            payload = existing.board_api_response(0, [], [], [])
+            payload["linked_resource"] = self._get_linked_resource_payloads(
+                user_or_bot, project, [existing], include_content=False
+            )[existing.get_uid()]
+            return existing, payload, False
+
+        payload = card.board_api_response(0, [], [], [])
+        payload["linked_resource"] = self._get_linked_resource_payloads(
+            user_or_bot, project, [card], include_content=False
+        )[card.get_uid()]
+        CardPublisher.created(project, column, {"card": payload})
+        return card, payload, True
+
+    def get_api_archived_page_by_project(
+        self,
+        project: TProjectParam | None,
+        limit: int,
+        before_archived_at: SafeDateTime | None = None,
+        before_card: TCardParam | None = None,
+        input_value: str | None = None,
+    ) -> tuple[list[dict[str, Any]], int, tuple[str, str] | None] | None:
+        """Return an archive-only page kept separate from the board hot path."""
+
+        project = InfraHelper.get_by_id_like(Project, project)
+        if not project:
+            return None
+        records = self.repo.card.get_archived_page_by_project(
+            project,
+            limit,
+            before_archived_at,
+            before_card,
+            input_value,
+        )
+        has_more = len(records) > limit
+        page = records[:limit]
+        cards: list[dict[str, Any]] = []
+        for card, column in page:
+            api_card = card.api_response()
+            api_card["project_column_name"] = column.name
+            cards.append(api_card)
+        next_fields = None
+        if has_more and page:
+            last_card = page[-1][0]
+            next_fields = (last_card.archived_at.isoformat(), last_card.get_uid())
+        return cards, self.repo.card.count_archived_by_project(project, input_value), next_fields
+
+    def get_dashboard_list(
+        self, user: User, pagination: TimeBasedPagination
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        records = self.repo.card.get_dashboard_list_scroller(user, pagination)
+        work_states = self.get_work_states([card for card, *_ in records])
+
+        api_cards = []
+        api_projects: dict[int, dict[str, Any]] = {}
+        linked_resources_by_project: dict[int, tuple[Project, list[Card], list[dict[str, Any]]]] = {}
+        for card, project, column in records:
+            api_card = card.api_response()
+            api_card["project_column_name"] = column.name
+            api_card["work_state"] = work_states[card.id]
+            if card.is_linked_resource:
+                resource_group = linked_resources_by_project.setdefault(project.id, (project, [], []))
+                resource_group[1].append(card)
+                resource_group[2].append(api_card)
+            if project.id not in api_projects:
+                api_projects[project.id] = project.api_response()
+            api_cards.append(api_card)
+
+        for project, linked_cards, linked_api_cards in linked_resources_by_project.values():
+            payloads = self._get_linked_resource_payloads(user, project, linked_cards, include_content=False)
+            for card, api_card in zip(linked_cards, linked_api_cards, strict=True):
+                api_card["linked_resource"] = payloads[card.get_uid()]
+
+        return api_cards, list(api_projects.values())
+
+    def get_api_list_by_project(
+        self,
+        project: TProjectParam | None,
+        user_or_bot: TUserOrBot | None = None,
+    ) -> list[dict[str, Any]]:
+        project = InfraHelper.get_by_id_like(Project, project)
+        if not project:
+            return []
+
+        records = self.repo.card.get_all_by_project(project)
+        work_states = self.get_work_states([card for card, _ in records])
+        resource_payloads = self._get_linked_resource_payloads(
+            user_or_bot,
+            project,
+            [card for card, _ in records if card.is_linked_resource],
+            include_content=False,
+        )
+        block_service = self._get_service(CardContentBlockService)
+        cards = []
+        for card, column in records:
+            api_card = card.api_response()
+            api_card["project_column_name"] = column.name
+            api_card["work_state"] = work_states[card.id]
+            if card.is_linked_resource:
+                api_card["linked_resource"] = resource_payloads[card.get_uid()]
+            blocks = block_service.get_blocks_by_card(card)
+            if blocks:
+                api_card["content_blocks"] = block_service.api_blocks_by_card(card)
+                api_card["description_content_source"] = "blocks"
+            cards.append(api_card)
+        return cards
+
+    def search_context_by_project(
+        self,
+        project: TProjectParam | None,
+        input_value: str,
+        date_field: str = "updated_at",
+        since: SafeDateTime | None = None,
+        until: SafeDateTime | None = None,
+        *,
+        include_closed: bool = False,
+        workflow_stages: list[str] | None = None,
+        include_work_state: bool = False,
+    ) -> list[dict[str, Any]]:
+        project = InfraHelper.get_by_id_like(Project, project)
+        if not project:
+            return []
+
+        cards = []
+        records = self.repo.card.search_context_by_project(
+            project,
+            input_value,
+            date_field=date_field,
+            since=since,
+            until=until,
+            include_closed=include_closed,
+            workflow_stages=workflow_stages,
+        )
+        states = self.get_work_states([card for card, _ in records]) if include_work_state else {}
+        for card, column in records:
+            description = card.description.content
+            if not include_work_state and len(description) > self.CONTEXT_DESCRIPTION_MAX_LENGTH:
+                description = f"{description[: self.CONTEXT_DESCRIPTION_MAX_LENGTH - 3]}..."
+            cards.append(
+                {
+                    "uid": card.get_uid(),
+                    "title": card.title,
+                    "description": description if include_work_state else {"content": description},
+                    "project_column_name": column.name,
+                    **(
+                        {"project_column_uid": column.get_uid(), "work_state": states[card.id]}
+                        if include_work_state
+                        else {}
+                    ),
+                }
+            )
+        return cards
+
+    def get_my_work_cards(
+        self,
+        user: User,
+        projects: list[dict[str, Any]],
+        purposes: set[str],
+        mentioned_card_ids: list[int],
+        due_before: SafeDateTime,
+        date_field: str,
+        since: SafeDateTime | None,
+        until: SafeDateTime | None,
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        """Return a token-efficient cross-project work queue with match reasons."""
+
+        records = self.repo.card.get_my_work_page(
+            user,
+            [project["uid"] for project in projects],
+            purposes,
+            mentioned_card_ids,
+            SafeDateTime.now(),
+            due_before,
+            date_field,
+            since,
+            until,
+            limit,
+        )
+        cards: list[dict[str, Any]] = []
+        work_states = self.get_work_states([card for card, *_ in records])
+        for card, project, column, is_assigned in records:
+            reasons = []
+            if is_assigned:
+                reasons.append("assigned")
+            if card.deadline_at is not None and card.deadline_at <= SafeDateTime.now():
+                reasons.append("overdue")
+            elif card.deadline_at is not None and card.deadline_at <= due_before:
+                reasons.append("due_soon")
+            if card.created_by_user_id == user.id:
+                reasons.append("created")
+            if card.id in mentioned_card_ids:
+                reasons.append("mentioned")
+            cards.append(
+                {
+                    "uid": card.get_uid(),
+                    "title": card.title,
+                    "project_uid": project.get_uid(),
+                    "project_title": project.title,
+                    "project_column_name": column.name,
+                    "deadline_at": card.deadline_at.isoformat() if card.deadline_at else None,
+                    "updated_at": card.updated_at.isoformat(),
+                    "reasons": reasons,
+                    "work_state": work_states[card.id],
+                }
+            )
+        return cards
+
+    def list_assigned_work(
+        self, user: User, project_uid: str | None = None, cursor: str | None = None, limit: int = 20
+    ) -> dict[str, Any]:
+        """Shared REST/MCP assigned-work query with current read grants and keyset pagination."""
+        if type(limit) is not int or not 1 <= limit <= 25:
+            raise ValueError("limit must be between 1 and 25")
+        projects, _ = self._get_service(ProjectService).get_api_list(user)
+        readable = {
+            project["uid"]
+            for project in projects
+            if "*" in project["current_auth_role_actions"]
+            or ProjectRoleAction.Read.value in project["current_auth_role_actions"]
+        }
+        if project_uid is not None:
+            if project_uid not in readable:
+                raise ValueError("Project not found or not readable")
+            readable = {project_uid}
+        before = None
+        if cursor is not None:
+            try:
+                if len(cursor) > 512:
+                    raise ValueError
+                raw = base64.urlsafe_b64decode(cursor + "=" * (-len(cursor) % 4))
+                fields = json.loads(raw)
+                if not isinstance(fields, list) or len(fields) != 3 or not all(isinstance(v, str) for v in fields):
+                    raise ValueError
+                timestamp = SafeDateTime.fromisoformat(fields[0])
+                if timestamp.utcoffset() is None:
+                    raise ValueError
+                before = (timestamp, InfraHelper.convert_id(fields[1]), InfraHelper.convert_id(fields[2]))
+            except (ValueError, TypeError, Base64Error) as exc:
+                raise ValueError("Invalid My Work cursor") from exc
+        if not readable:
+            return {"items": [], "next_cursor": None}
+        items, next_fields = self.get_assigned_work_page(user, sorted(readable), limit, before)
+        next_cursor = (
+            base64.urlsafe_b64encode(json.dumps(next_fields, separators=(",", ":")).encode()).decode().rstrip("=")
+            if next_fields
+            else None
+        )
+        return {"items": items, "next_cursor": next_cursor}
+
+    def get_assigned_work_page(
+        self,
+        user: User,
+        project_uids: list[str],
+        limit: int,
+        before: tuple[SafeDateTime, int, int] | None = None,
+    ) -> tuple[list[dict[str, Any]], tuple[str, str, str] | None]:
+        """Read one permission-scoped, assigned-only page without per-card fetches."""
+        records = self.repo.card.get_my_work_page(
+            user,
+            project_uids,
+            {"assigned"},
+            [],
+            SafeDateTime.now(),
+            SafeDateTime.now(),
+            "updated_at",
+            None,
+            None,
+            limit + 1,
+            before=before,
+        )
+        has_more = len(records) > limit
+        page = records[:limit]
+        work_states = self.get_work_states([card for card, *_ in page])
+        items = [
+            {
+                "card_uid": card.get_uid(),
+                "title": card.title,
+                "project_uid": project.get_uid(),
+                "project_title": project.title,
+                "column_uid": column.get_uid(),
+                "column_name": column.name,
+                "updated_at": card.updated_at.isoformat(),
+                "deadline_at": card.deadline_at.isoformat() if card.deadline_at else None,
+                "work_state": work_states[card.id],
+            }
+            for card, project, column, _ in page
+        ]
+        last = page[-1] if has_more and page else None
+        next_fields = (last[0].updated_at.isoformat(), last[1].get_uid(), last[0].get_uid()) if last else None
+        return items, next_fields
+
+    def get_api_page_by_project(
+        self,
+        project: TProjectParam | None,
+        limit: int,
+        before_updated_at: SafeDateTime | None = None,
+        before_card: TCardParam | None = None,
+        user_or_bot: TUserOrBot | None = None,
+        *,
+        include_closed: bool = False,
+        workflow_stages: list[str] | None = None,
+    ) -> tuple[list[dict[str, Any]], int, tuple[str, str] | None] | None:
+        """Return a bounded newest-updated-first card page and opaque cursor fields."""
+
+        project = InfraHelper.get_by_id_like(Project, project)
+        if not project:
+            return None
+        records = self.repo.card.get_page_by_project(
+            project,
+            limit,
+            before_updated_at,
+            before_card,
+            include_closed=include_closed,
+            workflow_stages=workflow_stages,
+        )
+        has_more = len(records) > limit
+        page = records[:limit]
+        resource_payloads = self._get_linked_resource_payloads(
+            user_or_bot,
+            project,
+            [card for card, _ in page if card.is_linked_resource],
+            include_content=False,
+        )
+        work_states = self.get_work_states([card for card, _ in page])
+        cards: list[dict[str, Any]] = []
+        for card, column in page:
+            api_card = card.api_response()
+            api_card["project_column_name"] = column.name
+            api_card["work_state"] = work_states[card.id]
+            if card.is_linked_resource:
+                api_card["linked_resource"] = resource_payloads[card.get_uid()]
+            cards.append(api_card)
+        next_fields = None
+        if has_more and page:
+            last_card = page[-1][0]
+            next_fields = (last_card.updated_at.isoformat(), last_card.get_uid())
+        return (
+            cards,
+            self.repo.card.count_by_project(project, include_closed=include_closed, workflow_stages=workflow_stages),
+            next_fields,
+        )
+
+    def get_api_list_by_column(self, column: TColumnParam | None) -> list[dict[str, Any]]:
+        column = InfraHelper.get_by_id_like(ProjectColumn, column)
+        if not column:
+            return []
+
+        records = self.repo.card.get_all_by_column(column)
+        return [card.api_response() for card in records]
+
+    @overload
+    def get_api_assigned_user_list(
+        self,
+        card: TCardParam | None,
+        only_uids: Literal[False] = False,
+        limit: int | None = None,
+    ) -> list[dict[str, Any]]: ...
+    @overload
+    def get_api_assigned_user_list(
+        self,
+        card: TCardParam | None,
+        only_uids: Literal[True],
+        limit: int | None = None,
+    ) -> list[str]: ...
+    def get_api_assigned_user_list(
+        self,
+        card: TCardParam | None,
+        only_uids: bool = False,
+        limit: int | None = None,
+    ) -> list[dict[str, Any]] | list[str]:
+        """Return assigned users, optionally enforcing a repository row limit."""
+
+        card = InfraHelper.get_by_id_like(Card, card)
+        if not card:
+            return []
+
+        raw_users = self.repo.card_assigned_user.get_all_by_card(card, only_ids=only_uids, limit=limit)
+        if only_uids:
+            users = [cast(SnowflakeID, user).to_short_code() for user, _ in raw_users]
+        else:
+            users = [cast(User, user).api_response() for user, _ in raw_users]
+        return users
+
+    def get_api_bot_scope_list(
+        self,
+        project: TProjectParam | None,
+        card: TCardParam | None,
+        limit: int | None = None,
+    ) -> list[dict[str, Any]]:
+        """Return card bot scopes, optionally enforcing a database row limit."""
+
+        params = InfraHelper.get_records_with_foreign_by_params((Project, project), (Card, card))
+        if not params:
+            return []
+        project, card = params
+
+        scopes = BotScopeHelper.get_list(CardBotScope, limit=limit, card_id=card.id)
+        return [scope.api_response() for scope in scopes]
+
+    def get_api_bot_schedule_list(
+        self,
+        project: TProjectParam | None,
+        card: TCardParam | None,
+        limit: int | None = None,
+    ) -> list[dict[str, Any]]:
+        """Return card bot schedules, optionally enforcing a database row limit."""
+
+        params = InfraHelper.get_records_with_foreign_by_params((Project, project), (Card, card))
+        if not params:
+            return []
+        project, card = params
+
+        pagination = TimeBasedPagination(page=1, limit=limit) if limit is not None else None
+        schedules = BotScheduleHelper.get_all_by_scope(CardBotSchedule, None, card, as_api=True, pagination=pagination)
+
+        return schedules
+
+    COMPLETION_CHECKLIST_TITLE = ""
+
+    def _get_completion_checklist(self, card: Card) -> Checklist | None:
+        """Return the hidden system checklist backing a card's completion checkbox."""
+
+        checklists = self.repo.checklist.get_all_by_card(card, limit=1, is_system=True)
+        return checklists[0] if checklists else None
+
+    def is_check_card(self, card: Card) -> bool:
+        """A deadline card can use its own checkbox when it has no user checklist."""
+
+        if card.description.content.strip() and not card.deadline_at:
+            return False
+        return not self.repo.checklist.get_all_by_card(card, limit=1, is_system=False)
+
+    def ensure_completion_checklist(self, card: Card, completed: bool = False) -> Checklist:
+        """Create the hidden completion checklist silently when it does not exist yet."""
+
+        existing = self._get_completion_checklist(card)
+        if existing:
+            return existing
+
+        checklist = Checklist(
+            card_id=card.id,
+            title=self.COMPLETION_CHECKLIST_TITLE,
+            order=self.repo.checklist.get_next_order(card),
+            is_system=True,
+            is_checked=completed,
+        )
+        checkitem = Checkitem(checklist_id=checklist.id, title=card.title, is_checked=completed)
+        try:
+            self.repo.checklist.insert_completion(checklist, checkitem)
+        except IntegrityError:
+            existing = self._get_completion_checklist(card)
+            if existing:
+                return existing
+            raise
+        return checklist
+
+    def remove_completion_checklist(self, card: Card) -> None:
+        """Drop the hidden completion checklist without leaving user-visible traces."""
+
+        existing = self._get_completion_checklist(card)
+        if existing:
+            self.repo.checklist.delete(existing)
+
+    def sync_completion_checkitem_title(self, card: Card) -> None:
+        """Keep the hidden completion item's text aligned with the card title."""
+
+        checklist = self._get_completion_checklist(card)
+        if not checklist:
+            return
+        for checkitem, _, _ in self.repo.checkitem.get_all_by_checklist(checklist):
+            checkitem.title = card.title
+            self.repo.checkitem.update(checkitem)
+
+    def set_card_completed(
+        self, user_or_bot: TUserOrBot, project: TProjectParam, card: TCardParam, completed: bool
+    ) -> bool | None:
+        """Toggle a check card's completion state, creating the backing checklist lazily."""
+
+        params = InfraHelper.get_records_with_foreign_by_params((Project, project), (Card, card))
+        if not params:
+            return None
+        project, card = params
+
+        if not self.is_check_card(card):
+            return False
+
+        checklist = self.ensure_completion_checklist(card, completed=completed)
+        checkitems = self.repo.checkitem.get_all_by_checklist(checklist)
+        if not checkitems:
+            return False
+
+        checkitem = checkitems[0][0]
+        if checkitem.is_checked != completed:
+            checkitem_service = self._get_service(CheckitemService)
+            checkitem_service.toggle_checked(user_or_bot, project, card, checkitem, desired_checked=completed)
+            checklist.is_checked = completed
+            self.repo.checklist.update(checklist)
+        return True
+
+    def create(
+        self,
+        user_or_bot: TUserOrBot,
+        project: TProjectParam | None,
+        column: TColumnParam | None,
+        title: str,
+        description: EditorContentModel | None = None,
+        assign_user_uids: list[str] | None = None,
+        *,
+        dispatch_effects: bool = True,
+        order_override: int | None = None,
+        deadline_at: datetime | None = None,
+    ) -> tuple[Card, dict[str, Any]] | None:
+        params = InfraHelper.get_records_with_foreign_by_params((Project, project), (ProjectColumn, column))
+        if not params:
+            return None
+        project, column = params
+        if column.is_archive:
+            return None
+
+        with execution_readiness_uow() as execution:
+            card = Card(
+                created_by_user_id=user_or_bot.id if isinstance(user_or_bot, User) else None,
+                created_by_bot_id=user_or_bot.id if isinstance(user_or_bot, Bot) else None,
+                project_id=project.id,
+                project_column_id=column.id,
+                title=title,
+                description=description or EditorContentModel(),
+                deadline_at=deadline_at,
+                order=order_override
+                if order_override is not None
+                else self.repo.card.get_next_order(column, {"project_id": project.id}),
+            )
+            card.last_change_seq = self.next_change_seq()
+            card.last_change_target_type = self.UNREAD_TARGET_CARD
+            card.last_change_at = SafeDateTime.now()
+            self.repo.card.insert(card)
+            execution.watch_new(card.id)
+
+            users: list[User] = []
+            if assign_user_uids:
+                raw_users = self.repo.project_assigned_user.get_all_by_project(project, where_users_in=assign_user_uids)
+                for assign_user, project_assigned_user in raw_users:
+                    card_assigned_user = CardAssignedUser(
+                        project_assigned_id=project_assigned_user.id,
+                        card_id=card.id,
+                        user_id=assign_user.id,
+                    )
+                    users.append(assign_user)
+                    self.repo.card_assigned_user.insert(card_assigned_user)
+
+            is_check_card = bool(deadline_at) or not card.description.content.strip()
+            if is_check_card:
+                self.ensure_completion_checklist(card)
+
+            api_card = card.board_api_response(
+                0,
+                [user.get_uid() for user in users],
+                [],
+                [],
+                creator=self._card_creator_projection(card, user_or_bot)
+                if isinstance(user_or_bot, (User, Bot))
+                else None,
+                completed=False,
+                is_check_card=is_check_card,
+            )
+            model = {"card": api_card}
+
+        if dispatch_effects:
+            self.dispatch_created(user_or_bot, project, column, card, model, users)
+
+        return card, api_card
+
+    def dispatch_created(
+        self,
+        user_or_bot: TUserOrBot,
+        project: Project,
+        column: ProjectColumn,
+        card: Card,
+        model: dict[str, Any],
+        users: list[User] | None = None,
+        *,
+        include_bot: bool = True,
+        include_notifications: bool = True,
+    ) -> None:
+        CardPublisher.created(project, column, model)
+        CardActivityTask.card_created(user_or_bot, project, card)
+        if include_bot:
+            CardBotTask.card_created(user_or_bot, project, card)
+        if include_notifications and users:
+            notification_service = self._get_service(NotificationService)
+            for user in users:
+                notification_service.notify_assigned_to_card(user_or_bot, user, project, card)
+
+    def cardify_selection(
+        self,
+        user_or_bot: TUserOrBot,
+        project: TProjectParam | None,
+        card: TCardParam | None,
+        selected_markdown: str,
+    ) -> dict[str, Any] | None:
+        """Extract the selected body fragment into a child card with a link back.
+
+        Creates a child card in the parent's column, links them with the first
+        global parent-child relationship type, replaces the selection with a
+        [[title]] link, and returns the child card summary.
+        """
+        params = InfraHelper.get_records_with_foreign_by_params((Project, project), (Card, card))
+        if not params:
+            return None
+        project, card = params
+
+        selected_markdown = selected_markdown.strip()
+        if not selected_markdown:
+            return None
+
+        # Derive a concise title from the first meaningful line
+        first_line = next(
+            (line.lstrip("#-*> ").strip() for line in selected_markdown.split("\n") if line.strip()),
+            "Untitled",
+        )
+        title = first_line[:80] + ("..." if len(first_line) > 80 else "")
+
+        # Create the child card in the same column
+        child = Card(
+            project_id=project.id,
+            project_column_id=card.project_column_id,
+            title=title,
+            description=EditorContentModel(content=selected_markdown),
+            order=self.repo.card.get_next_order(
+                InfraHelper.get_by_id_like(ProjectColumn, card.project_column_id),
+                {"project_id": project.id},
+            ),
+        )
+        with execution_readiness_uow() as execution:
+            self.repo.card.insert(child)
+            execution.watch_new(child.id)
+
+            # A child is contained by its parent; an arbitrary first type could block execution.
+            contains_type = self._contains_relationship_type()
+            self.repo.card_relationship.insert(
+                CardRelationship(
+                    card_id_parent=card.id,
+                    card_id_child=child.id,
+                    relationship_type_id=contains_type.id,
+                )
+            )
+
+            # Replace the selection with a link in the parent body
+            full_markdown = card.description.content or ""
+            link = f"[[{title}]]"
+            index = full_markdown.find(selected_markdown)
+            if index != -1:
+                new_markdown = full_markdown[:index] + link + full_markdown[index + len(selected_markdown) :]
+                card.description = EditorContentModel(content=new_markdown)
+                self.repo.card.update(card)
+
+        CardPublisher.updated(project, card, None, {"description": link})
+        CardActivityTask.card_created(user_or_bot, project, child)
+
+        return {
+            "child_card_uid": child.get_uid(),
+            "child_card_title": title,
+            "link_markdown": link,
+        }
+
+    def convert_description_checkboxes(
+        self,
+        user_or_bot: TUserOrBot,
+        project: TProjectParam | None,
+        card: TCardParam | None,
+    ) -> dict[str, Any] | None:
+        """Convert markdown checkboxes in the card body into a native checklist.
+
+        Parses `- [ ]` / `- [x]` lines, creates a native checklist preserving
+        completion state, removes the checkbox lines from the description, and
+        returns the created checklist summary.
+        """
+        import re
+
+        params = InfraHelper.get_records_with_foreign_by_params((Project, project), (Card, card))
+        if not params:
+            return None
+        project, card = params
+
+        markdown = card.description.content or ""
+        pattern = re.compile(r"^[\t ]*(?:[-*+]|\d+\.)\s+\[([ xX])\]\s+(.+)$", re.MULTILINE)
+        matches = list(pattern.finditer(markdown))
+        if not matches:
+            return {"checklist_uid": None, "item_count": 0, "message": "No markdown checkboxes found"}
+
+        # Build checklist items preserving completion state
+        items = []
+        for match in matches:
+            is_checked = match.group(1).lower() == "x"
+            title = match.group(2).strip()
+            if title:
+                items.append({"title": title, "is_checked": is_checked})
 
         if not items:
             return {"checklist_uid": None, "item_count": 0, "message": "No valid checkbox titles"}
