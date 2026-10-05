@@ -63,6 +63,38 @@ def test_attachment_upload_requires_card_update_permission() -> None:
     assert actions == [ProjectRoleAction.CardUpdate.value]
 
 
+@pytest.mark.parametrize("completed", [False, True])
+def test_card_completion_reuses_rest_command_and_card_update_permission(monkeypatch, completed) -> None:
+    from unittest.mock import Mock
+
+    mutate = Mock(return_value=True)
+    service = SimpleNamespace(card=SimpleNamespace(set_card_completed=mutate))
+    actor = object()
+    monkeypatch.setattr(CardMcp, "_require_task_card", lambda *_: (object(), object()))
+    assert CardMcp.set_card_completed("project", "card", completed, actor, service) == {"completed": completed}
+    mutate.assert_called_once_with(actor, "project", "card", completed)
+    assert McpRoleFilter.get_filtered(CardMcp.set_card_completed)[1] == [ProjectRoleAction.CardUpdate.value]
+
+
+def test_card_completion_rejects_unavailable_checkbox_and_linked_reference(monkeypatch) -> None:
+    from unittest.mock import Mock
+
+    original_require_task_card = CardMcp._require_task_card
+    mutate = Mock(return_value=False)
+    service = SimpleNamespace(card=SimpleNamespace(set_card_completed=mutate))
+    monkeypatch.setattr(CardMcp, "_require_task_card", lambda *_: (object(), object()))
+    with pytest.raises(ValueError, match="checkbox is unavailable"):
+        CardMcp.set_card_completed("project", "card", True, object(), service)
+    mutate.reset_mock()
+    monkeypatch.setattr(
+        CardMcp, "_get_card_in_project", lambda *_: (object(), SimpleNamespace(is_linked_resource=True))
+    )
+    monkeypatch.setattr(CardMcp, "_require_task_card", original_require_task_card)
+    with pytest.raises(ValueError, match="read-only references"):
+        CardMcp.set_card_completed("project", "card", True, object(), service)
+    mutate.assert_not_called()
+
+
 def test_verification_evidence_tool_binds_reviewer_and_hides_identity_from_schema() -> None:
     from unittest.mock import Mock
     from langboard_shared.domain.services.CardVerification import VerificationEvidence
