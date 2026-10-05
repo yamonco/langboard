@@ -135,7 +135,17 @@ def read_card_images(
     _, card = params
     candidates = []
     if include_body_images:
-        candidates = [("body", url, None) for url in _image_urls(card.description.content)]
+        blocks = service.card_content_block.get_blocks_by_card(card)
+        if blocks:
+            urls = [
+                url
+                for block in blocks
+                if block.block_type == "rich_text"
+                for url in _image_urls(block.payload.get("text", ""))
+            ]
+        else:
+            urls = _image_urls(card.description.content)
+        candidates = [("body", url, None) for url in urls]
     omitted = []
     for uid in dict.fromkeys(include_attachment_uids or []):
         row = service.card_attachment.get_by_id_like(uid)
