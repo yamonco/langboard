@@ -25,6 +25,7 @@ from .GraphOutputs import GRAPH_OUTPUTS
 from .NotificationOutputs import NOTIFICATION_OUTPUTS
 from .Outputs import with_typed_output
 from .ProjectOutputs import PROJECT_OUTPUTS
+from .ProjectDiscovery import with_project_discovery
 from .ResourceOutputs import RESOURCE_OUTPUTS
 from .Tool import McpTool
 from .ToolGroupMiddleware import ToolGroupMiddleware
@@ -88,6 +89,8 @@ def create_native_domain_provider(
             handler = with_read_page_bounds(name, handler)
             if name == "get_card_bundle":
                 handler = with_card_links(handler)
+            if name == "get_projects":
+                handler = with_project_discovery(handler)
             handler = with_typed_output(
                 name,
                 handler,
