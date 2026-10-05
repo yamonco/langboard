@@ -35,6 +35,7 @@ from ..card_workspace.application import patch_card_description as replace_descr
 from ..card_workspace.application import reconcile_card_checklist_projection as reconcile_checklist
 from ..card_workspace.application import replace_card_description as replace_description
 from ..card_workspace.application import set_card_relationships as replace_relationships
+from ..card_workspace.application.work_plan import WorkPlan, WorkPlanService
 from ..card_workspace.application.context_profiles import ContextProfile
 from ..card_workspace.application.dtos import BoundedItemsDto
 from ..card_workspace.application.projections import (
@@ -1435,3 +1436,20 @@ def _public_content_block(block: Any) -> dict[str, Any]:
         "payload": block.payload,
         "updated_at": block.updated_at.isoformat() if block.updated_at else None,
     }
+
+
+def _require_work_plan_project(project_uid: str, plan: WorkPlan) -> None:
+    if plan.project_uid != project_uid:
+        raise ValueError("Work plan project does not match authorized project")
+
+
+@McpTool.add(
+    description="Preview a bounded atomic card work plan without saving; return the reviewed revision for apply."
+)
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+def preview_card_work_plan(
+    project_uid: str, plan: WorkPlan, user_or_bot: User | Bot, service: DomainService
+) -> dict[str, Any]:
+    _require_work_plan_project(project_uid, plan)
+    return WorkPlanService(user_or_bot, service).preview(plan)
+

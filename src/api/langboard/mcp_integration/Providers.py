@@ -44,6 +44,7 @@ AGENT_CORE_TOOLS = frozenset(
         "list_project_cards",
         "search_project_cards",
         "get_card_bundle",
+        "preview_card_work_plan",
         "create_card",
         "update_card",
         "change_card_checklist",
