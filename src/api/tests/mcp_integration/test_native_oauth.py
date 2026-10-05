@@ -245,6 +245,7 @@ def test_principal_uses_issuer_subject_without_toolgroup_dependency(monkeypatch,
         "stable-sub",
         "https://id.example",
     )
+    assert service.identity_link.get_user_by_provider_external_id.call_args.kwargs == {"consistent": True}
 
 
 @pytest.mark.parametrize("change", ["inactive", "deleted", "missing_identity"])
