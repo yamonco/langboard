@@ -23,7 +23,8 @@ class RoleSecurity(Generic[_TRoleModel]):
         query = role_finder(query, path_params, user_id)
 
         role = None
-        with DbSession.use(readonly=True) as db:
+        # Authorization must observe committed revocations without replica lag.
+        with DbSession.use(readonly=False) as db:
             result = db.exec(query.limit(1))
             role = result.first()
 
