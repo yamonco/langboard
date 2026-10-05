@@ -1,5 +1,6 @@
 import json
 import os
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from types import SimpleNamespace
@@ -16,6 +17,7 @@ from langboard_shared.domain.services import DomainService  # noqa: F401
 
 
 # isort: split
+from langboard.card_workspace.application import execution_receipts as receipt_command
 from langboard.routes.board import ExecutionReceiptApi as receipt_api
 from langboard_shared.core.db import DbSession
 from langboard_shared.core.db.DbEngine import DbEngine
@@ -73,11 +75,11 @@ def test_native_receipt_is_idempotent_and_never_writes_user_description(monkeypa
         )
     monkeypatch.setattr(DbEngine, "get_main_engine", lambda: engine)
     monkeypatch.setattr(
-        receipt_api.InfraHelper,
+        receipt_command.InfraHelper,
         "get_records_with_foreign_by_params",
         lambda *args: (SimpleNamespace(id=10), SimpleNamespace(id=100)),
     )
-    monkeypatch.setattr(receipt_api, "current_execution", lambda card_id, db: (datetime.now(UTC), True, 5))
+    monkeypatch.setattr(receipt_command, "current_execution", lambda card_id, db: (datetime.now(UTC), True, 5))
 
     @contextmanager
     def receipt_uow():
@@ -85,7 +87,7 @@ def test_native_receipt_is_idempotent_and_never_writes_user_description(monkeypa
             yield readiness_module.ExecutionReadinessUow(db)
 
     monkeypatch.setattr(readiness_module, "_scalar", lambda *args, **kwargs: False)
-    monkeypatch.setattr(receipt_api, "execution_readiness_uow", receipt_uow)
+    monkeypatch.setattr(receipt_command, "execution_readiness_uow", receipt_uow)
     actor = SimpleNamespace(id=44)
     moves = []
     receipt_notifications = []
@@ -95,17 +97,23 @@ def test_native_receipt_is_idempotent_and_never_writes_user_description(monkeypa
             committed = connection.execute(text("SELECT count(*) FROM execution_receipt")).scalar()
         receipt_notifications.append((card.id, committed))
 
-    monkeypatch.setattr(receipt_api.CardPublisher, "execution_receipt_changed", notify_receipt)
+    monkeypatch.setattr(receipt_command.CardPublisher, "execution_receipt_changed", notify_receipt)
 
     def notify_move(received_actor, project_id, card_id, old_column_id, new_column_id):
         with engine.connect() as connection:
             committed = connection.execute(text("SELECT count(*) FROM execution_receipt")).scalar()
         moves.append((received_actor, project_id, card_id, old_column_id, new_column_id, committed))
 
-    monkeypatch.setattr(receipt_api, "_review_move_notification", lambda *args: lambda: notify_move(*args))
+    monkeypatch.setattr(receipt_command, "_review_move_notification", lambda *args: lambda: notify_move(*args))
     form = receipt_api.PutExecutionReceiptForm(
         status="success",
         summary="PR submitted",
+        review={
+            "changed": "PR submitted",
+            "verified": "Transaction tests",
+            "remaining": "Human acceptance",
+            "evidence_refs": ["https://github.com/example/repo/pull/1"],
+        },
         artifacts=[{"type": "pull_request", "url": "https://github.com/example/repo/pull/1"}],
         evidence=[{"kind": "pr_submitted", "refs": ["https://github.com/example/repo/pull/1"]}],
         checklist_evidence=[
@@ -123,7 +131,7 @@ def test_native_receipt_is_idempotent_and_never_writes_user_description(monkeypa
                 yield readiness_module.ExecutionReadinessUow(db)
                 raise RuntimeError("receipt transaction failed before commit")
 
-        monkeypatch.setattr(receipt_api, "execution_readiness_uow", failed_receipt_uow)
+        monkeypatch.setattr(receipt_command, "execution_readiness_uow", failed_receipt_uow)
         with pytest.raises(RuntimeError, match="before commit"):
             receipt_api.put_execution_receipt("board", "card", 5, form, key, actor)
         assert moves == []
@@ -131,7 +139,13 @@ def test_native_receipt_is_idempotent_and_never_writes_user_description(monkeypa
         with engine.connect() as connection:
             assert connection.execute(text("SELECT count(*) FROM execution_receipt")).scalar() == 0
             assert connection.execute(text("SELECT project_column_id FROM card WHERE id=100")).scalar() == 1
-        monkeypatch.setattr(receipt_api, "execution_readiness_uow", receipt_uow)
+        monkeypatch.setattr(receipt_command, "execution_readiness_uow", receipt_uow)
+        monkeypatch.setattr(receipt_command, "current_execution", lambda card_id, db: (datetime.now(UTC), True, 6))
+        with pytest.raises(receipt_api.ApiException.Conflict_409):
+            receipt_api.put_execution_receipt("board", "card", 5, form, key, actor)
+        with engine.connect() as connection:
+            assert connection.execute(text("SELECT count(*) FROM execution_receipt")).scalar() == 0
+        monkeypatch.setattr(receipt_command, "current_execution", lambda card_id, db: (datetime.now(UTC), True, 5))
         first = receipt_api.put_execution_receipt("board", "card", 5, form, key, actor)
         # Simulate a missing derived row after a previous receipt was stored.
         with engine.begin() as connection:
@@ -140,6 +154,11 @@ def test_native_receipt_is_idempotent_and_never_writes_user_description(monkeypa
         second = receipt_api.put_execution_receipt("board", "card", 5, retried, key, actor)
         assert json.loads(first.body)["created"] is True
         assert json.loads(second.body)["created"] is False
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            retries = list(
+                pool.map(lambda _: receipt_api.put_execution_receipt("board", "card", 5, retried, key, actor), range(4))
+            )
+        assert all(json.loads(result.body)["created"] is False for result in retries)
         assert moves == [(actor, 10, 100, 1, 2, 1)]
         assert receipt_notifications == [(100, 1)]
         with engine.connect() as connection:
@@ -163,6 +182,7 @@ def test_native_receipt_is_idempotent_and_never_writes_user_description(monkeypa
         history = receipt_api.receipt_history(100)
         assert len(history) == 1
         assert history[0]["receipt"]["summary"] == "PR submitted"
+        assert history[0]["receipt"]["review"]["remaining"] == "Human acceptance"
         assert len(history[0]["checklist_projection"]) == 2
         changed = form.model_copy(update={"summary": "different result"})
         with pytest.raises(receipt_api.ApiException.Conflict_409):
