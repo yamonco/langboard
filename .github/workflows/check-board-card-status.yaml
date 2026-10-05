@@ -22,6 +22,7 @@ on:
       - src/shared/py/langboard_shared/domain/services/factory/CardService.py
       - src/shared/py/langboard_shared/domain/services/factory/CardService_verification_test.py
       - src/shared/py/langboard_shared/domain/services/factory/CardService_work_state_test.py
+      - src/shared/py/langboard_shared/domain/services/factory/CardService_board_progress_test.py
       - src/shared/py/langboard_shared/infrastructure/repositories/factory/CardVerificationRepository.py
       - src/shared/py/langboard_shared/infrastructure/repositories/factory/CardVerificationRepository_test.py
       - src/shared/py/langboard_shared/domain/services/factory/CheckitemService.py
@@ -56,7 +57,7 @@ jobs:
         with:
           python-version: "3.12"
       - run: uv sync --frozen
-      - run: uv run --no-sync pytest -q src/shared/py/langboard_shared/domain/services/factory/CheckitemService_timer_batch_test.py src/shared/py/langboard_shared/domain/services/CardApprovalGate_test.py src/shared/py/langboard_shared/domain/services/ExecutionGeneration_test.py src/shared/py/langboard_shared/domain/services/CardWorkState_test.py src/api/tests/card_workspace/test_archive_cold_store.py src/api/tests/card_workspace/test_verification_evidence_route.py src/api/tests/mcp_integration/test_card_mcp_contract.py src/shared/py/langboard_shared/domain/services/CardVerification_test.py src/shared/py/langboard_shared/domain/services/factory/CardService_verification_test.py src/shared/py/langboard_shared/domain/services/factory/CardService_work_state_test.py src/shared/py/langboard_shared/infrastructure/repositories/factory/CardVerificationRepository_test.py
+      - run: uv run --no-sync pytest -q src/shared/py/langboard_shared/domain/services/factory/CardService_board_progress_test.py src/shared/py/langboard_shared/domain/services/factory/CheckitemService_timer_batch_test.py src/shared/py/langboard_shared/domain/services/CardApprovalGate_test.py src/shared/py/langboard_shared/domain/services/ExecutionGeneration_test.py src/shared/py/langboard_shared/domain/services/CardWorkState_test.py src/api/tests/card_workspace/test_archive_cold_store.py src/api/tests/card_workspace/test_verification_evidence_route.py src/api/tests/mcp_integration/test_card_mcp_contract.py src/shared/py/langboard_shared/domain/services/CardVerification_test.py src/shared/py/langboard_shared/domain/services/factory/CardService_verification_test.py src/shared/py/langboard_shared/domain/services/factory/CardService_work_state_test.py src/shared/py/langboard_shared/infrastructure/repositories/factory/CardVerificationRepository_test.py
 
   ui:
     runs-on: ubuntu-latest

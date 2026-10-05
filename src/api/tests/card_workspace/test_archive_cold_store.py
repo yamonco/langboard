@@ -97,10 +97,6 @@ def _service(card_repository: Any, calls: dict[str, Any] | None = None) -> CardS
             )[1]
         ),
         checkitem=SimpleNamespace(
-            get_board_progress_by_project=lambda _project, cutoff: (
-                calls.__setitem__("progress", cutoff),
-                {},
-            )[1],
             get_active_workers_by_project=lambda _project, _card=None: [],
         ),
     )
@@ -123,7 +119,7 @@ def test_board_list_passes_one_visibility_cutoff_to_all_hot_path_queries(
     # has its own batch contract tests and receives only these visible cards.
     def project_states(_service: CardService, cards: list[Any]) -> dict[int, dict[str, Any]]:
         assert cards == [card]
-        return {card.id: {"lifecycle": "active"}}
+        return {card.id: {"lifecycle": "active", "checklist_progress": {"total": 0, "completed": 0}}}
 
     monkeypatch.setattr(CardService, "get_work_states", project_states)
     before = SafeDateTime.now()
@@ -135,7 +131,6 @@ def test_board_list_passes_one_visibility_cutoff_to_all_hot_path_queries(
     assert observed["relationships"] == observed["cutoff"]
     assert observed["labels"] == observed["cutoff"]
     assert observed["checklists"] == observed["cutoff"]
-    assert observed["progress"] == observed["cutoff"]
     assert result == [
         {
             "uid": "visible-card",
@@ -149,7 +144,7 @@ def test_board_list_passes_one_visibility_cutoff_to_all_hot_path_queries(
             "checklist_total_count": 0,
             "checklist_completed_count": 0,
             "active_workers": [],
-            "work_state": {"lifecycle": "active"},
+            "work_state": {"lifecycle": "active", "checklist_progress": {"total": 0, "completed": 0}},
         }
     ]
 
@@ -415,7 +410,6 @@ def test_hot_queries_share_the_exact_boundary_and_hide_cold_relationship_endpoin
     relationships = make_repo(CardRelationshipRepository).get_all_by_project(project, cutoff)
     labels = make_repo(ProjectLabelRepository).get_all_card_labels_by_project(project, cutoff)
     checklists = make_repo(ChecklistRepository).get_all_by_project(project, cutoff)
-    progress = make_repo(CheckitemRepository).get_board_progress_by_project(project, cutoff)
     active_workers = make_repo(CheckitemRepository).get_active_workers_by_project(project)
 
     assert {card.id for card, _ in cards} == {active_id, boundary_id}
@@ -423,7 +417,6 @@ def test_hot_queries_share_the_exact_boundary_and_hide_cold_relationship_endpoin
     assert {relationship.id for relationship, _ in relationships} == {301}
     assert {assignment.card_id for _, assignment in labels} == {active_id, boundary_id}
     assert {checklist.card_id for checklist in checklists} == {active_id, boundary_id}
-    assert progress == {active_id: (2, 1)}
     assert [(int(item.id), int(checklist.card_id), started_at) for item, checklist, started_at in active_workers] == [
         (602, active_id, cutoff)
     ]
