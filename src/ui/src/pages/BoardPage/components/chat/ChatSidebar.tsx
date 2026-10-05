@@ -25,13 +25,18 @@ import { TChatScope } from "@langboard/core/types";
 export interface IChatSidebarProps {
     ref: React.RefObject<HTMLDivElement | null>;
     onClose?: () => void;
+    active?: bool;
 }
 
-const ChatSidebar = memo(({ ref, onClose }: IChatSidebarProps): React.JSX.Element => {
+const ChatSidebar = memo(({ ref, onClose, active = true }: IChatSidebarProps): React.JSX.Element => {
     const [t] = useTranslation();
     const { chatResizableSidebar } = useBoardController();
     const [state, setState] = useState<TDroppableAreaState>(DROPPABLE_AREA_IDLE);
-    const { setSelectedScope } = useBoardChat();
+    const { setSelectedScope, requestSessionList } = useBoardChat();
+
+    useEffect(() => {
+        if (active) requestSessionList();
+    }, [active, requestSessionList]);
 
     useEffect(() => {
         const area = ref?.current;
