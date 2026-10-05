@@ -418,7 +418,6 @@ class CardService(BaseDomainService):
             checklist.card_id: checklist.is_checked for checklist in raw_checklists if checklist.is_system
         }
         user_checklist_card_ids = {checklist.card_id for checklist in raw_checklists if not checklist.is_system}
-        checklist_progress_by_card = self.repo.checkitem.get_board_progress_by_project(project, archive_visible_since)
         active_workers_by_card = self.get_active_workers(project)
         work_states = self.get_work_states([card for card, _ in raw_cards])
 
@@ -453,9 +452,9 @@ class CardService(BaseDomainService):
                 completed=completed_by_card.get(card.id, False),
                 is_check_card=is_check_card,
             )
-            checklist_total, checklist_completed = checklist_progress_by_card.get(card.id, (0, 0))
-            api_card["checklist_total_count"] = checklist_total
-            api_card["checklist_completed_count"] = checklist_completed
+            progress = work_states[card.id]["checklist_progress"]
+            api_card["checklist_total_count"] = progress["total"]
+            api_card["checklist_completed_count"] = progress["completed"]
             api_card["active_workers"] = active_workers_by_card.get(card.id, [])
             api_card["work_state"] = work_states[card.id]
             if getattr(card, "is_linked_resource", False):
