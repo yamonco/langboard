@@ -9,7 +9,7 @@ import pytest
 
 def test_native_remote_vlm_without_local_models():
     pytest.importorskip("docling")
-    from PIL import Image
+    import pypdfium2 as pdfium
     from langboard_shared.tasks.docling.DocumentVision import create_vision_converter
 
     seen = []
@@ -50,8 +50,10 @@ def test_native_remote_vlm_without_local_models():
     converter = create_vision_converter(json.dumps({"base_url": base, "model_name": "vision-test"}), {base})
     with TemporaryDirectory() as tmp:
         path = Path(tmp) / "two-pages.pdf"
-        image = Image.new("RGB", (200, 200), "white")
-        image.save(path, save_all=True, append_images=[image])
+        with pdfium.PdfDocument.new() as document:
+            for _ in range(2):
+                document.new_page(200, 200).close()
+            document.save(path)
         result = converter.convert(path)
         markdown = result.document.export_to_markdown()
         assert len(seen) == 2, (len(seen), result.status)
