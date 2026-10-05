@@ -187,26 +187,26 @@ function SettingsProxyDisplay({
         [ROUTES.SETTINGS.WORKFLOW_STAGES]: {
             icon: "list-tree",
             label: t("settings.Workflow stages"),
-            onClick: () => navigate(ROUTES.SETTINGS.WORKFLOW_STAGES, { smooth: true }),
+            onClick: () => navigate(ROUTES.SETTINGS.WORKFLOW_STAGES),
             hidden: !currentUser.is_admin || !hasSettingRoleAction(...SettingRole.CATEGORIZED_MAP.WorkflowStage),
         },
         [ROUTES.SETTINGS.GLOBAL_LABELS]: {
             icon: "tags",
             label: t("settings.Global labels"),
-            onClick: () => navigate(ROUTES.SETTINGS.GLOBAL_LABELS, { smooth: true }),
+            onClick: () => navigate(ROUTES.SETTINGS.GLOBAL_LABELS),
             hidden: !currentUser.is_admin || !hasSettingRoleAction(...SettingRole.CATEGORIZED_MAP.GlobalLabel),
         },
         [ROUTES.SETTINGS.PROJECT_TEMPLATES]: {
             icon: "layout-template",
             label: t("settings.Project templates"),
-            onClick: () => navigate(ROUTES.SETTINGS.PROJECT_TEMPLATES, { smooth: true }),
+            onClick: () => navigate(ROUTES.SETTINGS.PROJECT_TEMPLATES),
             hidden: !currentUser.is_admin,
         },
         [ROUTES.SETTINGS.API_KEYS]: {
             icon: "key-round",
             label: t("settings.API keys"),
             onClick: () => {
-                navigate(ROUTES.SETTINGS.API_KEYS, { smooth: true });
+                navigate(ROUTES.SETTINGS.API_KEYS);
             },
             hidden: !hasApiKeyRoleAction(...Object.values(ApiKeyRole.EAction)),
         },
@@ -214,7 +214,7 @@ function SettingsProxyDisplay({
             icon: "users",
             label: t("settings.Users"),
             onClick: () => {
-                navigate(ROUTES.SETTINGS.USERS, { smooth: true });
+                navigate(ROUTES.SETTINGS.USERS);
             },
             hidden: !hasSettingRoleAction(...SettingRole.CATEGORIZED_MAP.User),
         },
@@ -222,7 +222,7 @@ function SettingsProxyDisplay({
             icon: "bot",
             label: t("settings.Bots"),
             onClick: () => {
-                navigate(ROUTES.SETTINGS.BOTS, { smooth: true });
+                navigate(ROUTES.SETTINGS.BOTS);
             },
             hidden: !hasSettingRoleAction(...SettingRole.CATEGORIZED_MAP.Bot),
         },
@@ -230,7 +230,7 @@ function SettingsProxyDisplay({
             icon: "bot-message-square",
             label: t("settings.Internal bots"),
             onClick: () => {
-                navigate(ROUTES.SETTINGS.INTERNAL_BOTS, { smooth: true });
+                navigate(ROUTES.SETTINGS.INTERNAL_BOTS);
             },
             hidden: !hasSettingRoleAction(...SettingRole.CATEGORIZED_MAP.InternalBot),
         },
@@ -238,7 +238,7 @@ function SettingsProxyDisplay({
             icon: "waypoints",
             label: t("settings.Global relationships"),
             onClick: () => {
-                navigate(ROUTES.SETTINGS.GLOBAL_RELATIONSHIPS, { smooth: true });
+                navigate(ROUTES.SETTINGS.GLOBAL_RELATIONSHIPS);
             },
             hidden: !hasSettingRoleAction(...SettingRole.CATEGORIZED_MAP.GlobalRelationship),
         },
@@ -246,7 +246,7 @@ function SettingsProxyDisplay({
             icon: "package-plus",
             label: t("settings.API comfort tools"),
             onClick: () => {
-                navigate(ROUTES.SETTINGS.API_COMFORT_TOOLS, { smooth: true });
+                navigate(ROUTES.SETTINGS.API_COMFORT_TOOLS);
             },
             hidden: !hasSettingRoleAction(...SettingRole.CATEGORIZED_MAP.ApiComfortTool),
         },
@@ -254,7 +254,7 @@ function SettingsProxyDisplay({
             icon: "webhook",
             label: t("settings.Webhooks"),
             onClick: () => {
-                navigate(ROUTES.SETTINGS.WEBHOOKS, { smooth: true });
+                navigate(ROUTES.SETTINGS.WEBHOOKS);
             },
             hidden: !hasSettingRoleAction(...SettingRole.CATEGORIZED_MAP.Webhook),
         },
@@ -262,7 +262,7 @@ function SettingsProxyDisplay({
             icon: "bell",
             label: t("settings.Notification schedule"),
             onClick: () => {
-                navigate(ROUTES.SETTINGS.NOTIFICATION_SCHEDULE, { smooth: true });
+                navigate(ROUTES.SETTINGS.NOTIFICATION_SCHEDULE);
             },
             hidden: !hasSettingRoleAction(...SettingRole.CATEGORIZED_MAP.NotificationSchedule),
         },
@@ -270,7 +270,7 @@ function SettingsProxyDisplay({
             icon: "package",
             label: t("mcp.MCP Server"),
             onClick: () => {
-                navigate(ROUTES.SETTINGS.MCP_TOOL_GROUPS, { smooth: true });
+                navigate(ROUTES.SETTINGS.MCP_TOOL_GROUPS);
             },
             hidden: !hasMcpRoleAction(...Object.values(McpRole.EAction)),
         },
@@ -281,7 +281,7 @@ function SettingsProxyDisplay({
             icon: "ollama",
             label: t("settings.Ollama"),
             onClick: () => {
-                navigate(ROUTES.SETTINGS.OLLAMA, { smooth: true });
+                navigate(ROUTES.SETTINGS.OLLAMA);
             },
             hidden: !hasSettingRoleAction(...SettingRole.CATEGORIZED_MAP.Ollama),
         };
