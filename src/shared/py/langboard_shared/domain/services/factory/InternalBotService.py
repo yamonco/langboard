@@ -1,3 +1,4 @@
+from json import loads
 from typing import Any, Literal
 from ....core.domain import BaseDomainService
 from ....core.domain.BaseDomainService import TMutableValidatorMap
@@ -24,6 +25,15 @@ class InternalBotService(BaseDomainService):
     def get_document_vision_binding(self) -> InternalBot | None:
         """Resolve the global document-vision alias independently of project bots."""
         return self.repo.internal_bot.get_default_by_type(InternalBotType.DocumentVision)
+
+    def is_document_processing_enabled(self) -> bool:
+        binding = self.get_document_vision_binding()
+        if not binding:
+            return False
+        try:
+            return loads(binding.value).get("document_processing_enabled", True) is True
+        except (ValueError, AttributeError):
+            return False
 
     def get_api_list(self, is_setting: bool) -> list[dict[str, Any]]:
         internal_bots = InfraHelper.get_all(InternalBot)

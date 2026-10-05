@@ -166,5 +166,14 @@
   "Flip card": "카드 접어두기",
   "Flipped cards": "접힌 카드 {{count}}",
   "Restore flipped card": "{{title}} 다시 열기",
-  "Remove flipped card": "{{title}} 트레이에서 제거"
+  "Remove flipped card": "{{title}} 트레이에서 제거",
+  "Process document": "문서 처리",
+  "Process only this attachment": "현재 문서 비전 설정으로 이 첨부만 처리합니다. 성공한 경우에만 기존 전사문을 교체합니다. 다른 파일은 처리하지 않습니다.",
+  "Document processing requested": "문서 처리 요청됨",
+  "Processing document": "문서 처리 중",
+  "Document queued": "문서 처리 대기",
+  "Document indexed": "문서 검색 가능",
+  "Document processing failed": "문서 처리 실패",
+  "Document processing disabled": "첨부만 보관",
+  "Document page progress": "{{completed}} / {{total}}페이지"
 }

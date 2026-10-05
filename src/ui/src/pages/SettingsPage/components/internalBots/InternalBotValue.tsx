@@ -1,3 +1,6 @@
+import Checkbox from "@/components/base/Checkbox";
+import Switch from "@/components/base/Switch";
+import { EInternalBotType } from "@/core/models/InternalBotModel";
 import Box from "@/components/base/Box";
 import Toast from "@/components/base/Toast";
 import useUpdateInternalBot from "@/controllers/api/settings/internalBots/useUpdateInternalBot";
@@ -27,6 +30,15 @@ const InternalBotValue = memo(() => {
     const platform = internalBot.useField("platform");
     const platformRunningType = internalBot.useField("platform_running_type");
     const value = internalBot.useField("value");
+    const botType = internalBot.useField("bot_type");
+    const documentSettings = useMemo(() => {
+        try {
+            const config = JSON.parse(value);
+            return config && typeof config === "object" && !Array.isArray(config) ? config : null;
+        } catch {
+            return null;
+        }
+    }, [value]);
     const valueType = useMemo(() => getValueType(platform, platformRunningType), [platform, platformRunningType]);
     const shouldUseEditMode = valueType === "default";
     const { mutateAsync } = useUpdateInternalBot(internalBot, { interceptToast: true });
@@ -49,7 +61,19 @@ const InternalBotValue = memo(() => {
         }
 
         await syncPendingBotValueInputChange(input);
-        const newValue = newValueRef.current.trim();
+        let newValue = newValueRef.current.trim();
+        if (botType === EInternalBotType.DocumentVision && documentSettings) {
+            try {
+                const config = JSON.parse(newValue);
+                newValue = JSON.stringify({
+                    ...config,
+                    document_processing_enabled: documentSettings.document_processing_enabled ?? true,
+                    keyword_languages: documentSettings.keyword_languages ?? ["ko", "en", "ja", "zh"],
+                });
+            } catch {
+                return;
+            }
+        }
         if (value.trim() === newValue || !newValue) {
             newValueRef.current = newValue;
             setIsEditing(false);
@@ -106,8 +130,82 @@ const InternalBotValue = memo(() => {
         setIsEditing(false);
     };
 
+    const setKeywordLanguage = (language: string, enabled: boolean) => {
+        if (!documentSettings || !canUpdateInternalBot || isEditing || isValidating) return;
+        const selected = Array.isArray(documentSettings.keyword_languages) ? documentSettings.keyword_languages : ["ko", "en", "ja", "zh"];
+        const languages = enabled ? [...new Set([...selected, language])] : selected.filter((value: string) => value !== language);
+        setIsValidating(true);
+        Toast.Add.promise(mutateAsync({ value: JSON.stringify({ ...documentSettings, keyword_languages: languages }) }), {
+            loading: t("common.Changing..."),
+            success: () => t("successes.Internal bot value changed successfully."),
+            error: (error) => {
+                const message = { message: "" };
+                setupApiErrorHandler({}, message).handle(error);
+                return message.message;
+            },
+            finally: () => setIsValidating(false),
+        });
+    };
+
+    const setDocumentProcessing = (enabled: bool) => {
+        if (!documentSettings || !canUpdateInternalBot || isEditing || isValidating) return;
+        setIsValidating(true);
+        Toast.Add.promise(mutateAsync({ value: JSON.stringify({ ...documentSettings, document_processing_enabled: enabled }) }), {
+            loading: t("common.Changing..."),
+            success: () => t("successes.Internal bot value changed successfully."),
+            error: (error) => {
+                const message = { message: "" };
+                setupApiErrorHandler({}, message).handle(error);
+                return message.message;
+            },
+            finally: () => setIsValidating(false),
+        });
+    };
+
     return (
         <Box w="full">
+            {botType === EInternalBotType.DocumentVision && (
+                <div className="mb-4 flex items-start justify-between gap-4 rounded-lg border p-3">
+                    <div>
+                        <div className="text-sm font-medium">{t("internalBot.Process new uploads")}</div>
+                        <p className="mt-1 text-xs text-muted-foreground">{t("internalBot.Existing attachments require explicit processing")}</p>
+                    </div>
+                    <Switch
+                        aria-label={t("internalBot.Process new uploads")}
+                        checked={!!documentSettings && (documentSettings.document_processing_enabled ?? true) === true}
+                        disabled={!documentSettings || !canUpdateInternalBot || isEditing || isValidating}
+                        onCheckedChange={setDocumentProcessing}
+                    />
+                </div>
+            )}
+            {botType === EInternalBotType.DocumentVision && (
+                <fieldset className="mb-4 rounded-lg border p-3">
+                    <legend className="px-1 text-sm font-medium">{t("internalBot.Search keyword languages")}</legend>
+                    <div className="flex flex-wrap gap-4">
+                        {(
+                            [
+                                ["ko", "한국어"],
+                                ["en", "English"],
+                                ["ja", "日本語"],
+                                ["zh", "中文"],
+                            ] as const
+                        ).map(([language, name]) => (
+                            <label key={language} className="flex items-center gap-2 text-sm">
+                                <Checkbox
+                                    checked={
+                                        !!documentSettings &&
+                                        (!Array.isArray(documentSettings.keyword_languages) || documentSettings.keyword_languages.includes(language))
+                                    }
+                                    disabled={!documentSettings || !canUpdateInternalBot || isEditing || isValidating}
+                                    onCheckedChange={(checked) => setKeywordLanguage(language, checked === true)}
+                                />
+                                {name}
+                            </label>
+                        ))}
+                    </div>
+                    <p className="mt-2 text-xs text-muted-foreground">{t("internalBot.Keywords apply to requested processing")}</p>
+                </fieldset>
+            )}
             <BotValueInput
                 collaborationType={EEditorCollaborationType.AppSettings}
                 currentUser={currentUser}

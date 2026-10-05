@@ -2,6 +2,8 @@ export const DOCLING_DOCUMENTS_METADATA_KEY = "__system.docling_documents";
 
 export enum EDoclingIndexStatus {
     Pending = "pending",
+    Processing = "processing",
+    Disabled = "disabled",
     Indexed = "indexed",
     Failed = "failed",
 }
@@ -10,6 +12,9 @@ export interface IDoclingMetadataEntry {
     attachment_uid: string;
     document_type: string;
     status: EDoclingIndexStatus;
+    completed_pages?: number;
+    total_pages?: number;
+    progress_percent?: number;
     content_hash?: string;
     indexed_at?: string;
     error_message?: string;

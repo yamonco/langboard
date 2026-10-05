@@ -45,6 +45,7 @@ aws = ["langboard-shared[aws]"]
 azure-vault = ["langboard-shared[azure-vault]"]
 # Structured document types and CPU-only PDF rendering; no inference weights.
 document-processing = ["langboard-shared[document-processing]"]
+document-retrieval = ["langboard-shared[document-retrieval]"]
 
 
 [dependency-groups]

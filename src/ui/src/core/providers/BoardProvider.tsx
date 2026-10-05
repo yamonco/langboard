@@ -345,7 +345,18 @@ export const BoardProvider = memo(({ project, currentUser, children }: IBoardPro
             card.description.content.toLowerCase().includes(keyword.toLowerCase()) ||
             searchableTaskText.includes(keyword.toLowerCase()) ||
             parseDoclingMetadata(cardMetadataMap[card.uid]).some((document) => {
-                const searchableDocumentText = [document.document_type, document.status, document.content.filename, document.content.markdown]
+                const attributes = document.content.search_keywords;
+                const terms =
+                    attributes && typeof attributes === "object" && !Array.isArray(attributes)
+                        ? Object.values(attributes).flatMap((value) => (Array.isArray(value) ? value.filter((term) => typeof term === "string") : []))
+                        : [];
+                const searchableDocumentText = [
+                    document.document_type,
+                    document.status,
+                    document.content.filename,
+                    document.content.markdown,
+                    ...terms,
+                ]
                     .join(" ")
                     .toLowerCase();
                 return searchableDocumentText.includes(keyword.toLowerCase());

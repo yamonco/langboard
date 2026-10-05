@@ -4,5 +4,9 @@
     "editor_chat": "编辑器聊天",
     "editor_copilot": "编辑器Copilot",
     "document_vision": "文档视觉 · document-vision"
-  }
+  },
+  "Process new uploads": "自动处理新上传的文档",
+  "Existing attachments require explicit processing": "仅在上传时应用。请在卡片中手动处理现有附件。更改此设置不会重新处理旧文件。",
+  "Search keyword languages": "搜索关键词语言",
+  "Keywords apply to requested processing": "在转录之外单独提取搜索词。仅适用于新上传或手动重新处理的附件。"
 }

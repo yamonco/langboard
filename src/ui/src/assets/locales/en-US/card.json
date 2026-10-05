@@ -166,5 +166,14 @@
   "Flip card": "Flip card",
   "Flipped cards": "Flipped cards · {{count}}",
   "Restore flipped card": "Restore {{title}}",
-  "Remove flipped card": "Remove {{title}} from tray"
+  "Remove flipped card": "Remove {{title}} from tray",
+  "Process document": "Process document",
+  "Process only this attachment": "Queue only this attachment using the current document vision provider. Existing text is replaced only after successful processing. Other files remain unchanged.",
+  "Document processing requested": "Document processing requested",
+  "Processing document": "Processing document",
+  "Document queued": "Document queued",
+  "Document indexed": "Document searchable",
+  "Document processing failed": "Document processing failed",
+  "Document processing disabled": "Attachment only",
+  "Document page progress": "{{completed}} / {{total}} pages"
 }

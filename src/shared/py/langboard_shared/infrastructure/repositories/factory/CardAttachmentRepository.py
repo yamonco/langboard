@@ -1,3 +1,4 @@
+from sqlalchemy.orm import defer
 from ....core.db import DbSession, SqlBuilder
 from ....core.domain import BaseOrderRepository
 from ....core.types.ParamTypes import TCardParam
@@ -25,6 +26,7 @@ class CardAttachmentRepository(BaseOrderRepository[CardAttachment, Card]):
         card_attachments = []
         query = (
             SqlBuilder.select.tables(CardAttachment, User)
+            .options(defer(CardAttachment.document_text))
             .join(User, CardAttachment.column("user_id") == User.column("id"))
             .where(CardAttachment.column("card_id") == card_id)
             .order_by(

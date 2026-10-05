@@ -128,7 +128,9 @@ class CardService(BaseDomainService):
     def mark_card_seen(self, user: User, card: TCardParam | None, project: TProjectParam) -> dict[str, Any] | None:
         return self.set_card_read_state(user, project, card, True)
 
-    def set_card_read_state(self, user: User, project: TProjectParam, card: TCardParam | None, seen: bool) -> dict[str, Any] | None:
+    def set_card_read_state(
+        self, user: User, project: TProjectParam, card: TCardParam | None, seen: bool
+    ) -> dict[str, Any] | None:
         if not isinstance(user, User):
             return None
         records = InfraHelper.get_records_with_foreign_by_params((Project, project), (Card, card))
@@ -230,8 +232,10 @@ class CardService(BaseDomainService):
 
     def _dependency_children(self, card: Card) -> list[SnowflakeID]:
         return [
-            child.id for _, relation_type, child in
-            self.repo.card_relationship.get_all_by_card_and_relation(card, relation="child")
+            child.id
+            for _, relation_type, child in self.repo.card_relationship.get_all_by_card_and_relation(
+                card, relation="child"
+            )
             if relation_type.machine_semantic == "blocks" and child.project_id == card.project_id
         ]
 
@@ -442,7 +446,9 @@ class CardService(BaseDomainService):
             else {}
         )
         for card, count_comment in raw_cards:
-            is_check_card = (bool(card.deadline_at) or not card.description.content.strip()) and card.id not in user_checklist_card_ids
+            is_check_card = (
+                bool(card.deadline_at) or not card.description.content.strip()
+            ) and card.id not in user_checklist_card_ids
             api_card = card.board_api_response(
                 count_comment=count_comment,
                 member_uids=members.get(card.id, []),
@@ -756,7 +762,9 @@ class CardService(BaseDomainService):
             [card for card, _ in records if card.is_linked_resource],
             include_content=False,
         )
-        blocks_by_card = self._get_service(CardContentBlockService).api_blocks_by_cards([card.id for card, _ in records])
+        blocks_by_card = self._get_service(CardContentBlockService).api_blocks_by_cards(
+            [card.id for card, _ in records]
+        )
         cards = []
         for card, column in records:
             api_card = card.api_response()
@@ -797,10 +805,13 @@ class CardService(BaseDomainService):
             include_closed=include_closed,
             workflow_stages=workflow_stages,
         )
+        document_matches = self.repo.card.search_document_matches(
+            project, [card.id for card, _ in records], input_value
+        )
         states = self.get_work_states([card for card, _ in records]) if include_work_state else {}
         for card, column in records:
             description = card.description.content
-            if not include_work_state and len(description) > self.CONTEXT_DESCRIPTION_MAX_LENGTH:
+            if len(description) > self.CONTEXT_DESCRIPTION_MAX_LENGTH:
                 description = f"{description[: self.CONTEXT_DESCRIPTION_MAX_LENGTH - 3]}..."
             cards.append(
                 {
@@ -808,6 +819,7 @@ class CardService(BaseDomainService):
                     "title": card.title,
                     "description": description if include_work_state else {"content": description},
                     "project_column_name": column.name,
+                    **({"document_matches": document_matches[card.id]} if card.id in document_matches else {}),
                     **(
                         {"project_column_uid": column.get_uid(), "work_state": states[card.id]}
                         if include_work_state
@@ -1618,7 +1630,9 @@ class CardService(BaseDomainService):
                     return None
                 if card.is_linked_resource and new_column.is_archive:
                     if not self.can_delete(user_or_bot, card):
-                        raise CardDeleteForbidden("Only the original card author or an administrator can delete this card")
+                        raise CardDeleteForbidden(
+                            "Only the original card author or an administrator can delete this card"
+                        )
                     return self._delete_card(user_or_bot, project, card)
             execution.watch_card_and_dependents(card.id)
             old_order = card.order
@@ -1626,16 +1640,22 @@ class CardService(BaseDomainService):
                 card.project_column_id = new_column.id
                 card.archived_at = SafeDateTime.now() if new_column.is_archive else None
             card.order = order
-            self.repo.card.update_row_order(card, old_column, old_order, order, new_column, preserve_shifted_updated_at=True)
+            self.repo.card.update_row_order(
+                card, old_column, old_order, order, new_column, preserve_shifted_updated_at=True
+            )
             self.repo.card.update(card)
-            self._get_service(WorkflowStagePolicyService).apply_transition(user_or_bot, project, card, old_column, new_column)
+            self._get_service(WorkflowStagePolicyService).apply_transition(
+                user_or_bot, project, card, old_column, new_column
+            )
             if new_column is not None:
                 card.last_change_seq = self.next_change_seq()
                 card.last_change_target_type = self.UNREAD_TARGET_CARD
                 card.last_change_target_id = None
                 card.last_change_at = SafeDateTime.now()
                 self.repo.card.update(card)
-            execution.db.after_commit(lambda: self.notify_order_changed(user_or_bot, project, card, old_column, new_column))
+            execution.db.after_commit(
+                lambda: self.notify_order_changed(user_or_bot, project, card, old_column, new_column)
+            )
         return True
 
     def notify_order_changed(

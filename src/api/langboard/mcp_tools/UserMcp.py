@@ -135,11 +135,34 @@ def search_project_cards(
         workflow_stages=workflow_stages,
         include_work_state=True,
     )
+    # Keep document retrieval bounded independently of full stored transcriptions.
+    remaining_document_chars = 4_000
+    for card in cards:
+        matches = []
+        for match in card.get("document_matches", [])[:2]:
+            if remaining_document_chars <= 0:
+                break
+            snippet = str(match.get("snippet", ""))[: min(500, remaining_document_chars)]
+            remaining_document_chars -= len(snippet)
+            matches.append(
+                {
+                    "attachment_uid": match.get("attachment_uid"),
+                    "filename": str(match.get("filename", ""))[:200],
+                    "snippet": snippet,
+                }
+            )
+        if matches:
+            card["document_matches"] = matches
+        else:
+            card.pop("document_matches", None)
     keys = {card["work_state"]["workflow_stage"] for card in cards if card.get("work_state", {}).get("workflow_stage")}
     stages = service.workflow_stage.get_api_by_keys(keys) if keys else {}
     return {
         "cards": [
-            {**public_card_summary(card, compact_workflow=True), **pick(card, ("description",), max_field_chars=500)}
+            {
+                **public_card_summary(card, compact_workflow=True),
+                **pick(card, ("description", "document_matches"), max_field_chars=500),
+            }
             for card in cards
         ],
         "workflow_stages": public_workflow_stages(stages),

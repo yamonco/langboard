@@ -34,6 +34,7 @@ import {
     isDeadlineWarningSuppressed,
     type IBoardCardChecklistProgress,
 } from "@/pages/BoardPage/components/board/BoardColumnCardStatus";
+import { BoardCardAttachmentDocumentProgress } from "@/pages/BoardPage/components/card/attachment/BoardCardAttachmentDocument";
 import BoardTaskMetadataBadges from "@/pages/BoardPage/components/task/BoardTaskMetadataBadges";
 import BoardCardMove from "@/pages/BoardPage/components/board/BoardCardMove";
 import { getBoardCardWidgetVisibility } from "@/pages/BoardPage/components/board/BoardCardWidgetVisibility";
@@ -329,6 +330,7 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
                         {!compact && (
                             <div className="mb-1.5 flex flex-wrap items-center gap-1">
                                 <BoardTaskMetadataBadges cardUID={card.uid} compact />
+                                <BoardCardAttachmentDocumentProgress cardUID={card.uid} />
                                 {staleDays !== null && (
                                     <span
                                         title={t("card.Unchanged for {{days}} days", { days: staleDays, count: staleDays })}

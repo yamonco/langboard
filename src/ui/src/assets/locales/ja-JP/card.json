@@ -166,5 +166,14 @@
   "Flip card": "カードをしまう",
   "Flipped cards": "しまったカード {{count}}",
   "Restore flipped card": "{{title}} を開く",
-  "Remove flipped card": "{{title}} をトレイから外す"
+  "Remove flipped card": "{{title}} をトレイから外す",
+  "Process document": "文書を処理",
+  "Process only this attachment": "現在の文書ビジョン設定でこの添付のみを処理します。成功した場合だけ既存のテキストを置き換えます。他のファイルは処理しません。",
+  "Document processing requested": "文書処理をリクエストしました",
+  "Processing document": "文書処理中",
+  "Document queued": "文書処理待機中",
+  "Document indexed": "文書を検索可能",
+  "Document processing failed": "文書処理に失敗",
+  "Document processing disabled": "添付のみ保存",
+  "Document page progress": "{{completed}} / {{total}}ページ"
 }

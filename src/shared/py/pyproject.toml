@@ -37,6 +37,7 @@ dependencies = [
 
 
 [project.optional-dependencies]
+document-retrieval = ["langchain-text-splitters>=1.1.3,<2", "tiktoken>=0.12,<1"]
 # Native remote VLM conversion; never select standard/models-local extras.
 # Transformers supplies import-time types in Docling's VLM module, without Torch.
 document-processing = [

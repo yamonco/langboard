@@ -199,7 +199,7 @@ def get_project_labels(project_uid: str, service: DomainService = DomainService.
 @AppRouter.api.get(
     "/board/{project_uid}/cards/context",
     tags=["Board"],
-    description="Find bounded project card context.",
+    description="Find bounded project card context, including transcribed attachment text without embeddings.",
     responses=OpenApiSchema()
     .suc(
         {
