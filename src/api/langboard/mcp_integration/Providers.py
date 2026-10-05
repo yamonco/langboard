@@ -58,6 +58,7 @@ AGENT_CORE_TOOLS = frozenset(
         "add_project_people",
         "list_project_wikis",
         "read_wiki_content",
+        "read_wiki",
         "patch_wiki_content",
         "create_project_wiki",
         "get_unread_notifications",
