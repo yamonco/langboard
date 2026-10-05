@@ -251,6 +251,9 @@ class CheckitemService(BaseDomainService):
             old_order = checkitem.order
             checkitem.order = order
             self.repo.checkitem.update_row_order(checkitem, old_checklist, old_order, order, new_checklist)
+            if new_checklist is not None:
+                checkitem.checklist_id = new_checklist.id
+                self.repo.checkitem.update(checkitem)
             self._mark_card_changed_for_unread(card, "checkitem", checkitem.id)
             changed_item = checkitem.model_copy(deep=True)
             db.after_commit(lambda: CheckitemPublisher.order_changed(card, changed_item, old_checklist, new_checklist))

@@ -45,8 +45,9 @@ def test_order_cursor_and_event_transaction(monkeypatch, kind, mode):
                     position=order, parent=target.id if target else 10
                 )
             )
-        if target:
-            row.checklist_id = target.id
+    def update_item(row):
+        with DbSession.use(readonly=False) as db:
+            db.exec(text("UPDATE state SET parent=:parent").bindparams(parent=row.checklist_id))
 
     def update_card(changed):
         with DbSession.use(readonly=False) as db:
@@ -57,7 +58,7 @@ def test_order_cursor_and_event_transaction(monkeypatch, kind, mode):
     repository = SimpleNamespace(
         card=SimpleNamespace(update=update_card),
         checklist=SimpleNamespace(update_column_order=update_order),
-        checkitem=SimpleNamespace(update_row_order=update_order),
+        checkitem=SimpleNamespace(update_row_order=update_order, update=update_item),
     )
     card_service = CardService(lambda _: None, lambda _: None, repository)
     monkeypatch.setattr(CardService, "next_change_seq", staticmethod(lambda: 8))
