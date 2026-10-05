@@ -112,7 +112,12 @@ def test_native_bundle_and_project_columns_share_registry_guidance(registry, mon
     card = SimpleNamespace(id=2, project_column_id=3, api_response=lambda: {"uid": "c", "title": "Work"})
     service = SimpleNamespace(
         project_column=column_service,
-        card=SimpleNamespace(can_delete=lambda *_: False, get_work_states=lambda _: {2: {}}),
+        card=SimpleNamespace(
+            can_delete=lambda *_: False,
+            get_work_states=lambda _: {2: {}},
+            is_check_card=lambda _: False,
+            _get_completion_checklist=lambda _: None,
+        ),
     )
     adapter = NativeCardWorkspaceAdapter(object(), service)
     monkeypatch.setattr(adapter, "_ensure_project_card", lambda *_: (SimpleNamespace(id=1), card))
