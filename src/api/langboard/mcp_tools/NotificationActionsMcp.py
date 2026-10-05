@@ -22,7 +22,7 @@ NOTIFICATION_READ_COMMANDS = {"one": "mark_notification_read", "all": "mark_all_
 
 @McpTool.add(
     "user",
-    description="Mark the explicitly requested notification scope read. one requires notification_uid; all forbids it. Reading notifications never marks them read automatically.",
+    description="Mark the explicitly requested notification scope read. one requires notification_uid; all forbids it and marks only the current user's visible unread notifications. Queries never mark notifications read.",
 )
 async def mark_notifications_read(change: NotificationReadChange) -> NotificationReadOutput:
     from ..mcp_integration.Server import McpServer
