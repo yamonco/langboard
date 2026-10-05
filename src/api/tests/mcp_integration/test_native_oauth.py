@@ -73,6 +73,7 @@ def test_mounted_discovery_and_callback_urls_use_native_fastmcp_routes(monkeypat
         return server
 
     monkeypatch.setattr(Server, "FastMCP", capture_server)
+    monkeypatch.setattr(type(Server.Env), "MCP_OAUTH_ENABLED", property(lambda _: True))
     app = Server.McpServer.get_oauth_http_app()
     assert native_servers[0].instructions == AGENT_POLICY
     root = Starlette(routes=[*Server.McpServer.oauth_discovery_routes, Mount("/mcp/oauth", app=app)])

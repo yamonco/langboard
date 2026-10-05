@@ -93,6 +93,10 @@ class McpServer:
 
     def get_oauth_http_app(self):
         """Expose an opt-in OAuth transport beside the unchanged legacy transport."""
+        if not Env.MCP_OAUTH_ENABLED:
+            self.oauth_discovery_routes = []
+            return None
+
         from fastmcp.server.auth import require_scopes
         from fastmcp.server.middleware import AuthMiddleware
         from .OAuth import NativeOAuthMiddleware, create_oauth_provider
