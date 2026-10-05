@@ -41,6 +41,8 @@ on:
 jobs:
   backend:
     runs-on: ubuntu-latest
+    env:
+      PROJECT_NAME: langboard
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
