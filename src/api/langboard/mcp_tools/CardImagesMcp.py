@@ -132,11 +132,10 @@ def read_card_images(
     params = _get_card_in_project(project_uid, card_uid)
     if not params:
         raise ValueError("Card not found in project")
-    project, card = params
-    details = service.card.get_details(project, card, user_or_bot)
-    if not details:
-        raise ValueError("Card not found")
-    candidates = [("body", url, None) for url in _image_urls(details.get("description"))] if include_body_images else []
+    _, card = params
+    candidates = []
+    if include_body_images:
+        candidates = [("body", url, None) for url in _image_urls(card.description.content)]
     omitted = []
     for uid in dict.fromkeys(include_attachment_uids or []):
         row = service.card_attachment.get_by_id_like(uid)
