@@ -216,7 +216,7 @@ def get_global_relationships(service: DomainService) -> dict:
 
 @McpTool.add(description="Get bot scopes for all columns in a project.")
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
-def get_column_bot_scopes(project_uid: str, service: DomainService) -> dict:
+def get_project_column_bot_scopes(project_uid: str, service: DomainService) -> dict:
     p = service.project.get_by_id_like(project_uid)
     if not p:
         raise ValueError("Project not found")

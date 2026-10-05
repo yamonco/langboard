@@ -32,6 +32,8 @@ class McpTool:
         """Register a model-visible MCP tool and derive its input schema."""
 
         def decorator(func: Callable) -> Callable:
+            if func.__name__ in self._tools:
+                raise ValueError(f"MCP tool already registered: {func.__name__}")
             sig = signature(func)
             params = sig.parameters
             exclude = [name for name, param in params.items() if self._is_injected_parameter(param)]
