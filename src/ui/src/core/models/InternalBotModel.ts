@@ -9,6 +9,7 @@ export enum EInternalBotType {
     ProjectChat = "project_chat",
     EditorChat = "editor_chat",
     EditorCopilot = "editor_copilot",
+    DocumentVision = "document_vision",
 }
 
 export interface Interface extends IBaseBotModel {

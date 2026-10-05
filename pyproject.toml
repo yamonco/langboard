@@ -43,11 +43,8 @@ dependencies = [
 [project.optional-dependencies]
 aws = ["langboard-shared[aws]"]
 azure-vault = ["langboard-shared[azure-vault]"]
-# Document conversion runs only in the broker worker. Keeping it out of the
-# API runtime avoids shipping Torch/CUDA into every web worker.
-document-processing = [
-    "docling>=2.105.0",
-]
+# Structured document types and CPU-only PDF rendering; no inference weights.
+document-processing = ["langboard-shared[document-processing]"]
 
 
 [dependency-groups]

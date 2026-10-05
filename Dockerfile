@@ -40,6 +40,13 @@ RUN cd /app && uv sync --locked --no-dev --extra azure-vault
 
 FROM base AS with-document-processing
 
+# PDF font substitution requires installed CJK glyphs, even with remote inference.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends fontconfig fonts-noto-cjk \
+    && fc-cache -f \
+    && fc-match -f '%{family}\n' ':lang=ko' | grep -q 'Noto.*CJK' \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN cd /app && uv sync --locked --no-dev --extra document-processing
 
 FROM base AS with-cron
