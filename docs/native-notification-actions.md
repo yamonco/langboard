@@ -7,7 +7,8 @@ any command runs. Querying unread notifications does not mark them read.
 
 The facade is user-only and dispatches through canonical authorized commands.
 One-notification ownership and all-notifications receiver filtering remain in
-the existing domain service. It returns the native typed `{ "read": true }`
+the existing domain service. The all scope marks only visible unread notifications;
+hidden notifications and another receiver's notifications remain unchanged. It returns the native typed `{ "read": true }`
 contract. Output validation follows execution and must not imply rollback.
 
 Only invoke this mutation for the scope explicitly requested by the user.
