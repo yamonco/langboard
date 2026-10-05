@@ -39,6 +39,11 @@ class DeadlineCard(CardAction):
     deadline_at: str
 
 
+class CompleteCard(CardAction):
+    action: Literal["completion"]
+    completed: Annotated[bool, Field(strict=True)]
+
+
 class ReplaceCardDescription(CardAction):
     # Preserve reviewed body whitespace, including leading Markdown indentation.
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=False)
@@ -90,6 +95,7 @@ CardChange = Annotated[
     | LabelCard
     | TitleCard
     | DeadlineCard
+    | CompleteCard
     | ReplaceCardDescription
     | MoveCard
     | ArchiveCard
@@ -105,6 +111,7 @@ CARD_ACTION_COMMANDS = {
     "label": "set_card_people_and_labels",
     "title": "change_card_details",
     "deadline": "change_card_details",
+    "completion": "set_card_completed",
     "description_replace": "replace_card_description",
     "move": "change_card_order_or_move_column",
     "archive": "archive_card",
