@@ -1,6 +1,7 @@
 """Optional native OAuth using FastMCP and existing Langboard identity policy."""
 
 import logging
+from contextvars import ContextVar
 from urllib.parse import urlsplit
 from uuid import uuid4
 import anyio
@@ -16,6 +17,9 @@ from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
 from ..middlewares.McpAuthMiddleware import mcp_auth_context
 
 
+_refresh_scope_limit = ContextVar("native_oauth_refresh_scope_limit", default=None)
+
+
 class LangboardOIDCProxy(OIDCProxy):
     """Keep upstream scopes within the MCP client's verified consent grant."""
 
@@ -29,7 +33,25 @@ class LangboardOIDCProxy(OIDCProxy):
             current = await self.load_refresh_token(client, refresh_token.token)
             if current is None:
                 raise TokenError("invalid_grant", "Refresh token was already consumed or expired")
-            return await super().exchange_refresh_token(client, current, scopes)
+            try:
+                granted = self.jwt_issuer.verify_token(current.token, expected_token_use="refresh").get("scope", "")
+            except Exception as error:
+                raise TokenError("invalid_grant", "Invalid refresh token") from error
+            if not isinstance(granted, str):
+                raise TokenError("invalid_grant", "Invalid refresh scope grant")
+            allowed = set(granted.split()).intersection(current.scopes)
+            if not set(scopes).issubset(allowed):
+                raise TokenError("invalid_scope", "Refresh scope exceeds the approved grant")
+            scope_token = _refresh_scope_limit.set(frozenset(scopes))
+            try:
+                return await super().exchange_refresh_token(client, current, scopes)
+            finally:
+                _refresh_scope_limit.reset(scope_token)
+
+    def _translate_scopes_from_idp(self, scopes: list[str]) -> list[str]:
+        translated = super()._translate_scopes_from_idp(scopes)
+        limit = _refresh_scope_limit.get()
+        return translated if limit is None else [scope for scope in translated if scope in limit]
 
     async def storage_readiness(self, *, timeout=3):
         """Probe the existing encrypted store without touching client credentials."""

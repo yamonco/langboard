@@ -13,8 +13,9 @@ from mcp.server.auth.provider import TokenError
 from mcp.shared.auth import OAuthClientInformationFull
 
 
+@pytest.mark.parametrize("scope_case", ["unchanged", "broadened", "narrowed", "client_expansion"])
 @pytest.mark.parametrize("upstream_failure", [False, True])
-async def test_concurrent_exchange_consumes_refresh_once(monkeypatch, upstream_failure):
+async def test_concurrent_exchange_consumes_refresh_once(monkeypatch, upstream_failure, scope_case):
     """Two requests may load first; only one can exchange the loaded refresh."""
     discovery = OIDCConfiguration(
         issuer="https://invalid.example",
@@ -38,10 +39,15 @@ async def test_concurrent_exchange_consumes_refresh_once(monkeypatch, upstream_f
     proxy.set_mcp_path("/mcp")
     client = OAuthClientInformationFull(client_id="isolated", redirect_uris=["https://invalid.example/callback"])
     now = time.time()
-    token = proxy.jwt_issuer.issue_refresh_token(client_id="isolated", scopes=[], jti="refresh-jti", expires_in=120)
+    approved = ["openid", "profile"] if scope_case == "narrowed" else ["openid"]
+    requested = ["openid"]
+    upstream_scopes = "openid profile mcp:access" if scope_case != "unchanged" else "openid"
+    token = proxy.jwt_issuer.issue_refresh_token(
+        client_id="isolated", scopes=approved, jti="refresh-jti", expires_in=120
+    )
     await proxy._refresh_token_store.put(
         key=_hash_token(token),
-        value=RefreshTokenMetadata(client_id="isolated", scopes=[], expires_at=int(now) + 120, created_at=now),
+        value=RefreshTokenMetadata(client_id="isolated", scopes=approved, expires_at=int(now) + 120, created_at=now),
         ttl=120,
     )
     await proxy._jti_mapping_store.put(
@@ -56,7 +62,7 @@ async def test_concurrent_exchange_consumes_refresh_once(monkeypatch, upstream_f
             refresh_token_expires_at=now + 120,
             expires_at=now + 60,
             token_type="Bearer",
-            scope="",
+            scope=" ".join(approved),
             client_id="isolated",
             created_at=now,
             raw_token_data={},
@@ -69,6 +75,7 @@ async def test_concurrent_exchange_consumes_refresh_once(monkeypatch, upstream_f
 
     async def refresh_token(**kwargs):
         nonlocal calls
+        assert kwargs["scope"] == "openid"
         calls += 1
         if upstream_failure and calls == 1:
             raise RuntimeError("Isolated upstream failure")
@@ -78,6 +85,7 @@ async def test_concurrent_exchange_consumes_refresh_once(monkeypatch, upstream_f
             "access_token": "isolated-new-access",
             "refresh_token": "isolated-upstream-refresh",
             "expires_in": 60,
+            "scope": upstream_scopes,
             "refresh_expires_in": 120,
         }
 
@@ -90,13 +98,23 @@ async def test_concurrent_exchange_consumes_refresh_once(monkeypatch, upstream_f
         proxy.load_refresh_token(client, token), proxy.load_refresh_token(client, token)
     )
     assert first is not None and second is not None
+    if scope_case == "client_expansion":
+        with pytest.raises(TokenError) as denied:
+            await proxy.exchange_refresh_token(client, first, ["openid", "mcp:access"])
+        assert denied.value.error == "invalid_scope"
+        assert calls == 0
+        assert await proxy.load_refresh_token(client, token) is not None
+        return
     if upstream_failure:
         with pytest.raises(TokenError, match="Upstream refresh failed"):
-            await proxy.exchange_refresh_token(client, first, [])
+            await proxy.exchange_refresh_token(client, first, requested)
         assert await proxy.load_refresh_token(client, token) is not None
-    task = asyncio.create_task(proxy.exchange_refresh_token(client, first, []))
+        assert proxy._translate_scopes_from_idp(["mcp:access"]) == ["mcp:access"]
+    task = asyncio.create_task(proxy.exchange_refresh_token(client, first, requested))
     await asyncio.wait_for(entered.wait(), timeout=2)
-    concurrent = asyncio.create_task(proxy.exchange_refresh_token(client, second, []))
+    # Another authorization task must not inherit the in-flight refresh limit.
+    assert proxy._translate_scopes_from_idp(["openid", "mcp:access"]) == ["openid", "mcp:access"]
+    concurrent = asyncio.create_task(proxy.exchange_refresh_token(client, second, requested))
     release.set()
     results = await asyncio.gather(task, concurrent, return_exceptions=True)
     successes = [value for value in results if not isinstance(value, BaseException)]
@@ -105,5 +123,12 @@ async def test_concurrent_exchange_consumes_refresh_once(monkeypatch, upstream_f
     assert counts == (1, 1)
     assert failures[0].error == "invalid_grant"
     assert calls == (2 if upstream_failure else 1)
+    issued = successes[0]
+    assert issued.scope == "openid"
+    assert proxy.jwt_issuer.verify_token(issued.access_token)["scope"] == "openid"
+    assert proxy.jwt_issuer.verify_token(issued.refresh_token, expected_token_use="refresh")["scope"] == "openid"
+    assert (await proxy.load_refresh_token(client, issued.refresh_token)).scopes == requested
     assert await proxy.load_refresh_token(client, token) is None
     assert await proxy.load_refresh_token(client, successes[0].refresh_token) is not None
+
+    assert proxy._translate_scopes_from_idp(["openid", "profile", "mcp:access"]) == ["openid", "profile", "mcp:access"]
