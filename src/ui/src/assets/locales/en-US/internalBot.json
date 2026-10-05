@@ -2,6 +2,7 @@
   "botTypes": {
     "project_chat": "Project Chat",
     "editor_chat": "Editor Chat",
-    "editor_copilot": "Editor Copilot"
+    "editor_copilot": "Editor Copilot",
+    "document_vision": "Document Vision · document-vision"
   }
 }

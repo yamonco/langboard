@@ -37,6 +37,13 @@ dependencies = [
 
 
 [project.optional-dependencies]
+# Native remote VLM conversion; never select standard/models-local extras.
+# Transformers supplies import-time types in Docling's VLM module, without Torch.
+document-processing = [
+    "docling-slim[convert-core,format-pdf,format-office,format-web]==2.133.0",
+    "transformers>=4.42,<6",
+    "packaging>=24",
+]
 aws = ["boto3>=1.40.61"]
 azure-vault = ["azure-keyvault-keys>=4.11.0", "azure-identity>=1.25.1"]
 

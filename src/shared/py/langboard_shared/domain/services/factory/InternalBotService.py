@@ -21,6 +21,10 @@ class InternalBotService(BaseDomainService):
         internal_bot = InfraHelper.get_by_id_like(InternalBot, internal_bot)
         return internal_bot
 
+    def get_document_vision_binding(self) -> InternalBot | None:
+        """Resolve the global document-vision alias independently of project bots."""
+        return self.repo.internal_bot.get_default_by_type(InternalBotType.DocumentVision)
+
     def get_api_list(self, is_setting: bool) -> list[dict[str, Any]]:
         internal_bots = InfraHelper.get_all(InternalBot)
         return [internal_bot.api_response(is_setting=is_setting) for internal_bot in internal_bots]
