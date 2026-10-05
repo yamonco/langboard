@@ -14,7 +14,7 @@ Tests exercise storage/parser/card boundaries and actual middleware response han
 
 ## Query cost and deployed-domain receipt
 
-Image reads use the already validated card's description instead of the full card-details projection. Attachment-only reads do not load body content, comments, assignees, labels, relationships, workers or content blocks. Tests fail if the full card-details service is invoked. This does not claim a measured latency improvement or full structured-content-block parity.
+Image reads use the already validated card and a targeted content-block query instead of the full card-details projection. When blocks exist, only rich-text block payloads provide body image references; code and diagram sources stay literal, and the legacy description is not revived. Cards without blocks retain description parsing. Attachment-only reads do not load body content, comments, assignees, labels, relationships, workers or content blocks. Tests fail if the full card-details service is invoked. This does not claim a measured latency improvement or full structured-content-block parity.
 
 On 2026-10-05, an in-process FastMCP client inside the deployed API container used the native Agent/Core provider, canonical wrapper, current database user/role checks and actual storage. Card `0HNR57mHyGP`, attachment `bV29EzKID39`, returned one PNG ImageContent with 27,859 bytes and no omissions. Selecting that same attachment from card `dUceNp14Xz9` returned only text and `attachment_not_in_card`, with zero image bytes. No business records were changed.
 
