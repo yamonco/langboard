@@ -222,6 +222,27 @@ def get_my_work(
 
 
 @AppRouter.api.get(
+    "/dashboard/work/assigned",
+    tags=["Dashboard"],
+    description="Read current user's assigned cards with the same cursor contract as native MCP list_my_work.",
+    responses=OpenApiSchema().suc({"items": "object[]", "next_cursor": "string?"}).auth().forbidden().get(),
+)
+@AuthFilter.add("user")
+def get_assigned_work(
+    project_uid: str | None = None,
+    cursor: str | None = Query(default=None, max_length=512),
+    limit: int = Query(default=20, ge=1, le=25),
+    user: User = Auth.scope("user"),
+    service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    try:
+        result = service.card.list_assigned_work(user, project_uid, cursor, limit)
+    except ValueError as exc:
+        raise ApiException.BadRequest_400(ApiErrorCode.VA0000) from exc
+    return JsonResponse(content=result)
+
+
+@AppRouter.api.get(
     "/dashboard/work/active",
     tags=["Dashboard"],
     responses=OpenApiSchema()
