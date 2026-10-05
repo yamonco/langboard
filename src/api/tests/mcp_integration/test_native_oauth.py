@@ -201,7 +201,7 @@ def service_fixture():
 def test_provider_disabled_does_not_construct_or_fetch_discovery(monkeypatch):
     monkeypatch.setattr(OAuth, "Env", settings(MCP_OAUTH_ENABLED=False))
     factory = Mock()
-    monkeypatch.setattr(OAuth, "OIDCProxy", factory)
+    monkeypatch.setattr(OAuth, "LangboardOIDCProxy", factory)
     assert OAuth.create_oauth_provider() is None
     factory.assert_not_called()
 
@@ -209,7 +209,7 @@ def test_provider_disabled_does_not_construct_or_fetch_discovery(monkeypatch):
 def test_provider_uses_native_storage_and_generic_configuration(monkeypatch):
     monkeypatch.setattr(OAuth, "Env", settings())
     factory = Mock()
-    monkeypatch.setattr(OAuth, "OIDCProxy", factory)
+    monkeypatch.setattr(OAuth, "LangboardOIDCProxy", factory)
     OAuth.create_oauth_provider()
     args = factory.call_args.kwargs
     assert args["client_storage"] is None

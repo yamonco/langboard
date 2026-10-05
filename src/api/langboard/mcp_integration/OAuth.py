@@ -11,6 +11,23 @@ from langboard_shared.Env import Env
 from ..middlewares.McpAuthMiddleware import mcp_auth_context
 
 
+class LangboardOIDCProxy(OIDCProxy):
+    """Keep upstream scopes within the MCP client's verified consent grant."""
+
+    async def load_access_token(self, token: str):
+        validated = await super().load_access_token(token)
+        if validated is None:
+            return None
+        try:
+            granted = self.jwt_issuer.verify_token(token).get("scope", "")
+        except Exception:
+            return None
+        if not isinstance(granted, str):
+            return None
+        allowed = set(granted.split())
+        return validated.model_copy(update={"scopes": [scope for scope in validated.scopes if scope in allowed]})
+
+
 def create_oauth_provider(*, client_storage=None):
     """Keep provider choice and persistent storage under operator control."""
     if not Env.MCP_OAUTH_ENABLED:
@@ -23,7 +40,7 @@ def create_oauth_provider(*, client_storage=None):
         raise ValueError("Native MCP OAuth requires a client and stable signing key")
     if "mcp:access" not in Env.MCP_OAUTH_SCOPES.split():
         raise ValueError("Native MCP OAuth scopes must include mcp:access")
-    return OIDCProxy(
+    return LangboardOIDCProxy(
         config_url=Env.MCP_OAUTH_DISCOVERY_URL,
         client_id=Env.MCP_OAUTH_CLIENT_ID,
         client_secret=Env.MCP_OAUTH_CLIENT_SECRET or None,
