@@ -133,3 +133,11 @@ all planned action facades, atomic Work Plan handling,
 OAuth profile access, deprecation telemetry or representative installed-client
 parity. Do not switch a connector automatically or remove its legacy tools.
 Native OAuth remains a separate opt-in delivery.
+
+The native `update_card` action `completion` accepts a strict boolean `completed`
+for a card's own completion checkbox. Read `core.is_check_card` and
+`core.completed` from `get_card_bundle` first. This action calls the same
+`CardService.set_card_completed` operation as REST and requires CardUpdate
+permission. Linked Wiki references and cards without that checkbox are rejected.
+It does not move the card, complete user checklists or grant workflow approval.
+The hidden backing checklist remains absent from ordinary checklist pages.
