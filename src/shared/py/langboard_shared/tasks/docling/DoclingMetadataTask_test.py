@@ -16,7 +16,7 @@ def test_missing_worker_package_preserves_attachment_and_skips_file_work(monkeyp
         project=SimpleNamespace(get_by_id_like=lambda _: object()),
         docling_metadata=metadata,
     )
-    monkeypatch.setattr(task, "find_spec", lambda _: None)
+    monkeypatch.setattr(task, "find_spec", lambda _: None, raising=False)
     download = Mock(side_effect=AssertionError("Missing package must not download"))
     convert = Mock(side_effect=AssertionError("Missing package must not spawn conversion"))
     monkeypatch.setattr(task.Storage, "download_file", download)
