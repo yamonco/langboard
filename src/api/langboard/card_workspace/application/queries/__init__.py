@@ -1,5 +1,6 @@
 """Side-effect-free read use cases for the card workspace feature."""
 
+from collections.abc import Callable
 from typing import Any
 from ...domain import (
     CardBundleInclude,
@@ -321,26 +322,26 @@ def _section_continuation(
         text = bounded_text(details.get("description"), section, cursor.offset, cursor.revision)
         continuation = CardBundleContinuationDto(section=section, text=text)
     else:
-        collections: dict[str, list[dict[str, Any]]] = {
-            CardBundleSection.People: assigned_people(details),
-            CardBundleSection.Labels: [
+        collections: dict[str, Callable[[], list[dict[str, Any]]]] = {
+            CardBundleSection.People: lambda: assigned_people(details),
+            CardBundleSection.Labels: lambda: [
                 public_label(item) for item in details.get("labels", []) if isinstance(item, dict)
             ],
-            CardBundleSection.Relationships: [
+            CardBundleSection.Relationships: lambda: [
                 public_relationship(item) for item in details.get("relationships", []) if isinstance(item, dict)
             ],
-            CardBundleSection.Checklists: [
+            CardBundleSection.Checklists: lambda: [
                 public_checklist(item) for item in source.checklists if isinstance(item, dict)
             ],
-            CardBundleSection.ContentBlocks: source.content_blocks,
-            CardBundleSection.Attachments: [
+            CardBundleSection.ContentBlocks: lambda: source.content_blocks,
+            CardBundleSection.Attachments: lambda: [
                 public_attachment(item) for item in source.attachments if isinstance(item, dict)
             ],
-            CardBundleSection.Metadata: public_metadata(source.metadata),
-            CardBundleSection.BotScopes: [
+            CardBundleSection.Metadata: lambda: public_metadata(source.metadata),
+            CardBundleSection.BotScopes: lambda: [
                 public_bot_scope(item) for item in source.bot_scopes if isinstance(item, dict)
             ],
-            CardBundleSection.BotSchedules: [
+            CardBundleSection.BotSchedules: lambda: [
                 public_bot_schedule(item) for item in source.bot_schedules if isinstance(item, dict)
             ],
         }
@@ -360,9 +361,10 @@ def _section_continuation(
 
             items = [public_checkitem(item) for item in raw if isinstance(item, dict)]
         else:
-            items = collections.get(section)
-            if items is None:
+            project_section = collections.get(section)
+            if project_section is None:
                 raise ValueError("Unsupported section cursor")
+            items = project_section()
         page = bounded_items(items, section, limit, cursor.offset, cursor.revision)
         continuation = CardBundleContinuationDto(section=section, page=page)
     return CardBundleResponse(card_uid=card_uid, continuation=continuation)
