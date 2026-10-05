@@ -113,8 +113,8 @@ async def test_signed_bearer_http_checks_identity_scope_and_revocation(monkeypat
         activated_at=None if failure == "inactive" else object(), deleted_at=object() if failure == "deleted" else None
     )
     lookup = Mock(
-        side_effect=lambda provider, subject, issuer: user
-        if subject == "linked-sub" and issuer == "https://id.example"
+        side_effect=lambda provider, subject, issuer, *, consistent: user
+        if consistent and subject == "linked-sub" and issuer == "https://id.example"
         else None
     )
     service = SimpleNamespace(identity_link=SimpleNamespace(get_user_by_provider_external_id=lookup), close=Mock())
