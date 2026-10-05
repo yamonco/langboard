@@ -124,7 +124,7 @@ def test_changes_replace_only_affected_sections_and_report_removal(change):
         assert "checklists:item" in delta.removed_refs
     if change == "wiki_revoke":
         assert "linked_wikis:wiki" in delta.removed_refs
-    if change == "evidence_stale":
+    if change in {"evidence_stale", "generation", "wiki_revoke", "wiki_revision"}:
         assert delta.invalidated_evidence == ["evidence:proof"]
     if change == "generation":
         assert delta.execution_generation == 2 and delta.source_revision == "code-rev"
