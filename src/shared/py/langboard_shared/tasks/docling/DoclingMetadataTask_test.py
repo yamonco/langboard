@@ -7,7 +7,7 @@ from langboard_shared.tasks.docling import DoclingMetadataTask as task
 
 
 def test_missing_worker_package_preserves_attachment_and_skips_file_work(monkeypatch):
-    attachment = SimpleNamespace(get_uid=lambda: "attachment", card_id=1, filename="report.pdf")
+    attachment = SimpleNamespace(get_uid=lambda: "attachment", card_id=1, filename="report.pdf", file=object())
     card = SimpleNamespace(project_id=2)
     metadata = Mock()
     service = SimpleNamespace(
