@@ -152,6 +152,7 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
                     card,
                     limit=_SOURCE_QUERY_LIMIT,
                     checkitems_limit=_SOURCE_QUERY_LIMIT,
+                    max_checklists=MAX_NATIVE_SECTION_SOURCE,
                     **open_filter,
                 ),
                 "checklists",

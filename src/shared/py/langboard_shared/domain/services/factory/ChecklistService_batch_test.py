@@ -108,3 +108,46 @@ def test_hundred_lists_preserve_point_projection_with_five_queries(monkeypatch, 
         assert repo.checkitem.get_all_by_checklists(card, [], 5) == []
     finally:
         engine.dispose()
+
+
+@pytest.mark.parametrize("open_only", [False, True])
+def test_overbound_lists_reject_before_item_or_timer_hydration(monkeypatch, open_only):
+    engine = create_engine("sqlite://")
+    for model in (Card, Checklist, Checkitem):
+        model.__table__.create(engine)
+    monkeypatch.setattr(DbEngine, "get_main_engine", lambda: engine)
+    monkeypatch.setattr(DbEngine, "get_readonly_engine", lambda: engine)
+    card = Card(id=2, project_id=1, project_column_id=1, created_by_user_id=1, title="Source")
+    lists = [Checklist(id=i + 100, card_id=2, title=str(i), order=i) for i in range(101)]
+    items = [Checkitem(id=i + 1000, checklist_id=i + 100, title="Open") for i in range(101)]
+    with engine.begin() as db:
+        for model, rows in [(Card, [card]), (Checklist, lists), (Checkitem, items)]:
+            db.execute(model.__table__.insert(), [{k: getattr(row, k) for k in row.model_fields} for row in rows])
+    repo = SimpleNamespace(checklist=ChecklistRepository(lambda _: None, lambda _: None))
+
+    def reject_hydration(_):
+        raise AssertionError("Overbound source must not construct item service")
+
+    service = ChecklistService(reject_hydration, lambda _: None, repo)
+    queries = []
+
+    def listener(conn, cursor, statement, *args):
+        queries.append(statement)
+
+    event.listen(engine, "before_cursor_execute", listener)
+    try:
+        with pytest.raises(ValueError, match="safe 100-item MCP source bound"):
+            service.get_api_list_by_card(card, limit=101, checkitems_limit=101, max_checklists=100, open_only=open_only)
+    finally:
+        event.remove(engine, "before_cursor_execute", listener)
+    assert len(queries) == 1
+    assert "checkitem_timer_record" not in queries[0]
+    # Execute-mode membership is filtered by an EXISTS query, without hydrating items.
+    assert ("checkitem" in queries[0]) is open_only
+
+
+@pytest.mark.parametrize("maximum,limit", [(0, 1), (100, 100), (100, None)])
+def test_source_bound_requires_sentinel_query(maximum, limit):
+    service = ChecklistService(lambda _: None, lambda _: None, SimpleNamespace())
+    with pytest.raises(ValueError, match="sentinel query limit"):
+        service.get_api_list_by_card(None, limit=limit, max_checklists=maximum)

@@ -73,7 +73,8 @@ def _service(people: list[dict[str, Any]] | None = None) -> tuple[Any, list[tupl
     card = Card()
     column = SimpleNamespace(id=2, project_id=1, name="Backlog", workflow_stage=None)
 
-    def checklists(target: Any, limit: int, checkitems_limit: int) -> list[dict[str, Any]]:
+    def checklists(target: Any, limit: int, checkitems_limit: int, *, max_checklists: int) -> list[dict[str, Any]]:
+        assert max_checklists == MAX_NATIVE_SECTION_SOURCE
         calls.append(("checklists", limit, checkitems_limit))
         return []
 
@@ -1002,5 +1003,6 @@ def test_native_execute_source_filters_open_items_before_loading_limits():
     assert service.checklist.get_api_list_by_card.call_args.kwargs == {
         "limit": MAX_NATIVE_SECTION_SOURCE + 1,
         "checkitems_limit": MAX_NATIVE_SECTION_SOURCE + 1,
+        "max_checklists": MAX_NATIVE_SECTION_SOURCE,
         "open_only": True,
     }
