@@ -6,7 +6,6 @@ from typing import Annotated
 from langboard_shared.core.db import DbSession
 from langboard_shared.domain.models import (
     Card,
-    CardMetadata,
     Checkitem,
     Checklist,
     GlobalCardRelationshipType,

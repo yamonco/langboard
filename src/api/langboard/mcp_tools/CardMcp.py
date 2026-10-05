@@ -35,7 +35,6 @@ from ..card_workspace.application import patch_card_description as replace_descr
 from ..card_workspace.application import reconcile_card_checklist_projection as reconcile_checklist
 from ..card_workspace.application import replace_card_description as replace_description
 from ..card_workspace.application import set_card_relationships as replace_relationships
-from ..card_workspace.application.work_plan import WorkPlan, WorkPlanService
 from ..card_workspace.application.context_profiles import ContextProfile
 from ..card_workspace.application.dtos import BoundedItemsDto
 from ..card_workspace.application.projections import (
@@ -48,6 +47,7 @@ from ..card_workspace.application.projections import (
     public_label,
     public_metadata,
 )
+from ..card_workspace.application.work_plan import WorkPlan, WorkPlanService
 from ..card_workspace.domain import (
     CardBundleInclude,
     CardBundleSection,
