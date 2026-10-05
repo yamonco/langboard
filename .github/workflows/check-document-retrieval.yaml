@@ -1,0 +1,35 @@
+name: Check Document Retrieval
+on:
+  pull_request:
+    paths:
+      - .github/workflows/check-document-retrieval.yaml
+      - src/shared/py/langboard_shared/tasks/docling/DocumentSplitter*
+      - src/shared/py/langboard_shared/tasks/docling/DocumentRetrievalSettings*
+      - src/shared/py/langboard_shared/tasks/docling/DocumentSqliteStore*
+      - src/shared/py/pyproject.toml
+      - src/shared/py/uv.lock
+      - uv.lock
+  workflow_dispatch:
+jobs:
+  official-store-and-settings:
+    runs-on: ubuntu-latest
+    env:
+      PROJECT_NAME: langboard
+      PYTHONPATH: src/shared/py
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: uv sync --frozen --extra document-retrieval
+      - run: uv run --no-sync pytest -q src/shared/py/langboard_shared/tasks/docling/DocumentRetrievalSettings_test.py src/shared/py/langboard_shared/tasks/docling/DocumentSplitter_test.py
+      - name: Verify retrieval does not install local inference runtimes
+        run: |
+          uv run --no-sync python - <<'PY'
+          from importlib.util import find_spec
+          for package in ("torch", "onnxruntime", "docling"):
+              assert find_spec(package) is None, package
+          PY
