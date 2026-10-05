@@ -143,7 +143,10 @@ def card_context_delta(bundle: dict, *, project_uid: str, actor_uid: str, profil
     if permissions_changed:
         reasons.append("linked_wiki_removed_or_permission_revoked")
     evidence_changed = old is not None and (
-        current["verification"] != old["verification"] or current["verification_state"] != old["verification_state"]
+        current["verification"] != old["verification"]
+        or current["verification_state"] != old["verification_state"]
+        or "linked_wikis" in changed
+        or "work_state" in changed
     )
     encoded = _encode(current, key) if not partial else None
     if encoded and len(encoded) > 65536:
