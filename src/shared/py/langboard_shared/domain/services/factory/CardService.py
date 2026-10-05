@@ -46,6 +46,7 @@ from ...models import (
 )
 from ...models.Checkitem import CheckitemStatus
 from ...models.ProjectRole import ProjectRoleAction
+from ..CardApprovalGate import pending_card_approvals
 from ..CardVerification import VerificationConflict, VerificationSubmission
 from ..CardWorkState import project_work_state
 from ..DependencyPolicy import dependency_blockers
@@ -178,6 +179,7 @@ class CardService(BaseDomainService):
         verification_records = self.repo.card_verification.get_latest_by_card_ids([card.id for card in cards])
         blockers = dependency_blockers([card.id for card in cards])
         generations = execution_generations([card.id for card in cards])
+        approvals = pending_card_approvals([card.id for card in cards])
         states = {}
         for card in cards:
             column = columns.get(card.project_column_id)
@@ -205,6 +207,7 @@ class CardService(BaseDomainService):
                 paused=paused,
                 change_seq=card.last_change_seq,
                 execution_generation=generations.get(int(card.id)),
+                pending_approval_count=approvals.get(int(card.id), 0),
                 verification_record=self._verification_projection(record) if record else None,
                 direct_blockers=blockers.get(int(card.id), []),
             )

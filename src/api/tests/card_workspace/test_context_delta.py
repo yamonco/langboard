@@ -171,3 +171,18 @@ def test_native_generation_changes_without_card_edit_invalidate_current_work_sta
     assert result.card_change_seq == first.card_change_seq
     assert result.invalidated_evidence
     assert result.sections["work_state"]["execution_state"] is None
+
+
+def test_pending_approval_changes_delta_without_card_edit_and_never_implies_approval():
+    original = snapshot()
+    original["card"]["work_state"].update(blocker_state=None, pending_approval_count=0)
+    initial = read(original)
+    pending = deepcopy(original)
+    pending["card"]["work_state"].update(blocker_state="needs_approval", pending_approval_count=1)
+    changed = read(pending, initial.current_context_cursor)
+    assert changed.blocker_changed and changed.work_state_changed
+    assert changed.card_change_seq == initial.card_change_seq
+    assert changed.invalidated_evidence
+    cleared = read(original, changed.current_context_cursor)
+    assert cleared.blocker_changed
+    assert cleared.sections["work_state"]["blocker_state"] is None

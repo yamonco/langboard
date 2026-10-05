@@ -83,6 +83,7 @@ export interface IWorkState {
         }>;
         required_checkitem_uids: string[];
     } | null;
+    pending_approval_count?: number;
     execution_generation?: number | null;
     execution_state: "idle" | "human_active" | "agent_active" | "paused" | "failed" | null;
     blocker_state: "clear" | "blocked" | "needs_input" | "needs_approval" | null;

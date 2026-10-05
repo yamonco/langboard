@@ -20,6 +20,7 @@ def project_work_state(
     paused: int,
     change_seq: int = 0,
     execution_generation: int | None = None,
+    pending_approval_count: int = 0,
     verification_record: dict[str, Any] | None = None,
     direct_blockers: list[dict[str, Any]] | None = None,
     workflow_policy: dict[str, Any] | None = None,
@@ -93,10 +94,14 @@ def project_work_state(
             )
         if not direct_blockers:
             reasons.append(reason("dependencies_clear", "No unsatisfied blocks prerequisites.", "blockers"))
+    if pending_approval_count:
+        reasons.append(reason("approval_pending", "A current native card approval requires a decision.", "approvals"))
     reasons.append(
         reason(
             "blocker_policy_unavailable",
-            "Input and approval gates have not been evaluated."
+            "Other input and approval policies have not been evaluated."
+            if pending_approval_count
+            else "Input and approval gates have not been evaluated."
             if direct_blockers is not None
             else "Dependency, input and approval gates have not been evaluated.",
             "blockers",
@@ -140,7 +145,8 @@ def project_work_state(
         "verification": verification_record,
         "execution_state": execution,
         "execution_generation": execution_generation,
-        "blocker_state": "blocked" if direct_blockers else None,
+        "blocker_state": "blocked" if direct_blockers else "needs_approval" if pending_approval_count else None,
+        "pending_approval_count": pending_approval_count,
         "dependency_state": {
             "state": "blocked" if direct_blockers else "clear" if direct_blockers is not None else None,
             "direct_blockers": direct_blockers,
@@ -148,7 +154,12 @@ def project_work_state(
         "material_kind": material,
         "lifecycle": "archived" if archived else "active",
         "active_queue_eligible": False
-        if archived or completed_work or queue_policy == "exclude" or linked_resource or direct_blockers
+        if archived
+        or completed_work
+        or queue_policy == "exclude"
+        or linked_resource
+        or direct_blockers
+        or pending_approval_count
         else None,
         "checklist_progress": {"total": total, "completed": completed},
         "reasons": reasons,
