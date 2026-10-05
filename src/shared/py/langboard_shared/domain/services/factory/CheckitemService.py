@@ -245,12 +245,18 @@ class CheckitemService(BaseDomainService):
             if not new_checklist or old_checklist.card_id != card.id or new_checklist.card_id != card.id:
                 return None
 
-        old_order = checkitem.order
-        checkitem.order = order
-        self.repo.checkitem.update_row_order(checkitem, old_checklist, old_order, order, new_checklist)
-
-        CheckitemPublisher.order_changed(card, checkitem, old_checklist, new_checklist)
-
+        if checkitem.order == order and (new_checklist is None or new_checklist.id == old_checklist.id):
+            return True
+        with DbSession.atomic() as db:
+            old_order = checkitem.order
+            checkitem.order = order
+            self.repo.checkitem.update_row_order(checkitem, old_checklist, old_order, order, new_checklist)
+            if new_checklist is not None:
+                checkitem.checklist_id = new_checklist.id
+                self.repo.checkitem.update(checkitem)
+            self._mark_card_changed_for_unread(card, "checkitem", checkitem.id)
+            changed_item = checkitem.model_copy(deep=True)
+            db.after_commit(lambda: CheckitemPublisher.order_changed(card, changed_item, old_checklist, new_checklist))
         return True
 
     def change_status(
