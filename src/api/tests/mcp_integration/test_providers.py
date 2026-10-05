@@ -105,6 +105,11 @@ async def test_registered_profiles_partition_catalog_without_changing_schemas():
         assert "profile" in modern["get_card_bundle"]["properties"]
         assert "profile" not in catalogs["compatibility"]["get_card_bundle"]["properties"]
         modern["get_card_bundle"]["properties"].pop("profile")
+        assert "query" not in catalogs["compatibility"]["get_projects"]["properties"]
+        query = modern["get_projects"]["properties"].pop("query")
+        assert query["default"] is None
+        assert query["anyOf"][0]["minLength"] == 1
+        assert query["anyOf"][0]["maxLength"] == 100
         from langboard.mcp_integration.Providers import READ_PAGE_BOUNDS
 
         for name, bounds in READ_PAGE_BOUNDS.items():
@@ -210,9 +215,9 @@ async def test_profiles_preserve_domain_dispatch_and_deny_hidden_or_ungranted_ca
 ):
     calls = []
 
-    def record(value: int) -> dict[str, int]:
+    def record(value: int) -> dict[str, list]:
         calls.append(value)
-        return {"value": value}
+        return {"projects": []}
 
     metadata = {"handler": record, "description": "Record", "exclude": [], "accessible_type": "all"}
     names = {"get_projects", "archive_card", "denied"}
@@ -242,7 +247,7 @@ async def test_profiles_preserve_domain_dispatch_and_deny_hidden_or_ungranted_ca
             if role_allowed:
                 result = await client.call_tool(visible, {"value": 3})
                 assert result.structured_content == (
-                    {"message": "Archived"} if visible == "archive_card" else {"value": 3}
+                    {"message": "Archived"} if visible == "archive_card" else {"projects": []}
                 )
             else:
                 with pytest.raises(ToolError, match="Insufficient permissions"):
