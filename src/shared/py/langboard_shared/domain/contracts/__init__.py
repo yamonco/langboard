@@ -1,8 +1,9 @@
 """WorkEvent contract: Langboard's standard external event envelope.
 
 Langboard emits WorkEvents for action-required business changes; durable
-delivery to external channels (YERMESS, Teams) is owned by YAM Runtime
-Control, not Langboard itself.
+delivery to external channels is owned by the deployment's configured
+integration consumer. The envelope does not require a particular company,
+channel, or external runtime.
 """
 
 from dataclasses import dataclass, field
