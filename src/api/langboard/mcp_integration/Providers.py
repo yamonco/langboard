@@ -10,12 +10,13 @@ from fastmcp.prompts import Prompt
 from fastmcp.resources import Resource, ResourceTemplate
 from fastmcp.server.providers.local_provider import LocalProvider
 from fastmcp.server.transforms import Visibility
+from fastmcp.server.transforms.search import RegexSearchTransform
 from fastmcp.tools import Tool
 from pydantic import Field
 from ..card_workspace.application.dtos import ProjectCardIndexResponse, ProjectCardListResponse
 from ..card_workspace.domain.value_objects import MAX_COMMENT_LIMIT, MAX_SECTION_LIMIT
 from ..middlewares.McpAuthMiddleware import mcp_auth_context
-from .Annotations import tool_annotations
+from .Annotations import ToolAnnotationTransform, tool_annotations
 from .BoardOutputs import BOARD_OUTPUTS
 from .BotOutputs import BOT_OUTPUTS
 from .CardLinks import with_card_links
@@ -162,6 +163,21 @@ def create_native_domain_provider(
 def create_compatibility_provider(wrap_tool: Callable[[str, Callable[..., Any]], Callable[..., Any]]) -> LocalProvider:
     """Preserve the complete legacy catalog without visibility changes."""
     return create_native_domain_provider(wrap_tool)
+
+
+def create_native_agent_provider(wrap_tool: Callable[[str, Callable[..., Any]], Callable[..., Any]]) -> LocalProvider:
+    """Default native discovery pins core actions and searches every other command."""
+    provider = create_native_domain_provider(wrap_tool, modern_annotations=True)
+    provider.add_transform(
+        RegexSearchTransform(
+            max_results=5,
+            always_visible=sorted(AGENT_CORE_TOOLS),
+            search_tool_name="search_raw_tools",
+            call_tool_name="call_raw_tool",
+        )
+    )
+    provider.add_transform(ToolAnnotationTransform())
+    return provider
 
 
 def create_agent_core_provider(wrap_tool: Callable[[str, Callable[..., Any]], Callable[..., Any]]) -> LocalProvider:
