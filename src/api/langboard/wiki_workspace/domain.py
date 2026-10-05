@@ -6,10 +6,15 @@ from base64 import urlsafe_b64decode, urlsafe_b64encode
 from dataclasses import dataclass
 from hashlib import sha256
 from typing import Any
+from langboard_shared.core.exceptions.WikiContentConflict import WikiContentConflict
 
 
 class WikiValidationError(ValueError):
     """Invalid or stale wiki input detected before a save."""
+
+
+class WikiRevisionConflict(WikiValidationError, WikiContentConflict):
+    """A stale reviewed revision rejected before persistence."""
 
 
 @dataclass(frozen=True)
@@ -84,7 +89,7 @@ def content_page(snapshot: WikiSnapshot, context: str, cursor: str | None, limit
 def append_content(snapshot: WikiSnapshot, expected_revision: str, text: str) -> str:
     """Preserve the whole previous document and reject stale or empty appends."""
     if snapshot.revision != expected_revision:
-        raise WikiValidationError("Wiki changed after review; read it again before appending")
+        raise WikiRevisionConflict("Wiki changed after review; read it again before appending")
     if not text.strip() or len(text) > 32000:
         raise WikiValidationError("Append text must contain 1 to 32000 characters")
     return snapshot.content + ("\n\n" if snapshot.content else "") + text
@@ -94,7 +99,7 @@ def replace_content(snapshot: WikiSnapshot, expected_revision: str, edits: list[
     """Apply bounded exact replacements without guessing through stale or ambiguous text."""
 
     if snapshot.revision != expected_revision:
-        raise WikiValidationError("Wiki changed after review; read it again before editing")
+        raise WikiRevisionConflict("Wiki changed after review; read it again before editing")
     if not 1 <= len(edits) <= 20:
         raise WikiValidationError("Wiki patch must contain 1 to 20 edits")
     content = snapshot.content
@@ -115,7 +120,7 @@ def replace_all_content(snapshot: WikiSnapshot, expected_revision: str, content:
     """Replace a complete reviewed wiki, including initialization or clearing."""
 
     if snapshot.revision != expected_revision:
-        raise WikiValidationError("Wiki changed after review; read it again before replacing")
+        raise WikiRevisionConflict("Wiki changed after review; read it again before replacing")
     if not isinstance(content, str) or len(content) > 32000:
         raise WikiValidationError("Replacement wiki content must be a string of at most 32000 characters")
     if content == snapshot.content:
