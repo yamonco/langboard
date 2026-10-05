@@ -19,6 +19,7 @@ def project_work_state(
     started: int,
     paused: int,
     change_seq: int = 0,
+    execution_generation: int | None = None,
     verification_record: dict[str, Any] | None = None,
     direct_blockers: list[dict[str, Any]] | None = None,
     workflow_policy: dict[str, Any] | None = None,
@@ -138,6 +139,7 @@ def project_work_state(
         "verification_source_change_seq": change_seq,
         "verification": verification_record,
         "execution_state": execution,
+        "execution_generation": execution_generation,
         "blocker_state": "blocked" if direct_blockers else None,
         "dependency_state": {
             "state": "blocked" if direct_blockers else "clear" if direct_blockers is not None else None,
