@@ -92,6 +92,8 @@ def _service(people: list[dict[str, Any]] | None = None) -> tuple[Any, list[tupl
             get_by_id_like=lambda uid: card,
             get_work_states=lambda cards: {item.id: {"version": 1} for item in cards},
             can_delete=lambda actor, target: False,
+            is_check_card=lambda target: False,
+            _get_completion_checklist=lambda target: None,
             get_api_assigned_user_list=lambda target, limit: people or [],
             get_api_bot_scope_list=lambda target_project, target_card, limit: [],
             get_api_bot_schedule_list=lambda target_project, target_card, limit: [],
@@ -154,6 +156,27 @@ def test_native_source_fetches_optional_sections_lazily_with_hard_query_limits()
         ("attachments", expected_limit, None),
         ("metadata", expected_limit, None),
     ]
+
+
+@pytest.mark.parametrize("checked", [False, True])
+def test_bundle_retains_card_checkbox_state_without_exposing_system_checklists(checked: bool) -> None:
+    from langboard.card_workspace.application.queries import get_card_bundle
+    from langboard.card_workspace.domain import CommentPage, SectionPage
+
+    service, calls = _service()
+    service.card.is_check_card = lambda target: True
+    service.card._get_completion_checklist = lambda target: SimpleNamespace(is_checked=checked)
+    adapter = NativeCardWorkspaceAdapter(object(), service)
+    source = adapter.get_card_bundle_source("p1", "c1", frozenset())
+    assert source is not None
+    result = get_card_bundle(
+        SimpleNamespace(get_card_bundle_source=lambda *_: source),
+        "p1", "c1", CommentPage(), SectionPage(), include=[],
+    ).model_dump()
+    assert result["card"]["core"]["is_check_card"] is True
+    assert result["card"]["core"]["completed"] is checked
+    assert source.checklists == []
+    assert calls == []
 
 
 def test_card_bundle_automation_requires_update_access(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -271,6 +294,8 @@ def test_native_checkitem_continuation_reads_only_the_requested_checklist() -> N
             get_by_id_like=lambda _uid: card,
             get_work_states=lambda cards: {item.id: {"version": 1} for item in cards},
             can_delete=lambda actor, target: False,
+            is_check_card=lambda target: False,
+            _get_completion_checklist=lambda target: None,
         ),
         checklist=SimpleNamespace(
             get_by_id_like=lambda _uid: checklist,
