@@ -68,6 +68,7 @@ READ_ONLY_TOOLS = frozenset(
         "get_project_bot_scopes",
         "get_card_bot_scopes",
         "get_column_bot_scopes",
+        "get_project_column_bot_scopes",
         "get_bot_schedules_by_project",
         "get_bot_schedules_by_card",
         "get_bot_schedules_by_column",
