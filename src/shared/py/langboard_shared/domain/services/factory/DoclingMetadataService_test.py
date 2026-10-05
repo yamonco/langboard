@@ -112,3 +112,32 @@ def test_document_generation_fences_old_results_and_preserves_previous_text_on_f
     assert docling.get_document_by_attachment_uid(CardMetadata, card, attachment.get_uid()) is None
     service.close()
     engine.dispose()
+
+
+def test_progress_publish_reads_primary_when_replica_is_unavailable(monkeypatch):
+    from ....core.routing import SocketTopic
+    from ....publishers import MetadataPublisher
+    from .DoclingMetadataService import DOCLING_DOCUMENTS_METADATA_KEY
+
+    engine = create_engine("sqlite://")
+    CardMetadata.__table__.create(engine)
+    monkeypatch.setattr(DbEngine, "get_main_engine", lambda: engine)
+
+    def lagging_replica():
+        raise AssertionError("Post-write publication must not read the replica")
+
+    monkeypatch.setattr(DbEngine, "get_readonly_engine", lagging_replica)
+    card = Card(id=123, project_id=1, project_column_id=2, title="Primary publication")
+    value = '[{"attachment_uid":"source","status":"indexed","progress_percent":100}]'
+    with DbSession.use(readonly=False) as db:
+        db.insert(CardMetadata(card_id=card.id, key=DOCLING_DOCUMENTS_METADATA_KEY, value=value))
+    publish = Mock()
+    monkeypatch.setattr(MetadataPublisher, "updated_metadata", publish)
+    service = DomainService()
+    try:
+        assert service.docling_metadata.load_documents(CardMetadata, card)[0]["status"] == "indexed"
+        service.docling_metadata.publish_update(CardMetadata, card, SocketTopic.BoardCard)
+        publish.assert_called_once_with(SocketTopic.BoardCard, card.get_uid(), DOCLING_DOCUMENTS_METADATA_KEY, value)
+    finally:
+        service.close()
+        engine.dispose()

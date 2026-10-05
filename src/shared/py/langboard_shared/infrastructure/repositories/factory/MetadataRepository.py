@@ -30,13 +30,15 @@ class MetadataRepository(BaseRepository):
         with DbSession.use(readonly=True) as db:
             return list(db.exec(query).all())
 
-    def get_by_key(self, model_cls: type[_TMetadata], foreign_model: BaseDbModel, key: str) -> _TMetadata | None:
+    def get_by_key(
+        self, model_cls: type[_TMetadata], foreign_model: BaseDbModel, key: str, *, readonly: bool = True
+    ) -> _TMetadata | None:
         foreign_key = self.__get_foreign_key(foreign_model)
         if foreign_key not in model_cls.model_fields:
             return None
 
         metadata = None
-        with DbSession.use(readonly=True) as db:
+        with DbSession.use(readonly=readonly) as db:
             result = db.exec(
                 SqlBuilder.select.table(model_cls)
                 .where((model_cls.column(foreign_key) == foreign_model.id) & (model_cls.column("key") == key))

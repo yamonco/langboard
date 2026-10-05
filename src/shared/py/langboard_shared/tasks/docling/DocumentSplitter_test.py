@@ -34,6 +34,21 @@ def test_official_splitters_preserve_sources_and_apply_character_token_and_heade
     )
     assert "second paragraph" in character_chunks[0].page_content
 
+    for unit in ["characters", "tokens"]:
+        unbroken = "한글日本語中文abc" * 100
+        bounded = split_document(
+            unbroken,
+            DocumentSplitterSettings(type="character", chunk_size=64, chunk_overlap=8, length_unit=unit),
+            metadata={"attachment_uid": "unbroken-source", "page": 3},
+        )
+        assert len(bounded) > 1
+        assert all(chunk.metadata["attachment_uid"] == "unbroken-source" for chunk in bounded)
+        assert all(chunk.metadata["page"] == 3 for chunk in bounded)
+        assert all(
+            (len(chunk.page_content) if unit == "characters" else len(encoder.encode(chunk.page_content))) <= 64
+            for chunk in bounded
+        )
+
     for invalid in [
         {"chunk_size": 64, "chunk_overlap": 64},
         {"chunk_size": True},

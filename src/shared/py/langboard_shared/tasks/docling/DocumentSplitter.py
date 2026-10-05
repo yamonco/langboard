@@ -83,6 +83,18 @@ def split_document(
     else:
         documents = [Document(page_content=text, metadata=dict(metadata or {}))]
     chunks = splitter.split_documents(documents)
+    if settings.type == "character":
+        # CharacterTextSplitter leaves an unbroken paragraph oversized. Apply
+        # the official recursive splitter to keep the configured ingestion bound.
+        fallback_options = {key: value for key, value in options.items() if key != "separator"}
+        fallback_options["separators"] = [""]
+        if settings.length_unit == "tokens":
+            fallback = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
+                encoding_name=settings.encoding, allowed_special=set(), disallowed_special=(), **fallback_options
+            )
+        else:
+            fallback = RecursiveCharacterTextSplitter(**fallback_options)
+        chunks = fallback.split_documents(chunks)
     for index, chunk in enumerate(chunks):
         chunk.metadata["chunk_index"] = index
     return chunks
