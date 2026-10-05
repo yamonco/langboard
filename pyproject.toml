@@ -13,7 +13,6 @@ dependencies = [
     "anyio>=4.11.0",
     "argcomplete>=3.6.3",
     "bcrypt<=5.0.0",
-    "boto3>=1.40.61",
     "celery>=5.5.3",
     "cryptocode>=0.1",
     "fastapi==0.139.2",
@@ -42,6 +41,7 @@ dependencies = [
 
 
 [project.optional-dependencies]
+aws = ["langboard-shared[aws]"]
 azure-vault = ["langboard-shared[azure-vault]"]
 # Document conversion runs only in the broker worker. Keeping it out of the
 # API runtime avoids shipping Torch/CUDA into every web worker.

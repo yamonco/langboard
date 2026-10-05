@@ -30,6 +30,10 @@ COPY ./src/api ./src/api
 
 RUN cd /app && uv sync --locked --no-dev
 
+FROM base AS with-aws
+
+RUN cd /app && uv sync --locked --no-dev --extra aws
+
 FROM base AS with-azure-vault
 
 RUN cd /app && uv sync --locked --no-dev --extra azure-vault

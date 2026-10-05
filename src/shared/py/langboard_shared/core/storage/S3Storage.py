@@ -1,6 +1,5 @@
 from io import BytesIO
 from typing import IO, BinaryIO
-from boto3 import client
 from ...Env import Env
 from .BaseStorage import BaseStorage
 from .FileModel import FileModel
@@ -96,6 +95,8 @@ class S3Storage(BaseStorage):
                 s3_client.close()
 
     def _connect_client(self):
+        from boto3 import client
+
         return client(
             "s3",
             region_name=Env.S3_REGION_NAME,
