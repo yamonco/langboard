@@ -88,6 +88,18 @@ def test_mounted_discovery_and_callback_urls_use_native_fastmcp_routes(monkeypat
         assert resource.json()["resource"] == "https://board.example/mcp/oauth/stream"
         assert "mcp:access" in resource.json()["scopes_supported"]
         assert client.get("/mcp/oauth/auth/callback").status_code == 400
+        ready = client.get("/mcp/oauth/readyz")
+        assert ready.status_code == 200
+        assert ready.json() == {"component": "oauth_storage", "status": "ready"}
+        from unittest.mock import AsyncMock
+
+        with monkeypatch.context() as fault:
+            fault.setattr(provider._client_storage, "get", AsyncMock(side_effect=OSError(5, "private secret")))
+            failed = client.get("/mcp/oauth/readyz")
+            assert failed.status_code == 503
+            assert failed.json() == {"component": "oauth_storage", "status": "not_ready", "reason": "storage_io_error"}
+            assert client.post("/mcp/oauth/stream").status_code == 401
+        assert client.get("/mcp/oauth/readyz").status_code == 200
         assert client.post("/mcp/oauth/stream").status_code == 401
         registered = client.post(
             "/mcp/oauth/register",

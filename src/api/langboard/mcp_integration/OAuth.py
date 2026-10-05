@@ -1,6 +1,9 @@
 """Optional native OAuth using FastMCP and existing Langboard identity policy."""
 
+import logging
 from urllib.parse import urlsplit
+from uuid import uuid4
+import anyio
 from fastmcp.exceptions import AuthorizationError
 from fastmcp.server.auth.oidc_proxy import OIDCProxy
 from fastmcp.server.dependencies import get_access_token
@@ -13,6 +16,39 @@ from ..middlewares.McpAuthMiddleware import mcp_auth_context
 
 class LangboardOIDCProxy(OIDCProxy):
     """Keep upstream scopes within the MCP client's verified consent grant."""
+
+    async def storage_readiness(self, *, timeout=3):
+        """Probe the existing encrypted store without touching client credentials."""
+        if not hasattr(self, "_readiness_lock"):
+            self._readiness_lock = anyio.Lock()
+        result = {"component": "oauth_storage", "status": "ready"}
+        key = str(uuid4())
+        collection = "langboard_oauth_readiness"
+        payload = {"probe": key}
+        try:
+            with anyio.fail_after(timeout):
+                async with self._readiness_lock:
+                    try:
+                        await self._client_storage.put(key, payload, collection=collection, ttl=60)
+                        if await self._client_storage.get(key, collection=collection) != payload:
+                            result.update(status="not_ready", reason="round_trip_mismatch")
+                    finally:
+                        await self._client_storage.delete(key, collection=collection)
+        except TimeoutError:
+            result.update(status="not_ready", reason="storage_timeout")
+        except OSError:
+            result.update(status="not_ready", reason="storage_io_error")
+        except Exception:
+            result.update(status="not_ready", reason="storage_error")
+        state = result.get("reason", "ready")
+        if getattr(self, "_readiness_state", None) != state:
+            logging.getLogger(__name__).log(
+                logging.INFO if state == "ready" else logging.WARNING,
+                "Native MCP OAuth storage readiness: %s",
+                state,
+            )
+            self._readiness_state = state
+        return result
 
     async def load_access_token(self, token: str):
         validated = await super().load_access_token(token)

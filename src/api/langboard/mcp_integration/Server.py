@@ -118,6 +118,14 @@ class McpServer:
             ],
         )
         app.add_provider(create_native_agent_provider(self._wrap_tool))
+
+        @app.custom_route("/readyz", methods=["GET"])
+        async def oauth_readiness(request):
+            from starlette.responses import JSONResponse
+
+            result = await auth.storage_readiness()
+            return JSONResponse(result, status_code=200 if result["status"] == "ready" else 503)
+
         hosts, origins = _get_transport_security_allowlists()
         self.oauth_discovery_routes = auth.get_well_known_routes(mcp_path="/stream")
         return app.http_app(path="/stream", stateless_http=True, allowed_hosts=hosts, allowed_origins=origins)
