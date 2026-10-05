@@ -1,0 +1,36 @@
+name: Check Python SDK
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/check-python-sdk.yaml
+      - src/sdk/py/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  standalone-sdk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v6
+      - name: Check protocol without host dependencies
+        run: PYTHONPATH=src/sdk/py python -m unittest langboard_sdk.client_test -v
+      - name: Build standalone distribution
+        run: uv build --out-dir sdk-dist ./src/sdk/py
+      - name: Verify installed wheel has no runtime dependencies
+        run: |
+          python -m venv sdk-env
+          sdk-env/bin/pip install --no-deps sdk-dist/*.whl
+          sdk-env/bin/python - <<'PY'
+          import sys
+          from importlib.metadata import metadata
+          from langboard_sdk import LangboardClient, McpTransport
+          assert metadata("langboard-sdk").get_all("Requires-Dist") is None
+          assert not any(name.startswith(("langboard_chatgpt_plugin", "langboard_shared", "fastmcp", "httpx")) for name in sys.modules)
+          PY
