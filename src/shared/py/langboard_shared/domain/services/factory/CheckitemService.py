@@ -44,7 +44,8 @@ class CheckitemService(BaseDomainService):
         open_filter = {"open_only": True} if open_only else {}
         records = self.repo.checkitem.get_all_by_checklist(checklist, limit=limit, **open_filter)
 
-        checkitems = [self.__convert_api_response(card, record) for record in records]
+        timer_arcs = self.repo.checkitem_timer_record.get_arc_map_by_checkitems([record[0] for record in records])
+        checkitems = [self.__convert_api_response(card, record, timer_arcs) for record in records]
         return checkitems
 
     def get_api_map_by_card(self, card: TCardParam | None) -> dict[int, list[dict[str, Any]]]:
@@ -54,10 +55,11 @@ class CheckitemService(BaseDomainService):
 
         records = self.repo.checkitem.get_all_by_card(card)
 
+        timer_arcs = self.repo.checkitem_timer_record.get_arc_map_by_checkitems([record[0] for record in records])
         checkitems_map: dict[int, list[dict[str, Any]]] = {}
         for record in records:
             checkitem, _, _ = record
-            api_checkitem = self.__convert_api_response(card, record)
+            api_checkitem = self.__convert_api_response(card, record, timer_arcs)
             if checkitem.checklist_id not in checkitems_map:
                 checkitems_map[checkitem.checklist_id] = []
             checkitems_map[checkitem.checklist_id].append(api_checkitem)
@@ -65,11 +67,12 @@ class CheckitemService(BaseDomainService):
 
     def get_active_work(self, user: User) -> list[dict[str, Any]]:
         records = self.repo.checkitem.get_started_work_by_user(user)
+        timer_arcs = self.repo.checkitem_timer_record.get_arc_map_by_checkitems([record[0] for record in records])
         active_work: list[dict[str, Any]] = []
         for checkitem, card, project in records:
             api_checkitem = checkitem.api_response()
             api_checkitem["card_uid"] = card.get_uid()
-            last_timer = self.repo.checkitem_timer_record.get_by_checkitem_and_arc_type(checkitem, "last")
+            last_timer = timer_arcs.get(checkitem.id, {}).get("last")
             if last_timer and last_timer.status == CheckitemStatus.Started:
                 api_checkitem["timer_started_at"] = last_timer.created_at
             active_work.append(
@@ -592,12 +595,17 @@ class CheckitemService(BaseDomainService):
 
         return True
 
-    def __convert_api_response(self, card: Card, record: tuple[Checkitem, Card | None, User | None]):
+    def __convert_api_response(
+        self,
+        card: Card,
+        record: tuple[Checkitem, Card | None, User | None],
+        timer_arcs: dict[int, dict[str, CheckitemTimerRecord]],
+    ):
         checkitem, cardified_card, user = record
 
         api_checkitem = checkitem.api_response()
         api_checkitem["card_uid"] = card.get_uid()
-        last_timer = self.repo.checkitem_timer_record.get_by_checkitem_and_arc_type(checkitem, "last")
+        last_timer = timer_arcs.get(checkitem.id, {}).get("last")
         if last_timer and last_timer.status == CheckitemStatus.Started:
             api_checkitem["timer_started_at"] = last_timer.created_at
         if cardified_card:
