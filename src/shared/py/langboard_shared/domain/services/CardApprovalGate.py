@@ -1,6 +1,6 @@
 """Pending native card approvals: no request payload or caller identity escapes."""
 
-from sqlalchemy import or_, select, union_all
+from sqlalchemy import func, or_, select, union_all
 from ...core.db import DbSession
 from ...core.types import SafeDateTime
 from ...helpers import ModelHelper
@@ -36,11 +36,9 @@ def pending_card_approvals(card_ids: list[int]) -> dict[int, int]:
         )
     if not queries:
         return {}
-    statement = select(union_all(*queries).subquery()).distinct()
+    approvals = union_all(*queries).subquery()
+    statement = select(approvals.c.card_id, func.count(approvals.c.approval_id.distinct())).group_by(approvals.c.card_id)
     # Approval resolution must be reflected immediately, even with a lagging replica.
     with DbSession.use(readonly=False) as db:
         rows = db.exec(statement).all()
-    counts: dict[int, int] = {}
-    for card_id, _ in rows:
-        counts[int(card_id)] = counts.get(int(card_id), 0) + 1
-    return counts
+    return {int(card_id): int(count) for card_id, count in rows}
