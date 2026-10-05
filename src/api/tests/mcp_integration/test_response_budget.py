@@ -54,7 +54,7 @@ async def test_large_command_result_is_never_replaced(name):
 
 @pytest.mark.parametrize("profile", ["agent", "raw", "compatibility"])
 async def test_native_transport_schema_and_oversize_error_preserve_legacy(monkeypatch, profile):
-    name = "get_project_columns" if profile == "raw" else "get_projects"
+    name = "get_project_columns" if profile == "raw" else "get_shared_user_activities"
 
     def handler() -> dict:
         return {"rows": "한" * 400_000, "next_cursor": "next"}
