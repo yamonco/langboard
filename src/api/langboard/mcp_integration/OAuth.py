@@ -11,11 +11,25 @@ from fastmcp.server.middleware import Middleware
 from langboard_shared.domain.models import IdentityProvider
 from langboard_shared.domain.services import DomainService
 from langboard_shared.Env import Env
+from mcp.server.auth.provider import RefreshToken, TokenError
+from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
 from ..middlewares.McpAuthMiddleware import mcp_auth_context
 
 
 class LangboardOIDCProxy(OIDCProxy):
     """Keep upstream scopes within the MCP client's verified consent grant."""
+
+    async def exchange_refresh_token(
+        self, client: OAuthClientInformationFull, refresh_token: RefreshToken, scopes: list[str]
+    ) -> OAuthToken:
+        if not hasattr(self, "_exchange_lock"):
+            # ponytail: serialize one provider process; shared atomic claims required before replica scaling.
+            self._exchange_lock = anyio.Lock()
+        async with self._exchange_lock:
+            current = await self.load_refresh_token(client, refresh_token.token)
+            if current is None:
+                raise TokenError("invalid_grant", "Refresh token was already consumed or expired")
+            return await super().exchange_refresh_token(client, current, scopes)
 
     async def storage_readiness(self, *, timeout=3):
         """Probe the existing encrypted store without touching client credentials."""
