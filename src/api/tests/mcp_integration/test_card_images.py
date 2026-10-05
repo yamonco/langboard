@@ -13,13 +13,15 @@ def image_card(monkeypatch):
     monkeypatch.setattr(
         images, "Env", SimpleNamespace(PUBLIC_UI_URL="https://board.example", API_URL="https://board.example/api")
     )
-    monkeypatch.setattr(images, "_get_card_in_project", lambda *args: (object(), SimpleNamespace(id=1)))
+    card = SimpleNamespace(id=1, description=SimpleNamespace(content="![body](/api/file/key/card_attachment/a.png)"))
+    monkeypatch.setattr(images, "_get_card_in_project", lambda *args: (object(), card))
     rows = {
         "valid": SimpleNamespace(card_id=1, file=SimpleNamespace(path="/file/key/card_attachment/a.png")),
         "foreign": SimpleNamespace(card_id=2),
     }
     service = SimpleNamespace(
-        card=SimpleNamespace(get_details=lambda *args: {"description": "![body](/api/file/key/card_attachment/a.png)"}),
+        card=SimpleNamespace(get_details=lambda *args: pytest.fail("Image reads must not load the complete card")),
+        source_card=card,
         card_attachment=SimpleNamespace(get_by_id_like=rows.get),
     )
     calls = []
@@ -72,9 +74,9 @@ def test_editor_parser_ignores_code_and_links():
 
 def test_count_and_byte_limits_report_omission(image_card, monkeypatch):
     service, calls = image_card
-    service.card.get_details = lambda *args: {
-        "description": "![a](/file/key/card_attachment/a.png) ![b](/file/key/card_attachment/b.png)"
-    }
+    service.source_card.description.content = (
+        "![a](/file/key/card_attachment/a.png) ![b](/file/key/card_attachment/b.png)"
+    )
     monkeypatch.setattr(images, "MAX_IMAGES", 1)
     result = images.read_card_images("p", "c", object(), service)
     assert result.structured_content["omitted"][0]["reason"] == "image_count_limit"
