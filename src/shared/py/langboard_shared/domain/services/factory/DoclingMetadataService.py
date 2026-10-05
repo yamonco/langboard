@@ -374,7 +374,10 @@ class DoclingMetadataService(BaseDomainService):
     def publish_update(
         self, model_cls: type[BaseMetadataModel], foreign_model: BaseDbModel, topic: SocketTopic
     ) -> None:
-        metadata = self.repo.metadata.get_by_key(model_cls, foreign_model, DOCLING_DOCUMENTS_METADATA_KEY)
+        # Publish the committed state, never a lagging replica's prior progress.
+        metadata = self.repo.metadata.get_by_key(
+            model_cls, foreign_model, DOCLING_DOCUMENTS_METADATA_KEY, readonly=False
+        )
         topic_uid = foreign_model.get_uid()
         if metadata:
             MetadataPublisher.updated_metadata(topic, topic_uid, DOCLING_DOCUMENTS_METADATA_KEY, metadata.value)
