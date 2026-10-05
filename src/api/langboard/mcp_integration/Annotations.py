@@ -25,7 +25,6 @@ READ_ONLY_TOOLS = frozenset(
         "list_project_cards",
         "search_project_cards",
         "get_card_bundle",
-        "preview_card_work_plan",
         "list_my_work",
         "list_project_members",
         "get_project_assigned_users",
