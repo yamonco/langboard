@@ -35,6 +35,7 @@ from ..card_workspace.application import patch_card_description as replace_descr
 from ..card_workspace.application import reconcile_card_checklist_projection as reconcile_checklist
 from ..card_workspace.application import replace_card_description as replace_description
 from ..card_workspace.application import set_card_relationships as replace_relationships
+from ..card_workspace.application.context_delta import CardContextDelta, card_context_delta
 from ..card_workspace.application.context_profiles import ContextProfile
 from ..card_workspace.application.dtos import BoundedItemsDto
 from ..card_workspace.application.projections import (
@@ -336,7 +337,9 @@ def change_card_details(
     return result
 
 
-@McpTool.add(description="Set the card's own completion checkbox explicitly. Requires core.is_check_card=true; does not approve work, move columns or complete user checklists.")
+@McpTool.add(
+    description="Set the card's own completion checkbox explicitly. Requires core.is_check_card=true; does not approve work, move columns or complete user checklists."
+)
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
 def set_card_completed(
     project_uid: str,
@@ -618,6 +621,53 @@ def get_card_bundle(
         if params and not params[1].is_linked_resource:
             result.card.core["linked_wikis"] = visible_linked_wikis(*params, user_or_bot, service)
     return result
+
+
+@McpTool.add(
+    description="Read authorized changed context sections. Replace sections, purge removed refs; on authorization error purge all cached card context. Incomplete projections require get_card_bundle continuations."
+)
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+def get_card_delta(
+    project_uid: str,
+    card_uid: str,
+    user_or_bot: User | Bot,
+    service: DomainService,
+    since_context_cursor: str | None = None,
+    profile: ContextProfile = "full",
+) -> CardContextDelta:
+    bundle = get_card_bundle(
+        project_uid,
+        card_uid,
+        user_or_bot,
+        service,
+        comments_limit=20,
+        section_limit=25,
+        profile=profile,
+    )
+    payload = bundle.model_dump(mode="json")
+    if isinstance(user_or_bot, User):
+        from ..wiki_workspace.infrastructure import NativeWikiRepository
+
+        repository = NativeWikiRepository(user_or_bot, service)
+        for wiki in payload["card"]["core"].get("linked_wikis", []):
+            wiki["revision"] = repository.snapshot(project_uid, wiki["wiki_uid"]).revision
+    elif payload["card"]["core"].get("linked_wikis"):
+        from fastmcp.exceptions import AuthorizationError
+        from ..wiki_workspace.domain import WikiSnapshot
+
+        for link in payload["card"]["core"]["linked_wikis"]:
+            wiki = service.project_wiki.get_by_id_like(link["wiki_uid"])
+            if wiki is None or not wiki.is_public:
+                raise AuthorizationError("Linked wiki is no longer readable; purge cached card context")
+            link["revision"] = WikiSnapshot(wiki.get_uid(), wiki.title, wiki.content.content).revision
+    return card_context_delta(
+        payload,
+        project_uid=project_uid,
+        actor_uid=user_or_bot.get_uid(),
+        profile=profile,
+        cursor=since_context_cursor,
+        key=Env.JWT_SECRET_KEY,
+    )
 
 
 @McpTool.add(
