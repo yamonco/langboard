@@ -39,6 +39,7 @@ class CheckitemService(BaseDomainService):
         *,
         open_only: bool = False,
         max_checkitems: int | None = None,
+        include_work_tracking: bool = True,
     ) -> list[dict[str, Any]]:
         """Return checkitems, optionally enforcing a repository row limit."""
 
@@ -49,10 +50,16 @@ class CheckitemService(BaseDomainService):
         card, checklist = params
 
         open_filter = {"open_only": True} if open_only else {}
-        records = self.repo.checkitem.get_all_by_checklist(checklist, limit=limit, **open_filter)
+        records = self.repo.checkitem.get_all_by_checklist(
+            checklist, limit=limit, **open_filter, **({"include_user": False} if not include_work_tracking else {})
+        )
         self._check_source_bound(records, max_checkitems)
 
-        timer_arcs = self.repo.checkitem_timer_record.get_arc_map_by_checkitems([record[0] for record in records])
+        timer_arcs = (
+            self.repo.checkitem_timer_record.get_arc_map_by_checkitems([record[0] for record in records])
+            if include_work_tracking
+            else {}
+        )
         checkitems = [self.__convert_api_response(card, record, timer_arcs) for record in records]
         return checkitems
 
@@ -81,12 +88,23 @@ class CheckitemService(BaseDomainService):
         *,
         open_only: bool = False,
         max_checkitems: int | None = None,
+        include_work_tracking: bool = True,
     ) -> dict[int, list[dict[str, Any]]]:
         """Project bounded checklist rows with one shared timer batch."""
         self._validate_source_limit(limit, max_checkitems)
-        records = self.repo.checkitem.get_all_by_checklists(card, checklist_ids, limit, open_only=open_only)
+        records = self.repo.checkitem.get_all_by_checklists(
+            card,
+            checklist_ids,
+            limit,
+            open_only=open_only,
+            **({"include_user": False} if not include_work_tracking else {}),
+        )
         self._check_source_bound(records, max_checkitems)
-        timer_arcs = self.repo.checkitem_timer_record.get_arc_map_by_checkitems([record[0] for record in records])
+        timer_arcs = (
+            self.repo.checkitem_timer_record.get_arc_map_by_checkitems([record[0] for record in records])
+            if include_work_tracking
+            else {}
+        )
         result: dict[int, list[dict[str, Any]]] = {}
         for record in records:
             result.setdefault(record[0].checklist_id, []).append(self.__convert_api_response(card, record, timer_arcs))

@@ -116,7 +116,7 @@ class CheckitemRepository(BaseOrderRepository[Checkitem, Checklist]):
         return "checkitem"
 
     def get_all_by_checklist(
-        self, checklist: TChecklistParam, limit: int | None = None, *, open_only: bool = False
+        self, checklist: TChecklistParam, limit: int | None = None, *, open_only: bool = False, include_user: bool = True
     ) -> list[tuple[Checkitem, Card | None, User | None]]:
         """Return checklist items, optionally enforcing a database row limit."""
 
@@ -124,12 +124,13 @@ class CheckitemRepository(BaseOrderRepository[Checkitem, Checklist]):
 
         records = []
         query = (
-            SqlBuilder.select.tables(Checkitem, Card, User)
+            SqlBuilder.select.tables(*((Checkitem, Card, User) if include_user else (Checkitem, Card)))
             .outerjoin(Card, Card.column("id") == Checkitem.column("cardified_id"))
-            .outerjoin(User, User.column("id") == Checkitem.column("user_id"))
             .where(Checkitem.column("checklist_id") == checklist_id)
             .order_by(Checkitem.column("order").asc(), Checkitem.column("id").asc())
         )
+        if include_user:
+            query = query.outerjoin(User, User.column("id") == Checkitem.column("user_id"))
         if open_only:
             query = query.where(Checkitem.column("is_checked") == False)  # noqa: E712
         if limit is not None:
@@ -137,10 +138,16 @@ class CheckitemRepository(BaseOrderRepository[Checkitem, Checklist]):
         with DbSession.use(readonly=True) as db:
             result = db.exec(query)
             records = result.all()
-        return list(records)
+        return list(records) if include_user else [(item, card, None) for item, card in records]
 
     def get_all_by_checklists(
-        self, card: TCardParam, checklist_ids: list[int], limit: int | None, *, open_only: bool = False
+        self,
+        card: TCardParam,
+        checklist_ids: list[int],
+        limit: int | None,
+        *,
+        open_only: bool = False,
+        include_user: bool = True,
     ) -> list[tuple[Checkitem, Card | None, User | None]]:
         """Read one authorized card batch with the existing per-checklist ordering and limit."""
         if not checklist_ids:
@@ -166,16 +173,18 @@ class CheckitemRepository(BaseOrderRepository[Checkitem, Checklist]):
             ranked = ranked.where(Checkitem.column("is_checked") == False)  # noqa: E712
         ranked = ranked.subquery()
         query = (
-            SqlBuilder.select.tables(Checkitem, Card, User)
+            SqlBuilder.select.tables(*((Checkitem, Card, User) if include_user else (Checkitem, Card)))
             .join(ranked, ranked.c.item_id == Checkitem.column("id"))
             .outerjoin(Card, Card.column("id") == Checkitem.column("cardified_id"))
-            .outerjoin(User, User.column("id") == Checkitem.column("user_id"))
             .order_by(Checkitem.column("checklist_id"), Checkitem.column("order"), Checkitem.column("id"))
         )
+        if include_user:
+            query = query.outerjoin(User, User.column("id") == Checkitem.column("user_id"))
         if limit is not None:
             query = query.where(ranked.c.position <= limit)
         with DbSession.use(readonly=True) as db:
-            return list(db.exec(query).all())
+            records = db.exec(query).all()
+            return list(records) if include_user else [(item, linked_card, None) for item, linked_card in records]
 
     def get_all_by_card(self, card: TCardParam) -> list[tuple[Checkitem, Card | None, User | None]]:
         card_id = InfraHelper.convert_id(card)
