@@ -153,3 +153,21 @@ def test_malformed_and_tampered_cursor_fail_to_full_refresh():
     cursor = read(bundle).current_context_cursor
     for broken in ("not-json", cursor[:-1] + "x", "x" * 65537):
         assert read(bundle, broken).requires_full_refresh
+
+
+def test_native_generation_changes_without_card_edit_invalidate_current_work_state():
+    import copy
+
+    original = snapshot()
+    original["card"]["work_state"]["execution_state"] = None
+    original["card"]["work_state"]["execution_generation"] = 0
+    first = read(original)
+    updated = copy.deepcopy(original)
+    updated["card"]["work_state"]["execution_generation"] = 2
+    result = read(updated, first.current_context_cursor)
+    assert result.execution_generation == 2
+    assert result.work_state_changed
+    assert "work_state" in result.changed_sections
+    assert result.card_change_seq == first.card_change_seq
+    assert result.invalidated_evidence
+    assert result.sections["work_state"]["execution_state"] is None

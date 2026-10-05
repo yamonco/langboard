@@ -160,7 +160,7 @@ def card_context_delta(bundle: dict, *, project_uid: str, actor_uid: str, profil
         current_context_cursor=encoded,
         card_change_seq=current["card_change_seq"],
         description_revision=(sections.get("description") or {}).get("revision"),
-        execution_generation=execution.get("generation"),
+        execution_generation=state.get("execution_generation", execution.get("generation")),
         source_revision=execution.get("source_revision"),
         changed_sections=sorted(changed),
         sections={name: sections[name] for name in sorted(changed)},
