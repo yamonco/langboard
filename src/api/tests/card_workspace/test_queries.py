@@ -562,3 +562,67 @@ def test_missing_card_is_a_distinct_domain_query_outcome():
     port = SimpleNamespace(get_card_bundle_source=lambda *args: None)
     with pytest.raises(CardUnavailableError, match="Card not found in project"):
         get_card_bundle(port, "project", "missing", CommentPage(), SectionPage())
+
+
+def test_nested_continuation_projects_each_source_item_once(monkeypatch):
+    """A nested continuation needs one complete revision, not a second checklist preview."""
+    from langboard.card_workspace.application import projections
+
+    port = FakeQueryPort()
+    first = get_card_bundle(port, "p1", "c1", CommentPage(), SectionPage(), [CardBundleInclude.Checklists])
+    cursor = first.card.checklists.items[0]["checkitems_next_cursor"]
+    item_calls = 0
+    revision_calls = 0
+    original_item = projections.public_checkitem
+    original_revision = projections.projection_revision
+
+    def counted_item(item):
+        nonlocal item_calls
+        item_calls += 1
+        return original_item(item)
+
+    def counted_revision(items):
+        nonlocal revision_calls
+        revision_calls += 1
+        return original_revision(items)
+
+    monkeypatch.setattr(projections, "public_checkitem", counted_item)
+    monkeypatch.setattr(projections, "projection_revision", counted_revision)
+    response = get_card_bundle(port, "p1", "c1", CommentPage(), SectionPage(cursor=cursor))
+    assert item_calls == 30
+    assert revision_calls == 1
+    assert [item["uid"] for item in response.continuation.page.items] == [f"ci{i}" for i in range(25, 30)]
+    assert response.continuation.page.next_cursor is None
+    assert all("private" not in item for item in response.continuation.page.items)
+
+    # Changes outside the returned page must still invalidate its full-source revision.
+    port.source.checklists[0]["checkitems"][0]["title"] = "Changed before this page"
+    with pytest.raises(ValueError, match="stale"):
+        get_card_bundle(port, "p1", "c1", CommentPage(), SectionPage(cursor=cursor))
+
+
+def test_label_continuation_does_not_project_unrequested_sections(monkeypatch):
+    """No checklist hashing or unrelated projection should occur on a label continuation."""
+    from langboard.card_workspace.application import queries
+
+    port = FakeQueryPort()
+    first = get_card_bundle(port, "p1", "c1", CommentPage(), SectionPage(limit=10), [CardBundleInclude.Classification])
+    cursor = first.card.classification.labels.next_cursor
+
+    def unrelated(*args, **kwargs):
+        raise AssertionError("Unrequested section was projected")
+
+    for name in (
+        "assigned_people",
+        "public_relationship",
+        "public_checklist",
+        "public_attachment",
+        "public_metadata",
+        "public_bot_scope",
+        "public_bot_schedule",
+    ):
+        monkeypatch.setattr(queries, name, unrelated)
+    response = get_card_bundle(port, "p1", "c1", CommentPage(), SectionPage(limit=10, cursor=cursor))
+    assert [item["uid"] for item in response.continuation.page.items] == [f"l{i}" for i in range(10, 20)]
+    assert response.continuation.page.total_count == 30
+    assert response.continuation.page.next_cursor
