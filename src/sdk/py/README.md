@@ -49,3 +49,18 @@ SDK. Artifacts expire and are a review/distribution path, not a permanent packag
 index or an automatic production dependency. Production consumers must retain
 and pin the reviewed wheel digest in their chosen package repository or build
 input. No company registry, identity, or deployment URL is built into this package.
+
+## MCP errors and uncertain writes
+
+`McpTransport` accepts an already connected FastMCP-style client whose
+`call_tool(..., raise_on_error=False)` returns `is_error`, `structured_content`,
+and content blocks. It does not open or close the client or manage credentials.
+A server error raises `NativeCommandError`; its `command` and original `result`
+retain structured details and content for the caller. The exception message does
+not automatically print the returned payload. An error response is not proof
+that a mutation had no effects: inspect current state before replaying it.
+
+A client/protocol exception or missing structured receipt for a mutation raises
+`MutationOutcomeUnknown`, preserving the original exception as its cause.
+Read failures propagate unchanged. Neither path retries the command. Cancellation
+and other Python `BaseException` signals remain under caller control.

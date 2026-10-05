@@ -4,7 +4,7 @@ from types import SimpleNamespace
 from unittest import IsolatedAsyncioTestCase, main
 from unittest.mock import AsyncMock
 from .client import LangboardClient, MutationOutcomeUnknown
-from .mcp import McpTransport
+from .mcp import McpTransport, NativeCommandError
 
 
 class ClientTests(IsolatedAsyncioTestCase):
@@ -46,6 +46,33 @@ class ClientTests(IsolatedAsyncioTestCase):
         session.call_tool.return_value = SimpleNamespace(is_error=False, structured_content=None)
         with self.assertRaises(MutationOutcomeUnknown):
             await transport.call("apply_card_work_plan", {}, mutation=True)
+
+    async def test_server_error_receipt_preserves_original_payload_and_never_retries(self):
+        result = SimpleNamespace(is_error=True, structured_content={"code": "revision_conflict"}, content=["Original server error"])
+        session = SimpleNamespace(call_tool=AsyncMock(return_value=result))
+        with self.assertRaises(NativeCommandError) as captured:
+            await McpTransport(session).call("apply_card_work_plan", {"request_id": "stable"}, mutation=True)
+        self.assertIs(captured.exception.result, result)
+        self.assertEqual(captured.exception.command, "apply_card_work_plan")
+        session.call_tool.assert_awaited_once_with("apply_card_work_plan", {"request_id": "stable"}, raise_on_error=False)
+        self.assertNotIn("revision_conflict", str(captured.exception))
+
+    async def test_other_client_failures_preserve_cause_without_replaying_mutation(self):
+        failure = RuntimeError("Protocol disconnected")
+        session = SimpleNamespace(call_tool=AsyncMock(side_effect=failure))
+        with self.assertRaises(MutationOutcomeUnknown) as captured:
+            await McpTransport(session).call("apply_card_work_plan", {}, mutation=True)
+        self.assertIs(captured.exception.__cause__, failure)
+        session.call_tool.assert_awaited_once()
+        with self.assertRaises(RuntimeError) as read_error:
+            await McpTransport(session).call("get_card_bundle", {})
+        self.assertIs(read_error.exception, failure)
+
+    async def test_missing_receipt_is_unknown_without_retries(self):
+        session = SimpleNamespace(call_tool=AsyncMock(return_value=object()))
+        with self.assertRaises(MutationOutcomeUnknown):
+            await McpTransport(session).call("apply_card_work_plan", {}, mutation=True)
+        session.call_tool.assert_awaited_once()
 
 
 if __name__ == "__main__":
