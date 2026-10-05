@@ -95,11 +95,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: uv sync --frozen
+      - run: uv sync --frozen --extra document-retrieval
       - name: Verify immutable artifacts and rejection behavior
         run: uv run --no-sync python scripts/mcp_contracts/test_legacy.py
       - name: Verify native protocol and authorization contracts
-        run: uv run --no-sync pytest -q src/api/tests/mcp_integration src/api/tests/identity src/api/tests/scim/test_project_role_projection.py src/shared/py/langboard_shared/core/security/KeyVault_isolation_test.py src/shared/py/langboard_shared/core/storage/Storage_isolation_test.py src/shared/py/langboard_shared/tasks/docling/DoclingMetadataTask_test.py
+        run: uv run --no-sync pytest -q src/api/tests/mcp_integration src/api/tests/identity src/api/tests/scim/test_project_role_projection.py src/shared/py/langboard_shared/core/security/KeyVault_isolation_test.py src/shared/py/langboard_shared/core/storage/Storage_isolation_test.py src/shared/py/langboard_shared/tasks/docling/DoclingMetadataTask_test.py src/shared/py/langboard_shared/tasks/docling/DocumentKeywords_test.py src/shared/py/langboard_shared/tasks/docling/DocumentSplitter_test.py src/shared/py/langboard_shared/domain/services/factory/DoclingMetadataService_test.py src/shared/py/langboard_shared/infrastructure/repositories/factory/CardRepository_test.py src/shared/py/langboard_shared/infrastructure/repositories/factory/DocumentSearchMigration_test.py src/api/langboard/mcp_tools/UserMcp_search_test.py src/api/tests/card_workspace/test_attachment_document_http.py
       - name: Capture candidate catalog without deployed database access
         run: uv run --no-sync python scripts/mcp_contracts/capture_native.py --catalog-only > candidate.json
       - name: Preserve all legacy tool schemas and annotations

@@ -1,3 +1,4 @@
+import { BoardCardAttachmentDocumentAction } from "./BoardCardAttachmentDocument";
 import MoreMenu from "@/components/MoreMenu";
 import { ProjectCardAttachment } from "@/core/models";
 import { ModelRegistry } from "@/core/models/ModelRegistry";
@@ -16,6 +17,7 @@ function BoardCardAttachmentMoreMenu({ attachment, isValidating, setIsValidating
         <ModelRegistry.ProjectCardAttachment.Provider model={attachment} params={{ isValidating, setIsValidating }}>
             <MoreMenu.Root triggerProps={{ className: "h-8 w-5 sm:size-8" }}>
                 <BoardCardAttachmentMoreMenuDownload />
+                <BoardCardAttachmentDocumentAction />
                 <BoardCardAttachmentMoreMenuRename />
                 <BoardCardAttachmentMoreMenuDelete />
             </MoreMenu.Root>

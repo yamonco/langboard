@@ -4,5 +4,9 @@
     "editor_chat": "エディターチャット",
     "editor_copilot": "エディターCopilot",
     "document_vision": "ドキュメントビジョン · document-vision"
-  }
+  },
+  "Process new uploads": "新しい文書アップロードを自動処理",
+  "Existing attachments require explicit processing": "アップロード時に適用します。既存の添付はカードから個別に処理してください。設定変更で古いファイルは再処理しません。",
+  "Search keyword languages": "検索キーワードの言語",
+  "Keywords apply to requested processing": "転記とは別に検索語を抽出します。新規アップロードまたは明示的に再処理した添付のみに適用します。"
 }

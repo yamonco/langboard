@@ -7,8 +7,9 @@ os.environ.setdefault("PROJECT_NAME", "langboard")
 
 from datetime import timedelta
 import pytest
-from sqlalchemy import create_engine, update
+from sqlalchemy import create_engine, inspect, select, update
 from sqlalchemy.dialects import postgresql
+from sqlalchemy.orm import defer
 from ....core.db import DbSession, EditorContentModel
 from ....core.db.DbEngine import DbEngine
 from ....core.storage import FileModel
@@ -82,23 +83,107 @@ def test_search_matches_comment_only_unicode_and_deduplicates_without_cross_proj
                 filename="fixture.png",
                 path="/test/fixture.png",
             )
-            db.insert(CardAttachment(card_id=cards[0].id, user_id=owner.id, filename="회의자료.png", file=file))
+            db.insert(
+                CardAttachment(
+                    card_id=cards[0].id,
+                    user_id=owner.id,
+                    filename="회의자료.png",
+                    file=file,
+                    document_text="긴 앞말 " * 180 + "전사검색 고유내용 100%_done " + "긴 뒷말 " * 180,
+                )
+            )
+            db.insert(
+                CardAttachment(
+                    card_id=cards[2].id,
+                    user_id=owner.id,
+                    filename="foreign.pdf",
+                    file=file,
+                    document_text="전사검색 외부보드 내용",
+                )
+            )
             db.insert(
                 CardAttachment(
                     card_id=cards[1].id,
                     user_id=owner.id,
                     filename="삭제자료.png",
                     file=file,
+                    document_text="삭제전사 내용",
                     deleted_at=SafeDateTime.now(),
                 )
             )
+        assert (
+            "document_text"
+            not in CardAttachment(
+                card_id=cards[0].id,
+                user_id=owner.id,
+                filename="test.pdf",
+                file=file,
+                document_text="private whole document",
+            ).model_dump_json()
+        )
         repository = CardRepository(lambda _: None, lambda _: None)
         assert [c.title for c, _ in repository.search_context_by_project(project, "기쁨")] == ["Comment only"]
         assert [c.title for c, _ in repository.search_context_by_project(project, "본문 전용")] == ["Body only"]
-        assert [c.title for c, _ in repository.search_context_by_project(project, "100%_done")] == ["Literal 100%_done"]
+        assert {c.title for c, _ in repository.search_context_by_project(project, "100%_done")} == {
+            "Comment only",
+            "Literal 100%_done",
+        }
         assert repository.search_context_by_project(project, "missing") == []
         assert [c.title for c, _ in repository.search_context_by_project(project, "회의자료")] == ["Comment only"]
         assert repository.search_context_by_project(project, "삭제자료") == []
+        assert [c.title for c, _ in repository.search_context_by_project(project, "전사검색")] == ["Comment only"]
+        assert repository.search_context_by_project(project, "삭제전사") == []
+        assert {c.title for c, _ in repository.search_context_by_project(project, "100%_done")} == {
+            "Comment only",
+            "Literal 100%_done",
+        }
+        matches = repository.search_document_matches(project, [c.id for c in cards], "전사검색")
+        assert list(matches) == [cards[0].id]
+        assert "전사검색" in matches[cards[0].id][0]["snippet"]
+        assert len(matches[cards[0].id][0]["snippet"]) <= 500
+        with DbSession.use(readonly=True) as db:
+            deferred = db.exec(
+                select(CardAttachment)
+                .options(defer(CardAttachment.document_text))
+                .where(CardAttachment.card_id == cards[0].id)
+            ).first()[0]
+            assert "document_text" in inspect(deferred).unloaded
+            assert "document_text" not in deferred.model_dump_json()
+            assert "document_text" in inspect(deferred).unloaded
+        with DbSession.use(readonly=False) as db:
+            for index in range(45):
+                db.insert(
+                    CardAttachment(
+                        card_id=cards[0].id,
+                        user_id=owner.id,
+                        filename=f"many-{index}.pdf",
+                        file=file,
+                        document_text="bounded source fairness",
+                    )
+                )
+            db.insert(
+                CardAttachment(
+                    card_id=cards[3].id,
+                    user_id=owner.id,
+                    filename="later-card.pdf",
+                    file=file,
+                    document_text="bounded source fairness",
+                )
+            )
+        matches = repository.search_document_matches(project, [c.id for c in cards], "bounded source fairness")
+        assert len(matches[cards[0].id]) == 2
+        assert len(matches[cards[3].id]) == 1
+        assert (
+            "document_text"
+            not in CardAttachment(
+                card_id=cards[0].id,
+                user_id=owner.id,
+                filename="test.pdf",
+                file=file,
+                document_text="private whole document",
+            ).api_response()
+        )
+
         assert len(repository.search_context_by_project(project, "only", limit=1)) == 1
         start = SafeDateTime(2026, 9, 1)
         with DbSession.use(readonly=False) as db:

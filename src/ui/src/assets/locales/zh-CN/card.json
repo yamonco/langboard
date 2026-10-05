@@ -166,5 +166,14 @@
   "Flip card": "收起卡片",
   "Flipped cards": "已收起卡片 {{count}}",
   "Restore flipped card": "打开 {{title}}",
-  "Remove flipped card": "从托盘移除 {{title}}"
+  "Remove flipped card": "从托盘移除 {{title}}",
+  "Process document": "处理文档",
+  "Process only this attachment": "使用当前文档视觉设置仅处理此附件。成功后才替换现有转录文本，不处理其他文件。",
+  "Document processing requested": "已请求文档处理",
+  "Processing document": "正在处理文档",
+  "Document queued": "文档等待处理",
+  "Document indexed": "文档可搜索",
+  "Document processing failed": "文档处理失败",
+  "Document processing disabled": "仅保存附件",
+  "Document page progress": "{{completed}} / {{total}}页"
 }

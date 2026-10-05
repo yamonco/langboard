@@ -20,6 +20,7 @@ from langboard_shared.domain.services import DomainService
 from langboard_shared.filter import RoleFilter
 from langboard_shared.security import Auth, RoleFinder, RoleSecurity
 from .forms import ChangeAttachmentNameForm, ChangeChildOrderForm
+from .forms.Attachment import ProcessAttachmentDocumentForm
 
 
 @AppRouter.api.post(
@@ -161,3 +162,28 @@ def delete_card_attachment(
         raise ApiException.NotFound_404(ApiErrorCode.NF2009)
 
     return JsonResponse()
+
+
+@AppRouter.api.post(
+    "/board/{project_uid}/card/{card_uid}/attachment/{attachment_uid}/document-processing",
+    tags=["Board.Card.Attachment"],
+    responses=OpenApiSchema().auth().forbidden().err(400, ApiErrorCode.VA0000).err(404, ApiErrorCode.NF2009).get(),
+)
+@RoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
+@AuthFilter.add("user")
+def process_card_attachment_document(
+    project_uid: str,
+    card_uid: str,
+    attachment_uid: str,
+    form: ProcessAttachmentDocumentForm,
+    service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    try:
+        result = service.card_attachment.request_document_processing(
+            project_uid, card_uid, attachment_uid, reprocess=form.reprocess
+        )
+    except ValueError as error:
+        raise ApiException.BadRequest_400(ApiErrorCode.VA0000) from error
+    if result is None:
+        raise ApiException.NotFound_404(ApiErrorCode.NF2009)
+    return JsonResponse(content={"status": result})

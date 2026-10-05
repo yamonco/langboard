@@ -1,6 +1,8 @@
+from json import dumps, loads
 from typing import Any
 from ....core.broker import Broker
 from ....core.broker.TaskParameters import TaskParameters
+from ....core.db import DbSession
 from ....core.domain import BaseDomainService
 from ....core.routing import SocketTopic
 from ....core.storage import FileModel
@@ -11,6 +13,7 @@ from ....tasks.activities import CardAttachmentActivityTask
 from ....tasks.bots import CardAttachmentBotTask
 from ...models import Card, CardAttachment, CardMetadata, Project, User
 from .DoclingMetadataService import DoclingMetadataService
+from .InternalBotService import InternalBotService
 
 
 DOCLING_INDEX_CARD_ATTACHMENT_TASK = "langboard_shared.tasks.docling.DoclingMetadataTask.index_card_attachment"
@@ -81,7 +84,22 @@ class CardAttachmentService(BaseDomainService):
     ) -> None:
         """Dispatch effects after a persisted attachment is available."""
         docling_metadata = self._get_service(DoclingMetadataService)
-        if docling_metadata.queue_document(CardMetadata, card, card_attachment.get_uid(), card_attachment.filename):
+        internal_bot = self._get_service(InternalBotService)
+        binding = internal_bot.get_document_vision_binding()
+        vision_config = None
+        if binding and internal_bot.is_document_processing_enabled():
+            config = loads(binding.value)
+            vision_config = {
+                "binding_uid": binding.get_uid(),
+                **{
+                    key: config[key]
+                    for key in ("base_url", "model_name", "model", "reasoning_effort", "top_p", "keyword_languages")
+                    if key in config
+                },
+            }
+        if vision_config and docling_metadata.queue_document(
+            CardMetadata, card, card_attachment.get_uid(), card_attachment.filename, vision_config=vision_config
+        ):
             docling_metadata.publish_update(CardMetadata, card, SocketTopic.BoardCard)
             self._queue_docling_index_task(card_attachment)
 
@@ -89,6 +107,46 @@ class CardAttachmentService(BaseDomainService):
         CardAttachmentActivityTask.card_attachment_uploaded(user, project, card, card_attachment)
         if include_bot:
             CardAttachmentBotTask.card_attachment_uploaded(user, project, card, card_attachment)
+
+    def request_document_processing(
+        self, project: TProjectParam, card: TCardParam, attachment: TAttachmentParam, *, reprocess: bool = False
+    ) -> str | None:
+        """Explicit per-attachment processing; never scan existing files on settings changes."""
+        params = InfraHelper.get_records_with_foreign_by_params(
+            (Project, project), (Card, card), (CardAttachment, attachment)
+        )
+        if not params:
+            return None
+        project, card, attachment = params
+        if (
+            card.project_id != project.id
+            or attachment.card_id != card.id
+            or attachment.deleted_at is not None
+            or card.is_linked_resource
+        ):
+            return None
+        binding = self._get_service(InternalBotService).get_document_vision_binding()
+        if not binding:
+            raise ValueError("Configure a document vision provider before processing attachments")
+        config = loads(binding.value)
+        vision_config = {
+            "binding_uid": binding.get_uid(),
+            **{
+                key: config[key]
+                for key in ("base_url", "model_name", "model", "reasoning_effort", "top_p", "keyword_languages")
+                if key in config
+            },
+        }
+        docling = self._get_service(DoclingMetadataService)
+        if not docling.detect_document_type(attachment.filename):
+            raise ValueError("Attachment format does not support document processing")
+        if docling.queue_document(
+            CardMetadata, card, attachment.get_uid(), attachment.filename, vision_config=vision_config, force=reprocess
+        ):
+            docling.publish_update(CardMetadata, card, SocketTopic.BoardCard)
+            self._queue_docling_index_task(attachment)
+        document = docling.get_document_by_attachment_uid(CardMetadata, card, attachment.get_uid())
+        return document.get("status", "pending") if document else None
 
     def change_order(
         self,
@@ -167,5 +225,19 @@ class CardAttachmentService(BaseDomainService):
         return True
 
     def _queue_docling_index_task(self, card_attachment: CardAttachment) -> None:
-        args, kwargs = TaskParameters(card_attachment).pack()
-        Broker.celery.send_task(DOCLING_INDEX_CARD_ATTACHMENT_TASK, args=args, kwargs=kwargs)
+        document = self._get_service(DoclingMetadataService).get_document_by_attachment_uid(
+            CardMetadata, InfraHelper.get_by_id_like(Card, card_attachment.card_id), card_attachment.get_uid()
+        )
+        args, kwargs = TaskParameters(
+            dumps(
+                {
+                    "attachment_uid": card_attachment.get_uid(),
+                    "generation": document.get("generation") if document else None,
+                }
+            )
+        ).pack()
+        # Native transaction hook prevents queue delivery before the attachment commit.
+        with DbSession.atomic() as db:
+            db.after_commit(
+                lambda: Broker.celery.send_task(DOCLING_INDEX_CARD_ATTACHMENT_TASK, args=args, kwargs=kwargs)
+            )

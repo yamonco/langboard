@@ -30,7 +30,7 @@ def test_native_remote_vlm_without_local_models():
                             "index": 0,
                             "message": {
                                 "role": "assistant",
-                                "content": "# Native remote conversion\n\n| A | B |\n| --- | --- |\n| 1 | 2 |",
+                                "content": '# Native remote conversion\n\n| A | B |\n| --- | --- |\n| 1 | 2 |\n<!--LANGBOARD_SEARCH_KEYWORDS:{"ko":["문서 검색"],"en":["document search"],"ja":["文書検索"],"zh":["文档搜索"]}-->',
                             },
                             "finish_reason": "stop",
                         }
@@ -47,7 +47,14 @@ def test_native_remote_vlm_without_local_models():
     server = HTTPServer(("127.0.0.1", 0), Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     base = f"http://127.0.0.1:{server.server_port}/v1"
-    converter = create_vision_converter(json.dumps({"base_url": base, "model_name": "vision-test"}), {base})
+    progress = []
+    keywords = []
+    converter = create_vision_converter(
+        json.dumps({"base_url": base, "model_name": "vision-test"}),
+        {base},
+        on_progress=lambda current, total: progress.append((current, total)),
+        on_keywords=lambda page, attributes: keywords.append((page, attributes)),
+    )
     with TemporaryDirectory() as tmp:
         path = Path(tmp) / "two-pages.pdf"
         with pdfium.PdfDocument.new() as document:
@@ -57,6 +64,16 @@ def test_native_remote_vlm_without_local_models():
         result = converter.convert(path)
         markdown = result.document.export_to_markdown()
         assert len(seen) == 2, (len(seen), result.status)
+        assert progress == [(0, 2), (1, 2), (2, 2)]
+        assert len(keywords) == 2
+        assert keywords[0][1] == {
+            "ko": ["문서 검색"],
+            "en": ["document search"],
+            "ja": ["文書検索"],
+            "zh": ["文档搜索"],
+        }
+        assert "LANGBOARD_SEARCH_KEYWORDS" not in markdown
+        assert "문서 검색" not in markdown
         assert all(p["model"] == "vision-test" for p in seen)
         assert all(any(c["type"] == "image_url" for c in p["messages"][0]["content"]) for p in seen)
         assert "Native remote conversion" in markdown and len(result.document.tables) == 2, markdown

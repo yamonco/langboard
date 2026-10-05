@@ -322,7 +322,13 @@ class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
             select(CardAttachment.column("id"))
             .where(CardAttachment.column("card_id") == Card.column("id"))
             .where(CardAttachment.column("deleted_at") == None)  # noqa: E711
-            .where(CardAttachment.column("filename").ilike(pattern, escape="\\"))
+            .where(
+                or_(
+                    CardAttachment.column("filename").ilike(pattern, escape="\\"),
+                    (CardAttachment.column("document_text") != "")
+                    & CardAttachment.column("document_text").ilike(pattern, escape="\\"),
+                )
+            )
             .exists()
         )
         query = (
@@ -353,6 +359,58 @@ class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
             query = query.where(date_column < until)
         with DbSession.use(readonly=True) as db:
             return db.exec(query).all()
+
+    def search_document_matches(
+        self, project: TProjectParam, card_ids: list[int], query: str
+    ) -> dict[int, list[dict[str, str]]]:
+        """Return bounded source excerpts, never entire attachment documents."""
+        if not card_ids or not query:
+            return {}
+        pattern = "%" + query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+        body = CardAttachment.document_text
+        dialect = DbEngine.get_readonly_engine().dialect.name
+        position = (
+            func.strpos(func.lower(body), query.lower())
+            if dialect == "postgresql"
+            else func.instr(func.lower(body), query.lower())
+        )
+        if dialect in {"mysql", "mariadb"}:
+            position = func.locate(query.lower(), func.lower(body))
+        start = func.greatest(1, position - 100) if dialect != "sqlite" else func.max(1, position - 100)
+        excerpt = func.substr(body, start, 500).label("excerpt")
+        ranked = (
+            select(
+                CardAttachment.id,
+                CardAttachment.card_id,
+                CardAttachment.filename,
+                excerpt,
+                func.row_number()
+                .over(partition_by=CardAttachment.card_id, order_by=CardAttachment.id)
+                .label("source_rank"),
+            )
+            .join(Card, Card.id == CardAttachment.card_id)
+            .where(Card.project_id == InfraHelper.convert_id(project))
+            .where(Card.id.in_(card_ids[:20]))
+            .where(CardAttachment.deleted_at.is_(None))
+            .where(body != "")
+            .where(body.ilike(pattern, escape="\\"))
+            .subquery()
+        )
+        statement = (
+            select(ranked.c.id, ranked.c.card_id, ranked.c.filename, ranked.c.excerpt)
+            .where(ranked.c.source_rank <= 2)
+            .order_by(ranked.c.card_id, ranked.c.id)
+            .limit(40)
+        )
+        result: dict[int, list[dict[str, str]]] = {}
+        with DbSession.use(readonly=True) as db:
+            for attachment_id, card_id, filename, snippet in db.exec(statement).all():
+                matches = result.setdefault(card_id, [])
+                if len(matches) < 2:
+                    matches.append(
+                        {"attachment_uid": attachment_id.to_short_code(), "filename": filename, "snippet": snippet}
+                    )
+        return result
 
     def get_my_work_page(
         self,

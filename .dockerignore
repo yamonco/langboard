@@ -4,3 +4,12 @@
 **/__pycache__
 .canary-ui-*
 **/dist.rollback-*
+.git
+.verification
+.abathur
+**/node_modules
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+**/*.tsbuildinfo
+**/.DS_Store

@@ -141,6 +141,7 @@ const API = {
             SET_COMPLETED: "/board/{uid}/card/{card_uid}/completion",
             DELETE: "/board/{uid}/card/{card_uid}",
             ATTACHMENT: {
+                PROCESS_DOCUMENT: "/board/{uid}/card/{card_uid}/attachment/{attachment_uid}/document-processing",
                 UPLOAD: "/board/{uid}/card/{card_uid}/attachment",
                 CHANGE_NAME: "/board/{uid}/card/{card_uid}/attachment/{attachment_uid}/name",
                 CHANGE_ORDER: "/board/{uid}/card/{card_uid}/attachment/{attachment_uid}/order",
