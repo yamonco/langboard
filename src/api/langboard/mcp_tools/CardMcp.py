@@ -650,8 +650,10 @@ def get_card_delta(
             from ..wiki_workspace.infrastructure import NativeWikiRepository
     
             repository = NativeWikiRepository(user_or_bot, service)
-            for wiki in payload["card"]["core"].get("linked_wikis", []):
-                wiki["revision"] = repository.snapshot(project_uid, wiki["wiki_uid"]).revision
+            links = payload["card"]["core"].get("linked_wikis", [])
+            revisions = repository.linked_revisions(project_uid, [wiki["wiki_uid"] for wiki in links])
+            for wiki in links:
+                wiki["revision"] = revisions[wiki["wiki_uid"]]
         elif payload["card"]["core"].get("linked_wikis"):
             from fastmcp.exceptions import AuthorizationError
             from ..wiki_workspace.domain import WikiSnapshot

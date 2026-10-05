@@ -33,6 +33,39 @@ class NativeWikiRepository(WikiRepository):
         wiki = self._wiki(project_uid, wiki_uid)
         return WikiSnapshot(wiki.get_uid(), wiki.title, wiki.content.content)
 
+    def linked_revisions(self, project_uid: str, wiki_uids: list[str]) -> dict[str, str]:
+        """Batch current visible link revisions; previously returned links grant no access."""
+        if not wiki_uids:
+            return {}
+        project = self.service.project.get_by_id_like(project_uid)
+        if project is None:
+            raise ValueError("Project not found")
+        ids = [InfraHelper.convert_id(uid) for uid in wiki_uids]
+        statement = SqlBuilder.select.columns(
+            ProjectWiki.column("id"), ProjectWiki.column("title"), ProjectWiki.column("content")
+        ).where(
+            (ProjectWiki.column("project_id") == project.id)
+            & ProjectWiki.column("deleted_at").is_(None)
+            & ProjectWiki.column("id").in_(ids)
+        )
+        # Match visible_linked_wikis: private links require assignment or admin.
+        if not self.user.is_admin:
+            assigned = select(ProjectWikiAssignedUser.project_wiki_id).where(
+                ProjectWikiAssignedUser.user_id == self.user.id
+            )
+            statement = statement.where(
+                or_(ProjectWiki.column("is_public").is_(True), ProjectWiki.column("id").in_(assigned))
+            )
+        with DbSession.use(readonly=False) as db:
+            rows = db.exec(statement).all()
+        revisions = {
+            row[0].to_short_code(): WikiSnapshot(row[0].to_short_code(), row[1], row[2].content).revision
+            for row in rows
+        }
+        if set(revisions) != set(wiki_uids):
+            raise AuthorizationError("Linked wiki is no longer readable; purge cached card context")
+        return revisions
+
     def append(self, project_uid: str, wiki_uid: str, before: str, after: str) -> None:
         """Use native events/history and a locked content-only conditional save."""
         wiki = self._wiki(project_uid, wiki_uid)
