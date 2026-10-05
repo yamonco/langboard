@@ -1416,8 +1416,6 @@ dependencies = [
     { name = "alembic" },
     { name = "anyio" },
     { name = "argcomplete" },
-    { name = "azure-identity" },
-    { name = "azure-keyvault-keys" },
     { name = "bcrypt" },
     { name = "boto3" },
     { name = "celery" },
@@ -1447,6 +1445,9 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+azure-vault = [
+    { name = "langboard-shared", extra = ["azure-vault"] },
+]
 document-processing = [
     { name = "docling" },
 ]
@@ -1464,8 +1465,6 @@ requires-dist = [
     { name = "alembic", specifier = ">=1.16.2" },
     { name = "anyio", specifier = ">=4.11.0" },
     { name = "argcomplete", specifier = ">=3.6.3" },
-    { name = "azure-identity", specifier = ">=1.25.1" },
-    { name = "azure-keyvault-keys", specifier = ">=4.11.0" },
     { name = "bcrypt", specifier = "<=5.0.0" },
     { name = "boto3", specifier = ">=1.40.61" },
     { name = "celery", specifier = ">=5.5.3" },
@@ -1479,6 +1478,7 @@ requires-dist = [
     { name = "inflect", specifier = ">=7.5.0" },
     { name = "kafka-python", specifier = ">=2.2.15" },
     { name = "langboard-shared", editable = "src/shared/py" },
+    { name = "langboard-shared", extras = ["azure-vault"], marker = "extra == 'azure-vault'", editable = "src/shared/py" },
     { name = "orjson", specifier = ">=3.11.0" },
     { name = "psutil", specifier = ">=7.1.2" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2.12" },
@@ -1494,7 +1494,7 @@ requires-dist = [
     { name = "sqlalchemy", specifier = ">=2.0.41,<2.0.50" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.38.0" },
 ]
-provides-extras = ["document-processing"]
+provides-extras = ["azure-vault", "document-processing"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -1513,8 +1513,6 @@ dependencies = [
     { name = "alembic" },
     { name = "anyio" },
     { name = "argcomplete" },
-    { name = "azure-identity" },
-    { name = "azure-keyvault-keys" },
     { name = "bcrypt" },
     { name = "boto3" },
     { name = "celery" },
@@ -1543,14 +1541,20 @@ dependencies = [
     { name = "uvicorn", extra = ["standard"] },
 ]
 
+[package.optional-dependencies]
+azure-vault = [
+    { name = "azure-identity" },
+    { name = "azure-keyvault-keys" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "aiosmtplib", specifier = ">=3.0.2,<4" },
     { name = "alembic", specifier = ">=1.16.2" },
     { name = "anyio", specifier = ">=4.11.0" },
     { name = "argcomplete", specifier = ">=3.6.3" },
-    { name = "azure-identity", specifier = ">=1.25.1" },
-    { name = "azure-keyvault-keys", specifier = ">=4.11.0" },
+    { name = "azure-identity", marker = "extra == 'azure-vault'", specifier = ">=1.25.1" },
+    { name = "azure-keyvault-keys", marker = "extra == 'azure-vault'", specifier = ">=4.11.0" },
     { name = "bcrypt", specifier = "<=5.0.0" },
     { name = "boto3", specifier = ">=1.40.61" },
     { name = "celery", specifier = ">=5.5.3" },
@@ -1578,6 +1582,7 @@ requires-dist = [
     { name = "sqlalchemy", specifier = ">=2.0.41,<2.0.50" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.38.0" },
 ]
+provides-extras = ["azure-vault"]
 
 [package.metadata.requires-dev]
 dev = [
