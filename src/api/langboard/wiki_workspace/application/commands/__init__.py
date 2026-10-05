@@ -1,5 +1,6 @@
 """Revision-guarded wiki append commands."""
 
+from langboard_shared.core.exceptions.WikiContentConflict import WikiContentConflict
 from ...domain import WikiRepository, WikiSnapshot, append_content, replace_all_content, replace_content
 
 
@@ -48,6 +49,6 @@ def delete_wiki(repository: WikiRepository, project_uid: str, wiki_uid: str, exp
 
     before = repository.snapshot(project_uid, wiki_uid)
     if before.revision != expected_revision:
-        raise ValueError("Wiki changed after review; read it again before deleting")
+        raise WikiContentConflict("Wiki changed after review; read it again before deleting")
     repository.delete(project_uid, wiki_uid, before.content)
     return {"deleted": True}
