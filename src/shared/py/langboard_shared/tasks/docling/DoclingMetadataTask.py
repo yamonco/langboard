@@ -120,8 +120,10 @@ def _index_card_attachment(
                 ).get(language, [])
 
         progress(0, None)
+        structural: list[dict] = []
         markdown = _convert_to_markdown(
-            temp_path, on_progress=progress, vision_value=dumps(private_config), on_keywords=collect_keywords
+            temp_path, on_progress=progress, vision_value=dumps(private_config), on_keywords=collect_keywords,
+            on_document=structural.append
         )
         indexed = service.docling_metadata.mark_document_indexed(
             CardMetadata,
@@ -133,6 +135,7 @@ def _index_card_attachment(
                 "filename": current_attachment.filename,
                 "markdown": markdown,
                 "search_keywords": keywords,
+                **({"docling_document": structural[0]} if structural else {}),
             },
             generation=generation,
         )
@@ -195,13 +198,19 @@ def _convert_to_markdown(
     *,
     vision_value: str | None = None,
     on_keywords: Callable[[dict], None] | None = None,
+    on_document: Callable[[dict], None] | None = None,
 ) -> str:
     output_path = ""
+    document_path = ""
     try:
         with NamedTemporaryFile(delete=False, suffix=".md") as output_file:
             output_path = output_file.name
 
         command = [executable, "-m", "langboard_shared.tasks.docling.DoclingConverter", source, output_path]
+        if on_document is not None:
+            with NamedTemporaryFile(delete=False, suffix=".json") as document_file:
+                document_path = document_file.name
+            command.extend(["--document-output", document_path])
         if vision_value is not None:
             command.append("--vision-config-stdin")
         with Popen(command, stdin=PIPE, stdout=PIPE, stderr=DEVNULL, text=True) as process:
@@ -257,13 +266,19 @@ def _convert_to_markdown(
                 if process.poll() is None:
                     process.kill()
                 reader.join(timeout=1)
+        if on_document is not None:
+            structural = loads(Path(document_path).read_text(encoding="utf-8"))
+            if not isinstance(structural, dict) or structural.get("schema_name") != "DoclingDocument":
+                raise ValueError("Invalid structural Docling document")
+            on_document(structural)
         return Path(output_path).read_text(encoding="utf-8")
     finally:
-        if output_path:
-            try:
-                unlink(output_path)
-            except OSError:
-                pass
+        for path in (output_path, document_path):
+            if path:
+                try:
+                    unlink(path)
+                except OSError:
+                    pass
 
 
 def _get_content_hash(source: str) -> str:

@@ -9,7 +9,7 @@ from ....core.db import BaseDbModel, DbSession, SqlBuilder
 from ....core.domain import BaseDomainService
 from ....core.routing import SocketTopic
 from ....core.types import SafeDateTime
-from ....domain.models import CardAttachment, CardMetadata
+from ....domain.models import CardAttachment, CardDocumentArtifact, CardMetadata
 from ....domain.models.bases import BaseMetadataModel
 from ....Env import Env
 from ....helpers import InfraHelper
@@ -204,6 +204,8 @@ class DoclingMetadataService(BaseDomainService):
         *,
         generation: str | None = None,
     ) -> bool:
+        content = dict(content or {})
+        structural = content.pop("docling_document", None)
         current = self.get_document_by_attachment_uid(model_cls, foreign_model, attachment_uid) or {}
         document = {
             **current,
@@ -251,6 +253,21 @@ class DoclingMetadataService(BaseDomainService):
                 )
                 if not result:
                     return False
+                artifact = db.exec(
+                    SqlBuilder.select.table(CardDocumentArtifact)
+                    .where(CardDocumentArtifact.attachment_id == attachment_id)
+                ).first()
+                if structural is not None:
+                    if not isinstance(structural, dict) or structural.get("schema_name") != "DoclingDocument":
+                        raise ValueError("Invalid structural Docling document")
+                    encoded = json.dumps(structural, ensure_ascii=False)
+                    if artifact:
+                        artifact.document_json = encoded
+                        db.update(artifact)
+                    else:
+                        db.insert(CardDocumentArtifact(attachment_id=attachment_id, document_json=encoded))
+                elif artifact:
+                    db.delete(artifact)
             self.upsert_document(model_cls, foreign_model, document)
         return True
 

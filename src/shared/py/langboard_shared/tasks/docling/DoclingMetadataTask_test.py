@@ -82,27 +82,31 @@ def test_converter_process_streams_pages_and_keywords_without_exposing_stdin(mon
         'print(\'LANGBOARD_DOCLING_PROGRESS:{"completed_pages": 1, "total_pages": 2}\', flush=True)\n'
         'print(\'LANGBOARD_DOCLING_KEYWORDS:{"keywords": {"ko": ["문서"]}}\', flush=True)\n'
         'print(\'LANGBOARD_DOCLING_PROGRESS:{"completed_pages": 2, "total_pages": 2}\', flush=True)\n'
-        "pathlib.Path(sys.argv[1]).write_text('faithful original', encoding='utf-8')\n",
+        "pathlib.Path(sys.argv[1]).write_text('faithful original', encoding='utf-8')\n"
+        "pathlib.Path(sys.argv[2]).write_text(json.dumps({'schema_name':'DoclingDocument','pages':{'2':{}}}))\n",
         encoding="utf-8",
     )
     output_paths = []
 
     def launch(command, **kwargs):
         assert "fixture-private-key" not in " ".join(command)
-        output_paths.append(command[4])
-        return subprocess.Popen([sys.executable, str(script), command[4]], **kwargs)
+        document_path = command[command.index("--document-output") + 1]
+        output_paths.extend([command[4], document_path])
+        return subprocess.Popen([sys.executable, str(script), command[4], document_path], **kwargs)
 
     monkeypatch.setattr(task, "Popen", launch)
-    progress, keywords = [], []
+    progress, keywords, structural = [], [], []
     result = task._convert_to_markdown(
         "fixture.pdf",
         lambda done, total: progress.append((done, total)),
         vision_value='{"api_key":"fixture-private-key"}',
         on_keywords=keywords.append,
+        on_document=structural.append,
     )
     assert result == "faithful original"
     assert progress == [(1, 2), (2, 2)]
     assert keywords == [{"ko": ["문서"]}]
+    assert structural == [{"schema_name": "DoclingDocument", "pages": {"2": {}}}]
     assert not any(task.Path(path).exists() for path in output_paths)
 
 
