@@ -4,9 +4,18 @@ import { AuthGuard } from "@/core/routing/AuthGuard";
 import { ROUTES } from "@/core/routing/constants";
 
 const AccountPage = lazy(() => import("./index"));
+const SecretInputPage = lazy(() => import("./SecretInputPage"));
 const EmailVerificationPage = lazy(() => import("./EmailVerificationPage"));
 
 const routes: RouteObject[] = [
+    {
+        path: "/secret-input/:inputUID",
+        element: (
+            <AuthGuard>
+                <SecretInputPage />
+            </AuthGuard>
+        ),
+    },
     {
         path: ROUTES.ACCOUNT.ROUTE,
         element: (
