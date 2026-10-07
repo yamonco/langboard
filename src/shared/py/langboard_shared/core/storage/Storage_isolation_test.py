@@ -62,3 +62,46 @@ def test_local_storage_without_aws_sdk(tmp_path):
     )
     assert result.returncode == 0, result.stderr
     assert "LOCAL_STORAGE_WITHOUT_AWS_VERIFIED" in result.stdout
+
+
+def test_s3_selection_keeps_object_keys_cleanup_and_failure_contract(monkeypatch):
+    """Exercise the existing S3 adapter without reaching a cloud endpoint."""
+    from io import BytesIO
+    from unittest.mock import Mock
+    from langboard_shared.core.storage import Storage, StorageName
+    from langboard_shared.core.storage.S3Storage import S3Storage
+    from langboard_shared.Env import Env
+
+    monkeypatch.setenv("COMMON_SECRET_KEY", "fixture-only-local-storage")
+    monkeypatch.setattr(type(Env), "S3_ACCESS_KEY_ID", property(lambda _: "fixture-only"))
+    monkeypatch.setattr(type(Env), "S3_SECRET_ACCESS_KEY", property(lambda _: "fixture-only"))
+    client = Mock()
+    objects = {}
+
+    def upload(*, Fileobj, Bucket, Key):
+        objects[(Bucket, Key)] = Fileobj.read()
+
+    def download(*, Bucket, Key, Fileobj):
+        Fileobj.write(objects[(Bucket, Key)])
+
+    client.upload_fileobj.side_effect = upload
+    client.download_fileobj.side_effect = download
+    client.delete_object.side_effect = lambda *, Bucket, Key: objects.pop((Bucket, Key))
+    monkeypatch.setattr(S3Storage, "_connect_client", lambda _: client)
+    file = Storage.upload_named(BytesIO(b"s3 payload"), StorageName.CardAttachment, "probe.txt", "source.txt")
+    assert file and file.storage_type == "s3"
+    assert file.original_filename == "source.txt" and file.filename == "probe.txt"
+    assert Storage.get_file(file) == b"s3 payload"
+    destination = BytesIO()
+    assert Storage.download(file.path.split("/")[2], file.storage_name, file.filename, destination)
+    assert destination.getvalue() == b"s3 payload"
+    assert Storage.delete(file) and not objects
+    client.close.assert_called()
+    client.download_fileobj.side_effect = RuntimeError("fixture cloud unavailable")
+    assert Storage.get_file(file) is None
+    assert not Storage.download_file(file, BytesIO())
+    client.delete_object.side_effect = RuntimeError("fixture cloud unavailable")
+    assert not Storage.delete(file)
+    client.upload_fileobj.side_effect = RuntimeError("fixture cloud unavailable")
+    # A selected S3 upload failure must not silently store data locally.
+    assert Storage.upload_named(BytesIO(b"new"), StorageName.CardAttachment, "probe.txt", "source.txt") is None
