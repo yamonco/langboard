@@ -1,3 +1,4 @@
+from dataclasses import asdict
 from fastapi import Request, status
 from langboard_shared.core.db import DbSession, SqlBuilder
 from langboard_shared.core.filter import AuthFilter
@@ -6,12 +7,14 @@ from langboard_shared.core.routing import (
     ApiException,
     ApiPermission,
     AppRouter,
+    BaseFormModel,
     EEditorCollaborationType,
     JsonResponse,
     collaborative_block,
     collaborative_edit,
     collaborative_text,
     create_editor_collaboration_document_id,
+    form_model,
 )
 from langboard_shared.core.schema import OpenApiSchema
 from langboard_shared.core.security.CollaborationChannel import CollaborationChannel
@@ -35,12 +38,14 @@ from langboard_shared.domain.models.bases import ALL_GRANTED
 from langboard_shared.domain.models.InternalBot import InternalBotType
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.domain.services import DomainService
+from langboard_shared.domain.services.factory.WorkflowStageService import WorkflowStageEditConflict
 from langboard_shared.filter import RoleFilter
 from langboard_shared.helpers import InfraHelper
 from langboard_shared.security import Auth, RoleFinder
 from langboard_shared.tasks.webhooks.ExecutionBindingPolicy import binding_invalid_reasons
 from langboard_shared.tasks.webhooks.ExecutionReadinessUow import execution_readiness_uow
 from langboard_shared.tasks.webhooks.utils import WORK_EXECUTION_EVENTS
+from pydantic import ConfigDict, Field
 from .forms import (
     ChangeInternalBotForm,
     ChangeInternalBotSettingsForm,
@@ -649,3 +654,70 @@ def delete_project(
         raise ApiException.NotFound_404(ApiErrorCode.NF2001)
 
     return JsonResponse()
+
+
+# Board App workflow settings share the native board authentication boundary.
+
+
+@form_model
+class AppWorkflowMappingForm(BaseFormModel):
+    model_config = ConfigDict(extra="forbid")
+    binding_uid: str = Field(..., min_length=1, max_length=64)
+    workflow_mapping: dict[str, str] | None = Field(...)
+    expected_revision: str = Field(..., pattern=r"^[0-9a-f]{64}$")
+    enable_transitions: bool = Field(..., strict=True)
+
+
+def _app_workflow_response(snapshot: dict) -> dict:
+    binding = snapshot["binding"]
+    result = snapshot["mapping"]
+    return {
+        "binding": None if binding is None else {
+            "uid": binding.get_uid(), "app_key": binding.app_key,
+            "workflow_mapping": binding.workflow_mapping,
+            "stage_transitions_enabled": binding.stage_transitions_enabled,
+            "revision": binding.edit_revision(),
+        },
+        "choices": [asdict(choice) for choice in result.choices],
+        "mapping_valid": result.transitions_enabled,
+    }
+
+
+@AppRouter.api.get("/board/{project_uid}/settings/apps/{app_key}/workflow", tags=["Board.Settings"])
+@RoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+@AuthFilter.add("user")
+def get_app_workflow_mapping(
+    project_uid: str, app_key: str, user: User = Auth.scope("user"),
+    service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    snapshot = service.workflow_stage.get_app_mapping(user, project_uid, app_key)
+    if snapshot is None:
+        raise ApiException.NotFound_404(ApiErrorCode.NF2001)
+    return JsonResponse(content=_app_workflow_response(snapshot))
+
+
+@AppRouter.api.put("/board/{project_uid}/settings/apps/{app_key}/workflow", tags=["Board.Settings"])
+@RoleFilter.add(ProjectRole, [ProjectRoleAction.Update], RoleFinder.project)
+@AuthFilter.add("user")
+def update_app_workflow_mapping(
+    project_uid: str, app_key: str, form: AppWorkflowMappingForm,
+    user: User = Auth.scope("user"), service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    snapshot = service.workflow_stage.get_app_mapping(user, project_uid, app_key)
+    if snapshot is None or snapshot["binding"] is None or snapshot["binding"].get_uid() != form.binding_uid:
+        raise ApiException.NotFound_404(ApiErrorCode.NF2001)
+    try:
+        saved = service.workflow_stage.save_app_mapping(
+            user, form.binding_uid, form.workflow_mapping, project_uid=project_uid, app_key=app_key,
+            expected_revision=form.expected_revision, enable_transitions=form.enable_transitions,
+        )
+    except WorkflowStageEditConflict:
+        raise ApiException.Conflict_409(ApiErrorCode.EX3004) from None
+    except ValueError:
+        raise ApiException.BadRequest_400(ApiErrorCode.VA0000) from None
+    if saved is None:
+        raise ApiException.NotFound_404(ApiErrorCode.NF2001)
+    snapshot = service.workflow_stage.get_app_mapping(user, project_uid, app_key)
+    if snapshot is None:
+        raise ApiException.NotFound_404(ApiErrorCode.NF2001)
+    return JsonResponse(content=_app_workflow_response(snapshot))
