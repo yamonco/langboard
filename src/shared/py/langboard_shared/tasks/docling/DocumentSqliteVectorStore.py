@@ -58,10 +58,16 @@ class DocumentSqliteVectorStore(VectorStore):
             id=item.key, page_content=item.value["text"], metadata={k: v for k, v in item.value.items() if k != "text"}
         )
 
-    def similarity_search(self, query, k=4, *, filter=None, **kwargs):
+    def similarity_search_with_score(self, query, k=4, *, filter=None, **kwargs):
         if kwargs or type(k) is not int or not 1 <= k <= 100:
             raise ValueError("Unsupported or unbounded SQLite search options")
-        return [self._document(item) for item in self.store.search(self.namespace, query=query, filter=filter, limit=k)]
+        return [
+            (self._document(item), item.score)
+            for item in self.store.search(self.namespace, query=query, filter=filter, limit=k)
+        ]
+
+    def similarity_search(self, query, k=4, *, filter=None, **kwargs):
+        return [document for document, _ in self.similarity_search_with_score(query, k, filter=filter, **kwargs)]
 
     @classmethod
     def from_texts(cls, texts, embedding, metadatas=None, *, store=None, **kwargs):

@@ -146,21 +146,7 @@ def read_card_document(
     """Recheck current permissions and live ancestry before loading document content."""
     if type(offset) is not int or offset < 0 or type(max_chars) is not int or not 128 <= max_chars <= 8000:
         raise ValueError("Invalid document excerpt bounds")
-    params = _get_card_in_project(project_uid, card_uid)
-    if not params:
-        raise ValueError("Document unavailable")
-    project, card = params
-    actions = service.project.get_user_role_actions_by_project(user, project)
-    if "*" not in actions and ProjectRoleAction.Read.value not in actions:
-        raise ValueError("Document unavailable")
-    attachment = service.card_attachment.get_by_id_like(attachment_uid)
-    if (
-        card.is_linked_resource
-        or attachment is None
-        or attachment.card_id != card.id
-        or attachment.deleted_at is not None
-    ):
-        raise ValueError("Document unavailable")
+    _, card, attachment = _require_readable_document(project_uid, card_uid, attachment_uid, user, service)
     document = service.docling_metadata.get_document_by_attachment_uid(CardMetadata, card, attachment_uid)
     if not document:
         raise ValueError("Document transcription unavailable")
@@ -189,6 +175,138 @@ def read_card_document(
         "next_offset": end if end < len(text) else None,
         "total_chars": len(text),
         "content_format": "markdown",
+    }
+
+
+def _require_readable_document(project_uid, card_uid, attachment_uid, user, service):
+    params = _get_card_in_project(project_uid, card_uid)
+    if not params:
+        raise ValueError("Document unavailable")
+    project, card = params
+    actions = service.project.get_user_role_actions_by_project(user, project)
+    if "*" not in actions and ProjectRoleAction.Read.value not in actions:
+        raise ValueError("Document unavailable")
+    attachment = service.card_attachment.get_by_id_like(attachment_uid)
+    if (
+        card.is_linked_resource
+        or attachment is None
+        or attachment.card_id != card.id
+        or attachment.deleted_at is not None
+    ):
+        raise ValueError("Document unavailable")
+    return project, card, attachment
+
+
+@McpTool.add(
+    "user",
+    description="Search one readable attachment's active vectors; bounded excerpts, current ACL and source checks.",
+)
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+def search_card_document(
+    project_uid: str,
+    card_uid: str,
+    attachment_uid: str,
+    query: Annotated[str, Field(min_length=1, max_length=1000)],
+    user: User,
+    service: DomainService,
+    max_tokens: Annotated[int, Field(ge=128, le=4000)] = 2000,
+) -> dict:
+    import re
+    from langboard_shared.tasks.docling.DocumentEmbedding import (
+        create_document_embeddings,
+        resolve_embedding_snapshot,
+        validate_embedding_config,
+    )
+    from langboard_shared.tasks.docling.DocumentSqliteStore import open_sqlite_vector_store
+    from langboard_shared.tasks.docling.DocumentVectorGeneration import embedding_fingerprint
+    from langboard_shared.tasks.docling.DocumentVectorQuery import search_vector_generation
+    from langboard_shared.tasks.docling.DocumentVectorStore import open_qdrant_store
+
+    if (
+        not isinstance(query, str)
+        or not query.strip()
+        or len(query) > 1000
+        or type(max_tokens) is not int
+        or not 128 <= max_tokens <= 4000
+    ):
+        raise ValueError("Invalid document vector query bounds")
+    _, card, _ = _require_readable_document(project_uid, card_uid, attachment_uid, user, service)
+    document = service.docling_metadata.get_document_by_attachment_uid(CardMetadata, card, attachment_uid)
+    if not document or document.get("status") != "indexed":
+        raise ValueError("Document vectors unavailable")
+    pointer = (document.get("embedding") or {}).get("pointer")
+    if not isinstance(pointer, dict) or "chunk_ids" not in pointer:
+        raise ValueError("Reindex this attachment before vector retrieval")
+    if (
+        pointer.get("board_uid") != project_uid
+        or pointer.get("card_uid") != card_uid
+        or pointer.get("attachment_uid") != attachment_uid
+        or pointer.get("content_hash") != document.get("content_hash")
+        or (document.get("embedding") or {}).get("source_generation") != document.get("generation")
+    ):
+        raise ValueError("Document vectors do not match the current source")
+    snapshot = document.get("embedding_config") or {}
+    binding = service.internal_bot.get_by_id_like(snapshot.get("binding_uid"))
+    from langboard_shared.domain.models.InternalBot import InternalBotType
+
+    if not binding or binding.bot_type != InternalBotType.DocumentEmbedding:
+        raise ValueError("Document embedding binding unavailable")
+    try:
+        _, current = validate_embedding_config(binding.value)
+        if not current.enabled:
+            raise ValueError("Document retrieval disabled")
+        private = resolve_embedding_snapshot(snapshot, binding.value)
+        config, settings = validate_embedding_config(private)
+        fingerprint = embedding_fingerprint(
+            provider=config["base_url"], model=config["model_name"], dimensions=settings.dimensions, version="v1"
+        )
+        if not re.fullmatch(r"[0-9a-f]{64}", fingerprint) or fingerprint != pointer.get("embedding_fingerprint"):
+            raise ValueError("Document embedding configuration changed")
+        storage = pointer.get("storage") or {}
+        if storage.get("type") != settings.store or (
+            settings.store == "qdrant" and storage.get("endpoint") != str(settings.external_url).rstrip("/")
+        ):
+            raise ValueError("Document vector storage configuration changed")
+        embeddings = create_document_embeddings(
+            private, set(Env.get_from_env("MODEL_PROVIDER_ALLOWED_BASE_URLS", "").split(","))
+        )
+        if settings.store == "sqlite":
+            path = Env.DATA_DIR / "document-retrieval" / (fingerprint + ".sqlite")
+            if not path.is_file():
+                raise ValueError("Document vectors unavailable")
+            context = open_sqlite_vector_store(
+                path, embeddings, dimensions=settings.dimensions, timeout_seconds=settings.timeout_seconds
+            )
+        else:
+            context = open_qdrant_store(
+                settings,
+                embeddings,
+                fingerprint,
+                set(Env.get_from_env("DOCUMENT_VECTOR_ALLOWED_BASE_URLS", "").split(",")),
+                create=False,
+            )
+        with context as store:
+            if store is None:
+                raise ValueError("Document vectors unavailable")
+            hits = search_vector_generation(store, pointer, query, settings, max_tokens=max_tokens)
+    except Exception:
+        raise ValueError("Document vector retrieval unavailable; verify binding and reindex this attachment") from None
+    _, latest_card, _ = _require_readable_document(project_uid, card_uid, attachment_uid, user, service)
+    latest = service.docling_metadata.get_document_by_attachment_uid(CardMetadata, latest_card, attachment_uid)
+    if (
+        not latest
+        or latest.get("status") != "indexed"
+        or latest.get("generation") != document.get("generation")
+        or latest.get("content_hash") != document.get("content_hash")
+        or (latest.get("embedding") or {}).get("pointer") != pointer
+    ):
+        raise ValueError("Document generation changed; retry retrieval")
+    return {
+        "project_uid": project_uid,
+        "card_uid": card_uid,
+        "attachment_uid": attachment_uid,
+        "generation": document.get("generation"),
+        "matches": hits,
     }
 
 
