@@ -172,11 +172,17 @@ def test_catalog_resource_summary_is_board_scoped_and_selection_scoped(board, bi
 
 
 def test_disable_is_scoped_revision_checked_and_preserves_other_bindings(board, binding):
-    from langboard_shared.domain.models import BoardAppBinding
+    from langboard_shared.domain.models import BoardAppBinding, AppConnection, AppResourceBinding
     from langboard_shared.domain.services.factory.WorkflowStageService import WorkflowStageEditConflict
     with DbSession.use(readonly=False) as db:
         other = BoardAppBinding(project_id=11, app_key="github", state="enabled", granted_capabilities=["signals.read"])
         db.insert(other)
+    with DbSession.use(readonly=False) as db:
+        connection = AppConnection(app_key="github", owner_id=board[1].id, state="connected")
+        db.insert(connection)
+        resource = AppResourceBinding(board_binding_id=binding.id, connection_id=connection.id,
+            resource_type="repository", external_resource_id="kept", access_state="granted", health="healthy")
+        db.insert(resource)
     original_mapping = dict(binding.workflow_mapping)
     revision = binding.edit_revision()
     assert board[0].disable_app_binding(board[1], board[2].get_uid(), "github", other.get_uid(), other.edit_revision()) is None
@@ -189,6 +195,32 @@ def test_disable_is_scoped_revision_checked_and_preserves_other_bindings(board, 
     with DbSession.use(readonly=False) as db:
         stored_other = db.exec(SqlBuilder.select.table(BoardAppBinding).where(BoardAppBinding.id == other.id)).first()
         assert stored_other.state == "enabled" and stored_other.granted_capabilities == ["signals.read"]
+        stored_connection = db.exec(SqlBuilder.select.table(AppConnection).where(AppConnection.id == connection.id)).first()
+        stored_resource = db.exec(SqlBuilder.select.table(AppResourceBinding).where(AppResourceBinding.id == resource.id)).first()
+        assert stored_connection.state == "connected"
+        assert stored_resource.is_selected and stored_resource.access_state == "granted" and stored_resource.health == "healthy"
+
         board[4].actions = ["read"]
         db.update(board[4])
     assert board[0].disable_app_binding(board[1], board[2].get_uid(), "github", binding.get_uid(), disabled.edit_revision()) is None
+
+
+def test_postgresql_same_revision_disable_serializes(board, binding):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+    from langboard_shared.core.db.DbEngine import DbEngine
+    from langboard_shared.domain.services.factory.WorkflowStageService import WorkflowStageEditConflict
+    if DbEngine.get_main_engine().dialect.name != "postgresql":
+        pytest.skip("Row-lock concurrency requires PostgreSQL")
+    ready = Barrier(2)
+    revision = binding.edit_revision()
+    def disable():
+        ready.wait(timeout=5)
+        try:
+            result = board[0].disable_app_binding(board[1], board[2].get_uid(), "github", binding.get_uid(), revision)
+            return "disabled" if result and result.state == "disabled" else "denied"
+        except WorkflowStageEditConflict:
+            return "conflict"
+    with ThreadPoolExecutor(max_workers=2) as workers:
+        results = [workers.submit(disable) for _ in range(2)]
+        assert sorted(result.result(timeout=15) for result in results) == ["conflict", "disabled"]
