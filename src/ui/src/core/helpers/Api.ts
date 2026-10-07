@@ -79,10 +79,16 @@ api.interceptors.request.use((config) => {
 
 api.interceptors.response.use(
     (value) => {
+        if ((value.config.env as { secretInput?: boolean } | undefined)?.secretInput) value.config.data = undefined;
         if (isPreviousSession(value.config)) throw new axios.CanceledError("Session changed");
         return value;
     },
     async (error) => {
+        if ((error.config?.env as { secretInput?: boolean } | undefined)?.secretInput) {
+            // Never retain material in an Axios error or replay a credential POST.
+            error.config.data = undefined;
+            throw new Error("Secret input failed");
+        }
         if (axios.isCancel(error)) throw error;
         if (isPreviousSession(error.config)) throw new axios.CanceledError("Session changed");
         // A failed cookie refresh is terminal; it must never refresh itself.
@@ -141,3 +147,16 @@ api.interceptors.response.use(
         return result;
     }
 );
+
+/** One-shot credential transport. Global auth attachment remains active. */
+export const submitSecretInput = (url: string, value: string) =>
+    api.post(
+        url,
+        { value },
+        {
+            // Skip automatic gzip: the server's normal decompressor spools to disk.
+            transformRequest: [(data) => JSON.stringify(data)],
+            headers: { "Content-Type": "application/json" },
+            env: { secretInput: true } as never,
+        }
+    );
