@@ -50,11 +50,14 @@ def search_vector_generation(store, pointer: dict, query: str, settings, *, max_
             break
         content = encoding.decode(tokens[:remaining])
         remaining -= min(len(tokens), remaining)
+        pages = metadata.get("pages")
+        pages = sorted({page for page in pages if type(page) is int and page > 0}) if isinstance(pages, list) else []
         result.append(
             {
                 "chunk_id": str(identifier),
                 "content": content,
                 "source": source,
+                **({"pages": pages} if pages else {}),
                 **({"page": metadata["page"]} if type(metadata.get("page")) is int and metadata["page"] > 0 else {}),
             }
         )

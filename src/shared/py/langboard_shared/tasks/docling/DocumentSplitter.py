@@ -98,3 +98,27 @@ def split_document(
     for index, chunk in enumerate(chunks):
         chunk.metadata["chunk_index"] = index
     return chunks
+
+
+def split_structural_document(
+    document_json: dict[str, Any], settings: DocumentSplitterSettings, *, metadata: dict[str, Any]
+) -> list["Document"]:
+    """Use official Docling structure before applying the configured LangChain bounds."""
+    from docling_core.transforms.chunker.hierarchical_chunker import HierarchicalChunker
+    from docling_core.types.doc import DoclingDocument
+
+    document = DoclingDocument.model_validate(document_json)
+    chunker = HierarchicalChunker()
+    chunks = []
+    for section in chunker.chunk(dl_doc=document):
+        pages = sorted({prov.page_no for item in section.meta.doc_items for prov in item.prov})
+        section_metadata = {
+            **metadata,
+            "pages": pages,
+            "docling_items": [item.self_ref for item in section.meta.doc_items],
+            "headings": section.meta.headings or [],
+        }
+        chunks.extend(split_document(chunker.contextualize(section), settings, metadata=section_metadata))
+    for index, chunk in enumerate(chunks):
+        chunk.metadata["chunk_index"] = index
+    return chunks
