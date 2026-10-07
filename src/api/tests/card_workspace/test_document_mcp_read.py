@@ -79,3 +79,60 @@ def test_pending_document_does_not_expose_stale_content(monkeypatch):
     document["status"] = "pending"
     result = CardMcp.read_card_document("board", "card", "attachment", object(), service)
     assert result["content"] == "" and result["next_offset"] is None
+
+
+def test_vector_search_rechecks_permission_after_provider_call(monkeypatch):
+    from contextlib import nullcontext
+    from langboard_shared.domain.models.InternalBot import InternalBotType
+    from langboard_shared.tasks.docling import DocumentEmbedding as embedding
+    from langboard_shared.tasks.docling import DocumentSqliteStore as sqlite_module
+    from langboard_shared.tasks.docling import DocumentVectorQuery as query_module
+    from langboard_shared.tasks.docling.DocumentRetrievalSettings import DocumentRetrievalSettings
+    from langboard_shared.tasks.docling.DocumentVectorGeneration import embedding_fingerprint
+
+    service, card, _, document = fixture(monkeypatch)
+    config = {"base_url": "https://fixture.invalid", "model_name": "fixture"}
+    fingerprint = embedding_fingerprint(
+        provider=config["base_url"], model=config["model_name"], dimensions=3, version="v1"
+    )
+    document["embedding_config"] = {"binding_uid": "binding"}
+    document["embedding"] = {
+        "source_generation": "current",
+        "pointer": {
+            "board_uid": "board",
+            "card_uid": "card",
+            "attachment_uid": "attachment",
+            "content_hash": "hash",
+            "embedding_fingerprint": fingerprint,
+            "chunk_ids": ["chunk"],
+            "storage": {"type": "sqlite"},
+        },
+    }
+    service.internal_bot = SimpleNamespace(
+        get_by_id_like=Mock(return_value=SimpleNamespace(value="binding", bot_type=InternalBotType.DocumentEmbedding))
+    )
+    monkeypatch.setattr(
+        embedding,
+        "validate_embedding_config",
+        lambda *_: (config, DocumentRetrievalSettings(enabled=True, dimensions=3)),
+    )
+    monkeypatch.setattr(embedding, "resolve_embedding_snapshot", lambda *_: "private")
+    monkeypatch.setattr(embedding, "create_document_embeddings", lambda *_: object())
+    monkeypatch.setattr(sqlite_module, "open_sqlite_vector_store", lambda *_, **kw: nullcontext(object()))
+
+    class ExistingPath:
+        def __truediv__(self, other):
+            return self
+
+        def is_file(self):
+            return True
+
+    monkeypatch.setattr(CardMcp, "Env", SimpleNamespace(DATA_DIR=ExistingPath(), get_from_env=lambda *_: ""))
+
+    def revoke(*args, **kwargs):
+        service.project.get_user_role_actions_by_project.return_value = []
+        return [{"content": "must-not-return"}]
+
+    monkeypatch.setattr(query_module, "search_vector_generation", revoke)
+    with pytest.raises(ValueError, match="unavailable"):
+        CardMcp.search_card_document("board", "card", "attachment", "query", object(), service)
