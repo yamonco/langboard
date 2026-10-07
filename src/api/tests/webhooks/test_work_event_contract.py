@@ -110,6 +110,7 @@ def test_notification_is_durable_before_work_event_scheduling_and_respects_web_u
     )
     notification_service_module = import_module("langboard_shared.domain.services.factory.NotificationService")
     monkeypatch.setattr(notification_service_module.InfraHelper, "get_by_id_like", lambda _model, value: value)
+    monkeypatch.setattr(service, "_resolve_notification_recipient", lambda *_args: (target, []))
     monkeypatch.setattr(service, "convert_to_api_response", lambda *_args: {"notifier_user": {"uid": "actor"}})
 
     def publish(model: object) -> None:

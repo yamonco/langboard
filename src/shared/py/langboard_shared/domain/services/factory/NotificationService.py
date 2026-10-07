@@ -23,6 +23,7 @@ from ...models import (
     ProjectColumn,
     ProjectInvitation,
     ProjectWiki,
+    ProjectWikiAssignedUser,
     User,
     UserNotification,
 )
@@ -414,6 +415,78 @@ class NotificationService(BaseDomainService):
                 dumped_models.append((type(model).__tablename__, model.model_dump()))
             BotDefaultTask.bot_mentioned(notifier, target_bot, mentioned_in, dumped_models)
 
+    def _resolve_notification_recipient(
+        self, target_user: TUserParam | None, notification_type: NotificationType,
+        references: list[_TModel],
+    ) -> tuple[User, list[_TModel]] | None:
+        """Authorize current references before persisting or scheduling outbound content."""
+        from .CardService import CardService
+
+        user_id = InfraHelper.convert_id(target_user) if target_user is not None else None
+        if not user_id or not references:
+            return None
+        allowed_models = (Project, ProjectInvitation, ProjectWiki, Card, CardComment, Checklist, Checkitem)
+        with DbSession.use(readonly=False) as db:
+            current = db.exec(SqlBuilder.select.table(User).where(User.id == user_id)).first()
+            if current is None or current.deleted_at or not current.activated_at:
+                return None
+            canonical = []
+            for reference in references:
+                model = type(reference)
+                if model not in allowed_models:
+                    return None
+                record = db.exec(SqlBuilder.select.table(model).where(model.id == reference.id)).first()
+                if record is None or getattr(record, "deleted_at", None):
+                    return None
+                canonical.append(record)
+            projects = [record for record in canonical if isinstance(record, Project)]
+            if len(projects) != 1:
+                return None
+            project = projects[0]
+            contexts = self._get_service(CardService).resolve_work_visibility_contexts(current, CollaborationChannel.Api)
+            context = contexts.get(int(project.id))
+            invitation = notification_type == NotificationType.ProjectInvited
+            if invitation:
+                invites = [record for record in canonical if isinstance(record, ProjectInvitation)]
+                if len(canonical) != 2 or len(invites) != 1:
+                    return None
+                if invites[0].project_id != project.id or invites[0].email.casefold() != current.email.casefold():
+                    return None
+            elif context is None:
+                return None
+            for record in canonical:
+                if isinstance(record, Project):
+                    continue
+                if isinstance(record, ProjectInvitation):
+                    if not invitation:
+                        return None
+                    continue
+                if isinstance(record, ProjectWiki):
+                    assigned = db.exec(SqlBuilder.select.table(ProjectWikiAssignedUser).where(
+                        ProjectWikiAssignedUser.project_wiki_id == record.id,
+                        ProjectWikiAssignedUser.user_id == current.id,
+                    )).first()
+                    if record.project_id != project.id or not (record.is_public or project.owner_id == current.id or assigned):
+                        return None
+                    continue
+                card = record if isinstance(record, Card) else None
+                if isinstance(record, Checkitem):
+                    checklist = db.exec(SqlBuilder.select.table(Checklist).where(Checklist.id == record.checklist_id)).first()
+                    if checklist is None or checklist.deleted_at:
+                        return None
+                    card_id = checklist.card_id
+                elif isinstance(record, (CardComment, Checklist)):
+                    card_id = record.card_id
+                else:
+                    card_id = record.id
+                if card is None:
+                    card = db.exec(SqlBuilder.select.table(Card).where(Card.id == card_id)).first()
+                if card is None or card.deleted_at or card.project_id != project.id or context is None:
+                    return None
+                if not context.can_read_card(card.visibility, owner_user_id=card.owner_user_id):
+                    return None
+        return current, canonical
+
     def __notify(
         self,
         notifier: TUserOrBot,
@@ -426,8 +499,11 @@ class NotificationService(BaseDomainService):
         email_formats: dict[str, str] | None = None,
         allow_self: bool = False,
     ) -> bool:
-        target_user = InfraHelper.get_by_id_like(User, target_user)
-        if not target_user or (target_user.id == notifier.id and not allow_self):
+        resolved = self._resolve_notification_recipient(target_user, notification_type, references)
+        if resolved is None:
+            return False
+        target_user, references = resolved
+        if target_user.id == notifier.id and not allow_self:
             return False
 
         raw_record_list = self.create_record_list(references)

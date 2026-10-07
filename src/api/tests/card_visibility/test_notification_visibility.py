@@ -110,3 +110,73 @@ def test_mysql_notification_reference_query_compiles(monkeypatch):
     assert UserNotificationRepository(None, None).get_scoped_list(1, "all", 1, 1, False, contexts={}) == ([], 0)
     assert len(statements) == 2
     assert all("JSON_TABLE(user_notification.record_list, '$[*]' COLUMNS (" in sql for sql in statements)
+
+
+@pytest.mark.parametrize("visibility,allowed", [("PRIVATE", False), ("INTERNAL", False), ("SHARED", True)])
+def test_outbound_creation_checks_current_visibility_before_any_side_effect(current_card, monkeypatch, visibility, allowed):
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+    from langboard_shared.core.publisher import NotificationPublisher
+    from langboard_shared.domain.services.factory.NotificationService import NotificationService
+
+    user, project, card, card_service = current_card
+    with DbSession.use(readonly=False) as db:
+        card.visibility = visibility
+        card.owner_user_id = user.id if visibility == "PRIVATE" else None
+        db.update(card)
+    insert = Mock()
+    setting = SimpleNamespace(has_unsubscription=lambda *_args: False)
+    service = NotificationService(lambda cls: card_service if cls.__name__ == "CardService" else setting,
+        lambda _: None, SimpleNamespace(user_notification=SimpleNamespace(insert=insert)))
+    convert = Mock(return_value={})
+    publish = Mock()
+    schedule = Mock()
+    monkeypatch.setattr(service, "convert_to_api_response", convert)
+    monkeypatch.setattr(NotificationPublisher, "put_dispather", publish)
+    from importlib import import_module
+    monkeypatch.setattr(import_module("langboard_shared.domain.services.factory.NotificationService"), "publish_pending_work_events", schedule)
+    formats = {"body": "sensitive"}
+    result = service._NotificationService__notify(user, user, NotificationType.MentionedInCard,
+        [], [project, card], email_formats=formats, allow_self=True)
+    assert result is allowed
+    assert insert.call_count == convert.call_count == publish.call_count == schedule.call_count == int(allowed)
+    assert ("recipient" in formats) is allowed
+
+
+def test_outbound_uses_live_actor_and_reference_provenance(current_card):
+    from types import SimpleNamespace
+    from langboard_shared.domain.models import Project, User
+    from langboard_shared.domain.services.factory.NotificationService import NotificationService
+
+    user, project, card, card_service = current_card
+    for model in (Checklist, Checkitem, ProjectInvitation):
+        model.__table__.create(DbEngine.get_main_engine())
+    service = NotificationService(lambda _: card_service, lambda _: None, SimpleNamespace())
+    with DbSession.use(readonly=False) as db:
+        card.visibility = "SHARED"
+        card.owner_user_id = None
+        db.update(card)
+        other = Project(owner_id=user.id, title="Other")
+        db.insert(other)
+        checklist = Checklist(card_id=card.id, title="Current child")
+        db.insert(checklist)
+        item = Checkitem(checklist_id=checklist.id, title="Current item")
+        db.insert(item)
+        invite = ProjectInvitation(project_id=project.id, email=user.email, token="test-only")
+        db.insert(invite)
+    resolve = service._resolve_notification_recipient
+    assert resolve(user, NotificationType.MentionedInCard, [project, card])
+    assert resolve(user, NotificationType.ScheduledRule, [project, item])
+    assert resolve(user, NotificationType.ProjectInvited, [project, invite])
+    assert resolve(user, NotificationType.MentionedInCard, [other, card]) is None
+    assert resolve(user, NotificationType.MentionedInCard, []) is None
+    cached_user = User.model_validate(user.model_dump())
+    with DbSession.use(readonly=False) as db:
+        from langboard_shared.core.types import SafeDateTime
+        checklist.deleted_at = SafeDateTime.now()
+        db.update(checklist)
+    assert resolve(user, NotificationType.ScheduledRule, [project, item]) is None
+    with DbSession.use(readonly=False) as db:
+        user.activated_at = None
+        db.update(user)
+    assert resolve(cached_user, NotificationType.MentionedInCard, [project, card]) is None
