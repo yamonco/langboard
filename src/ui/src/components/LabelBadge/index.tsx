@@ -127,7 +127,7 @@ export const LabelBadge = memo(({ name, color, textColor, description, noTooltip
                         setExpanded(false);
                     }}
                     className={cn(
-                        "pointer-events-none w-auto max-w-[min(20rem,calc(100vw-2rem))]",
+                        "pointer-events-none z-[130] w-auto max-w-[min(20rem,calc(100vw-2rem))]",
                         "rounded-full border-0 bg-transparent p-0 shadow-none motion-reduce:!animate-none"
                     )}
                     onOpenAutoFocus={(event) => event.preventDefault()}
