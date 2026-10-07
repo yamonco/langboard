@@ -5,11 +5,10 @@ import useRoleActionFilter from "@/core/hooks/useRoleActionFilter";
 import { ISocketContext, useSocket } from "@/core/providers/SocketProvider";
 import { TUserLikeModel } from "@/core/models/ModelRegistry";
 import { ProjectRole } from "@/core/models/roles";
-import { Utils } from "@langboard/core/utils";
 import type { ICardCommentAnchor } from "@/core/models/types/card-comment-anchor.type";
 
-// Must stay aligned with Tailwind `lg` breakpoint so the body keeps usable width.
-const DESKTOP_COMMENT_BREAKPOINT = 1024;
+// Reserve body and comment panel space inside the actual card.
+const COMMENT_PANEL_MIN_SURFACE_WIDTH = 760;
 
 export interface IBoardCardContext {
     projectUID: string;
@@ -69,6 +68,7 @@ export interface IBoardCardPanelContext {
     setIsActionPanelOpen: React.Dispatch<React.SetStateAction<bool>>;
     toggleActionPanel: () => void;
     commentLayoutMode: "mobile" | "panel";
+    commentSurfaceRef: React.RefObject<HTMLDivElement | null>;
 }
 
 const initialPanelContext = {
@@ -79,6 +79,7 @@ const initialPanelContext = {
     setIsActionPanelOpen: () => false,
     toggleActionPanel: () => {},
     commentLayoutMode: "mobile" as const,
+    commentSurfaceRef: { current: null },
 };
 
 const BoardCardPanelContext = createContext<IBoardCardPanelContext>(initialPanelContext);
@@ -90,6 +91,7 @@ export const BoardCardProvider = ({ projectUID, card, currentUser, viewportRef, 
     const commentCount = card.useField("count_comment");
     const [isCommentPanelOpen, setIsCommentPanelOpen] = useState(() => commentCount > 0);
     const [isActionPanelOpen, setIsActionPanelOpen] = useState(false);
+    const commentSurfaceRef = useRef<HTMLDivElement | null>(null);
     const [commentLayoutMode, setCommentLayoutMode] = useState<"mobile" | "panel">("mobile");
     const [cardEditMode, setCardEditMode] = useState<"view" | "edit">(() =>
         useCardFlipDraftStore.getState().drafts[flipDraftKey(currentUser.uid, projectUID, card.uid)] ? "edit" : "view"
@@ -105,22 +107,15 @@ export const BoardCardProvider = ({ projectUID, card, currentUser, viewportRef, 
     );
 
     useEffect(() => {
-        if (Utils.Type.isNullOrUndefined(window)) {
-            return;
-        }
-
-        const mediaQuery = window.matchMedia(`(min-width: ${DESKTOP_COMMENT_BREAKPOINT}px)`);
-        const updateLayoutMode = () => {
-            setCommentLayoutMode(mediaQuery.matches ? "panel" : "mobile");
-        };
-
+        const surface = commentSurfaceRef.current;
+        if (!surface) return;
+        const updateLayoutMode = () =>
+            setCommentLayoutMode(surface.clientWidth >= COMMENT_PANEL_MIN_SURFACE_WIDTH + (isActionPanelOpen ? 172 : 0) ? "panel" : "mobile");
+        const observer = new ResizeObserver(updateLayoutMode);
+        observer.observe(surface);
         updateLayoutMode();
-        mediaQuery.addEventListener("change", updateLayoutMode);
-
-        return () => {
-            mediaQuery.removeEventListener("change", updateLayoutMode);
-        };
-    }, []);
+        return () => observer.disconnect();
+    }, [isActionPanelOpen]);
 
     const toggleCommentPanel = useCallback(() => setIsCommentPanelOpen((prev) => !prev), []);
     const toggleActionPanel = useCallback(() => setIsActionPanelOpen((prev) => !prev), []);
@@ -186,6 +181,7 @@ export const BoardCardProvider = ({ projectUID, card, currentUser, viewportRef, 
             setIsActionPanelOpen,
             toggleActionPanel,
             commentLayoutMode,
+            commentSurfaceRef,
         }),
         [isCommentPanelOpen, toggleCommentPanel, isActionPanelOpen, toggleActionPanel, commentLayoutMode]
     );

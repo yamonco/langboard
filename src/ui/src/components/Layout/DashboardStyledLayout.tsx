@@ -124,12 +124,7 @@ export const DashboardStyledLayoutFrame = forwardRef<HTMLDivElement, TDashboardS
         const { scrollableRef, isAtTop, scrollToTop } = useScrollToTop({});
 
         const main = (
-            <ScrollArea.Root
-                viewportId="main"
-                mutable={scrollAreaMutable}
-                className="relative size-full overflow-y-auto"
-                viewportRef={scrollableRef}
-            >
+            <ScrollArea.Root viewportId="main" mutable={scrollAreaMutable} className="relative size-full overflow-y-auto" viewportRef={scrollableRef}>
                 <main className={cn("relative size-full overflow-y-auto p-4 md:p-6 lg:p-8", className)}>
                     {children}
                     {!isAtTop && (
@@ -193,7 +188,8 @@ export const DashboardStyledLayoutFrame = forwardRef<HTMLDivElement, TDashboardS
                                     maxWidth={420}
                                     compactHeight
                                     floatingHidden
-                                    showCollapseButton={false}
+                                    showCollapseButton
+                                    autoCollapseAt={1280}
                                     hidden={!workbenchContext || workbenchContextHidden}
                                 >
                                     {workbenchContextHidden ? null : workbenchContext}
@@ -219,7 +215,7 @@ export const DashboardStyledLayoutFrame = forwardRef<HTMLDivElement, TDashboardS
                             "fixed z-[120]",
                             mobileWorkbenchContext.immersive
                                 ? "inset-x-0 top-0 h-dvh"
-                                : "left-2 right-2 bottom-[4.75rem] h-[60dvh] max-h-[calc(100dvh-7rem)]",
+                                : "bottom-[4.75rem] left-2 right-2 h-[60dvh] max-h-[calc(100dvh-7rem)]",
                             "overflow-hidden bg-background md:hidden",
                             !mobileWorkbenchContext.immersive && "rounded-2xl border shadow-lg"
                         )}

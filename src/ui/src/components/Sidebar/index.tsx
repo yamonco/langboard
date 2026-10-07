@@ -37,8 +37,9 @@ function Sidebar({ navs, main, floatingIcon = "plus", floatingTitle = "common.Ac
 
                     <Button
                         variant="secondary"
+                        aria-label={t(isCollapsed ? "common.Expand" : "common.Collapse")}
                         onClick={() => setIsCollapsed(!isCollapsed)}
-                        className="absolute right-[-1.2rem] top-1/2 z-50 size-10 -translate-y-1/2 transform rounded-full p-0"
+                        className="absolute right-1 top-1/2 z-50 size-10 -translate-y-1/2 rounded-md p-0"
                     >
                         <IconComponent icon={isCollapsed ? "chevron-right" : "chevron-left"} size="8" />
                     </Button>
