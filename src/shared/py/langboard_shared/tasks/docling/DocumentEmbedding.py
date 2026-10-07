@@ -34,6 +34,10 @@ def resolve_embedding_snapshot(snapshot: dict, current_value: str) -> str:
     current, _ = validate_embedding_config(current_value)
     if current["base_url"].strip().rstrip("/") != snapshot.get("base_url"):
         raise ValueError("Embedding endpoint changed; explicitly request processing again")
+    if str(current.get("retrieval", {}).get("external_url") or "").rstrip("/") != str(
+        snapshot.get("retrieval", {}).get("external_url") or ""
+    ).rstrip("/"):
+        raise ValueError("Vector endpoint changed; explicitly request processing again")
     resolved = {
         **snapshot,
         "api_key": current.get("api_key", ""),
