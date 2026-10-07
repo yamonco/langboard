@@ -48,19 +48,22 @@ class WorkflowStageService(BaseDomainService):
         if requirements is None:
             return None
         with DbSession.atomic() as db:
-            result = self.preview_app_mapping(user, project_uid, requirements, {})
-            if result is None:
-                return None
             binding = db.exec(SqlBuilder.select.table(BoardAppBinding).where(
                 BoardAppBinding.project_id == InfraHelper.convert_id(project_uid),
                 BoardAppBinding.app_key == app_key,
             )).first()
-            if binding is None:
-                return {"binding": None, "mapping": result}
-            result = self.preview_app_mapping(user, project_uid, requirements, binding.workflow_mapping)
+            result = self.preview_app_mapping(
+                user, project_uid, requirements, binding.workflow_mapping if binding else {},
+            )
             if result is None:
                 return None
-            return {"binding": binding, "mapping": result}
+            candidate_uids = {uid for choice in result.choices for uid in choice.candidates}
+            columns = db.exec(SqlBuilder.select.table(ProjectColumn).where(
+                ProjectColumn.project_id == InfraHelper.convert_id(project_uid),
+                ProjectColumn.id.in_([InfraHelper.convert_id(uid) for uid in candidate_uids]),
+            )).all() if candidate_uids else []
+            return {"binding": binding, "mapping": result,
+                    "column_names": {column.get_uid(): column.name for column in columns}}
 
     def prepare_app_mapping(self, user: User, project_uid: str, app_key: str) -> BoardAppBinding | None:
         """Create only a disabled workflow draft; this is not App installation."""

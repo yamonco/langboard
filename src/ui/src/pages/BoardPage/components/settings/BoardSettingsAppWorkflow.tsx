@@ -7,6 +7,7 @@ import { ProjectColumn } from "@/core/models";
 import { useBoardSettings } from "@/core/providers/BoardSettingsProvider";
 
 interface Snapshot {
+    column_names: Record<string, string>;
     binding: { uid: string; revision: string; workflow_mapping: Record<string, string> } | null;
     choices: { stage: string; required: boolean; status: string; column_uid: string | null; candidates: string[] }[];
 }
@@ -18,6 +19,8 @@ export default function BoardSettingsAppWorkflow() {
     const [app, setApp] = useState("github");
     const [draft, setDraft] = useState<Record<string, string>>({});
     const [pending, setPending] = useState(false);
+    const [dirty, setDirty] = useState(false);
+    const [draftRevision, setDraftRevision] = useState<string | null>(null);
     const [error, setError] = useState(false);
     const { query } = useQueryMutation();
     const url = `/board/${project.uid}/settings/apps/${app}/workflow`;
@@ -25,9 +28,12 @@ export default function BoardSettingsAppWorkflow() {
         retry: 0,
     });
     useEffect(() => {
-        setDraft(data?.binding?.workflow_mapping ?? {});
-        setError(false);
-    }, [data, app]);
+        if (!dirty) {
+            setDraft(data?.binding?.workflow_mapping ?? {});
+            setError(false);
+            setDraftRevision(null);
+        }
+    }, [data, app, dirty]);
     const save = async () => {
         if (pending || !canEditBasicInfo || !data) return;
         setPending(true);
@@ -38,9 +44,10 @@ export default function BoardSettingsAppWorkflow() {
                 await api.put(url, {
                     binding_uid: data.binding.uid,
                     workflow_mapping: draft,
-                    expected_revision: data.binding.revision,
+                    expected_revision: draftRevision ?? data.binding.revision,
                     enable_transitions: false,
                 });
+            setDirty(false);
             await refetch();
         } catch {
             setError(true);
@@ -80,14 +87,16 @@ export default function BoardSettingsAppWorkflow() {
                                     className="min-w-0 rounded-md border border-input bg-background p-2"
                                     value={draft[choice.stage] ?? choice.column_uid ?? ""}
                                     disabled={!canEditBasicInfo || pending || !data.binding}
-                                    onChange={(event) =>
+                                    onChange={(event) => {
+                                        if (!dirty) setDraftRevision(data.binding?.revision ?? null);
+                                        setDirty(true);
                                         setDraft((current) => {
                                             const next = { ...current };
                                             if (event.target.value) next[choice.stage] = event.target.value;
                                             else delete next[choice.stage];
                                             return next;
-                                        })
-                                    }
+                                        });
+                                    }}
                                 >
                                     <option value="">{t("project.settings.Select column")}</option>
                                     {draft[choice.stage] && !choice.candidates.includes(draft[choice.stage]) && (
@@ -95,7 +104,9 @@ export default function BoardSettingsAppWorkflow() {
                                     )}
                                     {choice.candidates.map((uid) => (
                                         <option key={uid} value={uid}>
-                                            {columns.find((column) => column.uid === uid)?.name ?? t("project.settings.Column")}
+                                            {columns.find((column) => column.uid === uid)?.name ??
+                                                data.column_names[uid] ??
+                                                t("project.settings.Column")}
                                         </option>
                                     ))}
                                 </select>
@@ -114,7 +125,12 @@ export default function BoardSettingsAppWorkflow() {
                 <Button size="sm" disabled={!canEditBasicInfo || pending || !data} onClick={() => void save()}>
                     {t(`project.settings.${data?.binding ? "Save workflow mapping" : "Prepare workflow settings"}`)}
                 </Button>
-                <Button size="sm" variant="outline" disabled={pending} onClick={() => void refetch()}>
+                {dirty && (
+                    <Button size="sm" variant="outline" disabled={pending} onClick={() => setDirty(false)}>
+                        {t("project.settings.Discard workflow changes")}
+                    </Button>
+                )}
+                <Button size="sm" variant="outline" disabled={pending || dirty} onClick={() => void refetch()}>
                     {t("common.Retry")}
                 </Button>
             </div>

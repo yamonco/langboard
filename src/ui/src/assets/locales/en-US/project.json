@@ -134,6 +134,7 @@
     "Mapping resolved": "Destination selected",
     "Mapping invalid": "Check the previous mapping.",
     "Save workflow mapping": "Save workflow mapping",
-    "Prepare workflow settings": "Prepare workflow settings"
+    "Prepare workflow settings": "Prepare workflow settings",
+    "Discard workflow changes": "Discard changes"
   }
 }
