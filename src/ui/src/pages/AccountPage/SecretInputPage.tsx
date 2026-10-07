@@ -7,7 +7,7 @@ import Button from "@/components/base/Button";
 export default function SecretInputPage() {
     const { inputUID } = useParams();
     const [t] = useTranslation();
-    const [target, setTarget] = useState<{ name: string; scope: string }>();
+    const [target, setTarget] = useState<{ name: string; scope: string; operation: "create" | "rotate" }>();
     const [state, setState] = useState<"loading" | "ready" | "saving" | "completed" | "failed" | "cancelled">("loading");
     const input = useRef<HTMLInputElement>(null);
     const url = `/secret-input/${inputUID}`;
@@ -36,6 +36,8 @@ export default function SecretInputPage() {
                     <p className="text-sm text-muted-foreground">{t("myAccount.secretInput.help")}</p>
                     {target && (
                         <p className="break-all text-sm">
+                            {t(target.operation === "rotate" ? "myAccount.secretInput.rotate" : "myAccount.secretInput.create")}
+                            {" · "}
                             {target.scope} · {target.name}
                         </p>
                     )}
