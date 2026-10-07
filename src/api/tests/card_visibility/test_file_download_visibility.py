@@ -1,6 +1,8 @@
 """Raw attachment URLs must enforce the same current card audience."""
+import os
 from types import SimpleNamespace
 from unittest.mock import Mock
+from uuid import uuid4
 import pytest
 from langboard.routes.file import FileApi
 from langboard_shared.core.routing import ApiException
@@ -64,16 +66,36 @@ def test_raw_url_path_aliases_are_rejected_before_storage(monkeypatch, namespace
     reader.assert_not_called()
 
 
-def test_file_provenance_uses_exact_live_database_object_not_cached_rows(monkeypatch):
+@pytest.mark.parametrize("database_url", [
+    "sqlite://",
+    pytest.param(
+        os.environ.get("LANGBOARD_FILE_TEST_DATABASE_URL", "postgresql+psycopg://"),
+        marks=pytest.mark.skipif(
+            not os.environ.get("LANGBOARD_FILE_TEST_DATABASE_URL"),
+            reason="Set LANGBOARD_FILE_TEST_DATABASE_URL to a disposable PostgreSQL database",
+        ),
+    ),
+])
+def test_file_provenance_uses_exact_live_database_object_not_cached_rows(monkeypatch, database_url):
     from langboard_shared.core.db import DbSession
     from langboard_shared.core.db.DbEngine import DbEngine
     from langboard_shared.core.storage import FileModel
     from langboard_shared.core.types import SafeDateTime
     from langboard_shared.domain.models import CardAttachment
     from langboard_shared.domain.services.factory.CardAttachmentService import CardAttachmentService
-    from sqlalchemy import create_engine
-
-    engine = create_engine("sqlite://")
+    from sqlalchemy import create_engine, text
+    schema = "file_provenance_" + uuid4().hex
+    engine = create_engine(database_url)
+    if engine.dialect.name == "postgresql":
+        with engine.begin() as db:
+            db.execute(text(f'CREATE SCHEMA "{schema}"'))
+        engine.dispose()
+        engine = create_engine(database_url, connect_args={"options": f"-csearch_path={schema}"})
+        with engine.begin() as db:
+            db.execute(text('CREATE TABLE "user" (id BIGINT PRIMARY KEY)'))
+            db.execute(text('CREATE TABLE card (id BIGINT PRIMARY KEY)'))
+            db.execute(text('INSERT INTO "user" VALUES (1)'))
+            db.execute(text('INSERT INTO card VALUES (2)'))
     CardAttachment.__table__.create(engine)
     monkeypatch.setattr(DbEngine, "get_main_engine", lambda: engine)
     monkeypatch.setattr(DbEngine, "get_readonly_engine", lambda: engine)
@@ -105,4 +127,7 @@ def test_file_provenance_uses_exact_live_database_object_not_cached_rows(monkeyp
         assert source.deleted_at is None
         assert service.resolve_file_owner("local", "card_attachment", "proof.pdf") is None
     finally:
+        if engine.dialect.name == "postgresql":
+            with engine.begin() as db:
+                db.execute(text(f'DROP SCHEMA "{schema}" CASCADE'))
         engine.dispose()
