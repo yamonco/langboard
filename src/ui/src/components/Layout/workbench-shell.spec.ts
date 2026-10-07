@@ -372,3 +372,34 @@ test("compact sidebar label Escape collapses the label and preserves the open pa
     await page.getByRole("button", { name: "Parent action", exact: true }).press("Escape");
     await expect(page.getByRole("dialog", { name: "Parent card" })).toHaveCount(0);
 });
+
+test("hovered sidebar label consumes Escape when focus remains in the parent card", async ({ page }) => {
+    await page.goto("/src/components/LabelBadge/compact-labels.fixture.html?nested=1");
+    const label = page.getByRole("button", { name: "🧩 Contract", exact: true });
+    await label.focus();
+    const parent = page.getByRole("dialog", { name: "Parent card" });
+    await expect(parent).toBeVisible();
+    await page.getByRole("button", { name: "Parent action", exact: true }).focus();
+    await label.hover();
+    await expect(page.getByRole("dialog", { name: "🧩 Contract", exact: true })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog", { name: "🧩 Contract", exact: true })).toHaveCount(0);
+    await expect(parent).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(parent).toHaveCount(0);
+});
+
+test("sidebar preview focus does not dismiss the parent card", async ({ page }) => {
+    await page.goto("/src/components/LabelBadge/compact-labels.fixture.html?nested=1");
+    const label = page.getByRole("button", { name: "🧩 Contract", exact: true });
+    await label.focus();
+    const parent = page.getByRole("dialog", { name: "Parent card" });
+    await expect(parent).toBeVisible();
+    const preview = page.getByRole("dialog", { name: "🧩 Contract", exact: true });
+    await expect(preview).toBeVisible();
+    await preview.focus();
+    await expect(parent).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(preview).toHaveCount(0);
+    await expect(parent).toBeVisible();
+});

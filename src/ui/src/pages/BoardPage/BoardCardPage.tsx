@@ -343,7 +343,7 @@ const BoardCardPageComponent = ({
                                 if (
                                     (event.detail.originalEvent.target as Element)?.closest?.(
                                         "[data-workbench-sidebar], [data-workbench-explorer], [data-workbench-context], " +
-                                            "[data-command-palette], [data-command-palette-trigger]"
+                                            "[data-command-palette], [data-command-palette-trigger], [data-compact-label-preview]"
                                     )
                                 ) {
                                     event.preventDefault();

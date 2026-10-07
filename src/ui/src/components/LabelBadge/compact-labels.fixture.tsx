@@ -10,7 +10,7 @@ function Fixture() {
     const nested = new URLSearchParams(location.search).has("nested");
     return (
         <>
-            <div className="p-8" onFocus={() => window.setTimeout(() => setMounted(true), 100)}>
+            <div data-workbench-context="" className="p-8" onFocus={() => window.setTimeout(() => setMounted(true), 100)}>
                 <div data-testid="row" className="flex items-center gap-1">
                     <LabelBadge compact name="🧩 Contract" emoji="🧩" color="#8B5CF6" />
                     <LabelBadge compact name="Local" color="#10B981" />
@@ -27,7 +27,11 @@ function Fixture() {
                         nonModalOverlay
                         overlayClassName="pointer-events-none"
                         className="pointer-events-auto"
-                        onInteractOutside={(event) => event.preventDefault()}
+                        onInteractOutside={(event) => {
+                            if ((event.detail.originalEvent.target as Element)?.closest?.("[data-workbench-context], [data-compact-label-preview]")) {
+                                event.preventDefault();
+                            }
+                        }}
                         onOverlayInteract={(event) => event.preventDefault()}
                         aria-describedby=""
                     >
