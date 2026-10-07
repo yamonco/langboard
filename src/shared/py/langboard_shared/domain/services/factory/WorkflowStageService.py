@@ -5,7 +5,15 @@ from ....core.domain import BaseDomainService
 from ....helpers import InfraHelper
 from ....publishers import AppSettingPublisher
 from ....tasks.webhooks.ExecutionReadinessUow import execution_readiness_uow
-from ...models import Project, ProjectAssignedUser, ProjectColumn, ProjectRole, User, WorkflowStageDefinition
+from ...models import (
+    BoardAppBinding,
+    Project,
+    ProjectAssignedUser,
+    ProjectColumn,
+    ProjectRole,
+    User,
+    WorkflowStageDefinition,
+)
 from ...models.ProjectRole import ProjectRoleAction
 from ..AppWorkflowPolicy import WorkflowMappingResult, WorkflowRequirements, resolve_app_workflow
 
@@ -28,26 +36,74 @@ class WorkflowStageService(BaseDomainService):
         Re-read the primary so stale caller models, roles and replicas cannot
         authorize a board. App binding writes still require their own update gate.
         """
+        return self._resolve_app_mapping(user, project, requirements, explicit, ProjectRoleAction.Read)
+
+    def save_app_mapping(
+        self, user: User, binding_uid: str, requirements: WorkflowRequirements,
+        explicit: Mapping[str, str] | None, *, expected_revision: str,
+        enable_transitions: bool,
+    ) -> BoardAppBinding | None:
+        """Host supplies the installed App requirements; request bodies do not.
+
+        Persist current choices without changing resource selections, grants or
+        App activation. Incomplete mappings may be saved with transitions off.
+        This does not authorize future transition execution.
+        """
+        with DbSession.atomic() as db:
+            binding = db.exec(SqlBuilder.select.table(BoardAppBinding).where(
+                BoardAppBinding.id == InfraHelper.convert_id(binding_uid),
+            ).with_for_update()).first()
+            if binding is None:
+                return None
+            mapping = dict(binding.workflow_mapping if explicit is None else explicit)
+            result = self._resolve_app_mapping(
+                user, binding.project_id, requirements, mapping, ProjectRoleAction.Update, lock=True,
+            )
+            if result is None:
+                return None
+            if binding.edit_revision() != expected_revision:
+                raise WorkflowStageEditConflict()
+            if enable_transitions and not result.transitions_enabled:
+                raise ValueError("App workflow mapping is incomplete or invalid")
+            # Save automatic unique choices too, so a later duplicate cannot
+            # silently change an existing App destination.
+            binding.workflow_mapping = {
+                **mapping,
+                **{choice.stage: choice.column_uid for choice in result.choices if choice.status == "resolved"},
+            }
+            binding.stage_transitions_enabled = enable_transitions
+            db.update(binding)
+            return binding
+
+    def _resolve_app_mapping(
+        self, user: User, project: Project | int | str,
+        requirements: WorkflowRequirements, explicit: Mapping[str, str],
+        action: ProjectRoleAction, *, lock: bool = False,
+    ) -> WorkflowMappingResult | None:
+        def query(model):
+            statement = SqlBuilder.select.table(model)
+            return statement.with_for_update() if lock else statement
+
         if not isinstance(user, User):
             return None
         project_id = InfraHelper.convert_id(project)
         with DbSession.use(readonly=False) as db:
-            current = db.exec(SqlBuilder.select.table(User).where(User.id == user.id)).first()
-            board = db.exec(SqlBuilder.select.table(Project).where(Project.id == project_id)).first()
+            current = db.exec(query(User).where(User.id == user.id)).first()
+            board = db.exec(query(Project).where(Project.id == project_id)).first()
             if current is None or current.deleted_at or not current.activated_at or board is None or board.deleted_at:
                 return None
             if not current.is_admin and board.owner_id != current.id:
-                member = db.exec(SqlBuilder.select.table(ProjectAssignedUser).where(
+                member = db.exec(query(ProjectAssignedUser).where(
                     ProjectAssignedUser.project_id == board.id, ProjectAssignedUser.user_id == current.id,
                 )).first()
-                role = db.exec(SqlBuilder.select.table(ProjectRole).where(
+                role = db.exec(query(ProjectRole).where(
                     ProjectRole.project_id == board.id, ProjectRole.user_id == current.id,
                 )).first()
-                if member is None or role is None or not role.is_granted(ProjectRoleAction.Read):
+                if member is None or role is None or not role.is_granted(action):
                     return None
-            columns = db.exec(SqlBuilder.select.table(ProjectColumn).where(ProjectColumn.project_id == board.id)).all()
+            columns = db.exec(query(ProjectColumn).where(ProjectColumn.project_id == board.id)).all()
             keys = requirements.required + requirements.optional
-            stages = db.exec(SqlBuilder.select.table(WorkflowStageDefinition).where(
+            stages = db.exec(query(WorkflowStageDefinition).where(
                 WorkflowStageDefinition.key.in_(keys),
             )).all()
         return resolve_app_workflow(
