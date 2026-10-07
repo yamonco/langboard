@@ -11,14 +11,14 @@ from sqlalchemy import create_engine
 from ....core.db import DbSession, SqlBuilder
 from ....core.db.DbEngine import DbEngine
 from ....core.storage import FileModel
-from ....domain.models import Card, CardAttachment, CardMetadata, Project, ProjectColumn, User
+from ....domain.models import Card, CardAttachment, CardDocumentArtifact, CardMetadata, Project, ProjectColumn, User
 from ....domain.services import DomainService
 from .InternalBotService import InternalBotService
 
 
 def test_document_generation_fences_old_results_and_preserves_previous_text_on_failure(monkeypatch):
     engine = create_engine("sqlite://")
-    for model in (User, Project, ProjectColumn, Card, CardAttachment, CardMetadata):
+    for model in (User, Project, ProjectColumn, Card, CardAttachment, CardDocumentArtifact, CardMetadata):
         model.__table__.create(engine)
     monkeypatch.setattr(DbEngine, "get_main_engine", lambda: engine)
     monkeypatch.setattr(DbEngine, "get_readonly_engine", lambda: engine)
@@ -80,9 +80,16 @@ def test_document_generation_fences_old_results_and_preserves_previous_text_on_f
         card,
         attachment.get_uid(),
         "pdf",
-        content={"markdown": "이전 전사", "search_keywords": {"en": ["document search"], "ja": ["文書検索"]}},
+        content={"markdown": "이전 전사", "search_keywords": {"en": ["document search"], "ja": ["文書検索"]},
+                 "docling_document": {"schema_name": "DoclingDocument", "pages": {"1": {}}}},
         generation=first,
     )
+    with DbSession.use(readonly=True) as db:
+        artifact = db.exec(SqlBuilder.select.table(CardDocumentArtifact)).first()
+        assert artifact and '"pages"' in artifact.document_json
+    assert "docling_document" not in docling.get_document_by_attachment_uid(
+        CardMetadata, card, attachment.get_uid()
+    )["content"]
     first_embedding = {"status": "indexed", "pointer": {"generation": "first-vector"}}
     embedding_snapshot = {"binding_uid": "embedding-provider", "model_name": "embedding-model"}
     assert docling.publish_document_embedding(
@@ -124,6 +131,9 @@ def test_document_generation_fences_old_results_and_preserves_previous_text_on_f
     )
     with DbSession.use(readonly=True) as db:
         current = db.exec(SqlBuilder.select.table(CardAttachment).where(CardAttachment.id == attachment.id)).first()
+    with DbSession.use(readonly=True) as db:
+        preserved = db.exec(SqlBuilder.select.table(CardDocumentArtifact)).first()
+        assert preserved.document_json == artifact.document_json
     assert current.document_text == "이전 전사\n\ndocument search 文書検索"
     assert (
         docling.get_document_by_attachment_uid(CardMetadata, card, attachment.get_uid())["content"]["markdown"]

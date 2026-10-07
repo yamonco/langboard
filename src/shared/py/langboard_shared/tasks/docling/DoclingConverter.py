@@ -18,7 +18,9 @@ def _report_keywords(page: int, keywords: dict[str, list[str]]) -> None:
     print("LANGBOARD_DOCLING_KEYWORDS:" + dumps({"page": page, "keywords": keywords}, ensure_ascii=False), flush=True)
 
 
-def convert_document(source: Path, destination: Path, vision_value: str | None = None) -> None:
+def convert_document(
+    source: Path, destination: Path, vision_value: str | None = None, document_output: Path | None = None
+) -> None:
     converter = DocumentConverter()
     if source.suffix.lower() in {".pdf", ".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp"}:
         from ...domain.services import DomainService
@@ -43,6 +45,12 @@ def convert_document(source: Path, destination: Path, vision_value: str | None =
     if result.status != ConversionStatus.SUCCESS:
         raise ValueError("Document conversion did not complete; attachment remains available")
     destination.write_text(result.document.export_to_markdown(), encoding="utf-8")
+    if document_output is not None:
+        structural = result.document.model_copy(update={
+            "pages": {key: page.model_copy(update={"image": None}) for key, page in result.document.pages.items()},
+            "pictures": [picture.model_copy(update={"image": None}) for picture in result.document.pictures],
+        })
+        document_output.write_text(dumps(structural.export_to_dict(), ensure_ascii=False), encoding="utf-8")
 
 
 def main() -> None:
@@ -50,11 +58,12 @@ def main() -> None:
     parser.add_argument("source", type=Path)
     parser.add_argument("destination", type=Path)
     parser.add_argument("--vision-config-stdin", action="store_true")
+    parser.add_argument("--document-output", type=Path)
     args = parser.parse_args()
     value = stdin.read() if args.vision_config_stdin else None
     if value is not None:
         loads(value)  # Validate the private worker payload before conversion.
-    convert_document(args.source, args.destination, value)
+    convert_document(args.source, args.destination, value, args.document_output)
 
 
 if __name__ == "__main__":
