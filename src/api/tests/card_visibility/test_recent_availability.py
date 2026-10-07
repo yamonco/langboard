@@ -130,7 +130,7 @@ def test_recent_cards_revalidate_actor_and_filter_visibility_before_return(monke
             deleted_attachment.deleted_at = SafeDateTime.now()
             db.update(deleted_attachment)
         assert attachment.deleted_at is None
-        assert attachment_service.get_by_id_like(attachment, consistent=True).deleted_at is not None
+        assert attachment_service.get_by_id_like(attachment, consistent=True) is None
         scim.is_employee = lambda user: True
         assert set(service.get_existing_uids(project, uids, user=member, channel=CollaborationChannel.Mcp)) == set(uids[:3])
         _, internal_context = service.resolve_visibility_context(project, member, CollaborationChannel.Mcp)
