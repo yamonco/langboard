@@ -142,7 +142,7 @@ def test_recent_cards_revalidate_actor_and_filter_visibility_before_return(monke
             db.update(changed)
         assert cards[0].visibility == "SHARED"
         assert service.resolve_readable_card(project, cards[0], member, CollaborationChannel.Mcp) is None
-        assert service.get_api_page_by_project(project, 1, user_or_bot=member, channel=CollaborationChannel.Mcp) is None
+        assert service.get_api_page_by_project(project, 1, user_or_bot=member, channel=CollaborationChannel.Mcp)[1] == 1
         with DbSession.use(readonly=False) as db:
             changed.visibility = "SHARED"
             db.update(changed)
@@ -167,6 +167,7 @@ def test_recent_cards_revalidate_actor_and_filter_visibility_before_return(monke
             inactive.activated_at = None
             db.update(inactive)
         assert member.activated_at is not None
+        assert service.get_api_page_by_project(project, 1, user_or_bot=member, channel=CollaborationChannel.Mcp) is None
         assert service.resolve_readable_card(project, cards[0], member, CollaborationChannel.Mcp) is None
         assert service.get_existing_uids(project, uids, user=member, channel=CollaborationChannel.Mcp) == []
         assert service.search_context_by_project(project, "SearchProof", user=member, channel=CollaborationChannel.Mcp) == []
