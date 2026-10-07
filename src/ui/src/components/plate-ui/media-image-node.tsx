@@ -4,9 +4,10 @@
 import type { TImageElement } from "platejs";
 import type { PlateElementProps } from "platejs/react";
 import { useDraggable } from "@platejs/dnd";
-import { Image, ImagePlugin, openImagePreview, useMediaState } from "@platejs/media/react";
+import { useImage, ImagePlugin, openImagePreview, useMediaState } from "@platejs/media/react";
 import { ResizableProvider, useResizableValue } from "@platejs/resizable";
 import { PlateElement, useEditorRef, withHOC } from "platejs/react";
+import useProtectedImage from "@/core/hooks/useProtectedImage";
 import { cn } from "@/core/utils/ComponentUtils";
 import { Caption, CaptionTextarea } from "@/components/plate-ui/caption";
 import { MediaToolbar } from "@/components/plate-ui/media-toolbar";
@@ -18,6 +19,8 @@ import type { MouseEvent, SyntheticEvent } from "react";
 
 export const ImageElement = withHOC(ResizableProvider, function ImageElement(props: PlateElementProps<TImageElement>) {
     const [t] = useTranslation();
+    const { props: imageProps } = useImage();
+    const image = useProtectedImage(props.element.url);
     const { align = "center", focused, readOnly, selected } = useMediaState();
     const width = useResizableValue("width");
     const editor = useEditorRef();
@@ -63,7 +66,9 @@ export const ImageElement = withHOC(ResizableProvider, function ImageElement(pro
                         }}
                     >
                         <ResizeHandle className={mediaResizeHandleVariants({ direction: "left" })} options={{ direction: "left" }} />
-                        <Image
+                        <img
+                            {...imageProps}
+                            src={image.src}
                             ref={handleRef}
                             className={cn(
                                 "block h-auto max-w-full cursor-pointer object-cover px-0",

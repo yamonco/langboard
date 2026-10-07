@@ -64,3 +64,56 @@ for (const width of [390, 1440]) {
         }
     });
 }
+
+test("Plate inline and preview authenticate protected images without changing persisted URLs", async ({ page }) => {
+    const imageBody = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"900\" height=\"600\"><rect width=\"900\" height=\"600\" fill=\"teal\"/></svg>";
+    let reads = 0;
+    let denied = false;
+    await page.route("**/file/encrypted/card_attachment/proof.png", async (route) => {
+        reads++;
+        expect(route.request().headers().authorization).toBe("Bearer fixture-token");
+        await route.fulfill(denied ? { status: 404 } : { contentType: "image/svg+xml", body: imageBody });
+    });
+    await page.goto("/src/components/plate-ui/media-image-node.fixture.html");
+    await page.evaluate(async () => {
+        const apiPath = "/src/core/helpers/Api.ts";
+        const { api } = await import(apiPath);
+        api.defaults.headers.common.Authorization = "Bearer fixture-token";
+        sessionStorage.setItem("fixture-auth", "1");
+    });
+    await page.goto("/src/components/plate-ui/media-image-node.fixture.html?protected");
+    const inline = page.locator("[data-dynamic-image-fixture] [data-slate-editor] img");
+    await expect(inline.first()).toHaveAttribute("src", /^blob:/);
+    await inline.last().click();
+    const preview = page.locator("div.fixed.left-0.top-0:not(.hidden) img");
+    await expect(preview).toHaveAttribute("src", /^blob:/);
+    const blob = (await preview.getAttribute("src"))!;
+    await preview.click();
+    await expect(preview).toHaveCSS("cursor", "zoom-out");
+    await page.keyboard.press("Escape");
+    await expect(preview).toHaveCount(0);
+    expect(
+        await page.evaluate(async (url) => {
+            try {
+                await fetch(url);
+                return true;
+            } catch {
+                return false;
+            }
+        }, blob)
+    ).toBe(false);
+    expect(await page.evaluate(() => (window as unknown as { fixtureEditor: { children: { url: string }[] } }).fixtureEditor.children[0].url)).toBe(
+        "/file/encrypted/card_attachment/proof.png"
+    );
+    await inline.first().dblclick();
+    await expect(preview).toHaveAttribute("src", /^blob:/);
+    denied = true;
+    await page.evaluate(async () => {
+        const authPath = "/src/core/stores/AuthStore.ts";
+        const { getAuthStore } = await import(authPath);
+        getAuthStore().removeToken();
+    });
+    await expect(preview).not.toHaveAttribute("src", /.+/);
+    await expect(inline.first()).not.toHaveAttribute("src", /.+/);
+    expect(reads).toBeGreaterThanOrEqual(4);
+});
