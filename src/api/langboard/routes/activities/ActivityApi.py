@@ -3,6 +3,7 @@ from fastapi import Depends, Query, Request
 from langboard_shared.core.filter import AuthFilter
 from langboard_shared.core.routing import ApiErrorCode, ApiException, ApiPermission, AppRouter, JsonResponse
 from langboard_shared.core.schema import InfiniteRefreshableList, OpenApiSchema
+from langboard_shared.core.security.CollaborationChannel import CollaborationChannel
 from langboard_shared.domain.models import Bot, ProjectRole, ProjectWikiActivity, User, UserActivity
 from langboard_shared.domain.models.bases import BaseActivityModel
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
@@ -93,6 +94,7 @@ def get_current_user_activities(
 @AuthFilter.add()
 def get_project_activities(
     project_uid: str,
+    request: Request,
     pagination: ActivityPagination = Depends(),
     user: User = Auth.scope("user"),
     service: DomainService = DomainService.scope(),
@@ -103,11 +105,11 @@ def get_project_activities(
 
     if pagination.only_count:
         result = service.activity.get_api_list_by_project(
-            project_uid, pagination, only_count=True, assignee=pagination.assignee_uid
+            project_uid, pagination, only_count=True, assignee=pagination.assignee_uid, user=user, channel=request.scope.get("collaboration_channel", CollaborationChannel.Api)
         )
         return JsonResponse(content=InfiniteRefreshableList(count_new_records=result or 0))
 
-    result = service.activity.get_api_list_by_project(project_uid, pagination, assignee=pagination.assignee_uid)
+    result = service.activity.get_api_list_by_project(project_uid, pagination, assignee=pagination.assignee_uid, user=user, channel=request.scope.get("collaboration_channel", CollaborationChannel.Api))
     if not result:
         return JsonResponse(content=InfiniteRefreshableList())
     activities, count_new_records, project = result
@@ -134,6 +136,7 @@ def get_project_activities(
 @AuthFilter.add()
 def get_project_column_activities(
     project_uid: str,
+    request: Request,
     column_uid: str,
     pagination: ActivityPagination = Depends(),
     user: User = Auth.scope("user"),
@@ -145,11 +148,11 @@ def get_project_column_activities(
 
     if pagination.only_count:
         result = service.activity.get_api_list_by_column(
-            project_uid, column_uid, pagination, only_count=True, assignee=assignee
+            project_uid, column_uid, pagination, only_count=True, assignee=assignee, user=user, channel=request.scope.get("collaboration_channel", CollaborationChannel.Api)
         )
         return JsonResponse(content=InfiniteRefreshableList(count_new_records=result or 0))
 
-    result = service.activity.get_api_list_by_column(project_uid, column_uid, pagination, assignee=assignee)
+    result = service.activity.get_api_list_by_column(project_uid, column_uid, pagination, assignee=assignee, user=user, channel=request.scope.get("collaboration_channel", CollaborationChannel.Api))
     if not result:
         return JsonResponse(content=InfiniteRefreshableList())
     activities, count_new_records, project, column = result
@@ -197,11 +200,11 @@ def get_card_activities(
 
     if pagination.only_count:
         result = service.activity.get_api_list_by_card(
-            project_uid, card_uid, pagination, only_count=True, assignee=assignee
+            project_uid, card_uid, pagination, only_count=True, assignee=assignee, user=user, channel=request.scope.get("collaboration_channel", CollaborationChannel.Api)
         )
         return JsonResponse(content=InfiniteRefreshableList(count_new_records=result or 0))
 
-    result = service.activity.get_api_list_by_card(project_uid, card_uid, pagination, assignee=assignee)
+    result = service.activity.get_api_list_by_card(project_uid, card_uid, pagination, assignee=assignee, user=user, channel=request.scope.get("collaboration_channel", CollaborationChannel.Api))
     if not result:
         return JsonResponse(content=InfiniteRefreshableList())
     activities, count_new_records, project, card = result
