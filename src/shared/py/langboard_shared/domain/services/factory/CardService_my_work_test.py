@@ -22,6 +22,7 @@ def test_assigned_only_card_reports_assigned_reason() -> None:
     column = SimpleNamespace(name="Doing")
     repo = SimpleNamespace(card=SimpleNamespace(get_my_work_page=Mock(return_value=[(card, project, column, True)])))
     service = CardService(lambda _: None, lambda _: None, repo)
+    service.resolve_work_visibility_contexts = Mock(return_value={1: object()})
     service.get_work_states = Mock(return_value={10: {"blocker_state": None}})
 
     result = service.get_my_work_cards(

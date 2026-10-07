@@ -224,6 +224,7 @@ def get_my_work_cards(
         lower,
         upper,
         limit,
+        channel=CollaborationChannel.Mcp,
     )
     return {
         "cards": cards,
@@ -241,4 +242,4 @@ def list_my_work(
     cursor: str | None = None,
     limit: Annotated[int, Field(ge=1, le=25)] = 20,
 ) -> dict:
-    return service.card.list_assigned_work(user, project_uid, cursor, limit)
+    return service.card.list_assigned_work(user, project_uid, cursor, limit, channel=CollaborationChannel.Mcp)

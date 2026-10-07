@@ -67,7 +67,7 @@ def test_my_work_scopes_projects_and_round_trips_keyset_cursor() -> None:
     )
     user = SimpleNamespace(id=1)
     service.card._get_service = lambda _: service.project
-    service.card.list_assigned_work = lambda *args: CardService.list_assigned_work(service.card, *args)
+    service.card.list_assigned_work = lambda *args, **kwargs: CardService.list_assigned_work(service.card, *args, **kwargs)
     first = UserMcp.list_my_work(user, service, limit=1)
     assert first["items"] == [{"card_uid": card_uid}]
     assert page.call_args.args[1:3] == ([project_uid], 1)

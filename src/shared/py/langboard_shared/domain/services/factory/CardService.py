@@ -3,7 +3,8 @@ import json
 from binascii import Error as Base64Error
 from datetime import datetime, timedelta
 from typing import Any, Literal, Sequence, cast, overload
-from sqlalchemy import func, select
+from sqlalchemy import Text, func, or_, select
+from sqlalchemy import cast as sql_cast
 from sqlalchemy.exc import IntegrityError
 from ....ai import BotScheduleHelper, BotScopeHelper
 from ....core.db import DbSession, EditorContentModel, SqlBuilder
@@ -41,7 +42,9 @@ from ...models import (
     Checklist,
     GlobalCardRelationshipType,
     Project,
+    ProjectAssignedUser,
     ProjectColumn,
+    ProjectRole,
     ProjectWiki,
     User,
 )
@@ -190,6 +193,32 @@ class CardService(BaseDomainService):
             internal_member=internal, actor_user_id=int(current_user.id),
         )
         return project, context
+
+    def resolve_work_visibility_contexts(
+        self, user: User, channel: CollaborationChannel,
+    ) -> dict[int, CardVisibilityContext]:
+        """Resolve current cross-board membership in two primary reads, not N reads."""
+        if not isinstance(user, User):
+            return {}
+        with DbSession.use(readonly=False) as db:
+            current = db.exec(SqlBuilder.select.table(User).where(User.id == user.id)).first()
+            if current is None or current.deleted_at is not None or not current.activated_at:
+                return {}
+            membership = select(ProjectAssignedUser.id).where(
+                ProjectAssignedUser.project_id == Project.id,
+                ProjectAssignedUser.user_id == current.id,
+            ).exists()
+            actions = "," + sql_cast(ProjectRole.actions, Text) + ","
+            read_grant = select(ProjectRole.id).where(
+                ProjectRole.project_id == Project.id, ProjectRole.user_id == current.id,
+                or_(actions.contains(",*,"), actions.contains(",read,")),
+            ).exists()
+            projects = db.exec(SqlBuilder.select.table(Project).where(
+                or_(Project.owner_id == current.id, membership & read_grant),
+            )).all()
+        internal = self._get_service(ScimProvisioningService).is_employee(current)
+        context = CardVisibilityContext(channel, True, True, internal, actor_user_id=int(current.id))
+        return {int(project.id): context for project in projects}
 
     def get_by_project(self, project: TProjectParam | None) -> list[Card]:
         project = InfraHelper.get_by_id_like(Project, project)
@@ -806,10 +835,12 @@ class CardService(BaseDomainService):
         return cards, self.repo.card.count_archived_by_project(project, input_value), next_fields
 
     def get_dashboard_list(
-        self, user: User, pagination: TimeBasedPagination
+        self, user: User, pagination: TimeBasedPagination, *,
+        channel: CollaborationChannel = CollaborationChannel.Api,
     ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-        records = self.repo.card.get_dashboard_list_scroller(user, pagination)
-        work_states = self.get_work_states([card for card, *_ in records])
+        contexts = self.resolve_work_visibility_contexts(user, channel)
+        records = self.repo.card.get_dashboard_list_scroller(user, pagination, contexts=contexts)
+        work_states = self.get_work_states([card for card, *_ in records], context=next(iter(contexts.values()), None))
 
         api_cards = []
         api_projects: dict[int, dict[str, Any]] = {}
@@ -935,9 +966,11 @@ class CardService(BaseDomainService):
         since: SafeDateTime | None,
         until: SafeDateTime | None,
         limit: int,
+        *, channel: CollaborationChannel = CollaborationChannel.Api,
     ) -> list[dict[str, Any]]:
         """Return a token-efficient cross-project work queue with match reasons."""
 
+        contexts = self.resolve_work_visibility_contexts(user, channel)
         records = self.repo.card.get_my_work_page(
             user,
             [project["uid"] for project in projects],
@@ -949,9 +982,10 @@ class CardService(BaseDomainService):
             since,
             until,
             limit,
+            contexts=contexts,
         )
         cards: list[dict[str, Any]] = []
-        work_states = self.get_work_states([card for card, *_ in records])
+        work_states = self.get_work_states([card for card, *_ in records], context=next(iter(contexts.values()), None))
         for card, project, column, is_assigned in records:
             reasons = []
             if is_assigned:
@@ -980,7 +1014,8 @@ class CardService(BaseDomainService):
         return cards
 
     def list_assigned_work(
-        self, user: User, project_uid: str | None = None, cursor: str | None = None, limit: int = 20
+        self, user: User, project_uid: str | None = None, cursor: str | None = None, limit: int = 20,
+        *, channel: CollaborationChannel = CollaborationChannel.Api,
     ) -> dict[str, Any]:
         """Shared REST/MCP assigned-work query with current read grants and keyset pagination."""
         if type(limit) is not int or not 1 <= limit <= 25:
@@ -1013,7 +1048,7 @@ class CardService(BaseDomainService):
                 raise ValueError("Invalid My Work cursor") from exc
         if not readable:
             return {"items": [], "next_cursor": None}
-        items, next_fields = self.get_assigned_work_page(user, sorted(readable), limit, before)
+        items, next_fields = self.get_assigned_work_page(user, sorted(readable), limit, before, channel=channel)
         next_cursor = (
             base64.urlsafe_b64encode(json.dumps(next_fields, separators=(",", ":")).encode()).decode().rstrip("=")
             if next_fields
@@ -1027,8 +1062,10 @@ class CardService(BaseDomainService):
         project_uids: list[str],
         limit: int,
         before: tuple[SafeDateTime, int, int] | None = None,
+        *, channel: CollaborationChannel = CollaborationChannel.Api,
     ) -> tuple[list[dict[str, Any]], tuple[str, str, str] | None]:
         """Read one permission-scoped, assigned-only page without per-card fetches."""
+        contexts = self.resolve_work_visibility_contexts(user, channel)
         records = self.repo.card.get_my_work_page(
             user,
             project_uids,
@@ -1041,10 +1078,11 @@ class CardService(BaseDomainService):
             None,
             limit + 1,
             before=before,
+            contexts=contexts,
         )
         has_more = len(records) > limit
         page = records[:limit]
-        work_states = self.get_work_states([card for card, *_ in page])
+        work_states = self.get_work_states([card for card, *_ in page], context=next(iter(contexts.values()), None))
         items = [
             {
                 "card_uid": card.get_uid(),

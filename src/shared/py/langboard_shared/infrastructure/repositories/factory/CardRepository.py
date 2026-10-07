@@ -244,7 +244,21 @@ class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
         with DbSession.use(readonly=True) as db:
             return db.exec(query).first() or 0
 
-    def get_dashboard_list_scroller(self, user: TUserParam, pagination: TimeBasedPagination):
+    @staticmethod
+    def _work_visibility_scope(contexts: dict[int, CardVisibilityContext]):
+        grouped: dict[CardVisibilityContext, list[int]] = {}
+        for project_id, context in contexts.items():
+            grouped.setdefault(context, []).append(project_id)
+        return or_(false(), *(
+            Card.project_id.in_(project_ids) & card_visibility_scope(context)
+            for context, project_ids in grouped.items()
+        ))
+
+    def get_dashboard_list_scroller(
+        self, user: TUserParam, pagination: TimeBasedPagination, *, contexts: dict[int, CardVisibilityContext],
+    ):
+        if not contexts:
+            return []
         user_id = InfraHelper.convert_id(user)
         query = (
             SqlBuilder.select.tables(Card, Project, ProjectColumn)
@@ -272,13 +286,14 @@ class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
                     | ((ProjectRole.column("actions") != "*") & (CardAssignedUser.column("user_id") == user_id))
                 )
             )
+            .where(self._work_visibility_scope(contexts))
             .where(Card.column("created_at") <= pagination.refer_time)
             .order_by(Card.column("created_at").desc(), Card.column("id").desc())
         )
         query = InfraHelper.paginate(query, pagination.page, pagination.limit)
 
         records = []
-        with DbSession.use(readonly=True) as db:
+        with DbSession.use(readonly=False) as db:
             result = db.exec(query)
             records = result.all()
         return records
@@ -438,9 +453,12 @@ class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
         until: SafeDateTime | None,
         limit: int,
         before: tuple[SafeDateTime, int, int] | None = None,
+        *, contexts: dict[int, CardVisibilityContext],
     ) -> list[tuple[Card, Project, ProjectColumn, bool]]:
         """Return one bounded cross-project page of user-focused, non-archived cards."""
 
+        if not contexts:
+            return []
         user_id = InfraHelper.convert_id(user)
         assigned = (
             select(CardAssignedUser.column("id"))
@@ -483,6 +501,7 @@ class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
             .join(Project, Card.column("project_id") == Project.column("id"))
             .join(ProjectColumn, Card.column("project_column_id") == ProjectColumn.column("id"))
             .where(Project.column("id").in_([InfraHelper.convert_id(project) for project in project_uids]))
+            .where(self._work_visibility_scope(contexts))
             .where(Project.column("deleted_at") == None)  # noqa: E711
             .where(Card.column("archived_at") == None)  # noqa: E711
             .where(ProjectColumn.column("is_archive").is_(False))
@@ -511,7 +530,7 @@ class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
         query = query.order_by(
             Card.column("updated_at").desc(), Project.column("id").desc(), Card.column("id").desc()
         ).limit(limit)
-        with DbSession.use(readonly=True) as db:
+        with DbSession.use(readonly=False) as db:
             return db.exec(query).all()
 
     def get_page_by_project(
