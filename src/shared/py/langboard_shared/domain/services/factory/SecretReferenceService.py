@@ -103,6 +103,8 @@ class SecretReferenceService(BaseDomainService):
         *,
         source: SecretAuditSource = SecretAuditSource(),
     ) -> dict:
+        if DbSession.has_active_transaction():
+            raise RuntimeError("Credential storage must own its transaction")
         name = validate_secret_name(name)
         scope_id = int(actor.id) if scope == "personal" and scope_uid == "me" else InfraHelper.convert_id(scope_uid)
         if not isinstance(value, SecretStr) or not value.get_secret_value():
@@ -224,6 +226,43 @@ class SecretReferenceService(BaseDomainService):
             db.update(reference)
             self._audit(db, actor, reference, "moved", source)
             return reference.metadata()
+
+    def rotate(
+        self,
+        actor: User,
+        uri: str,
+        value: SecretStr,
+        expected_revision: int,
+        *,
+        source: SecretAuditSource = SecretAuditSource(),
+    ) -> dict:
+        if DbSession.has_active_transaction():
+            raise RuntimeError("Credential storage must own its transaction")
+        if not isinstance(value, SecretStr) or not value.get_secret_value():
+            raise ValueError("Secret material must be a nonempty SecretStr")
+        new_locator = None
+        provider = KeyVault.provider
+        try:
+            with DbSession.atomic() as db:
+                reference = self._find(actor, uri, lock=True)
+                if reference.revision != expected_revision:
+                    raise SecretReferenceConflict()
+                if reference.state != "active" or reference.provider != provider.name():
+                    raise SecretReferenceUnavailable()
+                old_locator = reference.locator
+                new_locator = provider.store_secret(uuid4().hex, value.get_secret_value())
+                reference.locator = new_locator
+                reference.revision += 1
+                db.update(reference)
+                self._audit(db, actor, reference, "rotated", source)
+                # Commit the new reference before retiring old material. Callback
+                # failure leaves a valid new reference and a cleanup obligation.
+                db.after_commit(lambda: provider.delete_key(old_locator))
+                return reference.metadata()
+        except Exception:
+            if new_locator is not None:
+                provider.delete_key(new_locator)
+            raise
 
     def revoke(
         self, actor: User, uri: str, expected_revision: int, *, source: SecretAuditSource = SecretAuditSource()

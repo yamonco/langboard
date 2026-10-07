@@ -27,7 +27,11 @@ def secrets(board, monkeypatch, tmp_path):
     from alembic.migration import MigrationContext
     from alembic.operations import Operations
 
-    for filename in ("20261008061000-820ebc13da57.py", "20261008065000-932fcd24eb68.py"):
+    for filename in (
+        "20261008061000-820ebc13da57.py",
+        "20261008065000-932fcd24eb68.py",
+        "20261008072000-a430de35fc79.py",
+    ):
         migration_path = Path(__file__).resolve().parents[7] / "src/api/langboard/migrations/versions" / filename
         spec = importlib.util.spec_from_file_location("secret_reference_migration", migration_path)
         migration = importlib.util.module_from_spec(spec)
@@ -237,3 +241,72 @@ def test_audit_failure_rolls_back_reference_and_new_storage(secrets, monkeypatch
     assert not list(path.iterdir())
     with DbSession.use(readonly=False) as db:
         assert not db.exec(select(SecretReference)).all()
+
+
+def test_rotation_keeps_uri_retires_old_material_and_rejects_stale_revision(secrets):
+    from ...models import SecretReferenceAudit
+
+    service, board, path = secrets
+    meta = service.create(board[1], "personal", "me", "fixture", SecretStr("old"))
+    original_paths = set(path.iterdir())
+    rotated = service.rotate(board[1], meta["uri"], SecretStr("new"), 0)
+    assert rotated["uri"] == meta["uri"] and rotated["revision"] == 1
+    assert not original_paths & set(path.iterdir()) and len(list(path.iterdir())) == 1
+    assert service.resolve_for_runtime(board[1], meta["uri"]).get_secret_value() == "new"
+    with pytest.raises(SecretReferenceConflict):
+        service.rotate(board[1], meta["uri"], SecretStr("stale"), 0)
+    assert len(list(path.iterdir())) == 1
+    with DbSession.use(readonly=False) as db:
+        audit = db.exec(select(SecretReferenceAudit).where(SecretReferenceAudit.action == "rotated")).first()[0]
+    assert audit.reference_revision == 1
+
+
+def test_rotation_audit_failure_preserves_existing_material(secrets, monkeypatch):
+    service, board, path = secrets
+    meta = service.create(board[1], "personal", "me", "fixture", SecretStr("old"))
+    original_paths = set(path.iterdir())
+    original = service._audit
+
+    def fail(db, actor, reference, action, source):
+        if action == "rotated":
+            raise RuntimeError("audit unavailable")
+        return original(db, actor, reference, action, source)
+
+    monkeypatch.setattr(service, "_audit", fail)
+    with pytest.raises(RuntimeError, match="audit unavailable"):
+        service.rotate(board[1], meta["uri"], SecretStr("new"), 0)
+    assert set(path.iterdir()) == original_paths
+    assert service.get_metadata(board[1], meta["uri"])["revision"] == 0
+    assert service.resolve_for_runtime(board[1], meta["uri"]).get_secret_value() == "old"
+
+
+def test_revoked_rotation_cannot_restore_access(secrets):
+    service, board, path = secrets
+    meta = service.create(board[1], "personal", "me", "fixture", SecretStr("old"))
+    service.revoke(board[1], meta["uri"], 0)
+    with pytest.raises(SecretReferenceUnavailable):
+        service.rotate(board[1], meta["uri"], SecretStr("new"), 1)
+
+
+def test_retired_material_cleanup_failure_keeps_new_reference_valid(secrets, monkeypatch):
+    service, board, path = secrets
+    meta = service.create(board[1], "personal", "me", "fixture", SecretStr("old"))
+    monkeypatch.setattr(
+        KeyVault.provider, "delete_key", lambda *_: (_ for _ in ()).throw(RuntimeError("cleanup unavailable"))
+    )
+    rotated = service.rotate(board[1], meta["uri"], SecretStr("new"), 0)
+    assert rotated["revision"] == 1
+    assert service.resolve_for_runtime(board[1], meta["uri"]).get_secret_value() == "new"
+    assert len(list(path.iterdir())) == 2
+
+
+def test_storage_writes_reject_outer_transaction_before_vault_effect(secrets):
+    service, board, path = secrets
+    meta = service.create(board[1], "personal", "me", "fixture", SecretStr("old"))
+    original_paths = set(path.iterdir())
+    with DbSession.atomic():
+        with pytest.raises(RuntimeError, match="own its transaction"):
+            service.create(board[1], "personal", "me", "other", SecretStr("other"))
+        with pytest.raises(RuntimeError, match="own its transaction"):
+            service.rotate(board[1], meta["uri"], SecretStr("new"), 0)
+    assert set(path.iterdir()) == original_paths
