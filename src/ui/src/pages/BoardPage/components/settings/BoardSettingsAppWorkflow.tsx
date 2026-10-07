@@ -1,0 +1,123 @@
+import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
+import Button from "@/components/base/Button";
+import { api } from "@/core/helpers/Api";
+import { useQueryMutation } from "@/core/helpers/QueryMutation";
+import { ProjectColumn } from "@/core/models";
+import { useBoardSettings } from "@/core/providers/BoardSettingsProvider";
+
+interface Snapshot {
+    binding: { uid: string; revision: string; workflow_mapping: Record<string, string> } | null;
+    choices: { stage: string; required: boolean; status: string; column_uid: string | null; candidates: string[] }[];
+}
+const labels: Record<string, string> = { active: "In progress", review: "Review", closed: "Completed", ready: "Ready" };
+export default function BoardSettingsAppWorkflow() {
+    const [t] = useTranslation();
+    const { project, canEditBasicInfo } = useBoardSettings();
+    const columns = ProjectColumn.Model.useModels((column) => column.project_uid === project.uid);
+    const [app, setApp] = useState("github");
+    const [draft, setDraft] = useState<Record<string, string>>({});
+    const [pending, setPending] = useState(false);
+    const [error, setError] = useState(false);
+    const { query } = useQueryMutation();
+    const url = `/board/${project.uid}/settings/apps/${app}/workflow`;
+    const { data, isLoading, isError, refetch } = query(["app-workflow", project.uid, app], async () => (await api.get(url)).data as Snapshot, {
+        retry: 0,
+    });
+    useEffect(() => {
+        setDraft(data?.binding?.workflow_mapping ?? {});
+        setError(false);
+    }, [data, app]);
+    const save = async () => {
+        if (pending || !canEditBasicInfo || !data) return;
+        setPending(true);
+        setError(false);
+        try {
+            if (!data.binding) await api.post(url);
+            else
+                await api.put(url, {
+                    binding_uid: data.binding.uid,
+                    workflow_mapping: draft,
+                    expected_revision: data.binding.revision,
+                    enable_transitions: false,
+                });
+            await refetch();
+        } catch {
+            setError(true);
+        } finally {
+            setPending(false);
+        }
+    };
+    return (
+        <div className="flex w-full flex-col gap-4 py-4">
+            <label className="flex flex-col gap-2 text-sm">
+                {t("project.settings.App")}
+                <select
+                    className="rounded-md border border-input bg-background p-2"
+                    value={app}
+                    disabled={pending}
+                    onChange={(event) => setApp(event.target.value)}
+                >
+                    <option value="github">GitHub</option>
+                    <option value="glitchtip">GlitchTip</option>
+                </select>
+            </label>
+            <p className="text-sm text-muted-foreground">{t("project.settings.App workflow draft help")}</p>
+            {isLoading ? (
+                <p role="status">{t("common.Loading...")}</p>
+            ) : isError ? (
+                <p role="alert">{t("project.settings.App workflow unavailable")}</p>
+            ) : (
+                data && (
+                    <div className="grid gap-3 sm:grid-cols-2">
+                        {data.choices.map((choice) => (
+                            <label key={choice.stage} className="flex min-w-0 flex-col gap-2 rounded-lg border p-3 text-sm">
+                                <span>
+                                    {t(`project.settings.${labels[choice.stage] ?? choice.stage}`)} ·{" "}
+                                    {t(`project.settings.${choice.required ? "Required" : "Optional"}`)}
+                                </span>
+                                <select
+                                    className="min-w-0 rounded-md border border-input bg-background p-2"
+                                    value={draft[choice.stage] ?? choice.column_uid ?? ""}
+                                    disabled={!canEditBasicInfo || pending || !data.binding}
+                                    onChange={(event) =>
+                                        setDraft((current) => {
+                                            const next = { ...current };
+                                            if (event.target.value) next[choice.stage] = event.target.value;
+                                            else delete next[choice.stage];
+                                            return next;
+                                        })
+                                    }
+                                >
+                                    <option value="">{t("project.settings.Select column")}</option>
+                                    {draft[choice.stage] && !choice.candidates.includes(draft[choice.stage]) && (
+                                        <option value={draft[choice.stage]}>{t("project.settings.Previous column unavailable")}</option>
+                                    )}
+                                    {choice.candidates.map((uid) => (
+                                        <option key={uid} value={uid}>
+                                            {columns.find((column) => column.uid === uid)?.name ?? t("project.settings.Column")}
+                                        </option>
+                                    ))}
+                                </select>
+                                <span className="text-xs text-muted-foreground">{t(`project.settings.Mapping ${choice.status}`)}</span>
+                            </label>
+                        ))}
+                    </div>
+                )
+            )}
+            {error && (
+                <p role="alert" className="text-sm text-destructive">
+                    {t("project.settings.App workflow save failed")}
+                </p>
+            )}
+            <div className="flex flex-wrap gap-2">
+                <Button size="sm" disabled={!canEditBasicInfo || pending || !data} onClick={() => void save()}>
+                    {t(`project.settings.${data?.binding ? "Save workflow mapping" : "Prepare workflow settings"}`)}
+                </Button>
+                <Button size="sm" variant="outline" disabled={pending} onClick={() => void refetch()}>
+                    {t("common.Retry")}
+                </Button>
+            </div>
+        </div>
+    );
+}

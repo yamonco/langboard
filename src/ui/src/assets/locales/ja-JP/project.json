@@ -114,6 +114,26 @@
       "Description cannot be empty.": "説明は空にできません。"
     },
     "New Label": "新しいラベル",
-    "Sample label description": "ラベルの説明例"
+    "Sample label description": "ラベルの説明例",
+    "Apps workflow": "アプリのワークフロー",
+    "App": "アプリ",
+    "App workflow draft help": "移動先を設定します。接続は別途設定が必要です。保存時に自動遷移は無効になります。",
+    "App workflow unavailable": "設定を取得できません",
+    "App workflow save failed": "保存できません。設定を再読み込みしてください。",
+    "In progress": "進行中",
+    "Review": "レビュー",
+    "Completed": "完了",
+    "Ready": "準備",
+    "Required": "必須",
+    "Optional": "任意",
+    "Select column": "列を選択",
+    "Column": "列",
+    "Previous column unavailable": "以前の列は利用できません",
+    "Mapping missing": "先にボード列にこのステージを割り当ててください。",
+    "Mapping ambiguous": "移動先を選択してください。",
+    "Mapping resolved": "移動先選択済み",
+    "Mapping invalid": "以前のマッピングを確認してください。",
+    "Save workflow mapping": "マッピングを保存",
+    "Prepare workflow settings": "ワークフロー設定を準備"
   }
 }
