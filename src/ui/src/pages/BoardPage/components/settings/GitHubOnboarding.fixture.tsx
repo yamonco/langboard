@@ -6,6 +6,7 @@ import { api } from "@/core/helpers/Api";
 import i18n from "@/i18n";
 import "@/assets/styles/main.css";
 const calls: unknown[] = [];
+let healthPage = 0;
 Object.assign(window, { githubCalls: calls });
 const params = new URLSearchParams(location.search);
 sessionStorage.setItem(
@@ -16,6 +17,19 @@ sessionStorage.setItem("github-onboarding:me:fixture:kind", params.has("manifest
 if (params.has("new") || params.has("existing")) sessionStorage.removeItem("github-onboarding:me:fixture");
 api.defaults.adapter = async (config) => {
     calls.push({ url: config.url, method: config.method, data: config.data ? JSON.parse(config.data) : null });
+    if (config.url?.endsWith("/resources/refresh"))
+        return {
+            config,
+            status: 200,
+            statusText: "OK",
+            headers: {},
+            data: {
+                revision: "a".repeat(64),
+                items: [],
+                next_cursor: params.has("healthpages") && healthPage++ === 0 ? "cursor" : null,
+                refreshed_count: 25,
+            },
+        };
     if (config.url?.endsWith("/app"))
         return {
             config,

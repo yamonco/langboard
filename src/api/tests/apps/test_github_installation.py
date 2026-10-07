@@ -412,3 +412,40 @@ def test_explicit_health_refresh_preserves_selection_and_foreign_board(installat
         assert persisted.state == "disabled" and persisted.workflow_mapping == {"active": "column"}
     if failure == "stale":
         assert not calls
+
+
+def test_health_refresh_pages_and_groups_repository_checks(installation):
+    from langboard.apps.GitHubResources import get_resources, refresh_resources
+    from langboard_shared.domain.models import AppResourceBinding, BoardAppBinding
+
+    service, board, connection, calls, responses = installation
+    with DbSession.use(readonly=False) as db:
+        binding = BoardAppBinding(project_id=board[2].id, app_key="github")
+        db.insert(binding)
+        for uid in range(99, 139):
+            db.insert(
+                AppResourceBinding(
+                    board_binding_id=binding.id,
+                    connection_id=connection.id,
+                    resource_type="repository",
+                    external_resource_id=str(uid),
+                    resource_path=[
+                        {"type": "installation", "id": "17"},
+                        {"type": "account", "id": "7"},
+                        {"type": "repository", "id": str(uid)},
+                    ],
+                )
+            )
+    snapshot = get_resources(service, board[1], board[2].get_uid())
+    first = refresh_resources(service, board[1], board[2].get_uid(), connection.get_uid(), snapshot["revision"])
+    assert first["refreshed_count"] == 25 and first["next_cursor"]
+    assert sum(item["health"] == "healthy" for item in first["items"]) == 25
+    assert len(calls) == 4  # One restricted token lifecycle for a same-installation batch.
+    second = refresh_resources(
+        service, board[1], board[2].get_uid(), connection.get_uid(), first["revision"], first["next_cursor"]
+    )
+    assert second["refreshed_count"] == 15 and second["next_cursor"] is None
+    assert all(item["health"] == "healthy" and item["selected"] for item in second["items"])
+    assert len(calls) == 8
+    with pytest.raises(ValueError):
+        refresh_resources(service, board[1], board[2].get_uid(), connection.get_uid(), second["revision"], "invalid")
