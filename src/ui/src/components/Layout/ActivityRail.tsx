@@ -24,7 +24,7 @@ export default function ActivityRail({ items, contextExpanded = false }: { items
             {items
                 .filter((item) => !item.hidden)
                 .map((item) => (
-                    <Tooltip.Root key={item.label} open={contextExpanded ? false : undefined}>
+                    <Tooltip.Root key={`${item.label}:${contextExpanded}`} open={contextExpanded ? false : undefined}>
                         <Tooltip.Trigger asChild>
                             <button
                                 type="button"

@@ -190,6 +190,10 @@ test("description markers remain within the card viewport and track its internal
 });
 
 test("expanded Explorer suppresses Activity Rail tooltip and collapsed Explorer restores it", async ({ page }) => {
+    const warnings: string[] = [];
+    page.on("console", (message) => {
+        if (message.type() === "warning") warnings.push(message.text());
+    });
     await page.goto("/src/components/Layout/workbench-shell.fixture.html");
     const explorer = page.getByRole("button", { name: "Explorer", exact: true });
     await explorer.focus();
@@ -204,9 +208,16 @@ test("expanded Explorer suppresses Activity Rail tooltip and collapsed Explorer 
     await page.getByRole("button", { name: "Expand", exact: true }).click();
     await explorer.focus();
     await expect(page.getByRole("tooltip")).toHaveCount(0);
+    expect(warnings.filter((message) => message.includes("controlled to uncontrolled") || message.includes("uncontrolled to controlled"))).toEqual(
+        []
+    );
 });
 
 test("common Sidebar tooltips follow explicit collapse state", async ({ page }) => {
+    const warnings: string[] = [];
+    page.on("console", (message) => {
+        if (message.type() === "warning") warnings.push(message.text());
+    });
     await page.goto("/src/components/Layout/sidebar-tooltip.fixture.html");
     const explorer = page.getByRole("link", { name: "Explorer", exact: true });
     await explorer.focus();
@@ -223,6 +234,9 @@ test("common Sidebar tooltips follow explicit collapse state", async ({ page }) 
     await page.getByRole("button", { name: "Expand", exact: true }).click();
     await explorer.focus();
     await expect(page.getByRole("tooltip")).toHaveCount(0);
+    expect(warnings.filter((message) => message.includes("controlled to uncontrolled") || message.includes("uncontrolled to controlled"))).toEqual(
+        []
+    );
 });
 
 test("mobile floating Sidebar retains tooltip and link navigation", async ({ page }) => {

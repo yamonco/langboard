@@ -14,7 +14,7 @@ const SidebarNavItems = memo(({ isFloating, isCollapsed, navs }: TSidebarNavItem
                 const Comp = isFloating ? FloatingNavItem : SidebarNavItem;
 
                 return (
-                    <Tooltip.Root key={key} open={isFloating || isCollapsed ? undefined : false}>
+                    <Tooltip.Root key={`${key}:${Boolean(isFloating || isCollapsed)}`} open={isFloating || isCollapsed ? undefined : false}>
                         <Tooltip.Trigger asChild>
                             <span className="w-full">
                                 <Comp item={item} />
