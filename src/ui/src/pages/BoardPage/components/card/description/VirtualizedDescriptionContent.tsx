@@ -40,6 +40,8 @@ export const VirtualizedDescriptionContent = memo(
         const [scrollMargin, setScrollMargin] = useState(0);
         const [activeIndex, setActiveIndex] = useState(0);
         const [viewportHeight, setViewportHeight] = useState(320);
+        const navigationFrameRef = useRef(0);
+        useEffect(() => () => cancelAnimationFrame(navigationFrameRef.current), []);
 
         const measureScrollMargin = useCallback(() => {
             const scrollElement = scrollParentRef.current;
@@ -115,8 +117,9 @@ export const VirtualizedDescriptionContent = memo(
 
         const scrollToChunk = useCallback(
             (index: number) => {
+                cancelAnimationFrame(navigationFrameRef.current);
                 virtualizer.scrollToIndex(index, { align: "start", behavior: "auto" });
-                requestAnimationFrame(() => {
+                navigationFrameRef.current = requestAnimationFrame(() => {
                     virtualizer.scrollToIndex(index, { align: "start", behavior: "auto" });
                 });
             },
@@ -127,6 +130,7 @@ export const VirtualizedDescriptionContent = memo(
             (key: string) => {
                 const viewport = scrollParentRef.current;
                 if (!viewport || !["PageUp", "PageDown", "Home", "End"].includes(key)) return false;
+                cancelAnimationFrame(navigationFrameRef.current);
                 const offset =
                     key === "Home"
                         ? 0
