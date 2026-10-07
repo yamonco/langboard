@@ -9,6 +9,7 @@ from fastmcp.exceptions import AuthorizationError
 from fastmcp.server.auth.oidc_proxy import OIDCProxy
 from fastmcp.server.dependencies import get_access_token
 from fastmcp.server.middleware import Middleware
+from langboard_shared.core.security.CollaborationChannel import CollaborationChannel
 from langboard_shared.domain.models import IdentityProvider
 from langboard_shared.domain.services import DomainService
 from langboard_shared.Env import Env
@@ -141,7 +142,12 @@ def resolve_principal(access_token, service):
     )
     if not user or not user.activated_at or user.deleted_at:
         raise AuthorizationError("An active linked user is required")
-    return {"user_or_bot": user, "api_key": None, "transport": "oauth"}
+    return {
+        "user_or_bot": user,
+        "api_key": None,
+        "transport": "oauth",
+        "collaboration_channel": CollaborationChannel.Mcp,
+    }
 
 
 class NativeOAuthMiddleware(Middleware):

@@ -6,18 +6,12 @@ this context. A User reached through MCP or an API key is not a human UI actor.
 
 from dataclasses import dataclass
 from enum import Enum
+from ...core.security.CollaborationChannel import CollaborationChannel as CollaborationChannel
 
 
 class CardVisibility(str, Enum):
     Internal = "INTERNAL"
     Shared = "SHARED"
-
-
-class CollaborationChannel(str, Enum):
-    HumanUI = "human_ui"
-    Mcp = "mcp"
-    Api = "api"
-    Bot = "bot"
 
 
 @dataclass(frozen=True)
@@ -49,7 +43,8 @@ class CardVisibilityContext:
         if not self.can_read_internal or self.can_update_card is not True:
             return False
         if current not in (CardVisibility.Internal, CardVisibility.Shared) or target not in (
-            CardVisibility.Internal, CardVisibility.Shared
+            CardVisibility.Internal,
+            CardVisibility.Shared,
         ):
             return False
         if current == target:

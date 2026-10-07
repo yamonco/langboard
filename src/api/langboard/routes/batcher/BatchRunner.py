@@ -7,6 +7,7 @@ from re import sub as re_sub
 from fastapi import Request, status
 from langboard_shared.core.routing import AppRouter
 from langboard_shared.core.routing.ApiSchemaHelper import ApiSchemaMap
+from langboard_shared.core.security.CollaborationChannel import CollaborationChannel
 from langboard_shared.core.utils.Converter import json_default
 from langboard_shared.domain.models import Bot, User
 from langboard_shared.Env import Env
@@ -45,6 +46,7 @@ async def execute_batch_request_schemas(
             "query_string": query_string,
             "headers": get_internal_request_headers(request),
             "auth": user_or_bot,
+            "collaboration_channel": request.scope.get("collaboration_channel", CollaborationChannel.Api),
             "is_batch": True,
             "batch_api_schema": api_schema,
         }
