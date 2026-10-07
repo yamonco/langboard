@@ -89,3 +89,35 @@ def test_deleted_project_blocks_current_card_scope(current_card):
         project.deleted_at = SafeDateTime.now()
         db.update(project)
     assert not BotTaskHelper.can_dispatch_card_scope({}, project, card)
+
+
+@pytest.mark.parametrize("current_card", ["sqlite://", "postgresql-test"], indirect=True)
+@pytest.mark.parametrize("kind", ["comment", "checklist", "checkitem"])
+def test_payload_child_uid_cannot_override_current_scope(current_card, kind):
+    from langboard_shared.core.db.DbEngine import DbEngine
+    from langboard_shared.domain.models import Card, CardComment, Checkitem, Checklist
+
+    _, project, private_card, _ = current_card
+    for model in (CardComment, Checklist, Checkitem):
+        model.__table__.create(DbEngine.get_main_engine(), checkfirst=True)
+    with DbSession.use(readonly=False) as db:
+        shared = Card(project_id=project.id, project_column_id=private_card.project_column_id,
+                      title="Shared scope", visibility="SHARED")
+        db.insert(shared)
+        if kind == "comment":
+            current = CardComment(card_id=shared.id)
+            private = CardComment(card_id=private_card.id)
+        else:
+            current = Checklist(card_id=shared.id, title="Shared child")
+            private = Checklist(card_id=private_card.id, title="Private child")
+        db.insert(current)
+        db.insert(private)
+        if kind == "checkitem":
+            current = Checkitem(checklist_id=current.id, title="Shared item")
+            private = Checkitem(checklist_id=private.id, title="Private item")
+            db.insert(current)
+            db.insert(private)
+    key = f"{kind}_uid"
+    assert BotTaskHelper.can_dispatch_card_scope({key: current.get_uid()}, project, current)
+    assert not BotTaskHelper.can_dispatch_card_scope({key: private.get_uid()}, project, current)
+    assert not BotTaskHelper.can_dispatch_card_scope({key: "invalid"}, project, current)
