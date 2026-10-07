@@ -175,14 +175,16 @@ class BotTaskHelper:
         with DbSession.use(readonly=False) as db:
             for model, key in ((CardComment, "comment_uid"), (Checklist, "checklist_uid"), (Checkitem, "checkitem_uid")):
                 raw_id = data.get(key)
-                if isinstance(scope_model, model):
-                    child_id = scope_model.id
-                elif raw_id:
+                child_id = scope_model.id if isinstance(scope_model, model) else None
+                if raw_id:
                     try:
-                        child_id = SnowflakeID.from_short_code(raw_id)
+                        referenced_id = SnowflakeID.from_short_code(raw_id)
                     except (TypeError, ValueError):
                         return False
-                else:
+                    if child_id is not None and referenced_id != child_id:
+                        return False
+                    child_id = referenced_id
+                if child_id is None:
                     continue
                 child = db.exec(SqlBuilder.select.table(model).where(model.id == child_id)).first()
                 if child is None or child.deleted_at:
