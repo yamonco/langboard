@@ -21,15 +21,18 @@ on:
       - src/shared/py/uv.lock
       - uv.lock
   workflow_dispatch:
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
   official-store-and-settings:
-    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false
+    if: vars.CI_RUNNER != '' && (github.event_name == 'workflow_dispatch' || (github.event.pull_request.draft == false && github.event.pull_request.head.repo.full_name == github.repository))
     timeout-minutes: 20
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"unconfigured"') }}
     env:
       PROJECT_NAME: langboard
       PYTHONPATH: src/shared/py

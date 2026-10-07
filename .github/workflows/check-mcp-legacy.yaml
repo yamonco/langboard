@@ -25,15 +25,18 @@ on:
 permissions:
   contents: read
 
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
   vault-dependencies:
-    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false
+    if: vars.CI_RUNNER != '' && (github.event_name == 'workflow_dispatch' || (github.event.pull_request.draft == false && github.event.pull_request.head.repo.full_name == github.repository))
     timeout-minutes: 20
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"unconfigured"') }}
     env:
       PROJECT_NAME: langboard
     steps:
@@ -71,9 +74,9 @@ jobs:
           from azure.keyvault.keys import KeyClient
           PY
   document-vision:
-    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false
+    if: vars.CI_RUNNER != '' && (github.event_name == 'workflow_dispatch' || (github.event.pull_request.draft == false && github.event.pull_request.head.repo.full_name == github.repository))
     timeout-minutes: 20
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"unconfigured"') }}
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
@@ -93,9 +96,9 @@ jobs:
           PY
           VERIFY_DOCUMENT_FONTS=1 PYTHONPATH=src/shared/py uv run --no-sync pytest -q -p no:tach src/shared/py/langboard_shared/tasks/docling/DocumentVision_test.py
   catalog:
-    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false
+    if: vars.CI_RUNNER != '' && (github.event_name == 'workflow_dispatch' || (github.event.pull_request.draft == false && github.event.pull_request.head.repo.full_name == github.repository))
     timeout-minutes: 20
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"unconfigured"') }}
     env:
       PROJECT_NAME: langboard
       PYTHONPATH: .
