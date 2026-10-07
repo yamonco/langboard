@@ -22,7 +22,10 @@ function Fixture() {
             <button onClick={() => setShort((value) => !value)}>Short description</button>
             <button onClick={() => setHeight((h) => (h === 360 ? 520 : 360))}>Resize card</button>
             <button onClick={() => setBefore((h) => (h === 120 ? 240 : 120))}>Expand header</button>
-            <div data-card-content-frame style={{ position: "relative", height, width: "100%", maxWidth: 900 }}>
+            <div
+                data-card-content-frame
+                style={{ position: "relative", height, width: "100%", maxWidth: 900, paddingRight: 40, boxSizing: "border-box" }}
+            >
                 <div
                     ref={scrollParentRef}
                     data-card-content-viewport

@@ -311,7 +311,9 @@ test("mobile description navigator fills a fixed viewport while keyboard scrolli
         })
         .toBe(true);
     const bounds = await viewport.boundingBox();
-    expect(initial!.height).toBeGreaterThan(bounds!.height - 20);
+    expect(initial!.y - bounds!.y).toBeGreaterThanOrEqual(24);
+    expect(bounds!.y + bounds!.height - initial!.y - initial!.height).toBeGreaterThanOrEqual(24);
+    expect(initial!.x).toBeGreaterThanOrEqual(bounds!.x + bounds!.width);
     await expect(viewport).toHaveCSS("scrollbar-width", "none");
     await markers.last().press("Home");
     await expect.poll(() => viewport.evaluate((element) => element.scrollTop)).toBe(0);
