@@ -96,7 +96,7 @@ def test_project_search_reuses_native_bounded_search() -> None:
         )
     )
 
-    assert UserMcp.search_project_cards("project-1", "  release  ", service) == {
+    assert UserMcp.search_project_cards("project-1", "  release  ", service, user=SEARCH_USER) == {
         "cards": [{"uid": "c1", "description": "Example card"}],
         "workflow_stages": {},
         "columns": {},
@@ -118,7 +118,7 @@ def test_project_search_normalizes_offset_bounds_to_utc() -> None:
         service,
         since="2026-09-20T09:00:00+09:00",
         until="2026-09-20T10:00:00+09:00",
-    )
+     user=SEARCH_USER)
 
     assert captured["since"].tzinfo == timezone.utc
     assert captured["since"].isoformat() == "2026-09-20T00:00:00+00:00"
@@ -204,7 +204,7 @@ def test_project_search_rejects_empty_or_oversized_queries(query: str) -> None:
     """Search rejects unbounded or empty model input before repository access."""
 
     with pytest.raises(ValueError):
-        UserMcp.search_project_cards("project-1", query, SimpleNamespace())
+        UserMcp.search_project_cards("project-1", query, SimpleNamespace(), user=SEARCH_USER)
 
 
 def test_project_search_reuses_distinct_column_context():
@@ -217,7 +217,7 @@ def test_project_search_reuses_distinct_column_context():
         card=SimpleNamespace(search_context_by_project=Mock(return_value=cards)),
         project_column=SimpleNamespace(get_api_workflow_context=resolve),
     )
-    result = UserMcp.search_project_cards("p", "text", service)
+    result = UserMcp.search_project_cards("p", "text", service, user=SEARCH_USER)
     resolve.assert_called_once_with("p", {"c"})
     assert result["columns"] == context
     assert all("project_column_name" not in card for card in result["cards"])
@@ -243,3 +243,6 @@ async def test_legacy_card_list_preserves_schema_and_column_names():
     assert type(result) is ProjectCardListResponse
     assert "columns" not in result.model_dump()
     assert result.cards.items[0]["project_column_name"] == "Custom"
+
+
+SEARCH_USER = SimpleNamespace(id=1)

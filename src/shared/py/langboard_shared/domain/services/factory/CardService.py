@@ -159,15 +159,28 @@ class CardService(BaseDomainService):
             raise ValueError("At most 200 recent cards may be checked")
         if not card_uids or not isinstance(user, User):
             return []
+        resolved = self.resolve_visibility_context(project, user, channel)
+        if resolved is None:
+            return []
+        project, context = resolved
+        return self.repo.card.get_existing_uids(project, card_uids, context=context)
+
+    def resolve_visibility_context(
+        self, project: TProjectParam, user: User,
+        channel: CollaborationChannel = CollaborationChannel.Api,
+    ) -> tuple[Project, CardVisibilityContext] | None:
+        """Resolve current project-scoped identity; unknown callers fail closed."""
+        if not isinstance(user, User):
+            return None
         # Read the primary: cached auth and replica membership may outlive revocation.
         project_id = InfraHelper.convert_id(project)
         with DbSession.use(readonly=False) as db:
             project = db.exec(SqlBuilder.select.table(Project).where(Project.column("id") == project_id)).first()
             current_user = db.exec(SqlBuilder.select.table(User).where(User.column("id") == user.id)).first()
         if project is None or project.deleted_at is not None:
-            return []
+            return None
         if current_user is None or current_user.deleted_at is not None or not current_user.activated_at:
-            return []
+            return None
         member = project.owner_id == current_user.id or bool(
             self.repo.project_assigned_user.get_all_by_project(project, [current_user], limit=1, consistent=True)
         )
@@ -176,7 +189,7 @@ class CardService(BaseDomainService):
             channel=channel, active=True, project_member=member,
             internal_member=internal, actor_user_id=int(current_user.id),
         )
-        return self.repo.card.get_existing_uids(project, card_uids, context=context)
+        return project, context
 
     def get_by_project(self, project: TProjectParam | None) -> list[Card]:
         project = InfraHelper.get_by_id_like(Project, project)
@@ -817,10 +830,13 @@ class CardService(BaseDomainService):
         include_closed: bool = False,
         workflow_stages: list[str] | None = None,
         include_work_state: bool = False,
+        user: User,
+        channel: CollaborationChannel = CollaborationChannel.Api,
     ) -> list[dict[str, Any]]:
-        project = InfraHelper.get_by_id_like(Project, project)
-        if not project:
+        resolved = self.resolve_visibility_context(project, user, channel)
+        if resolved is None:
             return []
+        project, context = resolved
 
         cards = []
         records = self.repo.card.search_context_by_project(
@@ -831,9 +847,10 @@ class CardService(BaseDomainService):
             until=until,
             include_closed=include_closed,
             workflow_stages=workflow_stages,
+            context=context,
         )
         document_matches = self.repo.card.search_document_matches(
-            project, [card.id for card, _ in records], input_value
+            project, [card.id for card, _ in records], input_value, context=context
         )
         states = self.get_work_states([card for card, _ in records]) if include_work_state else {}
         for card, column in records:

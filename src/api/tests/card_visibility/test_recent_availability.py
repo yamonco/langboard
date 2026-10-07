@@ -4,8 +4,18 @@ from types import SimpleNamespace
 import pytest
 from langboard_shared.core.db import DbSession
 from langboard_shared.core.db.DbEngine import DbEngine
+from langboard_shared.core.storage import FileModel
 from langboard_shared.core.types import SafeDateTime
-from langboard_shared.domain.models import Card, Project, ProjectAssignedUser, ProjectColumn, User
+from langboard_shared.domain.models import (
+    Card,
+    CardAttachment,
+    CardComment,
+    Project,
+    ProjectAssignedUser,
+    ProjectColumn,
+    User,
+    WorkflowStageDefinition,
+)
 from langboard_shared.domain.services.CardVisibilityPolicy import CollaborationChannel
 from langboard_shared.domain.services.factory.CardService import CardService
 from langboard_shared.infrastructure.repositories.factory.CardRepository import CardRepository
@@ -17,7 +27,7 @@ from sqlalchemy import create_engine
 
 def test_recent_cards_revalidate_actor_and_filter_visibility_before_return(monkeypatch):
     engine = create_engine("sqlite://")
-    for model in (User, Project, ProjectColumn, ProjectAssignedUser, Card):
+    for model in (User, Project, ProjectColumn, ProjectAssignedUser, Card, CardComment, CardAttachment, WorkflowStageDefinition):
         model.__table__.create(engine)
     monkeypatch.setattr(DbEngine, "get_main_engine", lambda: engine)
     monkeypatch.setattr(DbEngine, "get_readonly_engine", lambda: engine)
@@ -41,6 +51,9 @@ def test_recent_cards_revalidate_actor_and_filter_visibility_before_return(monke
                               ("PRIVATE", member.id), ("PRIVATE", owner.id))]
             for card in cards:
                 db.insert(card)
+                db.insert(CardAttachment(card_id=card.id, user_id=owner.id,
+                    filename="proof.pdf", file=FileModel(storage_type="test", storage_name="test", original_filename="proof.pdf", path="/tmp/fixture", filename="proof.pdf"),
+                    document_text="SearchProof document"))
         repository = SimpleNamespace(
             card=CardRepository(lambda _: None, lambda _: None),
             project_assigned_user=ProjectAssignedUserRepository(lambda _: None, lambda _: None),
@@ -51,6 +64,14 @@ def test_recent_cards_revalidate_actor_and_filter_visibility_before_return(monke
         for channel in CollaborationChannel:
             expected = {uids[0], uids[2]} if channel in (CollaborationChannel.HumanUI, CollaborationChannel.Mcp) else {uids[0]}
             assert set(service.get_existing_uids(project, uids, user=member, channel=channel)) == expected
+            found = service.search_context_by_project(project, "SearchProof", user=member, channel=channel)
+            assert {row["uid"] for row in found} == expected
+            assert all(row["document_matches"][0]["snippet"] == "SearchProof document" for row in found)
+            _, context = service.resolve_visibility_context(project, member, channel)
+            excerpts = repository.card.search_document_matches(project, [card.id for card in cards], "SearchProof", context=context)
+            assert {cards[i].id for i, uid in enumerate(uids) if uid in expected} == set(excerpts)
+            limited = repository.card.search_context_by_project(project, "SearchProof", limit=1, context=context)
+            assert len(limited) == 1 and limited[0][0].get_uid() in expected
         scim.is_employee = lambda user: True
         assert set(service.get_existing_uids(project, uids, user=member, channel=CollaborationChannel.Mcp)) == set(uids[:3])
         scim.is_employee = lambda user: None
@@ -62,6 +83,7 @@ def test_recent_cards_revalidate_actor_and_filter_visibility_before_return(monke
             db.update(inactive)
         assert member.activated_at is not None
         assert service.get_existing_uids(project, uids, user=member, channel=CollaborationChannel.Mcp) == []
+        assert service.search_context_by_project(project, "SearchProof", user=member, channel=CollaborationChannel.Mcp) == []
         with DbSession.use(readonly=False) as db:
             inactive.activated_at = member.activated_at
             db.update(inactive)

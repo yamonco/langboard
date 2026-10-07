@@ -321,6 +321,7 @@ class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
         since: SafeDateTime | None = None,
         until: SafeDateTime | None = None,
         *,
+        context: CardVisibilityContext,
         include_closed: bool = True,
         workflow_stages: list[str] | None = None,
     ) -> list[tuple[Card, ProjectColumn]]:
@@ -328,7 +329,7 @@ class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
         escaped_input = input_value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
         title = Card.column("title")
         pattern = f"%{escaped_input}%"
-        dialect = DbEngine.get_readonly_engine().dialect.name
+        dialect = DbEngine.get_main_engine().dialect.name
         comments = (
             select(CardComment.column("id"))
             .where(CardComment.column("card_id") == Card.column("id"))
@@ -353,6 +354,7 @@ class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
             SqlBuilder.select.tables(Card, ProjectColumn)
             .join(ProjectColumn, Card.column("project_column_id") == ProjectColumn.column("id"))
             .where(Card.column("project_id") == project_id)
+            .where(card_visibility_scope(context))
             .where(Card.column("source_type") == None)  # noqa: E711
             .where(
                 or_(
@@ -375,18 +377,18 @@ class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
             query = query.where(date_column >= since)
         if until is not None:
             query = query.where(date_column < until)
-        with DbSession.use(readonly=True) as db:
+        with DbSession.use(readonly=False) as db:
             return db.exec(query).all()
 
     def search_document_matches(
-        self, project: TProjectParam, card_ids: list[int], query: str
+        self, project: TProjectParam, card_ids: list[int], query: str, *, context: CardVisibilityContext
     ) -> dict[int, list[dict[str, str]]]:
         """Return bounded source excerpts, never entire attachment documents."""
         if not card_ids or not query:
             return {}
         pattern = "%" + query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
         body = CardAttachment.document_text
-        dialect = DbEngine.get_readonly_engine().dialect.name
+        dialect = DbEngine.get_main_engine().dialect.name
         position = (
             func.strpos(func.lower(body), query.lower())
             if dialect == "postgresql"
@@ -409,6 +411,8 @@ class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
             .join(Card, Card.id == CardAttachment.card_id)
             .where(Card.project_id == InfraHelper.convert_id(project))
             .where(Card.id.in_(card_ids[:20]))
+            .where(card_visibility_scope(context))
+            .where(Card.deleted_at.is_(None))
             .where(CardAttachment.deleted_at.is_(None))
             .where(body != "")
             .where(body.ilike(pattern, escape="\\"))
@@ -421,7 +425,7 @@ class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
             .limit(40)
         )
         result: dict[int, list[dict[str, str]]] = {}
-        with DbSession.use(readonly=True) as db:
+        with DbSession.use(readonly=False) as db:
             for attachment_id, card_id, filename, snippet in db.exec(statement).all():
                 matches = result.setdefault(card_id, [])
                 if len(matches) < 2:
