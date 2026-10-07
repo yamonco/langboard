@@ -7,7 +7,7 @@ import re
 from dataclasses import dataclass
 from uuid import UUID
 from langboard_shared.core.db import DbSession, SqlBuilder
-from langboard_shared.domain.models import AppConnection
+from langboard_shared.domain.models import AppConnection, GitHubLifecycleReceipt
 from langboard_shared.domain.services.factory.SecretReferenceService import SecretAuditSource
 from langboard_shared.helpers import InfraHelper
 from .GitHubInstallation import connection_revision
@@ -123,3 +123,48 @@ def verify_lifecycle(service, actor, connection_uid, body: bytes, signature: str
         )
     except Exception:
         raise GitHubManifestUnavailable() from None
+
+
+class GitHubDeliveryConflict(Exception):
+    pass
+
+
+def receive_lifecycle(service, actor, connection_uid, body: bytes, signature: str, event: str, delivery_id: str):
+    """Durably record verified input before any resource processing; replay is not processing."""
+    verified = verify_lifecycle(service, actor, connection_uid, body, signature, event, delivery_id)
+    with DbSession.atomic() as db:
+        connection = db.exec(
+            SqlBuilder.select.table(AppConnection)
+            .where(AppConnection.id == InfraHelper.convert_id(connection_uid), AppConnection.owner_id == actor.id)
+            .with_for_update()
+        ).first()
+        if connection is None or connection_revision(connection) != verified.connection_revision:
+            raise GitHubManifestUnavailable()
+        values = {
+            "payload_digest": verified.payload_digest,
+            "event": verified.event,
+            "action": verified.action,
+            "app_id": str(verified.app_id),
+            "installation_id": str(verified.installation_id),
+            "account_id": str(verified.account_id),
+            "added_repository_ids": list(verified.added_repository_ids),
+            "removed_repository_ids": list(verified.removed_repository_ids),
+        }
+        receipt = db.exec(
+            SqlBuilder.select.table(GitHubLifecycleReceipt).where(
+                GitHubLifecycleReceipt.connection_id == connection.id,
+                GitHubLifecycleReceipt.delivery_id == verified.delivery_id,
+            )
+        ).first()
+        if receipt is not None:
+            if any(getattr(receipt, key) != value for key, value in values.items()):
+                raise GitHubDeliveryConflict()
+            return {"receipt_uid": receipt.get_uid(), "duplicate": True}
+        receipt = GitHubLifecycleReceipt(
+            connection_id=connection.id,
+            connection_revision=verified.connection_revision,
+            delivery_id=verified.delivery_id,
+            **values,
+        )
+        db.insert(receipt)
+        return {"receipt_uid": receipt.get_uid(), "duplicate": False}
