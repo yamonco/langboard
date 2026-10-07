@@ -82,7 +82,7 @@ def _credential(service, actor, project_uid, connection_uid):
 
 
 def _callback(project_uid):
-    return Env.PUBLIC_UI_URL.rstrip("/") + f"/board/{project_uid}"
+    return Env.PUBLIC_UI_URL.rstrip("/") + f"/board/{project_uid}/settings"
 
 
 def begin_authorization(service, actor, project_uid, connection_uid):

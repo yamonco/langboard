@@ -62,8 +62,9 @@ def begin_manifest(
         "manifest": {
             "name": "Langboard-" + board.get_uid(),
             "url": root,
-            "redirect_url": root + f"/board/{board.get_uid()}?github_app_manifest=1",
-            "callback_urls": [root + f"/board/{board.get_uid()}"],
+            "redirect_url": root + f"/board/{board.get_uid()}/settings?github_app_manifest=1",
+            "callback_urls": [root + f"/board/{board.get_uid()}/settings"],
+            "setup_url": root + f"/board/{board.get_uid()}/settings",
             # Signals are not enabled before an authenticated receiver exists.
             "hook_attributes": {"url": api + "/apps/github/events", "active": False},
             "public": False,
