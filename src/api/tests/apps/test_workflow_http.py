@@ -11,6 +11,7 @@ from langboard.middlewares.RoleMiddleware import RoleMiddleware
 from langboard.routes.board.BoardSettingApi import (
     get_app_workflow_mapping,
     get_board_app_catalog,
+    disable_board_app,
     prepare_app_workflow_mapping,
     update_app_workflow_mapping,
 )
@@ -40,6 +41,7 @@ def test_authenticated_http_workflow_and_current_revocation(board, binding, monk
         if getattr(route, "endpoint", None) in (
             get_app_workflow_mapping,
             get_board_app_catalog,
+            disable_board_app,
             update_app_workflow_mapping,
             prepare_app_workflow_mapping,
         ):
@@ -78,11 +80,18 @@ def test_authenticated_http_workflow_and_current_revocation(board, binding, monk
         saved = client.put(url, headers=headers, json=payload)
         assert saved.status_code == 200 and saved.json()["binding"]["stage_transitions_enabled"]
         assert client.put(url, headers=headers, json=payload).status_code == 409
+        catalog_binding = client.get(catalog_url, headers=headers).json()["apps"][0]["binding"]
+        disable_url = f"{catalog_url}/github/disable"
+        disable_payload = {"binding_uid": catalog_binding["uid"], "expected_revision": catalog_binding["revision"]}
+        assert client.post(disable_url, headers=headers, json=disable_payload).status_code == 200
+        assert client.post(disable_url, headers=headers, json=disable_payload).status_code == 409
+
         with DbSession.use(readonly=False) as db:
             board[4].actions = ["read"]
             db.update(board[4])
         assert client.get(url, headers=headers).status_code == 200
         assert client.put(url, headers=headers, json=payload).status_code == 403
+        assert client.post(disable_url, headers=headers, json=disable_payload).status_code == 403
         with DbSession.use(readonly=False) as db:
             db.delete(board[3])
         assert client.get(url, headers=headers).status_code == 404

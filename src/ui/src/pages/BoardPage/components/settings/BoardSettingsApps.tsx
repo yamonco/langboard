@@ -16,20 +16,40 @@ interface CatalogApp {
         health_counts: Record<string, number>;
         connection_counts: Record<string, number>;
     };
-    binding: { state: string; granted_capabilities: string[]; stage_transitions_enabled: boolean } | null;
+    binding: { uid: string; revision: string; state: string; granted_capabilities: string[]; stage_transitions_enabled: boolean } | null;
 }
 const names = { github: "GitHub", glitchtip: "GlitchTip", dokploy: "Dokploy" };
 export default function BoardSettingsApps() {
     const [t] = useTranslation();
-    const { project } = useBoardSettings();
+    const { project, canEditBasicInfo } = useBoardSettings();
     const { query } = useQueryMutation();
     const { data, isLoading, isError, refetch } = query(
         ["board-app-catalog", project.uid],
         async () => (await api.get<{ apps: CatalogApp[] }>(`/board/${project.uid}/settings/apps`)).data.apps,
         { retry: 0 }
     );
+    const [pending, setPending] = useState(false);
+    const [disableTarget, setDisableTarget] = useState<string | null>(null);
+    const [error, setError] = useState(false);
     const [dirty, setDirty] = useState(false);
     const [selected, setSelected] = useState<"github" | "glitchtip" | null>(null);
+    const disable = async (app: CatalogApp) => {
+        if (pending || !canEditBasicInfo || !app.binding) return;
+        setPending(true);
+        setError(false);
+        try {
+            await api.post(`/board/${project.uid}/settings/apps/${app.key}/disable`, {
+                binding_uid: app.binding.uid,
+                expected_revision: app.binding.revision,
+            });
+            setDisableTarget(null);
+            await refetch();
+        } catch {
+            setError(true);
+        } finally {
+            setPending(false);
+        }
+    };
     return (
         <div className="flex w-full flex-col gap-4 py-4">
             {selected ? (
@@ -51,6 +71,7 @@ export default function BoardSettingsApps() {
                 </>
             ) : (
                 <>
+                    {error && <p role="alert">{t("project.settings.App workflow save failed")}</p>}
                     <h3 className="text-base font-semibold">{t("project.settings.App Store")}</h3>
                     <p className="text-sm text-muted-foreground">{t("project.settings.App Store help")}</p>
                     {isLoading && <p role="status">{t("common.Loading...")}</p>}
@@ -100,11 +121,38 @@ export default function BoardSettingsApps() {
                                 <Button
                                     size="sm"
                                     variant="outline"
-                                    disabled={!workflow_requirements || (key !== "github" && key !== "glitchtip")}
+                                    disabled={pending || !workflow_requirements || (key !== "github" && key !== "glitchtip")}
                                     onClick={() => (key === "github" || key === "glitchtip") && setSelected(key)}
                                 >
                                     {t(`project.settings.${key === "dokploy" ? "App workflow contract pending" : "Configure workflow"}`)}
                                 </Button>
+                                {binding &&
+                                    binding.state !== "disabled" &&
+                                    (disableTarget === key ? (
+                                        <div className="flex flex-col gap-2">
+                                            <p className="text-xs">{t("project.settings.Disable App help")}</p>
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                disabled={!canEditBasicInfo || pending}
+                                                onClick={() => void disable({ key, name, binding, workflow_requirements, resources })}
+                                            >
+                                                {t("project.settings.Confirm disable App")}
+                                            </Button>
+                                            <Button size="sm" variant="ghost" disabled={pending} onClick={() => setDisableTarget(null)}>
+                                                {t("common.Cancel")}
+                                            </Button>
+                                        </div>
+                                    ) : (
+                                        <Button
+                                            size="sm"
+                                            variant="ghost"
+                                            disabled={!canEditBasicInfo || pending}
+                                            onClick={() => setDisableTarget(key)}
+                                        >
+                                            {t("project.settings.Disable App")}
+                                        </Button>
+                                    ))}
                             </article>
                         ))}
                     </div>

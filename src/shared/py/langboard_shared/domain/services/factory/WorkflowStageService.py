@@ -49,7 +49,7 @@ class WorkflowStageService(BaseDomainService):
     def get_app_catalog(self, user: User, project_uid: str) -> list[dict] | None:
         """Host catalog and board-owned status, never installation authority."""
         with DbSession.atomic() as db:
-            if self.preview_app_mapping(user, project_uid, APP_WORKFLOW_REQUIREMENTS["github"], {}) is None:
+            if self._authorized_app_board(user, project_uid, ProjectRoleAction.Read) is None:
                 return None
             bindings = db.exec(SqlBuilder.select.table(BoardAppBinding).where(
                 BoardAppBinding.project_id == InfraHelper.convert_id(project_uid),
@@ -87,12 +87,40 @@ class WorkflowStageService(BaseDomainService):
                         "selected_count": 0, "access_counts": {}, "health_counts": {}, "connection_counts": {},
                     }),
                     "binding": None if binding is None else {
-                        "uid": binding.get_uid(), "state": binding.state,
+                        "uid": binding.get_uid(), "state": binding.state, "revision": binding.edit_revision(),
                         "granted_capabilities": list(binding.granted_capabilities),
                         "stage_transitions_enabled": binding.stage_transitions_enabled,
                     },
                 })
             return items
+
+    def disable_app_binding(
+        self, user: User, project_uid: str, app_key: str, binding_uid: str, expected_revision: str,
+    ) -> BoardAppBinding | None:
+        """Disable this board configuration without deleting shared connections or resources."""
+        if app_key not in {"github", "glitchtip", "dokploy"}:
+            return None
+        with DbSession.atomic() as db:
+            board = db.exec(SqlBuilder.select.table(Project).where(
+                Project.id == InfraHelper.convert_id(project_uid),
+            ).with_for_update()).first()
+            if board is None:
+                return None
+            if self._authorized_app_board(user, board.id, ProjectRoleAction.Update, lock=True) is None:
+                return None
+            binding = db.exec(SqlBuilder.select.table(BoardAppBinding).where(
+                BoardAppBinding.id == InfraHelper.convert_id(binding_uid),
+                BoardAppBinding.project_id == board.id, BoardAppBinding.app_key == app_key,
+            ).with_for_update()).first()
+            if binding is None:
+                return None
+            if binding.edit_revision() != expected_revision:
+                raise WorkflowStageEditConflict()
+            binding.state = "disabled"
+            binding.stage_transitions_enabled = False
+            binding.granted_capabilities = []
+            db.update(binding)
+            return binding
 
     def get_app_mapping(self, user: User, project_uid: str, app_key: str) -> dict | None:
         requirements = APP_WORKFLOW_REQUIREMENTS.get(app_key)
@@ -207,11 +235,8 @@ class WorkflowStageService(BaseDomainService):
             db.update(binding)
             return binding
 
-    def _resolve_app_mapping(
-        self, user: User, project: Project | int | str,
-        requirements: WorkflowRequirements, explicit: Mapping[str, str],
-        action: ProjectRoleAction, *, lock: bool = False,
-    ) -> WorkflowMappingResult | None:
+    def _authorized_app_board(self, user: User, project: Project | int | str,
+                              action: ProjectRoleAction, *, lock: bool = False) -> Project | None:
         def query(model):
             statement = SqlBuilder.select.table(model)
             return statement.with_for_update() if lock else statement
@@ -233,6 +258,21 @@ class WorkflowStageService(BaseDomainService):
                 )).first()
                 if member is None or role is None or not role.is_granted(action):
                     return None
+            return board
+
+    def _resolve_app_mapping(
+        self, user: User, project: Project | int | str,
+        requirements: WorkflowRequirements, explicit: Mapping[str, str],
+        action: ProjectRoleAction, *, lock: bool = False,
+    ) -> WorkflowMappingResult | None:
+        def query(model):
+            statement = SqlBuilder.select.table(model)
+            return statement.with_for_update() if lock else statement
+
+        with DbSession.use(readonly=False) as db:
+            board = self._authorized_app_board(user, project, action, lock=lock)
+            if board is None:
+                return None
             columns = db.exec(query(ProjectColumn).where(ProjectColumn.project_id == board.id)).all()
             keys = requirements.required + requirements.optional
             stages = db.exec(query(WorkflowStageDefinition).where(

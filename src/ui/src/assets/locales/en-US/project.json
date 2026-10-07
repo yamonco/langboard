@@ -172,6 +172,9 @@
     "App resource state unavailable": "Unavailable",
     "App resource state pending": "Pending",
     "App resource state connected": "Connected",
-    "App resource state disconnected": "Disconnected"
+    "App resource state disconnected": "Disconnected",
+    "Disable App": "Disable App",
+    "Confirm disable App": "Confirm disable App",
+    "Disable App help": "Disable this board App and its automatic transitions. Resource selections and shared connections are kept."
   }
 }
