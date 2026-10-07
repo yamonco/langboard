@@ -156,6 +156,22 @@
     "App state disabled": "비활성",
     "App state enabled": "활성",
     "App state needs_attention": "확인 필요",
-    "App state disconnected": "연결 해제"
+    "App state disconnected": "연결 해제",
+    "Selected App resources": "선택된 리소스: {{count}}",
+    "App stored resource status help": "저장된 상태입니다. 이 화면에서 외부 접근을 검증한 결과는 아닙니다.",
+    "No selected App resources": "선택된 리소스 없음",
+    "App resource access": "접근권한",
+    "App resource health": "상태",
+    "App resource connection": "연결",
+    "App resource state unknown": "미확인",
+    "App resource state granted": "허용",
+    "App resource state denied": "거부",
+    "App resource state revoked": "철회",
+    "App resource state healthy": "정상",
+    "App resource state degraded": "저하",
+    "App resource state unavailable": "사용 불가",
+    "App resource state pending": "대기",
+    "App resource state connected": "연결됨",
+    "App resource state disconnected": "연결 해제"
   }
 }
