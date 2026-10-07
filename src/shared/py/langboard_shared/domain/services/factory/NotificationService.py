@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from typing import Any, Literal, TypeVar, cast, overload
 from urllib.parse import urlparse
 from ....core.db import BaseDbModel, DbSession, EditorContentModel, SqlBuilder
@@ -434,6 +435,14 @@ class NotificationService(BaseDomainService):
             return False
         expected = build_notification_work_event(notification)
         if expected is None or expected.model_dump(exclude={"occurred_at"}) != model.model_dump(exclude={"occurred_at"}):
+            return False
+        try:
+            def utc_timestamp(value: str):
+                parsed = datetime.fromisoformat(value)
+                return (parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)).astimezone(timezone.utc)
+            if utc_timestamp(expected.occurred_at) != utc_timestamp(model.occurred_at):
+                return False
+        except (TypeError, ValueError):
             return False
         models = {cls.__tablename__: cls for cls in (
             Project, ProjectInvitation, ProjectWiki, Card, CardComment, Checklist, Checkitem,
