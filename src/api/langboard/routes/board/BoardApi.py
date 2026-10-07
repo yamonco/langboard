@@ -1,5 +1,5 @@
 from datetime import timedelta
-from fastapi import Query
+from fastapi import Query, Request
 from langboard_shared.core.filter import AuthFilter
 from langboard_shared.core.routing import (
     ApiErrorCode,
@@ -13,6 +13,7 @@ from langboard_shared.core.routing import (
     create_editor_collaboration_document_id,
 )
 from langboard_shared.core.schema import OpenApiSchema
+from langboard_shared.core.security.CollaborationChannel import CollaborationChannel
 from langboard_shared.core.types import SafeDateTime
 from langboard_shared.domain.models import (
     Bot,
@@ -222,13 +223,18 @@ def get_project_labels(project_uid: str, service: DomainService = DomainService.
 @AuthFilter.add()
 def get_project_card_context(
     project_uid: str,
+    request: Request,
+    user: User = Auth.scope("user"),
     input_value: str = Query(min_length=1, max_length=1000),
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
     project = service.project.get_by_id_like(project_uid)
     if project is None:
         raise ApiException.NotFound_404(ApiErrorCode.NF2001)
-    return JsonResponse(content={"cards": service.card.search_context_by_project(project, input_value)})
+    return JsonResponse(content={"cards": service.card.search_context_by_project(
+        project, input_value, user=user,
+        channel=request.scope.get("collaboration_channel", CollaborationChannel.Api),
+    )})
 
 
 @AppRouter.schema(permission=ApiPermission.Read)
