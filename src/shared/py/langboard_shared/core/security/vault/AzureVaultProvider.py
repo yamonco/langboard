@@ -5,6 +5,7 @@ from azure.identity import ClientSecretCredential
 from azure.keyvault.keys import KeyClient
 from azure.keyvault.keys.crypto import CryptographyClient, EncryptionAlgorithm
 from ....Env import Env
+from .SecretEnvelope import PREFIX, open_secret, seal_secret
 from .VaultProvider import VaultProvider
 
 
@@ -30,7 +31,12 @@ class AzureVaultProvider(VaultProvider):
         return "azure"
 
     def create_key(self, key_id: str) -> str:
-        key_material = secrets.token_urlsafe(32)
+        return self._encrypt_material(key_id, secrets.token_urlsafe(32))
+
+    def store_secret(self, key_id: str, key_material: str) -> str:
+        return seal_secret(key_material, lambda key: self._encrypt_material(key_id, key))
+
+    def _encrypt_material(self, key_id: str, key_material: str) -> str:
         try:
             crypto_client = self._get_crypto_client(Env.KEY_PROVIDER_AZURE_ENCRYPTION_KEY_NAME)
             result = crypto_client.encrypt(EncryptionAlgorithm.rsa_oaep, f"{key_id}:{key_material}".encode())
@@ -39,6 +45,8 @@ class AzureVaultProvider(VaultProvider):
             raise RuntimeError(f"Failed to encrypt API key with Azure Key Vault: {e}") from e
 
     def get_key(self, key_id: str) -> str:
+        if key_id.startswith(PREFIX):
+            return open_secret(key_id, self.get_key)
         try:
             ciphertext = base64.b64decode(key_id)
             crypto_client = self._get_crypto_client(Env.KEY_PROVIDER_AZURE_ENCRYPTION_KEY_NAME)

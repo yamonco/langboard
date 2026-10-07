@@ -54,6 +54,11 @@ class KeyVault(VaultProvider):
     def create_key(self, key_id: str) -> str:
         return self.provider.create_key(key_id)
 
+    def store_secret(self, secret_id: str, value: str) -> str:
+        if not isinstance(value, str) or not value:
+            raise ValueError("Secret material must be a nonempty string")
+        return self.provider.store_secret(secret_id, value)
+
     def get_key(self, key_id: str) -> str:
         return self.provider.get_key(key_id)
 
