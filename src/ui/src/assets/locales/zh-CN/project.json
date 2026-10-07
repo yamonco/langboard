@@ -114,6 +114,26 @@
       "Description cannot be empty.": "描述不能为空。"
     },
     "New Label": "新标签",
-    "Sample label description": "标签描述示例"
+    "Sample label description": "标签描述示例",
+    "Apps workflow": "应用工作流",
+    "App": "应用",
+    "App workflow draft help": "配置工作流目标。连接需要单独设置。保存会关闭自动转换。",
+    "App workflow unavailable": "无法加载设置",
+    "App workflow save failed": "保存失败。请刷新设置后重试。",
+    "In progress": "进行中",
+    "Review": "审核",
+    "Completed": "已完成",
+    "Ready": "准备",
+    "Required": "必需",
+    "Optional": "可选",
+    "Select column": "选择列",
+    "Column": "列",
+    "Previous column unavailable": "原列不可用",
+    "Mapping missing": "请先将此阶段分配给看板列。",
+    "Mapping ambiguous": "请选择一个目标。",
+    "Mapping resolved": "已选择目标",
+    "Mapping invalid": "请检查原映射。",
+    "Save workflow mapping": "保存映射",
+    "Prepare workflow settings": "准备工作流设置"
   }
 }

@@ -114,6 +114,26 @@
       "Description cannot be empty.": "설명은 비워 둘 수 없습니다."
     },
     "New Label": "새 라벨",
-    "Sample label description": "라벨 설명 예시"
+    "Sample label description": "라벨 설명 예시",
+    "Apps workflow": "앱 워크플로우",
+    "App": "앱",
+    "App workflow draft help": "워크플로우 대상을 설정합니다. 연결은 별도 설정이 필요합니다. 저장 시 자동 전환은 꺼집니다.",
+    "App workflow unavailable": "설정을 불러올 수 없습니다",
+    "App workflow save failed": "저장 실패. 설정을 새로고침한 후 다시 시도하세요.",
+    "In progress": "진행 중",
+    "Review": "검토",
+    "Completed": "완료",
+    "Ready": "준비",
+    "Required": "필수",
+    "Optional": "선택",
+    "Select column": "칼럼 선택",
+    "Column": "칼럼",
+    "Previous column unavailable": "기존 칼럼 사용 불가",
+    "Mapping missing": "먼저 보드 칼럼에 이 스테이지를 지정하세요.",
+    "Mapping ambiguous": "대상 하나를 선택하세요.",
+    "Mapping resolved": "대상 선택됨",
+    "Mapping invalid": "기존 매핑을 확인하세요.",
+    "Save workflow mapping": "매핑 저장",
+    "Prepare workflow settings": "워크플로우 설정 준비"
   }
 }
