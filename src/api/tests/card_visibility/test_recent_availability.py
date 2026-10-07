@@ -1,6 +1,7 @@
 """Recent-card restoration must not disclose a vault or revoked membership."""
 
 from types import SimpleNamespace
+from unittest.mock import Mock
 import pytest
 from langboard_shared.core.db import DbSession, SqlBuilder
 from langboard_shared.core.db.DbEngine import DbEngine
@@ -20,6 +21,7 @@ from langboard_shared.domain.models import (
     ProjectColumn,
     ProjectRole,
     User,
+    UserCardReadState,
     WorkflowStageDefinition,
 )
 from langboard_shared.domain.services.CardVisibilityPolicy import CollaborationChannel
@@ -32,12 +34,14 @@ from langboard_shared.infrastructure.repositories.factory.ProjectAssignedUserRep
     ProjectAssignedUserRepository,
 )
 from langboard_shared.infrastructure.repositories.factory.ProjectColumnRepository import ProjectColumnRepository
+from langboard_shared.infrastructure.repositories.factory.UserCardReadStateRepository import UserCardReadStateRepository
+from langboard_shared.publishers import CardPublisher
 from sqlalchemy import create_engine
 
 
 def test_recent_cards_revalidate_actor_and_filter_visibility_before_return(monkeypatch):
     engine = create_engine("sqlite://")
-    for model in (User, Project, ProjectColumn, ProjectAssignedUser, Card, CardComment, CardAttachment, WorkflowStageDefinition, Checklist, Checkitem, CardRelationship, GlobalCardRelationshipType, ProjectRole, CardAssignedUser):
+    for model in (User, Project, ProjectColumn, ProjectAssignedUser, Card, CardComment, CardAttachment, WorkflowStageDefinition, Checklist, Checkitem, CardRelationship, GlobalCardRelationshipType, ProjectRole, CardAssignedUser, UserCardReadState):
         model.__table__.create(engine)
     monkeypatch.setattr(DbEngine, "get_main_engine", lambda: engine)
     monkeypatch.setattr(DbEngine, "get_readonly_engine", lambda: engine)
@@ -76,8 +80,11 @@ def test_recent_cards_revalidate_actor_and_filter_visibility_before_return(monke
                 edge = CardRelationship(card_id_parent=cards[left].id, card_id_child=cards[right].id, relationship_type_id=relation_type.id)
                 db.insert(edge)
                 edges.append(edge)
+        events = Mock()
+        monkeypatch.setattr(CardPublisher, "read_state_changed", events)
         repository = SimpleNamespace(
             card=CardRepository(lambda _: None, lambda _: None),
+            user_card_read_state=UserCardReadStateRepository(None, None),
             project_assigned_user=ProjectAssignedUserRepository(lambda _: None, lambda _: None),
         )
         content_reader = SimpleNamespace(api_blocks_by_cards=lambda ids: {card_id: [{"uid": str(card_id)}] for card_id in ids})
@@ -131,6 +138,19 @@ def test_recent_cards_revalidate_actor_and_filter_visibility_before_return(monke
 
             for candidate in cards:
                 resolved_card = service.resolve_readable_card(project, candidate, member, channel)
+                events.reset_mock()
+                seen_result = service.mark_card_seen(member, candidate, project, channel=channel)
+                unread_result = service.set_card_read_state(member, project, candidate, False, channel=channel)
+                receipt = service.get_card_read_state(project, candidate, user=member, channel=channel)
+                allowed = candidate.get_uid() in expected
+                assert (seen_result is not None) == allowed
+                assert (unread_result is not None) == allowed
+                assert (receipt is not None) == allowed
+                assert events.call_count == (2 if allowed else 0)
+                if allowed:
+                    assert unread_result["seen_change_seq"] == -1
+                    assert receipt["readers"] == []
+
                 assert (resolved_card is not None) == (candidate.get_uid() in expected)
                 if resolved_card is None:
                     assert service.get_details(project, candidate, member, channel=channel) is None
@@ -185,6 +205,9 @@ def test_recent_cards_revalidate_actor_and_filter_visibility_before_return(monke
             db.update(changed)
         assert cards[0].visibility == "SHARED"
         assert service.resolve_readable_card(project, cards[0], member, CollaborationChannel.Mcp) is None
+        events.reset_mock()
+        assert service.mark_card_seen(member, cards[0], project, channel=CollaborationChannel.Mcp) is None
+        events.assert_not_called()
         assert service.get_api_page_by_project(project, 1, user_or_bot=member, channel=CollaborationChannel.Mcp)[1] == 1
         with DbSession.use(readonly=False) as db:
             changed.visibility = "SHARED"
@@ -210,6 +233,8 @@ def test_recent_cards_revalidate_actor_and_filter_visibility_before_return(monke
             inactive.activated_at = None
             db.update(inactive)
         assert member.activated_at is not None
+        assert service.mark_card_seen(member, cards[0], project, channel=CollaborationChannel.Mcp) is None
+        assert service.get_card_read_state(project, cards[0], user=member, channel=CollaborationChannel.Mcp) is None
         assert service.resolve_work_visibility_contexts(member, CollaborationChannel.Mcp) == {}
         assert service.get_api_list_by_project(project, member, channel=CollaborationChannel.Mcp) == []
         assert service.get_api_page_by_project(project, 1, user_or_bot=member, channel=CollaborationChannel.Mcp) is None
@@ -225,6 +250,8 @@ def test_recent_cards_revalidate_actor_and_filter_visibility_before_return(monke
         assert service.get_existing_uids(project, uids, user=member, channel=CollaborationChannel.Mcp) == []
         assert service.get_api_page_by_project(project, 1, user_or_bot=member, channel=CollaborationChannel.Mcp) == ([], 0, None)
         assert service.get_api_list_by_project(project, member, channel=CollaborationChannel.Mcp) == []
+        assert service.mark_card_seen(member, cards[0], project, channel=CollaborationChannel.Mcp) is None
+        assert service.get_card_read_state(project, cards[0], user=member, channel=CollaborationChannel.Mcp) is None
         assert service.resolve_work_visibility_contexts(member, CollaborationChannel.Mcp) == {}
         assert set(service.get_existing_uids(project, uids, user=owner, channel=CollaborationChannel.HumanUI)) == {uids[0], uids[3]}
         with DbSession.use(readonly=False) as db:
