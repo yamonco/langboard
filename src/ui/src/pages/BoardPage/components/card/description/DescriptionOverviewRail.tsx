@@ -13,6 +13,7 @@ interface IDescriptionOverviewRailProps {
     activeIndex: number;
     onNavigate: (index: number) => void;
     viewportHeight: number;
+    onScrollKey?: (key: string) => boolean;
 }
 
 export function getPreviewTitleKey(type: IDescriptionChunk["metadata"]["type"]): string {
@@ -35,7 +36,7 @@ export function getPreviewTitleKey(type: IDescriptionChunk["metadata"]["type"]):
 }
 
 export const DescriptionOverviewRail = memo(
-    ({ chunks, activeIndex, onNavigate, viewportHeight }: IDescriptionOverviewRailProps): React.JSX.Element => {
+    ({ chunks, activeIndex, onNavigate, viewportHeight, onScrollKey }: IDescriptionOverviewRailProps): React.JSX.Element => {
         const [t, i18n] = useTranslation();
         const markers = useMemo(() => buildRailMarkers(chunks), [chunks]);
         const nearestActiveMarkerIndex = useMemo(() => getNearestMarkerIndex(markers, activeIndex), [activeIndex, markers]);
@@ -49,6 +50,9 @@ export const DescriptionOverviewRail = memo(
                 className="pointer-events-none z-10 flex w-7 justify-center"
                 style={{ height: Math.max(0, viewportHeight - 16) }}
                 aria-hidden={false}
+                onKeyDown={(event) => {
+                    if (onScrollKey?.(event.key)) event.preventDefault();
+                }}
             >
                 <Box className="pointer-events-auto flex max-h-full min-h-0 flex-1 flex-col items-end justify-between gap-px py-2">
                     {markers.map((marker, markerIndex) => {

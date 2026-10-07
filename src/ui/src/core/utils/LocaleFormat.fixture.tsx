@@ -126,7 +126,7 @@ function Fixture() {
             <output data-testid="numeric-activity">{t("activity.{count} New Activities", { count: 1234 })}</output>
             <output data-testid="numeric-approval">{t("bot.{count} pending approvals", { count: 1234 })}</output>
             <div data-testid="description-rail" className="relative h-96">
-                <DescriptionOverviewRail chunks={railChunks} activeIndex={1233} onNavigate={() => {}} />
+                <DescriptionOverviewRail chunks={railChunks} activeIndex={1233} onNavigate={() => {}} viewportHeight={320} />
             </div>
             <output data-testid="relative">{distance}</output>
             <output data-testid="remaining-counts">
