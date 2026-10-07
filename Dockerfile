@@ -28,15 +28,15 @@ RUN cd /app && uv venv && uv sync --locked --no-dev --no-install-project
 
 COPY ./src/api ./src/api
 
-RUN cd /app && uv sync --locked --no-dev
+RUN cd /app && uv sync --locked --no-dev --extra document-retrieval
 
 FROM base AS with-aws
 
-RUN cd /app && uv sync --locked --no-dev --extra aws
+RUN cd /app && uv sync --locked --no-dev --extra aws --extra document-retrieval
 
 FROM base AS with-azure-vault
 
-RUN cd /app && uv sync --locked --no-dev --extra azure-vault
+RUN cd /app && uv sync --locked --no-dev --extra azure-vault --extra document-retrieval
 
 FROM base AS with-document-processing
 
