@@ -95,3 +95,37 @@ def test_create_column_forwards_stage_and_rejects_inactive_stage():
     create.side_effect = ValueError("Inactive workflow stage")
     with pytest.raises(ApiException.BadRequest_400):
         create_project_column("board", CreateColumnForm(name="Doing", workflow_stage="active"), actor, services)
+
+
+def test_stage_compare_uses_locked_current_row_and_preserves_changes(board, monkeypatch):
+    from langboard_shared.core.db.DbEngine import DbEngine
+    from langboard_shared.domain.models.ProjectColumn import ProjectColumnWorkflowConflict
+    from langboard_shared.domain.services.factory.ProjectColumnService import ProjectColumnService
+    from langboard_shared.infrastructure.repositories import Repository
+    monkeypatch.setattr(DbEngine, "get_readonly_engine", DbEngine.get_main_engine)
+    columns = ProjectColumnService(lambda _: None, lambda _: None, Repository())
+    column = board[5][0]
+    with pytest.raises(ProjectColumnWorkflowConflict):
+        columns.change_workflow_stage(board[2].get_uid(), column.get_uid(), "review",
+                                     check_expected=True, expected_workflow_stage=None)
+    # A matching no-op needs no readiness side effects or external publishing.
+    assert columns.change_workflow_stage(board[2].get_uid(), column.get_uid(), "active",
+                                       check_expected=True, expected_workflow_stage="active")
+    with DbSession.use(readonly=False) as db:
+        from langboard_shared.core.db import SqlBuilder
+        from langboard_shared.domain.models import ProjectColumn
+        stored = db.exec(SqlBuilder.select.table(ProjectColumn).where(ProjectColumn.id == column.id)).first()
+        assert stored.workflow_stage == "active"
+
+
+def test_native_stage_route_conflict_is_409():
+    from unittest.mock import Mock
+    from langboard.routes.board.BoardColumnApi import update_project_column_workflow_stage
+    from langboard.routes.board.forms.Column import ColumnWorkflowStageForm
+    from langboard_shared.domain.models.ProjectColumn import ProjectColumnWorkflowConflict
+    change = Mock(side_effect=ProjectColumnWorkflowConflict())
+    with pytest.raises(ApiException.Conflict_409):
+        update_project_column_workflow_stage("board", "column",
+            ColumnWorkflowStageForm(workflow_stage="active", expected_workflow_stage=None),
+            SimpleNamespace(project_column=SimpleNamespace(change_workflow_stage=change)))
+    change.assert_called_once_with("board", "column", "active", check_expected=True, expected_workflow_stage=None)

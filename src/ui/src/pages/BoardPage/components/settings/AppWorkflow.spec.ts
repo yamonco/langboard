@@ -44,7 +44,7 @@ for (const width of [1440, 390]) {
             expect(writes).toEqual([
                 create
                     ? { name: "In progress", workflow_stage: "active", url: "/board/fixture/column" }
-                    : { workflow_stage: "active", url: "/board/fixture/column/two/workflow-stage" },
+                    : { workflow_stage: "active", expected_workflow_stage: null, url: "/board/fixture/column/two/workflow-stage" },
             ]);
             expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
         });

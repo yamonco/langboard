@@ -13,6 +13,7 @@ from ....tasks.activities import ProjectColumnActivityTask
 from ....tasks.bots import ProjectColumnBotTask
 from ....tasks.webhooks.ExecutionReadinessUow import execution_readiness_uow
 from ...models import Project, ProjectColumn, ProjectColumnBotSchedule, ProjectColumnBotScope
+from ...models.ProjectColumn import ProjectColumnWorkflowConflict
 from ..CardVisibilityPolicy import CardVisibilityContext
 from .GraphApprovalRequestService import GraphApprovalRequestService
 
@@ -240,7 +241,8 @@ class ProjectColumnService(BaseDomainService):
         return True
 
     def change_workflow_stage(
-        self, project: TProjectParam | None, column: TColumnParam | None, workflow_stage: str | None
+        self, project: TProjectParam | None, column: TColumnParam | None, workflow_stage: str | None,
+        *, check_expected: bool = False, expected_workflow_stage: str | None = None,
     ) -> bool:
         """Store an explicit meaning; never classify from a mutable column name."""
         params = InfraHelper.get_records_with_foreign_by_params((Project, project), (ProjectColumn, column))
@@ -256,8 +258,10 @@ class ProjectColumnService(BaseDomainService):
                 .where(ProjectColumn.column("project_id") == project.id)
                 .with_for_update()
             ).first()
-            if column is None or column.is_archive:
+            if column is None or column.is_archive or column.deleted_at:
                 return False
+            if check_expected and column.workflow_stage != expected_workflow_stage:
+                raise ProjectColumnWorkflowConflict()
             if column.workflow_stage == workflow_stage:
                 return True
             self._validate_workflow_stage(workflow_stage)
