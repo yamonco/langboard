@@ -81,7 +81,8 @@ def test_pending_document_does_not_expose_stale_content(monkeypatch):
     assert result["content"] == "" and result["next_offset"] is None
 
 
-def test_vector_search_rechecks_permission_after_provider_call(monkeypatch):
+@pytest.mark.parametrize("changed", ["permission", "generation", "pointer", "deleted"])
+def test_vector_search_rechecks_current_source_after_provider_call(monkeypatch, changed):
     from contextlib import nullcontext
     from langboard_shared.domain.models.InternalBot import InternalBotType
     from langboard_shared.tasks.docling import DocumentEmbedding as embedding
@@ -90,7 +91,7 @@ def test_vector_search_rechecks_permission_after_provider_call(monkeypatch):
     from langboard_shared.tasks.docling.DocumentRetrievalSettings import DocumentRetrievalSettings
     from langboard_shared.tasks.docling.DocumentVectorGeneration import embedding_fingerprint
 
-    service, card, _, document = fixture(monkeypatch)
+    service, card, attachment, document = fixture(monkeypatch)
     config = {"base_url": "https://fixture.invalid", "model_name": "fixture"}
     fingerprint = embedding_fingerprint(
         provider=config["base_url"], model=config["model_name"], dimensions=3, version="v1"
@@ -130,9 +131,19 @@ def test_vector_search_rechecks_permission_after_provider_call(monkeypatch):
     monkeypatch.setattr(CardMcp, "Env", SimpleNamespace(DATA_DIR=ExistingPath(), get_from_env=lambda *_: ""))
 
     def revoke(*args, **kwargs):
-        service.project.get_user_role_actions_by_project.return_value = []
+        if changed == "permission":
+            service.project.get_user_role_actions_by_project.return_value = []
+        elif changed == "deleted":
+            attachment.deleted_at = "deleted"
+        else:
+            latest = {**document, "embedding": {**document["embedding"]}}
+            if changed == "generation":
+                latest["generation"] = "replacement"
+            else:
+                latest["embedding"]["pointer"] = {**document["embedding"]["pointer"], "generation": "replacement"}
+            service.docling_metadata.get_document_by_attachment_uid.return_value = latest
         return [{"content": "must-not-return"}]
 
     monkeypatch.setattr(query_module, "search_vector_generation", revoke)
-    with pytest.raises(ValueError, match="unavailable"):
+    with pytest.raises(ValueError, match="unavailable|generation changed"):
         CardMcp.search_card_document("board", "card", "attachment", "query", object(), service)
