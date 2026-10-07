@@ -17,7 +17,8 @@ ARG PUBLIC_UI_URL
 ARG SOCKET_URL
 ARG IS_OLLAMA_RUNNING=false
 ARG MAX_FILE_SIZE_MB=50
-RUN yarn build
+ARG NODE_BUILD_HEAP_MB=4096
+RUN NODE_OPTIONS="--max-old-space-size=${NODE_BUILD_HEAP_MB}" yarn build
 
 FROM nginxinc/nginx-unprivileged:stable-alpine@sha256:15c994d10d6d78658721c3bcafff14cb281fba2a4bdf9d5ba92c416a472516e3
 COPY docker/ui-nginx.conf /etc/nginx/conf.d/default.conf
