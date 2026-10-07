@@ -263,7 +263,7 @@ def search_card_document(
     ):
         raise ValueError("Document vectors do not match the current source")
     snapshot = document.get("embedding_config") or {}
-    binding = service.internal_bot.get_by_id_like(snapshot.get("binding_uid"))
+    binding = service.internal_bot.get_current_by_id_like(snapshot.get("binding_uid"))
     from langboard_shared.domain.models.InternalBot import InternalBotType
 
     if not binding or binding.bot_type != InternalBotType.DocumentEmbedding:
@@ -309,8 +309,19 @@ def search_card_document(
         or latest.get("generation") != document.get("generation")
         or latest.get("content_hash") != document.get("content_hash")
         or (latest.get("embedding") or {}).get("pointer") != pointer
+        or latest.get("embedding_config") != snapshot
     ):
         raise ValueError("Document generation changed; retry retrieval")
+    current_binding = service.internal_bot.get_current_by_id_like(snapshot.get("binding_uid"))
+    if not current_binding or current_binding.bot_type != InternalBotType.DocumentEmbedding:
+        raise ValueError("Document embedding binding unavailable")
+    try:
+        _, current_settings = validate_embedding_config(current_binding.value)
+        if not current_settings.enabled:
+            raise ValueError("Document retrieval disabled")
+        resolve_embedding_snapshot(snapshot, current_binding.value)
+    except Exception:
+        raise ValueError("Document embedding binding unavailable") from None
     return {
         "project_uid": project_uid,
         "card_uid": card_uid,
