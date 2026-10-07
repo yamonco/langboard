@@ -135,6 +135,10 @@
     "Mapping invalid": "Check the previous mapping.",
     "Save workflow mapping": "Save workflow mapping",
     "Prepare workflow settings": "Prepare workflow settings",
-    "Discard workflow changes": "Discard changes"
+    "Discard workflow changes": "Discard changes",
+    "Existing column for stage": "Existing column for stage",
+    "Assign stage to column": "Assign stage to column",
+    "New workflow column name": "New workflow column name",
+    "Create column with stage": "Create column with stage"
   }
 }

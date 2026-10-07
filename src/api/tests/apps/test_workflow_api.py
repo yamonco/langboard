@@ -62,3 +62,36 @@ def test_form_rejects_caller_authority(extra):
         AppWorkflowMappingForm(
             binding_uid="x", workflow_mapping={}, expected_revision="a" * 64, enable_transitions=True, **extra
         )
+
+
+def test_repair_columns_exclude_foreign_deleted_and_archive(board):
+    from langboard_shared.core.types import SafeDateTime
+    from langboard_shared.domain.models import ProjectColumn
+
+    with DbSession.use(readonly=False) as db:
+        unclassified = ProjectColumn(project_id=10, name="Unclassified")
+        db.insert(unclassified)
+        db.insert(ProjectColumn(project_id=11, name="Foreign"))
+        db.insert(ProjectColumn(project_id=10, name="Archive", is_archive=True))
+        db.insert(ProjectColumn(project_id=10, name="Deleted", deleted_at=SafeDateTime.now()))
+    data = json.loads(get_app_workflow_mapping(board[2].get_uid(), "github", board[1], service(board)).body)
+    assert {column["uid"] for column in data["available_columns"]} == {column.get_uid() for column in board[5]} | {
+        unclassified.get_uid()
+    }
+    assert {"uid": unclassified.get_uid(), "name": "Unclassified", "workflow_stage": None} in data["available_columns"]
+
+
+def test_create_column_forwards_stage_and_rejects_inactive_stage():
+    from unittest.mock import Mock
+    from langboard.routes.board.BoardColumnApi import create_project_column
+    from langboard.routes.board.forms.Column import CreateColumnForm
+
+    create = Mock(return_value=SimpleNamespace(api_response=lambda: {"uid": "created", "workflow_stage": "active"}))
+    services = SimpleNamespace(project_column=SimpleNamespace(create=create))
+    actor = object()
+    response = create_project_column("board", CreateColumnForm(name="Doing", workflow_stage="active"), actor, services)
+    assert response.status_code == 201
+    create.assert_called_once_with(actor, "board", "Doing", description="", workflow_stage="active")
+    create.side_effect = ValueError("Inactive workflow stage")
+    with pytest.raises(ApiException.BadRequest_400):
+        create_project_column("board", CreateColumnForm(name="Doing", workflow_stage="active"), actor, services)
