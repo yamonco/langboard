@@ -1,7 +1,9 @@
 """App previews use current primary authority and semantic registry rows."""
 
+import os
+from uuid import uuid4
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 from ....core.db import DbSession
 from ....core.db.DbEngine import DbEngine
@@ -19,9 +21,23 @@ from ..AppWorkflowPolicy import GITHUB_WORKFLOW_REQUIREMENTS
 from .WorkflowStageService import WorkflowStageService
 
 
-@pytest.fixture
-def board(monkeypatch):
-    engine = create_engine("sqlite://")
+@pytest.fixture(params=["sqlite://", "postgresql-test"])
+def board(monkeypatch, request):
+    url = request.param
+    if url == "postgresql-test":
+        url = os.environ.get("LANGBOARD_FILE_TEST_DATABASE_URL")
+        if not url:
+            pytest.skip("Set LANGBOARD_FILE_TEST_DATABASE_URL to a disposable PostgreSQL database")
+    engine = create_engine(url)
+    schema = None
+    if engine.dialect.name == "postgresql":
+        schema = "app_authority_test_" + uuid4().hex
+        with engine.begin() as db:
+            db.execute(text(f'CREATE SCHEMA "{schema}"'))
+        engine.dispose()
+        engine = create_engine(url, connect_args={"options": f"-csearch_path={schema}"})
+        with engine.begin() as db:
+            db.execute(text("CREATE TABLE organization (id BIGINT PRIMARY KEY)"))
     for model in (
         User,
         Project,
@@ -47,7 +63,19 @@ def board(monkeypatch):
             password="test-only",
             activated_at=SafeDateTime.now(),
         )
+        owner = User(
+            id=2,
+            firstname="Test",
+            lastname="Owner",
+            email="owner@example.invalid",
+            password="test-only",
+            activated_at=SafeDateTime.now(),
+        )
+        db.add_all([user, owner])
+        db.commit()
         project = Project(id=10, owner_id=2, title="Current board")
+        db.add_all([project, Project(id=11, owner_id=2, title="Foreign board")])
+        db.commit()
         member = ProjectAssignedUser(id=20, project_id=10, user_id=1)
         role = ProjectRole(id=30, project_id=10, user_id=1, actions=["read"])
         columns = [
@@ -58,13 +86,16 @@ def board(monkeypatch):
             WorkflowStageDefinition(id=50 + i, key=key, name="Localized")
             for i, key in enumerate(("active", "review", "closed"))
         ]
-        for row in (user, project, member, role, *columns, *stages):
+        for row in (member, role, *columns, *stages):
             db.add(row)
         db.commit()
     service = WorkflowStageService(lambda _: None, lambda _: None, None)
     try:
         yield service, user, project, member, role, columns, stages
     finally:
+        if schema:
+            with engine.begin() as db:
+                db.execute(text(f'DROP SCHEMA "{schema}" CASCADE'))
         engine.dispose()
 
 
@@ -166,7 +197,6 @@ def save_mapping(board, binding, mapping=None, enabled=True, revision=None):
     return board[0].save_app_mapping(
         board[1],
         binding.get_uid(),
-        GITHUB_WORKFLOW_REQUIREMENTS,
         mapping,
         expected_revision=revision or binding.edit_revision(),
         enable_transitions=enabled,
@@ -232,3 +262,42 @@ def test_deleted_target_never_replaced_on_enable(board, binding):
     disabled = save_mapping(board, saved, enabled=False)
     assert disabled.workflow_mapping["active"] == board[5][0].get_uid()
     assert not disabled.stage_transitions_enabled
+
+
+def test_unknown_app_cannot_save_or_enable_with_an_invented_contract(board, binding):
+    with DbSession.use(readonly=False) as db:
+        binding.app_key = "unregistered"
+        db.update(binding)
+    assert save_mapping(board, binding) is None
+
+
+def test_glitchtip_saved_binding_uses_its_own_optional_contract(board, binding):
+    with DbSession.use(readonly=False) as db:
+        binding.app_key = "glitchtip"
+        db.update(binding)
+    with pytest.raises(ValueError, match="undeclared"):
+        save_mapping(board, binding, {"ready": "arbitrary"})
+    assert save_mapping(board, binding).stage_transitions_enabled
+
+
+def test_postgresql_concurrent_edit_has_one_winner(board, binding):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+    from .WorkflowStageService import WorkflowStageEditConflict
+
+    if DbEngine.get_main_engine().dialect.name != "postgresql":
+        pytest.skip("Row-lock concurrency requires PostgreSQL")
+    ready = Barrier(2)
+    revision = binding.edit_revision()
+
+    def attempt():
+        ready.wait(timeout=5)
+        try:
+            saved = save_mapping(board, binding, revision=revision)
+            return "saved" if saved else "denied"
+        except WorkflowStageEditConflict:
+            return "conflict"
+
+    with ThreadPoolExecutor(max_workers=2) as workers:
+        results = [workers.submit(attempt) for _ in range(2)]
+        assert sorted(result.result(timeout=15) for result in results) == ["conflict", "saved"]
