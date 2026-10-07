@@ -375,7 +375,7 @@ function BoardTaskCardResult({
     linkedWikis = [],
 }: IBoardCardResultProps): React.JSX.Element {
     const { card, projectUID, isCardEditing, leaveCardEditMode } = useBoardCard();
-    const { isActionPanelOpen, setIsCommentPanelOpen } = useBoardCardPanel();
+    const { isActionPanelOpen, setIsCommentPanelOpen, commentLayoutMode, commentSurfaceRef } = useBoardCardPanel();
     const { boardChat } = useBoardController();
     const { cancelSections } = useBoardCardSectionSaveActions();
     const [t] = useTranslation();
@@ -460,6 +460,7 @@ function BoardTaskCardResult({
             <Flex direction="col" className="h-full min-h-0 gap-2">
                 <Flex className={cn("min-h-0 min-w-0 flex-1", isExpanded ? "overflow-hidden" : "overflow-visible")}>
                     <Box
+                        ref={commentSurfaceRef}
                         data-card-surface=""
                         className={cn(
                             "relative min-h-0 min-w-0 max-w-full flex-1 border bg-background px-4 py-4 sm:px-6 sm:py-6",
@@ -665,9 +666,11 @@ function BoardTaskCardResult({
                                     </BoardCardSection>
                                 </Box>
                             </Flex>
-                            <Box className="pt-3 lg:hidden">
-                                <BoardCommentForm variant="mobile" />
-                            </Box>
+                            {commentLayoutMode === "mobile" && (
+                                <Box className="pt-3">
+                                    <BoardCommentForm variant="mobile" />
+                                </Box>
+                            )}
                         </Box>
                     </Box>
                 </Flex>
@@ -703,7 +706,7 @@ function BoardCardMobileComments({ scrollableRef }: { scrollableRef?: React.RefO
     }
 
     return (
-        <Box className="lg:hidden" data-card-outline-section="comments" tabIndex={-1}>
+        <Box data-card-outline-section="comments" tabIndex={-1}>
             <BoardCardSection title="card.Comments">
                 <BoardCommentList key={`board-card-comment-list-mobile-${card.uid}`} scrollableRef={scrollableRef} />
             </BoardCardSection>
@@ -812,7 +815,8 @@ function BoardCardCommentPanel(): React.JSX.Element {
             data-card-outline-section="comments"
             tabIndex={-1}
             className={cn(
-                "relative hidden min-h-0 shrink-0 overflow-hidden lg:block",
+                "relative min-h-0 shrink-0 overflow-hidden",
+                !isPanelLayout && "hidden",
                 isResizing ? "transition-none" : "transition-[width,min-width] duration-300 motion-reduce:transition-none"
             )}
             style={{ width: isOpen ? width : 0, minWidth: isOpen ? width : 0 }}

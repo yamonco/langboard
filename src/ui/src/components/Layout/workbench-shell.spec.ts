@@ -123,3 +123,38 @@ test("same workspace navigation preserves sidebar state", async ({ page }) => {
     await expect(page.getByRole("textbox", { name: "Sidebar search", exact: true })).toHaveValue("retained query");
     await expect(page.locator("[inert]")).toHaveCount(0);
 });
+
+test("split-window Explorer collapses automatically and can be expanded or collapsed explicitly", async ({ page }) => {
+    await page.setViewportSize({ width: 1100, height: 800 });
+    await page.goto("/src/components/Layout/workbench-shell.fixture.html");
+    const sidebar = page.locator("[id^='resizable-sidebar-']").filter({ has: page.getByText("Sidebar Dashboard", { exact: true }) });
+    await expect(sidebar).toHaveAttribute("data-collapsed", "true");
+    await expect.poll(() => sidebar.evaluate((element) => element.getBoundingClientRect().width)).toBe(52);
+    const toggle = sidebar.getByRole("button").last();
+    await toggle.click();
+    await expect(sidebar).toHaveAttribute("data-collapsed", "false");
+    await expect(page.getByText("Sidebar Dashboard", { exact: true })).toBeVisible();
+    const bounds = await toggle.boundingBox();
+    expect(bounds!.x).toBeGreaterThanOrEqual(0);
+    expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(1100);
+    await toggle.click();
+    await expect(sidebar).toHaveAttribute("data-collapsed", "true");
+    await toggle.click();
+    await expect(sidebar).toHaveAttribute("data-collapsed", "false");
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(1100);
+});
+
+test("comment layout follows card width even within a wide viewport and reserves action space", async ({ page }) => {
+    await page.setViewportSize({ width: 1400, height: 900 });
+    await page.goto("/src/pages/BoardPage/components/card/card-comment-layout.fixture.html");
+    const mode = page.getByTestId("comment-layout");
+    await expect(mode).toHaveText("mobile");
+    await page.getByRole("button", { name: "Wide card" }).click();
+    await expect(mode).toHaveText("panel");
+    await page.getByRole("button", { name: "Toggle actions" }).click();
+    await expect(mode).toHaveText("mobile");
+    await page.getByRole("button", { name: "Toggle actions" }).click();
+    await expect(mode).toHaveText("panel");
+    await page.getByRole("button", { name: "Narrow card" }).click();
+    await expect(mode).toHaveText("mobile");
+});
