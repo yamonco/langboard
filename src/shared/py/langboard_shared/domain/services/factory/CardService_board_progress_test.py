@@ -4,6 +4,7 @@ from importlib import import_module
 from types import SimpleNamespace
 from unittest.mock import Mock
 from sqlalchemy import create_engine, event
+from langboard_shared.domain.services.CardVisibilityPolicy import CardVisibilityContext, CollaborationChannel
 from ....core.db.DbEngine import DbEngine
 from ....core.types import SafeDateTime
 from ....domain.models import Checkitem, Checklist, ProjectColumn
@@ -43,6 +44,8 @@ def test_board_progress_and_work_state_share_one_scoped_aggregate(monkeypatch):
         SimpleNamespace(
             id=i,
             project_id=1,
+            visibility="PRIVATE" if i in (2, 3) else "SHARED",
+            owner_user_id=7 if i in (2, 3) else None,
             project_column_id=100,
             archived_at=SafeDateTime.now() if i == 2 else None,
             deadline_at=None,
@@ -61,12 +64,14 @@ def test_board_progress_and_work_state_share_one_scoped_aggregate(monkeypatch):
     monkeypatch.setattr(module.InfraHelper, "get_by_id_like", lambda *args: project)
     for name in ("dependency_blockers", "execution_generations", "pending_card_approvals"):
         monkeypatch.setattr(module, name, lambda ids: {})
+    relations = [SimpleNamespace(card_id_parent=a, card_id_child=b) for a, b in ((1, 2), (2, 3), (1, 4), (1, 101))]
+    monkeypatch.setattr(module.CardRelationshipService, "public_relationship", lambda rel, _: {"edge": (rel.card_id_parent, rel.card_id_child)})
     repository = SimpleNamespace(
         card=SimpleNamespace(
-            get_board_list=lambda *args: [(card, 0) for card in cards], get_board_creators=lambda *args: {}
+            get_board_list=lambda *args, **kwargs: [(card, 0) for card in cards], get_board_creators=lambda *args: {}
         ),
         card_assigned_user=SimpleNamespace(get_all_by_project=lambda *args: []),
-        card_relationship=SimpleNamespace(get_all_by_project=lambda *args: []),
+        card_relationship=SimpleNamespace(get_all_by_project=lambda *args: [(rel, None) for rel in relations]),
         project_label=SimpleNamespace(get_all_card_labels_by_project=lambda *args: []),
         checklist=SimpleNamespace(get_all_by_project=lambda *args, **kwargs: lists),
         checkitem=CheckitemRepository(None, None),
@@ -74,6 +79,7 @@ def test_board_progress_and_work_state_share_one_scoped_aggregate(monkeypatch):
         workflow_stage=SimpleNamespace(get_by_keys=lambda keys: {}),
     )
     service = CardService(lambda _: None, lambda _: None, repository)
+    service.resolve_visibility_context = Mock(return_value=(project, CardVisibilityContext(CollaborationChannel.HumanUI, True, True, True, actor_user_id=7)))
     service.get_active_workers = Mock(return_value={})
     service._get_linked_resource_payloads = Mock(return_value={"3": {"fixture": True}})
     queries = []
@@ -83,6 +89,8 @@ def test_board_progress_and_work_state_share_one_scoped_aggregate(monkeypatch):
         aggregates = [query for query in queries if "count(checkitem.id)" in query]
         assert len(aggregates) == 1, aggregates
         assert len(result) == 100
+        assert result[0]["relationships"] == [{"edge": (1, 4)}]
+        assert result[1]["relationships"] == result[2]["relationships"] == [{"edge": (2, 3)}]
         for row in result:
             assert row["checklist_total_count"] == row["work_state"]["checklist_progress"]["total"] == 10
             assert row["checklist_completed_count"] == row["work_state"]["checklist_progress"]["completed"] == 4

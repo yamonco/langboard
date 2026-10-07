@@ -13,6 +13,7 @@ from ....tasks.activities import ProjectColumnActivityTask
 from ....tasks.bots import ProjectColumnBotTask
 from ....tasks.webhooks.ExecutionReadinessUow import execution_readiness_uow
 from ...models import Project, ProjectColumn, ProjectColumnBotSchedule, ProjectColumnBotScope
+from ..CardVisibilityPolicy import CardVisibilityContext
 from .GraphApprovalRequestService import GraphApprovalRequestService
 
 
@@ -46,9 +47,10 @@ class ProjectColumnService(BaseDomainService):
         column = InfraHelper.get_by_id_like(ProjectColumn, column)
         return column
 
-    def get_api_list_by_project(self, projects: TProjectParam | list[TProjectParam]) -> list[dict[str, Any]]:
-        raw_columns = self.repo.project_column.get_all_by_project(projects)
-        work_counts = self.repo.project_column.get_work_counts(projects)
+    def get_api_list_by_project(self, projects: TProjectParam | list[TProjectParam], *, context: CardVisibilityContext | None = None) -> list[dict[str, Any]]:
+        scope = {"context": context} if context is not None else {}
+        raw_columns = self.repo.project_column.get_all_by_project(projects, **scope)
+        work_counts = self.repo.project_column.get_work_counts(projects, **scope)
         guidance = self.get_workflow_guidance([column for column, _ in raw_columns])
 
         columns = []

@@ -4,7 +4,9 @@ from ....core.domain import BaseOrderRepository
 from ....core.types import SafeDateTime
 from ....core.types.ParamTypes import TCardParam, TProjectParam
 from ....domain.models import Card, Checkitem, Checklist
+from ....domain.services.CardVisibilityPolicy import CardVisibilityContext
 from ....helpers import InfraHelper
+from .CardRepository import card_visibility_scope
 
 
 class ChecklistRepository(BaseOrderRepository[Checklist, Card]):
@@ -59,6 +61,8 @@ class ChecklistRepository(BaseOrderRepository[Checklist, Card]):
         archive_visible_since: SafeDateTime | None = None,
         limit: int | None = None,
         is_system: bool | None = None,
+        *,
+        context: CardVisibilityContext | None = None,
     ) -> list[Checklist]:
         project_id = InfraHelper.convert_id(project)
 
@@ -68,6 +72,8 @@ class ChecklistRepository(BaseOrderRepository[Checklist, Card]):
             .where(Card.column("project_id") == project_id)
             .order_by(Checklist.column("id").asc())
         )
+        if context is not None:
+            query = query.where(Card.deleted_at.is_(None), card_visibility_scope(context))
         if archive_visible_since is not None:
             query = query.where(
                 (Card.column("archived_at") == None)  # noqa: E711
@@ -78,7 +84,7 @@ class ChecklistRepository(BaseOrderRepository[Checklist, Card]):
         if limit is not None:
             query = query.limit(limit)
 
-        with DbSession.use(readonly=True) as db:
+        with DbSession.use(readonly=context is None) as db:
             return list(db.exec(query).all())
 
     def insert_completion(self, checklist: Checklist, checkitem: Checkitem) -> None:
