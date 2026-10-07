@@ -53,6 +53,13 @@ assert KeyVault.is_fallback_provider and KeyVault.name() == 'openbao'
 key = KeyVault.create_key('fixture')
 assert KeyVault.get_key('fixture') == key
 assert KeyVault.health_check()
+locator = KeyVault.store_secret('imported', 'fixture:multiline\\ncredential')
+assert KeyVault.get_key(locator) == 'fixture:multiline\\ncredential'
+for invalid in ['', None]:
+    try: KeyVault.store_secret('invalid', invalid)
+    except ValueError: pass
+    else: raise AssertionError('Invalid material accepted')
+KeyVault.delete_key(locator)
 KeyVault.delete_key('fixture')
 try: KeyVault.get_key('fixture')
 except KeyError: pass
