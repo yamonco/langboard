@@ -79,7 +79,11 @@ export default function BoardSettingsAppWorkflow() {
         setError(false);
         try {
             if (create) await api.post(`/board/${project.uid}/column`, { name, workflow_stage: stage });
-            else await api.put(`/board/${project.uid}/column/${columnUID}/workflow-stage`, { workflow_stage: stage });
+            else
+                await api.put(`/board/${project.uid}/column/${columnUID}/workflow-stage`, {
+                    workflow_stage: stage,
+                    expected_workflow_stage: currentColumn?.workflow_stage ?? null,
+                });
             setRepairColumns({});
             setNewNames({});
             await refetch();

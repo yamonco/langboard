@@ -39,7 +39,7 @@ def test_workflow_edit_fences_readiness_and_publishes_after_commit(monkeypatch):
     from importlib import import_module
 
     module = import_module(ProjectColumnService.__module__)
-    column = SimpleNamespace(id=2, project_id=1, workflow_stage="active", is_archive=False, description="")
+    column = SimpleNamespace(id=2, project_id=1, workflow_stage="active", is_archive=False, deleted_at=None, description="")
     project = SimpleNamespace(id=1)
     events = []
     execution = SimpleNamespace(

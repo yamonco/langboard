@@ -84,8 +84,8 @@ def test_authenticated_http_workflow_and_current_revocation(board, binding, monk
 @pytest.mark.parametrize("board", ["sqlite-http"], indirect=True)
 def test_authenticated_missing_stage_creation_persists_and_resolves(board, binding, monkeypatch):
     from langboard_shared.core.db import SqlBuilder
-    from langboard.routes.board.BoardColumnApi import create_project_column
-    from langboard_shared.domain.models import ProjectColumn
+    from langboard.routes.board.BoardColumnApi import create_project_column, update_project_column_workflow_stage
+    from langboard_shared.domain.models import ProjectColumn, Card
     from langboard_shared.domain.services.factory.ProjectColumnService import ProjectColumnService
     from langboard_shared.infrastructure.repositories import Repository
 
@@ -98,6 +98,11 @@ def test_authenticated_missing_stage_creation_persists_and_resolves(board, bindi
         db.update(column)
         binding.workflow_mapping = {}
         db.update(binding)
+    Card.__table__.create(DbEngine.get_main_engine())
+    from langboard_shared.publishers import ProjectColumnPublisher
+    from langboard_shared.domain.services.factory.CardService import CardService
+    monkeypatch.setattr(ProjectColumnPublisher, "workflow_stage_changed", lambda *args: None)
+    monkeypatch.setattr(CardService, "publish_work_states", lambda *args: None)
     repository = Repository()
     column_service = ProjectColumnService(lambda _: None, lambda _: None, repository)
     # External socket/activity/bot dispatch is outside this isolated DB test.
@@ -110,7 +115,7 @@ def test_authenticated_missing_stage_creation_persists_and_resolves(board, bindi
     app = FastAPI()
     app.include_router(AppRouter.api)
     for route in app.routes:
-        if getattr(route, "endpoint", None) in (get_app_workflow_mapping, create_project_column):
+        if getattr(route, "endpoint", None) in (get_app_workflow_mapping, create_project_column, update_project_column_workflow_stage):
             for dependency in route.dependant.dependencies:
                 if dependency.name == "service":
                     app.dependency_overrides[dependency.call] = lambda: service
@@ -135,6 +140,15 @@ def test_authenticated_missing_stage_creation_persists_and_resolves(board, bindi
         assert snapshot["choices"][0]["status"] == "resolved"
         assert snapshot["choices"][0]["column_uid"] == uid
         assert snapshot["binding"]["stage_transitions_enabled"] is False
+        stage_url = f"{board_url}/column/{column.get_uid()}/workflow-stage"
+        assigned = client.put(stage_url, headers=headers, json={"workflow_stage": "review", "expected_workflow_stage": None})
+        assert assigned.status_code == 200, assigned.text
+        stale = client.put(stage_url, headers=headers, json={"workflow_stage": "closed", "expected_workflow_stage": None})
+        assert stale.status_code == 409, stale.text
+        with DbSession.use(readonly=False) as db:
+            actual = db.exec(SqlBuilder.select.table(ProjectColumn).where(ProjectColumn.id == column.id)).first()
+            assert actual.workflow_stage == "review"
+
         with DbSession.use(readonly=False) as db:
             rows = db.exec(SqlBuilder.select.table(ProjectColumn).where(ProjectColumn.name == "Started")).all()
             assert len(rows) == 1 and rows[0].workflow_stage == "active" and rows[0].project_id == board[2].id

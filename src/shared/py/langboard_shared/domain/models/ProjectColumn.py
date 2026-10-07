@@ -9,6 +9,10 @@ class ProjectColumnDockConflict(Exception):
     """The shared shortcut configuration changed after the caller read it."""
 
 
+class ProjectColumnWorkflowConflict(Exception):
+    """The column meaning changed after the caller read it."""
+
+
 class ProjectColumn(SoftDeleteModel, table=True):
     DEFAULT_ARCHIVE_COLUMN_NAME: ClassVar[str] = "Archive"
     project_id: SnowflakeID = SnowflakeIDField(
