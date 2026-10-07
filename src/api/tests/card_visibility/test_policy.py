@@ -48,3 +48,17 @@ def test_only_confirmed_human_ui_can_share_and_only_humans_can_use_whisper(chann
     )
     assert context.can_change_visibility(CardVisibility.Shared, CardVisibility.Internal)
     assert not context.can_change_visibility(CardVisibility.Internal, "UNKNOWN", confirmed=True)
+
+
+def test_unactivated_visibility_and_audit_do_not_leak_into_generic_payloads():
+    from langboard_shared.domain.models import Card, CardVisibilityChange
+
+    card = Card(project_id=1, project_column_id=2, title="Private")
+    assert card.visibility == "INTERNAL"
+    assert "visibility" not in card.api_response()
+    audit = CardVisibilityChange(
+        card_id=card.id, changed_by_user_id=3, channel="human_ui", previous_visibility="INTERNAL", next_visibility="SHARED"
+    )
+    assert audit.notification_data() == {}
+    response = audit.api_response()
+    assert not {"card_id", "changed_by_user_id", "previous_visibility", "next_visibility"}.intersection(response)

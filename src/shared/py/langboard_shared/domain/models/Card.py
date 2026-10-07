@@ -15,6 +15,8 @@ class Card(BaseNotificationScheduleModel, table=True):
             name="linked_source_complete",
         ),
         Index("ix_card_project_archive_page", "project_id", "archived_at", "id"),
+        CheckConstraint("visibility IN ('INTERNAL', 'SHARED')", name="card_visibility"),
+        Index("ix_card_project_visibility", "project_id", "visibility"),
     )
 
     created_by_user_id: SnowflakeID | None = SnowflakeIDField(nullable=True, index=True)
@@ -29,6 +31,9 @@ class Card(BaseNotificationScheduleModel, table=True):
     project_column_id: SnowflakeID = SnowflakeIDField(
         foreign_key=ProjectColumn, nullable=False, index=True, api_field=ApiField(name="project_column_uid")
     )
+    # Visibility remains internal storage until every read and publish boundary
+    # is enforced. External membership never rewrites this persisted value.
+    visibility: str = Field(default="INTERNAL", nullable=False, sa_column_kwargs={"server_default": "INTERNAL"})
     title: str = Field(nullable=False, api_field=ApiField())
     description: EditorContentModel = Field(
         default=EditorContentModel(), sa_type=ModelColumnType(EditorContentModel), api_field=ApiField()
