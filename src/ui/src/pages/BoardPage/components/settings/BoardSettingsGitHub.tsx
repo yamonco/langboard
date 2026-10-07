@@ -28,7 +28,7 @@ interface Snapshot {
     items: { repository_id: string; connection_uid: string; selected: boolean }[];
 }
 
-export default function BoardSettingsGitHub() {
+export default function BoardSettingsGitHub({ onStatusChange }: { onStatusChange?: () => void }) {
     const [t] = useTranslation();
     const { project, currentUser, canEditBasicInfo } = useBoardSettings();
     const root = `/board/${project.uid}/settings/apps/github`;
@@ -53,12 +53,14 @@ export default function BoardSettingsGitHub() {
     const [pending, setPending] = useState(false);
     const [error, setError] = useState(false);
     const [saved, setSaved] = useState(false);
+    const [refreshed, setRefreshed] = useState(false);
     const callbackStarted = useRef(false);
     const text = (name: string) => t(`project.settings.${name}`);
     const run = async (action: () => Promise<void>) => {
         setPending(true);
         setError(false);
         setSaved(false);
+        setRefreshed(false);
         try {
             await action();
         } catch {
@@ -185,12 +187,14 @@ export default function BoardSettingsGitHub() {
                 ).data
             );
             setSaved(true);
+            onStatusChange?.();
         });
     return (
         <fieldset className="fieldset min-w-0 rounded-lg border p-3" disabled={pending || !canEditBasicInfo}>
             <legend className="fieldset-legend">{text("GitHub connection")}</legend>
             <p className="text-sm text-muted-foreground">{text("GitHub onboarding help")}</p>
             {error && <p role="alert">{text("GitHub onboarding failed")}</p>}
+            {refreshed && <p role="status">{text("GitHub health refreshed")}</p>}
             {saved && <p role="status">{text("GitHub repositories saved")}</p>}
             {pending && <p role="status">{t("common.Loading...")}</p>}
             {connectionsError && (
@@ -269,6 +273,24 @@ export default function BoardSettingsGitHub() {
                         }
                     >
                         {text("Install GitHub App")}
+                    </Button>
+                    <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() =>
+                            void run(async () => {
+                                const current = (await api.get<Snapshot>(`${root}/resources`)).data;
+                                await api.post(`${root}/resources/refresh`, {
+                                    connection_uid: connection.connection_uid,
+                                    expected_revision: current.revision,
+                                });
+                                setSnapshot((await api.get<Snapshot>(`${root}/resources`)).data);
+                                setRefreshed(true);
+                                onStatusChange?.();
+                            })
+                        }
+                    >
+                        {text("Refresh GitHub resource health")}
                     </Button>
                     <Button size="sm" variant="outline" onClick={() => void authorize()}>
                         {text("Verify GitHub account")}
