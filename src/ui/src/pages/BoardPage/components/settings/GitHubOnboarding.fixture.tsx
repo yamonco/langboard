@@ -31,6 +31,8 @@ api.defaults.adapter = async (config) => {
                 refreshed_count: 25,
             },
         };
+    if (config.url?.endsWith("/jobs"))
+        return { config, status: 200, statusText: "OK", headers: {}, data: { items: [{ job_uid: "job", state: "blocked" }], next_cursor: null } };
     if (config.url?.endsWith("/health"))
         return {
             config,

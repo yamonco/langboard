@@ -210,6 +210,16 @@
     "Degraded": "Degraded",
     "Unavailable": "Unavailable",
     "Unverified": "Unverified",
-    "More installation health": "More installation health"
+    "More installation health": "More installation health",
+    "GitHub background health jobs": "Background verification",
+    "GitHub background health guidance": "Stored installation jobs shared across boards. Use Refresh repository health to recheck this board now.",
+    "No GitHub health jobs": "No background jobs",
+    "GitHub health job pending": "Queued",
+    "GitHub health job processing": "Processing",
+    "GitHub health job completed": "Completed",
+    "GitHub health job blocked": "Needs attention",
+    "GitHub health job failed": "Failed",
+    "Reload GitHub health jobs": "Reload job status",
+    "More GitHub health jobs": "Older jobs"
   }
 }

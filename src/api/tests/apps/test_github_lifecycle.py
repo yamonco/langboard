@@ -1022,3 +1022,89 @@ def test_health_repository_delta_never_refreshes_unrelated_repositories(health_j
     with DbSession.use(readonly=False) as db:
         current = db.exec(SqlBuilder.select.table(GitHubHealthJob).where(GitHubHealthJob.id == delta_job.id)).first()
         assert current.state == "completed"
+
+
+@pytest.mark.parametrize("failure", [None, "permission", "owner", "foreign_board", "invalid_cursor"])
+def test_health_job_diagnostics_current_authority_paging_and_redaction(health_job, failure):
+    from langboard.apps.GitHubConnections import health_jobs
+    from langboard_shared.core.types import SafeDateTime
+    from langboard_shared.domain.models import GitHubHealthJob, GitHubLifecycleReceipt
+
+    worker, service, board, connection, job, dispatched, receive, migration, engine = health_job
+    with DbSession.use(readonly=False) as db:
+        for i in range(30):
+            receipt = GitHubLifecycleReceipt(
+                connection_id=connection.id,
+                connection_revision="test",
+                delivery_id=str(uuid4()),
+                payload_digest="test",
+                event="installation",
+                action="created",
+                app_id="42",
+                installation_id="17" if i < 27 else "999",
+                account_id="7",
+            )
+            db.insert(receipt)
+            db.insert(GitHubHealthJob(receipt_id=receipt.id, available_at=SafeDateTime.now(), state="failed"))
+        if failure == "permission":
+            board[4].actions = ["read"]
+            db.update(board[4])
+        elif failure == "owner":
+            connection.owner_id = 2
+            db.update(connection)
+    if failure in {"permission", "owner", "foreign_board"}:
+        with pytest.raises(GitHubManifestUnavailable):
+            health_jobs(
+                service, board[1], board[2].get_uid() if failure != "foreign_board" else "B", connection.get_uid()
+            )
+    elif failure == "invalid_cursor":
+        with pytest.raises(ValueError):
+            health_jobs(service, board[1], board[2].get_uid(), connection.get_uid(), "!invalid")
+    else:
+        first = health_jobs(service, board[1], board[2].get_uid(), connection.get_uid())
+        second = health_jobs(service, board[1], board[2].get_uid(), connection.get_uid(), first["next_cursor"])
+        assert len(first["items"]) == 25 and len(second["items"]) == 3 and second["next_cursor"] is None
+        assert not ({item["job_uid"] for item in first["items"]} & {item["job_uid"] for item in second["items"]})
+        assert all(set(item) == {"job_uid", "state"} for item in first["items"] + second["items"])
+
+
+@pytest.mark.parametrize("board", ["sqlite-http"], indirect=True)
+def test_health_jobs_http_requires_browser_auth_and_current_board_authority(health_job, monkeypatch):
+    import importlib
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from langboard.middlewares.ApiAuthMiddleware import ApiAuthMiddleware
+    from langboard.routes.board.BoardGitHubAppApi import get_github_health_jobs
+    from langboard_shared.core.db.DbEngine import DbEngine
+    from langboard_shared.core.routing import AppRouter
+    from langboard_shared.core.security import AuthSecurity
+    from langboard_shared.Env import Env
+
+    worker, service, board, connection, job, dispatched, receive, migration, engine = health_job
+    service.close = lambda: None
+    monkeypatch.setattr(DbEngine, "get_readonly_engine", DbEngine.get_main_engine)
+    monkeypatch.setattr(
+        importlib.import_module("langboard.middlewares.ApiAuthMiddleware"), "DomainService", lambda: service
+    )
+    app = FastAPI()
+    app.include_router(AppRouter.api)
+    for route in app.routes:
+        if getattr(route, "endpoint", None) == get_github_health_jobs:
+            for dependency in route.dependant.dependencies:
+                if dependency.name == "service":
+                    app.dependency_overrides[dependency.call] = lambda: service
+    app.add_middleware(ApiAuthMiddleware, routes=AppRouter.api.routes)
+    access, refresh = AuthSecurity.authenticate(board[1].id)
+    with TestClient(app, base_url="https://testserver") as client:
+        url = f"/board/{board[2].get_uid()}/settings/apps/github/connections/{connection.get_uid()}/jobs"
+        assert client.get(url).status_code == 401
+        client.cookies.set(Env.REFRESH_TOKEN_NAME, refresh)
+        headers = {"Authorization": f"Bearer {access}"}
+        result = client.get(url, headers=headers)
+        assert result.status_code == 200 and result.json()["items"] == [{"job_uid": job.get_uid(), "state": "pending"}]
+        assert "secret://" not in result.text and "lease_token" not in result.text
+        assert client.get(url + "?after=!invalid", headers=headers).status_code == 400
+        with DbSession.use(readonly=False) as db:
+            board[4].actions = ["read"]
+            db.update(board[4])
+        assert client.get(url, headers=headers).status_code == 404

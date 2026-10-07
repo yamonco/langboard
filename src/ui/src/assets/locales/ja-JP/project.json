@@ -210,6 +210,16 @@
     "Degraded": "注意",
     "Unavailable": "確認不可",
     "Unverified": "未検証",
-    "More installation health": "他のインストール状態"
+    "More installation health": "他のインストール状態",
+    "GitHub background health jobs": "バックグラウンド検証",
+    "GitHub background health guidance": "ボード間で共有するインストール更新ジョブの保存済み状態です。このボードを今検証するにはリソース状態を更新してください。",
+    "No GitHub health jobs": "バックグラウンドジョブなし",
+    "GitHub health job pending": "待機",
+    "GitHub health job processing": "処理中",
+    "GitHub health job completed": "完了",
+    "GitHub health job blocked": "確認が必要",
+    "GitHub health job failed": "失敗",
+    "Reload GitHub health jobs": "ジョブ状態を更新",
+    "More GitHub health jobs": "以前のジョブ"
   }
 }
