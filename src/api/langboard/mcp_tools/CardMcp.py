@@ -9,6 +9,7 @@ from fastmcp.exceptions import ValidationError
 from langboard_shared.core.db import DbSession, EditorContentModel
 from langboard_shared.core.exceptions.CardDeleteForbidden import CardDeleteForbidden
 from langboard_shared.core.exceptions.RelationshipCycle import RelationshipCycle
+from langboard_shared.core.security.CollaborationChannel import CollaborationChannel
 from langboard_shared.core.storage import Storage, StorageName
 from langboard_shared.core.types import SafeDateTime
 from langboard_shared.domain.models import Bot, Card, CardMetadata, Project, ProjectRole, User
@@ -88,7 +89,7 @@ def get_card(project_uid: str, card_uid: str, user_or_bot: User | Bot, service: 
     if not params:
         raise ValueError("Card not found")
     project, card = params
-    details = service.card.get_details(project, card, user_or_bot)
+    details = service.card.get_details(project, card, user_or_bot, channel=CollaborationChannel.Mcp)
     if not details:
         raise ValueError("Card not found")
     return details

@@ -31,7 +31,6 @@ from langboard_shared.domain.models import (
     Checkitem,
     Checklist,
     GlobalCardRelationshipType,
-    Project,
     ProjectColumn,
     ProjectLabel,
     ProjectRole,
@@ -41,7 +40,6 @@ from langboard_shared.domain.models.bases import ALL_GRANTED
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.domain.services import DomainService
 from langboard_shared.filter import RoleFilter
-from langboard_shared.helpers import InfraHelper
 from langboard_shared.security import Auth, RoleFinder
 from langboard_shared.tasks.webhooks.ExecutionReadinessUow import current_execution
 from ...card_workspace.application import get_card_bundle, validate_card_graph_patch
@@ -162,14 +160,16 @@ def get_available_recent_cards(
 def get_card_details(
     project_uid: str,
     card_uid: str,
+    request: Request,
     user_or_bot: User | Bot = Auth.scope("all"),
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
-    params = InfraHelper.get_records_with_foreign_by_params((Project, project_uid), (Card, card_uid))
-    if not params:
+    channel = request.scope.get("collaboration_channel", CollaborationChannel.Api)
+    resolved = service.card.resolve_readable_card(project_uid, card_uid, user_or_bot, channel)
+    if resolved is None:
         raise ApiException.NotFound_404(ApiErrorCode.NF2003)
-    project, card = params
-    api_card = service.card.get_details(project, card, user_or_bot)
+    project, card, context = resolved
+    api_card = service.card.get_details(project, card, user_or_bot, channel=channel)
     if api_card is None:
         raise ApiException.NotFound_404(ApiErrorCode.NF2003)
     is_linked_resource = card.is_linked_resource
@@ -184,7 +184,7 @@ def get_card_details(
     if can_set_scopes and not is_linked_resource:
         bot_scopes = service.card.get_api_bot_scope_list(project, card)
 
-    project_columns = service.project_column.get_api_list_by_project(project.id)
+    project_columns = service.project_column.get_api_list_by_project(project.id, context=context)
     project_labels = [] if is_linked_resource else service.project_label.get_api_list_by_project(project)
 
     checklists = [] if is_linked_resource else service.checklist.get_api_list_by_card(card)
@@ -219,14 +219,16 @@ def get_card_context(
     card_uid: str,
     user_or_bot: User | Bot = Auth.scope("all"),
     service: DomainService = DomainService.scope(),
+    *,
+    request: Request,
 ) -> JsonResponse:
-    records = InfraHelper.get_records_with_foreign_by_params((Project, project_uid), (Card, card_uid))
+    records = service.card.resolve_readable_card(project_uid, card_uid, user_or_bot, request.scope.get("collaboration_channel", CollaborationChannel.Api))
     if not records:
         raise ApiException.NotFound_404(ApiErrorCode.NF2003)
-    _, card = records
+    _, card, _ = records
 
     context = get_card_bundle(
-        NativeCardWorkspaceAdapter(user_or_bot, service),
+        NativeCardWorkspaceAdapter(user_or_bot, service, channel=request.scope.get("collaboration_channel", CollaborationChannel.Api)),
         project_uid,
         card_uid,
         CommentPage(),
@@ -287,8 +289,11 @@ def get_card_context(
 )
 @RoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
 @AuthFilter.add()
-def get_card_comments(card_uid: str, service: DomainService = DomainService.scope()) -> JsonResponse:
-    comments = service.card_comment.get_api_list_by_card(card_uid)
+def get_card_comments(project_uid: str, card_uid: str, request: Request, user_or_bot: User | Bot = Auth.scope("all"), service: DomainService = DomainService.scope()) -> JsonResponse:
+    resolved = service.card.resolve_readable_card(project_uid, card_uid, user_or_bot, request.scope.get("collaboration_channel", CollaborationChannel.Api))
+    if resolved is None:
+        raise ApiException.NotFound_404(ApiErrorCode.NF2003)
+    comments = service.card_comment.get_api_list_by_card(resolved[1])
     return JsonResponse(content={"comments": comments})
 
 
