@@ -31,7 +31,7 @@ class UserCardReadStateRepository(BaseRepository[UserCardReadState]):
 
     def get_readers(self, card: Card) -> list[dict]:
         """Expose existing read receipts only for current board members."""
-        with DbSession.use(readonly=True) as db:
+        with DbSession.use(readonly=False) as db:
             rows = db.exec(
                 SqlBuilder.select.tables(UserCardReadState, User)
                 .join(User, User.column("id") == UserCardReadState.column("user_id"))
@@ -39,6 +39,8 @@ class UserCardReadStateRepository(BaseRepository[UserCardReadState]):
                 .where(UserCardReadState.column("card_id") == card.id)
                 .where(UserCardReadState.column("seen_change_seq") >= 0)
                 .where(ProjectAssignedUser.column("project_id") == card.project_id)
+                .where(User.activated_at.is_not(None))
+                .where(User.id == card.owner_user_id if card.visibility == "PRIVATE" else True)
             ).all()
         return [{"user_uid": user.get_uid(), "seen_at": state.seen_at.isoformat()} for state, user in rows]
 
