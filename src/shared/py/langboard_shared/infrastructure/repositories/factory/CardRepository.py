@@ -1,5 +1,5 @@
 from typing import Any, Sequence
-from sqlalchemy import Text, cast, false, func, or_, select, update
+from sqlalchemy import Text, and_, cast, false, func, or_, select, update
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from ....core.db import DbSession, SqlBuilder
 from ....core.db.DbEngine import DbEngine
@@ -19,7 +19,22 @@ from ....domain.models import (
     User,
     WorkflowStageDefinition,
 )
+from ....domain.services.CardVisibilityPolicy import CardVisibility, CardVisibilityContext
 from ....helpers import InfraHelper
+
+
+def card_visibility_scope(context: CardVisibilityContext):
+    """Apply the policy before pagination, counts, or existence projections."""
+    allowed = [false()]
+    for visibility in (CardVisibility.Shared, CardVisibility.Internal):
+        if context.can_read_card(visibility):
+            allowed.append(Card.column("visibility") == visibility.value)
+    if context.is_private_owner(context.actor_user_id):
+        allowed.append(and_(
+            Card.column("visibility") == CardVisibility.Private.value,
+            Card.column("owner_user_id") == context.actor_user_id,
+        ))
+    return or_(*allowed)
 
 
 def _editor_search_text(column, dialect: str):
@@ -49,20 +64,23 @@ class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
     def get_by_id_like(self, card: TCardParam | None) -> Card | None:
         return InfraHelper.get_by_id_like(Card, card)
 
-    def get_existing_uids(self, project: TProjectParam, card_uids: Sequence[str]) -> list[str]:
+    def get_existing_uids(
+        self, project: TProjectParam, card_uids: Sequence[str], *, context: CardVisibilityContext
+    ) -> list[str]:
         if not card_uids:
             return []
         if len(card_uids) > 200:
             raise ValueError("At most 200 recent cards may be checked")
         project_id = InfraHelper.convert_id(project)
         card_ids = [InfraHelper.convert_id(uid) for uid in card_uids]
-        with DbSession.use(readonly=True) as db:
+        with DbSession.use(readonly=False) as db:
             cards = db.exec(
                 SqlBuilder.select.table(Card)
                 .join(Project, Project.column("id") == Card.column("project_id"))
                 .where(Project.column("deleted_at") == None)  # noqa: E711
                 .where(Card.column("project_id") == project_id)
                 .where(Card.column("id").in_(card_ids))
+                .where(card_visibility_scope(context))
             ).all()
         return [card.get_uid() for card in cards]
 
