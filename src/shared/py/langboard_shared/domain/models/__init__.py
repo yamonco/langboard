@@ -74,6 +74,7 @@ from .ProjectWikiAttachment import ProjectWikiAttachment
 from .ProjectWikiMetadata import ProjectWikiMetadata
 from .ScimGroup import ScimGroup
 from .ScimGroupMember import ScimGroupMember
+from .SecretReference import SecretReference
 from .SettingRole import SettingRole
 from .User import User
 from .UserActivity import UserActivity
@@ -168,6 +169,7 @@ __all__ = [
     "ProjectWikiAssignedUser",
     "ProjectWikiAttachment",
     "ProjectWikiMetadata",
+    "SecretReference",
     "SettingRole",
     "ScimGroup",
     "ScimGroupMember",

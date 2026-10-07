@@ -39,6 +39,10 @@ class DomainService(Factory):
         return self._create_or_get_product(factory.ProjectService)
 
     @property
+    def secret_reference(self):
+        return self._create_or_get_product(factory.SecretReferenceService)
+
+    @property
     def workflow_stage(self):
         return self._create_or_get_product(factory.WorkflowStageService)
 
