@@ -62,7 +62,7 @@ export default function BoardSettingsAppWorkflow() {
                 <select
                     className="rounded-md border border-input bg-background p-2"
                     value={app}
-                    disabled={pending}
+                    disabled={pending || dirty}
                     onChange={(event) => setApp(event.target.value)}
                 >
                     <option value="github">GitHub</option>
