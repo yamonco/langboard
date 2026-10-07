@@ -1068,19 +1068,22 @@ class CardService(BaseDomainService):
         before_card: TCardParam | None = None,
         user_or_bot: TUserOrBot | None = None,
         *,
+        channel: CollaborationChannel = CollaborationChannel.Api,
         include_closed: bool = False,
         workflow_stages: list[str] | None = None,
     ) -> tuple[list[dict[str, Any]], int, tuple[str, str] | None] | None:
         """Return a bounded newest-updated-first card page and opaque cursor fields."""
 
-        project = InfraHelper.get_by_id_like(Project, project)
-        if not project:
+        resolved = self.resolve_visibility_context(project, user_or_bot, channel)
+        if resolved is None:
             return None
+        project, context = resolved
         records = self.repo.card.get_page_by_project(
             project,
             limit,
             before_updated_at,
             before_card,
+            context=context,
             include_closed=include_closed,
             workflow_stages=workflow_stages,
         )
@@ -1092,7 +1095,7 @@ class CardService(BaseDomainService):
             [card for card, _ in page if card.is_linked_resource],
             include_content=False,
         )
-        work_states = self.get_work_states([card for card, _ in page])
+        work_states = self.get_work_states([card for card, _ in page], context=context)
         cards: list[dict[str, Any]] = []
         for card, column in page:
             api_card = card.api_response()
@@ -1107,7 +1110,7 @@ class CardService(BaseDomainService):
             next_fields = (last_card.updated_at.isoformat(), last_card.get_uid())
         return (
             cards,
-            self.repo.card.count_by_project(project, include_closed=include_closed, workflow_stages=workflow_stages),
+            self.repo.card.count_by_project(project, context=context, include_closed=include_closed, workflow_stages=workflow_stages),
             next_fields,
         )
 

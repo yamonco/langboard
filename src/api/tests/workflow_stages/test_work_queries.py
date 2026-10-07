@@ -156,22 +156,22 @@ def test_overdue_purpose_excludes_suppressed_policy_without_hiding_other_work(wo
 def test_project_page_and_search_filter_registry_completion_before_limit(work_db):
     data = work_db
     repo = CardRepository(None, None)
-    page = repo.get_page_by_project(data.project, 25, include_closed=False)
+    page = repo.get_page_by_project(data.project, 25, context=TEST_SCOPE, include_closed=False)
     ids = {card.id for card, _ in page}
     assert data.cards["released"].id not in ids
     assert data.cards["active"].id in ids  # Display name Done is not completion.
     assert data.cards[None].id in ids
-    assert repo.count_by_project(data.project, include_closed=False) == len(page)
+    assert repo.count_by_project(data.project, context=TEST_SCOPE, include_closed=False) == len(page)
     assert data.cards["released"].id in {
-        card.id for card, _ in repo.get_page_by_project(data.project, 25, include_closed=True)
+        card.id for card, _ in repo.get_page_by_project(data.project, 25, context=TEST_SCOPE, include_closed=True)
     }
-    assert repo.get_page_by_project(data.project, 25, include_closed=False, workflow_stages=["released"]) == []
+    assert repo.get_page_by_project(data.project, 25, context=TEST_SCOPE, include_closed=False, workflow_stages=["released"]) == []
     assert {
         card.id
-        for card, _ in repo.get_page_by_project(data.project, 25, include_closed=True, workflow_stages=["released"])
+        for card, _ in repo.get_page_by_project(data.project, 25, context=TEST_SCOPE, include_closed=True, workflow_stages=["released"])
     } == {data.cards["released"].id}
-    assert repo.count_by_project(data.project, include_closed=True, workflow_stages=["released"]) == 1
-    assert repo.get_page_by_project(data.project, 25, workflow_stages=[]) == []
+    assert repo.count_by_project(data.project, context=TEST_SCOPE, include_closed=True, workflow_stages=["released"]) == 1
+    assert repo.get_page_by_project(data.project, 25, context=TEST_SCOPE, workflow_stages=[]) == []
     assert repo.search_context_by_project(data.project, "Still", include_closed=False, context=TEST_SCOPE) == []
     assert {card.id for card, _ in repo.search_context_by_project(data.project, "Still", include_closed=True, context=TEST_SCOPE)} == {
         data.cards["released"].id
@@ -187,7 +187,7 @@ def test_project_page_and_search_filter_registry_completion_before_limit(work_db
         data.definitions["released"].is_active = False
         db.update(data.definitions["released"])
     assert data.cards["released"].id in {
-        card.id for card, _ in repo.get_page_by_project(data.project, 25, include_closed=False)
+        card.id for card, _ in repo.get_page_by_project(data.project, 25, context=TEST_SCOPE, include_closed=False)
     }
 
 

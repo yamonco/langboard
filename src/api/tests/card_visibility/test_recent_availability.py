@@ -87,6 +87,29 @@ def test_recent_cards_revalidate_actor_and_filter_visibility_before_return(monke
             assert {row["uid"] for row in found} == expected
             assert all(row["document_matches"][0]["snippet"] == "SearchProof document" for row in found)
             _, context = service.resolve_visibility_context(project, member, channel)
+            # Scope both keyset rows and total before LIMIT, not after pagination.
+            rows = repository.card.get_page_by_project(project, 1, context=context)
+            assert len(rows) == min(2, len(expected))
+            assert all(card.get_uid() in expected for card, _ in rows)
+            assert repository.card.count_by_project(project, context=context) == len(expected)
+            collected = []
+            before_time = before_card = None
+            while True:
+                batch = repository.card.get_page_by_project(project, 1, before_time, before_card, context=context)
+                if not batch:
+                    break
+                current = batch[0][0]
+                collected.append(current.get_uid())
+                before_time, before_card = current.updated_at, current.id
+            assert set(collected) == expected and len(collected) == len(expected)
+            service.get_work_states = lambda cards, **kwargs: {card.id: {"scoped": kwargs["context"] == context} for card in cards}
+            service._get_linked_resource_payloads = lambda *args, **kwargs: {}
+            api_cards, total, cursor = service.get_api_page_by_project(project, 1, user_or_bot=member, channel=channel, include_closed=True)
+            assert total == len(expected) and api_cards[0]["uid"] in expected
+            assert api_cards[0]["work_state"] == {"scoped": True}
+            assert (cursor is not None) == (len(expected) > 1)
+            assert service.get_api_page_by_project(project, 1, user_or_bot=None, channel=channel) is None
+
             for candidate in cards:
                 resolved_card = service.resolve_readable_card(project, candidate, member, channel)
                 assert (resolved_card is not None) == (candidate.get_uid() in expected)
@@ -119,6 +142,7 @@ def test_recent_cards_revalidate_actor_and_filter_visibility_before_return(monke
             db.update(changed)
         assert cards[0].visibility == "SHARED"
         assert service.resolve_readable_card(project, cards[0], member, CollaborationChannel.Mcp) is None
+        assert service.get_api_page_by_project(project, 1, user_or_bot=member, channel=CollaborationChannel.Mcp) is None
         with DbSession.use(readonly=False) as db:
             changed.visibility = "SHARED"
             db.update(changed)
@@ -153,6 +177,7 @@ def test_recent_cards_revalidate_actor_and_filter_visibility_before_return(monke
         with DbSession.use(readonly=False) as db:
             db.delete(assignment)
         assert service.get_existing_uids(project, uids, user=member, channel=CollaborationChannel.Mcp) == []
+        assert service.get_api_page_by_project(project, 1, user_or_bot=member, channel=CollaborationChannel.Mcp) is None
         assert set(service.get_existing_uids(project, uids, user=owner, channel=CollaborationChannel.HumanUI)) == {uids[0], uids[3]}
         with DbSession.use(readonly=False) as db:
             removed_project = project.model_copy(deep=True)
