@@ -459,4 +459,11 @@ test("sidebar collapse and expansion preserve the open card", async ({ page }) =
     await sidebar.getByRole("button", { name: /Expand|펼치기/ }).click();
     await expect(sidebar).toHaveAttribute("data-collapsed", "false");
     await expect(viewer).toBeVisible();
+    await sidebar.getByRole("button", { name: /Collapse|접기/ }).press("Enter");
+    await expect(sidebar).toHaveAttribute("data-collapsed", "true");
+    await sidebar.getByRole("button", { name: /Expand|펼치기/ }).press("Enter");
+    await expect(sidebar).toHaveAttribute("data-collapsed", "false");
+    await sidebar.getByRole("button", { name: /Collapse|접기/ }).press("Space");
+    await expect(sidebar).toHaveAttribute("data-collapsed", "true");
+    await expect(viewer).toBeVisible();
 });
