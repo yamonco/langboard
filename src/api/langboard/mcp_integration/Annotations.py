@@ -18,6 +18,7 @@ class ToolAnnotationTransform(Transform):
 # Reviewed query entry points. Do not infer read-only behavior from a name prefix.
 READ_ONLY_TOOLS = frozenset(
     {
+        "get_secret_reference_metadata",
         "diagnose_connection",
         "get_projects",
         "get_starred_projects",
