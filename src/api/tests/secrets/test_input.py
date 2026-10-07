@@ -129,6 +129,9 @@ def test_authenticated_browser_transport_never_echoes_invalid_material(flow, mon
                 if dependency.name == "service":
                     app.dependency_overrides[dependency.call] = lambda: service
     app.add_middleware(ApiAuthMiddleware, routes=AppRouter.api.routes)
+    from langboard.middlewares.GZipDecompressMiddleware import GZipDecompressMiddleware
+
+    app.add_middleware(GZipDecompressMiddleware)
     access, refresh = AuthSecurity.authenticate(actor.id)
     headers = {"Authorization": f"Bearer {access}", "Origin": "https://langboard.example"}
     uid = input_flow.begin_input(service, actor, "personal", "me", "provider/http")["input_uid"]
@@ -138,6 +141,16 @@ def test_authenticated_browser_transport_never_echoes_invalid_material(flow, mon
         client.cookies.set(Env.REFRESH_TOKEN_NAME, refresh)
         opened = client.get(url, headers=headers)
         assert opened.status_code == 200
+        import gzip
+
+        middleware = importlib.import_module("langboard.middlewares.GZipDecompressMiddleware")
+        monkeypatch.setattr(middleware, "TemporaryFile", lambda: pytest.fail("Secret body reached disk spool"))
+        compressed = client.post(
+            url,
+            content=gzip.compress(b'{"value":"fixture-sensitive"}'),
+            headers={**headers, "Content-Encoding": "gzip", "Content-Type": "application/json"},
+        )
+        assert compressed.status_code == 400 and "fixture-sensitive" not in compressed.text
         assert opened.headers["cache-control"] == "no-store"
         assert "HttpOnly" in opened.headers["set-cookie"]
         for body in [{"value": {"fixture-sensitive": "bad"}}, {"value": "fixture-sensitive", "extra": True}]:

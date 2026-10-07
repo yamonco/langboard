@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router";
 import { useTranslation } from "react-i18next";
-import { api } from "@/core/helpers/Api";
+import { api, submitSecretInput } from "@/core/helpers/Api";
 import Button from "@/components/base/Button";
 
 export default function SecretInputPage() {
@@ -59,7 +59,7 @@ export default function SecretInputPage() {
                                 input.current.value = "";
                                 setState("saving");
                                 try {
-                                    await api.post(url, { value }, { env: { interceptToast: true } as never });
+                                    await submitSecretInput(url, value);
                                     setState("completed");
                                 } catch {
                                     setState("failed");
