@@ -29,6 +29,13 @@ class OpenBaoVaultProvider(VaultProvider):
 
     def create_key(self, key_id: str) -> str:
         key_material = secrets.token_urlsafe(32)
+        self.store_secret(key_id, key_material)
+        # Preserve the legacy development API-key copy, not imported credentials.
+        if Env.ENVIRONMENT != "production":
+            self._save_key_to_file(key_id, key_material)
+        return key_material
+
+    def store_secret(self, key_id: str, key_material: str) -> str:
         try:
             self.client.secrets.kv.v2.create_or_update_secret(
                 path=key_id, secret={"key_material": key_material}, mount_point="apikeys"
@@ -49,11 +56,7 @@ class OpenBaoVaultProvider(VaultProvider):
             else:
                 raise RuntimeError(f"Failed to create API key in OpenBao: {e}") from e
 
-        # Save key material to file in non-production environments
-        if Env.ENVIRONMENT != "production":
-            self._save_key_to_file(key_id, key_material)
-
-        return key_material
+        return key_id
 
     def get_key(self, key_id: str) -> str:
         try:

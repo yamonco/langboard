@@ -32,6 +32,10 @@ class HashiCorpVaultProvider(VaultProvider):
 
     def create_key(self, key_id: str) -> str:
         key_material = secrets.token_urlsafe(32)
+        self.store_secret(key_id, key_material)
+        return key_material
+
+    def store_secret(self, key_id: str, key_material: str) -> str:
         try:
             self.client.secrets.kv.v2.create_or_update_secret(
                 path=key_id, secret={"key_material": key_material}, mount_point="apikeys"
@@ -51,7 +55,7 @@ class HashiCorpVaultProvider(VaultProvider):
                 ) from e
             else:
                 raise RuntimeError(f"Failed to create API key in Vault: {e}") from e
-        return key_material
+        return key_id
 
     def get_key(self, key_id: str) -> str:
         try:

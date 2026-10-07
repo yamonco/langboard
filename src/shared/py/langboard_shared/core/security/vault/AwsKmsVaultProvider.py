@@ -3,6 +3,7 @@ import secrets
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError, NoCredentialsError, PartialCredentialsError
 from ....Env import Env
+from .SecretEnvelope import PREFIX, open_secret, seal_secret
 from .VaultProvider import VaultProvider
 
 
@@ -29,7 +30,12 @@ class AwsKmsVaultProvider(VaultProvider):
         return "aws"
 
     def create_key(self, key_id: str) -> str:
-        key_material = secrets.token_urlsafe(32)
+        return self._encrypt_material(key_id, secrets.token_urlsafe(32))
+
+    def store_secret(self, key_id: str, key_material: str) -> str:
+        return seal_secret(key_material, lambda key: self._encrypt_material(key_id, key))
+
+    def _encrypt_material(self, key_id: str, key_material: str) -> str:
         try:
             response = self.client.encrypt(KeyId=self.key_arn, Plaintext=f"{key_id}:{key_material}".encode())
             return base64.b64encode(response["CiphertextBlob"]).decode()
@@ -52,6 +58,8 @@ class AwsKmsVaultProvider(VaultProvider):
             raise RuntimeError(f"Failed to encrypt API key with AWS KMS: {e}") from e
 
     def get_key(self, key_id: str) -> str:
+        if key_id.startswith(PREFIX):
+            return open_secret(key_id, self.get_key)
         try:
             ciphertext = base64.b64decode(key_id)
             response = self.client.decrypt(CiphertextBlob=ciphertext)
