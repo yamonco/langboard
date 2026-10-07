@@ -95,3 +95,13 @@ for (const width of [1440, 390]) {
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     });
 }
+
+test("board App disable confirms and refreshes the stored state", async ({ page }) => {
+    await page.goto(`${path}?store&enabled`);
+    await page.getByRole("button", { name: "Disable App", exact: true }).click();
+    expect(await page.evaluate(() => (window as unknown as { workflowWrites: unknown[] }).workflowWrites.length)).toBe(0);
+    await page.getByRole("button", { name: "Confirm disable App" }).click();
+    await expect(page.getByRole("button", { name: "Disable App", exact: true })).toHaveCount(0);
+    const writes = await page.evaluate(() => (window as unknown as { workflowWrites: unknown[] }).workflowWrites);
+    expect(writes).toEqual([{ binding_uid: "binding", expected_revision: "a".repeat(64), url: "/board/fixture/settings/apps/github/disable" }]);
+});

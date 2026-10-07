@@ -681,6 +681,32 @@ def get_board_app_catalog(
     return JsonResponse(content={"apps": items})
 
 
+@form_model
+class DisableBoardAppForm(BaseFormModel):
+    model_config = {"extra": "forbid"}
+    binding_uid: str = Field(..., min_length=1, max_length=64)
+    expected_revision: str = Field(..., pattern=r"^[0-9a-f]{64}$")
+
+
+@AppRouter.schema(form=DisableBoardAppForm, permission=ApiPermission.Edit)
+@AppRouter.api.post("/board/{project_uid}/settings/apps/{app_key}/disable", tags=["Board.Settings"])
+@RoleFilter.add(ProjectRole, [ProjectRoleAction.Update], RoleFinder.project)
+@AuthFilter.add("user")
+def disable_board_app(
+    project_uid: str, app_key: str, form: DisableBoardAppForm,
+    user: User = Auth.scope("user"), service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    try:
+        binding = service.workflow_stage.disable_app_binding(
+            user, project_uid, app_key, form.binding_uid, form.expected_revision,
+        )
+    except WorkflowStageEditConflict:
+        raise ApiException.Conflict_409(ApiErrorCode.EX3004) from None
+    if binding is None:
+        raise ApiException.NotFound_404(ApiErrorCode.NF2001)
+    return JsonResponse(content={"state": binding.state, "revision": binding.edit_revision()})
+
+
 def _app_workflow_response(snapshot: dict) -> dict:
     binding = snapshot["binding"]
     result = snapshot["mapping"]

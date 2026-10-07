@@ -172,6 +172,9 @@
     "App resource state unavailable": "利用不可",
     "App resource state pending": "保留",
     "App resource state connected": "接続済み",
-    "App resource state disconnected": "接続解除"
+    "App resource state disconnected": "接続解除",
+    "Disable App": "アプリを無効にする",
+    "Confirm disable App": "無効化を確認",
+    "Disable App help": "このボードのアプリと自動遷移を無効にします。リソース選択と共有接続は保持されます。"
   }
 }

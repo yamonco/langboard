@@ -10,11 +10,13 @@ import { api } from "@/core/helpers/Api";
 const writes: unknown[] = [];
 const missing = new URLSearchParams(location.search).has("missing");
 let repaired = false;
+let disabled = false;
 Object.assign(window, { workflowWrites: writes });
 api.defaults.adapter = async (config) => {
     if (config.method === "put" || config.method === "post") {
         writes.push({ ...JSON.parse(config.data ?? "{}"), url: config.url });
         if (!config.url?.endsWith("/workflow")) repaired = true;
+        if (config.url?.endsWith("/disable")) disabled = true;
     }
     if (config.url?.endsWith("/settings/apps"))
         return {
@@ -26,7 +28,16 @@ api.defaults.adapter = async (config) => {
                 apps: ["github", "glitchtip", "dokploy"].map((key) => ({
                     key,
                     name: { github: "GitHub", glitchtip: "GlitchTip", dokploy: "Dokploy" }[key],
-                    binding: key === "github" ? { state: "disabled", granted_capabilities: [], stage_transitions_enabled: false } : null,
+                    binding:
+                        key === "github"
+                            ? {
+                                  uid: "binding",
+                                  revision: "a".repeat(64),
+                                  state: !disabled && new URLSearchParams(location.search).has("enabled") ? "enabled" : "disabled",
+                                  granted_capabilities: [],
+                                  stage_transitions_enabled: false,
+                              }
+                            : null,
                     resources: {
                         selected_count: key === "github" ? 2 : 0,
                         access_counts: key === "github" ? { granted: 1, denied: 1 } : {},

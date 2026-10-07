@@ -172,6 +172,9 @@
     "App resource state unavailable": "不可用",
     "App resource state pending": "待处理",
     "App resource state connected": "已连接",
-    "App resource state disconnected": "已断开"
+    "App resource state disconnected": "已断开",
+    "Disable App": "禁用应用",
+    "Confirm disable App": "确认禁用应用",
+    "Disable App help": "禁用此看板应用及自动转换，保留资源选择和共享连接。"
   }
 }
