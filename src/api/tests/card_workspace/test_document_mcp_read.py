@@ -81,7 +81,7 @@ def test_pending_document_does_not_expose_stale_content(monkeypatch):
     assert result["content"] == "" and result["next_offset"] is None
 
 
-@pytest.mark.parametrize("changed", ["permission", "generation", "pointer", "deleted"])
+@pytest.mark.parametrize("changed", ["permission", "generation", "pointer", "deleted", "unchanged"])
 def test_vector_search_rechecks_current_source_after_provider_call(monkeypatch, changed):
     from contextlib import nullcontext
     from langboard_shared.domain.models.InternalBot import InternalBotType
@@ -135,15 +135,20 @@ def test_vector_search_rechecks_current_source_after_provider_call(monkeypatch, 
             service.project.get_user_role_actions_by_project.return_value = []
         elif changed == "deleted":
             attachment.deleted_at = "deleted"
-        else:
+        elif changed != "unchanged":
             latest = {**document, "embedding": {**document["embedding"]}}
             if changed == "generation":
                 latest["generation"] = "replacement"
             else:
                 latest["embedding"]["pointer"] = {**document["embedding"]["pointer"], "generation": "replacement"}
             service.docling_metadata.get_document_by_attachment_uid.return_value = latest
-        return [{"content": "must-not-return"}]
+        return [{"content": "authorized excerpt", "pages": [3]}]
 
     monkeypatch.setattr(query_module, "search_vector_generation", revoke)
-    with pytest.raises(ValueError, match="unavailable|generation changed"):
-        CardMcp.search_card_document("board", "card", "attachment", "query", object(), service)
+    if changed == "unchanged":
+        result = CardMcp.search_card_document("board", "card", "attachment", "query", object(), service)
+        assert result["matches"] == [{"content": "authorized excerpt", "pages": [3]}]
+        assert result["generation"] == "current"
+    else:
+        with pytest.raises(ValueError, match="unavailable|generation changed"):
+            CardMcp.search_card_document("board", "card", "attachment", "query", object(), service)

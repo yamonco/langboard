@@ -113,3 +113,32 @@ def test_official_qdrant_generation_query_accepts_real_chunk_ids_and_filters_old
     hits = search_vector_generation(store, pointer, "alpha", settings)
     assert len(hits) == 1 and hits[0]["content"] == "alpha current"
     client.close()
+
+
+def test_structural_pages_survive_official_sqlite_persistence_and_query(tmp_path):
+    from docling_core.types.doc import BoundingBox, DocItemLabel, DoclingDocument, ProvenanceItem, Size
+
+    document = DoclingDocument(name="Source pages")
+    document.add_heading("원문 source")
+    document.add_page(page_no=3, size=Size(width=600, height=800))
+    text = "alpha 한국어 source 日本語 中文"
+    document.add_text(
+        label=DocItemLabel.TEXT, text=text,
+        prov=ProvenanceItem(page_no=3, bbox=BoundingBox(l=0, t=0, r=600, b=800), charspan=(0, len(text))),
+    )
+    path = tmp_path / "structural.sqlite"
+    with open_sqlite_vector_store(path, Fixture(), dimensions=3) as store:
+        pointer = stage_vector_generation(
+            store,
+            source={"board_uid": "board", "card_uid": "card", "attachment_uid": "attachment",
+                    "content_hash": "hash", "embedding_fingerprint": "a" * 64},
+            text=document.export_to_markdown(),
+            document_json=document.export_to_dict(),
+            splitter=DocumentSplitterSettings(chunk_size=96, chunk_overlap=8),
+            storage={"type": "sqlite"},
+        )
+    with open_sqlite_vector_store(path, Fixture(), dimensions=3) as store:
+        hits = search_vector_generation(store, pointer, "alpha", DocumentRetrievalSettings(dimensions=3))
+    assert hits and all(hit["pages"] == [3] for hit in hits)
+    assert all(hit["source"]["content_hash"] == "hash" for hit in hits)
+    assert any("한국어" in hit["content"] and "日本語" in hit["content"] for hit in hits)
