@@ -114,6 +114,26 @@
       "Description cannot be empty.": "Description cannot be empty."
     },
     "New Label": "New Label",
-    "Sample label description": "Sample label description"
+    "Sample label description": "Sample label description",
+    "Apps workflow": "Apps workflow",
+    "App": "App",
+    "App workflow draft help": "Configure workflow destinations. Connections need separate setup. Saving keeps automatic transitions off.",
+    "App workflow unavailable": "Workflow settings unavailable",
+    "App workflow save failed": "Could not save. Reload settings and try again.",
+    "In progress": "In progress",
+    "Review": "Review",
+    "Completed": "Completed",
+    "Ready": "Ready",
+    "Required": "Required",
+    "Optional": "Optional",
+    "Select column": "Select column",
+    "Column": "Column",
+    "Previous column unavailable": "Previous column unavailable",
+    "Mapping missing": "Assign this stage to a board column first.",
+    "Mapping ambiguous": "Choose one destination.",
+    "Mapping resolved": "Destination selected",
+    "Mapping invalid": "Check the previous mapping.",
+    "Save workflow mapping": "Save workflow mapping",
+    "Prepare workflow settings": "Prepare workflow settings"
   }
 }
