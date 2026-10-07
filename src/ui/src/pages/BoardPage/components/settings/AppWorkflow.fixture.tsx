@@ -23,7 +23,9 @@ api.defaults.adapter = async (config) => {
         data: {
             binding: { uid: "binding", revision: "a".repeat(64), workflow_mapping: { active: "one" } },
             column_names: { one: "Doing", two: "Implementation" },
-            available_columns: [{ uid: "two", name: "Implementation", workflow_stage: null }],
+            available_columns: [
+                { uid: "two", name: "Implementation", workflow_stage: new URLSearchParams(location.search).has("replace") ? "review" : null },
+            ],
             choices: [
                 {
                     stage: "active",

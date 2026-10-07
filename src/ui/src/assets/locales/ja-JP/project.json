@@ -139,6 +139,8 @@
     "Existing column for stage": "ステージを設定する既存の列",
     "Assign stage to column": "列にステージを設定",
     "New workflow column name": "新しいワークフロー列名",
-    "Create column with stage": "ステージ付きの列を作成"
+    "Create column with stage": "ステージ付きの列を作成",
+    "Replace column stage warning": "ステージを変更すると、このボードのすべてのアプリで列の意味が変わります。",
+    "Confirm stage replacement": "ステージの変更を確認"
   }
 }

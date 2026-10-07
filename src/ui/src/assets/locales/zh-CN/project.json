@@ -139,6 +139,8 @@
     "Existing column for stage": "指定阶段的现有列",
     "Assign stage to column": "为列指定阶段",
     "New workflow column name": "新工作流列名称",
-    "Create column with stage": "创建带阶段的列"
+    "Create column with stage": "创建带阶段的列",
+    "Replace column stage warning": "更改阶段会改变此看板所有应用中的列含义。",
+    "Confirm stage replacement": "确认更改阶段"
   }
 }
