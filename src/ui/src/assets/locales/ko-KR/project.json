@@ -172,6 +172,9 @@
     "App resource state unavailable": "사용 불가",
     "App resource state pending": "대기",
     "App resource state connected": "연결됨",
-    "App resource state disconnected": "연결 해제"
+    "App resource state disconnected": "연결 해제",
+    "Disable App": "앱 비활성화",
+    "Confirm disable App": "앱 비활성화 확인",
+    "Disable App help": "이 보드의 앱과 자동 전환을 끕니다. 리소스 선택과 공유 연결은 보존됩니다."
   }
 }

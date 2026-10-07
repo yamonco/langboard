@@ -169,3 +169,26 @@ def test_catalog_resource_summary_is_board_scoped_and_selection_scoped(board, bi
     assert items[1]["resources"]["selected_count"] == 0
     assert "private-test-reference" not in json.dumps(items)
     assert "external_resource_id" not in json.dumps(items)
+
+
+def test_disable_is_scoped_revision_checked_and_preserves_other_bindings(board, binding):
+    from langboard_shared.domain.models import BoardAppBinding
+    from langboard_shared.domain.services.factory.WorkflowStageService import WorkflowStageEditConflict
+    with DbSession.use(readonly=False) as db:
+        other = BoardAppBinding(project_id=11, app_key="github", state="enabled", granted_capabilities=["signals.read"])
+        db.insert(other)
+    original_mapping = dict(binding.workflow_mapping)
+    revision = binding.edit_revision()
+    assert board[0].disable_app_binding(board[1], board[2].get_uid(), "github", other.get_uid(), other.edit_revision()) is None
+    disabled = board[0].disable_app_binding(board[1], board[2].get_uid(), "github", binding.get_uid(), revision)
+    assert disabled.state == "disabled" and not disabled.stage_transitions_enabled and not disabled.granted_capabilities
+    assert disabled.workflow_mapping == original_mapping
+    with pytest.raises(WorkflowStageEditConflict):
+        board[0].disable_app_binding(board[1], board[2].get_uid(), "github", binding.get_uid(), revision)
+    from langboard_shared.core.db import SqlBuilder
+    with DbSession.use(readonly=False) as db:
+        stored_other = db.exec(SqlBuilder.select.table(BoardAppBinding).where(BoardAppBinding.id == other.id)).first()
+        assert stored_other.state == "enabled" and stored_other.granted_capabilities == ["signals.read"]
+        board[4].actions = ["read"]
+        db.update(board[4])
+    assert board[0].disable_app_binding(board[1], board[2].get_uid(), "github", binding.get_uid(), disabled.edit_revision()) is None
