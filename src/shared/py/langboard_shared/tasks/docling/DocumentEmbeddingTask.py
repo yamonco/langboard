@@ -1,6 +1,7 @@
 """Embed only a queued, current transcription snapshot; never scan existing attachments."""
 
 from json import loads
+from sqlite3 import OperationalError
 from ...core.broker import Broker
 from ...core.routing import SocketTopic
 from ...domain.models import CardMetadata
@@ -8,7 +9,7 @@ from ...domain.models.InternalBot import InternalBotType
 from ...domain.services import DomainService
 from ...Env import Env
 from .DocumentEmbedding import create_document_embeddings, resolve_embedding_snapshot, validate_embedding_config
-from .DocumentSqliteStore import open_document_store
+from .DocumentSqliteStore import open_document_store, remove_document_generation
 from .DocumentVectorGeneration import delete_attachment_generation, embedding_fingerprint, replace_attachment_generation
 
 
@@ -23,6 +24,15 @@ async def index_transcribed_attachment(request: str):
             )
     finally:
         service.close()
+
+
+@Broker.wrap_async_task_decorator({"autoretry_for": (OperationalError,), "retry_backoff": True, "max_retries": 3})
+async def remove_attachment_embedding(request: str):
+    """Only the committed attachment lifecycle supplies this server-owned pointer."""
+    pointer = loads(request)
+    if not isinstance(pointer, dict):
+        raise ValueError("A recorded embedding pointer is required")
+    remove_document_generation(Env.DATA_DIR / "document-retrieval", pointer)
 
 
 def embed_transcription(service, attachment_uid: str, generation: str, request_uid: str | None = None) -> None:

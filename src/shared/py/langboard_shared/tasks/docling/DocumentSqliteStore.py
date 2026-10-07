@@ -1,5 +1,6 @@
 """Open the official LangGraph store with LangChain embeddings and SQLite lifecycle guarantees."""
 
+import re
 import sqlite3
 from contextlib import contextmanager
 from math import isfinite
@@ -62,5 +63,32 @@ def open_document_store(
         # setup performs migration DML. End it before the store starts its own transaction.
         connection.commit()
         yield store
+    finally:
+        connection.close()
+
+
+def remove_document_generation(directory: Path, pointer: dict) -> None:
+    """Remove one recorded generation without resolving an embedding provider.
+
+    Opening an existing database without an index avoids inference, credential
+    access and vector-extension loading. The official delete batch still removes
+    vectors through the store's foreign-key cascade.
+    """
+    from langgraph.store.sqlite import SqliteStore
+    from .DocumentVectorGeneration import delete_attachment_generation
+
+    fingerprint = pointer.get("embedding_fingerprint")
+    if not isinstance(fingerprint, str) or not re.fullmatch(r"[0-9a-f]{64}", fingerprint):
+        raise ValueError("Invalid embedding fingerprint")
+    path = directory / (fingerprint + ".sqlite")
+    if not path.is_file():
+        return
+    connection = sqlite3.connect(path.resolve().as_uri() + "?mode=rw", uri=True, timeout=10)
+    try:
+        connection.execute("PRAGMA foreign_keys=ON")
+        store = SqliteStore(connection)
+        store.setup()
+        connection.commit()
+        delete_attachment_generation(store, pointer)
     finally:
         connection.close()
