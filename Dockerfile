@@ -47,7 +47,7 @@ RUN apt-get update \
     && fc-match -f '%{family}\n' ':lang=ko' | grep -q 'Noto.*CJK' \
     && rm -rf /var/lib/apt/lists/*
 
-RUN cd /app && uv sync --locked --no-dev --extra document-processing
+RUN cd /app && uv sync --locked --no-dev --extra document-processing --extra document-retrieval
 
 FROM base AS with-cron
 
