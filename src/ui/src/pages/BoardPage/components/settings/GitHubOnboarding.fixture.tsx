@@ -13,9 +13,17 @@ sessionStorage.setItem(
     JSON.stringify({ connection_uid: "conn", installation_url: "https://github.com/apps/fixture/installations/new" })
 );
 sessionStorage.setItem("github-onboarding:me:fixture:kind", params.has("manifest") ? "manifest" : "authorization");
-if (params.has("new")) sessionStorage.removeItem("github-onboarding:me:fixture");
+if (params.has("new") || params.has("existing")) sessionStorage.removeItem("github-onboarding:me:fixture");
 api.defaults.adapter = async (config) => {
     calls.push({ url: config.url, method: config.method, data: config.data ? JSON.parse(config.data) : null });
+    if (config.url?.endsWith("connections"))
+        return {
+            config,
+            status: 200,
+            statusText: "OK",
+            headers: {},
+            data: { items: params.has("existing") ? [{ connection_uid: "stored", app_id: "42", state: "pending" }] : [], next_cursor: null },
+        };
     if (config.url?.endsWith("manifest"))
         return {
             config,

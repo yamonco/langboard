@@ -49,3 +49,13 @@ test("manifest return and creation form", async ({ page }) => {
     await expect.poll(() => submitted).toContain("manifest=");
     expect(JSON.parse(new URLSearchParams(submitted).get("manifest")!)).toMatchObject({ name: "Langboard" });
 });
+
+test("fresh tab can reselect owned connection and reset", async ({ page }) => {
+    await page.goto("/src/pages/BoardPage/components/settings/GitHubOnboarding.fixture.html?existing");
+    await page.getByRole("combobox", { name: "Existing GitHub connection" }).selectOption("stored");
+    await expect(page.getByRole("button", { name: "Verify GitHub account" })).toBeEnabled();
+    await expect(page.getByRole("button", { name: "Install GitHub App" })).toBeDisabled();
+    expect(await page.evaluate(() => JSON.parse(sessionStorage.getItem("github-onboarding:me:fixture")!).connection_uid)).toBe("stored");
+    await page.getByRole("combobox", { name: "Existing GitHub connection" }).selectOption("");
+    await expect(page.getByRole("button", { name: "Create GitHub App" })).toBeEnabled();
+});

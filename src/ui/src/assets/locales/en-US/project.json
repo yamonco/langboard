@@ -187,6 +187,11 @@
     "GitHub installation limit": "First 100 installations shown. Additional installations require a later discovery flow.",
     "GitHub repository selection help": "Select repositories. Save up to 25 additions and 25 removals at a time; verification expires after 5 minutes.",
     "More GitHub repositories": "More repositories",
-    "Save GitHub repositories": "Save repository selection"
+    "Save GitHub repositories": "Save repository selection",
+    "GitHub connections unavailable": "Connections unavailable.",
+    "Existing GitHub connection": "Existing GitHub connection",
+    "Create new GitHub connection": "Create new connection",
+    "Current GitHub connection": "Current connection",
+    "More GitHub connections": "More connections"
   }
 }

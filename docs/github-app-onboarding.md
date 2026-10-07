@@ -27,7 +27,7 @@ private key or webhook URL is required by this registration path.
 
 ## Remaining acceptance
 
-Live installation acceptance, reusable Connection selection in fresh browser tabs,
+Live installation acceptance,
 installation lifecycle callback state, reinstall/uninstall lifecycle and webhook
 processing remain
 pending. Store onboarding availability must remain false until these paths work.
@@ -123,5 +123,20 @@ share the same onboarding controls.
 
 Browser fixture acceptance covers 1440px/390px, callback cleanup, official form
 submission, repository deltas and read-only denial with mocked native API. It is
-not live OAuth acceptance. Fresh-tab Connection discovery/re-selection, automatic
-installation-return processing and global Store setup availability remain pending.
+not live OAuth acceptance. Automatic installation-return processing and global Store setup availability remain pending.
+
+## Reusable Connection discovery
+
+Authenticated GET `/board/{uid}/settings/apps/github/connections` requires current
+board update authority and lists only the current host user's GitHub Connections
+in pending/connected state. Fifty-row keyset pages expose Connection UID, App ID
+and state; no credential URI or material is resolved or returned. Other users'
+connections and revoked/disconnected rows remain hidden. Native OAuth and resource
+mutation recheck authority independently after selection.
+
+The settings panel can choose an existing Connection in a fresh tab, fetch more
+connections and return to new registration. Switching clears installation/proof/
+repository edit state. Reused Connections lack a stored App slug/install URL, so
+install navigation remains unavailable for them; account verification and existing
+installation selection work. App metadata refresh and reinstall navigation remain
+acceptance work.
