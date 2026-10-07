@@ -1,9 +1,10 @@
 from typing import Any, Literal, TypeVar, cast, overload
 from urllib.parse import urlparse
-from ....core.db import BaseDbModel, EditorContentModel
+from ....core.db import BaseDbModel, DbSession, EditorContentModel, SqlBuilder
 from ....core.domain import BaseDomainService
 from ....core.publisher import NotificationPublisher, NotificationPublishModel
 from ....core.resources.locales.EmailTemplateNames import TEmailTemplateName
+from ....core.security.CollaborationChannel import CollaborationChannel
 from ....core.types import SafeDateTime, SnowflakeID
 from ....core.types.ParamTypes import TNotificationParam, TUserOrBot, TUserParam
 from ....core.utils.EditorContentParser import change_date_element, find_mentioned
@@ -51,20 +52,24 @@ class NotificationService(BaseDomainService):
         limit: int = 20,
         unread_only: bool = False,
         authorized_projects_only: bool = False,
+        *, channel: CollaborationChannel = CollaborationChannel.Api,
     ) -> tuple[list[dict[str, Any]], bool, int]:
         """Return one notification page, optionally limited to unread rows."""
 
-        raw_notifications = self.repo.user_notification.get_list(
-            user,
-            time_range,
-            page,
-            limit,
-            unread_only,
-            authorized_projects_only,
+        from .CardService import CardService
+
+        if not isinstance(user, User):
+            return [], False, 0
+        with DbSession.use(readonly=False) as db:
+            current = db.exec(SqlBuilder.select.table(User).where(User.id == user.id)).first()
+        if current is None or current.deleted_at or not current.activated_at:
+            return [], False, 0
+        contexts = self._get_service(CardService).resolve_work_visibility_contexts(current, channel)
+        raw_notifications, unread_count = self.repo.user_notification.get_scoped_list(
+            current, time_range, page, limit, unread_only, contexts=contexts,
         )
         has_more = len(raw_notifications) > limit
         raw_notifications = raw_notifications[:limit]
-        unread_count = self.repo.user_notification.count_unread(user, time_range)
 
         references: list[tuple[str, int]] = []
         for notification in raw_notifications:

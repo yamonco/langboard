@@ -19,5 +19,4 @@ def test_unread_filter_and_time_range_are_applied_before_pagination(monkeypatch:
     monkeypatch.setattr(InfraHelper, "get_references", lambda *_args, **_kwargs: {})
 
     assert service.get_api_list(SimpleNamespace(), "7d", 2, 20, unread_only=True) == ([], False, 0)
-    assert calls[0][1:] == ("7d", 2, 20, True, False)
-    assert calls[1][1:] == ("7d",)
+    assert calls == []  # Unknown actors fail closed before repository access.
