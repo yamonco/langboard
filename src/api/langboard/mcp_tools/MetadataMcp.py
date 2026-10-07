@@ -1,4 +1,5 @@
 from langboard_shared.core.routing import SocketTopic
+from langboard_shared.core.security.CollaborationChannel import CollaborationChannel
 from langboard_shared.domain.models import (
     Bot,
     Card,
@@ -20,11 +21,11 @@ from ..mcp_integration import McpRoleFilter, McpTool
 @McpTool.add(description="Get card metadata.")
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
 def get_card_metadata(project_uid: str, card_uid: str, user_or_bot: User | Bot, service: DomainService) -> dict:
-    params = InfraHelper.get_records_with_foreign_by_params((Project, project_uid), (Card, card_uid))
+    params = service.card.resolve_readable_card(project_uid, card_uid, user_or_bot, CollaborationChannel.Mcp)
     if not params:
         raise ValueError("Project or card not found")
 
-    _, card = params
+    _, card, _ = params
     metadata = service.metadata.get_all_as_api(CardMetadata, card, as_dict=True)
     return {"metadata": metadata}
 
@@ -34,11 +35,11 @@ def get_card_metadata(project_uid: str, card_uid: str, user_or_bot: User | Bot, 
 def get_card_metadata_by_key(
     project_uid: str, card_uid: str, key: str, user_or_bot: User | Bot, service: DomainService
 ) -> dict:
-    params = InfraHelper.get_records_with_foreign_by_params((Project, project_uid), (Card, card_uid))
+    params = service.card.resolve_readable_card(project_uid, card_uid, user_or_bot, CollaborationChannel.Mcp)
     if not params:
         raise ValueError("Project or card not found")
 
-    _, card = params
+    _, card, _ = params
     metadata = service.metadata.get_by_key_as_api(CardMetadata, card, key)
     value = metadata.get("value", None) if metadata else None
     return {key: value}

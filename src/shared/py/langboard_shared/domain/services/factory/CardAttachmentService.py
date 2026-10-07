@@ -3,7 +3,7 @@ from typing import Any
 from uuid import uuid4
 from ....core.broker import Broker
 from ....core.broker.TaskParameters import TaskParameters
-from ....core.db import DbSession
+from ....core.db import DbSession, SqlBuilder
 from ....core.domain import BaseDomainService
 from ....core.routing import SocketTopic
 from ....core.storage import FileModel
@@ -33,7 +33,12 @@ class CardAttachmentService(BaseDomainService):
         card_service = self._get_service(CardService)
         card_service.mark_card_changed(card, target_type, target_id)
 
-    def get_by_id_like(self, attachment: TAttachmentParam | None) -> CardAttachment | None:
+    def get_by_id_like(self, attachment: TAttachmentParam | None, *, consistent: bool = False) -> CardAttachment | None:
+        if consistent:
+            if attachment is None:
+                return None
+            with DbSession.use(readonly=False) as db:
+                return db.exec(SqlBuilder.select.table(CardAttachment).where(CardAttachment.id == InfraHelper.convert_id(attachment))).first()
         attachment = InfraHelper.get_by_id_like(CardAttachment, attachment)
         return attachment
 

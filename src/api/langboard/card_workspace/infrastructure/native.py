@@ -333,9 +333,10 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
         )
 
     def get_public_card_metadata(self, project_uid: str, card_uid: str) -> dict[str, str] | None:
-        card = self._ensure_card(project_uid, card_uid, required=False)
-        if card is None:
+        resolved = self._service.card.resolve_readable_card(project_uid, card_uid, self._actor, self._channel)
+        if resolved is None:
             return None
+        _, card, _ = resolved
         metadata = self._bounded_mapping(
             self._service.metadata.get_all_as_api(CardMetadata, card, as_dict=True, limit=_SOURCE_QUERY_LIMIT),
             "metadata",

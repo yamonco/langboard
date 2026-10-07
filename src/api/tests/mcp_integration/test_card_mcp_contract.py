@@ -141,11 +141,11 @@ def test_plugin_compatibility_tools_preserve_native_contracts(monkeypatch: pytes
     card = object()
     monkeypatch.setattr(CardMcp, "_get_card_in_project", lambda *args: (object(), card))
     service = SimpleNamespace(
-        card=SimpleNamespace(get_details=lambda *args: {"description": "![img](image.png)"}),
+        card=SimpleNamespace(get_details=lambda *args, **kwargs: {"description": "![img](image.png)"}, resolve_readable_card=lambda *args: (object(), card, object())),
         card_attachment=SimpleNamespace(get_api_list_by_card=lambda value: [{"uid": "attachment", "url": "image.png"}]),
     )
     assert "description" in CardMcp.get_card("board", "card", None, service)
-    assert CardMcp.get_card_attachments("board", "card", service)["attachments"][0]["uid"] == "attachment"
+    assert CardMcp.get_card_attachments("board", "card", service, user_or_bot=object())["attachments"][0]["uid"] == "attachment"
 
 
 def test_comment_tools_use_native_owner_without_workspace_adapter(monkeypatch: pytest.MonkeyPatch) -> None:

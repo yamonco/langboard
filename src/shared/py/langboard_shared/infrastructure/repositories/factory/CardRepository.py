@@ -297,11 +297,11 @@ class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
             records = result.all()
         return records
 
-    def get_all_by_project(self, project: TProjectParam):
+    def get_all_by_project(self, project: TProjectParam, *, context: CardVisibilityContext | None = None):
         project_id = InfraHelper.convert_id(project)
 
         records = []
-        with DbSession.use(readonly=True) as db:
+        with DbSession.use(readonly=context is None) as db:
             result = db.exec(
                 SqlBuilder.select.tables(Card, ProjectColumn)
                 .join(
@@ -309,6 +309,8 @@ class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
                     Card.column("project_column_id") == ProjectColumn.column("id"),
                 )
                 .where(Card.column("project_id") == project_id)
+                .where(card_visibility_scope(context) if context is not None else True)
+                .where(Card.deleted_at.is_(None))
                 .order_by(Card.column("order").asc())
             )
             records = result.all()
