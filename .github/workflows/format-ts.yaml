@@ -2,13 +2,19 @@ name: Format TS
 
 on: workflow_dispatch
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   NODE_VERSION: "22"
 
 jobs:
   run-ts-formatters:
     name: Run Formatters
-    runs-on: ubuntu-latest
+    if: vars.CI_RUNNER != ''
+    timeout-minutes: 20
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"unconfigured"') }}
     permissions:
       contents: write
     steps:

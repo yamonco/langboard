@@ -2,13 +2,19 @@ name: Lint TS
 
 on: workflow_dispatch
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   NODE_VERSION: "22"
 
 jobs:
   run-linters:
     name: Run Linters
-    runs-on: ubuntu-latest
+    if: vars.CI_RUNNER != ''
+    timeout-minutes: 20
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"unconfigured"') }}
     permissions:
       contents: write
     steps:

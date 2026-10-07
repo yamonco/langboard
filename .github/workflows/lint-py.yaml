@@ -2,10 +2,16 @@ name: Lint Python
 
 on: workflow_dispatch
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   run-core-linter:
     name: Lint (src/shared/py via uv)
-    runs-on: ubuntu-latest
+    if: vars.CI_RUNNER != ''
+    timeout-minutes: 20
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"unconfigured"') }}
     defaults:
       run:
         working-directory: src/shared/py
@@ -38,7 +44,9 @@ jobs:
           uv run ruff check .
   run-root-linter:
     name: Lint (root via uv)
-    runs-on: ubuntu-latest
+    if: vars.CI_RUNNER != ''
+    timeout-minutes: 20
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"unconfigured"') }}
     strategy:
       matrix:
         python-version:
@@ -75,7 +83,9 @@ jobs:
           uv run ruff check .
   run-graph-linter:
     name: Lint (src/graph via uv)
-    runs-on: ubuntu-latest
+    if: vars.CI_RUNNER != ''
+    timeout-minutes: 20
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"unconfigured"') }}
     defaults:
       run:
         working-directory: src/graph
