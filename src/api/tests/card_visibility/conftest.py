@@ -22,7 +22,11 @@ def current_card(monkeypatch, request):
         database_url = os.environ.get("LANGBOARD_FILE_TEST_DATABASE_URL")
         if not database_url:
             pytest.skip("Set LANGBOARD_FILE_TEST_DATABASE_URL to a disposable PostgreSQL database")
-    engine = create_engine(database_url)
+    if database_url == "sqlite-http":
+        from sqlalchemy.pool import StaticPool
+        engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    else:
+        engine = create_engine(database_url)
     schema = None
     if engine.dialect.name == "postgresql":
         schema = "notification_test_" + uuid4().hex
