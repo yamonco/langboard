@@ -93,7 +93,7 @@ def project_work_state(
                 }
             )
         if not direct_blockers:
-            reasons.append(reason("dependencies_clear", "No unsatisfied blocks prerequisites.", "blockers"))
+            reasons.append(reason("dependencies_clear", "No unsatisfied readable blocks prerequisites.", "blockers"))
     if pending_approval_count:
         reasons.append(reason("approval_pending", "A current native card approval requires a decision.", "approvals"))
     reasons.append(

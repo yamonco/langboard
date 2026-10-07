@@ -105,7 +105,7 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
         details["project_column_name"] = column.name
         details["workflow_stage"] = getattr(column, "workflow_stage", None)
         details.update(self._service.project_column.get_workflow_guidance([column])[column.id])
-        details["work_state"] = self._service.card.get_work_states([card])[card.id]
+        details["work_state"] = self._service.card.get_work_states([card], context=visibility_context)[card.id]
 
         if "people" in requested_sections:
             people = self._bounded_source(

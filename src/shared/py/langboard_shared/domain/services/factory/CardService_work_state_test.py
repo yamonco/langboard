@@ -15,7 +15,7 @@ def test_card_batch_uses_bounded_queries_and_no_actor_or_editable_metadata(monke
         yield db
 
     monkeypatch.setattr(import_module(CardService.__module__).DbSession, "use", use)
-    dependency_query = Mock(return_value={2: []})
+    dependency_query = Mock(return_value={2: None})
     monkeypatch.setattr(import_module(CardService.__module__), "dependency_blockers", dependency_query)
     approval_query = Mock(return_value={2: 1})
     monkeypatch.setattr(import_module(CardService.__module__), "pending_card_approvals", approval_query)
@@ -58,10 +58,12 @@ def test_card_batch_uses_bounded_queries_and_no_actor_or_editable_metadata(monke
     db.exec.assert_called_once()
     counts.assert_called_once_with([2])
     service.repo.workflow_stage.get_by_keys.assert_called_once_with({"review"})
-    dependency_query.assert_called_once_with([2])
+    dependency_query.assert_called_once_with([2], context=None)
     verifications.assert_called_once_with([2])
     generation_query.assert_called_once_with([2])
     approval_query.assert_called_once_with([2])
+    assert result[2]["dependency_state"] == {"state": None, "direct_blockers": None, "scope": None}
+    assert not any(reason["code"].startswith("dependency_") or reason["code"] == "dependencies_clear" for reason in result[2]["reasons"])
     assert result[2]["pending_approval_count"] == 1
     assert result[2]["blocker_state"] == "needs_approval"
     assert result[2]["active_queue_eligible"] is False

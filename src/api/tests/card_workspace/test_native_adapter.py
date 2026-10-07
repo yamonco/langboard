@@ -102,7 +102,7 @@ def _service(people: list[dict[str, Any]] | None = None) -> tuple[Any, list[tupl
         card=SimpleNamespace(
             get_by_id_like=lambda uid: card,
             resolve_readable_card=lambda project_arg, card_arg, *args: (project_arg, card_arg, object()),
-            get_work_states=lambda cards: {item.id: {"version": 1} for item in cards},
+            get_work_states=lambda cards, **kwargs: {item.id: {"version": 1} for item in cards},
             can_delete=lambda actor, target: False,
             is_check_card=lambda target: False,
             _get_completion_checklist=lambda target: None,
@@ -305,7 +305,7 @@ def test_native_checkitem_continuation_reads_only_the_requested_checklist() -> N
         card=SimpleNamespace(
             get_by_id_like=lambda _uid: card,
             resolve_readable_card=lambda *args: (project, card, object()),
-            get_work_states=lambda cards: {item.id: {"version": 1} for item in cards},
+            get_work_states=lambda cards, **kwargs: {item.id: {"version": 1} for item in cards},
             can_delete=lambda actor, target: False,
             is_check_card=lambda target: False,
             _get_completion_checklist=lambda target: None,

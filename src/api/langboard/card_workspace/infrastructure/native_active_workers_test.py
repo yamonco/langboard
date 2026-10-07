@@ -18,13 +18,18 @@ def test_people_bundle_uses_native_workers_and_core_read_does_not_overfetch(monk
         id=2, project_column_id=3,
         api_response=lambda: {"uid": "card", "title": "Work", "description": {"content": ""}},
     )
+    context = object()
+    work_states = Mock(return_value={2: {"workflow_stage": None, "blocker_state": None}})
     workers = Mock(return_value={2: [{"user_uid": "worker", "status": "started", "checkitems": [{"uid": "item"}]}]})
     service = SimpleNamespace(
         card=SimpleNamespace(
             can_delete=lambda *_: False,
             get_api_assigned_user_list=lambda *_args, **_kwargs: [{"uid": "owner"}],
             get_active_workers=workers,
-            get_work_states=lambda _: {2: {"workflow_stage": None, "blocker_state": None}},
+            get_work_states=work_states,
+            resolve_readable_card=lambda *args: (project, card, context),
+            is_check_card=lambda _: False,
+            _get_completion_checklist=lambda _: None,
         ),
         project_column=SimpleNamespace(
             get_by_id_like=lambda _: SimpleNamespace(id=3, project_id=1, name="Doing"),
@@ -38,6 +43,7 @@ def test_people_bundle_uses_native_workers_and_core_read_does_not_overfetch(monk
     assert core.card.people is None
     assert core.card.work_state == {"workflow_stage": None, "blocker_state": None}
     workers.assert_not_called()
+    work_states.assert_called_once_with([card], context=context)
 
     result = get_card_bundle(adapter, "project", "card", CommentPage(), SectionPage(), [CardBundleInclude.People])
     assert result.card.people.items == [{"uid": "owner"}]
