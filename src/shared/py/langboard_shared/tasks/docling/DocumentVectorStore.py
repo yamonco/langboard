@@ -65,6 +65,50 @@ def open_qdrant_store(
         client.close()
 
 
+@contextmanager
+def open_document_vector_store(
+    settings, embeddings, fingerprint: str, directory, allowed_urls: set[str], *, create=True
+):
+    """Keep backend connection details outside MCP and document processing."""
+    import re
+    from .DocumentSqliteStore import open_sqlite_vector_store
+
+    if not re.fullmatch(r"[0-9a-f]{64}", fingerprint):
+        raise ValueError("Invalid embedding fingerprint")
+    if settings.store == "sqlite":
+        path = directory / (fingerprint + ".sqlite")
+        if create:
+            directory.mkdir(parents=True, exist_ok=True)
+        elif not path.is_file():
+            yield None
+            return
+        context = open_sqlite_vector_store(
+            path, embeddings, dimensions=settings.dimensions, timeout_seconds=settings.timeout_seconds
+        )
+    elif settings.store == "qdrant":
+        context = open_qdrant_store(settings, embeddings, fingerprint, allowed_urls, create=create)
+    else:
+        raise ValueError("Unsupported vector storage")
+    with context as store:
+        yield store
+
+
+def document_source_filter(storage: dict, source: dict):
+    """Translate exact source constraints to the official backend filter format."""
+    if storage.get("type") == "sqlite":
+        return source
+    if storage.get("type") != "qdrant":
+        raise ValueError("Unsupported vector storage")
+    from qdrant_client import models
+
+    return models.Filter(
+        must=[
+            models.FieldCondition(key="metadata." + key, match=models.MatchValue(value=value))
+            for key, value in source.items()
+        ]
+    )
+
+
 def stage_vector_generation(store: "VectorStore", *, source: dict, text: str, splitter, storage: dict) -> dict:
     """No active pointer changes until the caller's authoritative source fence commits."""
     if not all(

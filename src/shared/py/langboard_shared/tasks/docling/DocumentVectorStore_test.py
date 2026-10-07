@@ -122,3 +122,31 @@ def test_external_store_rejects_invalid_provider_vectors_before_write(monkeypatc
                 storage={"type": "qdrant"},
             )
         assert client.count("langboard_documents_" + "a" * 64).count == 0
+
+
+def test_common_factory_read_missing_sqlite_does_not_create_files(tmp_path):
+    from langboard_shared.tasks.docling.DocumentVectorStore import open_document_vector_store
+
+    directory = tmp_path / "absent"
+    with open_document_vector_store(
+        DocumentRetrievalSettings(dimensions=3), Fixture(), "a" * 64, directory, set(), create=False
+    ) as store:
+        assert store is None
+    assert not directory.exists()
+
+
+def test_common_factory_external_store_does_not_create_local_directory(monkeypatch, tmp_path):
+    from contextlib import nullcontext
+    from langboard_shared.tasks.docling import DocumentVectorStore as module
+
+    sentinel = object()
+    connect = Mock(return_value=nullcontext(sentinel))
+    monkeypatch.setattr(module, "open_qdrant_store", connect)
+    directory = tmp_path / "absent"
+    settings = DocumentRetrievalSettings(store="qdrant", external_url="https://fixture.invalid")
+    with module.open_document_vector_store(
+        settings, Fixture(), "a" * 64, directory, {"https://fixture.invalid"}, create=False
+    ) as store:
+        assert store is sentinel
+    assert connect.call_args.kwargs["create"] is False
+    assert not directory.exists()

@@ -2,6 +2,7 @@
 
 from math import isfinite
 from .DocumentVectorGeneration import MAX_ATTACHMENT_CHUNKS
+from .DocumentVectorStore import document_source_filter
 
 
 def search_vector_generation(store, pointer: dict, query: str, settings, *, max_tokens: int = 4000) -> list[dict]:
@@ -22,20 +23,7 @@ def search_vector_generation(store, pointer: dict, query: str, settings, *, max_
     if not all(isinstance(pointer.get(key), str) and pointer[key] for key in fields):
         raise ValueError("Incomplete vector source")
     source = {key: pointer[key] for key in fields}
-    storage = pointer.get("storage") or {}
-    if storage.get("type") == "qdrant":
-        from qdrant_client import models
-
-        filter = models.Filter(
-            must=[
-                models.FieldCondition(key="metadata." + key, match=models.MatchValue(value=value))
-                for key, value in source.items()
-            ]
-        )
-    elif storage.get("type") == "sqlite":
-        filter = source
-    else:
-        raise ValueError("Unsupported vector storage")
+    filter = document_source_filter(pointer.get("storage") or {}, source)
     if settings.search_type == "mmr":
         if settings.score_threshold is not None:
             raise ValueError("MMR with a score threshold is not supported")
