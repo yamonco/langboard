@@ -8,6 +8,7 @@ from langboard_shared.core.filter import AuthFilter
 from langboard_shared.core.logger import Logger
 from langboard_shared.core.routing import ApiErrorCode, ApiException, ApiPermission, AppRouter, JsonResponse
 from langboard_shared.core.security import AuthSecurity
+from langboard_shared.core.security.CollaborationChannel import CollaborationChannel
 from langboard_shared.domain.models import McpRole, User
 from langboard_shared.domain.models.McpRole import McpRoleAction
 from langboard_shared.domain.services import DomainService
@@ -90,7 +91,12 @@ async def execute_mcp_tool(tool_name: str, request: Request):
             raise ApiException.BadRequest_400(ApiErrorCode.VA0000)
 
         context_token = mcp_auth_context.set(
-            {"user_or_bot": user_or_bot, "api_key": request.scope.get("api_key"), "tool_group": tool_group}
+            {
+                "user_or_bot": user_or_bot,
+                "api_key": request.scope.get("api_key"),
+                "tool_group": tool_group,
+                "collaboration_channel": CollaborationChannel.Mcp,
+            }
         )
         try:
             server = McpServer.agent_mcp if tool_name in {"list_project_cards", "get_card_bundle"} else McpServer.mcp
