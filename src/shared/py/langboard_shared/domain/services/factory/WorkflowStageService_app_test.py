@@ -30,6 +30,7 @@ def board(monkeypatch, request):
             pytest.skip("Set LANGBOARD_FILE_TEST_DATABASE_URL to a disposable PostgreSQL database")
     if url == "sqlite-http":
         from sqlalchemy.pool import StaticPool
+
         engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
     else:
         engine = create_engine(url)
@@ -307,3 +308,40 @@ def test_postgresql_concurrent_edit_has_one_winner(board, binding):
     with ThreadPoolExecutor(max_workers=2) as workers:
         results = [workers.submit(attempt) for _ in range(2)]
         assert sorted(result.result(timeout=15) for result in results) == ["conflict", "saved"]
+
+
+def test_prepare_disabled_draft_is_idempotent_and_preserves_existing_config(board):
+    with DbSession.use(readonly=False) as db:
+        board[4].actions = ["read", "update"]
+        db.update(board[4])
+    prepared = board[0].prepare_app_mapping(board[1], board[2].get_uid(), "github")
+    assert prepared.state == "disabled" and not prepared.stage_transitions_enabled
+    assert prepared.granted_capabilities == [] and len(prepared.workflow_mapping) == 3
+    saved = save_mapping(board, prepared, enabled=False)
+    again = board[0].prepare_app_mapping(board[1], board[2].get_uid(), "github")
+    assert again.id == saved.id and again.edit_revision() == saved.edit_revision()
+
+
+def test_prepare_cannot_create_for_read_only_or_unknown_app(board):
+    assert board[0].prepare_app_mapping(board[1], board[2].get_uid(), "github") is None
+    assert board[0].prepare_app_mapping(board[1], board[2].get_uid(), "unknown") is None
+
+
+def test_postgresql_concurrent_prepare_returns_one_draft(board):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+
+    if DbEngine.get_main_engine().dialect.name != "postgresql":
+        pytest.skip("Row-lock concurrency requires PostgreSQL")
+    with DbSession.use(readonly=False) as db:
+        board[4].actions = ["read", "update"]
+        db.update(board[4])
+    ready = Barrier(2)
+
+    def prepare():
+        ready.wait(timeout=5)
+        return board[0].prepare_app_mapping(board[1], board[2].get_uid(), "github").get_uid()
+
+    with ThreadPoolExecutor(max_workers=2) as workers:
+        futures = [workers.submit(prepare) for _ in range(2)]
+        assert len({future.result(timeout=15) for future in futures}) == 1

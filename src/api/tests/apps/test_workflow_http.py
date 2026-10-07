@@ -8,7 +8,11 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from langboard.middlewares.ApiAuthMiddleware import ApiAuthMiddleware
 from langboard.middlewares.RoleMiddleware import RoleMiddleware
-from langboard.routes.board.BoardSettingApi import get_app_workflow_mapping, update_app_workflow_mapping
+from langboard.routes.board.BoardSettingApi import (
+    get_app_workflow_mapping,
+    prepare_app_workflow_mapping,
+    update_app_workflow_mapping,
+)
 from langboard_shared.core.caching import Cache
 from langboard_shared.core.db import DbSession
 from langboard_shared.core.db.DbEngine import DbEngine
@@ -32,7 +36,11 @@ def test_authenticated_http_workflow_and_current_revocation(board, binding, monk
     app = FastAPI()
     app.include_router(AppRouter.api)
     for route in app.routes:
-        if getattr(route, "endpoint", None) in (get_app_workflow_mapping, update_app_workflow_mapping):
+        if getattr(route, "endpoint", None) in (
+            get_app_workflow_mapping,
+            update_app_workflow_mapping,
+            prepare_app_workflow_mapping,
+        ):
             for dependency in route.dependant.dependencies:
                 if dependency.name == "service":
                     app.dependency_overrides[dependency.call] = lambda: service
@@ -45,6 +53,11 @@ def test_authenticated_http_workflow_and_current_revocation(board, binding, monk
         assert client.get(url).status_code == 401
         client.cookies.set(Env.REFRESH_TOKEN_NAME, refresh)
         assert client.get(url, headers={"Authorization": "Bearer invalid"}).status_code == 401
+        draft_url = url.replace("github", "glitchtip")
+        first = client.post(draft_url, headers=headers)
+        assert first.status_code == 200
+        assert first.json()["binding"]["stage_transitions_enabled"] is False
+        assert client.post(draft_url, headers=headers).json()["binding"]["uid"] == first.json()["binding"]["uid"]
         response = client.get(url, headers=headers)
         assert response.status_code == 200
         payload = {
