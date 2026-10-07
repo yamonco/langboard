@@ -37,6 +37,14 @@
     "overlap_error": "겹침은 청크 크기보다 작아야 합니다.",
     "separators_error": "32자 이하 문자열 1–16개를 입력하고 마지막 구분자는 빈 문자열로 지정하세요.",
     "headers_error": "Markdown 헤더 수준을 하나 이상 선택하세요.",
-    "header_level": "헤더 {{level}}"
+    "header_level": "헤더 {{level}}",
+    "search_type": "검색 방식",
+    "mode_similarity": "유사도",
+    "mode_mmr": "다양성 (MMR)",
+    "fetch_k": "후보 수 상한",
+    "lambda_mult": "관련성 가중치",
+    "score_threshold": "최소 유사도 (선택)",
+    "fetch_error": "후보 수는 결과 수 이상이어야 합니다.",
+    "search_help": "MMR은 관련성과 다양성을 조절합니다. 유사도 검색의 최소 점수는 비워 두면 필터를 적용하지 않습니다."
   }
 }
