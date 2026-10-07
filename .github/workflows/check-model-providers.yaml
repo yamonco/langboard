@@ -8,9 +8,14 @@ on:
       - src/graph/langboard_graph/core/graph/default/chat_model.py
       - src/graph/langboard_graph/core/graph/default/tooling.py
   workflow_dispatch:
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   catalog-contract:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     env:
       PROJECT_NAME: langboard
       PYTHONPATH: src/api:src/shared/py

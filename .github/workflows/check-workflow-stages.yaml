@@ -24,9 +24,14 @@ on:
       - src/shared/py/langboard_shared/publishers/CheckitemPublisher.py
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   policy-and-transition:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     services:
       postgres:
         image: postgres:16
