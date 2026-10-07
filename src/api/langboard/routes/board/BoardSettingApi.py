@@ -721,3 +721,19 @@ def update_app_workflow_mapping(
     if snapshot is None:
         raise ApiException.NotFound_404(ApiErrorCode.NF2001)
     return JsonResponse(content=_app_workflow_response(snapshot))
+
+
+@AppRouter.api.post("/board/{project_uid}/settings/apps/{app_key}/workflow", tags=["Board.Settings"])
+@RoleFilter.add(ProjectRole, [ProjectRoleAction.Update], RoleFinder.project)
+@AuthFilter.add("user")
+def prepare_app_workflow_mapping(
+    project_uid: str, app_key: str, user: User = Auth.scope("user"),
+    service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    binding = service.workflow_stage.prepare_app_mapping(user, project_uid, app_key)
+    if binding is None:
+        raise ApiException.NotFound_404(ApiErrorCode.NF2001)
+    snapshot = service.workflow_stage.get_app_mapping(user, project_uid, app_key)
+    if snapshot is None:
+        raise ApiException.NotFound_404(ApiErrorCode.NF2001)
+    return JsonResponse(content=_app_workflow_response(snapshot))
