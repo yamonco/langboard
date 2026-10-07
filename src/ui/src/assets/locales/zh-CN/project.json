@@ -195,6 +195,8 @@
     "More GitHub connections": "更多连接",
     "Refresh GitHub resource health": "刷新仓库状态",
     "GitHub health refreshed": "已刷新资源状态，请查看 App 资源状态。",
-    "Continue GitHub health refresh": "刷新下一批仓库"
+    "Continue GitHub health refresh": "刷新下一批仓库",
+    "Previous GitHub installations": "上一页安装",
+    "More GitHub installations": "下一页安装"
   }
 }

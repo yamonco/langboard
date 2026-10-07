@@ -87,7 +87,7 @@ HttpOnly path-scoped session cookie. State is bound to actor, board, Connection
 revision and a PKCE S256 verifier for ten minutes, with atomic one-time claiming.
 The fixed GitHub token endpoint exchanges the code, then `/user` and
 `/user/installations` identify the GitHub user and visible installations for this
-App. Discovery is bounded to 100 installations with `has_more` explicitly returned.
+App. Each discovery page is bounded to 100 installations with `next_page` explicitly returned.
 The user access token is neither stored nor returned; its revoke must succeed.
 Current host authority and Connection identity are checked again after external IO.
 
@@ -103,8 +103,7 @@ The proof is a bounded snapshot of GitHub user visibility, not a continuous user
 revocation feed or permission to activate a Binding. GitHub App repository access
 is independently revalidated for every addition. User access revocation after
 proof issuance may remain unobserved for up to five minutes. UI integration,
-continuation for more than 100 installations, lifecycle handling and live GitHub
-authorization remain acceptance work. Older registered Apps require their callback URL updated.
+lifecycle handling and live GitHub authorization remain acceptance work. Older registered Apps require their callback URL updated.
 
 Official user flow:
 https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-a-user-access-token-for-a-github-app
@@ -174,3 +173,14 @@ revision on every request. The UI requires another explicit click for each page;
 there is no background full-board scan. Forty same-installation resources require
 two token lifecycles instead of forty. Ambiguous group failure marks the group
 unknown/unavailable; it does not identify a particular removed repository.
+
+## Installation discovery pages
+
+Authorization start accepts a strict page integer from 1 to 10000. It binds that
+page to the actor/board/Connection/session nonce and PKCE context; completion cannot
+override it. Each authorization exchanges one code, reads that 100-row installation
+page, revokes its user token and issues a proof for only the returned installations.
+The UI offers previous/next pages via fresh authorization. This avoids retaining
+user access tokens but requires a GitHub authorization redirect per page. Returning
+to an earlier page requires new verification; only current-page choices are shown.
+No automatic all-installation scan is introduced.

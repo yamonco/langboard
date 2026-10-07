@@ -17,6 +17,8 @@ interface Authorization {
     installations: Installation[];
     installation_proof: string;
     has_more: boolean;
+    page: number;
+    next_page: number | null;
 }
 interface Repository {
     id: number;
@@ -136,10 +138,11 @@ export default function BoardSettingsGitHub({ onStatusChange }: { onStatusChange
             form.submit();
             form.remove();
         });
-    const authorize = () =>
+    const authorize = (page = 1) =>
         run(async () => {
-            const result = (await api.post<{ authorization_url: string }>(`${root}/authorization`, { connection_uid: connection!.connection_uid }))
-                .data;
+            const result = (
+                await api.post<{ authorization_url: string }>(`${root}/authorization`, { connection_uid: connection!.connection_uid, page })
+            ).data;
             const url = new URL(result.authorization_url);
             if (url.origin !== "https://github.com" || url.pathname !== "/login/oauth/authorize") throw new Error("Invalid authorization target");
             sessionStorage.setItem(`${key}:kind`, "authorization");
@@ -304,7 +307,18 @@ export default function BoardSettingsGitHub({ onStatusChange }: { onStatusChange
                     </Button>
                     {authorization && (
                         <>
-                            {authorization.has_more && <p role="status">{text("GitHub installation limit")}</p>}
+                            <div className="flex flex-wrap gap-2">
+                                {authorization.page > 1 && (
+                                    <Button size="sm" variant="outline" onClick={() => void authorize(authorization.page - 1)}>
+                                        {text("Previous GitHub installations")}
+                                    </Button>
+                                )}
+                                {authorization.next_page && (
+                                    <Button size="sm" variant="outline" onClick={() => void authorize(authorization.next_page!)}>
+                                        {text("More GitHub installations")}
+                                    </Button>
+                                )}
+                            </div>
                             <div className="flex flex-wrap gap-2">
                                 {authorization.installations.map((item) => (
                                     <Button

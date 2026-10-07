@@ -47,11 +47,12 @@ def authorized(installation, monkeypatch, tmp_path):
                 .decode()
                 .rstrip("=")
             )
-            assert challenge == query["code_challenge"][0]
+            assert challenge == controls.get("expected_challenge", query["code_challenge"][0])
             return httpx.Response(200, json={"access_token": "fixture-user-token"})
         if request.url.path == "/user":
             return httpx.Response(200, json={"id": 8, "login": "fixture-user"})
         if request.url.path == "/user/installations":
+            controls["requested_page"] = int(request.url.params["page"])
             if controls.get("host_revoke"):
                 with DbSession.use(readonly=False) as db:
                     connection.state = "revoked"
@@ -59,7 +60,7 @@ def authorized(installation, monkeypatch, tmp_path):
             return httpx.Response(
                 200,
                 json={
-                    "total_count": 1,
+                    "total_count": controls.get("count", 1),
                     "installations": [
                         {
                             "id": 17,
@@ -179,3 +180,29 @@ def test_native_authorization_http_cookie_and_replay(authorized, monkeypatch):
         started = client.post(url, headers=headers, json={"connection_uid": connection.get_uid()})
         assert started.status_code == 200
         assert "HttpOnly" in started.headers["set-cookie"] and "SameSite=lax" in started.headers["set-cookie"]
+
+
+@pytest.mark.parametrize("page,count,next_page", [(1, 201, 2), (2, 201, 3), (3, 201, None)])
+def test_installation_page_is_bound_to_authorization_context(authorized, page, count, next_page):
+    service, board, connection, state, session, calls, controls = authorized
+    # Request a new page using real start; verify stored page, independent of callback input.
+    payload, session = authorization.begin_authorization(
+        service, board[1], board[2].get_uid(), connection.get_uid(), page
+    )
+    query = parse_qs(urlsplit(payload["authorization_url"]).query)
+    state = query["state"][0]
+    controls["expected_challenge"] = query["code_challenge"][0]
+    controls["count"] = count
+    result = authorization.complete_authorization(service, board[1], board[2].get_uid(), state, "a" * 40, session)
+    assert controls["requested_page"] == page and result["page"] == page and result["next_page"] == next_page
+    authorization.require_installation_proof(
+        board[1], board[2].get_uid(), connection.get_uid(), 17, 7, result["installation_proof"]
+    )
+
+
+@pytest.mark.parametrize("page", [0, 10001, True, "2"])
+def test_invalid_page_rejects_before_external_call(authorized, page):
+    service, board, connection, state, session, calls, controls = authorized
+    with pytest.raises(authorization.GitHubManifestUnavailable):
+        authorization.begin_authorization(service, board[1], board[2].get_uid(), connection.get_uid(), page)
+    assert not calls
