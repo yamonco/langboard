@@ -136,7 +136,19 @@ mutation recheck authority independently after selection.
 
 The settings panel can choose an existing Connection in a fresh tab, fetch more
 connections and return to new registration. Switching clears installation/proof/
-repository edit state. Reused Connections lack a stored App slug/install URL, so
-install navigation remains unavailable for them; account verification and existing
-installation selection work. App metadata refresh and reinstall navigation remain
-acceptance work.
+repository edit state. Install navigation re-reads current App metadata via the native endpoint below.
+Account verification and existing installation selection remain independent.
+
+## Current App metadata and install navigation
+
+Authenticated GET `/board/{uid}/settings/apps/github/connections/{uid}/app` uses
+current board update and Connection ownership/state checks. The shared runtime
+SecretReference/App JWT helper calls fixed GitHub GET `/app`, verifies the exact
+App ID and bounded slug, then rechecks host authority and Connection revision.
+Only Connection UID, App ID, slug and a host-constructed GitHub installation URL
+are returned. Arbitrary response URLs, credential fields and JWT are omitted.
+The UI fetches this endpoint on install click for both new and reused Connections.
+No persisted metadata migration or automatic lifecycle activation is introduced.
+
+Live GitHub App creation/install acceptance, validated lifecycle callbacks and
+health propagation remain pending.
