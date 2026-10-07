@@ -85,7 +85,7 @@ def embed_transcription(service, attachment_uid: str, generation: str, request_u
     snapshot = document.get("embedding_config")
     if not isinstance(snapshot, dict):
         return
-    binding = service.internal_bot.get_by_id_like(snapshot.get("binding_uid"))
+    binding = service.internal_bot.get_current_by_id_like(snapshot.get("binding_uid"))
     content_hash = document.get("content_hash")
     old = document.get("embedding") or {}
     if request_uid is not None and old.get("request_uid") != request_uid:
@@ -143,6 +143,12 @@ def embed_transcription(service, attachment_uid: str, generation: str, request_u
             )
             remove = delete_vector_generation
             try:
+                # Inference can outlive deletion or an endpoint change. Resolve
+                # the current primary binding before publishing its new pointer.
+                current_binding = service.internal_bot.get_current_by_id_like(snapshot.get("binding_uid"))
+                if not current_binding or current_binding.bot_type != InternalBotType.DocumentEmbedding:
+                    raise ValueError("Embedding binding is unavailable")
+                resolve_embedding_snapshot(snapshot, current_binding.value)
                 committed = service.docling_metadata.publish_document_embedding(
                     card,
                     attachment_uid,

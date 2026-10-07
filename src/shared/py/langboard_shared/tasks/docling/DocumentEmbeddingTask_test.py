@@ -33,7 +33,7 @@ def fixture(monkeypatch, tmp_path):
         card_attachment=SimpleNamespace(get_by_id_like=Mock(return_value=attachment)),
         card=SimpleNamespace(get_by_id_like=Mock(return_value=card)),
         project=SimpleNamespace(get_by_id_like=Mock(return_value=SimpleNamespace(get_uid=lambda: "board-uid"))),
-        internal_bot=SimpleNamespace(get_by_id_like=Mock(return_value=binding)),
+        internal_bot=SimpleNamespace(get_current_by_id_like=Mock(return_value=binding)),
         docling_metadata=metadata,
     )
     monkeypatch.setattr(
@@ -129,7 +129,7 @@ def test_database_publication_error_removes_staged_vectors(monkeypatch, tmp_path
 
 def test_missing_binding_reports_safe_failure_without_inference(monkeypatch, tmp_path):
     service, _, _ = fixture(monkeypatch, tmp_path)
-    service.internal_bot.get_by_id_like.return_value = None
+    service.internal_bot.get_current_by_id_like.return_value = None
     task.embed_transcription(service, "attachment", "current")
     task.create_document_embeddings.assert_not_called()
     assert service.docling_metadata.publish_document_embedding.call_args.args[-1]["status"] == "failed"
@@ -246,3 +246,66 @@ def test_cleanup_dispatch_outage_cannot_downgrade_committed_generation(monkeypat
     task.embed_transcription(service, "attachment", "current")
     assert service.docling_metadata.publish_document_embedding.call_count == 1
     assert service.docling_metadata.publish_document_embedding.call_args.args[-1]["status"] == "indexed"
+
+
+@pytest.mark.parametrize("change", ["deleted", "type", "endpoint", "vector-endpoint"])
+def test_binding_changed_during_inference_discards_stage_and_keeps_prior_pointer(monkeypatch, tmp_path, change):
+    from json import dumps
+    from langboard_shared.tasks.docling.DocumentEmbedding import resolve_embedding_snapshot, snapshot_embedding_config
+
+    service, document, _ = fixture(monkeypatch, tmp_path)
+    value = {
+        "agent_llm": "OpenAI Compatible",
+        "base_url": "https://fixture.invalid",
+        "model_name": "fixture-model",
+        "retrieval": {"enabled": True},
+    }
+    document["embedding_config"] = snapshot_embedding_config(dumps(value), "binding")
+    binding = service.internal_bot.get_current_by_id_like.return_value
+    binding.value = dumps(value)
+    monkeypatch.setattr(task, "resolve_embedding_snapshot", resolve_embedding_snapshot)
+    pointer = task.stage_vector_generation.return_value
+
+    def infer(*args, **kwargs):
+        if change == "deleted":
+            service.internal_bot.get_current_by_id_like.return_value = None
+        elif change == "type":
+            binding.bot_type = None
+        else:
+            if change == "endpoint":
+                value["base_url"] = "https://changed.invalid"
+            else:
+                value["retrieval"].update(store="qdrant", external_url="https://vectors.invalid")
+            binding.value = dumps(value)
+        return pointer
+
+    task.stage_vector_generation.side_effect = infer
+    task.embed_transcription(service, "attachment", "current")
+    task.delete_vector_generation.assert_called_once()
+    assert task.delete_vector_generation.call_args.args[1] is pointer
+    publication = service.docling_metadata.publish_document_embedding.call_args.args[-1]
+    assert publication["status"] == "failed"
+    assert publication["pointer"]["generation"] == "old"
+    assert service.docling_metadata.publish_document_embedding.call_count == 1
+
+
+def test_explicit_reindex_preserves_off_and_snapshotted_model_after_global_edit(monkeypatch, tmp_path):
+    from json import dumps, loads
+    from langboard_shared.tasks.docling.DocumentEmbedding import resolve_embedding_snapshot, snapshot_embedding_config
+
+    service, document, _ = fixture(monkeypatch, tmp_path)
+    value = {
+        "agent_llm": "OpenAI Compatible",
+        "base_url": "https://fixture.invalid",
+        "model_name": "old-model",
+        "retrieval": {"enabled": False},
+    }
+    document["embedding_config"] = snapshot_embedding_config(dumps(value), "binding", explicit=True)
+    document["embedding"]["request_uid"] = "explicit-request"
+    value["model_name"] = "new-model"
+    service.internal_bot.get_current_by_id_like.return_value.value = dumps(value)
+    monkeypatch.setattr(task, "resolve_embedding_snapshot", resolve_embedding_snapshot)
+    task.embed_transcription(service, "attachment", "current", "explicit-request")
+    assert loads(task.create_document_embeddings.call_args.args[0])["model_name"] == "old-model"
+    assert service.docling_metadata.publish_document_embedding.call_args.args[-1]["status"] == "indexed"
+    task.delete_vector_generation.assert_not_called()
