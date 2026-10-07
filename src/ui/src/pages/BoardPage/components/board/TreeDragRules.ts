@@ -1,7 +1,7 @@
 /** Drag execution rules for tree cards: reorder, reparent, group operations. */
 
 import type { ITreeCard } from "./ColumnCardTree.ts";
-import { canDropAsChild, TREE_MAX_DEPTH } from "./TreeRenderer.ts";
+import { canDropAsChild } from "./TreeRenderer.ts";
 
 export type DragPosition = "before" | "after" | "child";
 
@@ -22,10 +22,7 @@ export interface IDragResult {
  * Validate and compute the result of a drag intent.
  * Position "child" nests under the target; "before"/"after" reorders as sibling.
  */
-export const resolveDragIntent = (
-    intent: IDragIntent,
-    trees: ITreeCard[]
-): IDragResult => {
+export const resolveDragIntent = (intent: IDragIntent, trees: ITreeCard[]): IDragResult => {
     const { dragged_uid, target_uid, position } = intent;
 
     if (dragged_uid === target_uid) {
@@ -60,9 +57,7 @@ export const resolveDragIntent = (
     }
 
     // Find sibling order
-    const siblings = parentUid
-        ? (findNode(trees, parentUid)?.children ?? [])
-        : trees;
+    const siblings = parentUid ? (findNode(trees, parentUid)?.children ?? []) : trees;
     const targetIdx = siblings.findIndex((s) => s.uid === target_uid);
     const newOrder =
         position === "before"
@@ -80,10 +75,7 @@ export const resolveDragIntent = (
  * Execute a validated drag by mutating the tree structure.
  * Returns a new trees array (immutable update).
  */
-export const executeDrag = (
-    intent: IDragIntent,
-    trees: ITreeCard[]
-): ITreeCard[] => {
+export const executeDrag = (intent: IDragIntent, trees: ITreeCard[]): ITreeCard[] => {
     const result = resolveDragIntent(intent, trees);
     if (!result.valid) return trees;
 
@@ -105,7 +97,6 @@ export const executeDrag = (
     removeFrom(clone);
 
     // Set new parent and order
-    const draggedClone = findNode(clone, intent.dragged_uid);
     const updatedDragged: ITreeCard = {
         ...dragged,
         parent_uid: result.new_parent_uid,
@@ -150,17 +141,10 @@ const findNode = (nodes: ITreeCard[], uid: string): ITreeCard | null => {
 /**
  * Group a subtree under a new parent (for bulk operations).
  */
-export const groupSubtree = (
-    childUids: string[],
-    newParentUid: string,
-    trees: ITreeCard[]
-): ITreeCard[] => {
+export const groupSubtree = (childUids: string[], newParentUid: string, trees: ITreeCard[]): ITreeCard[] => {
     let result = trees;
     for (const uid of childUids) {
-        result = executeDrag(
-            { dragged_uid: uid, target_uid: newParentUid, position: "child" },
-            result
-        );
+        result = executeDrag({ dragged_uid: uid, target_uid: newParentUid, position: "child" }, result);
     }
     return result;
 };

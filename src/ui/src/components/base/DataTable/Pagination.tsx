@@ -6,7 +6,7 @@ import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 
 function DataTablePagination() {
-    const [t, i18n] = useTranslation();
+    const [t] = useTranslation();
     const { currentPage, itemsPerPage, totalRecords } = useDataTable();
     const totalPages = useMemo(() => Math.ceil(totalRecords / itemsPerPage), [totalRecords, itemsPerPage]);
     const pageNumbers = useMemo(() => {

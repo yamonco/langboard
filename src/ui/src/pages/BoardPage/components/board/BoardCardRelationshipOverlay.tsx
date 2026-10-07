@@ -123,7 +123,7 @@ const BoardCardRelationshipOverlay = memo(({ scrollable }: IBoardCardRelationshi
         const onPointerOut = (event: PointerEvent | FocusEvent) => {
             const sourceCardUID = getCardUID(event.target);
             const nextElement = event.relatedTarget instanceof Element ? event.relatedTarget : undefined;
-            const nextCardUID = getCardUID(nextElement);
+            const nextCardUID = getCardUID(nextElement ?? null);
             if (nextElement?.closest(`[${RELATIONSHIP_PREVIEW_ATTR}]`)) {
                 return;
             }

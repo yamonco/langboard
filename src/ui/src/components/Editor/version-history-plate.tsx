@@ -66,7 +66,12 @@ export function VersionHistoryPlate({ oldValue, newValue, ...props }: IDefaultVe
     });
 
     return (
-        <EditorDataProvider editorType="view" {...props}>
+        <EditorDataProvider
+            editorType="view"
+            currentUser={props.currentUser}
+            mentionables={props.mentionables}
+            form={props.form && "project_uid" in props.form ? { project_uid: props.form.project_uid } : undefined}
+        >
             <Diff
                 current={revision.getApi(MarkdownPlugin).markdown.deserialize(newValue?.content ?? "")}
                 previous={revision.getApi(MarkdownPlugin).markdown.deserialize(oldValue?.content ?? "")}
@@ -133,7 +138,12 @@ export const CollapsibleVersionHistoryPlate = ({ oldValue, newValue, maxShowLine
             if (isFirstExpandedRef.current && state) {
                 isFirstExpandedRef.current = false;
                 setLoadedDiff(
-                    <EditorDataProvider editorType="view" {...props}>
+                    <EditorDataProvider
+                        editorType="view"
+                        currentUser={props.currentUser}
+                        mentionables={props.mentionables}
+                        form={props.form && "project_uid" in props.form ? { project_uid: props.form.project_uid } : undefined}
+                    >
                         <Diff current={currentValueRef.current} previous={previousValueRef.current} />
                     </EditorDataProvider>
                 );
@@ -152,7 +162,12 @@ export const CollapsibleVersionHistoryPlate = ({ oldValue, newValue, maxShowLine
             onOpenChange={changeExpanded}
             className="w-full [&_.slate-editor>:first-child]:pt-0 [&_.slate-editor>:last-child]:pb-0"
         >
-            <EditorDataProvider editorType="view" {...props}>
+            <EditorDataProvider
+                editorType="view"
+                currentUser={props.currentUser}
+                mentionables={props.mentionables}
+                form={props.form && "project_uid" in props.form ? { project_uid: props.form.project_uid } : undefined}
+            >
                 <Diff current={previewCurrentValueRef.current} previous={previewPreviousValueRef.current} />
             </EditorDataProvider>
             <Box className={cn(isExpanded ? "block" : "hidden")}>{loadedDiff}</Box>

@@ -85,7 +85,7 @@ const BoardColumnCardRelationship = memo(({ attributes, compact = false }: IBoar
                         )}
                         onClick={(event) => {
                             event.stopPropagation();
-                            target.dispatchEvent(new CustomEvent(BOARD_CARD_RELATIONSHIP_PREVIEW_EVENT, { bubbles: true }));
+                            event.currentTarget.dispatchEvent(new CustomEvent(BOARD_CARD_RELATIONSHIP_PREVIEW_EVENT, { bubbles: true }));
                         }}
                         {...attributes}
                     >
@@ -203,16 +203,19 @@ const BoardColumnCardRelationshipButton = memo(({ type, attributes, compact, has
                     return;
                 }
                 stopHold();
-                event.currentTarget.dispatchEvent(new CustomEvent(BOARD_CARD_RELATIONSHIP_PREVIEW_EVENT, { bubbles: true }));
+                target.dispatchEvent(new CustomEvent(BOARD_CARD_RELATIONSHIP_PREVIEW_EVENT, { bubbles: true }));
             };
             holdRafRef.current = requestAnimationFrame(advance);
         },
         [stopHold]
     );
 
-    useEffect(() => () => {
-        if (holdRafRef.current !== undefined) cancelAnimationFrame(holdRafRef.current);
-    }, []);
+    useEffect(
+        () => () => {
+            if (holdRafRef.current !== undefined) cancelAnimationFrame(holdRafRef.current);
+        },
+        []
+    );
 
     useEffect(() => {
         const button = buttonRef.current;

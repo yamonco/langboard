@@ -7,7 +7,7 @@ import { AuthUser } from "@/core/models";
 import { ROUTES } from "@/core/routing/constants";
 import { cleanModels } from "@/core/models/Base";
 import { useTranslation } from "react-i18next";
-import useAuthStore, { getAuthStore } from "@/core/stores/AuthStore";
+import useAuthStore from "@/core/stores/AuthStore";
 import { usePageNavigateRef } from "@/core/hooks/usePageNavigate";
 import Progress from "@/components/base/Progress";
 
