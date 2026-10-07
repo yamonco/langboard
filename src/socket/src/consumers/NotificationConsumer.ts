@@ -9,6 +9,9 @@ import * as path from "path";
 import { Utils } from "@langboard/core/utils";
 import { ESocketTopic } from "@langboard/core/enums";
 import SnowflakeID from "@/core/db/SnowflakeID";
+import { API_INTERNAL_URL } from "@/Constants";
+import { api } from "@/core/helpers/Api";
+import { createOneTimeToken } from "@/core/ai/BotOneTimeToken";
 
 const convertBigIntToString = <T>(value: T): T => {
     if (Utils.Type.isBigInt(value)) {
@@ -36,8 +39,34 @@ const convertBigIntToString = <T>(value: T): T => {
     return value;
 };
 
+const refreshDispatchRecipient = async (model: TNotificationPublishData): Promise<boolean> => {
+    if (!model.source_notification_persisted || !model.notification.receiver_id || !model.api_notification?.uid) {
+        return false;
+    }
+    try {
+        const response = await api.get(
+            `${API_INTERNAL_URL}/notifications/${encodeURIComponent(model.api_notification.uid)}/dispatch-context`,
+            { timeout: 5000, headers: { "X-Api-Token": createOneTimeToken(new SnowflakeID(model.notification.receiver_id)) } }
+        );
+        const recipient = response.data?.recipient;
+        if (response.data?.allowed !== true || !recipient || typeof recipient.email !== "string") {
+            return false;
+        }
+        model.target_user.email = recipient.email;
+        model.target_user.preferred_lang = recipient.preferred_lang;
+        if (model.email_formats) {
+            model.email_formats.recipient = recipient.firstname;
+        }
+        return true;
+    } catch {
+        // A failed authorization lookup never falls back to queued recipient data.
+        return false;
+    }
+};
+
 Consumer.register("notification_publish", async (data: unknown) => {
     const webNotification = async (model: TNotificationPublishData) => {
+        if (!(await refreshDispatchRecipient(model))) return;
         const hasUnsubscription = await UserNotificationUnsubscription.hasUnsubscription(model, ENotificationChannel.Web);
 
         if (hasUnsubscription || !model.api_notification?.notifier_user?.uid) {
@@ -75,6 +104,8 @@ Consumer.register("notification_publish", async (data: unknown) => {
         if (!model.email_template_name || !MAIL_SERVER || !MAIL_FROM || !MAIL_PORT) {
             return;
         }
+
+        if (!(await refreshDispatchRecipient(model))) return;
 
         const hasUnsubscription = await UserNotificationUnsubscription.hasUnsubscription(model, ENotificationChannel.Email);
 
