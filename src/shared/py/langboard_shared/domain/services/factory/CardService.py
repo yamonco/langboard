@@ -49,7 +49,7 @@ from ...models.Checkitem import CheckitemStatus
 from ...models.ProjectRole import ProjectRoleAction
 from ..CardApprovalGate import pending_card_approvals
 from ..CardVerification import VerificationConflict, VerificationSubmission
-from ..CardVisibilityPolicy import CardVisibilityContext
+from ..CardVisibilityPolicy import CardVisibility, CardVisibilityContext
 from ..CardWorkState import project_work_state
 from ..DependencyPolicy import dependency_blockers
 from ..ExecutionGeneration import execution_generations
@@ -420,14 +420,18 @@ class CardService(BaseDomainService):
         project: TProjectParam | None,
         user_or_bot: TUserOrBot | None = None,
         archive_visible_since: SafeDateTime | None = None,
+        *,
+        channel: CollaborationChannel = CollaborationChannel.Api,
     ) -> list[dict[str, Any]]:
-        project = InfraHelper.get_by_id_like(Project, project)
-        if not project:
+        resolved = self.resolve_visibility_context(project, user_or_bot, channel)
+        if resolved is None:
             return []
 
+        project, context = resolved
         if archive_visible_since is None:
             archive_visible_since = SafeDateTime.now() - timedelta(days=project.archive_visible_days)
-        raw_cards = self.repo.card.get_board_list(project, archive_visible_since)
+        raw_cards = self.repo.card.get_board_list(project, archive_visible_since, context=context)
+        visible_cards = {card.id: card for card, _ in raw_cards}
         raw_members = self.repo.card_assigned_user.get_all_by_project(project, archive_visible_since)
         members: dict[int, list[str]] = {}
         for member, card_assigned_user in raw_members:
@@ -438,6 +442,13 @@ class CardService(BaseDomainService):
         raw_relationships = self.repo.card_relationship.get_all_by_project(project, archive_visible_since)
         relationships: dict[int, list[dict[str, Any]]] = {}
         for relationship, relation_type in raw_relationships:
+            parent = visible_cards.get(relationship.card_id_parent)
+            child = visible_cards.get(relationship.card_id_child)
+            if parent is None or child is None or not context.can_link_cards(
+                CardVisibility(parent.visibility), CardVisibility(child.visibility),
+                source_owner_user_id=parent.owner_user_id, target_owner_user_id=child.owner_user_id,
+            ):
+                continue
             if relationship.card_id_parent not in relationships:
                 relationships[relationship.card_id_parent] = []
             if relationship.card_id_child not in relationships:
@@ -457,6 +468,7 @@ class CardService(BaseDomainService):
         raw_checklists = self.repo.checklist.get_all_by_project(
             project,
             archive_visible_since=archive_visible_since,
+            context=context,
         )
         completed_by_card = {
             checklist.card_id: checklist.is_checked for checklist in raw_checklists if checklist.is_system

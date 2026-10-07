@@ -146,7 +146,7 @@ class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
             ).all()
         return {card.source_uid: card for card in cards if card.source_uid is not None}
 
-    def get_board_list(self, project: TProjectParam, archive_visible_since: SafeDateTime) -> list[tuple[Card, int]]:
+    def get_board_list(self, project: TProjectParam, archive_visible_since: SafeDateTime, *, context: CardVisibilityContext) -> list[tuple[Card, int]]:
         project_id = InfraHelper.convert_id(project)
         comment_counts = (
             SqlBuilder.select.columns(
@@ -155,12 +155,13 @@ class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
             )
             .join(Card, Card.column("id") == CardComment.column("card_id"))
             .where(Card.column("project_id") == project_id)
+            .where(Card.deleted_at.is_(None), card_visibility_scope(context))
             .group_by(CardComment.column("card_id"))
             .subquery()
         )
 
         cards = []
-        with DbSession.use(readonly=True) as db:
+        with DbSession.use(readonly=False) as db:
             result = db.exec(
                 SqlBuilder.select.tables(
                     Card,
@@ -168,6 +169,7 @@ class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
                 )
                 .outerjoin(comment_counts, Card.column("id") == comment_counts.c.card_id)
                 .where(Card.column("project_id") == project_id)
+                .where(Card.deleted_at.is_(None), card_visibility_scope(context))
                 .where(
                     (Card.column("archived_at") == None)  # noqa: E711
                     | (Card.column("archived_at") >= archive_visible_since)
