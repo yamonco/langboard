@@ -11,6 +11,10 @@ from .GitHubInstallation import connection_revision, inspect_installation
 from .GitHubManifest import GitHubManifestUnavailable, _board
 
 
+class GitHubNoSelectedRepositories(ValueError):
+    pass
+
+
 class GitHubResourceConflict(Exception):
     pass
 
@@ -186,6 +190,7 @@ def refresh_resources(
     after=None,
     *,
     installation_scope=None,
+    repository_scope=None,
     expected_connection_revision=None,
 ):
     """Explicit bounded health refresh; unavailable evidence never means uninstall."""
@@ -216,12 +221,14 @@ def refresh_resources(
         rows = [item for item in snapshot["items"] if item["connection_uid"] == connection_uid and item["selected"]]
     if installation_scope is not None:
         rows = [item for item in rows if tuple(part.get("id") for part in item["path"][:2]) == installation_scope]
+    if repository_scope is not None:
+        rows = [item for item in rows if item["repository_id"] in repository_scope]
     if after is not None:
         if not isinstance(after, str) or len(after) > 11 or not any(item["uid"] == after for item in rows):
             raise ValueError("Invalid resource cursor")
         rows = [item for item in rows if item["uid"] > after]
     if not rows:
-        raise ValueError("No selected repositories to refresh")
+        raise GitHubNoSelectedRepositories("No selected repositories to refresh")
     next_cursor = rows[24]["uid"] if len(rows) > 25 else None
     rows = rows[:25]
     groups = {}
@@ -269,4 +276,9 @@ def refresh_resources(
             ).first()
             row.access_state, row.health = access, health
             db.update(row)
-        return {**resource_snapshot(db, binding), "next_cursor": next_cursor, "refreshed_count": len(results)}
+        return {
+            **resource_snapshot(db, binding),
+            "next_cursor": next_cursor,
+            "refreshed_count": len(results),
+            "unavailable_count": sum(access == "unknown" for access, _ in results.values()),
+        }

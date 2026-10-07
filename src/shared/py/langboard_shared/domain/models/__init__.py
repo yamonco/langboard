@@ -36,6 +36,7 @@ from .CheckitemTimerRecord import CheckitemTimerRecord
 from .Checklist import Checklist
 from .EditorGraphApprovalRequest import EditorGraphApprovalRequest
 from .ExternalImportRecord import ExternalImportRecord
+from .GitHubHealthJob import GitHubHealthJob
 from .GitHubLifecycleReceipt import GitHubLifecycleReceipt
 from .GlobalCardRelationshipType import GlobalCardRelationshipType
 from .GlobalLabel import GlobalLabel
@@ -95,6 +96,7 @@ from .WorkflowStageDefinition import WorkflowStageDefinition
 
 __all__ = [
     "GitHubLifecycleReceipt",
+    "GitHubHealthJob",
     "AppConnection",
     "BoardAppBinding",
     "AppResourceBinding",
