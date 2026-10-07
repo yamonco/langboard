@@ -152,6 +152,18 @@ def receipt_storage(lifecycle, monkeypatch):
     with engine.begin() as connection:
         monkeypatch.setattr(migration, "op", Operations(MigrationContext.configure(connection)))
         migration.upgrade()
+        # Board fixture uses current ORM; reconstruct the preceding deployed schema.
+        with migration.op.batch_alter_table("app_resource_binding") as batch:
+            batch.drop_column("access_revision")
+    spec = importlib.util.spec_from_file_location(
+        "github_invalidation_migration", path.with_name("20261008095000-c652f0571e91.py")
+    )
+    invalidation = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(invalidation)
+    with engine.begin() as connection:
+        invalidation.op = Operations(MigrationContext.configure(connection))
+        invalidation.upgrade()
+    migration.invalidation = invalidation
     return lifecycle, migration, engine
 
 
@@ -371,3 +383,165 @@ def test_external_routing_does_not_trust_sender_or_candidate(receipt_storage, fa
         receive_external_lifecycle(service, body, signature, "installation_repositories", str(uuid4()))
     with DbSession.use(readonly=False) as db:
         assert not db.exec(SqlBuilder.select.table(GitHubLifecycleReceipt)).all()
+
+
+@pytest.mark.parametrize(
+    "action", ["deleted", "suspend", "unsuspend", "created", "new_permissions_accepted", "removed", "added"]
+)
+def test_lifecycle_invalidates_only_matching_selected_resources(receipt_storage, action):
+    from langboard.apps.GitHubLifecycle import receive_lifecycle
+    from langboard.apps.GitHubResources import resource_snapshot
+    from langboard_shared.core.db import SqlBuilder
+    from langboard_shared.domain.models import AppResourceBinding, BoardAppBinding, GitHubLifecycleReceipt
+
+    lifecycle, migration, engine = receipt_storage
+    service, board, connection, payload = lifecycle
+    with DbSession.use(readonly=False) as db:
+        bindings = []
+        for project_id in (10, 11):
+            binding = BoardAppBinding(project_id=project_id, app_key="github")
+            db.insert(binding)
+            bindings.append(binding)
+        resources = []
+        for index, (binding, installation_id, account_id, selected, repo) in enumerate(
+            [
+                (bindings[0], 17, 7, True, 99),
+                (bindings[1], 17, 7, True, 99),
+                (bindings[0], 18, 7, True, 100),
+                (bindings[0], 17, 8, True, 101),
+                (bindings[0], 17, 7, False, 102),
+                (bindings[0], 17, 7, True, 103),
+            ]
+        ):
+            row = AppResourceBinding(
+                board_binding_id=binding.id,
+                connection_id=connection.id,
+                resource_type="repository",
+                external_resource_id=str(repo),
+                is_selected=selected,
+                access_state="granted",
+                health="healthy",
+                resource_path=[
+                    {"type": "installation", "id": str(installation_id)},
+                    {"type": "account", "id": str(account_id)},
+                ],
+            )
+            db.insert(row)
+            resources.append(row)
+        before = resource_snapshot(db, bindings[0])["revision"]
+    payload["action"] = action
+    payload.pop("repositories_removed")
+    event = "installation"
+    if action in {"removed", "added"}:
+        event = "installation_repositories"
+        payload["repositories_" + action] = [{"id": 99}]
+    body, signature = signed(payload)
+    delivery = str(uuid4())
+    first = receive_lifecycle(service, board[1], connection.get_uid(), body, signature, event, delivery)
+    # Replay does not invalidate again, even after an explicit API refresh restored health.
+    with DbSession.use(readonly=False) as db:
+        rows = {row.get_uid(): row for row in db.exec(SqlBuilder.select.table(AppResourceBinding)).all()}
+        expected = {0, 1} if event == "installation_repositories" else {0, 1, 5}
+        for index, original in enumerate(resources):
+            row = rows[original.get_uid()]
+            assert row.access_revision == (1 if index in expected else 0)
+            assert row.health == ("unavailable" if index in expected else "healthy")
+            assert row.is_selected == original.is_selected
+        after = resource_snapshot(db, bindings[0])["revision"]
+        assert after != before
+        row = rows[resources[0].get_uid()]
+        row.access_state, row.health = "granted", "healthy"
+        db.update(row)
+        receipt = db.exec(SqlBuilder.select.table(GitHubLifecycleReceipt)).first()
+        assert receipt.invalidated
+    duplicate = receive_lifecycle(service, board[1], connection.get_uid(), body, signature, event, delivery)
+    assert duplicate["duplicate"] and duplicate["receipt_uid"] == first["receipt_uid"]
+    with DbSession.use(readonly=False) as db:
+        row = db.exec(
+            SqlBuilder.select.table(AppResourceBinding).where(AppResourceBinding.id == resources[0].id)
+        ).first()
+        assert row.health == "healthy" and row.access_revision == 1
+    # A different delayed event still cannot grant access; revision changes despite already-invalid state.
+    receive_lifecycle(service, board[1], connection.get_uid(), body, signature, event, str(uuid4()))
+    with DbSession.use(readonly=False) as db:
+        assert resource_snapshot(db, bindings[0])["revision"] != after
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+
+    with engine.begin() as db:
+        migration.invalidation.op = Operations(MigrationContext.configure(db))
+        with pytest.raises(RuntimeError, match="Cannot discard"):
+            migration.invalidation.downgrade()
+
+
+def test_receipt_and_invalidation_roll_back_together(receipt_storage, monkeypatch):
+    from langboard.apps import GitHubLifecycle as github
+    from langboard_shared.core.db import SqlBuilder
+    from langboard_shared.domain.models import GitHubLifecycleReceipt
+
+    lifecycle, migration, engine = receipt_storage
+    service, board, connection, payload = lifecycle
+    body, signature = signed(payload)
+
+    def fail(db, receipt):
+        raise RuntimeError("fixture resource update failure")
+
+    monkeypatch.setattr(github, "_invalidate_resources", fail)
+    with pytest.raises(RuntimeError, match="fixture resource"):
+        github.receive_lifecycle(
+            service, board[1], connection.get_uid(), body, signature, "installation_repositories", str(uuid4())
+        )
+    with DbSession.use(readonly=False) as db:
+        assert not db.exec(SqlBuilder.select.table(GitHubLifecycleReceipt)).all()
+
+
+def test_empty_invalidation_migration_roundtrip(receipt_storage):
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+
+    lifecycle, migration, engine = receipt_storage
+    with engine.begin() as db:
+        migration.invalidation.op = Operations(MigrationContext.configure(db))
+        migration.invalidation.downgrade()
+        migration.invalidation.upgrade()
+
+
+def test_refresh_cannot_commit_after_repeated_unknown_invalidation(receipt_storage, monkeypatch):
+    from langboard.apps import GitHubResources as resources
+    from langboard.apps.GitHubLifecycle import receive_lifecycle
+    from langboard_shared.core.db import SqlBuilder
+    from langboard_shared.domain.models import AppResourceBinding, BoardAppBinding
+
+    lifecycle, migration, engine = receipt_storage
+    service, board, connection, payload = lifecycle
+    with DbSession.use(readonly=False) as db:
+        binding = BoardAppBinding(project_id=board[2].id, app_key="github")
+        db.insert(binding)
+        row = AppResourceBinding(
+            board_binding_id=binding.id,
+            connection_id=connection.id,
+            resource_type="repository",
+            external_resource_id="99",
+            access_state="unknown",
+            health="unavailable",
+            resource_path=[{"type": "installation", "id": "17"}, {"type": "account", "id": "7"}],
+        )
+        db.insert(row)
+    before = resources.get_resources(service, board[1], board[2].get_uid())
+    body, signature = signed(payload)
+
+    def stale_inspection(*args, **kwargs):
+        # The external query began before another lifecycle invalidated already-unknown evidence.
+        receive_lifecycle(
+            service, board[1], connection.get_uid(), body, signature, "installation_repositories", str(uuid4())
+        )
+        return {"repositories": [{"id": 99, "archived": False}]}
+
+    monkeypatch.setattr(resources, "inspect_installation", stale_inspection)
+    with pytest.raises(resources.GitHubResourceConflict):
+        resources.refresh_resources(service, board[1], board[2].get_uid(), connection.get_uid(), before["revision"])
+    after = resources.get_resources(service, board[1], board[2].get_uid())
+    assert after["revision"] != before["revision"] and after["items"][0]["access_revision"] == 1
+    with DbSession.use(readonly=False) as db:
+        current = db.exec(SqlBuilder.select.table(AppResourceBinding).where(AppResourceBinding.id == row.id)).first()
+        assert current.health == "unavailable" and current.access_state == "unknown"
