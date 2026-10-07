@@ -113,13 +113,24 @@ def read_card_attachment(
         raise ValueError("Card not found in project")
     _, card = params
     attachment = service.card_attachment.get_by_id_like(attachment_uid)
-    if attachment is None or attachment.card_id != card.id:
+    if attachment is None or attachment.card_id != card.id or attachment.deleted_at is not None:
         raise ValueError("Attachment not found in card")
-    content = Storage.get_file(attachment.file)
+    source_file = attachment.file
+    source_name = attachment.filename
+    content = Storage.get_file(source_file)
     if content is None:
         raise ValueError("Attachment content unavailable")
     if len(content) > 8 * 1024 * 1024:
         raise ValueError("Attachment exceeds the 8 MB MCP read limit")
+    latest = service.card_attachment.get_by_id_like(attachment_uid)
+    if (
+        latest is None
+        or latest.card_id != card.id
+        or latest.deleted_at is not None
+        or latest.file != source_file
+        or latest.filename != source_name
+    ):
+        raise ValueError("Attachment content unavailable")
     return {
         "attachment_uid": attachment.get_uid(),
         "file_name": attachment.filename,
