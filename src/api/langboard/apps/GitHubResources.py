@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import re
 from langboard_shared.core.db import DbSession, SqlBuilder
 from langboard_shared.domain.models import AppConnection, AppResourceBinding, BoardAppBinding, Project, User
 from langboard_shared.domain.services import DomainService
@@ -30,6 +31,10 @@ def resource_snapshot(db, binding):
             )
         ).all()
     )
+    return _snapshot_rows(rows)
+
+
+def _snapshot_rows(rows):
     items = sorted(
         [
             {
@@ -48,6 +53,37 @@ def resource_snapshot(db, binding):
     )
     revision = hashlib.sha256(json.dumps(items, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     return {"items": items, "revision": revision}
+
+
+def _receipt_page(db, binding, connection_id, installation_scope, repository_scope, after, *, lock=False):
+    """Only the receipt's current selected page, including one continuation row."""
+    if binding is None:
+        raise GitHubNoSelectedRepositories("No selected repositories to refresh")
+    query = SqlBuilder.select.table(AppResourceBinding).where(
+        AppResourceBinding.board_binding_id == binding.id,
+        AppResourceBinding.connection_id == connection_id,
+        AppResourceBinding.resource_type == "repository",
+        AppResourceBinding.is_selected == True,  # noqa: E712
+        AppResourceBinding.resource_path[0]["id"].as_string() == installation_scope[0],
+        AppResourceBinding.resource_path[1]["id"].as_string() == installation_scope[1],
+    )
+    if repository_scope is not None:
+        query = query.where(AppResourceBinding.external_resource_id.in_(repository_scope))
+    if after is not None:
+        if not isinstance(after, str) or not re.fullmatch(r"[0-9A-Za-z]{11}", after):
+            raise ValueError("Invalid resource cursor")
+        cursor_id = InfraHelper.convert_id(after)
+        if db.exec(query.where(AppResourceBinding.id == cursor_id).limit(1)).first() is None:
+            raise ValueError("Invalid resource cursor")
+        query = query.where(AppResourceBinding.id > cursor_id)
+    query = query.order_by(AppResourceBinding.id).limit(26)
+    if lock:
+        query = query.with_for_update()
+    rows = db.exec(query).all()
+    if not rows:
+        raise GitHubNoSelectedRepositories("No selected repositories to refresh")
+    items = sorted(_snapshot_rows(rows[:25])["items"], key=lambda item: InfraHelper.convert_id(item["uid"]))
+    return _snapshot_rows(rows), rows[24].get_uid() if len(rows) > 25 else None, items
 
 
 def get_resources(service: DomainService, actor: User, project_uid: str) -> dict:
@@ -192,6 +228,7 @@ def refresh_resources(
     installation_scope=None,
     repository_scope=None,
     expected_connection_revision=None,
+    receipt_page=False,
 ):
     """Explicit bounded health refresh; unavailable evidence never means uninstall."""
     _board(service, actor, project_uid)
@@ -215,22 +252,31 @@ def refresh_resources(
                 BoardAppBinding.app_key == "github",
             )
         ).first()
-        snapshot = resource_snapshot(db, binding)
-        if snapshot["revision"] != expected_revision:
-            raise GitHubResourceConflict()
-        rows = [item for item in snapshot["items"] if item["connection_uid"] == connection_uid and item["selected"]]
-    if installation_scope is not None:
+        if receipt_page:
+            if installation_scope is None or expected_connection_revision is None:
+                raise ValueError("Receipt page requires installation and connection revision")
+            snapshot, next_cursor, rows = _receipt_page(
+                db, binding, connection.id, installation_scope, repository_scope, after
+            )
+            expected_revision = snapshot["revision"]
+        else:
+            snapshot = resource_snapshot(db, binding)
+            if snapshot["revision"] != expected_revision:
+                raise GitHubResourceConflict()
+            rows = [item for item in snapshot["items"] if item["connection_uid"] == connection_uid and item["selected"]]
+    if not receipt_page and installation_scope is not None:
         rows = [item for item in rows if tuple(part.get("id") for part in item["path"][:2]) == installation_scope]
-    if repository_scope is not None:
+    if not receipt_page and repository_scope is not None:
         rows = [item for item in rows if item["repository_id"] in repository_scope]
-    if after is not None:
+    if not receipt_page and after is not None:
         if not isinstance(after, str) or len(after) > 11 or not any(item["uid"] == after for item in rows):
             raise ValueError("Invalid resource cursor")
         rows = [item for item in rows if item["uid"] > after]
     if not rows:
         raise GitHubNoSelectedRepositories("No selected repositories to refresh")
-    next_cursor = rows[24]["uid"] if len(rows) > 25 else None
-    rows = rows[:25]
+    if not receipt_page:
+        next_cursor = rows[24]["uid"] if len(rows) > 25 else None
+        rows = rows[:25]
     groups = {}
     for item in rows:
         path = {part["type"]: part["id"] for part in item["path"]}
@@ -266,7 +312,12 @@ def refresh_resources(
         binding = db.exec(
             SqlBuilder.select.table(BoardAppBinding).where(BoardAppBinding.id == binding.id).with_for_update()
         ).first()
-        if resource_snapshot(db, binding)["revision"] != expected_revision:
+        current_snapshot = (
+            _receipt_page(db, binding, connection.id, installation_scope, repository_scope, after, lock=True)[0]
+            if receipt_page
+            else resource_snapshot(db, binding)
+        )
+        if current_snapshot["revision"] != expected_revision:
             raise GitHubResourceConflict()
         for uid, (access, health) in results.items():
             row = db.exec(
@@ -277,7 +328,7 @@ def refresh_resources(
             row.access_state, row.health = access, health
             db.update(row)
         return {
-            **resource_snapshot(db, binding),
+            **({} if receipt_page else resource_snapshot(db, binding)),
             "next_cursor": next_cursor,
             "refreshed_count": len(results),
             "unavailable_count": sum(access == "unknown" for access, _ in results.values()),
