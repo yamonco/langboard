@@ -15,8 +15,14 @@ class Card(BaseNotificationScheduleModel, table=True):
             name="linked_source_complete",
         ),
         Index("ix_card_project_archive_page", "project_id", "archived_at", "id"),
-        CheckConstraint("visibility IN ('INTERNAL', 'SHARED')", name="card_visibility"),
+        CheckConstraint("visibility IN ('INTERNAL', 'SHARED', 'PRIVATE')", name="card_visibility"),
         Index("ix_card_project_visibility", "project_id", "visibility"),
+        CheckConstraint(
+            "(visibility = 'PRIVATE' AND owner_user_id IS NOT NULL AND owner_user_id > 0 "
+            "AND created_by_user_id IS NOT NULL AND owner_user_id = created_by_user_id "
+            "AND created_by_bot_id IS NULL) OR (visibility <> 'PRIVATE' AND owner_user_id IS NULL)",
+            name="card_private_owner",
+        ),
     )
 
     created_by_user_id: SnowflakeID | None = SnowflakeIDField(nullable=True, index=True)
@@ -34,6 +40,7 @@ class Card(BaseNotificationScheduleModel, table=True):
     # Visibility remains internal storage until every read and publish boundary
     # is enforced. External membership never rewrites this persisted value.
     visibility: str = Field(default="INTERNAL", nullable=False, sa_column_kwargs={"server_default": "INTERNAL"})
+    owner_user_id: SnowflakeID | None = SnowflakeIDField(foreign_key="user.id", nullable=True)
     title: str = Field(nullable=False, api_field=ApiField())
     description: EditorContentModel = Field(
         default=EditorContentModel(), sa_type=ModelColumnType(EditorContentModel), api_field=ApiField()
