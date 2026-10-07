@@ -157,8 +157,8 @@ health propagation remain pending.
 
 Authenticated POST `/board/{uid}/settings/apps/github/resources/refresh` takes
 Connection UID and resource snapshot revision. Current board authority and owned
-Connection are required. One to 25 selected repositories are individually checked
-with restricted ephemeral metadata tokens. Successful access becomes granted/healthy
+Connection are required. Selected repositories are refreshed in explicit cursor pages of at most 25.
+Each same-installation/account group uses one restricted ephemeral token. Successful access becomes granted/healthy
 (or degraded for an archived repository). Missing external evidence, suspension,
 denial, transport or credential failure becomes unknown/unavailable. This does not
 prove uninstall or revoke selection.
@@ -167,5 +167,10 @@ Before persistence the transaction locks board/Connection/Binding, rechecks host
 authority, Connection identity and resource revision. Other boards, unselected
 resources, mapping/grants/activation and Connection state remain unchanged. UI has
 an explicit refresh control and refreshes Store status after success. Automatic
-signature-verified lifecycle events, resource batches above 25 and live GitHub
-health acceptance remain pending.
+signature-verified lifecycle events, live GitHub health acceptance remain pending.
+
+Health continuation uses a selected-resource UID cursor and current snapshot
+revision on every request. The UI requires another explicit click for each page;
+there is no background full-board scan. Forty same-installation resources require
+two token lifecycles instead of forty. Ambiguous group failure marks the group
+unknown/unavailable; it does not identify a particular removed repository.

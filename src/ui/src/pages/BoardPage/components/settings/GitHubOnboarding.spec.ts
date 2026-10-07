@@ -80,3 +80,15 @@ test("explicit health refresh uses current resource revision", async ({ page }) 
         expected_revision: "a".repeat(64),
     });
 });
+
+test("health refresh continues only on explicit request", async ({ page }) => {
+    await page.goto(path + "&healthpages");
+    await page.getByRole("button", { name: "Refresh repository health" }).click();
+    await page.getByRole("button", { name: "Refresh next repositories" }).click();
+    await expect(page.getByRole("button", { name: "Refresh repository health" })).toBeVisible();
+    const calls = await page.evaluate(() =>
+        (window as unknown as { githubCalls: { url: string; data: unknown }[] }).githubCalls.filter((call) => call.url.endsWith("/resources/refresh"))
+    );
+    expect(calls).toHaveLength(2);
+    expect(calls[1].data).toMatchObject({ after: "cursor" });
+});
