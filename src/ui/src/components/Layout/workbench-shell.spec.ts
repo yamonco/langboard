@@ -160,6 +160,7 @@ test("comment layout follows card width even within a wide viewport and reserves
 });
 
 test("description markers remain within the card viewport and track its internal scroll", async ({ page }) => {
+    await page.setViewportSize({ width: 1920, height: 1080 });
     await page.goto("/src/pages/BoardPage/components/card/description/description-scroll.fixture.html");
     const viewport = page.locator("[data-card-content-viewport]");
     const markers = page.getByRole("button", { name: /Go to description|번째 설명으로 이동/ });
@@ -205,6 +206,8 @@ test("description markers remain within the card viewport and track its internal
             );
         })
         .toBe(true);
+    await page.mouse.move(1900, 1000);
+    await markers.last().press("Escape");
     await page.getByRole("button", { name: "Short description" }).click();
     await expect(markers).toHaveCount(2);
     await markers.last().click();
@@ -313,7 +316,7 @@ test("mobile description navigator fills a fixed viewport while keyboard scrolli
     const bounds = await viewport.boundingBox();
     expect(initial!.y - bounds!.y).toBeGreaterThanOrEqual(24);
     expect(bounds!.y + bounds!.height - initial!.y - initial!.height).toBeGreaterThanOrEqual(24);
-    expect(initial!.x).toBeGreaterThanOrEqual(bounds!.x + bounds!.width);
+    expect(initial!.x + initial!.width).toBeLessThanOrEqual(bounds!.x);
     await expect(viewport).toHaveCSS("scrollbar-width", "none");
     await markers.last().press("Home");
     await expect.poll(() => viewport.evaluate((element) => element.scrollTop)).toBe(0);

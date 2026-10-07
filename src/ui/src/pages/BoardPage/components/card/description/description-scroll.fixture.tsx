@@ -24,7 +24,7 @@ function Fixture() {
             <button onClick={() => setBefore((h) => (h === 120 ? 240 : 120))}>Expand header</button>
             <div
                 data-card-content-frame
-                style={{ position: "relative", height, width: "100%", maxWidth: 900, paddingRight: 40, boxSizing: "border-box" }}
+                style={{ position: "relative", height, width: "100%", maxWidth: 900, paddingLeft: 40, boxSizing: "border-box" }}
             >
                 <div
                     ref={scrollParentRef}

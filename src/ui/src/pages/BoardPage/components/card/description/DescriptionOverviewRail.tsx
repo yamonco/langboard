@@ -46,7 +46,7 @@ export const DescriptionOverviewRail = memo(
                 data-card-description-rail
                 position="absolute"
                 top="6"
-                right="1"
+                left="1"
                 className="pointer-events-none z-10 flex w-7 justify-center"
                 style={{ height: Math.max(0, viewportHeight - 48) }}
                 aria-hidden={false}
@@ -90,7 +90,7 @@ export const DescriptionOverviewRail = memo(
 
                                 <HoverCard.Portal>
                                     <HoverCard.Content
-                                        side="left"
+                                        side="right"
                                         align="center"
                                         sideOffset={10}
                                         className="w-72"

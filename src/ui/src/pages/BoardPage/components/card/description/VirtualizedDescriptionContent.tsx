@@ -118,9 +118,11 @@ export const VirtualizedDescriptionContent = memo(
         const scrollToChunk = useCallback(
             (index: number) => {
                 cancelAnimationFrame(navigationFrameRef.current);
-                virtualizer.scrollToIndex(index, { align: "start", behavior: "auto" });
+                const offset = virtualizer.getOffsetForIndex(index, "start");
+                if (offset) virtualizer.scrollToOffset(offset[0], { behavior: "auto" });
                 navigationFrameRef.current = requestAnimationFrame(() => {
-                    virtualizer.scrollToIndex(index, { align: "start", behavior: "auto" });
+                    const measuredOffset = virtualizer.getOffsetForIndex(index, "start");
+                    if (measuredOffset) virtualizer.scrollToOffset(measuredOffset[0], { behavior: "auto" });
                 });
             },
             [virtualizer]
