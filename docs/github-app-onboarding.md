@@ -184,3 +184,22 @@ The UI offers previous/next pages via fresh authorization. This avoids retaining
 user access tokens but requires a GitHub authorization redirect per page. Returning
 to an earlier page requires new verification; only current-page choices are shown.
 No automatic all-installation scan is introduced.
+
+## Lifecycle verification boundary
+
+The internal lifecycle verifier accepts bounded original bytes, a SHA256 signature,
+event and UUID delivery ID. Trusted host code supplies the Connection owner actor;
+an external payload cannot choose actor authority. Existing runtime SecretReference
+resolves the App webhook secret; HMAC-SHA256 is compared in constant time before
+JSON decoding. It validates exact App ID, positive installation/account IDs, known
+installation/repository actions, bounded unique repository IDs and disjoint deltas.
+A post-resolution Connection revision check catches concurrent revocation.
+
+The frozen result carries identity, action, repository IDs, delivery ID, Connection
+revision and payload digest only. It retains no secret or arbitrary body. Verification
+is not receipt persistence or processing: the HTTP receiver, durable delivery
+idempotency, event ordering, resource consumers and lifecycle readback remain pending.
+Manifest webhook delivery remains disabled until these paths are wired and tested.
+
+Official signature contract:
+https://docs.github.com/en/webhooks/using-webhooks/validating-webhook-deliveries
