@@ -253,6 +253,7 @@ def test_principal_uses_issuer_subject_without_toolgroup_dependency(monkeypatch,
     token = SimpleNamespace(claims={"iss": issuer, "sub": "stable-sub", "email": "ignored@example.invalid"})
     result = OAuth.resolve_principal(token, service)
     assert result["user_or_bot"] is user
+    assert result["collaboration_channel"] == "mcp"
     assert "tool_group" not in result
     assert service.identity_link.get_user_by_provider_external_id.call_args.args[1:] == (
         "stable-sub",

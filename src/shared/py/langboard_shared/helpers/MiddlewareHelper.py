@@ -3,6 +3,7 @@ from fastapi import status
 from starlette.datastructures import Headers
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from ..core.security import AuthSecurity
+from ..core.security.CollaborationChannel import CollaborationChannel
 from ..core.utils.decorators import staticclass
 from ..domain.models import Bot, User
 from ..security import Auth
@@ -62,6 +63,8 @@ class MiddlewareHelper:
 
     @staticmethod
     def validate_auth(scope: Scope) -> User | Bot | int:
+        # Reset untrusted/preexisting hints before validating any credential.
+        scope["collaboration_channel"] = CollaborationChannel.Api
         headers = Headers(scope=scope)
         if headers.get(AuthSecurity.API_TOKEN_HEADER, headers.get(AuthSecurity.API_TOKEN_HEADER.lower())):
             validation_result = Auth.validate_user_by_api_token(headers)
@@ -71,6 +74,7 @@ class MiddlewareHelper:
 
             validation_result = Auth.validate_bot(headers)
             if isinstance(validation_result, Bot):
+                scope["collaboration_channel"] = CollaborationChannel.Bot
                 scope["auth"] = validation_result
                 return validation_result
             return validation_result
@@ -85,6 +89,10 @@ class MiddlewareHelper:
 
         validation_result = Auth.validate(headers)
         if isinstance(validation_result, User):
+            # Native session requires both the verified bearer and refresh cookie.
+            # An API credential with a session fallback is still an API call.
+            if not MiddlewareHelper._is_api_key_used(headers):
+                scope["collaboration_channel"] = CollaborationChannel.HumanUI
             scope["auth"] = validation_result
             return validation_result
 
