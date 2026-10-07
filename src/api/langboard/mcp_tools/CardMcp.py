@@ -97,11 +97,11 @@ def get_card(project_uid: str, card_uid: str, user_or_bot: User | Bot, service: 
 
 @McpTool.add(description="Compatibility entry for card attachment image selection.")
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
-def get_card_attachments(project_uid: str, card_uid: str, service: DomainService) -> dict:
-    params = _get_card_in_project(project_uid, card_uid)
-    if not params:
+def get_card_attachments(project_uid: str, card_uid: str, service: DomainService, *, user_or_bot: User | Bot) -> dict:
+    resolved = service.card.resolve_readable_card(project_uid, card_uid, user_or_bot, CollaborationChannel.Mcp)
+    if resolved is None:
         raise ValueError("Card not found")
-    return {"attachments": service.card_attachment.get_api_list_by_card(params[1])}
+    return {"attachments": service.card_attachment.get_api_list_by_card(resolved[1])}
 
 
 @McpTool.add("user", description="Read up to 8 MB of one attachment belonging to a readable card.")
@@ -109,11 +109,11 @@ def get_card_attachments(project_uid: str, card_uid: str, service: DomainService
 def read_card_attachment(
     project_uid: str, card_uid: str, attachment_uid: str, user: User, service: DomainService
 ) -> dict:
-    params = _get_card_in_project(project_uid, card_uid)
-    if not params:
+    resolved = service.card.resolve_readable_card(project_uid, card_uid, user, CollaborationChannel.Mcp)
+    if resolved is None:
         raise ValueError("Card not found in project")
-    _, card = params
-    attachment = service.card_attachment.get_by_id_like(attachment_uid)
+    _, card, _ = resolved
+    attachment = service.card_attachment.get_by_id_like(attachment_uid, consistent=True)
     if attachment is None or attachment.card_id != card.id or attachment.deleted_at is not None:
         raise ValueError("Attachment not found in card")
     source_file = attachment.file
@@ -123,7 +123,9 @@ def read_card_attachment(
         raise ValueError("Attachment content unavailable")
     if len(content) > 8 * 1024 * 1024:
         raise ValueError("Attachment exceeds the 8 MB MCP read limit")
-    latest = service.card_attachment.get_by_id_like(attachment_uid)
+    if service.card.resolve_readable_card(project_uid, card_uid, user, CollaborationChannel.Mcp) is None:
+        raise ValueError("Attachment content unavailable")
+    latest = service.card_attachment.get_by_id_like(attachment_uid, consistent=True)
     if (
         latest is None
         or latest.card_id != card.id
@@ -159,9 +161,13 @@ def read_card_document(
     if type(offset) is not int or offset < 0 or type(max_chars) is not int or not 128 <= max_chars <= 8000:
         raise ValueError("Invalid document excerpt bounds")
     _, card, attachment = _require_readable_document(project_uid, card_uid, attachment_uid, user, service)
+    source_file, source_name = attachment.file, attachment.filename
     document = service.docling_metadata.get_document_by_attachment_uid(CardMetadata, card, attachment_uid)
     if not document:
         raise ValueError("Document transcription unavailable")
+    _, _, latest_attachment = _require_readable_document(project_uid, card_uid, attachment_uid, user, service)
+    if latest_attachment.file != source_file or latest_attachment.filename != source_name:
+        raise ValueError("Document unavailable")
     generation = document.get("generation")
     if expected_generation is not None and expected_generation != generation:
         raise ValueError("Document generation changed; restart reading")
@@ -191,14 +197,14 @@ def read_card_document(
 
 
 def _require_readable_document(project_uid, card_uid, attachment_uid, user, service):
-    params = _get_card_in_project(project_uid, card_uid)
-    if not params:
+    resolved = service.card.resolve_readable_card(project_uid, card_uid, user, CollaborationChannel.Mcp)
+    if resolved is None:
         raise ValueError("Document unavailable")
-    project, card = params
+    project, card, _ = resolved
     actions = service.project.get_user_role_actions_by_project(user, project)
     if "*" not in actions and ProjectRoleAction.Read.value not in actions:
         raise ValueError("Document unavailable")
-    attachment = service.card_attachment.get_by_id_like(attachment_uid)
+    attachment = service.card_attachment.get_by_id_like(attachment_uid, consistent=True)
     if (
         card.is_linked_resource
         or attachment is None

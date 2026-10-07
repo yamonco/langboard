@@ -198,6 +198,16 @@ class CardService(BaseDomainService):
 
         return [card for card, _ in self.repo.card.get_all_by_project(project)]
 
+    def get_visible_by_project(
+        self, project: TProjectParam, user: TUserOrBot,
+        channel: CollaborationChannel = CollaborationChannel.Api,
+    ) -> list[Card]:
+        resolved = self.resolve_visibility_context(project, user, channel)
+        if resolved is None:
+            return []
+        project, context = resolved
+        return [card for card, _ in self.repo.card.get_all_by_project(project, context=context)]
+
     def resolve_readable_card(
         self, project: TProjectParam | None, card: TCardParam | None, user: TUserOrBot | None,
         channel: CollaborationChannel = CollaborationChannel.Api,

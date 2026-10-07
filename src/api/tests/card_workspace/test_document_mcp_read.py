@@ -10,7 +10,7 @@ from langboard.mcp_tools import CardMcp
 
 def fixture(monkeypatch):
     card = SimpleNamespace(id=7, is_linked_resource=False)
-    attachment = SimpleNamespace(card_id=7, deleted_at=None, filename="report.pdf")
+    attachment = SimpleNamespace(card_id=7, deleted_at=None, filename="report.pdf", file=object())
     document = {
         "generation": "current",
         "status": "indexed",
@@ -19,6 +19,7 @@ def fixture(monkeypatch):
         "embedding_config": {"api_key": "must-not-return"},
     }
     service = SimpleNamespace(
+        card=SimpleNamespace(resolve_readable_card=Mock(return_value=(object(), card, object()))),
         project=SimpleNamespace(get_user_role_actions_by_project=Mock(return_value=["*"])),
         card_attachment=SimpleNamespace(get_by_id_like=Mock(return_value=attachment)),
         docling_metadata=SimpleNamespace(get_document_by_attachment_uid=Mock(return_value=document)),
@@ -152,3 +153,19 @@ def test_vector_search_rechecks_current_source_after_provider_call(monkeypatch, 
     else:
         with pytest.raises(ValueError, match="unavailable|generation changed"):
             CardMcp.search_card_document("board", "card", "attachment", "query", object(), service)
+
+
+@pytest.mark.parametrize("phase", ["before", "during"])
+def test_visibility_revocation_never_returns_transcription(monkeypatch, phase):
+    service, _, _, document = fixture(monkeypatch)
+    if phase == "before":
+        service.card.resolve_readable_card.return_value = None
+    else:
+        def read(*args):
+            service.card.resolve_readable_card.return_value = None
+            return document
+        service.docling_metadata.get_document_by_attachment_uid.side_effect = read
+    with pytest.raises(ValueError, match="unavailable"):
+        CardMcp.read_card_document("board", "card", "attachment", object(), service)
+    if phase == "before":
+        service.docling_metadata.get_document_by_attachment_uid.assert_not_called()
