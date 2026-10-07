@@ -134,6 +134,7 @@
     "Mapping resolved": "已选择目标",
     "Mapping invalid": "请检查原映射。",
     "Save workflow mapping": "保存映射",
-    "Prepare workflow settings": "准备工作流设置"
+    "Prepare workflow settings": "准备工作流设置",
+    "Discard workflow changes": "放弃更改"
   }
 }

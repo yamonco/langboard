@@ -134,6 +134,7 @@
     "Mapping resolved": "대상 선택됨",
     "Mapping invalid": "기존 매핑을 확인하세요.",
     "Save workflow mapping": "매핑 저장",
-    "Prepare workflow settings": "워크플로우 설정 준비"
+    "Prepare workflow settings": "워크플로우 설정 준비",
+    "Discard workflow changes": "변경 취소"
   }
 }

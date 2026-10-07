@@ -134,6 +134,7 @@
     "Mapping resolved": "移動先選択済み",
     "Mapping invalid": "以前のマッピングを確認してください。",
     "Save workflow mapping": "マッピングを保存",
-    "Prepare workflow settings": "ワークフロー設定を準備"
+    "Prepare workflow settings": "ワークフロー設定を準備",
+    "Discard workflow changes": "変更を破棄"
   }
 }
