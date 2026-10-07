@@ -70,3 +70,21 @@ Audit source linkage, provider migration/rotation tooling, richer dangling statu
 model-facing API/MCP/CLI/wiki metadata integration and GitHub onboarding consumers
 remain pending. The earlier remaining-contract section describes those end-state
 requirements; scope/URI/rename/move primitives are now implemented as above.
+
+## Successful operation audit
+
+The host service writes `SecretReferenceAudit` in the same database transaction
+as successful create, trusted resolution, rename, move and revoke operations.
+Each fact records the actor, stable reference ID, action, current scope/revision
+and optional host source kind/identifier. There is no free-form payload, credential,
+locator or provider column. Source kinds are bounded and identifiers reject URLs
+and arbitrary text. Host adapters construct `SecretAuditSource`; client-provided
+source text must not be trusted as identity or provenance.
+
+Audit insert failure prevents a successful operation. Failed credential creation
+rolls back its reference and removes the new KV/local storage value. Successful
+resolution does not return material before its audit insert succeeds. These are
+transactional host facts, not an independent tamper-proof ledger: a surrounding
+transaction rollback also rolls back its audit. Denied/failed request auditing,
+retention/export, admin audit UI and external runtime consumer source binding
+remain pending. No public audit or secret-value endpoint is added.
