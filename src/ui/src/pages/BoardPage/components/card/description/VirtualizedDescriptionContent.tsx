@@ -127,15 +127,20 @@ export const VirtualizedDescriptionContent = memo(
             (key: string) => {
                 const viewport = scrollParentRef.current;
                 if (!viewport || !["PageUp", "PageDown", "Home", "End"].includes(key)) return false;
-                if (key === "Home" || key === "End") viewport.scrollTo({ top: key === "Home" ? 0 : viewport.scrollHeight });
-                else viewport.scrollBy({ top: viewport.clientHeight * (key === "PageDown" ? 0.9 : -0.9) });
+                const offset =
+                    key === "Home"
+                        ? 0
+                        : key === "End"
+                          ? viewport.scrollHeight
+                          : viewport.scrollTop + viewport.clientHeight * (key === "PageDown" ? 0.9 : -0.9);
+                virtualizer.scrollToOffset(offset, { behavior: "auto" });
                 return true;
             },
-            [scrollParentRef]
+            [scrollParentRef, virtualizer]
         );
 
         return (
-            <Box ref={containerRef} position="relative" className="grid grid-cols-[minmax(0,1fr)_28px] items-start">
+            <Box ref={containerRef} position="relative" className="min-w-0">
                 <Box position="relative" style={{ height: `${virtualizer.getTotalSize()}px` }}>
                     {virtualizer.getVirtualItems().map((virtualItem) => {
                         const chunk = chunks[virtualItem.index];

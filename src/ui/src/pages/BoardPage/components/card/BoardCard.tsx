@@ -558,7 +558,7 @@ function BoardTaskCardResult({
                                 </Flex>
                             </Dialog.Header>
                             <Flex gap="3" direction={{ initial: "col-reverse", sm: "row" }} className="min-h-0 flex-1">
-                                <Box data-card-content-frame="" className="relative min-h-0 min-w-0 flex-1">
+                                <Box data-card-content-frame="" className="relative min-h-0 min-w-0 flex-1 pr-10">
                                     <Box
                                         ref={contentViewportRef}
                                         data-card-content-viewport=""
