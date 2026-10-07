@@ -34,6 +34,51 @@ _TUserOrBotActivityParam: TypeAlias = User | Bot | SnowflakeID | int | str
 
 
 class ActivityRepository(BaseRepository[BaseActivityModel]):
+    def get_scoped_project_activities(
+        self, project: Project, pagination: TimeBasedPagination, *, context: CardVisibilityContext,
+        column: TColumnParam | None = None, card: TCardParam | None = None,
+        assignee: TUserOrBotParam | None = None, only_count: bool = False,
+    ) -> tuple[list[ProjectActivity] | list[UserActivity], int] | int:
+        """Apply the same current card scope to pages and new-record counts."""
+        if not context.active or not context.project_member:
+            return 0 if only_count else ([], 0)
+        scope = "card" if card is not None else "project_column" if column is not None else "project"
+        ids = {"project": project.id}
+        if column is not None:
+            ids["project_column"] = InfraHelper.convert_id(column)
+        if card is not None:
+            ids["card"] = InfraHelper.convert_id(card)
+        model, page_query, count_query, actor_filters = self.__create_refer_activity_queries(
+            ProjectActivity, scope, assignee=assignee, **ids,
+        )
+        if model is ProjectActivity:
+            page_query = SqlBuilder.select.table(model)
+            count_query = SqlBuilder.select.count(model, model.id)
+            actor_filters = {f"{key}_id": value for key, value in ids.items()}
+        visible_card = select(Card.id).where(
+            Card.id == ProjectActivity.card_id, Card.project_id == project.id,
+            Card.deleted_at.is_(None), card_visibility_scope(context),
+        ).exists()
+        readable_activity = or_(ProjectActivity.card_id.is_(None), visible_card)
+        if model is UserActivity:
+            readable_activity = or_(
+                and_(ProjectActivity.id.is_not(None), readable_activity),
+                ProjectWikiActivity.id.is_not(None) if scope == "project" else False,
+            )
+        page_query = InfraHelper.where_recursive(page_query, model, **actor_filters).where(readable_activity)
+        count_query = InfraHelper.where_recursive(count_query, model, **actor_filters).where(
+            readable_activity, model.created_at > pagination.refer_time,
+        )
+        with DbSession.use(readonly=False) as db:
+            count = db.exec(count_query).first() or 0
+            if only_count:
+                return count
+            page_query = page_query.where(model.created_at <= pagination.refer_time).order_by(
+                model.created_at.desc(), model.id.desc(),
+            )
+            page_query = InfraHelper.paginate(page_query, pagination.page, pagination.limit)
+            return list(db.exec(page_query).all()), count
+
     def get_card_change_page(
         self, project: Project, limit: int, *, context: CardVisibilityContext,
         before_activity_uid: str | None = None,
