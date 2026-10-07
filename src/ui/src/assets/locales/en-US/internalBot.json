@@ -9,5 +9,29 @@
   "Process new uploads": "Process new document uploads",
   "Existing attachments require explicit processing": "Applies at upload time. Process existing attachments explicitly from their card; changing this setting does not reprocess old files.",
   "Search keyword languages": "Search keyword languages",
-  "Keywords apply to requested processing": "Extract search terms separately from transcription. Applies to new uploads or explicitly reprocessed attachments."
+  "Keywords apply to requested processing": "Extract search terms separately from transcription. Applies to new uploads or explicitly reprocessed attachments.",
+  "retrieval": {
+    "title": "Document retrieval",
+    "enabled": "Embed new uploads",
+    "store": "Vector store",
+    "dimensions": "Embedding dimensions",
+    "splitter.type": "Splitter",
+    "splitter.chunk_size": "Chunk size",
+    "splitter.chunk_overlap": "Chunk overlap",
+    "splitter.length_unit": "Length unit",
+    "splitter.encoding": "Token encoding",
+    "splitter.keep_separator": "Keep separator",
+    "k": "Result limit",
+    "max_return_tokens": "Maximum returned tokens",
+    "timeout_seconds": "Provider timeout (seconds)",
+    "overlap_help": "Overlap must be smaller than chunk size. Saving settings never reindexes existing attachments.",
+    "splitter.strip_whitespace": "Trim chunk whitespace",
+    "splitter.separator": "Character separator",
+    "splitter.separators": "Recursive separators (JSON array)",
+    "splitter.markdown_headers": "Markdown header levels",
+    "splitter.strip_headers": "Remove headers from chunk text",
+    "overlap_error": "Overlap must be smaller than chunk size.",
+    "separators_error": "Use 1–16 strings, each at most 32 characters; the final separator must be an empty string.",
+    "headers_error": "Select at least one Markdown header level."
+  }
 }
