@@ -163,6 +163,18 @@ def receipt_storage(lifecycle, monkeypatch):
     with engine.begin() as connection:
         invalidation.op = Operations(MigrationContext.configure(connection))
         invalidation.upgrade()
+    spec = importlib.util.spec_from_file_location(
+        "github_health_migration", path.with_name("20261008103000-d76301682fa2.py")
+    )
+    health = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(health)
+    with engine.begin() as connection:
+        health.op = Operations(MigrationContext.configure(connection))
+        health.upgrade()
+    from langboard.apps import GitHubHealthWorker
+
+    monkeypatch.setattr(GitHubHealthWorker, "enqueue", lambda uid: None)
+    migration.health = health
     migration.invalidation = invalidation
     return lifecycle, migration, engine
 
@@ -221,8 +233,11 @@ def test_invalid_signature_never_creates_receipt(receipt_storage):
 
     with engine.begin() as db:
         migration.op = Operations(MigrationContext.configure(db))
+        migration.health.op = Operations(MigrationContext.configure(db))
+        migration.health.downgrade()
         migration.downgrade()
         migration.upgrade()
+        migration.health.upgrade()
 
 
 def test_receipt_rechecks_connection_after_verification(receipt_storage, monkeypatch):
@@ -750,3 +765,260 @@ def test_receipt_refresh_fences_connection_changed_between_snapshot_and_query(re
     monkeypatch.setattr(health, "get_resources", change)
     with pytest.raises(GitHubResourceConflict):
         health.refresh_receipt_resources(service, receipt["receipt_uid"], board[2].get_uid())
+
+
+@pytest.fixture
+def health_job(receipt_storage, monkeypatch):
+    from langboard.apps import GitHubHealthWorker as worker
+    from langboard.apps.GitHubLifecycle import receive_lifecycle
+    from langboard_shared.core.db import SqlBuilder
+    from langboard_shared.domain.models import AppResourceBinding, BoardAppBinding, GitHubHealthJob
+
+    lifecycle, migration, engine = receipt_storage
+    service, board, connection, payload = lifecycle
+    dispatched = []
+    monkeypatch.setattr(worker, "enqueue", dispatched.append)
+    with DbSession.use(readonly=False) as db:
+        for project_id, installation_id, count in ((10, 17, 40), (11, 17, 1)):
+            binding = BoardAppBinding(project_id=project_id, app_key="github")
+            db.insert(binding)
+            for i in range(count):
+                db.insert(
+                    AppResourceBinding(
+                        board_binding_id=binding.id,
+                        connection_id=connection.id,
+                        resource_type="repository",
+                        external_resource_id=str(100 + i),
+                        resource_path=[
+                            {"type": "installation", "id": str(installation_id)},
+                            {"type": "account", "id": "7"},
+                        ],
+                    )
+                )
+    payload = {"action": "unsuspend", "installation": payload["installation"]}
+    body, signature = signed(payload)
+    delivery = str(uuid4())
+
+    def receive():
+        return receive_lifecycle(service, board[1], connection.get_uid(), body, signature, "installation", delivery)
+
+    receive()
+    with DbSession.use(readonly=False) as db:
+        job = db.exec(SqlBuilder.select.table(GitHubHealthJob)).first()
+    return worker, service, board, connection, job, dispatched, receive, migration, engine
+
+
+def test_health_job_atomic_dispatch_replay_and_paged_board_cursor(health_job, monkeypatch):
+    from langboard.apps import GitHubResources as resources
+    from langboard_shared.core.db import SqlBuilder
+    from langboard_shared.domain.models import GitHubHealthJob
+
+    worker, service, board, connection, job, dispatched, receive, migration, engine = health_job
+    assert dispatched == [job.get_uid()]
+    receive()
+    assert dispatched == [job.get_uid()]
+    calls = []
+
+    def inspect(*args, **kwargs):
+        calls.append(kwargs["repository_ids"])
+        return {"repositories": [{"id": value, "archived": False} for value in kwargs["repository_ids"]]}
+
+    monkeypatch.setattr(resources, "inspect_installation", inspect)
+    assert worker.drain_one(service, job.get_uid())
+    with DbSession.use(readonly=False) as db:
+        current = db.exec(SqlBuilder.select.table(GitHubHealthJob)).first()
+        assert current.project_id == 10 and current.resource_after and current.attempts == 0
+    assert len(calls[0]) == 25
+    assert worker.drain_one(service, job.get_uid())
+    assert len(calls[1]) == 15
+    # Current board authority fails for the foreign board; no API call there.
+    assert worker.drain_one(service, job.get_uid())
+    with DbSession.use(readonly=False) as db:
+        current = db.exec(SqlBuilder.select.table(GitHubHealthJob)).first()
+        assert current.state == "pending" and current.board_after == 11
+        assert current.blocked_boards == 1
+        assert current.last_error == "authority_unavailable"
+    assert worker.drain_one(service, job.get_uid())
+    with DbSession.use(readonly=False) as db:
+        current = db.exec(SqlBuilder.select.table(GitHubHealthJob)).first()
+        assert current.state == "blocked"
+    assert len(calls) == 2 and not worker.drain_one(service, job.get_uid())
+
+
+def test_health_retry_recovery_cap_and_lease_fence(health_job, monkeypatch):
+    from datetime import timedelta
+    from langboard_shared.core.db import SqlBuilder
+    from langboard_shared.core.types import SafeDateTime
+    from langboard_shared.domain.models import GitHubHealthJob
+
+    worker, service, board, connection, job, dispatched, receive, migration, engine = health_job
+
+    def unavailable(*args, **kwargs):
+        return {"next_cursor": None, "unavailable_count": 25}
+
+    monkeypatch.setattr(worker, "refresh_receipt_resources", unavailable)
+    for attempt in range(1, 5):
+        assert worker.drain_one(service, job.get_uid())
+        with DbSession.use(readonly=False) as db:
+            current = db.exec(SqlBuilder.select.table(GitHubHealthJob)).first()
+            assert current.attempts == attempt and current.resource_after is None
+            assert current.state == ("failed" if attempt == 4 else "pending")
+            assert not worker.drain_one(service, job.get_uid())
+            current.available_at = SafeDateTime.now() - timedelta(seconds=1)
+            db.update(current)
+    assert worker.recover_pending() == 0
+    # Recovery after a worker crash retains cursor and counts the abandoned attempt.
+    with DbSession.use(readonly=False) as db:
+        current = db.exec(SqlBuilder.select.table(GitHubHealthJob)).first()
+        current.state, current.attempts, current.lease_token = "processing", 1, "abandoned"
+        current.available_at = SafeDateTime.now() - timedelta(seconds=1)
+        db.update(current)
+    dispatched.clear()
+    assert worker.recover_pending(limit=1) == 1 and dispatched == [job.get_uid()]
+    assert worker.drain_one(service, job.get_uid())
+    with DbSession.use(readonly=False) as db:
+        current = db.exec(SqlBuilder.select.table(GitHubHealthJob)).first()
+        assert current.attempts == 2 and current.lease_token is None
+    # Replaced lease cannot be overwritten by the old worker's completion.
+    with DbSession.use(readonly=False) as db:
+        current.available_at = SafeDateTime.now() - timedelta(seconds=1)
+        db.update(current)
+
+    def steal(*args, **kwargs):
+        with DbSession.use(readonly=False) as db:
+            current = db.exec(SqlBuilder.select.table(GitHubHealthJob)).first()
+            current.lease_token = "new-worker"
+            db.update(current)
+        return {"next_cursor": None}
+
+    monkeypatch.setattr(worker, "refresh_receipt_resources", steal)
+    assert not worker.drain_one(service, job.get_uid())
+    with DbSession.use(readonly=False) as db:
+        current = db.exec(SqlBuilder.select.table(GitHubHealthJob)).first()
+        assert current.lease_token == "new-worker" and current.state == "processing"
+
+
+def test_health_job_rolls_back_with_receipt_and_refuses_populated_downgrade(receipt_storage, monkeypatch):
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+    from langboard.apps import GitHubHealthWorker as worker
+    from langboard.apps import GitHubLifecycle as lifecycle_module
+    from langboard_shared.core.db import SqlBuilder
+    from langboard_shared.domain.models import GitHubHealthJob, GitHubLifecycleReceipt
+
+    lifecycle, migration, engine = receipt_storage
+    service, board, connection, payload = lifecycle
+    dispatched = []
+    monkeypatch.setattr(worker, "enqueue", dispatched.append)
+    original = lifecycle_module.schedule_receipt
+
+    def fail(db, receipt):
+        original(db, receipt)
+        raise RuntimeError("after job insert")
+
+    monkeypatch.setattr(lifecycle_module, "schedule_receipt", fail)
+    body, signature = signed(payload)
+    with pytest.raises(RuntimeError, match="after job"):
+        lifecycle_module.receive_lifecycle(
+            service, board[1], connection.get_uid(), body, signature, "installation_repositories", str(uuid4())
+        )
+    with DbSession.use(readonly=False) as db:
+        assert not db.exec(SqlBuilder.select.table(GitHubHealthJob)).all()
+        assert not db.exec(SqlBuilder.select.table(GitHubLifecycleReceipt)).all()
+    assert not dispatched
+    with engine.begin() as db:
+        migration.health.op = Operations(MigrationContext.configure(db))
+        migration.health.downgrade()
+        migration.health.upgrade()
+    monkeypatch.setattr(lifecycle_module, "schedule_receipt", original)
+    lifecycle_module.receive_lifecycle(
+        service, board[1], connection.get_uid(), body, signature, "installation_repositories", str(uuid4())
+    )
+    with engine.begin() as db:
+        migration.health.op = Operations(MigrationContext.configure(db))
+        with pytest.raises(RuntimeError, match="Cannot discard"):
+            migration.health.downgrade()
+
+
+def test_health_job_successful_completion_and_lost_enqueue(health_job, monkeypatch):
+    from langboard_shared.core.db import SqlBuilder
+    from langboard_shared.domain.models import GitHubHealthJob
+
+    worker, service, board, connection, job, dispatched, receive, migration, engine = health_job
+
+    def failed_enqueue(uid):
+        raise RuntimeError("broker unavailable")
+
+    monkeypatch.setattr(worker, "enqueue", failed_enqueue)
+    assert worker.recover_pending() == 0
+    # Both boards authorized by this test worker stub, one page each.
+    monkeypatch.setattr(worker, "refresh_receipt_resources", lambda *args, **kwargs: {"next_cursor": None})
+    assert worker.drain_one(service, job.get_uid())
+    assert worker.drain_one(service, job.get_uid())
+    assert worker.drain_one(service, job.get_uid())
+    with DbSession.use(readonly=False) as db:
+        current = db.exec(SqlBuilder.select.table(GitHubHealthJob)).first()
+        assert current.state == "completed" and current.board_after == 11
+    assert worker.recover_pending() == 0
+
+
+def test_health_job_postgres_concurrent_claim_is_exclusive(health_job, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event
+
+    worker, service, board, connection, job, dispatched, receive, migration, engine = health_job
+    if engine.dialect.name != "postgresql":
+        pytest.skip("PostgreSQL provides row-lock claim exclusivity")
+    entered, release = Event(), Event()
+    calls = []
+
+    def inspect(*args, **kwargs):
+        calls.append(args)
+        entered.set()
+        assert release.wait(10)
+        return {"next_cursor": None}
+
+    monkeypatch.setattr(worker, "refresh_receipt_resources", inspect)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first = pool.submit(worker.drain_one, service, job.get_uid())
+        try:
+            assert entered.wait(10)
+            assert pool.submit(worker.drain_one, service, job.get_uid()).result(timeout=10) is False
+        finally:
+            release.set()
+        assert first.result(timeout=10)
+    assert len(calls) == 1
+
+
+def test_health_repository_delta_never_refreshes_unrelated_repositories(health_job, monkeypatch):
+    from langboard.apps import GitHubResources as resources
+    from langboard.apps.GitHubLifecycle import receive_lifecycle
+    from langboard_shared.core.db import SqlBuilder
+    from langboard_shared.domain.models import GitHubHealthJob
+
+    worker, service, board, connection, job, dispatched, receive, migration, engine = health_job
+    payload = {
+        "action": "removed",
+        "installation": {"id": 17, "app_id": 42, "account": {"id": 7, "type": "Organization"}},
+        "repositories_removed": [{"id": 101}],
+    }
+    body, signature = signed(payload)
+    receive_lifecycle(
+        service, board[1], connection.get_uid(), body, signature, "installation_repositories", str(uuid4())
+    )
+    with DbSession.use(readonly=False) as db:
+        jobs = db.exec(SqlBuilder.select.table(GitHubHealthJob)).all()
+        delta_job = next(item for item in jobs if item.get_uid() != job.get_uid())
+    calls = []
+
+    def inspect(*args, **kwargs):
+        calls.append(kwargs["repository_ids"])
+        return {"repositories": [{"id": 101, "archived": False}]}
+
+    monkeypatch.setattr(resources, "inspect_installation", inspect)
+    assert worker.drain_one(service, delta_job.get_uid())
+    assert worker.drain_one(service, delta_job.get_uid())
+    assert calls == [(101,)]
+    with DbSession.use(readonly=False) as db:
+        current = db.exec(SqlBuilder.select.table(GitHubHealthJob).where(GitHubHealthJob.id == delta_job.id)).first()
+        assert current.state == "completed"

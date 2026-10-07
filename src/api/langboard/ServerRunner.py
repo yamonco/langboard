@@ -14,5 +14,9 @@ def run():
         "/app/scripts/run_execution_outbox_cron.sh",
         "execution-outbox-recovery",
     )
+    BotScheduleHelper.utils.remove_job(cron, "github-health-recovery")
+    BotScheduleHelper.utils.create_job(
+        cron, "* * * * *", "/app/scripts/run_github_health_cron.sh", "github-health-recovery"
+    )
     BotScheduleHelper.utils.save_cron(cron)
     FastAPIRunner.run(f"{Env.PROJECT_NAME}.AppInstance:app", APP_CONFIG_FILE, BASE_DIR)

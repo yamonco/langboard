@@ -11,6 +11,7 @@ from langboard_shared.domain.models import AppConnection, AppResourceBinding, Gi
 from langboard_shared.domain.services.factory.SecretReferenceService import SecretAuditSource
 from langboard_shared.helpers import InfraHelper
 from sqlalchemy import update
+from .GitHubHealthWorker import schedule_receipt
 from .GitHubInstallation import connection_revision
 from .GitHubManifest import GitHubManifestUnavailable
 
@@ -176,6 +177,7 @@ def receive_lifecycle(service, actor, connection_uid, body: bytes, signature: st
                 raise GitHubDeliveryConflict()
             if not receipt.invalidated:
                 _invalidate_resources(db, receipt)
+            schedule_receipt(db, receipt)
             return {"receipt_uid": receipt.get_uid(), "duplicate": True}
         receipt = GitHubLifecycleReceipt(
             connection_id=connection.id,
@@ -185,6 +187,7 @@ def receive_lifecycle(service, actor, connection_uid, body: bytes, signature: st
         )
         db.insert(receipt)
         _invalidate_resources(db, receipt)
+        schedule_receipt(db, receipt)
         return {"receipt_uid": receipt.get_uid(), "duplicate": False}
 
 

@@ -49,5 +49,8 @@ def refresh_receipt_resources(service, receipt_uid, project_uid, after=None):
         current["revision"],
         after,
         installation_scope=(receipt.installation_id, receipt.account_id),
+        repository_scope=tuple(str(value) for value in (*receipt.added_repository_ids, *receipt.removed_repository_ids))
+        if receipt.event == "installation_repositories"
+        else None,
         expected_connection_revision=receipt.connection_revision,
     )
