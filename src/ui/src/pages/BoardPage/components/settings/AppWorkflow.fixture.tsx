@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthUser, Project } from "@/core/models";
 import { BoardSettingsProvider } from "@/core/providers/BoardSettingsProvider";
 import BoardSettingsAppWorkflow from "./BoardSettingsAppWorkflow";
+import BoardSettingsApps from "./BoardSettingsApps";
 import i18n from "@/i18n";
 import "@/assets/styles/main.css";
 import { api } from "@/core/helpers/Api";
@@ -55,7 +56,7 @@ createRoot(document.getElementById("root")!).render(
     <QueryClientProvider client={new QueryClient()}>
         <BoardSettingsProvider project={project} currentUser={user}>
             <main className="mx-auto max-w-2xl p-4">
-                <BoardSettingsAppWorkflow />
+                {new URLSearchParams(location.search).has("store") ? <BoardSettingsApps /> : <BoardSettingsAppWorkflow />}
             </main>
         </BoardSettingsProvider>
     </QueryClientProvider>

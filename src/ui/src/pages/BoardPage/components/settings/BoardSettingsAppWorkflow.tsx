@@ -13,11 +13,15 @@ interface Snapshot {
     choices: { stage: string; required: boolean; status: string; column_uid: string | null; candidates: string[] }[];
 }
 const labels: Record<string, string> = { active: "In progress", review: "Review", closed: "Completed", ready: "Ready" };
-export default function BoardSettingsAppWorkflow() {
+export default function BoardSettingsAppWorkflow({
+    appKey,
+    onDirtyChange,
+}: { appKey?: "github" | "glitchtip"; onDirtyChange?: (dirty: boolean) => void } = {}) {
     const [t] = useTranslation();
     const { project, canEditBasicInfo } = useBoardSettings();
     const columns = ProjectColumn.Model.useModels((column) => column.project_uid === project.uid);
-    const [app, setApp] = useState("github");
+    const [selectedApp, setApp] = useState("github");
+    const app = appKey ?? selectedApp;
     const [draft, setDraft] = useState<Record<string, string>>({});
     const [pending, setPending] = useState(false);
     const [dirty, setDirty] = useState(false);
@@ -27,6 +31,9 @@ export default function BoardSettingsAppWorkflow() {
     const [newNames, setNewNames] = useState<Record<string, string>>({});
     const [error, setError] = useState(false);
     const { query } = useQueryMutation();
+    useEffect(() => {
+        onDirtyChange?.(dirty || pending);
+    }, [dirty, pending, onDirtyChange]);
     const url = `/board/${project.uid}/settings/apps/${app}/workflow`;
     const { data, isLoading, isError, refetch } = query(["app-workflow", project.uid, app], async () => (await api.get(url)).data as Snapshot, {
         retry: 0,
@@ -95,18 +102,20 @@ export default function BoardSettingsAppWorkflow() {
     };
     return (
         <div className="flex w-full flex-col gap-4 py-4">
-            <label className="flex flex-col gap-2 text-sm">
-                {t("project.settings.App")}
-                <select
-                    className="rounded-md border border-input bg-background p-2"
-                    value={app}
-                    disabled={pending || dirty}
-                    onChange={(event) => setApp(event.target.value)}
-                >
-                    <option value="github">GitHub</option>
-                    <option value="glitchtip">GlitchTip</option>
-                </select>
-            </label>
+            {!appKey && (
+                <label className="flex flex-col gap-2 text-sm">
+                    {t("project.settings.App")}
+                    <select
+                        className="rounded-md border border-input bg-background p-2"
+                        value={app}
+                        disabled={pending || dirty}
+                        onChange={(event) => setApp(event.target.value)}
+                    >
+                        <option value="github">GitHub</option>
+                        <option value="glitchtip">GlitchTip</option>
+                    </select>
+                </label>
+            )}
             <p className="text-sm text-muted-foreground">{t("project.settings.App workflow draft help")}</p>
             {isLoading ? (
                 <p role="status">{t("common.Loading...")}</p>

@@ -141,6 +141,16 @@
     "New workflow column name": "새 워크플로우 칼럼 이름",
     "Create column with stage": "스테이지와 함께 칼럼 생성",
     "Replace column stage warning": "스테이지를 바꾸면 이 보드의 모든 앱에서 칼럼의 의미가 변경됩니다.",
-    "Confirm stage replacement": "스테이지 교체 확인"
+    "Confirm stage replacement": "스테이지 교체 확인",
+    "Apps": "앱",
+    "Back to App Store": "앱 스토어로 돌아가기",
+    "App Store": "앱 스토어",
+    "App Store help": "보드 연동 앱을 살펴보고 워크플로우를 설정하세요.",
+    "App github summary": "저장소, 풀 리퀘스트와 리뷰 워크플로우.",
+    "App glitchtip summary": "프로젝트, 이슈와 해결 워크플로우.",
+    "App dokploy summary": "프로젝트, 환경과 애플리케이션.",
+    "App connection setup pending": "외부 연결 설정은 아직 제공되지 않습니다.",
+    "App workflow contract pending": "워크플로우 계약 준비 중",
+    "Configure workflow": "워크플로우 설정"
   }
 }

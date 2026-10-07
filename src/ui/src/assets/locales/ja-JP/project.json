@@ -141,6 +141,16 @@
     "New workflow column name": "新しいワークフロー列名",
     "Create column with stage": "ステージ付きの列を作成",
     "Replace column stage warning": "ステージを変更すると、このボードのすべてのアプリで列の意味が変わります。",
-    "Confirm stage replacement": "ステージの変更を確認"
+    "Confirm stage replacement": "ステージの変更を確認",
+    "Apps": "アプリ",
+    "Back to App Store": "アプリストアに戻る",
+    "App Store": "アプリストア",
+    "App Store help": "ボード連携アプリを探してワークフローを設定します。",
+    "App github summary": "リポジトリ、プルリクエスト、レビュー。",
+    "App glitchtip summary": "プロジェクト、問題、解決ワークフロー。",
+    "App dokploy summary": "プロジェクト、環境、アプリケーション。",
+    "App connection setup pending": "外部接続の設定はまだ利用できません。",
+    "App workflow contract pending": "ワークフロー契約を準備中",
+    "Configure workflow": "ワークフローを設定"
   }
 }
