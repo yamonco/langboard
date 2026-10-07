@@ -1,6 +1,8 @@
 """Primary SQLite card fixtures shared by REST visibility boundary tests."""
 
+import os
 from types import SimpleNamespace
+from uuid import uuid4
 import pytest
 from langboard_shared.core.db import DbSession
 from langboard_shared.core.db.DbEngine import DbEngine
@@ -10,12 +12,28 @@ from langboard_shared.domain.services.factory.CardService import CardService
 from langboard_shared.infrastructure.repositories.factory.ProjectAssignedUserRepository import (
     ProjectAssignedUserRepository,
 )
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 
 
 @pytest.fixture
-def current_card(monkeypatch):
-    engine = create_engine("sqlite://")
+def current_card(monkeypatch, request):
+    database_url = getattr(request, "param", "sqlite://")
+    if database_url == "postgresql-test":
+        database_url = os.environ.get("LANGBOARD_FILE_TEST_DATABASE_URL")
+        if not database_url:
+            pytest.skip("Set LANGBOARD_FILE_TEST_DATABASE_URL to a disposable PostgreSQL database")
+    engine = create_engine(database_url)
+    schema = None
+    if engine.dialect.name == "postgresql":
+        schema = "notification_test_" + uuid4().hex
+        with engine.begin() as db:
+            db.execute(text(f'CREATE SCHEMA "{schema}"'))
+        engine.dispose()
+        engine = create_engine(database_url, connect_args={"options": f"-csearch_path={schema}"})
+        with engine.begin() as db:
+            for table in ("organization", "bot", "project_column"):
+                db.execute(text(f'CREATE TABLE "{table}" (id BIGINT PRIMARY KEY)'))
+            db.execute(text('INSERT INTO project_column (id) VALUES (0)'))
     for model in (User, Project, ProjectAssignedUser, ProjectRole, Card):
         model.__table__.create(engine)
     monkeypatch.setattr(DbEngine, "get_main_engine", lambda: engine)
@@ -34,6 +52,9 @@ def current_card(monkeypatch):
     try:
         yield user, project, card, card_service
     finally:
+        if schema:
+            with engine.begin() as db:
+                db.execute(text(f'DROP SCHEMA "{schema}" CASCADE'))
         engine.dispose()
 
 

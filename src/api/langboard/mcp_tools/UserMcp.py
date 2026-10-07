@@ -72,6 +72,7 @@ def get_unread_notifications(
         limit,
         unread_only=True,
         authorized_projects_only=True,
+        channel=CollaborationChannel.Mcp,
     )
     return {
         "notifications": notifications,
