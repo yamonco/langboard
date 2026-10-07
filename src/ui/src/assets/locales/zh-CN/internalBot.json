@@ -37,6 +37,14 @@
     "overlap_error": "重叠必须小于分块大小。",
     "separators_error": "请输入1–16个不超过32字符的字符串，最后一个分隔符必须为空字符串。",
     "headers_error": "请选择至少一个 Markdown 标题级别。",
-    "header_level": "标题 {{level}}"
+    "header_level": "标题 {{level}}",
+    "search_type": "搜索方式",
+    "mode_similarity": "相似度",
+    "mode_mmr": "多样性 (MMR)",
+    "fetch_k": "候选数量上限",
+    "lambda_mult": "相关性权重",
+    "score_threshold": "最低相似度（可选）",
+    "fetch_error": "候选数量必须不少于结果数量。",
+    "search_help": "MMR平衡相关性与多样性。相似度最低分数留空时不进行筛选。"
   }
 }

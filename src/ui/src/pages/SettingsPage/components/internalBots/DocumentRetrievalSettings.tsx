@@ -21,18 +21,23 @@ export default function DocumentRetrievalSettings({
     const [splitterType, setSplitterType] = useState(String(splitter.type ?? "recursive"));
     const [lengthUnit, setLengthUnit] = useState(String(splitter.length_unit ?? "characters"));
     const [storeType, setStoreType] = useState(String(settings.store ?? "sqlite"));
-    const numeric = (name: string, fallback: number, min: number, max: number, step = 1) => (
+    const [searchType, setSearchType] = useState(String(settings.search_type ?? "similarity"));
+    const numeric = (name: string, fallback: number, min: number, max: number, step = 1, optional = false) => (
         <label className="grid gap-1 text-xs" key={name}>
             {t(`internalBot.retrieval.${name}`)}
             <Input
                 name={name}
                 onInput={(event) => event.currentTarget.setCustomValidity("")}
                 type="number"
-                required
+                required={!optional}
                 min={min}
                 max={max}
                 step={step}
-                defaultValue={Number((name.startsWith("splitter.") ? splitter[name.slice(9)] : settings[name]) ?? fallback)}
+                defaultValue={
+                    optional && settings[name] == null
+                        ? ""
+                        : Number((name.startsWith("splitter.") ? splitter[name.slice(9)] : settings[name]) ?? fallback)
+                }
             />
         </label>
     );
@@ -41,16 +46,20 @@ export default function DocumentRetrievalSettings({
             {t(`internalBot.retrieval.${name}`)}
             <select
                 name={name}
-                className="h-9 rounded-md border bg-background px-2 text-sm"
-                defaultValue={String(splitter[name.slice(9)] ?? fallback)}
+                className="select select-sm h-9 w-full rounded-md border bg-background px-2 text-sm"
+                value={name === "search_type" ? searchType : undefined}
+                defaultValue={
+                    name === "search_type" ? undefined : String((name.startsWith("splitter.") ? splitter[name.slice(9)] : settings[name]) ?? fallback)
+                }
                 onChange={(event) => {
                     if (name === "splitter.type") setSplitterType(event.target.value);
                     if (name === "splitter.length_unit") setLengthUnit(event.target.value);
+                    if (name === "search_type") setSearchType(event.target.value);
                 }}
             >
                 {options.map((option) => (
                     <option key={option} value={option}>
-                        {option}
+                        {name === "search_type" ? t(`internalBot.retrieval.mode_${option}`) : option}
                     </option>
                 ))}
             </select>
@@ -64,6 +73,8 @@ export default function DocumentRetrievalSettings({
                 setError("");
                 const overlap = event.currentTarget.elements.namedItem("splitter.chunk_overlap") as HTMLInputElement;
                 overlap.setCustomValidity("");
+                const fetch = event.currentTarget.elements.namedItem("fetch_k") as HTMLInputElement | null;
+                fetch?.setCustomValidity("");
             }}
             onSubmit={(event) => {
                 event.preventDefault();
@@ -72,6 +83,8 @@ export default function DocumentRetrievalSettings({
                 const overlap = Number(form.get("splitter.chunk_overlap"));
                 const overlapInput = event.currentTarget.elements.namedItem("splitter.chunk_overlap") as HTMLInputElement;
                 overlapInput.setCustomValidity(overlap >= size ? t("internalBot.retrieval.overlap_error") : "");
+                const fetch = event.currentTarget.elements.namedItem("fetch_k") as HTMLInputElement | null;
+                fetch?.setCustomValidity(Number(form.get("fetch_k")) < Number(form.get("k")) ? t("internalBot.retrieval.fetch_error") : "");
                 if (!event.currentTarget.reportValidity()) return;
                 const next = { ...settings };
                 const nextSplitter = { ...splitter };
@@ -98,11 +111,14 @@ export default function DocumentRetrievalSettings({
                         "store",
                         "external_url",
                         "external_api_key",
+                        "search_type",
                     ].includes(field)
                         ? field === "keep_separator" && raw === "false"
                             ? false
                             : raw
-                        : Number(raw);
+                        : raw === "" && field === "score_threshold"
+                          ? null
+                          : Number(raw);
                 }
                 nextSplitter.strip_whitespace = form.has("splitter.strip_whitespace");
                 if (splitterType === "markdown") {
@@ -138,6 +154,7 @@ export default function DocumentRetrievalSettings({
                     delete next.external_api_key;
                     next.search_type = "similarity";
                 } else if (!next.external_api_key) delete next.external_api_key;
+                if (storeType === "qdrant" && searchType === "mmr") delete next.score_threshold;
                 next.splitter = nextSplitter;
                 onSave(next);
             }}
@@ -154,7 +171,10 @@ export default function DocumentRetrievalSettings({
                     <select
                         name="store"
                         defaultValue={storeType}
-                        onChange={(event) => setStoreType(event.target.value)}
+                        onChange={(event) => {
+                            setStoreType(event.target.value);
+                            if (event.target.value === "sqlite") setSearchType("similarity");
+                        }}
                         className="h-9 rounded-md border bg-background px-2 text-sm"
                     >
                         <option value="sqlite">{t("internalBot.retrieval.store_sqlite")}</option>
@@ -187,9 +207,19 @@ export default function DocumentRetrievalSettings({
                     {lengthUnit === "tokens" && select("splitter.encoding", "cl100k_base", ["cl100k_base", "o200k_base"])}
                     {select("splitter.keep_separator", "start", ["false", "start", "end"])}
                     {numeric("k", 5, 1, 25)}
+                    {storeType === "qdrant" && select("search_type", "similarity", ["similarity", "mmr"])}
+                    {storeType === "qdrant" && searchType === "mmr" ? (
+                        <>
+                            {numeric("fetch_k", 20, 1, 100)}
+                            {numeric("lambda_mult", 0.5, 0, 1, 0.1)}
+                        </>
+                    ) : (
+                        numeric("score_threshold", 0, -1, 1, 0.01, true)
+                    )}
                     {numeric("max_return_tokens", 4000, 128, 16000)}
                     {numeric("timeout_seconds", 10, 1, 30, 0.1)}
                 </div>
+                <p className="text-xs text-muted-foreground">{t("internalBot.retrieval.search_help")}</p>
                 <label className="flex items-center gap-2 text-sm">
                     <input name="splitter.strip_whitespace" type="checkbox" defaultChecked={splitter.strip_whitespace !== false} />
                     {t("internalBot.retrieval.splitter.strip_whitespace")}

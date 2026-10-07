@@ -77,10 +77,14 @@ def test_mmr_and_score_threshold_are_not_silently_combined():
         chunk_ids=["chunk"],
         storage={"type": "qdrant"},
     )
-    settings = DocumentRetrievalSettings(
-        store="qdrant", external_url="https://fixture.invalid", search_type="mmr", score_threshold=0.5
-    )
     store = Mock()
+    with pytest.raises(ValueError, match="not supported"):
+        DocumentRetrievalSettings(
+            store="qdrant", external_url="https://fixture.invalid", search_type="mmr", score_threshold=0.5
+        )
+    settings = DocumentRetrievalSettings(store="qdrant", external_url="https://fixture.invalid", search_type="mmr")
+    # Runtime validation also fences previously persisted unsupported settings.
+    settings = settings.model_copy(update={"score_threshold": 0.5})
     with pytest.raises(ValueError, match="not supported"):
         search_vector_generation(store, pointer, "alpha", settings)
     store.max_marginal_relevance_search.assert_not_called()

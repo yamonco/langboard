@@ -37,6 +37,14 @@
     "overlap_error": "Overlap must be smaller than chunk size.",
     "separators_error": "Use 1–16 strings, each at most 32 characters; the final separator must be an empty string.",
     "headers_error": "Select at least one Markdown header level.",
-    "header_level": "Heading {{level}}"
+    "header_level": "Heading {{level}}",
+    "search_type": "Search mode",
+    "mode_similarity": "Similarity",
+    "mode_mmr": "Diversity (MMR)",
+    "fetch_k": "Candidate limit",
+    "lambda_mult": "Relevance weight",
+    "score_threshold": "Minimum similarity (optional)",
+    "fetch_error": "Candidate limit must be at least the result limit.",
+    "search_help": "MMR balances relevance and diversity. Similarity supports an optional minimum score; leave it empty to disable filtering."
   }
 }

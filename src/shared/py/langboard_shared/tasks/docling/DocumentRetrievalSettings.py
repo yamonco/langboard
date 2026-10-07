@@ -37,4 +37,6 @@ class DocumentRetrievalSettings(BaseModel):
             raise ValueError("the store endpoint must not contain a query or fragment")
         if self.search_type == "mmr" and self.fetch_k < self.k:
             raise ValueError("fetch_k must be at least k for MMR")
+        if self.search_type == "mmr" and self.score_threshold is not None:
+            raise ValueError("MMR with a score threshold is not supported")
         return self
