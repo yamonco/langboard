@@ -7,7 +7,7 @@ import re
 from dataclasses import dataclass
 from uuid import UUID
 from langboard_shared.core.db import DbSession, SqlBuilder
-from langboard_shared.domain.models import AppConnection, GitHubLifecycleReceipt
+from langboard_shared.domain.models import AppConnection, GitHubLifecycleReceipt, User
 from langboard_shared.domain.services.factory.SecretReferenceService import SecretAuditSource
 from langboard_shared.helpers import InfraHelper
 from .GitHubInstallation import connection_revision
@@ -168,3 +168,36 @@ def receive_lifecycle(service, actor, connection_uid, body: bytes, signature: st
         )
         db.insert(receipt)
         return {"receipt_uid": receipt.get_uid(), "duplicate": False}
+
+
+def receive_external_lifecycle(service, body: bytes, signature: str, event: str, delivery_id: str):
+    """Unverified App ID routes a bounded candidate; only HMAC verification authorizes receipt."""
+    try:
+        if not isinstance(body, bytes) or not body or len(body) > MAX_BODY:
+            raise GitHubManifestUnavailable()
+        if not isinstance(signature, str) or not re.fullmatch(r"sha256=[0-9a-f]{64}", signature):
+            raise GitHubManifestUnavailable()
+        if event not in ACTIONS or str(UUID(delivery_id)) != delivery_id.lower():
+            raise GitHubManifestUnavailable()
+        candidate = json.loads(body)
+        app_id = _positive(candidate.get("installation", {}).get("app_id"))
+        with DbSession.use(readonly=False) as db:
+            connections = db.exec(
+                SqlBuilder.select.table(AppConnection)
+                .where(
+                    AppConnection.app_key == "github",
+                    AppConnection.external_account_id == str(app_id),
+                    AppConnection.state.in_(["pending", "connected"]),
+                )
+                .limit(2)
+            ).all()
+            # No secret scan or guessed owner when a reusable App has ambiguous connections.
+            if len(connections) != 1:
+                raise GitHubManifestUnavailable()
+            connection = connections[0]
+            actor = db.exec(SqlBuilder.select.table(User).where(User.id == connection.owner_id)).first()
+            if actor is None or actor.deleted_at is not None or actor.activated_at is None:
+                raise GitHubManifestUnavailable()
+    except Exception:
+        raise GitHubManifestUnavailable() from None
+    return receive_lifecycle(service, actor, connection.get_uid(), body, signature, event, delivery_id)
