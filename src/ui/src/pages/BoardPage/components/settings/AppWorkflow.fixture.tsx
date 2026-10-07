@@ -16,6 +16,21 @@ api.defaults.adapter = async (config) => {
         writes.push({ ...JSON.parse(config.data ?? "{}"), url: config.url });
         if (!config.url?.endsWith("/workflow")) repaired = true;
     }
+    if (config.url?.endsWith("/settings/apps"))
+        return {
+            config,
+            status: 200,
+            statusText: "OK",
+            headers: {},
+            data: {
+                apps: ["github", "glitchtip", "dokploy"].map((key) => ({
+                    key,
+                    name: { github: "GitHub", glitchtip: "GlitchTip", dokploy: "Dokploy" }[key],
+                    binding: key === "github" ? { state: "disabled", granted_capabilities: [], stage_transitions_enabled: false } : null,
+                    workflow_requirements: key === "dokploy" ? null : { required: ["active", "review", "closed"], optional: [] },
+                })),
+            },
+        };
     return {
         config,
         status: 200,

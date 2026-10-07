@@ -668,6 +668,19 @@ class AppWorkflowMappingForm(BaseFormModel):
     enable_transitions: bool = Field(..., strict=True)
 
 
+@AppRouter.schema(permission=ApiPermission.Read)
+@AppRouter.api.get("/board/{project_uid}/settings/apps", tags=["Board.Settings"])
+@RoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+@AuthFilter.add("user")
+def get_board_app_catalog(
+    project_uid: str, user: User = Auth.scope("user"), service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    items = service.workflow_stage.get_app_catalog(user, project_uid)
+    if items is None:
+        raise ApiException.NotFound_404(ApiErrorCode.NF2001)
+    return JsonResponse(content={"apps": items})
+
+
 def _app_workflow_response(snapshot: dict) -> dict:
     binding = snapshot["binding"]
     result = snapshot["mapping"]

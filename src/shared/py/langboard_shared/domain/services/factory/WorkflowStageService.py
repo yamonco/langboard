@@ -43,6 +43,33 @@ class WorkflowStageService(BaseDomainService):
         """
         return self._resolve_app_mapping(user, project, requirements, explicit, ProjectRoleAction.Read)
 
+    def get_app_catalog(self, user: User, project_uid: str) -> list[dict] | None:
+        """Host catalog and board-owned status, never installation authority."""
+        with DbSession.atomic() as db:
+            if self.preview_app_mapping(user, project_uid, APP_WORKFLOW_REQUIREMENTS["github"], {}) is None:
+                return None
+            bindings = db.exec(SqlBuilder.select.table(BoardAppBinding).where(
+                BoardAppBinding.project_id == InfraHelper.convert_id(project_uid),
+            )).all()
+            by_app = {binding.app_key: binding for binding in bindings}
+            items = []
+            for key, name in (("github", "GitHub"), ("glitchtip", "GlitchTip"), ("dokploy", "Dokploy")):
+                binding = by_app.get(key)
+                requirements = APP_WORKFLOW_REQUIREMENTS.get(key)
+                items.append({
+                    "key": key, "name": name,
+                    "workflow_requirements": None if requirements is None else {
+                        "required": list(requirements.required), "optional": list(requirements.optional),
+                    },
+                    "connection_setup_available": False,
+                    "binding": None if binding is None else {
+                        "uid": binding.get_uid(), "state": binding.state,
+                        "granted_capabilities": list(binding.granted_capabilities),
+                        "stage_transitions_enabled": binding.stage_transitions_enabled,
+                    },
+                })
+            return items
+
     def get_app_mapping(self, user: User, project_uid: str, app_key: str) -> dict | None:
         requirements = APP_WORKFLOW_REQUIREMENTS.get(app_key)
         if requirements is None:
