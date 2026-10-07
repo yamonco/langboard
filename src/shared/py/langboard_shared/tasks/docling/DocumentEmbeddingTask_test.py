@@ -50,13 +50,13 @@ def fixture(monkeypatch, tmp_path):
         ),
     )
     monkeypatch.setattr(task, "create_document_embeddings", Mock(return_value=object()))
-    monkeypatch.setattr(task, "open_document_store", Mock(return_value=nullcontext(object())))
+    monkeypatch.setattr(task, "open_sqlite_vector_store", Mock(return_value=nullcontext(object())))
     monkeypatch.setattr(
         task,
-        "replace_attachment_generation",
+        "stage_vector_generation",
         Mock(return_value={"generation": "new", "embedding_fingerprint": "new-fingerprint"}),
     )
-    monkeypatch.setattr(task, "delete_attachment_generation", Mock())
+    monkeypatch.setattr(task, "delete_vector_generation", Mock())
     return service, document, attachment
 
 
@@ -71,7 +71,7 @@ def test_invalid_sources_never_send_document(monkeypatch, tmp_path, invalid):
         service.project.get_by_id_like.return_value = None
     task.embed_transcription(service, "attachment", "current")
     task.create_document_embeddings.assert_not_called()
-    task.replace_attachment_generation.assert_not_called()
+    task.stage_vector_generation.assert_not_called()
     service.docling_metadata.publish_document_embedding.assert_not_called()
 
 
@@ -79,10 +79,10 @@ def test_staged_generation_uses_public_board_uid_and_is_removed_on_failed_public
     service, _, _ = fixture(monkeypatch, tmp_path)
     service.docling_metadata.publish_document_embedding.return_value = False
     task.embed_transcription(service, "attachment", "current")
-    args = task.replace_attachment_generation.call_args.kwargs
-    assert args["board_uid"] == "board-uid"
-    assert args["publish_pointer"] is False
-    task.delete_attachment_generation.assert_called_once()
+    args = task.stage_vector_generation.call_args.kwargs
+    assert args["source"]["board_uid"] == "board-uid"
+    assert args["storage"] == {"type": "sqlite"}
+    task.delete_vector_generation.assert_called_once()
     assert (
         service.docling_metadata.publish_document_embedding.call_args.kwargs["expected_embedding"]["pointer"][
             "generation"
@@ -101,7 +101,7 @@ def test_replaced_explicit_request_never_starts_inference(monkeypatch, tmp_path)
 
 def test_provider_failure_retains_prior_pointer_and_redacts_error(monkeypatch, tmp_path):
     service, _, _ = fixture(monkeypatch, tmp_path)
-    task.replace_attachment_generation.side_effect = RuntimeError("secret-key and confidential document")
+    task.stage_vector_generation.side_effect = RuntimeError("secret-key and confidential document")
     task.embed_transcription(service, "attachment", "current")
     failure = service.docling_metadata.publish_document_embedding.call_args.args[-1]
     assert failure["status"] == "failed"
@@ -122,7 +122,7 @@ def test_database_publication_error_removes_staged_vectors(monkeypatch, tmp_path
     service, _, _ = fixture(monkeypatch, tmp_path)
     service.docling_metadata.publish_document_embedding.side_effect = [RuntimeError("database failure"), True]
     task.embed_transcription(service, "attachment", "current")
-    task.delete_attachment_generation.assert_called_once()
+    task.delete_vector_generation.assert_called_once()
     assert service.docling_metadata.publish_document_embedding.call_count == 2
 
 
@@ -146,9 +146,59 @@ def test_qdrant_generation_publishes_backend_independent_ids_and_cleans_rejected
     monkeypatch.setattr(task, "delete_vector_generation", Mock())
     service.docling_metadata.publish_document_embedding.return_value = False
     task.embed_transcription(service, "attachment", "current")
-    task.open_document_store.assert_not_called()
-    task.replace_attachment_generation.assert_not_called()
+    task.open_sqlite_vector_store.assert_not_called()
+    task.stage_vector_generation.assert_called_once()
     task.delete_vector_generation.assert_called_once()
     source = task.stage_vector_generation.call_args.kwargs["source"]
     assert source["board_uid"] == "board-uid" and source["attachment_uid"] == "attachment"
     assert service.docling_metadata.publish_document_embedding.call_args.args[-1]["pointer"] == pointer
+
+
+def test_sqlite_reindex_removes_legacy_only_after_pointer_commit(monkeypatch, tmp_path):
+    from langboard_shared.tasks.docling.DocumentEmbedding import validated_embeddings
+    from langboard_shared.tasks.docling.DocumentSplitter import DocumentSplitterSettings
+    from langboard_shared.tasks.docling.DocumentSqliteStore import open_document_store, open_sqlite_vector_store
+    from langboard_shared.tasks.docling.DocumentSqliteVectorStore_test import Fixture
+    from langboard_shared.tasks.docling.DocumentVectorGeneration import (
+        embedding_fingerprint,
+        replace_attachment_generation,
+    )
+    from langboard_shared.tasks.docling.DocumentVectorStore import delete_vector_generation, stage_vector_generation
+
+    service, document, _ = fixture(monkeypatch, tmp_path)
+    config, settings = task.validate_embedding_config.return_value
+    settings.splitter = DocumentSplitterSettings()
+    fingerprint = embedding_fingerprint(
+        provider=config["base_url"], model=config["model_name"], dimensions=3, version="v1"
+    )
+    directory = tmp_path / "document-retrieval"
+    directory.mkdir()
+    path = directory / (fingerprint + ".sqlite")
+    with open_document_store(path, Fixture(), dimensions=3) as store:
+        legacy = replace_attachment_generation(
+            store,
+            board_uid="board-uid",
+            card_uid="card-uid",
+            attachment_uid="attachment",
+            content_hash="hash",
+            fingerprint=fingerprint,
+            text="alpha old",
+            splitter=settings.splitter,
+            publish_pointer=False,
+        )
+    document["embedding"] = {"status": "pending", "pointer": legacy}
+    task.create_document_embeddings.return_value = validated_embeddings(Fixture(), 3)
+    monkeypatch.setattr(task, "open_sqlite_vector_store", open_sqlite_vector_store)
+    monkeypatch.setattr(task, "stage_vector_generation", stage_vector_generation)
+    monkeypatch.setattr(task, "delete_vector_generation", delete_vector_generation)
+    service.docling_metadata.publish_document_embedding.return_value = False
+    task.embed_transcription(service, "attachment", "current")
+    with open_document_store(path, Fixture(), dimensions=3) as store:
+        assert store.get(tuple(legacy["namespace"]), "0") is not None
+    service.docling_metadata.publish_document_embedding.return_value = True
+    task.embed_transcription(service, "attachment", "current")
+    pointer = service.docling_metadata.publish_document_embedding.call_args.args[-1]["pointer"]
+    assert pointer["storage"] == {"type": "sqlite"} and "namespace" not in pointer
+    with open_sqlite_vector_store(path, Fixture(), dimensions=3) as store:
+        assert store.get_by_ids(pointer["chunk_ids"])
+        assert store.store.get(tuple(legacy["namespace"]), "0") is None
