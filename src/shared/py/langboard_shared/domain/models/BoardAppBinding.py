@@ -1,3 +1,5 @@
+import hashlib
+import json
 from typing import Any
 from sqlalchemy import JSON, CheckConstraint, UniqueConstraint
 from sqlalchemy.schema import conv
@@ -21,6 +23,20 @@ class BoardAppBinding(BaseDbModel, table=True):
     workflow_mapping: dict[str, str] = Field(default_factory=dict, sa_type=JSON, nullable=False)
     granted_capabilities: list[str] = Field(default_factory=list, sa_type=JSON, nullable=False)
     stage_transitions_enabled: bool = Field(default=False, nullable=False)
+
+    def edit_revision(self) -> str:
+        payload = json.dumps(
+            {
+                "id": int(self.id),
+                "state": self.state,
+                "workflow_mapping": self.workflow_mapping,
+                "granted_capabilities": self.granted_capabilities,
+                "stage_transitions_enabled": self.stage_transitions_enabled,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        return hashlib.sha256(payload.encode()).hexdigest()
 
     def notification_data(self) -> dict[str, Any]:
         return {}

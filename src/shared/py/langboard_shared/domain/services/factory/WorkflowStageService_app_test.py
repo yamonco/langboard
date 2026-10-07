@@ -6,7 +6,15 @@ from sqlalchemy.orm import Session
 from ....core.db import DbSession
 from ....core.db.DbEngine import DbEngine
 from ....core.types import SafeDateTime
-from ...models import Project, ProjectAssignedUser, ProjectColumn, ProjectRole, User, WorkflowStageDefinition
+from ...models import (
+    BoardAppBinding,
+    Project,
+    ProjectAssignedUser,
+    ProjectColumn,
+    ProjectRole,
+    User,
+    WorkflowStageDefinition,
+)
 from ..AppWorkflowPolicy import GITHUB_WORKFLOW_REQUIREMENTS
 from .WorkflowStageService import WorkflowStageService
 
@@ -14,7 +22,15 @@ from .WorkflowStageService import WorkflowStageService
 @pytest.fixture
 def board(monkeypatch):
     engine = create_engine("sqlite://")
-    for model in (User, Project, ProjectAssignedUser, ProjectRole, ProjectColumn, WorkflowStageDefinition):
+    for model in (
+        User,
+        Project,
+        ProjectAssignedUser,
+        ProjectRole,
+        ProjectColumn,
+        WorkflowStageDefinition,
+        BoardAppBinding,
+    ):
         model.__table__.create(engine)
     monkeypatch.setattr(DbEngine, "get_main_engine", lambda: engine)
 
@@ -134,3 +150,85 @@ def test_stale_project_owner_and_unknown_actor_do_not_grant_access(board):
     stale_project = project.model_copy(update={"owner_id": user.id})
     assert service.preview_app_mapping(user, stale_project, GITHUB_WORKFLOW_REQUIREMENTS, {}) is None
     assert service.preview_app_mapping(None, project, GITHUB_WORKFLOW_REQUIREMENTS, {}) is None
+
+
+@pytest.fixture
+def binding(board):
+    with DbSession.use(readonly=False) as db:
+        row = BoardAppBinding(project_id=10, app_key="github", state="enabled", granted_capabilities=["signals.read"])
+        db.insert(row)
+        board[4].actions = ["read", "update"]
+        db.update(board[4])
+    return row
+
+
+def save_mapping(board, binding, mapping=None, enabled=True, revision=None):
+    return board[0].save_app_mapping(
+        board[1],
+        binding.get_uid(),
+        GITHUB_WORKFLOW_REQUIREMENTS,
+        mapping,
+        expected_revision=revision or binding.edit_revision(),
+        enable_transitions=enabled,
+    )
+
+
+def test_saved_auto_choices_survive_duplicates_and_keep_activation_grants(board, binding):
+    saved = save_mapping(board, binding)
+    assert saved.stage_transitions_enabled
+    assert saved.workflow_mapping == {key: col.get_uid() for key, col in zip(("active", "review", "closed"), board[5])}
+    with DbSession.use(readonly=False) as db:
+        db.insert(ProjectColumn(project_id=10, name="New", workflow_stage="active"))
+    again = save_mapping(board, saved)
+    assert again.workflow_mapping == saved.workflow_mapping
+    assert again.state == "enabled" and again.granted_capabilities == ["signals.read"]
+
+
+@pytest.mark.parametrize("revoked", ["role", "membership", "inactive"])
+def test_write_gate_uses_current_authority_and_leaves_mapping_unchanged(board, binding, revoked):
+    with DbSession.use(readonly=False) as db:
+        if revoked == "membership":
+            db.delete(board[3])
+        elif revoked == "role":
+            board[4].actions = ["read"]
+            db.update(board[4])
+        else:
+            board[1].activated_at = None
+            db.update(board[1])
+    assert save_mapping(board, binding) is None
+    with DbSession.use(readonly=False) as db:
+        from ....core.db import SqlBuilder
+
+        current = db.exec(SqlBuilder.select.table(BoardAppBinding).where(BoardAppBinding.id == binding.id)).first()
+    assert current.workflow_mapping == {} and not current.stage_transitions_enabled
+
+
+def test_incomplete_mapping_can_be_saved_only_without_transition(board, binding):
+    with DbSession.use(readonly=False) as db:
+        board[5][0].workflow_stage = None
+        db.update(board[5][0])
+    with pytest.raises(ValueError, match="incomplete"):
+        save_mapping(board, binding)
+    saved = save_mapping(board, binding, enabled=False)
+    assert not saved.stage_transitions_enabled and "active" not in saved.workflow_mapping
+
+
+def test_stale_revision_never_overwrites_saved_choices(board, binding):
+    from .WorkflowStageService import WorkflowStageEditConflict
+
+    old = binding.edit_revision()
+    saved = save_mapping(board, binding)
+    with pytest.raises(WorkflowStageEditConflict):
+        save_mapping(board, saved, {}, enabled=False, revision=old)
+
+
+def test_deleted_target_never_replaced_on_enable(board, binding):
+    saved = save_mapping(board, binding)
+    with DbSession.use(readonly=False) as db:
+        db.delete(board[5][0])
+        db.insert(ProjectColumn(project_id=10, name="Replacement", workflow_stage="active"))
+    with pytest.raises(ValueError, match="incomplete"):
+        save_mapping(board, saved)
+    disabled = save_mapping(board, saved, enabled=False)
+    assert disabled.workflow_mapping["active"] == board[5][0].get_uid()
+    assert not disabled.stage_transitions_enabled
