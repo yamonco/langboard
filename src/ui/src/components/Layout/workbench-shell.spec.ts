@@ -206,9 +206,7 @@ test("description markers remain within the card viewport and track its internal
             );
         })
         .toBe(true);
-    await page.mouse.move(1900, 1000);
-    await markers.last().press("Escape");
-    await page.getByRole("button", { name: "Short description" }).click();
+    await page.getByRole("button", { name: "Short description" }).press("Enter");
     await expect(markers).toHaveCount(2);
     await markers.last().click();
     await expect(markers.last()).toHaveAttribute("aria-current", "location");
