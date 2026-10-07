@@ -45,6 +45,8 @@
     "completed": "Stored. You can close this page and return to the conversation.",
     "failed": "This request expired, was used, or could not be completed. Request a new input link.",
     "cancel": "Cancel request",
-    "cancelled": "Cancelled. No secret was stored."
+    "cancelled": "Cancelled. No secret was stored.",
+    "create": "Create secret",
+    "rotate": "Replace existing secret value"
   }
 }
