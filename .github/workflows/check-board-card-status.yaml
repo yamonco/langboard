@@ -2,6 +2,7 @@ name: Check Board Card Status
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - .github/workflows/check-board-card-status.yaml
       - src/api/langboard/routes/board/BoardApi.py
@@ -43,8 +44,14 @@ on:
       - src/ui/src/pages/BoardPage/components/card/CardColumnHistory.tsx
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   backend:
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false
+    timeout-minutes: 20
     runs-on: ubuntu-latest
     env:
       PROJECT_NAME: langboard
@@ -60,6 +67,8 @@ jobs:
       - run: uv run --no-sync pytest -q src/shared/py/langboard_shared/domain/services/factory/CardService_board_progress_test.py src/shared/py/langboard_shared/domain/services/factory/CheckitemService_timer_batch_test.py src/shared/py/langboard_shared/domain/services/CardApprovalGate_test.py src/shared/py/langboard_shared/domain/services/ExecutionGeneration_test.py src/shared/py/langboard_shared/domain/services/CardWorkState_test.py src/api/tests/card_workspace/test_archive_cold_store.py src/api/tests/card_workspace/test_verification_evidence_route.py src/api/tests/mcp_integration/test_card_mcp_contract.py src/shared/py/langboard_shared/domain/services/CardVerification_test.py src/shared/py/langboard_shared/domain/services/factory/CardService_verification_test.py src/shared/py/langboard_shared/domain/services/factory/CardService_work_state_test.py src/shared/py/langboard_shared/infrastructure/repositories/factory/CardVerificationRepository_test.py
 
   ui:
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false
+    timeout-minutes: 20
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

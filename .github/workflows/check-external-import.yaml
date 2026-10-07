@@ -2,6 +2,7 @@ name: Check External Import
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - .github/workflows/check-external-import.yaml
       - src/api/langboard/external_import/**
@@ -11,8 +12,14 @@ on:
       - src/shared/py/langboard_shared/domain/services/factory/CheckitemService.py
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   contract:
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false
+    timeout-minutes: 20
     runs-on: ubuntu-latest
     services:
       postgres:

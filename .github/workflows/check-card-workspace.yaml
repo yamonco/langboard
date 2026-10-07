@@ -2,6 +2,7 @@ name: Check Card Workspace
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - .github/workflows/check-card-workspace.yaml
       - src/api/langboard/card_workspace/**
@@ -25,8 +26,14 @@ on:
       - src/shared/py/langboard_shared/infrastructure/repositories/factory/CheckitemRepository.py
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   contract:
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false
+    timeout-minutes: 20
     runs-on: ubuntu-latest
     services:
       postgres:

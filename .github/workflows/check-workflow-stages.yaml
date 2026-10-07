@@ -2,6 +2,7 @@ name: Check Workflow Stages
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - .github/workflows/check-workflow-stages.yaml
       - src/api/tests/workflow_stages/**
@@ -24,8 +25,14 @@ on:
       - src/shared/py/langboard_shared/publishers/CheckitemPublisher.py
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   policy-and-transition:
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false
+    timeout-minutes: 20
     runs-on: ubuntu-latest
     services:
       postgres:

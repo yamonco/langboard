@@ -1,6 +1,7 @@
 name: Check Model Providers
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - .github/workflows/check-model-providers.yaml
       - src/api/langboard/routes/settings/ModelProviderSettingsApi.py
@@ -8,8 +9,14 @@ on:
       - src/graph/langboard_graph/core/graph/default/chat_model.py
       - src/graph/langboard_graph/core/graph/default/tooling.py
   workflow_dispatch:
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   catalog-contract:
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false
+    timeout-minutes: 20
     runs-on: ubuntu-latest
     env:
       PROJECT_NAME: langboard

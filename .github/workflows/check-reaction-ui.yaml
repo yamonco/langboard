@@ -2,6 +2,7 @@ name: Check Reaction UI
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - .github/workflows/check-reaction-ui.yaml
       - src/ui/src/components/base/Dock/**
@@ -9,8 +10,14 @@ on:
       - src/ui/src/pages/BoardPage/components/card/comment/BoardCommentReaction.tsx
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   lint:
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false
+    timeout-minutes: 20
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
