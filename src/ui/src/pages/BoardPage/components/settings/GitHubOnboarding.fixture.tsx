@@ -17,6 +17,7 @@ sessionStorage.setItem("github-onboarding:me:fixture:kind", params.has("manifest
 if (params.has("new") || params.has("existing")) sessionStorage.removeItem("github-onboarding:me:fixture");
 api.defaults.adapter = async (config) => {
     calls.push({ url: config.url, method: config.method, data: config.data ? JSON.parse(config.data) : null });
+    if (config.url?.endsWith("/authorization")) console.log("authorization-page:" + JSON.parse(config.data).page);
     if (config.url?.endsWith("/resources/refresh"))
         return {
             config,
@@ -46,6 +47,14 @@ api.defaults.adapter = async (config) => {
             headers: {},
             data: { items: params.has("existing") ? [{ connection_uid: "stored", app_id: "42", state: "pending" }] : [], next_cursor: null },
         };
+    if (config.url?.endsWith("/authorization"))
+        return {
+            config,
+            status: 200,
+            statusText: "OK",
+            headers: {},
+            data: { authorization_url: "https://github.com/login/oauth/authorize?state=fixture" },
+        };
     if (config.url?.endsWith("manifest"))
         return {
             config,
@@ -74,7 +83,9 @@ api.defaults.adapter = async (config) => {
             data: {
                 installations: [{ id: 17, account: { id: 7, login: "example", type: "Organization" }, suspended: false }],
                 installation_proof: "p".repeat(43),
-                has_more: false,
+                has_more: params.has("installpages"),
+                page: 1,
+                next_page: params.has("installpages") ? 2 : null,
             },
         };
     if (config.url?.includes("/repositories"))

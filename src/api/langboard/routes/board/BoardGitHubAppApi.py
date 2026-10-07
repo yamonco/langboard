@@ -162,6 +162,7 @@ def save_github_resources(
 
 class GitHubAuthorizationStart(BaseModel):
     model_config = ConfigDict(extra="forbid")
+    page: int = Field(default=1, strict=True, ge=1, le=10000)
     connection_uid: str = Field(min_length=1, max_length=11)
 
 
@@ -177,7 +178,7 @@ def start_github_authorization(
     from ...apps.GitHubAuthorization import begin_authorization
 
     try:
-        payload, session = begin_authorization(service, user, project_uid, form.connection_uid)
+        payload, session = begin_authorization(service, user, project_uid, form.connection_uid, form.page)
     except GitHubManifestUnavailable:
         raise ApiException.NotFound_404() from None
     response = JsonResponse(content=payload)
