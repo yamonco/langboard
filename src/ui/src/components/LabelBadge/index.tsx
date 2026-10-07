@@ -3,7 +3,7 @@ import Flex from "@/components/base/Flex";
 import Tooltip from "@/components/base/Tooltip";
 import { IModelMap, TPickedModel } from "@/core/models/ModelRegistry";
 import { Utils } from "@langboard/core/utils";
-import { memo, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import Popover from "@/components/base/Popover";
 import { cn } from "@/core/utils/ComponentUtils";
 import { ProjectLabel } from "@/core/models";
@@ -30,6 +30,19 @@ export interface ILabelBadgeProps extends ILabelModel {
 
 export const LabelBadge = memo(({ name, color, textColor, description, noTooltip, compact, emoji }: ILabelBadgeProps) => {
     const [expanded, setExpanded] = useState(false);
+    useEffect(() => {
+        if (!compact || !expanded) return;
+        // Hover leaves focus in the parent dialog. Collapse the visual preview
+        // before Radix dispatches Escape to that parent layer.
+        const closeOnEscape = (event: KeyboardEvent) => {
+            if (event.key !== "Escape") return;
+            event.preventDefault();
+            event.stopPropagation();
+            setExpanded(false);
+        };
+        document.addEventListener("keydown", closeOnEscape, true);
+        return () => document.removeEventListener("keydown", closeOnEscape, true);
+    }, [compact, expanded]);
     const currentColor = color || "#FFFFFF";
     const currentDescription = description || name;
 

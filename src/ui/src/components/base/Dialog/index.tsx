@@ -165,7 +165,10 @@ const Content = React.forwardRef<React.ComponentRef<typeof DialogPrimitive.Conte
                         onEscapeKeyDown={(event) => {
                             // Sidebar label previews retain focus outside their portaled layer.
                             // Let that focused control collapse before dismissing this dialog.
-                            if ((event.target as Element)?.closest?.("[data-compact-label][aria-expanded='true'], [data-compact-label-preview]")) {
+                            if (
+                                (event.target as Element)?.closest?.("[data-compact-label][aria-expanded='true'], [data-compact-label-preview]") ||
+                                document.querySelector("[data-compact-label-preview][data-state='open']")
+                            ) {
                                 event.preventDefault();
                                 return;
                             }
