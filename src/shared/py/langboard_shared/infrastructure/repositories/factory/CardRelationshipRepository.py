@@ -4,7 +4,9 @@ from ....core.domain import BaseRepository
 from ....core.types import SafeDateTime
 from ....core.types.ParamTypes import TCardParam, TGlobalCardRelationshipTypeParam, TProjectParam
 from ....domain.models import Card, CardRelationship, GlobalCardRelationshipType, Project
+from ....domain.services.CardVisibilityPolicy import CardVisibilityContext
 from ....helpers import InfraHelper
+from .CardRepository import card_visibility_scope
 
 
 class CardRelationshipRepository(BaseRepository[CardRelationship]):
@@ -17,7 +19,7 @@ class CardRelationshipRepository(BaseRepository[CardRelationship]):
         return "card_relationship"
 
     def get_all_by_card(
-        self, card: TCardParam, limit: int | None = None
+        self, card: TCardParam, limit: int | None = None, *, context: CardVisibilityContext | None = None
     ) -> list[tuple[CardRelationship, GlobalCardRelationshipType]]:
         """Return card relationships, optionally enforcing a database row limit."""
 
@@ -36,9 +38,21 @@ class CardRelationshipRepository(BaseRepository[CardRelationship]):
             )
             .order_by(CardRelationship.column("id").asc())
         )
+        if context is not None:
+            with DbSession.use(readonly=False) as db:
+                source = db.exec(SqlBuilder.select.table(Card).where(Card.id == card_id)).first()
+            if source is None or source.deleted_at is not None:
+                return []
+            visible = (SqlBuilder.select.column(Card.id)
+                .where(Card.project_id == source.project_id, Card.deleted_at.is_(None), card_visibility_scope(context)))
+            if source.visibility == "PRIVATE":
+                visible = visible.where(Card.visibility == "PRIVATE", Card.owner_user_id == source.owner_user_id)
+            else:
+                visible = visible.where(Card.visibility != "PRIVATE")
+            query = query.where(CardRelationship.card_id_parent.in_(visible), CardRelationship.card_id_child.in_(visible))
         if limit is not None:
             query = query.limit(limit)
-        with DbSession.use(readonly=True) as db:
+        with DbSession.use(readonly=context is None) as db:
             result = db.exec(query)
             relationships = result.all()
         return relationships

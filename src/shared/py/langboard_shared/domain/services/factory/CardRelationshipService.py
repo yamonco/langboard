@@ -11,6 +11,7 @@ from ....tasks.activities import CardActivityTask, CardRelationshipActivityTask
 from ....tasks.bots import CardBotTask
 from ....tasks.webhooks.ExecutionReadinessUow import execution_readiness_uow
 from ...models import Card, CardRelationship, Project, ProjectColumn
+from ..CardVisibilityPolicy import CardVisibilityContext
 
 
 class CardRelationshipService(BaseDomainService):
@@ -26,14 +27,15 @@ class CardRelationshipService(BaseDomainService):
         card_service = self._get_service(CardService)
         card_service.mark_card_changed(card, target_type, target_id)
 
-    def get_api_list_by_card(self, card: TCardParam | None, limit: int | None = None) -> list[dict[str, Any]]:
+    def get_api_list_by_card(self, card: TCardParam | None, limit: int | None = None, *, context: CardVisibilityContext | None = None) -> list[dict[str, Any]]:
         """Return relationships, optionally enforcing a repository row limit."""
 
         card = InfraHelper.get_by_id_like(Card, card)
         if not card:
             return []
 
-        raw_relationships = self.repo.card_relationship.get_all_by_card(card, limit=limit)
+        scope = {"context": context} if context is not None else {}
+        raw_relationships = self.repo.card_relationship.get_all_by_card(card, limit=limit, **scope)
         relationships = [
             self.public_relationship(relationship, relation_type) for relationship, relation_type in raw_relationships
         ]
