@@ -27,15 +27,14 @@ def secrets(board, monkeypatch, tmp_path):
     from alembic.migration import MigrationContext
     from alembic.operations import Operations
 
-    migration_path = (
-        Path(__file__).resolve().parents[7] / "src/api/langboard/migrations/versions/20261008061000-820ebc13da57.py"
-    )
-    spec = importlib.util.spec_from_file_location("secret_reference_migration", migration_path)
-    migration = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(migration)
-    with engine.begin() as connection:
-        monkeypatch.setattr(migration, "op", Operations(MigrationContext.configure(connection)))
-        migration.upgrade()
+    for filename in ("20261008061000-820ebc13da57.py", "20261008065000-932fcd24eb68.py"):
+        migration_path = Path(__file__).resolve().parents[7] / "src/api/langboard/migrations/versions" / filename
+        spec = importlib.util.spec_from_file_location("secret_reference_migration", migration_path)
+        migration = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(migration)
+        with engine.begin() as connection:
+            monkeypatch.setattr(migration, "op", Operations(MigrationContext.configure(connection)))
+            migration.upgrade()
     if engine.dialect.name == "postgresql":
         from sqlalchemy import text
         from sqlalchemy.schema import CreateColumn
@@ -191,3 +190,50 @@ def test_postgresql_same_revision_rename_serializes(secrets):
         results = [workers.submit(rename, name) for name in ("first", "second")]
         assert sorted(result.result(timeout=15) for result in results) == ["conflict", "renamed"]
     assert service.get_metadata(board[1], meta["uri"])["revision"] == 1
+
+
+def test_audit_tracks_source_revision_and_no_credential_fields(secrets):
+    from ...models import SecretReferenceAudit
+    from .SecretReferenceService import SecretAuditSource
+
+    service, board, path = secrets
+    actor = board[1]
+    source = SecretAuditSource("app_connection", "installation_42")
+    meta = service.create(actor, "personal", "me", "github/key", SecretStr("fixture-private-material"), source=source)
+    service.resolve_for_runtime(actor, meta["uri"], source=source)
+    service.rename(actor, meta["uri"], "github/new", 0, source=source)
+    service.move(actor, meta["uri"], "personal", "me", 1, source=source)
+    service.revoke(actor, meta["uri"], 2, source=source)
+    with DbSession.use(readonly=False) as db:
+        rows = [row[0] for row in db.exec(select(SecretReferenceAudit).order_by(SecretReferenceAudit.id)).all()]
+    assert [row.action for row in rows] == ["created", "resolved", "renamed", "moved", "revoked"]
+    assert [row.reference_revision for row in rows] == [0, 0, 1, 2, 3]
+    assert all(row.actor_id == actor.id and row.source_uid == "installation_42" for row in rows)
+    assert "fixture-private-material" not in str([row.model_dump() for row in rows])
+    assert not {"locator", "provider", "value", "payload"} & set(SecretReferenceAudit.model_fields)
+    with pytest.raises(SecretReferenceUnavailable):
+        service.resolve_for_runtime(actor, meta["uri"], source=source)
+    with DbSession.use(readonly=False) as db:
+        assert len(db.exec(select(SecretReferenceAudit)).all()) == 5
+
+
+@pytest.mark.parametrize("kind,uid", [("unknown", "x"), ("runtime", "https://unsafe/path"), ("api", "x" * 65)])
+def test_audit_source_rejects_freeform_payload(kind, uid):
+    from .SecretReferenceService import SecretAuditSource
+
+    with pytest.raises(ValueError):
+        SecretAuditSource(kind, uid)
+
+
+def test_audit_failure_rolls_back_reference_and_new_storage(secrets, monkeypatch):
+    service, board, path = secrets
+
+    def fail(*args):
+        raise RuntimeError("audit unavailable")
+
+    monkeypatch.setattr(service, "_audit", fail)
+    with pytest.raises(RuntimeError, match="audit unavailable"):
+        service.create(board[1], "personal", "me", "fixture", SecretStr("material"))
+    assert not list(path.iterdir())
+    with DbSession.use(readonly=False) as db:
+        assert not db.exec(select(SecretReference)).all()

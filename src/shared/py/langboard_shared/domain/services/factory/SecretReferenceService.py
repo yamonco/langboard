@@ -1,13 +1,15 @@
 """Trusted host secret resolution; intentionally absent from MCP/value-read routes."""
 
 import re
+from dataclasses import dataclass
+from typing import Literal
 from uuid import uuid4
 from pydantic import SecretStr
 from ....core.db import DbSession, SqlBuilder
 from ....core.domain import BaseDomainService
 from ....core.security import KeyVault
 from ....helpers import InfraHelper
-from ...models import Organization, SecretReference, User
+from ...models import Organization, SecretReference, SecretReferenceAudit, User
 from ...models.ProjectRole import ProjectRoleAction
 from .WorkflowStageService import WorkflowStageService
 
@@ -26,10 +28,40 @@ def validate_secret_name(name: str) -> str:
     return name
 
 
+@dataclass(frozen=True)
+class SecretAuditSource:
+    """Constructed by a trusted host adapter, never from a caller's arbitrary text."""
+
+    kind: Literal["runtime", "card", "app_connection", "api", "cli", "workflow"] = "runtime"
+    uid: str | None = None
+
+    def __post_init__(self):
+        if self.kind not in {"runtime", "card", "app_connection", "api", "cli", "workflow"}:
+            raise ValueError("Unknown secret audit source")
+        if self.uid is not None and (
+            not isinstance(self.uid, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", self.uid)
+        ):
+            raise ValueError("Invalid secret audit source identifier")
+
+
 class SecretReferenceService(BaseDomainService):
     @staticmethod
     def name() -> str:
         return "secret_reference"
+
+    def _audit(self, db, actor: User, reference: SecretReference, action: str, source: SecretAuditSource):
+        db.insert(
+            SecretReferenceAudit(
+                reference_id=reference.id,
+                actor_id=actor.id,
+                action=action,
+                source_kind=source.kind,
+                source_uid=source.uid,
+                scope=reference.scope,
+                scope_id=reference.scope_id,
+                reference_revision=reference.revision,
+            )
+        )
 
     def _authorize(self, actor: User, scope: str, scope_id: int) -> bool:
         with DbSession.use(readonly=False) as db:
@@ -61,7 +93,16 @@ class SecretReferenceService(BaseDomainService):
                 )
             return False
 
-    def create(self, actor: User, scope: str, scope_uid: str, name: str, value: SecretStr) -> dict:
+    def create(
+        self,
+        actor: User,
+        scope: str,
+        scope_uid: str,
+        name: str,
+        value: SecretStr,
+        *,
+        source: SecretAuditSource = SecretAuditSource(),
+    ) -> dict:
         name = validate_secret_name(name)
         scope_id = int(actor.id) if scope == "personal" and scope_uid == "me" else InfraHelper.convert_id(scope_uid)
         if not isinstance(value, SecretStr) or not value.get_secret_value():
@@ -83,6 +124,7 @@ class SecretReferenceService(BaseDomainService):
                 locator = KeyVault.store_secret(uuid4().hex, value.get_secret_value())
                 reference.locator = locator
                 db.insert(reference)
+                self._audit(db, actor, reference, "created", source)
                 return reference.metadata()
         except Exception:
             if locator is not None:
@@ -123,17 +165,31 @@ class SecretReferenceService(BaseDomainService):
         with DbSession.atomic():
             return self._find(actor, uri).metadata()
 
-    def resolve_for_runtime(self, actor: User, uri: str) -> SecretStr:
-        with DbSession.atomic():
+    def resolve_for_runtime(
+        self, actor: User, uri: str, *, source: SecretAuditSource = SecretAuditSource()
+    ) -> SecretStr:
+        with DbSession.atomic() as db:
             reference = self._find(actor, uri, lock=True)
             if reference.state != "active" or reference.provider != KeyVault.provider.name():
                 raise SecretReferenceUnavailable()
             try:
-                return SecretStr(KeyVault.get_key(reference.locator))
+                material = KeyVault.get_key(reference.locator)
+                if not material:
+                    raise SecretReferenceUnavailable()
+                self._audit(db, actor, reference, "resolved", source)
+                return SecretStr(material)
             except KeyError:
                 raise SecretReferenceUnavailable() from None
 
-    def rename(self, actor: User, uri: str, name: str, expected_revision: int) -> dict:
+    def rename(
+        self,
+        actor: User,
+        uri: str,
+        name: str,
+        expected_revision: int,
+        *,
+        source: SecretAuditSource = SecretAuditSource(),
+    ) -> dict:
         name = validate_secret_name(name)
         with DbSession.atomic() as db:
             reference = self._find(actor, uri, lock=True)
@@ -142,9 +198,19 @@ class SecretReferenceService(BaseDomainService):
             reference.name = name
             reference.revision += 1
             db.update(reference)
+            self._audit(db, actor, reference, "renamed", source)
             return reference.metadata()
 
-    def move(self, actor: User, uri: str, scope: str, scope_uid: str, expected_revision: int) -> dict:
+    def move(
+        self,
+        actor: User,
+        uri: str,
+        scope: str,
+        scope_uid: str,
+        expected_revision: int,
+        *,
+        source: SecretAuditSource = SecretAuditSource(),
+    ) -> dict:
         scope_id = int(actor.id) if scope == "personal" and scope_uid == "me" else InfraHelper.convert_id(scope_uid)
         with DbSession.atomic() as db:
             reference = self._find(actor, uri, lock=True)
@@ -156,9 +222,12 @@ class SecretReferenceService(BaseDomainService):
             reference.scope_id = scope_id
             reference.revision += 1
             db.update(reference)
+            self._audit(db, actor, reference, "moved", source)
             return reference.metadata()
 
-    def revoke(self, actor: User, uri: str, expected_revision: int) -> dict:
+    def revoke(
+        self, actor: User, uri: str, expected_revision: int, *, source: SecretAuditSource = SecretAuditSource()
+    ) -> dict:
         with DbSession.atomic() as db:
             reference = self._find(actor, uri, lock=True)
             if reference.revision != expected_revision:
@@ -166,5 +235,6 @@ class SecretReferenceService(BaseDomainService):
             reference.state = "revoked"
             reference.revision += 1
             db.update(reference)
+            self._audit(db, actor, reference, "revoked", source)
             # Deny immediately in host storage, even when KMS cannot erase ciphertext.
             return reference.metadata()
