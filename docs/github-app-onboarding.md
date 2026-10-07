@@ -77,3 +77,25 @@ and other boards remain intact. New Binding stays disabled; resource access does
 not grant workflow capabilities, enable webhook processing or connect the App.
 No schema migration is added by this delta. SQLite/PostgreSQL regression covers
 preservation, re-selection and stale-edit rejection with mock GitHub transport.
+
+## User authorization and installation discovery
+
+The Manifest now registers the board URL as an OAuth callback. Native authenticated
+POST `/board/{uid}/settings/apps/github/authorization` takes a current-owner
+`connection_uid`; POST `/authorization/complete` takes `{state, code}` and the
+HttpOnly path-scoped session cookie. State is bound to actor, board, Connection
+revision and a PKCE S256 verifier for ten minutes, with atomic one-time claiming.
+The fixed GitHub token endpoint exchanges the code, then `/user` and
+`/user/installations` identify the GitHub user and visible installations for this
+App. Discovery is bounded to 100 installations with `has_more` explicitly returned.
+The user access token is neither stored nor returned; its revoke must succeed.
+Current host authority and Connection identity are checked again after external IO.
+
+This endpoint proves user visibility for its returned snapshot, not permission to
+activate a Binding. The snapshot is not yet consumed as a mandatory proof by the
+repository delta endpoint. UI integration, continuation for more than 100
+installations, proof consumption at Binding mutation and live GitHub authorization
+remain acceptance work. Older registered Apps require their callback URL updated.
+
+Official user flow:
+https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-a-user-access-token-for-a-github-app

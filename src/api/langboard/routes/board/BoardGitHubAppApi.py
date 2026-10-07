@@ -156,3 +156,65 @@ def save_github_resources(
         raise ApiException.Conflict_409() from None
     except ValueError:
         raise ApiException.BadRequest_400() from None
+
+
+class GitHubAuthorizationStart(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    connection_uid: str = Field(min_length=1, max_length=11)
+
+
+@AppRouter.api.post("/board/{project_uid}/settings/apps/github/authorization", tags=["Board.Settings"])
+@AuthFilter.add("user")
+def start_github_authorization(
+    project_uid: str,
+    form: GitHubAuthorizationStart,
+    user: User = Auth.scope("user"),
+    service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    from ...apps.GitHubAuthorization import COOKIE as AUTH_COOKIE
+    from ...apps.GitHubAuthorization import begin_authorization
+
+    try:
+        payload, session = begin_authorization(service, user, project_uid, form.connection_uid)
+    except GitHubManifestUnavailable:
+        raise ApiException.NotFound_404() from None
+    response = JsonResponse(content=payload)
+    response.set_cookie(
+        AUTH_COOKIE,
+        session,
+        max_age=TTL,
+        httponly=True,
+        secure=Env.ENVIRONMENT != "development",
+        samesite="lax",
+        path=f"/board/{project_uid}/settings/apps/github",
+    )
+    return response
+
+
+class GitHubAuthorizationComplete(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    state: str = Field(min_length=40, max_length=64)
+    code: str = Field(min_length=20, max_length=128)
+
+
+@AppRouter.api.post("/board/{project_uid}/settings/apps/github/authorization/complete", tags=["Board.Settings"])
+@AuthFilter.add("user")
+def finish_github_authorization(
+    project_uid: str,
+    request: Request,
+    form: GitHubAuthorizationComplete,
+    user: User = Auth.scope("user"),
+    service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    from ...apps.GitHubAuthorization import COOKIE as AUTH_COOKIE
+    from ...apps.GitHubAuthorization import complete_authorization
+
+    try:
+        result = complete_authorization(
+            service, user, project_uid, form.state, form.code, request.cookies.get(AUTH_COOKIE)
+        )
+    except GitHubManifestUnavailable:
+        raise ApiException.BadRequest_400() from None
+    response = JsonResponse(content=result)
+    response.delete_cookie(AUTH_COOKIE, path=f"/board/{project_uid}/settings/apps/github")
+    return response
