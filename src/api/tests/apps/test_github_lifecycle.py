@@ -321,6 +321,23 @@ def test_native_webhook_receipt_without_browser_identity(receipt_storage, monkey
         first = client.post("/apps/github/events", content=body, headers=headers)
         assert first.status_code == 202, first.text
         assert client.post("/apps/github/events", content=body, headers=headers).status_code == 202
+        ping_body, ping_signature = signed({"zen": "ignored", "hook_id": 123, "hook": {"id": 123}})
+        ping_headers = {
+            **headers,
+            "X-GitHub-Event": "ping",
+            "X-GitHub-Delivery": str(uuid4()),
+            "X-Hub-Signature-256": ping_signature,
+            "X-GitHub-Hook-Installation-Target-ID": "42",
+        }
+        assert client.post("/apps/github/events", content=ping_body, headers=ping_headers).status_code == 202
+        assert (
+            client.post(
+                "/apps/github/events",
+                content=ping_body,
+                headers={**ping_headers, "X-GitHub-Hook-Installation-Target-ID": "43"},
+            ).status_code
+            == 400
+        )
         payload["repositories_removed"] = [{"id": 100}]
         changed, changed_signature = signed(payload)
         assert (
@@ -355,7 +372,7 @@ def test_native_webhook_receipt_without_browser_identity(receipt_storage, monkey
         duplicated = list(headers.items()) + [("X-GitHub-Event", "installation")]
         assert client.post("/apps/github/events", content=body, headers=duplicated).status_code == 400
     with DbSession.use(readonly=False) as db:
-        assert len(db.exec(SqlBuilder.select.table(GitHubLifecycleReceipt)).all()) == 1
+        assert len(db.exec(SqlBuilder.select.table(GitHubLifecycleReceipt)).all()) == 2
 
 
 @pytest.mark.parametrize("failure", ["unknown", "ambiguous", "inactive_owner", "forged_app"])
@@ -545,3 +562,58 @@ def test_refresh_cannot_commit_after_repeated_unknown_invalidation(receipt_stora
     with DbSession.use(readonly=False) as db:
         current = db.exec(SqlBuilder.select.table(AppResourceBinding).where(AppResourceBinding.id == row.id)).first()
         assert current.health == "unavailable" and current.access_state == "unknown"
+
+
+@pytest.mark.parametrize("failure", [None, "tamper", "target", "hook", "boolean", "installation", "action"])
+def test_signed_ping_is_receipt_only_without_installation(receipt_storage, failure):
+    from langboard.apps.GitHubLifecycle import receive_external_lifecycle
+    from langboard_shared.core.db import SqlBuilder
+    from langboard_shared.domain.models import AppResourceBinding, BoardAppBinding, GitHubLifecycleReceipt
+
+    lifecycle, migration, engine = receipt_storage
+    service, board, connection, payload = lifecycle
+    with DbSession.use(readonly=False) as db:
+        binding = BoardAppBinding(project_id=board[2].id, app_key="github")
+        db.insert(binding)
+        row = AppResourceBinding(
+            board_binding_id=binding.id,
+            connection_id=connection.id,
+            resource_type="repository",
+            external_resource_id="99",
+            access_state="granted",
+            health="healthy",
+            resource_path=[{"type": "installation", "id": "17"}, {"type": "account", "id": "7"}],
+        )
+        db.insert(row)
+    ping = {"zen": "must not be stored", "hook_id": 123, "hook": {"id": 123}}
+    target = "42"
+    if failure == "hook":
+        ping["hook"]["id"] = 124
+    elif failure == "boolean":
+        ping["hook_id"] = True
+    elif failure == "installation":
+        ping["installation"] = payload["installation"]
+    elif failure == "action":
+        ping["action"] = "deleted"
+    elif failure == "target":
+        target = "43"
+    body, signature = signed(ping)
+    if failure == "tamper":
+        body += b" "
+    delivery = str(uuid4())
+    if failure:
+        with pytest.raises(GitHubManifestUnavailable):
+            receive_external_lifecycle(service, body, signature, "ping", delivery, target)
+    else:
+        first = receive_external_lifecycle(service, body, signature, "ping", delivery, target)
+        duplicate = receive_external_lifecycle(service, body, signature, "ping", delivery, target)
+        assert first["receipt_uid"] == duplicate["receipt_uid"] and duplicate["duplicate"]
+    with DbSession.use(readonly=False) as db:
+        current = db.exec(SqlBuilder.select.table(AppResourceBinding).where(AppResourceBinding.id == row.id)).first()
+        assert current.access_revision == 0 and current.access_state == "granted" and current.health == "healthy"
+        receipts = db.exec(SqlBuilder.select.table(GitHubLifecycleReceipt)).all()
+        assert len(receipts) == (0 if failure else 1)
+        if receipts:
+            assert receipts[0].installation_id == "" and receipts[0].account_id == ""
+            assert receipts[0].event == "ping" and receipts[0].invalidated and receipts[0].added_repository_ids == []
+            assert "zen" not in receipts[0].model_dump()

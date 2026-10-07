@@ -309,6 +309,7 @@ async def receive_github_lifecycle(request: Request, service: DomainService = Do
         "x-hub-signature-256",
         "x-github-event",
         "x-github-delivery",
+        "x-github-hook-installation-target-id",
     ):
         if len(request.headers.getlist(name)) > 1:
             return JsonResponse(status_code=400)
@@ -333,7 +334,15 @@ async def receive_github_lifecycle(request: Request, service: DomainService = Do
     if length is not None and int(length) != len(body):
         return JsonResponse(status_code=400)
     try:
-        await run_in_threadpool(receive_external_lifecycle, service, bytes(body), signature, event, delivery)
+        await run_in_threadpool(
+            receive_external_lifecycle,
+            service,
+            bytes(body),
+            signature,
+            event,
+            delivery,
+            request.headers.get("x-github-hook-installation-target-id"),
+        )
     except GitHubDeliveryConflict:
         return JsonResponse(status_code=409)
     except GitHubManifestUnavailable:
