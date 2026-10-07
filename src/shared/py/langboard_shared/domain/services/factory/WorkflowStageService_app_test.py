@@ -198,6 +198,8 @@ def save_mapping(board, binding, mapping=None, enabled=True, revision=None):
         board[1],
         binding.get_uid(),
         mapping,
+        project_uid=board[2].get_uid(),
+        app_key=binding.app_key,
         expected_revision=revision or binding.edit_revision(),
         enable_transitions=enabled,
     )

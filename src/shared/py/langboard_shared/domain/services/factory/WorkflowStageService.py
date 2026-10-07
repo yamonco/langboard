@@ -43,9 +43,28 @@ class WorkflowStageService(BaseDomainService):
         """
         return self._resolve_app_mapping(user, project, requirements, explicit, ProjectRoleAction.Read)
 
+    def get_app_mapping(self, user: User, project_uid: str, app_key: str) -> dict | None:
+        requirements = APP_WORKFLOW_REQUIREMENTS.get(app_key)
+        if requirements is None:
+            return None
+        with DbSession.atomic() as db:
+            result = self.preview_app_mapping(user, project_uid, requirements, {})
+            if result is None:
+                return None
+            binding = db.exec(SqlBuilder.select.table(BoardAppBinding).where(
+                BoardAppBinding.project_id == InfraHelper.convert_id(project_uid),
+                BoardAppBinding.app_key == app_key,
+            )).first()
+            if binding is None:
+                return {"binding": None, "mapping": result}
+            result = self.preview_app_mapping(user, project_uid, requirements, binding.workflow_mapping)
+            if result is None:
+                return None
+            return {"binding": binding, "mapping": result}
+
     def save_app_mapping(
         self, user: User, binding_uid: str,
-        explicit: Mapping[str, str] | None, *, expected_revision: str,
+        explicit: Mapping[str, str] | None, *, project_uid: str, app_key: str, expected_revision: str,
         enable_transitions: bool,
     ) -> BoardAppBinding | None:
         """Resolve requirements from the saved App key, never from request bodies.
@@ -57,6 +76,8 @@ class WorkflowStageService(BaseDomainService):
         with DbSession.atomic() as db:
             binding = db.exec(SqlBuilder.select.table(BoardAppBinding).where(
                 BoardAppBinding.id == InfraHelper.convert_id(binding_uid),
+                BoardAppBinding.project_id == InfraHelper.convert_id(project_uid),
+                BoardAppBinding.app_key == app_key,
             ).with_for_update()).first()
             if binding is None:
                 return None
