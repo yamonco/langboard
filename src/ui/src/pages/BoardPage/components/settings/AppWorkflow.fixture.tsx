@@ -7,9 +7,14 @@ import i18n from "@/i18n";
 import "@/assets/styles/main.css";
 import { api } from "@/core/helpers/Api";
 const writes: unknown[] = [];
+const missing = new URLSearchParams(location.search).has("missing");
+let repaired = false;
 Object.assign(window, { workflowWrites: writes });
 api.defaults.adapter = async (config) => {
-    if (config.method === "put") writes.push(JSON.parse(config.data));
+    if (config.method === "put" || config.method === "post") {
+        writes.push({ ...JSON.parse(config.data ?? "{}"), url: config.url });
+        if (!config.url?.endsWith("/workflow")) repaired = true;
+    }
     return {
         config,
         status: 200,
@@ -18,7 +23,16 @@ api.defaults.adapter = async (config) => {
         data: {
             binding: { uid: "binding", revision: "a".repeat(64), workflow_mapping: { active: "one" } },
             column_names: { one: "Doing", two: "Implementation" },
-            choices: [{ stage: "active", required: true, status: "resolved", column_uid: "one", candidates: ["one", "two"] }],
+            available_columns: [{ uid: "two", name: "Implementation", workflow_stage: null }],
+            choices: [
+                {
+                    stage: "active",
+                    required: true,
+                    status: missing && !repaired ? "missing" : "resolved",
+                    column_uid: missing && !repaired ? null : "one",
+                    candidates: missing && !repaired ? [] : ["one", "two"],
+                },
+            ],
         },
     };
 };
