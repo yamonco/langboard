@@ -178,7 +178,7 @@ def test_recent_cards_revalidate_actor_and_filter_visibility_before_return(monke
         with DbSession.use(readonly=False) as db:
             db.delete(assignment)
         assert service.get_existing_uids(project, uids, user=member, channel=CollaborationChannel.Mcp) == []
-        assert service.get_api_page_by_project(project, 1, user_or_bot=member, channel=CollaborationChannel.Mcp) is None
+        assert service.get_api_page_by_project(project, 1, user_or_bot=member, channel=CollaborationChannel.Mcp) == ([], 0, None)
         assert set(service.get_existing_uids(project, uids, user=owner, channel=CollaborationChannel.HumanUI)) == {uids[0], uids[3]}
         with DbSession.use(readonly=False) as db:
             removed_project = project.model_copy(deep=True)
