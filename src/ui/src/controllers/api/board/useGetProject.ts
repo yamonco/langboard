@@ -20,6 +20,7 @@ const useGetProject = (form: IGetProjectForm, options?: TQueryOptions<unknown, I
     const getProject = async () => {
         const url = Utils.String.format(Routing.API.BOARD.GET, { uid: form.uid });
         const res = await api.get(url, {
+            timeout: 15_000,
             env: {
                 interceptToast: options?.interceptToast,
             } as never,

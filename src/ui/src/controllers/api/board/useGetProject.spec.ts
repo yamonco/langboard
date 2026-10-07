@@ -23,3 +23,13 @@ test("denied project never reads dock or cards", async ({ page }) => {
     await expect(page.locator("li")).toHaveCount(1);
     await expect(page.getByText("Cards ready", { exact: true })).toHaveCount(0);
 });
+
+test("failed project transport exposes keyboard retry and recovers without waiting for dock", async ({ page }) => {
+    await page.goto(`${path}?unavailable`);
+    await expect(page.getByRole("alert")).toBeVisible();
+    await expect(page.getByText("Cards ready", { exact: true })).toHaveCount(0);
+    await page.getByRole("button", { name: /Retry|다시 시도/ }).press("Enter");
+    await expect(page.getByText("Cards ready", { exact: true })).toBeVisible();
+    await expect(page.getByRole("alert")).toHaveCount(0);
+    await expect(page.locator("li").filter({ hasText: /\/dock$/ })).toHaveCount(1);
+});

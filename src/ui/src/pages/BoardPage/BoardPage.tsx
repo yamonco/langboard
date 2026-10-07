@@ -1,3 +1,4 @@
+import BoardLoadError from "./BoardLoadError";
 import Box from "@/components/base/Box";
 import Button from "@/components/base/Button";
 import Flex from "@/components/base/Flex";
@@ -41,23 +42,7 @@ const BoardPage = memo(({ project, currentUser }: IBoardRelatedPageProps) => {
 
     return (
         <>
-            {error && (
-                <Box role="alert" className="m-4 shrink-0 rounded-xl border bg-background p-4">
-                    <p className="text-sm text-muted-foreground">{t("board.Could not load board")}</p>
-                    <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        className="mt-2"
-                        disabled={isFetching}
-                        onClick={() => {
-                            if (!isFetching) void refetch();
-                        }}
-                    >
-                        {t("common.Retry")}
-                    </Button>
-                </Box>
-            )}
+            {error && <BoardLoadError isFetching={isFetching} retry={() => void refetch()} />}
             {!data ? (
                 !error && <SkeletonBoard />
             ) : (
