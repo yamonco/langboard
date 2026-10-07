@@ -558,13 +558,13 @@ function BoardTaskCardResult({
                                 </Flex>
                             </Dialog.Header>
                             <Flex gap="3" direction={{ initial: "col-reverse", sm: "row" }} className="min-h-0 flex-1">
-                                <Box data-card-content-frame="" className="relative min-h-0 min-w-0 flex-1 pr-10">
+                                <Box data-card-content-frame="" className="relative min-h-0 min-w-0 flex-1 pl-10">
                                     <Box
                                         ref={contentViewportRef}
                                         data-card-content-viewport=""
                                         className="h-full min-h-0 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
                                     >
-                                        <Flex direction="col" gap="4" className="min-w-0 pb-6 pr-1">
+                                        <Flex direction="col" gap="4" className="min-w-0 py-6 pr-1">
                                             {isCheckCardView ? (
                                                 <BoardCardCheckBody key={`board-card-check-body-${card.uid}`} scrollParentRef={contentViewportRef} />
                                             ) : (
