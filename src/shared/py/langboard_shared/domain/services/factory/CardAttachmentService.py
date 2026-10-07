@@ -1,7 +1,7 @@
 from json import dumps, loads
 from typing import Any
 from uuid import uuid4
-from sqlalchemy import Text, cast, func
+from sqlalchemy import Text, cast, func, literal_column
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from ....core.broker import Broker
 from ....core.broker.TaskParameters import TaskParameters
@@ -52,10 +52,10 @@ class CardAttachmentService(BaseDomainService):
         if dialect == "postgresql":
             decoded = cast(cast(column, JSONB).op("#>>")(cast([], ARRAY(Text))), JSONB)
             def value(key):
-                return decoded[key].astext
+                return decoded.op("->>")(literal_column(f"'{key}'"))
         elif dialect == "sqlite":
             def value(key):
-                return func.json_extract(func.json_extract(column, "$"), f"$.{key}")
+                return func.json_extract(func.json_extract(column, literal_column("'$'")), literal_column(f"'$.{key}'"))
         elif dialect in {"mysql", "mariadb"}:
             def value(key):
                 return func.json_unquote(func.json_extract(func.json_unquote(column), f"$.{key}"))
