@@ -1,5 +1,5 @@
 from typing import Any, Sequence
-from sqlalchemy import Text, and_, cast, false, func, or_, select, update
+from sqlalchemy import Text, cast, false, func, or_, select, update
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from ....core.db import DbSession, SqlBuilder
 from ....core.db.DbEngine import DbEngine
@@ -19,22 +19,8 @@ from ....domain.models import (
     User,
     WorkflowStageDefinition,
 )
-from ....domain.services.CardVisibilityPolicy import CardVisibility, CardVisibilityContext
+from ....domain.services.CardVisibilityPolicy import CardVisibilityContext, card_visibility_scope
 from ....helpers import InfraHelper
-
-
-def card_visibility_scope(context: CardVisibilityContext):
-    """Apply the policy before pagination, counts, or existence projections."""
-    allowed = [false()]
-    for visibility in (CardVisibility.Shared, CardVisibility.Internal):
-        if context.can_read_card(visibility):
-            allowed.append(Card.column("visibility") == visibility.value)
-    if context.is_private_owner(context.actor_user_id):
-        allowed.append(and_(
-            Card.column("visibility") == CardVisibility.Private.value,
-            Card.column("owner_user_id") == context.actor_user_id,
-        ))
-    return or_(*allowed)
 
 
 def _editor_search_text(column, dialect: str):

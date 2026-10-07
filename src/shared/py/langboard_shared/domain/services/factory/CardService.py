@@ -229,7 +229,9 @@ class CardService(BaseDomainService):
             return None
         return project, current, context
 
-    def get_work_states(self, cards: Sequence[Card]) -> dict[int, dict[str, Any]]:
+    def get_work_states(
+        self, cards: Sequence[Card], *, context: CardVisibilityContext | None = None,
+    ) -> dict[int, dict[str, Any]]:
         """Project a permission-scoped card batch with bounded queries, never per-card reads.
 
         Callers must supply cards from their existing authorized query. No hidden
@@ -250,7 +252,7 @@ class CardService(BaseDomainService):
         )
         counts = self.repo.checkitem.get_work_state_counts([card.id for card in cards])
         verification_records = self.repo.card_verification.get_latest_by_card_ids([card.id for card in cards])
-        blockers = dependency_blockers([card.id for card in cards])
+        blockers = dependency_blockers([card.id for card in cards], context=context)
         generations = execution_generations([card.id for card in cards])
         approvals = pending_card_approvals([card.id for card in cards])
         states = {}
@@ -282,8 +284,9 @@ class CardService(BaseDomainService):
                 execution_generation=generations.get(int(card.id)),
                 pending_approval_count=approvals.get(int(card.id), 0),
                 verification_record=self._verification_projection(record) if record else None,
-                direct_blockers=blockers.get(int(card.id), []),
+                direct_blockers=blockers.get(int(card.id)),
             )
+            states[card.id]["dependency_state"]["scope"] = "readable_relationships" if context else None
         return states
 
     def publish_work_states(self, project: Project, card_ids: Sequence[SnowflakeID]) -> None:
@@ -403,7 +406,7 @@ class CardService(BaseDomainService):
 
         api_card = card.api_response()
         api_card["project_column_name"] = column.name
-        api_card["work_state"] = self.get_work_states([card])[card.id]
+        api_card["work_state"] = self.get_work_states([card], context=context)[card.id]
         progress = api_card["work_state"]["checklist_progress"]
         api_card["checklist_total_count"] = progress["total"]
         api_card["checklist_completed_count"] = progress["completed"]
@@ -508,7 +511,7 @@ class CardService(BaseDomainService):
         }
         user_checklist_card_ids = {checklist.card_id for checklist in raw_checklists if not checklist.is_system}
         active_workers_by_card = self.get_active_workers(project)
-        work_states = self.get_work_states([card for card, _ in raw_cards])
+        work_states = self.get_work_states([card for card, _ in raw_cards], context=context)
 
         user = user_or_bot if isinstance(user_or_bot, User) else None
         seen_map: dict[int, int] = {}
@@ -897,7 +900,7 @@ class CardService(BaseDomainService):
         document_matches = self.repo.card.search_document_matches(
             project, [card.id for card, _ in records], input_value, context=context
         )
-        states = self.get_work_states([card for card, _ in records]) if include_work_state else {}
+        states = self.get_work_states([card for card, _ in records], context=context) if include_work_state else {}
         for card, column in records:
             description = card.description.content
             if len(description) > self.CONTEXT_DESCRIPTION_MAX_LENGTH:

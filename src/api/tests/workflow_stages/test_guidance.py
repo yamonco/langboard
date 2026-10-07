@@ -114,7 +114,8 @@ def test_native_bundle_and_project_columns_share_registry_guidance(registry, mon
         project_column=column_service,
         card=SimpleNamespace(
             can_delete=lambda *_: False,
-            get_work_states=lambda _: {2: {}},
+            resolve_readable_card=lambda project, card, *args: (project, card, object()),
+            get_work_states=lambda _, **kwargs: {2: {}},
             is_check_card=lambda _: False,
             _get_completion_checklist=lambda _: None,
         ),

@@ -7,6 +7,7 @@ this context. A User reached through MCP or an API key is not a human UI actor.
 from collections.abc import Collection
 from dataclasses import dataclass
 from enum import Enum
+from sqlalchemy import and_, false, or_
 from ...core.security.CollaborationChannel import CollaborationChannel as CollaborationChannel
 
 
@@ -112,3 +113,21 @@ def default_card_visibility(actor_user_id: int | None, participant_user_ids: Col
     ):
         return CardVisibility.Private
     return DEFAULT_CARD_VISIBILITY
+
+
+def card_visibility_scope(context: CardVisibilityContext, *, columns=None):
+    """Apply the policy before pagination, counts, or existence projections."""
+    if columns is None:
+        from ..models import Card
+
+        columns = Card.__table__.c
+    allowed = [false()]
+    for visibility in (CardVisibility.Shared, CardVisibility.Internal):
+        if context.can_read_card(visibility):
+            allowed.append(columns["visibility"] == visibility.value)
+    if context.is_private_owner(context.actor_user_id):
+        allowed.append(and_(
+            columns["visibility"] == CardVisibility.Private.value,
+            columns["owner_user_id"] == context.actor_user_id,
+        ))
+    return or_(*allowed)
