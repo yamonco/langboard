@@ -88,3 +88,21 @@ transactional host facts, not an independent tamper-proof ledger: a surrounding
 transaction rollback also rolls back its audit. Denied/failed request auditing,
 retention/export, admin audit UI and external runtime consumer source binding
 remain pending. No public audit or secret-value endpoint is added.
+
+## Native metadata transports
+
+Authenticated native clients can read one canonical reference with
+`GET /secret-references/<uid>`. The endpoint returns `{reference: metadata}` and
+rechecks current host scope authority. Missing and unauthorized references are
+reported uniformly as not found. It never calls the vault backend.
+
+The native MCP command `get_secret_reference_metadata(uri)` accepts canonical or
+named logical URIs. Its schema contains only the bounded URI; authenticated
+actor and host service are injected by the existing MCP wrapper. It is annotated
+read-only and returns the same metadata projection. No create, rotate, resolve or
+credential-value command is registered. Standalone SDK and CLI clients can use
+the existing authenticated HTTP/MCP transports without a plugin dependency.
+
+Wiki documents may retain canonical URI text as a non-secret reference. Dedicated
+wiki reference rendering, CLI convenience UX, and real GitHub provider consumers
+remain pending; storing URI text does not imply that those integrations execute.
