@@ -1623,33 +1623,19 @@ class CardService(BaseDomainService):
         project: TProjectParam | None,
         limit: int = 50,
         before_activity_uid: str | None = None,
+        *,
+        user: TUserOrBot | None = None,
+        channel: CollaborationChannel = CollaborationChannel.Api,
     ) -> dict[str, Any] | None:
-        """Return a cursor-based board change feed for external orchestrators.
-
-        Each entry contains the activity type, actor, affected card, and a
-        stable cursor for pagination. Consumers use the cursor for idempotent
-        incremental polling.
-        """
-        from ...models import ProjectActivity
-
-        project = InfraHelper.get_by_id_like(Project, project)
-        if not project:
+        """Expose only currently readable card changes with a visible keyset cursor."""
+        resolved = self.resolve_visibility_context(project, user, channel)
+        if resolved is None:
             return None
-
-        raw_activities = self.repo.activity.get_list_by_project(
-            project,
-            TimeBasedPagination(page=1, limit=limit + 1),
+        project, context = resolved
+        limit = max(1, min(limit, 100))
+        card_activities = self.repo.activity.get_card_change_page(
+            project, limit, context=context, before_activity_uid=before_activity_uid,
         )
-        activities, _ = raw_activities if isinstance(raw_activities, tuple) else (raw_activities, 0)
-
-        # Filter to card-level activities only (external orchestrators care about cards)
-        card_activities = []
-        for activity in activities:
-            if not isinstance(activity, ProjectActivity):
-                continue
-            if not hasattr(activity, "card_id") or activity.card_id is None:
-                continue
-            card_activities.append(activity)
 
         has_more = len(card_activities) > limit
         page = card_activities[:limit]

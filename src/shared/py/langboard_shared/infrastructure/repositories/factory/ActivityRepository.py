@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Literal, TypeAlias, TypeVar, overload, override
-from sqlalchemy import String, cast, literal, or_, select, union_all
+from sqlalchemy import String, and_, cast, literal, or_, select, union_all
 from ....core.db import DbSession, SqlBuilder
 from ....core.db.queries.Select import SelectOfScalar
 from ....core.domain import BaseRepository
@@ -22,6 +22,7 @@ from ....domain.models import (
 )
 from ....domain.models.bases import BaseActivityModel
 from ....domain.models.ProjectActivity import ProjectActivityType
+from ....domain.services.CardVisibilityPolicy import CardVisibilityContext, card_visibility_scope
 from ....helpers import InfraHelper
 
 
@@ -33,6 +34,35 @@ _TUserOrBotActivityParam: TypeAlias = User | Bot | SnowflakeID | int | str
 
 
 class ActivityRepository(BaseRepository[BaseActivityModel]):
+    def get_card_change_page(
+        self, project: Project, limit: int, *, context: CardVisibilityContext,
+        before_activity_uid: str | None = None,
+    ) -> list[ProjectActivity]:
+        """Filter primary card visibility before keyset pagination or its sentinel."""
+        def scoped_query():
+            return SqlBuilder.select.table(ProjectActivity).join(
+                Card, Card.id == ProjectActivity.card_id,
+            ).where(
+                ProjectActivity.project_id == project.id, Card.project_id == project.id,
+                Card.deleted_at.is_(None), card_visibility_scope(context),
+            )
+
+        with DbSession.use(readonly=False) as db:
+            query = scoped_query()
+            if before_activity_uid:
+                cursor = db.exec(scoped_query().where(
+                    ProjectActivity.id == InfraHelper.convert_id(before_activity_uid),
+                )).first()
+                if cursor is None:
+                    return []
+                query = query.where(or_(
+                    ProjectActivity.created_at < cursor.created_at,
+                    and_(ProjectActivity.created_at == cursor.created_at, ProjectActivity.id < cursor.id),
+                ))
+            return list(db.exec(query.order_by(
+                ProjectActivity.created_at.desc(), ProjectActivity.id.desc(),
+            ).limit(limit + 1)).all())
+
     def get_card_column_history(self, project: Project, card: Card) -> list[ProjectActivity]:
         """Read the complete, ordered status path without paging unrelated activity."""
         query = (

@@ -433,8 +433,10 @@ def get_project_cards(
 @AuthFilter.add()
 def get_board_change_feed(
     project_uid: str,
+    request: Request,
     limit: int = 50,
     cursor: str | None = None,
+    user_or_bot: User | Bot = Auth.scope("all"),
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
     """Return board changes for external consumption with cursor-based pagination."""
@@ -443,7 +445,10 @@ def get_board_change_feed(
     if project is None:
         raise ApiException.NotFound_404(ApiErrorCode.NF2001)
 
-    result = service.card.get_change_feed(project_uid, limit=limit, before_activity_uid=cursor)
+    result = service.card.get_change_feed(
+        project_uid, limit=limit, before_activity_uid=cursor, user=user_or_bot,
+        channel=request.scope.get("collaboration_channel", CollaborationChannel.Api),
+    )
     if result is None:
         raise ApiException.NotFound_404(ApiErrorCode.NF2001)
     return JsonResponse(result)
