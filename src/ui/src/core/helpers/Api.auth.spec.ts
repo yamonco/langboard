@@ -1,5 +1,32 @@
 import { expect, test } from "@playwright/test";
 
+test("a canceled transport does not refresh auth or cancel a sibling request", async ({ page }) => {
+    await page.goto("/src/controllers/api/board/refreshProjectColumnDock.fixture.html");
+    let refreshes = 0;
+    await page.route("**/__aborted-transport-proof", (route) => route.abort("aborted"));
+    await page.route("**/__sibling-transport-proof", (route) => route.fulfill({ status: 200, json: { value: "preserved" } }));
+    await page.route("**/auth/refresh", async (route) => {
+        refreshes += 1;
+        await route.fulfill({ status: 401, json: {} });
+    });
+    const result = await page.evaluate(async () => {
+        const apiPath = "/src/core/helpers/Api.ts";
+        const authPath = "/src/core/stores/AuthStore.ts";
+        const { api } = await import(apiPath);
+        const { getAuthStore } = await import(authPath);
+        api.defaults.baseURL = location.origin;
+        const version = getAuthStore().getSessionVersion();
+        const [aborted, sibling] = await Promise.allSettled([api.get("/__aborted-transport-proof"), api.get("/__sibling-transport-proof")]);
+        return {
+            aborted: aborted.status,
+            sibling: sibling.status === "fulfilled" ? sibling.value.data.value : null,
+            sessionPreserved: version === getAuthStore().getSessionVersion(),
+        };
+    });
+    expect(result).toEqual({ aborted: "rejected", sibling: "preserved", sessionPreserved: true });
+    expect(refreshes).toBe(0);
+});
+
 test("a current expired token refreshes identity and replays the original HTTP request once", async ({ page }) => {
     await page.goto("/src/controllers/api/board/refreshProjectColumnDock.fixture.html");
     let reads = 0;
