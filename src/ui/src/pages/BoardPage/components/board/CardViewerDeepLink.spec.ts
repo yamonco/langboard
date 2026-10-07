@@ -445,3 +445,18 @@ test("touch drag reorders compact tray without restoring", async ({ page }) => {
         .toEqual(["other-1", "other-2", "other-0"]);
     await expect(page.locator("[data-card-viewer]")).toHaveCount(1);
 });
+
+test("sidebar collapse and expansion preserve the open card", async ({ page }) => {
+    await mockBoardApi(page);
+    await page.setViewportSize({ width: 1024, height: 768 });
+    await page.goto(`${FIXTURE}?sidebar`);
+    const viewer = page.locator("[data-card-viewer]");
+    const sidebar = page.locator("[data-workbench-sidebar]");
+    await expect(page.locator("[data-card-surface]")).toBeVisible();
+    await sidebar.getByRole("button", { name: /Collapse|접기/ }).click();
+    await expect(sidebar).toHaveAttribute("data-collapsed", "true");
+    await expect(viewer).toBeVisible();
+    await sidebar.getByRole("button", { name: /Expand|펼치기/ }).click();
+    await expect(sidebar).toHaveAttribute("data-collapsed", "false");
+    await expect(viewer).toBeVisible();
+});
