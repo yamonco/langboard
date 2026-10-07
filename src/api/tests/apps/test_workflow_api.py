@@ -129,3 +129,17 @@ def test_native_stage_route_conflict_is_409():
             ColumnWorkflowStageForm(workflow_stage="active", expected_workflow_stage=None),
             SimpleNamespace(project_column=SimpleNamespace(change_workflow_stage=change)))
     change.assert_called_once_with("board", "column", "active", check_expected=True, expected_workflow_stage=None)
+
+
+def test_catalog_reads_board_owned_state_and_denies_revoked_membership(board, binding):
+    items = board[0].get_app_catalog(board[1], board[2].get_uid())
+    assert [item["key"] for item in items] == ["github", "glitchtip", "dokploy"]
+    assert items[0]["binding"]["state"] == binding.state
+    assert items[0]["binding"]["granted_capabilities"] == ["signals.read"]
+    assert items[1]["binding"] is None
+    assert items[2]["workflow_requirements"] is None
+    assert not any(item["connection_setup_available"] for item in items)
+    assert "credential_reference" not in json.dumps(items)
+    with DbSession.use(readonly=False) as db:
+        db.delete(board[3])
+    assert board[0].get_app_catalog(board[1], board[2].get_uid()) is None

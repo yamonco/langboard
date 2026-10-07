@@ -151,6 +151,11 @@
     "App dokploy summary": "项目、环境和应用程序。",
     "App connection setup pending": "外部连接设置尚未提供。",
     "App workflow contract pending": "工作流契约准备中",
-    "Configure workflow": "配置工作流"
+    "Configure workflow": "配置工作流",
+    "App state unconfigured": "未配置",
+    "App state disabled": "已禁用",
+    "App state enabled": "已启用",
+    "App state needs_attention": "需要关注",
+    "App state disconnected": "已断开"
   }
 }

@@ -151,6 +151,11 @@
     "App dokploy summary": "프로젝트, 환경과 애플리케이션.",
     "App connection setup pending": "외부 연결 설정은 아직 제공되지 않습니다.",
     "App workflow contract pending": "워크플로우 계약 준비 중",
-    "Configure workflow": "워크플로우 설정"
+    "Configure workflow": "워크플로우 설정",
+    "App state unconfigured": "설정 전",
+    "App state disabled": "비활성",
+    "App state enabled": "활성",
+    "App state needs_attention": "확인 필요",
+    "App state disconnected": "연결 해제"
   }
 }

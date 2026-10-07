@@ -151,6 +151,11 @@
     "App dokploy summary": "Projects, environments and applications.",
     "App connection setup pending": "External connection setup is not available yet.",
     "App workflow contract pending": "Workflow contract pending",
-    "Configure workflow": "Configure workflow"
+    "Configure workflow": "Configure workflow",
+    "App state unconfigured": "Not configured",
+    "App state disabled": "Disabled",
+    "App state enabled": "Enabled",
+    "App state needs_attention": "Needs attention",
+    "App state disconnected": "Disconnected"
   }
 }
