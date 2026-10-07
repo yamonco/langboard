@@ -11,6 +11,7 @@ import { BaseImagePlugin } from "@platejs/media";
 import { ImageElementStatic } from "./media-image-node-static";
 import { Editor } from "./editor";
 import Dialog from "@/components/base/Dialog";
+import { api } from "@/core/helpers/Api";
 import { useState } from "react";
 import "@/assets/styles/main.css";
 
@@ -19,6 +20,10 @@ const imageUrl = (width: number, height: number) => {
     const rectangle = "<rect width='100%' height='100%' fill='teal'/></svg>";
     return `data:image/svg+xml,${encodeURIComponent(opening + rectangle)}`;
 };
+
+if (sessionStorage.getItem("fixture-auth")) api.defaults.headers.common.Authorization = "Bearer fixture-token";
+
+const protectedMode = new URLSearchParams(window.location.search).has("protected");
 
 function Fixture() {
     const [opened, setOpened] = useState(true);
@@ -47,14 +52,21 @@ function Fixture() {
                     ].map(({ width, height }) => {
                         const editor = createPlateEditor({
                             plugins: [ImagePlugin.configure({ render: { node: ImageElement, afterEditable: MediaPreviewDialog } })],
-                            value: [{ type: "img", url: imageUrl(width, height), children: [{ text: "" }] }],
+                            value: [
+                                {
+                                    type: "img",
+                                    url: protectedMode ? "/file/encrypted/card_attachment/proof.png" : imageUrl(width, height),
+                                    children: [{ text: "" }],
+                                },
+                            ],
                         });
+                        if (protectedMode) (window as unknown as { fixtureEditor: typeof editor }).fixtureEditor = editor;
                         return (
                             <div key={width} data-dynamic-image-fixture className="grid grid-cols-[32px,minmax(0,1fr)] gap-2">
                                 <div />
                                 <div className="min-w-0 max-w-full">
                                     <div className="flex w-fit max-w-full px-3 py-1.5">
-                                        <Plate editor={editor} readOnly>
+                                        <Plate editor={editor} readOnly={!(protectedMode && width === 1800)}>
                                             <Editor variant="ai" />
                                         </Plate>
                                     </div>

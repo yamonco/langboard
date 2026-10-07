@@ -1,6 +1,7 @@
 "use client";
 
-import { PreviewImage, useImagePreview, useImagePreviewValue, useScaleInput } from "@platejs/media/react";
+import { usePreviewImage, useImagePreview, useImagePreviewValue, useScaleInput } from "@platejs/media/react";
+import useProtectedImage from "@/core/hooks/useProtectedImage";
 import { cn } from "@/core/utils/ComponentUtils";
 import { cva } from "class-variance-authority";
 import { ArrowLeft, ArrowRight, Download, Minus, Plus, X } from "lucide-react";
@@ -57,7 +58,7 @@ export function MediaPreviewDialog() {
                 <div className="absolute inset-0 size-full bg-black opacity-30"></div>
                 <div className="absolute inset-0 flex items-center justify-center">
                     <div className="relative flex max-h-screen w-full items-center">
-                        <PreviewImage className={cn("mx-auto block max-h-[calc(100vh-4rem)] w-auto object-contain transition-transform")} />
+                        <ProtectedPreviewImage className={cn("mx-auto block max-h-[calc(100vh-4rem)] w-auto object-contain transition-transform")} />
                         <div
                             className="absolute bottom-0 left-1/2 z-40 flex w-fit -translate-x-1/2 justify-center gap-4 p-2 text-center text-white"
                             onClick={(e) => e.stopPropagation()}
@@ -139,4 +140,12 @@ function ScaleInput(props: React.ComponentProps<"input">) {
     const { props: scaleInputProps, ref } = useScaleInput();
 
     return <input {...scaleInputProps} {...props} ref={ref} />;
+}
+
+function ProtectedPreviewImage({ className }: { className: string }) {
+    const { props } = usePreviewImage();
+    const image = useProtectedImage(props.src);
+    // Plate types this image handler as a button event; its native PreviewImage forwards it to an img.
+    const onClick = props.onClick as unknown as React.MouseEventHandler<HTMLImageElement>;
+    return <img {...props} onClick={onClick} src={image.src} className={className} alt="" />;
 }
