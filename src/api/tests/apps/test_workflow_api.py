@@ -118,6 +118,63 @@ def test_stage_compare_uses_locked_current_row_and_preserves_changes(board, monk
         assert stored.workflow_stage == "active"
 
 
+@pytest.mark.parametrize("board", ["postgresql-test"], indirect=True)
+def test_native_column_stage_concurrent_edit_has_one_winner(board, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+    from langboard_shared.core.db.DbEngine import DbEngine
+    from langboard_shared.domain.models import Card, ProjectColumn
+    from langboard_shared.domain.models.ProjectColumn import ProjectColumnWorkflowConflict
+    from langboard_shared.domain.services.factory.ProjectColumnService import ProjectColumnService
+    from langboard_shared.helpers import InfraHelper
+    from langboard_shared.infrastructure.repositories import Repository
+    from langboard_shared.publishers import ProjectColumnPublisher
+    from sqlalchemy import select
+
+    engine = DbEngine.get_main_engine()
+    Card.__table__.create(engine)
+    monkeypatch.setattr(DbEngine, "get_readonly_engine", DbEngine.get_main_engine)
+    ready = Barrier(2)
+    native_lookup = InfraHelper.get_records_with_foreign_by_params
+
+    def synchronized_lookup(*args, **kwargs):
+        result = native_lookup(*args, **kwargs)
+        ready.wait(timeout=5)
+        return result
+
+    # Both commands finish their native initial lookup before either enters the
+    # write transaction. Only the locked current row may decide the expectation.
+    monkeypatch.setattr(InfraHelper, "get_records_with_foreign_by_params", synchronized_lookup)
+    published = []
+    monkeypatch.setattr(ProjectColumnPublisher, "workflow_stage_changed", lambda *args: published.append(args))
+    work_states = []
+    card_service = SimpleNamespace(publish_work_states=lambda *args: work_states.append(args))
+    columns = ProjectColumnService(lambda _: card_service, lambda _: None, Repository())
+
+    def attempt(stage):
+        try:
+            saved = columns.change_workflow_stage(
+                board[2].get_uid(), board[5][0].get_uid(), stage,
+                check_expected=True, expected_workflow_stage="active",
+            )
+            return "saved" if saved else "denied", stage
+        except ProjectColumnWorkflowConflict:
+            return "conflict", stage
+
+    with ThreadPoolExecutor(max_workers=2) as workers:
+        futures = [workers.submit(attempt, stage) for stage in ("review", "closed")]
+        results = [future.result(timeout=15) for future in futures]
+    assert sorted(result[0] for result in results) == ["conflict", "saved"]
+    winner = next(stage for result, stage in results if result == "saved")
+    with engine.connect() as connection:
+        assert connection.execute(
+            select(ProjectColumn.__table__.c.workflow_stage).where(ProjectColumn.__table__.c.id == board[5][0].id)
+        ).scalar_one() == winner
+    assert len(published) == len(work_states) == 1
+    assert published[0][1].workflow_stage == winner
+    assert work_states[0][1] == []
+
+
 def test_native_stage_route_conflict_is_409():
     from unittest.mock import Mock
     from langboard.routes.board.BoardColumnApi import update_project_column_workflow_stage
