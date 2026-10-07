@@ -14,7 +14,7 @@ from langboard_shared.core.routing import (
 )
 from langboard_shared.core.schema import OpenApiSchema
 from langboard_shared.domain.models import Bot, ProjectColumn, ProjectRole, User
-from langboard_shared.domain.models.ProjectColumn import ProjectColumnDockConflict
+from langboard_shared.domain.models.ProjectColumn import ProjectColumnDockConflict, ProjectColumnWorkflowConflict
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.domain.services import DomainService
 from langboard_shared.filter import RoleFilter
@@ -95,7 +95,16 @@ def create_project_column(
     user_or_bot: User | Bot = Auth.scope("all"),
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
-    column = service.project_column.create(user_or_bot, project_uid, form.name, description=form.description)
+    try:
+        column = service.project_column.create(
+            user_or_bot,
+            project_uid,
+            form.name,
+            description=form.description,
+            workflow_stage=form.workflow_stage,
+        )
+    except ValueError as exc:
+        raise ApiException.BadRequest_400(ApiErrorCode.VA0000) from exc
     if not column:
         raise ApiException.NotFound_404(ApiErrorCode.NF2001)
 
@@ -175,7 +184,7 @@ def get_project_workflow_stages(project_uid: str, service: DomainService = Domai
     "/board/{project_uid}/column/{column_uid}/workflow-stage",
     tags=["Board.Column"],
     description="Set the explicit meaning of a workflow column without renaming or moving cards.",
-    responses=OpenApiSchema().suc({"workflow_stage": "string|null"}).auth().forbidden().err(404, ApiErrorCode.NF2004).get(),
+    responses=OpenApiSchema().suc({"workflow_stage": "string|null"}).auth().forbidden().err(404, ApiErrorCode.NF2004).err(409, ApiErrorCode.EX2001).get(),
 )
 @RoleFilter.add(ProjectRole, [ProjectRoleAction.Update], RoleFinder.project)
 @AuthFilter.add()
@@ -186,7 +195,10 @@ def update_project_column_workflow_stage(
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
     try:
-        changed = service.project_column.change_workflow_stage(project_uid, column_uid, form.workflow_stage)
+        expected = {"check_expected": True, "expected_workflow_stage": form.expected_workflow_stage} if "expected_workflow_stage" in form.model_fields_set else {}
+        changed = service.project_column.change_workflow_stage(project_uid, column_uid, form.workflow_stage, **expected)
+    except ProjectColumnWorkflowConflict:
+        raise ApiException.Conflict_409(ApiErrorCode.EX2001) from None
     except ValueError as exc:
         raise ApiException.BadRequest_400(ApiErrorCode.VA0000) from exc
     if not changed:
