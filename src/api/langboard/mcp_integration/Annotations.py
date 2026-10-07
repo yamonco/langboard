@@ -39,6 +39,7 @@ READ_ONLY_TOOLS = frozenset(
         "get_card",
         "get_card_attachments",
         "read_card_attachment",
+        "read_card_document",
         "read_card_images",
         "get_card_linked_wikis",
         "get_public_card_metadata",

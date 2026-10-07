@@ -129,6 +129,69 @@ def read_card_attachment(
     }
 
 
+@McpTool.add(
+    "user", description="Read one bounded transcription excerpt without embeddings; continue by offset and generation."
+)
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+def read_card_document(
+    project_uid: str,
+    card_uid: str,
+    attachment_uid: str,
+    user: User,
+    service: DomainService,
+    offset: Annotated[int, Field(ge=0)] = 0,
+    max_chars: Annotated[int, Field(ge=128, le=8000)] = 4000,
+    expected_generation: str | None = None,
+) -> dict:
+    """Recheck current permissions and live ancestry before loading document content."""
+    if type(offset) is not int or offset < 0 or type(max_chars) is not int or not 128 <= max_chars <= 8000:
+        raise ValueError("Invalid document excerpt bounds")
+    params = _get_card_in_project(project_uid, card_uid)
+    if not params:
+        raise ValueError("Document unavailable")
+    project, card = params
+    actions = service.project.get_user_role_actions_by_project(user, project)
+    if "*" not in actions and ProjectRoleAction.Read.value not in actions:
+        raise ValueError("Document unavailable")
+    attachment = service.card_attachment.get_by_id_like(attachment_uid)
+    if (
+        card.is_linked_resource
+        or attachment is None
+        or attachment.card_id != card.id
+        or attachment.deleted_at is not None
+    ):
+        raise ValueError("Document unavailable")
+    document = service.docling_metadata.get_document_by_attachment_uid(CardMetadata, card, attachment_uid)
+    if not document:
+        raise ValueError("Document transcription unavailable")
+    generation = document.get("generation")
+    if expected_generation is not None and expected_generation != generation:
+        raise ValueError("Document generation changed; restart reading")
+    result = {
+        "project_uid": project_uid,
+        "card_uid": card_uid,
+        "attachment_uid": attachment_uid,
+        "filename": attachment.filename,
+        "generation": generation,
+        "status": document.get("status"),
+        "content_hash": document.get("content_hash"),
+    }
+    if document.get("status") != "indexed":
+        return {**result, "content": "", "next_offset": None}
+    text = (document.get("content") or {}).get("markdown", "")
+    if not isinstance(text, str) or offset > len(text):
+        raise ValueError("Document excerpt unavailable")
+    end = min(offset + max_chars, len(text))
+    return {
+        **result,
+        "content": text[offset:end],
+        "offset": offset,
+        "next_offset": end if end < len(text) else None,
+        "total_chars": len(text),
+        "content_format": "markdown",
+    }
+
+
 @McpTool.add("user", description="List wikis linked to a card that the current user may read.")
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
 def get_card_linked_wikis(project_uid: str, card_uid: str, user: User, service: DomainService) -> dict:
@@ -680,7 +743,7 @@ def get_card_delta(
         payload = bundle.model_dump(mode="json")
         if isinstance(user_or_bot, User):
             from ..wiki_workspace.infrastructure import NativeWikiRepository
-    
+
             repository = NativeWikiRepository(user_or_bot, service)
             links = payload["card"]["core"].get("linked_wikis", [])
             revisions = repository.linked_revisions(project_uid, [wiki["wiki_uid"] for wiki in links])
@@ -689,7 +752,7 @@ def get_card_delta(
         elif payload["card"]["core"].get("linked_wikis"):
             from fastmcp.exceptions import AuthorizationError
             from ..wiki_workspace.domain import WikiSnapshot
-    
+
             for link in payload["card"]["core"]["linked_wikis"]:
                 wiki = service.project_wiki.get_by_id_like(link["wiki_uid"])
                 if wiki is None or not wiki.is_public:
@@ -703,6 +766,7 @@ def get_card_delta(
             cursor=since_context_cursor,
             key=Env.JWT_SECRET_KEY,
         )
+
 
 @McpTool.add(
     "user", description="Append reviewer evidence for the current card revision; never approve gates or move the card."
