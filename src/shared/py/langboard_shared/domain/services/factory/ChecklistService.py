@@ -9,6 +9,7 @@ from ....tasks.activities import CardChecklistActivityTask
 from ....tasks.bots import CardChecklistBotTask
 from ...models import Card, Checklist, Project
 from ...models.Checkitem import CheckitemStatus
+from ..CardVisibilityPolicy import CardVisibilityContext
 from .CheckitemService import CheckitemService
 from .NotificationService import NotificationService
 
@@ -96,6 +97,8 @@ class ChecklistService(BaseDomainService):
         project: TProjectParam | None,
         archive_visible_since: SafeDateTime | None = None,
         limit: int | None = None,
+        *,
+        context: CardVisibilityContext | None = None,
     ) -> list[dict[str, Any]]:
         project = InfraHelper.get_by_id_like(Project, project)
         if not project:
@@ -106,6 +109,7 @@ class ChecklistService(BaseDomainService):
             archive_visible_since=archive_visible_since,
             limit=limit,
             is_system=False,
+            context=context,
         )
         return [checklist.api_response() for checklist in checklists]
 

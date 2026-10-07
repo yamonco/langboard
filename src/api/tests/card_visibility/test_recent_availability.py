@@ -10,6 +10,8 @@ from langboard_shared.domain.models import (
     Card,
     CardAttachment,
     CardComment,
+    Checkitem,
+    Checklist,
     Project,
     ProjectAssignedUser,
     ProjectColumn,
@@ -19,15 +21,17 @@ from langboard_shared.domain.models import (
 from langboard_shared.domain.services.CardVisibilityPolicy import CollaborationChannel
 from langboard_shared.domain.services.factory.CardService import CardService
 from langboard_shared.infrastructure.repositories.factory.CardRepository import CardRepository
+from langboard_shared.infrastructure.repositories.factory.ChecklistRepository import ChecklistRepository
 from langboard_shared.infrastructure.repositories.factory.ProjectAssignedUserRepository import (
     ProjectAssignedUserRepository,
 )
+from langboard_shared.infrastructure.repositories.factory.ProjectColumnRepository import ProjectColumnRepository
 from sqlalchemy import create_engine
 
 
 def test_recent_cards_revalidate_actor_and_filter_visibility_before_return(monkeypatch):
     engine = create_engine("sqlite://")
-    for model in (User, Project, ProjectColumn, ProjectAssignedUser, Card, CardComment, CardAttachment, WorkflowStageDefinition):
+    for model in (User, Project, ProjectColumn, ProjectAssignedUser, Card, CardComment, CardAttachment, WorkflowStageDefinition, Checklist, Checkitem):
         model.__table__.create(engine)
     monkeypatch.setattr(DbEngine, "get_main_engine", lambda: engine)
     monkeypatch.setattr(DbEngine, "get_readonly_engine", lambda: engine)
@@ -42,6 +46,7 @@ def test_recent_cards_revalidate_actor_and_filter_visibility_before_return(monke
             db.insert(project)
             column = ProjectColumn(project_id=project.id, name="Work")
             db.insert(column)
+            db.insert(ProjectColumn(project_id=project.id, name="Archive", is_archive=True))
             assignment = ProjectAssignedUser(project_id=project.id, user_id=member.id)
             db.insert(assignment)
             cards = [Card(project_id=project.id, project_column_id=column.id, title=visibility,
@@ -51,6 +56,7 @@ def test_recent_cards_revalidate_actor_and_filter_visibility_before_return(monke
                               ("PRIVATE", member.id), ("PRIVATE", owner.id))]
             for card in cards:
                 db.insert(card)
+                db.insert(Checklist(card_id=card.id, title="Scoped checklist"))
                 db.insert(CardAttachment(card_id=card.id, user_id=owner.id,
                     filename="proof.pdf", file=FileModel(storage_type="test", storage_name="test", original_filename="proof.pdf", path="/tmp/fixture", filename="proof.pdf"),
                     document_text="SearchProof document"))
@@ -68,6 +74,18 @@ def test_recent_cards_revalidate_actor_and_filter_visibility_before_return(monke
             assert {row["uid"] for row in found} == expected
             assert all(row["document_matches"][0]["snippet"] == "SearchProof document" for row in found)
             _, context = service.resolve_visibility_context(project, member, channel)
+            cutoff = SafeDateTime.now()
+            board_cards = repository.card.get_board_list(project, cutoff, context=context)
+            assert {card.get_uid() for card, _ in board_cards} == expected
+            visible_ids = {card.id for card, _ in board_cards}
+            checklists = ChecklistRepository(None, None).get_all_by_project(project, context=context)
+            assert {checklist.card_id for checklist in checklists} == visible_ids
+            columns = ProjectColumnRepository(None, None)
+            counts = columns.get_all_by_project(project, context=context)
+            assert next(count for item, count in counts if item.id == column.id) == len(expected)
+            assert columns.get_work_counts(project, context=context)[column.id] == {
+                "open_count": len(expected), "incomplete_count": len(expected),
+            }
             excerpts = repository.card.search_document_matches(project, [card.id for card in cards], "SearchProof", context=context)
             assert {cards[i].id for i, uid in enumerate(uids) if uid in expected} == set(excerpts)
             limited = repository.card.search_context_by_project(project, "SearchProof", limit=1, context=context)

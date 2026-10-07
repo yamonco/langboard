@@ -354,19 +354,26 @@ def get_archived_project_cards(
 @AuthFilter.add()
 def get_project_cards(
     project_uid: str,
+    request: Request,
     user_or_bot: User | Bot = Auth.scope("all"),
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
     project = service.project.get_by_id_like(project_uid)
     if project is None:
         raise ApiException.NotFound_404(ApiErrorCode.NF2001)
+    channel = request.scope.get("collaboration_channel", CollaborationChannel.Api)
+    resolved = service.card.resolve_visibility_context(project, user_or_bot, channel)
+    if resolved is None:
+        raise ApiException.NotFound_404(ApiErrorCode.NF2001)
+    project, context = resolved
     global_relationships = service.app_setting.get_api_global_relationship_list()
-    columns = service.project_column.get_api_list_by_project(project)
+    columns = service.project_column.get_api_list_by_project(project, context=context)
     archive_visible_since = SafeDateTime.now() - timedelta(days=project.archive_visible_days)
-    cards = service.card.get_board_list(project, user_or_bot, archive_visible_since)
+    cards = service.card.get_board_list(project, user_or_bot, archive_visible_since, channel=channel)
     checklists = service.checklist.get_api_list_only_by_project(
         project,
         archive_visible_since=archive_visible_since,
+        context=context,
     )
     column_bot_scopes = service.project_column.get_api_bot_scopes_by_project(project)
     column_bot_schedules = service.project_column.get_api_bot_schedule_list_by_project(project, columns)

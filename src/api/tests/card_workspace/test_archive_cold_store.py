@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from typing import Any
 import pytest
 import sqlalchemy as sa
+from langboard_shared.domain.services.CardVisibilityPolicy import CardVisibilityContext, CollaborationChannel
 from pydantic import SecretStr
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
@@ -91,7 +92,7 @@ def _service(card_repository: Any, calls: dict[str, Any] | None = None) -> CardS
         card_relationship=SimpleNamespace(get_all_by_project=capture("relationships")),
         project_label=SimpleNamespace(get_all_card_labels_by_project=capture("labels")),
         checklist=SimpleNamespace(
-            get_all_by_project=lambda _project, *, archive_visible_since: (
+            get_all_by_project=lambda _project, *, archive_visible_since, context: (
                 calls.__setitem__("checklists", archive_visible_since),
                 [],
             )[1]
@@ -110,7 +111,7 @@ def test_board_list_passes_one_visibility_cutoff_to_all_hot_path_queries(
     card = FakeCard(10, "visible-card")
     observed: dict[str, Any] = {}
 
-    def get_board_list(_project: Any, cutoff: SafeDateTime) -> list[tuple[FakeCard, int]]:
+    def get_board_list(_project: Any, cutoff: SafeDateTime, *, context: CardVisibilityContext) -> list[tuple[FakeCard, int]]:
         observed["cutoff"] = cutoff
         return [(card, 2)]
 
@@ -122,6 +123,7 @@ def test_board_list_passes_one_visibility_cutoff_to_all_hot_path_queries(
         return {card.id: {"lifecycle": "active", "checklist_progress": {"total": 0, "completed": 0}}}
 
     monkeypatch.setattr(CardService, "get_work_states", project_states)
+    monkeypatch.setattr(CardService, "resolve_visibility_context", lambda *args: (project, CardVisibilityContext(CollaborationChannel.HumanUI, True, True, True)))
     before = SafeDateTime.now()
     result = _service(SimpleNamespace(get_board_list=get_board_list), observed).get_board_list(project)
     after = SafeDateTime.now()
@@ -158,25 +160,26 @@ def test_board_route_passes_one_request_cutoff_to_cards_and_checklists(monkeypat
         project=SimpleNamespace(get_by_id_like=lambda _uid: project),
         app_setting=SimpleNamespace(get_api_global_relationship_list=lambda: []),
         project_column=SimpleNamespace(
-            get_api_list_by_project=lambda _project: [],
+            get_api_list_by_project=lambda _project, *, context: [],
             get_api_bot_scopes_by_project=lambda _project: [],
             get_api_bot_schedule_list_by_project=lambda _project, _columns: [],
         ),
         card=SimpleNamespace(
-            get_board_list=lambda _project, _user_or_bot, cutoff: (
+            resolve_visibility_context=lambda *args: (project, CardVisibilityContext(CollaborationChannel.HumanUI, True, True, True)),
+            get_board_list=lambda _project, _user_or_bot, cutoff, *, channel: (
                 calls.__setitem__("cards", cutoff),
                 [],
             )[1],
         ),
         checklist=SimpleNamespace(
-            get_api_list_only_by_project=lambda _project, *, archive_visible_since: (
+            get_api_list_only_by_project=lambda _project, *, archive_visible_since, context: (
                 calls.__setitem__("checklists", archive_visible_since),
                 [],
             )[1],
         ),
     )
 
-    get_project_cards("project", service=service)
+    get_project_cards("project", request=SimpleNamespace(scope={}), service=service)
 
     expected = now - timedelta(days=7)
     assert calls == {"cards": expected, "checklists": expected}
@@ -405,7 +408,7 @@ def test_hot_queries_share_the_exact_boundary_and_hide_cold_relationship_endpoin
 
     project = 1
 
-    cards = make_repo(CardRepository).get_board_list(project, cutoff)
+    cards = make_repo(CardRepository).get_board_list(project, cutoff, context=CardVisibilityContext(CollaborationChannel.HumanUI, True, True, True))
     members = make_repo(CardAssignedUserRepository).get_all_by_project(project, cutoff)
     relationships = make_repo(CardRelationshipRepository).get_all_by_project(project, cutoff)
     labels = make_repo(ProjectLabelRepository).get_all_card_labels_by_project(project, cutoff)
