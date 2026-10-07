@@ -33,6 +33,32 @@ def connection_revision(connection):
     ).hexdigest()
 
 
+def app_authentication(service, actor, project_uid, connection_uid):
+    _board(service, actor, project_uid)
+    with DbSession.use(readonly=False) as db:
+        connection = db.exec(
+            SqlBuilder.select.table(AppConnection).where(
+                AppConnection.id == InfraHelper.convert_id(connection_uid),
+                AppConnection.app_key == "github",
+                AppConnection.owner_id == actor.id,
+            )
+        ).first()
+    if connection is None or connection.state not in {"pending", "connected"} or not connection.credential_reference:
+        raise GitHubManifestUnavailable()
+    credential = json.loads(
+        service.secret_reference.resolve_for_runtime(
+            actor, connection.credential_reference, source=SecretAuditSource("app_connection", connection.get_uid())
+        ).get_secret_value()
+    )
+    if type(credential.get("id")) is not int or str(credential["id"]) != connection.external_account_id:
+        raise GitHubManifestUnavailable()
+    now = int(time.time())
+    token = jwt.encode(
+        {"iat": now - 60, "exp": now + 540, "iss": str(credential["id"])}, credential["pem"], algorithm="RS256"
+    )
+    return connection, credential, token
+
+
 def inspect_installation(
     service: DomainService,
     actor: User,
@@ -54,31 +80,8 @@ def inspect_installation(
         or len(set(repository_ids)) != len(repository_ids)
     ):
         raise GitHubManifestUnavailable()
-    _board(service, actor, project_uid)
-    with DbSession.use(readonly=False) as db:
-        connection = db.exec(
-            SqlBuilder.select.table(AppConnection).where(
-                AppConnection.id == InfraHelper.convert_id(connection_uid),
-                AppConnection.app_key == "github",
-                AppConnection.owner_id == actor.id,
-            )
-        ).first()
-    if connection is None or connection.state not in {"pending", "connected"} or not connection.credential_reference:
-        raise GitHubManifestUnavailable()
     try:
-        credential = json.loads(
-            service.secret_reference.resolve_for_runtime(
-                actor,
-                connection.credential_reference,
-                source=SecretAuditSource("app_connection", connection.get_uid()),
-            ).get_secret_value()
-        )
-        if type(credential.get("id")) is not int or str(credential["id"]) != connection.external_account_id:
-            raise GitHubManifestUnavailable()
-        now = int(time.time())
-        app_token = jwt.encode(
-            {"iat": now - 60, "exp": now + 540, "iss": str(credential["id"])}, credential["pem"], algorithm="RS256"
-        )
+        connection, credential, app_token = app_authentication(service, actor, project_uid, connection_uid)
         with httpx.Client(timeout=15, follow_redirects=False) as client:
             response = client.get(
                 f"{API}/app/installations/{installation_id}",

@@ -238,3 +238,23 @@ def get_github_connections(
         return JsonResponse(content=list_connections(service, user, project_uid, after))
     except GitHubManifestUnavailable:
         raise ApiException.NotFound_404() from None
+
+
+@AppRouter.api.get(
+    "/board/{project_uid}/settings/apps/github/connections/{connection_uid}/app", tags=["Board.Settings"]
+)
+@AuthFilter.add("user")
+def get_github_app(
+    project_uid: str,
+    connection_uid: str,
+    user: User = Auth.scope("user"),
+    service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    from ...apps.GitHubConnections import inspect_app
+
+    if not connection_uid or len(connection_uid) > 11:
+        raise ApiException.BadRequest_400()
+    try:
+        return JsonResponse(content=inspect_app(service, user, project_uid, connection_uid))
+    except GitHubManifestUnavailable:
+        raise ApiException.NotFound_404() from None
