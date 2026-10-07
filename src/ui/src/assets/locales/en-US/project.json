@@ -156,6 +156,22 @@
     "App state disabled": "Disabled",
     "App state enabled": "Enabled",
     "App state needs_attention": "Needs attention",
-    "App state disconnected": "Disconnected"
+    "App state disconnected": "Disconnected",
+    "Selected App resources": "Selected resources: {{count}}",
+    "App stored resource status help": "Stored status; external access has not been checked by this view.",
+    "No selected App resources": "No resources selected",
+    "App resource access": "Access",
+    "App resource health": "Health",
+    "App resource connection": "Connection",
+    "App resource state unknown": "Unknown",
+    "App resource state granted": "Granted",
+    "App resource state denied": "Denied",
+    "App resource state revoked": "Revoked",
+    "App resource state healthy": "Healthy",
+    "App resource state degraded": "Degraded",
+    "App resource state unavailable": "Unavailable",
+    "App resource state pending": "Pending",
+    "App resource state connected": "Connected",
+    "App resource state disconnected": "Disconnected"
   }
 }

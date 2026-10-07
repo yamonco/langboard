@@ -76,6 +76,9 @@ for (const width of [1440, 390]) {
         await page.goto(`${path}?store`);
         await expect(page.getByRole("heading", { name: "App Store" })).toBeVisible();
         await expect(page.getByRole("heading", { name: "Dokploy" })).toBeVisible();
+        await page.getByText("Selected resources: 2", { exact: true }).click();
+        await expect(page.getByText("Denied · 1", { exact: true })).toBeVisible();
+        await expect(page.getByText("Degraded · 1", { exact: true })).toBeVisible();
         await expect(page.getByRole("button", { name: "Workflow contract pending" })).toBeDisabled();
         await page
             .getByRole("article")

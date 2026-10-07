@@ -27,6 +27,12 @@ api.defaults.adapter = async (config) => {
                     key,
                     name: { github: "GitHub", glitchtip: "GlitchTip", dokploy: "Dokploy" }[key],
                     binding: key === "github" ? { state: "disabled", granted_capabilities: [], stage_transitions_enabled: false } : null,
+                    resources: {
+                        selected_count: key === "github" ? 2 : 0,
+                        access_counts: key === "github" ? { granted: 1, denied: 1 } : {},
+                        health_counts: key === "github" ? { healthy: 1, degraded: 1 } : {},
+                        connection_counts: key === "github" ? { connected: 2 } : {},
+                    },
                     workflow_requirements: key === "dokploy" ? null : { required: ["active", "review", "closed"], optional: [] },
                 })),
             },

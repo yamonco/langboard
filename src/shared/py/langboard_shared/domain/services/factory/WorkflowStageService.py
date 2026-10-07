@@ -1,4 +1,5 @@
 import re
+from sqlalchemy import select, func
 from collections.abc import Mapping
 from ....core.db import DbSession, SqlBuilder
 from ....core.domain import BaseDomainService
@@ -6,6 +7,8 @@ from ....helpers import InfraHelper
 from ....publishers import AppSettingPublisher
 from ....tasks.webhooks.ExecutionReadinessUow import execution_readiness_uow
 from ...models import (
+    AppConnection,
+    AppResourceBinding,
     BoardAppBinding,
     Project,
     ProjectAssignedUser,
@@ -52,6 +55,24 @@ class WorkflowStageService(BaseDomainService):
                 BoardAppBinding.project_id == InfraHelper.convert_id(project_uid),
             )).all()
             by_app = {binding.app_key: binding for binding in bindings}
+            resource_counts = db.exec(select(
+                AppResourceBinding.board_binding_id, AppResourceBinding.access_state,
+                AppResourceBinding.health, AppConnection.state, func.count(AppResourceBinding.id),
+            ).join(AppConnection, AppConnection.id == AppResourceBinding.connection_id)
+              .join(BoardAppBinding, BoardAppBinding.id == AppResourceBinding.board_binding_id)
+              .where(BoardAppBinding.project_id == InfraHelper.convert_id(project_uid),
+                     AppResourceBinding.is_selected == True)  # noqa: E712
+              .group_by(AppResourceBinding.board_binding_id, AppResourceBinding.access_state,
+                        AppResourceBinding.health, AppConnection.state)).all()
+            summaries = {}
+            for binding_id, access, health, connection, count in resource_counts:
+                summary = summaries.setdefault(binding_id, {
+                    "selected_count": 0, "access_counts": {}, "health_counts": {}, "connection_counts": {},
+                })
+                summary["selected_count"] += count
+                for field, state in (("access_counts", access), ("health_counts", health), ("connection_counts", connection)):
+                    summary[field][state] = summary[field].get(state, 0) + count
+
             items = []
             for key, name in (("github", "GitHub"), ("glitchtip", "GlitchTip"), ("dokploy", "Dokploy")):
                 binding = by_app.get(key)
@@ -62,6 +83,9 @@ class WorkflowStageService(BaseDomainService):
                         "required": list(requirements.required), "optional": list(requirements.optional),
                     },
                     "connection_setup_available": False,
+                    "resources": summaries.get(binding.id if binding else None, {
+                        "selected_count": 0, "access_counts": {}, "health_counts": {}, "connection_counts": {},
+                    }),
                     "binding": None if binding is None else {
                         "uid": binding.get_uid(), "state": binding.state,
                         "granted_capabilities": list(binding.granted_capabilities),

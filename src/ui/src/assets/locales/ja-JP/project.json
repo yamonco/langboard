@@ -156,6 +156,22 @@
     "App state disabled": "無効",
     "App state enabled": "有効",
     "App state needs_attention": "確認が必要",
-    "App state disconnected": "接続解除"
+    "App state disconnected": "接続解除",
+    "Selected App resources": "選択中のリソース: {{count}}",
+    "App stored resource status help": "保存された状態です。この画面で外部アクセスを検証した結果ではありません。",
+    "No selected App resources": "リソース未選択",
+    "App resource access": "アクセス",
+    "App resource health": "状態",
+    "App resource connection": "接続",
+    "App resource state unknown": "不明",
+    "App resource state granted": "許可",
+    "App resource state denied": "拒否",
+    "App resource state revoked": "取消済み",
+    "App resource state healthy": "正常",
+    "App resource state degraded": "劣化",
+    "App resource state unavailable": "利用不可",
+    "App resource state pending": "保留",
+    "App resource state connected": "接続済み",
+    "App resource state disconnected": "接続解除"
   }
 }
