@@ -2,6 +2,9 @@ from .ApiComfortTool import ApiComfortTool
 from .ApiKeyRole import ApiKeyRole
 from .ApiKeySetting import ApiKeySetting
 from .ApiKeyUsage import ApiKeyUsage
+from .AppConnection import AppConnection
+from .AppResourceBinding import AppResourceBinding
+from .BoardAppBinding import BoardAppBinding
 from .Bot import Bot
 from .BotDefaultScopeBranch import BotDefaultScopeBranch
 from .BotLog import BotLog
@@ -88,6 +91,9 @@ from .WorkflowStageDefinition import WorkflowStageDefinition
 
 
 __all__ = [
+    "AppConnection",
+    "BoardAppBinding",
+    "AppResourceBinding",
     "ApiComfortTool",
     "ApiKeyRole",
     "ApiKeySetting",
