@@ -13,7 +13,7 @@ Wrong session/board, missing/expired state, current permission revocation and
 replay fail before GitHub exchange. Ambiguous exchange failure is never retried
 automatically.
 
-The UI must POST `{state, code}` to the authenticated completion endpoint after
+The Board Apps onboarding panel POSTs `{state, code}` to the authenticated completion endpoint after
 GitHub returns to the board URL. The host exchanges the code only at the fixed
 GitHub API endpoint, with redirects disabled and a finite timeout. Credential
 response fields are validated then stored as one personal Secret Reference;
@@ -27,9 +27,9 @@ private key or webhook URL is required by this registration path.
 
 ## Remaining acceptance
 
-Board Apps UI form submission and return handling, live installation acceptance,
-installation callback state, UI multi-repository selection, reinstall/uninstall
-lifecycle and webhook processing remain
+Live installation acceptance, reusable Connection selection in fresh browser tabs,
+installation lifecycle callback state, reinstall/uninstall lifecycle and webhook
+processing remain
 pending. Store onboarding availability must remain false until these paths work.
 Current tests use actual native authentication, SQLite/PostgreSQL storage and
 mock GitHub transport, not live GitHub installation acceptance. No production
@@ -108,3 +108,20 @@ authorization remain acceptance work. Older registered Apps require their callba
 
 Official user flow:
 https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-a-user-access-token-for-a-github-app
+
+## Board Apps onboarding UI
+
+The existing settings App Store mounts the GitHub panel. Manifest registration
+uses the official external POST form; return and OAuth callbacks target the board
+settings route. The panel removes one-time code/state from the URL before exchange
+and never retries an ambiguous exchange automatically. Current-tab onboarding
+metadata is scoped to host user and board in sessionStorage; secrets and proofs
+are not persisted there. OAuth results show account installation choices, bounded
+repository paging and revision-checked selection deltas. Unloaded repositories
+remain selected. Read-only users cannot start or exchange callbacks. Four locales
+share the same onboarding controls.
+
+Browser fixture acceptance covers 1440px/390px, callback cleanup, official form
+submission, repository deltas and read-only denial with mocked native API. It is
+not live OAuth acceptance. Fresh-tab Connection discovery/re-selection, automatic
+installation-return processing and global Store setup availability remain pending.

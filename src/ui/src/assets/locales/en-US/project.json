@@ -175,6 +175,18 @@
     "App resource state disconnected": "Disconnected",
     "Disable App": "Disable App",
     "Confirm disable App": "Confirm disable App",
-    "Disable App help": "Disable this board App and its automatic transitions. Resource selections and shared connections are kept."
+    "Disable App help": "Disable this board App and its automatic transitions. Resource selections and shared connections are kept.",
+    "GitHub connection": "GitHub connection",
+    "GitHub onboarding help": "Create an App, install it, verify your GitHub account, then choose repositories.",
+    "GitHub onboarding failed": "Request failed. Verify your account again or reload repositories before retrying.",
+    "GitHub repositories saved": "Repository selection saved. Workflow activation remains separate.",
+    "GitHub organization optional": "Organization (optional; leave empty for personal account)",
+    "Create GitHub App": "Create GitHub App",
+    "Install GitHub App": "Install GitHub App",
+    "Verify GitHub account": "Verify GitHub account",
+    "GitHub installation limit": "First 100 installations shown. Additional installations require a later discovery flow.",
+    "GitHub repository selection help": "Select repositories. Save up to 25 additions and 25 removals at a time; verification expires after 5 minutes.",
+    "More GitHub repositories": "More repositories",
+    "Save GitHub repositories": "Save repository selection"
   }
 }
