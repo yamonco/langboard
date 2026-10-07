@@ -1,3 +1,4 @@
+import CardCompactLabels from "@/components/LabelBadge/CardCompactLabels";
 import { formatNumber } from "@/core/utils/LocaleFormat";
 import { useTranslation } from "react-i18next";
 import { GlobalRelationshipType, ProjectCard } from "@/core/models";
@@ -104,15 +105,17 @@ function RelationsTree({ card, projectUID }: { card: ProjectCard.TModel; project
                         const type = GlobalRelationshipType.Model.getModel(relationship.relationship_type_uid);
                         const relationName = isParent ? type?.parent_name : type?.child_name;
                         return (
-                            <button
-                                key={relationship.uid}
-                                type="button"
-                                className="flex w-full min-w-0 flex-col rounded px-2 py-1 text-left hover:bg-muted"
-                                onClick={() => navigate(ROUTES.BOARD.CARD(projectUID, targetUID))}
-                            >
-                                <span className="truncate">{target.title}</span>
-                                {relationName && <span className="truncate text-xs text-muted-foreground">{relationName}</span>}
-                            </button>
+                            <div key={relationship.uid} className="flex min-w-0 items-center gap-1 px-2">
+                                <button
+                                    type="button"
+                                    className="flex min-w-0 flex-1 flex-col rounded py-1 text-left hover:bg-muted"
+                                    onClick={() => navigate(ROUTES.BOARD.CARD(projectUID, targetUID))}
+                                >
+                                    <span className="truncate">{target.title}</span>
+                                    {relationName && <span className="truncate text-xs text-muted-foreground">{relationName}</span>}
+                                </button>
+                                <CardCompactLabels card={target} />
+                            </div>
                         );
                     })}
                 </section>

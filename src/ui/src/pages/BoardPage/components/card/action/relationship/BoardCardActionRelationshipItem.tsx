@@ -1,3 +1,4 @@
+import CardCompactLabels from "@/components/LabelBadge/CardCompactLabels";
 import Button from "@/components/base/Button";
 import Flex from "@/components/base/Flex";
 import { usePageNavigateRef } from "@/core/hooks/usePageNavigate";
@@ -26,19 +27,22 @@ const BoardCardActionRelationshipItem = memo(({ type, relationship }: IBoardCard
     };
 
     return (
-        <Button
-            type="button"
-            variant="ghost"
-            title={`${name} > ${targetCardTitle}`}
-            className="justify-start rounded-none border-b p-0"
-            onClick={toRelatedCard}
-        >
-            <Flex items="center" gap="2" py="1" px="2" className="truncate">
-                <span>{name}</span>
-                <span className="text-muted-foreground">&gt;</span>
-                <span className="truncate">{targetCardTitle}</span>
-            </Flex>
-        </Button>
+        <Flex items="center" gap="1" className="min-w-0 border-b">
+            <Button
+                type="button"
+                variant="ghost"
+                title={`${name} > ${targetCardTitle}`}
+                className="min-w-0 flex-1 justify-start rounded-none p-0"
+                onClick={toRelatedCard}
+            >
+                <Flex items="center" gap="2" py="1" px="2" className="truncate">
+                    <span>{name}</span>
+                    <span className="text-muted-foreground">&gt;</span>
+                    <span className="truncate">{targetCardTitle}</span>
+                </Flex>
+            </Button>
+            <CardCompactLabels card={targetCard} />
+        </Flex>
     );
 });
 
