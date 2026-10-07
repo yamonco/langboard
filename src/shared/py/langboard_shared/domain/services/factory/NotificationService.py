@@ -415,6 +415,39 @@ class NotificationService(BaseDomainService):
                 dumped_models.append((type(model).__tablename__, model.model_dump()))
             BotDefaultTask.bot_mentioned(notifier, target_bot, mentioned_in, dumped_models)
 
+    def can_dispatch_work_event(self, model) -> bool:
+        """Revalidate the durable source and its recipient at each outbound attempt."""
+        from ....tasks.webhooks.utils import build_notification_work_event
+
+        uid = model.data.get("notification_uid") if isinstance(model.data, dict) else None
+        if not isinstance(uid, str):
+            return False
+        try:
+            notification_id = SnowflakeID.from_short_code(uid)
+        except (ValueError, TypeError):
+            return False
+        with DbSession.use(readonly=False) as db:
+            notification = db.exec(SqlBuilder.select.table(UserNotification).where(
+                UserNotification.id == notification_id,
+            )).first()
+        if notification is None:
+            return False
+        expected = build_notification_work_event(notification)
+        if expected is None or expected.model_dump(exclude={"occurred_at"}) != model.model_dump(exclude={"occurred_at"}):
+            return False
+        models = {cls.__tablename__: cls for cls in (
+            Project, ProjectInvitation, ProjectWiki, Card, CardComment, Checklist, Checkitem,
+        )}
+        references = []
+        for table, record_id in notification.record_list:
+            cls = models.get(table)
+            if cls is None:
+                return False
+            references.append(cls.model_construct(id=record_id))
+        return self._resolve_notification_recipient(
+            notification.receiver_id, notification.notification_type, references,
+        ) is not None
+
     def _resolve_notification_recipient(
         self, target_user: TUserParam | None, notification_type: NotificationType,
         references: list[_TModel],

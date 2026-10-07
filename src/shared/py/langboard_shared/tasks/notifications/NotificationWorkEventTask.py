@@ -2,7 +2,14 @@ from kombu.exceptions import OperationalError
 from ...core.broker import Broker
 from ...infrastructure.repositories import Repository
 from ..webhooks.utils import build_notification_work_event
-from ..webhooks.WebhookTask import run_webhook
+from ..webhooks.utils.WorkEventModel import can_dispatch_work_event
+
+
+async def run_webhook(model) -> None:
+    # Notification services can load while WebhookTask is initializing.
+    from ..webhooks.WebhookTask import run_webhook as dispatch
+
+    await dispatch(model)
 
 
 WORK_EVENT_RETRY_OPTIONS = {
@@ -26,7 +33,7 @@ async def drain_pending_work_events(repository: Repository) -> None:
 
     for notification in repository.user_notification.get_pending_work_events(limit=100):
         work_event = build_notification_work_event(notification)
-        if work_event is None:
+        if work_event is None or not can_dispatch_work_event(work_event):
             repository.user_notification.mark_work_event_dispatched(notification)
             continue
         await run_webhook(work_event)
