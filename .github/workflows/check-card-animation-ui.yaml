@@ -2,6 +2,7 @@ name: Check Card Animation UI
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - .github/workflows/check-card-animation-ui.yaml
       - src/ui/src/assets/styles/main.css
@@ -13,8 +14,14 @@ on:
       - src/ui/src/pages/BoardPage/components/board/CardViewerDeepLink.*
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   lint-and-transform:
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false
+    timeout-minutes: 20
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

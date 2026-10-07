@@ -1,6 +1,7 @@
 name: Check Document Retrieval
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - Dockerfile
       - src/api/tests/test_document_retrieval_image.py
@@ -20,8 +21,14 @@ on:
       - src/shared/py/uv.lock
       - uv.lock
   workflow_dispatch:
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   official-store-and-settings:
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false
+    timeout-minutes: 20
     runs-on: ubuntu-latest
     env:
       PROJECT_NAME: langboard

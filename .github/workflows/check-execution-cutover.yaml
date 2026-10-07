@@ -2,6 +2,7 @@ name: Check Execution Cutover
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - .github/workflows/check-execution-cutover.yaml
       - src/api/langboard/routes/board/BoardCardApi.py
@@ -20,8 +21,14 @@ on:
       - src/shared/py/langboard_shared/domain/services/DependencyPolicy.py
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   postgres-contract:
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false
+    timeout-minutes: 20
     runs-on: ubuntu-latest
     services:
       postgres:
