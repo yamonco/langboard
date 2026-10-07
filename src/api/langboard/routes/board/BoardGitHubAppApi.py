@@ -347,7 +347,7 @@ async def receive_github_lifecycle(request: Request, service: DomainService = Do
         return JsonResponse(status_code=409)
     except GitHubManifestUnavailable:
         return JsonResponse(status_code=400)
-    # Receipt is durable, but no asynchronous resource consumer is claimed yet.
+    # Receipt and health job are durable; asynchronous completion is separate.
     return JsonResponse(status_code=202)
 
 
@@ -366,6 +366,27 @@ def get_github_connection_health(
 
     try:
         return JsonResponse(content=connection_health(service, user, project_uid, connection_uid, after))
+    except GitHubManifestUnavailable:
+        raise ApiException.NotFound_404() from None
+    except ValueError:
+        raise ApiException.BadRequest_400() from None
+
+
+@AppRouter.api.get(
+    "/board/{project_uid}/settings/apps/github/connections/{connection_uid}/jobs", tags=["Board.Settings"]
+)
+@AuthFilter.add("user")
+def get_github_health_jobs(
+    project_uid: str,
+    connection_uid: str,
+    after: str | None = None,
+    user: User = Auth.scope("user"),
+    service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    from ...apps.GitHubConnections import health_jobs
+
+    try:
+        return JsonResponse(content=health_jobs(service, user, project_uid, connection_uid, after))
     except GitHubManifestUnavailable:
         raise ApiException.NotFound_404() from None
     except ValueError:

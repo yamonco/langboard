@@ -210,6 +210,16 @@
     "Degraded": "警告",
     "Unavailable": "无法验证",
     "Unverified": "未验证",
-    "More installation health": "更多安装状态"
+    "More installation health": "更多安装状态",
+    "GitHub background health jobs": "后台验证",
+    "GitHub background health guidance": "跨看板共享的安装更新任务的已存储状态。立即验证此看板请刷新资源状态。",
+    "No GitHub health jobs": "暂无后台任务",
+    "GitHub health job pending": "排队中",
+    "GitHub health job processing": "处理中",
+    "GitHub health job completed": "已完成",
+    "GitHub health job blocked": "需要关注",
+    "GitHub health job failed": "失败",
+    "Reload GitHub health jobs": "刷新任务状态",
+    "More GitHub health jobs": "更早的任务"
   }
 }

@@ -8,6 +8,10 @@ interface Connection {
     connection_uid: string;
     installation_url?: string;
 }
+interface HealthJobs {
+    items: { job_uid: string; state: "pending" | "processing" | "completed" | "blocked" | "failed" }[];
+    next_cursor: string | null;
+}
 interface ConnectionHealth {
     state: string;
     next_cursor: string | null;
@@ -69,6 +73,7 @@ export default function BoardSettingsGitHub({ onStatusChange }: { onStatusChange
     const [error, setError] = useState(false);
     const [saved, setSaved] = useState(false);
     const [healthCursor, setHealthCursor] = useState<string | null>(null);
+    const [healthJobs, setHealthJobs] = useState<HealthJobs | null>(null);
     const [connectionHealth, setConnectionHealth] = useState<ConnectionHealth | null>(null);
     const [refreshed, setRefreshed] = useState(false);
     const callbackStarted = useRef(false);
@@ -135,6 +140,11 @@ export default function BoardSettingsGitHub({ onStatusChange }: { onStatusChange
             await api.get<ConnectionHealth>(`${root}/connections/${connection!.connection_uid}/health`, { params: after ? { after } : {} })
         ).data;
         setConnectionHealth((previous) => (after && previous ? { ...result, items: [...previous.items, ...result.items] } : result));
+        if (!after) await loadHealthJobs();
+    };
+    const loadHealthJobs = async (after?: string) => {
+        const result = (await api.get<HealthJobs>(`${root}/connections/${connection!.connection_uid}/jobs`, { params: after ? { after } : {} })).data;
+        setHealthJobs((previous) => (after && previous ? { ...result, items: [...previous.items, ...result.items] } : result));
     };
     const register = () =>
         run(async () => {
@@ -241,6 +251,7 @@ export default function BoardSettingsGitHub({ onStatusChange }: { onStatusChange
                             const next = item ? { connection_uid: item.connection_uid } : null;
                             setConnection(next);
                             setConnectionHealth(null);
+                            setHealthJobs(null);
                             setHealthCursor(null);
                             setAuthorization(null);
                             setInstallation(null);
@@ -348,6 +359,28 @@ export default function BoardSettingsGitHub({ onStatusChange }: { onStatusChange
                                     </li>
                                 ))}
                             </ul>
+                            {healthJobs && (
+                                <section className="space-y-2 border-t pt-2" aria-label={text("GitHub background health jobs")}>
+                                    <p className="text-sm text-muted-foreground">{text("GitHub background health guidance")}</p>
+                                    <div className="flex flex-wrap gap-2" aria-live="polite">
+                                        {healthJobs.items.length === 0
+                                            ? text("No GitHub health jobs")
+                                            : healthJobs.items.map((job) => (
+                                                  <span key={job.job_uid} className="badge badge-ghost badge-sm">
+                                                      {text(`GitHub health job ${job.state}`)}
+                                                  </span>
+                                              ))}
+                                    </div>
+                                    <Button size="sm" variant="outline" onClick={() => void run(() => loadHealthJobs())}>
+                                        {text("Reload GitHub health jobs")}
+                                    </Button>
+                                    {healthJobs.next_cursor && (
+                                        <Button size="sm" variant="outline" onClick={() => void run(() => loadHealthJobs(healthJobs.next_cursor!))}>
+                                            {text("More GitHub health jobs")}
+                                        </Button>
+                                    )}
+                                </section>
+                            )}
                             {connectionHealth.next_cursor && (
                                 <Button
                                     size="sm"

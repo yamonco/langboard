@@ -141,3 +141,60 @@ def connection_health(service, actor, project_uid, connection_uid, after=None):
             "items": items,
             "next_cursor": f"{rows[24][0]}:{rows[24][1]}" if len(rows) > 25 else None,
         }
+
+
+def health_jobs(service, actor, project_uid, connection_uid, after=None):
+    """Stored installation jobs relevant to this board; never reveal worker cursors or credentials."""
+    from langboard_shared.domain.models import (
+        AppResourceBinding,
+        BoardAppBinding,
+        GitHubHealthJob,
+        GitHubLifecycleReceipt,
+    )
+
+    board = _board(service, actor, project_uid)
+    import re
+
+    try:
+        if after is not None and (not isinstance(after, str) or not re.fullmatch(r"[0-9A-Za-z]{1,11}", after)):
+            raise ValueError("Invalid job cursor")
+        cursor = InfraHelper.convert_id(after) if after is not None else None
+    except Exception:
+        raise ValueError("Invalid job cursor") from None
+    with DbSession.use(readonly=False) as db:
+        connection = db.exec(
+            select(AppConnection).where(
+                AppConnection.id == InfraHelper.convert_id(connection_uid),
+                AppConnection.owner_id == actor.id,
+                AppConnection.app_key == "github",
+            )
+        ).first()
+        if connection is None:
+            raise GitHubManifestUnavailable()
+        connection = connection[0]
+        relevant = (
+            select(AppResourceBinding.id)
+            .join(BoardAppBinding, BoardAppBinding.id == AppResourceBinding.board_binding_id)
+            .where(
+                BoardAppBinding.project_id == board.id,
+                BoardAppBinding.app_key == "github",
+                AppResourceBinding.connection_id == connection.id,
+                AppResourceBinding.resource_type == "repository",
+                AppResourceBinding.is_selected == True,  # noqa: E712
+                AppResourceBinding.resource_path[0]["id"].as_string() == GitHubLifecycleReceipt.installation_id,
+                AppResourceBinding.resource_path[1]["id"].as_string() == GitHubLifecycleReceipt.account_id,
+            )
+            .exists()
+        )
+        statement = (
+            select(GitHubHealthJob)
+            .join(GitHubLifecycleReceipt, GitHubLifecycleReceipt.id == GitHubHealthJob.receipt_id)
+            .where(GitHubLifecycleReceipt.connection_id == connection.id, relevant)
+        )
+        if cursor is not None:
+            statement = statement.where(GitHubHealthJob.id < cursor)
+        rows = [row[0] for row in db.exec(statement.order_by(GitHubHealthJob.id.desc()).limit(26)).all()]
+        return {
+            "items": [{"job_uid": row.get_uid(), "state": row.state} for row in rows[:25]],
+            "next_cursor": rows[24].get_uid() if len(rows) > 25 else None,
+        }
