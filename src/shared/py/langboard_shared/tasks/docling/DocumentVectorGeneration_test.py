@@ -90,3 +90,36 @@ def test_staging_never_changes_the_active_pointer(tmp_path):
         delete_attachment_generation(store, staged)
         assert store.get(("document_active", "board"), "attachment").value == first
         assert not store.search(tuple(staged["namespace"]), query="replacement", limit=1)
+
+
+def test_lifecycle_cleanup_needs_no_provider_and_keeps_other_generations(tmp_path):
+    from langboard_shared.tasks.docling.DocumentSqliteStore import remove_document_generation
+
+    embeddings = FixtureEmbeddings()
+    fingerprint = embedding_fingerprint(provider="fixture", model="model", dimensions=3, version="v1")
+    source = dict(
+        board_uid="board",
+        card_uid="card",
+        attachment_uid="attachment",
+        content_hash="hash",
+        fingerprint=fingerprint,
+        splitter=DocumentSplitterSettings(chunk_size=64, chunk_overlap=8),
+        publish_pointer=False,
+    )
+    path = tmp_path / (fingerprint + ".sqlite")
+    with open_document_store(path, embeddings, dimensions=3) as store:
+        deleted = replace_attachment_generation(store, text="removed attachment", **source)
+        retained = replace_attachment_generation(
+            store, text="retained attachment", **{**source, "attachment_uid": "other"}
+        )
+    embeddings.fail = True
+    remove_document_generation(tmp_path, deleted)
+    remove_document_generation(tmp_path, deleted)  # Broker redelivery is harmless.
+    with open_document_store(path, embeddings, dimensions=3) as store:
+        assert store.get(tuple(deleted["namespace"]), "0") is None
+        assert store.get(tuple(retained["namespace"]), "0") is not None
+        assert store.conn.execute("SELECT COUNT(*) FROM store_vectors").fetchone()[0] == retained["chunk_count"]
+    with pytest.raises(ValueError, match="fingerprint"):
+        remove_document_generation(tmp_path, {**deleted, "embedding_fingerprint": "../../escape"})
+    remove_document_generation(tmp_path / "missing", deleted)
+    assert not (tmp_path / "missing").exists()

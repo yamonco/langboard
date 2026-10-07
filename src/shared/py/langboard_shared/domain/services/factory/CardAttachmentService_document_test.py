@@ -99,3 +99,42 @@ def test_explicit_embedding_preserves_transcription_and_uses_current_settings(mo
     send.reset_mock()
     assert service.request_document_embedding(project, card, attachment) is None
     send.assert_not_called()
+
+
+def test_attachment_delete_dispatches_recorded_vector_cleanup_only_after_commit(monkeypatch):
+    from contextlib import contextmanager
+
+    service = object.__new__(CardAttachmentService)
+    project, card = object(), object()
+    attachment = SimpleNamespace(get_uid=lambda: "attachment", order=0)
+    pointer = {"generation": "recorded", "embedding_fingerprint": "a" * 64}
+    metadata = Mock()
+    metadata.delete_document_by_attachment_uid.return_value = {"embedding": {"pointer": pointer}}
+    monkeypatch.setattr(service, "_get_service", lambda *_: metadata)
+    monkeypatch.setattr(
+        module.InfraHelper, "get_records_with_foreign_by_params", lambda *_: (project, card, attachment)
+    )
+    callbacks = []
+    repository = SimpleNamespace(card_attachment=Mock())
+    monkeypatch.setattr(service, "repo", repository, raising=False)
+
+    @contextmanager
+    def transaction():
+        yield SimpleNamespace(after_commit=callbacks.append)
+
+    monkeypatch.setattr(module.DbSession, "atomic", transaction)
+    send = Mock()
+    monkeypatch.setattr(module.Broker.celery, "send_task", send)
+    monkeypatch.setattr(module.CardAttachmentPublisher, "deleted", Mock())
+    monkeypatch.setattr(service, "_mark_card_changed_for_unread", Mock())
+    monkeypatch.setattr(module.CardAttachmentActivityTask, "card_attachment_deleted", Mock())
+    monkeypatch.setattr(module.CardAttachmentBotTask, "card_attachment_deleted", Mock())
+    assert service.delete("user", project, card, attachment)
+    send.assert_not_called()
+    repository.card_attachment.delete.assert_called_once_with(attachment)
+    assert len(callbacks) == 1
+    callbacks[0]()
+    assert send.call_args.args[0].endswith(".remove_attachment_embedding")
+    # TaskParameters supplies the encoded transport; never provider credentials.
+    assert "recorded" in str(send.call_args)
+    assert metadata.delete_document_by_attachment_uid.call_args.args[-1] == "attachment"

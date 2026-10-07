@@ -400,19 +400,18 @@ class DoclingMetadataService(BaseDomainService):
 
     def delete_document_by_attachment_uid(
         self, model_cls: type[BaseMetadataModel], foreign_model: BaseDbModel, attachment_uid: str
-    ) -> None:
+    ) -> dict[str, Any] | None:
         with DbSession.atomic() as db:
             db.exec(
                 SqlBuilder.select.table(type(foreign_model))
                 .where(type(foreign_model).column("id") == foreign_model.id)
                 .with_for_update()
             )
-            documents = [
-                document
-                for document in self.load_documents(model_cls, foreign_model)
-                if document.get("attachment_uid") != attachment_uid
-            ]
+            current = self.load_documents(model_cls, foreign_model)
+            removed = next((document for document in current if document.get("attachment_uid") == attachment_uid), None)
+            documents = [document for document in current if document.get("attachment_uid") != attachment_uid]
             self.save_documents(model_cls, foreign_model, documents)
+            return removed
 
     def publish_update(
         self, model_cls: type[BaseMetadataModel], foreign_model: BaseDbModel, topic: SocketTopic

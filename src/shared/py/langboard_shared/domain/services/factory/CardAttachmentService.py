@@ -322,10 +322,21 @@ class CardAttachmentService(BaseDomainService):
         project, card, card_attachment = params
 
         docling_metadata = self._get_service(DoclingMetadataService)
-        docling_metadata.delete_document_by_attachment_uid(CardMetadata, card, card_attachment.get_uid())
+        with DbSession.atomic() as db:
+            document = docling_metadata.delete_document_by_attachment_uid(CardMetadata, card, card_attachment.get_uid())
+            pointer = ((document or {}).get("embedding") or {}).get("pointer")
+            self.repo.card_attachment.delete(card_attachment)
+            self.repo.card_attachment.reoder_after_delete(card, card_attachment.order)
+            if isinstance(pointer, dict):
+                args, kwargs = TaskParameters(dumps(pointer)).pack()
+                db.after_commit(
+                    lambda: Broker.celery.send_task(
+                        "langboard_shared.tasks.docling.DocumentEmbeddingTask.remove_attachment_embedding",
+                        args=args,
+                        kwargs=kwargs,
+                    )
+                )
         docling_metadata.publish_update(CardMetadata, card, SocketTopic.BoardCard)
-        self.repo.card_attachment.delete(card_attachment)
-        self.repo.card_attachment.reoder_after_delete(card, card_attachment.order)
 
         CardAttachmentPublisher.deleted(card, card_attachment)
         self._mark_card_changed_for_unread(card, "attachment")
