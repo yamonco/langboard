@@ -2,6 +2,7 @@
 
 from datetime import datetime, timedelta, timezone
 from typing import Annotated, Literal
+from langboard_shared.core.security.CollaborationChannel import CollaborationChannel
 from langboard_shared.core.types import SafeDateTime
 from langboard_shared.domain.models import ProjectRole, User
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
@@ -112,6 +113,8 @@ def search_project_cards(
     until: str | None = None,
     include_closed: bool = False,
     workflow_stages: list[str] | None = None,
+    *,
+    user: User,
 ) -> dict:
     """Search bounded card context through the native project-scoped query."""
 
@@ -134,6 +137,8 @@ def search_project_cards(
         include_closed=include_closed,
         workflow_stages=workflow_stages,
         include_work_state=True,
+        user=user,
+        channel=CollaborationChannel.Mcp,
     )
     # Keep document retrieval bounded independently of full stored transcriptions.
     remaining_document_chars = 4_000

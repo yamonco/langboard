@@ -17,6 +17,7 @@ from langboard_shared.domain.models import (
     User,
     WorkflowStageDefinition,
 )
+from langboard_shared.domain.services.CardVisibilityPolicy import CardVisibilityContext, CollaborationChannel
 from langboard_shared.infrastructure.repositories.factory.CardRepository import CardRepository
 from langboard_shared.infrastructure.repositories.factory.ProjectColumnRepository import ProjectColumnRepository
 from sqlalchemy import create_engine
@@ -171,15 +172,15 @@ def test_project_page_and_search_filter_registry_completion_before_limit(work_db
     } == {data.cards["released"].id}
     assert repo.count_by_project(data.project, include_closed=True, workflow_stages=["released"]) == 1
     assert repo.get_page_by_project(data.project, 25, workflow_stages=[]) == []
-    assert repo.search_context_by_project(data.project, "Still", include_closed=False) == []
-    assert {card.id for card, _ in repo.search_context_by_project(data.project, "Still", include_closed=True)} == {
+    assert repo.search_context_by_project(data.project, "Still", include_closed=False, context=TEST_SCOPE) == []
+    assert {card.id for card, _ in repo.search_context_by_project(data.project, "Still", include_closed=True, context=TEST_SCOPE)} == {
         data.cards["released"].id
     }
     assert {
         card.id
         for card, _ in repo.search_context_by_project(
             data.project, "Done", include_closed=False, workflow_stages=["active"]
-        )
+        , context=TEST_SCOPE)
     } == {data.cards["active"].id}
     with DbSession.use(readonly=False) as db:
         data.definitions["released"].counts_as_completed = False
@@ -211,3 +212,8 @@ def test_open_acceptance_is_filtered_before_both_repository_limits(work_db):
     assert [item.id for item, *_ in items] == [remaining.id]
     legacy = CheckitemRepository(None, None).get_all_by_checklist(active, limit=1)
     assert legacy[0][0].is_checked is True
+
+
+
+
+TEST_SCOPE = CardVisibilityContext(CollaborationChannel.HumanUI, True, True, True)

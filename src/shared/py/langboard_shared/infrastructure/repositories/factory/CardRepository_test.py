@@ -123,22 +123,22 @@ def test_search_matches_comment_only_unicode_and_deduplicates_without_cross_proj
             ).model_dump_json()
         )
         repository = CardRepository(lambda _: None, lambda _: None)
-        assert [c.title for c, _ in repository.search_context_by_project(project, "기쁨")] == ["Comment only"]
-        assert [c.title for c, _ in repository.search_context_by_project(project, "본문 전용")] == ["Body only"]
-        assert {c.title for c, _ in repository.search_context_by_project(project, "100%_done")} == {
+        assert [c.title for c, _ in repository.search_context_by_project(project, "기쁨", context=TEST_SCOPE)] == ["Comment only"]
+        assert [c.title for c, _ in repository.search_context_by_project(project, "본문 전용", context=TEST_SCOPE)] == ["Body only"]
+        assert {c.title for c, _ in repository.search_context_by_project(project, "100%_done", context=TEST_SCOPE)} == {
             "Comment only",
             "Literal 100%_done",
         }
-        assert repository.search_context_by_project(project, "missing") == []
-        assert [c.title for c, _ in repository.search_context_by_project(project, "회의자료")] == ["Comment only"]
-        assert repository.search_context_by_project(project, "삭제자료") == []
-        assert [c.title for c, _ in repository.search_context_by_project(project, "전사검색")] == ["Comment only"]
-        assert repository.search_context_by_project(project, "삭제전사") == []
-        assert {c.title for c, _ in repository.search_context_by_project(project, "100%_done")} == {
+        assert repository.search_context_by_project(project, "missing", context=TEST_SCOPE) == []
+        assert [c.title for c, _ in repository.search_context_by_project(project, "회의자료", context=TEST_SCOPE)] == ["Comment only"]
+        assert repository.search_context_by_project(project, "삭제자료", context=TEST_SCOPE) == []
+        assert [c.title for c, _ in repository.search_context_by_project(project, "전사검색", context=TEST_SCOPE)] == ["Comment only"]
+        assert repository.search_context_by_project(project, "삭제전사", context=TEST_SCOPE) == []
+        assert {c.title for c, _ in repository.search_context_by_project(project, "100%_done", context=TEST_SCOPE)} == {
             "Comment only",
             "Literal 100%_done",
         }
-        matches = repository.search_document_matches(project, [c.id for c in cards], "전사검색")
+        matches = repository.search_document_matches(project, [c.id for c in cards], "전사검색", context=TEST_SCOPE)
         assert list(matches) == [cards[0].id]
         assert "전사검색" in matches[cards[0].id][0]["snippet"]
         assert len(matches[cards[0].id][0]["snippet"]) <= 500
@@ -171,7 +171,7 @@ def test_search_matches_comment_only_unicode_and_deduplicates_without_cross_proj
                     document_text="bounded source fairness",
                 )
             )
-        matches = repository.search_document_matches(project, [c.id for c in cards], "bounded source fairness")
+        matches = repository.search_document_matches(project, [c.id for c in cards], "bounded source fairness", context=TEST_SCOPE)
         assert len(matches[cards[0].id]) == 2
         assert len(matches[cards[3].id]) == 1
         assert (
@@ -185,7 +185,7 @@ def test_search_matches_comment_only_unicode_and_deduplicates_without_cross_proj
             ).api_response()
         )
 
-        assert len(repository.search_context_by_project(project, "only", limit=1)) == 1
+        assert len(repository.search_context_by_project(project, "only", limit=1, context=TEST_SCOPE)) == 1
         start = SafeDateTime(2026, 9, 1)
         with DbSession.use(readonly=False) as db:
             for index, card in enumerate(cards):
@@ -205,7 +205,7 @@ def test_search_matches_comment_only_unicode_and_deduplicates_without_cross_proj
                 date_field="created_at",
                 since=start,
                 until=start + timedelta(days=1),
-            )
+             context=TEST_SCOPE)
         ] == ["Comment only"]
         assert [
             c.title
@@ -215,7 +215,7 @@ def test_search_matches_comment_only_unicode_and_deduplicates_without_cross_proj
                 date_field="created_at",
                 since=start + timedelta(days=1),
                 until=start + timedelta(days=2),
-            )
+             context=TEST_SCOPE)
         ] == ["Deleted comment"]
         assert [
             c.title
@@ -225,12 +225,12 @@ def test_search_matches_comment_only_unicode_and_deduplicates_without_cross_proj
                 date_field="updated_at",
                 since=start + timedelta(days=10),
                 until=start + timedelta(days=11),
-            )
+             context=TEST_SCOPE)
         ] == ["Comment only"]
         with pytest.raises(ValueError, match="date_field"):
-            repository.search_context_by_project(project, "", date_field="deadline_at")
+            repository.search_context_by_project(project, "", date_field="deadline_at", context=TEST_SCOPE)
         with pytest.raises(ValueError, match="earlier"):
-            repository.search_context_by_project(project, "", since=start, until=start)
+            repository.search_context_by_project(project, "", since=start, until=start, context=TEST_SCOPE)
         expression = _editor_search_text(CardComment.column("content"), "postgresql")
         compiled = str(expression.compile(dialect=postgresql.dialect()))
         assert "#>>" in compiled and "TEXT[]" in compiled
@@ -429,3 +429,8 @@ def test_recent_availability_excludes_missing_deleted_and_foreign_project_cards(
         assert repo.get_existing_uids(project, [valid.get_uid()], context=context) == []
     finally:
         engine.dispose()
+
+
+
+
+TEST_SCOPE = CardVisibilityContext(CollaborationChannel.HumanUI, True, True, True)

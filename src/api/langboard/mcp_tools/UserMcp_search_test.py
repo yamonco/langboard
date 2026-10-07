@@ -28,7 +28,7 @@ def test_search_passes_timezone_aware_half_open_period_to_native_query() -> None
         "created_at",
         "2026-09-15T00:00:00+09:00",
         "2026-09-16T00:00:00+09:00",
-    ) == {"cards": [], "workflow_stages": {}, "columns": {}}
+     user=SEARCH_USER) == {"cards": [], "workflow_stages": {}, "columns": {}}
     project, query, filters = calls[0]
     assert (project, query) == ("project", "release")
     assert filters["date_field"] == "created_at"
@@ -46,7 +46,7 @@ def test_search_passes_timezone_aware_half_open_period_to_native_query() -> None
 )
 def test_search_rejects_invalid_period_before_service_access(since, until) -> None:
     with pytest.raises(ValueError):
-        UserMcp.search_project_cards("project", "release", SimpleNamespace(), since=since, until=until)
+        UserMcp.search_project_cards("project", "release", SimpleNamespace(), since=since, until=until, user=SEARCH_USER)
 
 
 def test_my_work_scopes_projects_and_round_trips_keyset_cursor() -> None:
@@ -101,7 +101,7 @@ def test_search_resolves_distinct_workflow_once_and_keeps_bounded_description():
         workflow_stage=SimpleNamespace(get_api_by_keys=resolve),
         project_column=SimpleNamespace(get_api_workflow_context=columns),
     )
-    response = UserMcp.search_project_cards("p", "match", service)
+    response = UserMcp.search_project_cards("p", "match", service, user=SEARCH_USER)
     resolve.assert_called_once_with({"released"})
     columns.assert_called_once_with("p", {"c"})
     assert service.card.search_context_by_project.call_args.kwargs["include_work_state"] is True
@@ -128,8 +128,11 @@ def test_document_search_tool_returns_sources_with_aggregate_excerpt_budget():
         card=SimpleNamespace(search_context_by_project=lambda *args, **kwargs: cards),
         project_column=SimpleNamespace(get_api_workflow_context=lambda *args: {}),
     )
-    response = UserMcp.search_project_cards("board", "한", service)
+    response = UserMcp.search_project_cards("board", "한", service, user=SEARCH_USER)
     matches = [match for card in response["cards"] for match in card.get("document_matches", [])]
     assert sum(len(match["snippet"]) for match in matches) == 4000
     assert all(len(match["snippet"]) <= 500 and match["attachment_uid"] == "a" for match in matches)
     assert all(len(card.get("document_matches", [])) <= 2 for card in response["cards"])
+
+
+SEARCH_USER = SimpleNamespace(id=1)
