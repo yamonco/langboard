@@ -197,6 +197,19 @@
     "GitHub health refreshed": "Stored resource health refreshed. See App resource status for results.",
     "Continue GitHub health refresh": "Refresh next repositories",
     "Previous GitHub installations": "Previous installations",
-    "More GitHub installations": "More installations"
+    "More GitHub installations": "More installations",
+    "Show GitHub connection health": "Show GitHub connection health",
+    "GitHub connection health": "GitHub connection health",
+    "GitHub stored health guidance": "Stored evidence only. Refresh resource health to verify current GitHub access.",
+    "Connection state": "Connection state",
+    "No selected GitHub resources": "No selected GitHub resources",
+    "Installation": "Installation",
+    "Account": "Account",
+    "Selected": "Selected",
+    "Healthy": "Healthy",
+    "Degraded": "Degraded",
+    "Unavailable": "Unavailable",
+    "Unverified": "Unverified",
+    "More installation health": "More installation health"
   }
 }
