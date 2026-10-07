@@ -9,6 +9,8 @@ from ....core.db import DbSession
 from ....core.db.DbEngine import DbEngine
 from ....core.types import SafeDateTime
 from ...models import (
+    AppConnection,
+    AppResourceBinding,
     BoardAppBinding,
     Project,
     ProjectAssignedUser,
@@ -51,6 +53,8 @@ def board(monkeypatch, request):
         ProjectColumn,
         WorkflowStageDefinition,
         BoardAppBinding,
+        AppConnection,
+        AppResourceBinding,
     ):
         model.__table__.create(engine)
     monkeypatch.setattr(DbEngine, "get_main_engine", lambda: engine)

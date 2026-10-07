@@ -143,3 +143,29 @@ def test_catalog_reads_board_owned_state_and_denies_revoked_membership(board, bi
     with DbSession.use(readonly=False) as db:
         db.delete(board[3])
     assert board[0].get_app_catalog(board[1], board[2].get_uid()) is None
+
+
+def test_catalog_resource_summary_is_board_scoped_and_selection_scoped(board, binding):
+    from langboard_shared.domain.models import AppConnection, AppResourceBinding, BoardAppBinding
+    with DbSession.use(readonly=False) as db:
+        connection = AppConnection(app_key="github", owner_id=board[1].id, state="connected", credential_reference="private-test-reference")
+        db.insert(connection)
+        foreign = BoardAppBinding(project_id=11, app_key="github")
+        db.insert(foreign)
+        for board_binding, selected, access, health, external in [
+            (binding, True, "granted", "healthy", "first"),
+            (binding, True, "denied", "degraded", "second"),
+            (binding, False, "revoked", "unavailable", "hidden"),
+            (foreign, True, "revoked", "unavailable", "foreign"),
+        ]:
+            db.insert(AppResourceBinding(board_binding_id=board_binding.id, connection_id=connection.id,
+                resource_type="repository", external_resource_id=external,
+                is_selected=selected, access_state=access, health=health))
+    items = board[0].get_app_catalog(board[1], board[2].get_uid())
+    assert items[0]["resources"] == {
+        "selected_count": 2, "access_counts": {"granted": 1, "denied": 1},
+        "health_counts": {"healthy": 1, "degraded": 1}, "connection_counts": {"connected": 2},
+    }
+    assert items[1]["resources"]["selected_count"] == 0
+    assert "private-test-reference" not in json.dumps(items)
+    assert "external_resource_id" not in json.dumps(items)

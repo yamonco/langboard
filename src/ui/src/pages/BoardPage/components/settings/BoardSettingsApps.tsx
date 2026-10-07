@@ -10,6 +10,12 @@ interface CatalogApp {
     key: string;
     name: string;
     workflow_requirements: { required: string[]; optional: string[] } | null;
+    resources: {
+        selected_count: number;
+        access_counts: Record<string, number>;
+        health_counts: Record<string, number>;
+        connection_counts: Record<string, number>;
+    };
     binding: { state: string; granted_capabilities: string[]; stage_transitions_enabled: boolean } | null;
 }
 const names = { github: "GitHub", glitchtip: "GlitchTip", dokploy: "Dokploy" };
@@ -57,12 +63,38 @@ export default function BoardSettingsApps() {
                         </div>
                     )}
                     <div className="grid gap-3 sm:grid-cols-3">
-                        {(data ?? []).map(({ key, name, binding, workflow_requirements }) => (
+                        {(data ?? []).map(({ key, name, binding, workflow_requirements, resources }) => (
                             <article key={key} className="flex min-w-0 flex-col gap-3 rounded-lg border p-4">
                                 <h4 className="font-semibold">{name}</h4>
                                 <span className="self-start rounded-md bg-muted px-2 py-1 text-xs">
                                     {t(`project.settings.App state ${binding?.state ?? "unconfigured"}`)}
                                 </span>
+                                {resources && (
+                                    <details className="rounded-md border p-2 text-xs">
+                                        <summary className="cursor-pointer">
+                                            {t("project.settings.Selected App resources", { count: resources.selected_count })}
+                                        </summary>
+                                        <p className="mt-2 text-muted-foreground">{t("project.settings.App stored resource status help")}</p>
+                                        {resources.selected_count === 0 ? (
+                                            <p className="mt-2">{t("project.settings.No selected App resources")}</p>
+                                        ) : (
+                                            Object.entries({
+                                                access: resources.access_counts,
+                                                health: resources.health_counts,
+                                                connection: resources.connection_counts,
+                                            }).map(([category, counts]) => (
+                                                <div key={category} className="mt-2 flex flex-wrap gap-1">
+                                                    <span>{t(`project.settings.App resource ${category}`)}:</span>
+                                                    {Object.entries(counts).map(([state, count]) => (
+                                                        <span key={state} className="rounded bg-muted px-1.5">
+                                                            {t(`project.settings.App resource state ${state}`)} · {count}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            ))
+                                        )}
+                                    </details>
+                                )}
                                 <p className="flex-1 text-sm text-muted-foreground">{t(`project.settings.App ${key} summary`)}</p>
                                 <p className="text-xs text-muted-foreground">{t("project.settings.App connection setup pending")}</p>
                                 <Button
