@@ -428,3 +428,24 @@ test("hovered sidebar preview wrapper does not intercept a click intended for it
     await expect(preview).toHaveCount(0);
     await expect(parent).toBeVisible();
 });
+
+test.describe("mobile context label preview", () => {
+    test.use({ hasTouch: true });
+    test("touch preview paints above the context panel and outside tap dismisses only the label", async ({ page }) => {
+        await page.setViewportSize({ width: 390, height: 844 });
+        await page.goto("/src/components/Layout/workbench-shell.fixture.html");
+        await page.getByRole("button", { name: "Toggle navigation menu", exact: true }).click();
+        await page.getByRole("dialog").getByRole("button", { name: "Explorer", exact: true }).click();
+        const panel = page.getByRole("complementary", { name: "Explorer", exact: true });
+        await expect(panel).toBeFocused();
+        await panel.getByRole("button", { name: "🧩 Contract", exact: true }).tap();
+        const preview = page.getByRole("dialog", { name: "🧩 Contract", exact: true });
+        await expect(preview).toBeVisible();
+        const previewZ = await preview.evaluate((element) => Number(getComputedStyle(element).zIndex));
+        const panelZ = await panel.evaluate((element) => Number(getComputedStyle(element).zIndex));
+        expect(previewZ).toBeGreaterThan(panelZ);
+        await panel.getByRole("textbox", { name: "Sidebar search", exact: true }).tap();
+        await expect(preview).toHaveCount(0);
+        await expect(panel).toBeVisible();
+    });
+});

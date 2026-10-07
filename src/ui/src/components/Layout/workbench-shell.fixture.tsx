@@ -4,6 +4,7 @@ import { createMemoryRouter, Link, RouterProvider, useLocation } from "react-rou
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import WorkbenchRouteLayout from "./WorkbenchRouteLayout";
 import DashboardStyledLayout from "./DashboardStyledLayout";
+import { LabelBadge } from "@/components/LabelBadge";
 import DropdownMenu from "@/components/base/DropdownMenu";
 import "@/i18n";
 import "@/assets/styles/main.css";
@@ -14,6 +15,7 @@ function SidebarContent() {
     return (
         <>
             <p>{useContext(PageContext)}</p>
+            <LabelBadge compact name="🧩 Contract" emoji="🧩" color="#8B5CF6" />
             <input aria-label="Sidebar search" value={search} onChange={(event) => setSearch(event.currentTarget.value)} />
             <DropdownMenu.Root>
                 <DropdownMenu.Trigger asChild>
