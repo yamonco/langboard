@@ -187,6 +187,11 @@
     "GitHub installation limit": "最初の100件を表示。以降の取得は未対応です。",
     "GitHub repository selection help": "リポジトリを選択。追加・削除は各25件まで。確認は5分で失効します。",
     "More GitHub repositories": "リポジトリをもっと見る",
-    "Save GitHub repositories": "リポジトリ選択を保存"
+    "Save GitHub repositories": "リポジトリ選択を保存",
+    "GitHub connections unavailable": "接続一覧を取得できません。",
+    "Existing GitHub connection": "既存のGitHub接続",
+    "Create new GitHub connection": "新規接続を作成",
+    "Current GitHub connection": "現在の接続",
+    "More GitHub connections": "接続をもっと見る"
   }
 }

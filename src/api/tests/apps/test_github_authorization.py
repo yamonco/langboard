@@ -129,7 +129,11 @@ def test_native_authorization_http_cookie_and_replay(authorized, monkeypatch):
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
     from langboard.middlewares.ApiAuthMiddleware import ApiAuthMiddleware
-    from langboard.routes.board.BoardGitHubAppApi import finish_github_authorization, start_github_authorization
+    from langboard.routes.board.BoardGitHubAppApi import (
+        finish_github_authorization,
+        get_github_connections,
+        start_github_authorization,
+    )
     from langboard_shared.core.db.DbEngine import DbEngine
     from langboard_shared.core.routing import AppRouter
     from langboard_shared.core.security import AuthSecurity
@@ -143,7 +147,11 @@ def test_native_authorization_http_cookie_and_replay(authorized, monkeypatch):
     app = FastAPI()
     app.include_router(AppRouter.api)
     for route in app.routes:
-        if getattr(route, "endpoint", None) in (start_github_authorization, finish_github_authorization):
+        if getattr(route, "endpoint", None) in (
+            start_github_authorization,
+            finish_github_authorization,
+            get_github_connections,
+        ):
             for dependency in route.dependant.dependencies:
                 if dependency.name == "service":
                     app.dependency_overrides[dependency.call] = lambda: service
@@ -153,7 +161,13 @@ def test_native_authorization_http_cookie_and_replay(authorized, monkeypatch):
     url = f"/board/{board[2].get_uid()}/settings/apps/github/authorization"
     with TestClient(app, base_url="https://testserver") as client:
         assert client.post(url, json={"connection_uid": connection.get_uid()}).status_code == 401
+        listing_url = url.removesuffix("authorization") + "connections"
+        assert client.get(listing_url).status_code == 401
         client.cookies.set(Env.REFRESH_TOKEN_NAME, refresh)
+        listed = client.get(listing_url, headers=headers)
+        assert listed.status_code == 200, listed.text
+        assert listed.json()["items"] == [{"connection_uid": connection.get_uid(), "app_id": "42", "state": "pending"}]
+        assert "secret://" not in listed.text and "credential" not in listed.text
         # Use prepared PKCE state so the mock validates its exact verifier.
         client.cookies.set(authorization.COOKIE, session)
         result = client.post(url + "/complete", headers=headers, json={"state": state, "code": "a" * 40})

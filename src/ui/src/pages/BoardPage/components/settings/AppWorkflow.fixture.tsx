@@ -13,6 +13,7 @@ let repaired = false;
 let disabled = false;
 Object.assign(window, { workflowWrites: writes });
 api.defaults.adapter = async (config) => {
+    if (config.url?.endsWith("/connections")) return { config, status: 200, statusText: "OK", headers: {}, data: { items: [], next_cursor: null } };
     if (config.method === "put" || config.method === "post") {
         writes.push({ ...JSON.parse(config.data ?? "{}"), url: config.url });
         if (!config.url?.endsWith("/workflow")) repaired = true;

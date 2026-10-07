@@ -187,6 +187,11 @@
     "GitHub installation limit": "显示前100个安装，暂不支持后续查询。",
     "GitHub repository selection help": "选择仓库，每次最多新增及移除各25个。验证5分钟后过期。",
     "More GitHub repositories": "更多仓库",
-    "Save GitHub repositories": "保存仓库选择"
+    "Save GitHub repositories": "保存仓库选择",
+    "GitHub connections unavailable": "无法获取连接列表。",
+    "Existing GitHub connection": "现有 GitHub 连接",
+    "Create new GitHub connection": "创建新连接",
+    "Current GitHub connection": "当前连接",
+    "More GitHub connections": "更多连接"
   }
 }

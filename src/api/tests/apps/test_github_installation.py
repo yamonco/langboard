@@ -244,3 +244,34 @@ def test_repository_add_requires_scoped_user_installation_proof(installation, fa
     assert get_resources(service, board[1], board[2].get_uid()) == snapshot
     if failure != "revision":
         assert not calls
+
+
+def test_connection_discovery_is_owner_scoped_bounded_and_secret_free(installation):
+    from langboard.apps.GitHubConnections import list_connections
+
+    service, board, connection, calls, responses = installation
+    with DbSession.use(readonly=False) as db:
+        foreign = AppConnection(
+            app_key="github",
+            owner_id=board[2].owner_id,
+            external_account_id="foreign",
+            credential_reference="secret://hidden",
+        )
+        db.insert(foreign)
+        revoked = AppConnection(app_key="github", owner_id=board[1].id, state="revoked", external_account_id="revoked")
+        db.insert(revoked)
+        for i in range(51):
+            db.insert(AppConnection(app_key="github", owner_id=board[1].id, external_account_id=str(100 + i)))
+    first = list_connections(service, board[1], board[2].get_uid())
+    second = list_connections(service, board[1], board[2].get_uid(), first["next_cursor"])
+    assert len(first["items"]) == 50 and len(second["items"]) == 2 and second["next_cursor"] is None
+    assert not set(item["connection_uid"] for item in first["items"]) & set(
+        item["connection_uid"] for item in second["items"]
+    )
+    assert {item["app_id"] for item in first["items"] + second["items"]}.isdisjoint({"foreign", "revoked"})
+    assert "credential" not in json.dumps(first) and "secret://" not in json.dumps(first) and not calls
+    with DbSession.use(readonly=False) as db:
+        board[4].actions = ["read"]
+        db.update(board[4])
+    with pytest.raises(github.GitHubManifestUnavailable):
+        list_connections(service, board[1], board[2].get_uid())
