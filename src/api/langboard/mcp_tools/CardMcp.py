@@ -9,6 +9,7 @@ from fastmcp.exceptions import ValidationError
 from langboard_shared.core.db import DbSession, EditorContentModel
 from langboard_shared.core.exceptions.CardDeleteForbidden import CardDeleteForbidden
 from langboard_shared.core.exceptions.RelationshipCycle import RelationshipCycle
+from langboard_shared.core.security.CollaborationChannel import CollaborationChannel
 from langboard_shared.core.storage import Storage, StorageName
 from langboard_shared.core.types import SafeDateTime
 from langboard_shared.domain.models import Bot, Card, CardMetadata, Project, ProjectRole, User
@@ -88,7 +89,7 @@ def get_card(project_uid: str, card_uid: str, user_or_bot: User | Bot, service: 
     if not params:
         raise ValueError("Card not found")
     project, card = params
-    details = service.card.get_details(project, card, user_or_bot)
+    details = service.card.get_details(project, card, user_or_bot, channel=CollaborationChannel.Mcp)
     if not details:
         raise ValueError("Card not found")
     return details
@@ -113,13 +114,24 @@ def read_card_attachment(
         raise ValueError("Card not found in project")
     _, card = params
     attachment = service.card_attachment.get_by_id_like(attachment_uid)
-    if attachment is None or attachment.card_id != card.id:
+    if attachment is None or attachment.card_id != card.id or attachment.deleted_at is not None:
         raise ValueError("Attachment not found in card")
-    content = Storage.get_file(attachment.file)
+    source_file = attachment.file
+    source_name = attachment.filename
+    content = Storage.get_file(source_file)
     if content is None:
         raise ValueError("Attachment content unavailable")
     if len(content) > 8 * 1024 * 1024:
         raise ValueError("Attachment exceeds the 8 MB MCP read limit")
+    latest = service.card_attachment.get_by_id_like(attachment_uid)
+    if (
+        latest is None
+        or latest.card_id != card.id
+        or latest.deleted_at is not None
+        or latest.file != source_file
+        or latest.filename != source_name
+    ):
+        raise ValueError("Attachment content unavailable")
     return {
         "attachment_uid": attachment.get_uid(),
         "file_name": attachment.filename,
@@ -754,6 +766,38 @@ def apply_card_graph_patch(
     return result
 
 
+def _require_work_plan_project(project_uid: str, plan: WorkPlan) -> None:
+    if plan.project_uid != project_uid:
+        raise ValueError("Work plan project does not match authorized project")
+
+
+@McpTool.add(
+    description="Preview a bounded atomic card work plan without saving; return the reviewed revision for apply."
+)
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+def preview_card_work_plan(
+    project_uid: str, plan: WorkPlan, user_or_bot: User | Bot, service: DomainService
+) -> dict[str, Any]:
+    _require_work_plan_project(project_uid, plan)
+    return WorkPlanService(user_or_bot, service).preview(plan)
+
+
+@McpTool.add(
+    description="Apply one reviewed card work plan atomically. Reuse request_id only for the identical plan and revision."
+)
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read, ProjectRoleAction.CardUpdate], RoleFinder.project)
+def apply_card_work_plan(
+    project_uid: str,
+    plan: WorkPlan,
+    expected_revision: str,
+    request_id: str,
+    user_or_bot: User | Bot,
+    service: DomainService,
+) -> dict[str, Any]:
+    _require_work_plan_project(project_uid, plan)
+    return WorkPlanService(user_or_bot, service).apply(plan, expected_revision, request_id)
+
+
 @McpTool.add(
     modern_only=("profile",),
     description=(
@@ -1322,7 +1366,9 @@ def change_card_checkitem_work(
         if other_active:
             raise ValueError("Another work timer is active; set replace_active to pause it")
     with DbSession.atomic():
-        if not service.checkitem.change_status(user, project_uid, card_uid, item, target, from_api=action == "complete"):
+        if not service.checkitem.change_status(
+            user, project_uid, card_uid, item, target, from_api=action == "complete"
+        ):
             raise ValueError("Work timer transition failed")
         if action == "complete" and item.status == CheckitemStatus.Stopped and not item.is_checked:
             if not service.checkitem.toggle_checked(user, project_uid, card_uid, item, desired_checked=True):
@@ -1662,20 +1708,3 @@ def _public_content_block(block: Any) -> dict[str, Any]:
         "payload": block.payload,
         "updated_at": block.updated_at.isoformat() if block.updated_at else None,
     }
-
-
-def _require_work_plan_project(project_uid: str, plan: WorkPlan) -> None:
-    if plan.project_uid != project_uid:
-        raise ValueError("Work plan project does not match authorized project")
-
-
-@McpTool.add(
-    description="Preview a bounded atomic card work plan without saving; return the reviewed revision for apply."
-)
-@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
-def preview_card_work_plan(
-    project_uid: str, plan: WorkPlan, user_or_bot: User | Bot, service: DomainService
-) -> dict[str, Any]:
-    _require_work_plan_project(project_uid, plan)
-    return WorkPlanService(user_or_bot, service).preview(plan)
-

@@ -198,6 +198,27 @@ class CardService(BaseDomainService):
 
         return [card for card, _ in self.repo.card.get_all_by_project(project)]
 
+    def resolve_readable_card(
+        self, project: TProjectParam | None, card: TCardParam | None, user: TUserOrBot | None,
+        channel: CollaborationChannel = CollaborationChannel.Api,
+    ) -> tuple[Project, Card, CardVisibilityContext] | None:
+        """Revalidate direct IDs and cached rows before exposing any card section."""
+        if card is None:
+            return None
+        with DbSession.use(readonly=False) as db:
+            current = db.exec(SqlBuilder.select.table(Card).where(Card.id == InfraHelper.convert_id(card))).first()
+        if current is None or current.deleted_at is not None:
+            return None
+        resolved = self.resolve_visibility_context(project if project is not None else current.project_id, user, channel)
+        if resolved is None:
+            return None
+        project, context = resolved
+        if current.project_id != project.id or not context.can_read_card(
+            CardVisibility(current.visibility), owner_user_id=current.owner_user_id,
+        ):
+            return None
+        return project, current, context
+
     def get_work_states(self, cards: Sequence[Card]) -> dict[int, dict[str, Any]]:
         """Project a permission-scoped card batch with bounded queries, never per-card reads.
 
@@ -358,11 +379,13 @@ class CardService(BaseDomainService):
         project: TProjectParam | None,
         card: TCardParam | None,
         user_or_bot: TUserOrBot | None = None,
+        *,
+        channel: CollaborationChannel = CollaborationChannel.Api,
     ) -> dict[str, Any] | None:
-        params = InfraHelper.get_records_with_foreign_by_params((Project, project), (Card, card))
-        if not params:
+        resolved = self.resolve_readable_card(project, card, user_or_bot, channel)
+        if resolved is None:
             return None
-        project, card = params
+        project, card, context = resolved
 
         column = InfraHelper.get_by_id_like(ProjectColumn, card.project_column_id)
         if not column:
@@ -407,7 +430,7 @@ class CardService(BaseDomainService):
         api_card["active_workers"] = self.get_active_workers(project, card).get(card.id, [])
 
         card_relationship_service = self._get_service(CardRelationshipService)
-        api_card["relationships"] = card_relationship_service.get_api_list_by_card(card)
+        api_card["relationships"] = card_relationship_service.get_api_list_by_card(card, context=context)
 
         blocks = self._get_service(CardContentBlockService).api_blocks_by_card(card)
         if blocks:

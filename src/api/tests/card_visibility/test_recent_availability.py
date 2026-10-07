@@ -10,8 +10,10 @@ from langboard_shared.domain.models import (
     Card,
     CardAttachment,
     CardComment,
+    CardRelationship,
     Checkitem,
     Checklist,
+    GlobalCardRelationshipType,
     Project,
     ProjectAssignedUser,
     ProjectColumn,
@@ -20,6 +22,7 @@ from langboard_shared.domain.models import (
 )
 from langboard_shared.domain.services.CardVisibilityPolicy import CollaborationChannel
 from langboard_shared.domain.services.factory.CardService import CardService
+from langboard_shared.infrastructure.repositories.factory.CardRelationshipRepository import CardRelationshipRepository
 from langboard_shared.infrastructure.repositories.factory.CardRepository import CardRepository
 from langboard_shared.infrastructure.repositories.factory.ChecklistRepository import ChecklistRepository
 from langboard_shared.infrastructure.repositories.factory.ProjectAssignedUserRepository import (
@@ -31,7 +34,7 @@ from sqlalchemy import create_engine
 
 def test_recent_cards_revalidate_actor_and_filter_visibility_before_return(monkeypatch):
     engine = create_engine("sqlite://")
-    for model in (User, Project, ProjectColumn, ProjectAssignedUser, Card, CardComment, CardAttachment, WorkflowStageDefinition, Checklist, Checkitem):
+    for model in (User, Project, ProjectColumn, ProjectAssignedUser, Card, CardComment, CardAttachment, WorkflowStageDefinition, Checklist, Checkitem, CardRelationship, GlobalCardRelationshipType):
         model.__table__.create(engine)
     monkeypatch.setattr(DbEngine, "get_main_engine", lambda: engine)
     monkeypatch.setattr(DbEngine, "get_readonly_engine", lambda: engine)
@@ -60,6 +63,14 @@ def test_recent_cards_revalidate_actor_and_filter_visibility_before_return(monke
                 db.insert(CardAttachment(card_id=card.id, user_id=owner.id,
                     filename="proof.pdf", file=FileModel(storage_type="test", storage_name="test", original_filename="proof.pdf", path="/tmp/fixture", filename="proof.pdf"),
                     document_text="SearchProof document"))
+        with DbSession.use(readonly=False) as db:
+            relation_type = GlobalCardRelationshipType(parent_name="Parent", child_name="Child")
+            db.insert(relation_type)
+            edges = []
+            for left, right in ((0, 1), (0, 2), (0, 3), (2, 3)):
+                edge = CardRelationship(card_id_parent=cards[left].id, card_id_child=cards[right].id, relationship_type_id=relation_type.id)
+                db.insert(edge)
+                edges.append(edge)
         repository = SimpleNamespace(
             card=CardRepository(lambda _: None, lambda _: None),
             project_assigned_user=ProjectAssignedUserRepository(lambda _: None, lambda _: None),
@@ -74,6 +85,15 @@ def test_recent_cards_revalidate_actor_and_filter_visibility_before_return(monke
             assert {row["uid"] for row in found} == expected
             assert all(row["document_matches"][0]["snippet"] == "SearchProof document" for row in found)
             _, context = service.resolve_visibility_context(project, member, channel)
+            for candidate in cards:
+                resolved_card = service.resolve_readable_card(project, candidate, member, channel)
+                assert (resolved_card is not None) == (candidate.get_uid() in expected)
+                if resolved_card is None:
+                    assert service.get_details(project, candidate, member, channel=channel) is None
+            assert service.resolve_readable_card(project.id + 1, cards[0], member, channel) is None
+            visible_edges = CardRelationshipRepository(None, None).get_all_by_card(cards[0], context=context)
+            assert [edge.id for edge, _ in visible_edges] == ([edges[0].id] if context.can_read_internal else [])
+            assert CardRelationshipRepository(None, None).get_all_by_card(cards[2], context=context) == []
             cutoff = SafeDateTime.now()
             board_cards = repository.card.get_board_list(project, cutoff, context=context)
             assert {card.get_uid() for card, _ in board_cards} == expected
@@ -90,8 +110,21 @@ def test_recent_cards_revalidate_actor_and_filter_visibility_before_return(monke
             assert {cards[i].id for i, uid in enumerate(uids) if uid in expected} == set(excerpts)
             limited = repository.card.search_context_by_project(project, "SearchProof", limit=1, context=context)
             assert len(limited) == 1 and limited[0][0].get_uid() in expected
+        # A cached SHARED object cannot bypass a committed visibility change.
+        with DbSession.use(readonly=False) as db:
+            changed = cards[0].model_copy(deep=True)
+            changed.visibility = "INTERNAL"
+            db.update(changed)
+        assert cards[0].visibility == "SHARED"
+        assert service.resolve_readable_card(project, cards[0], member, CollaborationChannel.Mcp) is None
+        with DbSession.use(readonly=False) as db:
+            changed.visibility = "SHARED"
+            db.update(changed)
+        assert service.resolve_readable_card(project, cards[0], member, CollaborationChannel.Mcp) is not None
         scim.is_employee = lambda user: True
         assert set(service.get_existing_uids(project, uids, user=member, channel=CollaborationChannel.Mcp)) == set(uids[:3])
+        _, internal_context = service.resolve_visibility_context(project, member, CollaborationChannel.Mcp)
+        assert [edge.id for edge, _ in CardRelationshipRepository(None, None).get_all_by_card(cards[0], limit=1, context=internal_context)] == [edges[0].id]
         scim.is_employee = lambda user: None
         assert service.get_existing_uids(project, uids, user=member) == [uids[0]]
         # The auth User remains active in memory after primary DB revocation.
@@ -100,6 +133,7 @@ def test_recent_cards_revalidate_actor_and_filter_visibility_before_return(monke
             inactive.activated_at = None
             db.update(inactive)
         assert member.activated_at is not None
+        assert service.resolve_readable_card(project, cards[0], member, CollaborationChannel.Mcp) is None
         assert service.get_existing_uids(project, uids, user=member, channel=CollaborationChannel.Mcp) == []
         assert service.search_context_by_project(project, "SearchProof", user=member, channel=CollaborationChannel.Mcp) == []
         with DbSession.use(readonly=False) as db:

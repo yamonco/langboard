@@ -101,6 +101,7 @@ def _service(people: list[dict[str, Any]] | None = None) -> tuple[Any, list[tupl
         project_column=SimpleNamespace(get_by_id_like=lambda uid: column, get_workflow_guidance=lambda _: {2: {}}),
         card=SimpleNamespace(
             get_by_id_like=lambda uid: card,
+            resolve_readable_card=lambda project_arg, card_arg, *args: (project_arg, card_arg, object()),
             get_work_states=lambda cards: {item.id: {"version": 1} for item in cards},
             can_delete=lambda actor, target: False,
             is_check_card=lambda target: False,
@@ -110,7 +111,7 @@ def _service(people: list[dict[str, Any]] | None = None) -> tuple[Any, list[tupl
             get_api_bot_schedule_list=lambda target_project, target_card, limit: [],
         ),
         project_label=SimpleNamespace(get_api_list_by_card=lambda target, limit: []),
-        card_relationship=SimpleNamespace(get_api_list_by_card=lambda target, limit: []),
+        card_relationship=SimpleNamespace(get_api_list_by_card=lambda target, limit, context: []),
         checklist=SimpleNamespace(get_api_list_by_card=checklists),
         card_attachment=SimpleNamespace(get_api_list_by_card=attachments),
         metadata=SimpleNamespace(get_all_as_api=metadata),
@@ -270,7 +271,7 @@ def test_native_source_projects_linked_wiki_content_without_task_sections() -> N
     service = SimpleNamespace(
         project=SimpleNamespace(get_by_id_like=lambda _uid: project),
         project_column=SimpleNamespace(get_by_id_like=lambda _uid: column, get_workflow_guidance=lambda _: {2: {}}),
-        card=SimpleNamespace(get_by_id_like=lambda _uid: card, get_details=get_details),
+        card=SimpleNamespace(get_by_id_like=lambda _uid: card, get_details=get_details, resolve_readable_card=lambda *args: (project, card, object())),
     )
 
     source = NativeCardWorkspaceAdapter(actor, service).get_card_bundle_source(
@@ -287,7 +288,7 @@ def test_native_source_projects_linked_wiki_content_without_task_sections() -> N
     assert source.metadata == {}
     assert source.bot_scopes == []
     assert source.bot_schedules == []
-    get_details.assert_called_once_with(project, card, actor)
+    get_details.assert_called_once_with(project, card, actor, channel=native_module.CollaborationChannel.Mcp)
 
 
 def test_native_checkitem_continuation_reads_only_the_requested_checklist() -> None:
@@ -303,6 +304,7 @@ def test_native_checkitem_continuation_reads_only_the_requested_checklist() -> N
         ),
         card=SimpleNamespace(
             get_by_id_like=lambda _uid: card,
+            resolve_readable_card=lambda *args: (project, card, object()),
             get_work_states=lambda cards: {item.id: {"version": 1} for item in cards},
             can_delete=lambda actor, target: False,
             is_check_card=lambda target: False,
@@ -1023,3 +1025,15 @@ def test_native_execute_source_filters_open_items_before_loading_limits():
         "include_work_tracking": False,
         "open_only": True,
     }
+
+
+def test_native_unreadable_source_and_comment_page_do_not_load_sections():
+    service, calls = _service()
+    service.card.resolve_readable_card = Mock(return_value=None)
+    service.card_comment = SimpleNamespace(get_api_page_by_card=Mock(side_effect=AssertionError("hidden comments loaded")))
+    adapter = NativeCardWorkspaceAdapter(object(), service)
+    assert adapter.get_card_bundle_source("p1", "c1", frozenset({"description", "people", "checklists", "attachments", "metadata"})) is None
+    assert calls == []
+    with pytest.raises(ValueError, match="Card not found"):
+        adapter.get_comment_page("c1", 5, None, None)
+    service.card_comment.get_api_page_by_card.assert_not_called()

@@ -5,6 +5,7 @@ import json
 from typing import Any
 from langboard_shared.core.db import EditorContentModel
 from langboard_shared.core.exceptions.CardDescriptionConflict import CardDescriptionConflict
+from langboard_shared.core.security.CollaborationChannel import CollaborationChannel
 from langboard_shared.core.types import SafeDateTime
 from langboard_shared.domain.models import Bot, CardMetadata, User
 from langboard_shared.domain.models.bases import ALL_GRANTED
@@ -33,10 +34,13 @@ MAX_NATIVE_SECTION_SOURCE = 100
 _SOURCE_QUERY_LIMIT = MAX_NATIVE_SECTION_SOURCE + 1
 
 
+
+
 class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPort):
     """Implement card workspace ports using native services and native validation."""
 
-    def __init__(self, actor: User | Bot, service: DomainService) -> None:
+    def __init__(self, actor: User | Bot, service: DomainService, *, channel: CollaborationChannel = CollaborationChannel.Mcp) -> None:
+        self._channel = channel
         self._actor = actor
         self._service = service
 
@@ -50,6 +54,10 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
             project, card = self._ensure_project_card(project_uid, card_uid)
         except ValueError:
             return None
+        resolved = self._service.card.resolve_readable_card(project, card, self._actor, self._channel)
+        if resolved is None:
+            return None
+        project, card, visibility_context = resolved
         column = self._service.project_column.get_by_id_like(card.project_column_id)
         if column is None or column.project_id != project.id:
             return None
@@ -59,6 +67,7 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
                 project,
                 card,
                 self._actor,
+                channel=self._channel,
             )
             if details is None:
                 return None
@@ -119,7 +128,7 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
             details["labels"] = []
         if "classification.relationships" in requested_sections:
             details["relationships"] = self._bounded_source(
-                self._service.card_relationship.get_api_list_by_card(card, limit=_SOURCE_QUERY_LIMIT),
+                self._service.card_relationship.get_api_list_by_card(card, limit=_SOURCE_QUERY_LIMIT, context=visibility_context),
                 "relationships",
             )
         else:
@@ -231,6 +240,9 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
         before_created_at: str | None,
         before_comment_uid: str | None,
     ) -> CommentPageSource:
+        resolved = self._service.card.resolve_readable_card(None, card_uid, self._actor, self._channel)
+        if resolved is None:
+            raise ValueError("Card not found in project")
         before = SafeDateTime.fromisoformat(before_created_at) if before_created_at else None
         items, total_count, next_fields = self._service.card_comment.get_api_page_by_card(
             card_uid, limit, before, before_comment_uid
