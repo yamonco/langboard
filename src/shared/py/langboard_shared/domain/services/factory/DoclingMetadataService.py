@@ -4,7 +4,7 @@ from hashlib import sha256
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
-from sqlalchemy import update
+from sqlalchemy import delete, select, update
 from ....core.db import BaseDbModel, DbSession, SqlBuilder
 from ....core.domain import BaseDomainService
 from ....core.routing import SocketTopic
@@ -428,6 +428,16 @@ class DoclingMetadataService(BaseDomainService):
             removed = next((document for document in current if document.get("attachment_uid") == attachment_uid), None)
             documents = [document for document in current if document.get("attachment_uid") != attachment_uid]
             self.save_documents(model_cls, foreign_model, documents)
+            if model_cls is CardMetadata:
+                db.exec(
+                    delete(CardDocumentArtifact).where(
+                        CardDocumentArtifact.attachment_id.in_(
+                            select(CardAttachment.id)
+                            .where(CardAttachment.id == InfraHelper.convert_id(attachment_uid))
+                            .where(CardAttachment.card_id == foreign_model.id)
+                        )
+                    )
+                )
             return removed
 
     def publish_update(
