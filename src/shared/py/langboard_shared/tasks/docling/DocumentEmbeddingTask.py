@@ -10,8 +10,8 @@ from ...domain.services import DomainService
 from ...Env import Env
 from .DocumentEmbedding import create_document_embeddings, resolve_embedding_snapshot, validate_embedding_config
 from .DocumentRetrievalSettings import DocumentRetrievalSettings
-from .DocumentSqliteStore import open_document_store, remove_document_generation
-from .DocumentVectorGeneration import delete_attachment_generation, embedding_fingerprint, replace_attachment_generation
+from .DocumentSqliteStore import open_sqlite_vector_store, remove_document_generation
+from .DocumentVectorGeneration import embedding_fingerprint
 from .DocumentVectorStore import delete_vector_generation, open_qdrant_store, stage_vector_generation
 
 
@@ -113,7 +113,7 @@ def embed_transcription(service, attachment_uid: str, generation: str, request_u
         # No PostgreSQL row lock is held during remote inference.
         vector_allowed = set(Env.get_from_env("DOCUMENT_VECTOR_ALLOWED_BASE_URLS", "").split(","))
         context = (
-            open_document_store(
+            open_sqlite_vector_store(
                 path, embeddings, dimensions=settings.dimensions, timeout_seconds=settings.timeout_seconds
             )
             if settings.store == "sqlite"
@@ -127,30 +127,21 @@ def embed_transcription(service, attachment_uid: str, generation: str, request_u
                 content_hash=content_hash,
                 embedding_fingerprint=fingerprint,
             )
-            if settings.store == "sqlite":
-                pointer = replace_attachment_generation(
-                    store,
-                    **{key: value for key, value in source.items() if key != "embedding_fingerprint"},
-                    fingerprint=fingerprint,
-                    text=(document.get("content") or {}).get("markdown", ""),
-                    splitter=settings.splitter,
-                    publish_pointer=False,
+            storage = {"type": settings.store}
+            if settings.store == "qdrant":
+                storage.update(
+                    endpoint=str(settings.external_url).rstrip("/"),
+                    binding_uid=snapshot["binding_uid"],
+                    dimensions=settings.dimensions,
                 )
-                remove = delete_attachment_generation
-            else:
-                pointer = stage_vector_generation(
-                    store,
-                    source=source,
-                    text=(document.get("content") or {}).get("markdown", ""),
-                    splitter=settings.splitter,
-                    storage={
-                        "type": "qdrant",
-                        "endpoint": str(settings.external_url).rstrip("/"),
-                        "binding_uid": snapshot["binding_uid"],
-                        "dimensions": settings.dimensions,
-                    },
-                )
-                remove = delete_vector_generation
+            pointer = stage_vector_generation(
+                store,
+                source=source,
+                text=(document.get("content") or {}).get("markdown", ""),
+                splitter=settings.splitter,
+                storage=storage,
+            )
+            remove = delete_vector_generation
             try:
                 committed = service.docling_metadata.publish_document_embedding(
                     card,
@@ -170,10 +161,13 @@ def embed_transcription(service, attachment_uid: str, generation: str, request_u
             if (
                 isinstance(prior, dict)
                 and prior.get("embedding_fingerprint") == fingerprint
-                and prior.get("storage") == pointer.get("storage")
+                and (prior.get("storage") or {"type": "sqlite"}) == pointer.get("storage")
             ):
                 try:
-                    remove(store, prior)
+                    if settings.store == "sqlite" and "namespace" in prior:
+                        remove_document_generation(directory, prior)
+                    else:
+                        remove(store, prior)
                 except Exception:
                     # The new source pointer is already committed. Cleanup cannot downgrade it.
                     pass
