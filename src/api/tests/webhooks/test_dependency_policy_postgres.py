@@ -8,8 +8,16 @@ from sqlalchemy import create_engine, text
 
 os.environ.setdefault("PROJECT_NAME", "langboard")
 from langboard_shared.core.db.DbEngine import DbEngine  # noqa: E402
-from langboard_shared.domain.services.DependencyPolicy import dependency_blockers  # noqa: E402
+from langboard_shared.domain.services.CardVisibilityPolicy import (  # noqa: E402
+    CardVisibilityContext,
+    CollaborationChannel,
+)
+from langboard_shared.domain.services.DependencyPolicy import dependency_blockers as scoped_blockers
 from langboard_shared.tasks.webhooks.ExecutionReadinessUow import _READY_EXPRESSION  # noqa: E402
+
+
+def dependency_blockers(ids):
+    return scoped_blockers(ids, context=CardVisibilityContext(CollaborationChannel.Mcp, True, True, True, actor_user_id=7))
 
 
 DATABASE_URL = os.getenv("LANGBOARD_OUTBOX_TEST_DATABASE_URL")
@@ -43,6 +51,9 @@ def policy_db(monkeypatch):
                 'INSERT INTO project_execution_binding VALUES(1,true,1,\'["io.langboard.work.ready.v1"]\',1,\'{"10":"ready","12":"terminal"}\')',
             ):
                 conn.execute(text(sql))
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE card ADD COLUMN visibility text DEFAULT 'SHARED'"))
+            conn.execute(text("ALTER TABLE card ADD COLUMN owner_user_id bigint"))
         yield engine
     finally:
         engine.dispose()
@@ -77,22 +88,16 @@ def test_all_block_types_gate_execution_and_all_direct_blockers_are_returned(pol
     edge(policy_db, 23, 5, 3)
     blockers = dependency_blockers([20])[20]
     assert ready(policy_db) is False
-    assert len(blockers) == 2  # closed parent is satisfied; additional blocks type is still enforced
+    assert len(blockers) == 1  # hidden foreign edge cannot disclose existence to the audience
     assert blockers[0]["title"] == "Open"
-    assert blockers[1]["accessible"] is False
-    assert blockers[1]["card_uid"] is None and blockers[1]["title"] is None
     assert "PRIVATE_FOREIGN_TITLE" not in repr(blockers)
 
 
 @pytest.mark.parametrize("parent", [23, 24, 999])
 def test_inaccessible_or_missing_prerequisite_redacts_identity_and_title(policy_db, parent):
     edge(policy_db, parent, 1)
-    blocker = dependency_blockers([20])[20][0]
     assert ready(policy_db) is False
-    assert blocker["code"] == "dependency_unavailable"
-    assert blocker["accessible"] is False
-    assert blocker["card_uid"] is None and blocker["title"] is None
-    assert "PRIVATE_" not in repr(blocker)
+    assert dependency_blockers([20]) == {20: []}
 
 
 def test_workflow_mapping_is_authoritative_and_archive_does_not_imply_completion(policy_db):
@@ -162,3 +167,14 @@ def test_policy_edit_reinterprets_existing_cards_without_name_or_terminal_fallba
         conn.execute(text("UPDATE project_column SET workflow_stage='active' WHERE id=12"))
     assert ready(policy_db) is True
     assert dependency_blockers([20]) == {20: []}
+
+
+@pytest.mark.parametrize("visibility", ["INTERNAL", "PRIVATE"])
+def test_hidden_same_project_prerequisite_does_not_open_execution(policy_db, visibility):
+    edge(policy_db, 21, 1)
+    with policy_db.begin() as conn:
+        conn.execute(text("UPDATE card SET visibility=:visibility, owner_user_id=7 WHERE id=21"), {"visibility": visibility})
+    context = CardVisibilityContext(CollaborationChannel.Mcp, True, True, False, actor_user_id=7)
+    assert scoped_blockers([20], context=context) == {20: []}
+    assert scoped_blockers([20]) == {20: None}
+    assert ready(policy_db) is False

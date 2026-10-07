@@ -48,7 +48,7 @@ def test_registry_edits_and_inactive_bindings_reinterpret_a_card_batch_without_e
         checkitem=SimpleNamespace(get_work_state_counts=counts),
         card_verification=SimpleNamespace(get_latest_by_card_ids=Mock(return_value={})),
     )
-    monkeypatch.setattr(import_module(CardService.__module__), "dependency_blockers", lambda ids: {i: [] for i in ids})
+    monkeypatch.setattr(import_module(CardService.__module__), "dependency_blockers", lambda ids, **kwargs: {i: [] for i in ids})
     monkeypatch.setattr(import_module(CardService.__module__), "execution_generations", lambda ids: {i: 0 for i in ids})
     monkeypatch.setattr(import_module(CardService.__module__), "pending_card_approvals", lambda ids: {})
     service = CardService(None, None, repo)

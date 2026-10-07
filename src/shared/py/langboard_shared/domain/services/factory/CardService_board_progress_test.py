@@ -63,7 +63,7 @@ def test_board_progress_and_work_state_share_one_scoped_aggregate(monkeypatch):
     module = import_module(CardService.__module__)
     monkeypatch.setattr(module.InfraHelper, "get_by_id_like", lambda *args: project)
     for name in ("dependency_blockers", "execution_generations", "pending_card_approvals"):
-        monkeypatch.setattr(module, name, lambda ids: {})
+        monkeypatch.setattr(module, name, lambda ids, **kwargs: {})
     relations = [SimpleNamespace(card_id_parent=a, card_id_child=b) for a, b in ((1, 2), (2, 3), (1, 4), (1, 101))]
     monkeypatch.setattr(module.CardRelationshipService, "public_relationship", lambda rel, _: {"edge": (rel.card_id_parent, rel.card_id_child)})
     repository = SimpleNamespace(
@@ -75,7 +75,7 @@ def test_board_progress_and_work_state_share_one_scoped_aggregate(monkeypatch):
         project_label=SimpleNamespace(get_all_card_labels_by_project=lambda *args: []),
         checklist=SimpleNamespace(get_all_by_project=lambda *args, **kwargs: lists),
         checkitem=CheckitemRepository(None, None),
-        card_verification=SimpleNamespace(get_latest_by_card_ids=lambda ids: {}),
+        card_verification=SimpleNamespace(get_latest_by_card_ids=lambda ids, **kwargs: {}),
         workflow_stage=SimpleNamespace(get_by_keys=lambda keys: {}),
     )
     service = CardService(lambda _: None, lambda _: None, repository)

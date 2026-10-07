@@ -1,13 +1,10 @@
-"""Shared blocks-only prerequisite policy for reads and execution fences.
+"""Audience-scoped blocks projection; execution fences remain authoritative separately."""
 
-Callers supply already-authorized current-card IDs. Hidden prerequisite titles,
-UIDs and linked-resource titles never leave this projection.
-"""
-
-from sqlalchemy import bindparam, select, text
+from sqlalchemy import and_, bindparam, literal_column, or_, select, text
 from ...core.db import DbSession
 from ...core.types import SnowflakeID
 from ..DependencyConditions import BLOCKING_RELATION_JOINS, UNSATISFIED_PREREQUISITE
+from .CardVisibilityPolicy import CardVisibilityContext, card_visibility_scope
 
 
 _VISIBLE_PREREQUISITE = """
@@ -16,22 +13,46 @@ _VISIBLE_PREREQUISITE = """
 """
 
 
-def dependency_blockers(card_ids: list[int]) -> dict[int, list[dict]]:
-    """Read all direct unsatisfied blocks in one permission-scoped batch."""
+def dependency_blockers(
+    card_ids: list[int], *, context: CardVisibilityContext | None = None,
+) -> dict[int, list[dict] | None]:
+    """Project readable edges only; absent audience means unknown, never clear.
+
+    Hidden edges contribute no identity, count or blocked-state hint. This
+    projection cannot authorize execution: execution readiness evaluates
+    UNSATISFIED_PREREQUISITE independently without this audience filter.
+    """
     if not card_ids:
         return {}
+    if context is None:
+        return {int(card_id): None for card_id in card_ids}
+
+    def columns(alias):
+        return {key: literal_column(f"{alias}.{key}") for key in ("visibility", "owner_user_id")}
+
+    current = columns("c")
+    prerequisite = columns("prerequisite")
     query = (
         select(
             text("c.id"),
             text("r.id"),
-            text(f"CASE WHEN {_VISIBLE_PREREQUISITE} THEN prerequisite.id ELSE NULL END"),
-            text(f"CASE WHEN {_VISIBLE_PREREQUISITE} THEN prerequisite.title ELSE NULL END"),
+            text("prerequisite.id"),
+            text("prerequisite.title"),
         )
         .select_from(
             text("card c JOIN card_relationship r ON r.card_id_child = c.id " + BLOCKING_RELATION_JOINS)
         )
         .where(text("c.id IN :card_ids").bindparams(bindparam("card_ids", expanding=True)))
         .where(text(UNSATISFIED_PREREQUISITE))
+        .where(text(_VISIBLE_PREREQUISITE))
+        .where(text("c.deleted_at IS NULL"))
+        .where(card_visibility_scope(context, columns=current))
+        .where(card_visibility_scope(context, columns=prerequisite))
+        .where(or_(
+            and_(current["visibility"] != "PRIVATE", prerequisite["visibility"] != "PRIVATE"),
+            and_(current["visibility"] == "PRIVATE", prerequisite["visibility"] == "PRIVATE",
+                 current["owner_user_id"] == prerequisite["owner_user_id"]),
+        ))
         .order_by(text("c.id, r.id"))
     )
     with DbSession.use(readonly=False) as db:
@@ -41,10 +62,10 @@ def dependency_blockers(card_ids: list[int]) -> dict[int, list[dict]]:
         result[int(card_id)].append(
             {
                 "relationship_uid": SnowflakeID(relationship_id).to_short_code(),
-                "card_uid": SnowflakeID(parent_id).to_short_code() if parent_id is not None else None,
-                "title": title if parent_id is not None else None,
-                "accessible": parent_id is not None,
-                "code": "dependency_unfinished" if parent_id is not None else "dependency_unavailable",
+                "card_uid": SnowflakeID(parent_id).to_short_code(),
+                "title": title,
+                "accessible": True,
+                "code": "dependency_unfinished",
             }
         )
     return result
