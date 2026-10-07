@@ -220,3 +220,21 @@ def finish_github_authorization(
     response = JsonResponse(content=result)
     response.delete_cookie(AUTH_COOKIE, path=f"/board/{project_uid}/settings/apps/github")
     return response
+
+
+@AppRouter.api.get("/board/{project_uid}/settings/apps/github/connections", tags=["Board.Settings"])
+@AuthFilter.add("user")
+def get_github_connections(
+    project_uid: str,
+    after: str | None = None,
+    user: User = Auth.scope("user"),
+    service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    from ...apps.GitHubConnections import list_connections
+
+    if after is not None and (not after or len(after) > 11):
+        raise ApiException.BadRequest_400()
+    try:
+        return JsonResponse(content=list_connections(service, user, project_uid, after))
+    except GitHubManifestUnavailable:
+        raise ApiException.NotFound_404() from None

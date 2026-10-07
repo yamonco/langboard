@@ -6,7 +6,7 @@ import Button from "@/components/base/Button";
 
 interface Connection {
     connection_uid: string;
-    installation_url: string;
+    installation_url?: string;
 }
 interface Installation {
     id: number;
@@ -40,6 +40,9 @@ export default function BoardSettingsGitHub() {
             return null;
         }
     });
+    const [connections, setConnections] = useState<{ connection_uid: string; app_id: string; state: string }[]>([]);
+    const [connectionCursor, setConnectionCursor] = useState<string | null>(null);
+    const [connectionsError, setConnectionsError] = useState(false);
     const [organization, setOrganization] = useState("");
     const [authorization, setAuthorization] = useState<Authorization | null>(null);
     const [installation, setInstallation] = useState<Installation | null>(null);
@@ -64,6 +67,25 @@ export default function BoardSettingsGitHub() {
             setPending(false);
         }
     };
+    const loadConnections = async (after?: string) => {
+        setConnectionsError(false);
+        try {
+            const result = (
+                await api.get<{ items: typeof connections; next_cursor: string | null }>(`${root}/connections`, { params: after ? { after } : {} })
+            ).data;
+            setConnections((previous) =>
+                after
+                    ? [...previous, ...result.items.filter((row) => !previous.some((old) => old.connection_uid === row.connection_uid))]
+                    : result.items
+            );
+            setConnectionCursor(result.next_cursor);
+        } catch {
+            setConnectionsError(true);
+        }
+    };
+    useEffect(() => {
+        if (canEditBasicInfo) void loadConnections();
+    }, [root, canEditBasicInfo]);
     useEffect(() => {
         const params = new URLSearchParams(window.location.search);
         const code = params.get("code"),
@@ -171,6 +193,51 @@ export default function BoardSettingsGitHub() {
             {error && <p role="alert">{text("GitHub onboarding failed")}</p>}
             {saved && <p role="status">{text("GitHub repositories saved")}</p>}
             {pending && <p role="status">{t("common.Loading...")}</p>}
+            {connectionsError && (
+                <div role="alert">
+                    {text("GitHub connections unavailable")}{" "}
+                    <Button size="sm" variant="outline" onClick={() => void loadConnections()}>
+                        {t("common.Retry")}
+                    </Button>
+                </div>
+            )}
+            {connections.length > 0 && (
+                <label className="flex flex-col gap-1">
+                    {text("Existing GitHub connection")}
+                    <select
+                        className="min-w-0 rounded-md border bg-background px-3 py-2"
+                        value={connection?.connection_uid ?? ""}
+                        onChange={(event) => {
+                            const item = connections.find((row) => row.connection_uid === event.target.value);
+                            const next = item ? { connection_uid: item.connection_uid } : null;
+                            setConnection(next);
+                            setAuthorization(null);
+                            setInstallation(null);
+                            setRepositories([]);
+                            setSnapshot(null);
+                            setSelected([]);
+                            setSaved(false);
+                            if (next) sessionStorage.setItem(key, JSON.stringify(next));
+                            else sessionStorage.removeItem(key);
+                        }}
+                    >
+                        <option value="">{text("Create new GitHub connection")}</option>
+                        {connection && !connections.some((row) => row.connection_uid === connection.connection_uid) && (
+                            <option value={connection.connection_uid}>{text("Current GitHub connection")}</option>
+                        )}
+                        {connections.map((row) => (
+                            <option key={row.connection_uid} value={row.connection_uid}>
+                                GitHub App {row.app_id} · {row.connection_uid}
+                            </option>
+                        ))}
+                    </select>
+                </label>
+            )}
+            {connectionCursor && (
+                <Button size="sm" variant="outline" onClick={() => void loadConnections(connectionCursor)}>
+                    {text("More GitHub connections")}
+                </Button>
+            )}
             {!connection ? (
                 <>
                     <label className="flex flex-col gap-1">
@@ -191,8 +258,9 @@ export default function BoardSettingsGitHub() {
                     <Button
                         size="sm"
                         variant="outline"
+                        disabled={!connection.installation_url}
                         onClick={() => {
-                            const url = new URL(connection.installation_url);
+                            const url = new URL(connection.installation_url!);
                             if (url.origin === "https://github.com" && /^\/apps\/[a-zA-Z0-9-]+\/installations\/new$/.test(url.pathname))
                                 location.assign(url.href);
                         }}
