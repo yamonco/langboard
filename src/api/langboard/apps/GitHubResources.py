@@ -177,7 +177,17 @@ def update_resources(
         return resource_snapshot(db, binding)
 
 
-def refresh_resources(service, actor, project_uid, connection_uid, expected_revision, after=None):
+def refresh_resources(
+    service,
+    actor,
+    project_uid,
+    connection_uid,
+    expected_revision,
+    after=None,
+    *,
+    installation_scope=None,
+    expected_connection_revision=None,
+):
     """Explicit bounded health refresh; unavailable evidence never means uninstall."""
     _board(service, actor, project_uid)
     with DbSession.use(readonly=False) as db:
@@ -191,6 +201,8 @@ def refresh_resources(service, actor, project_uid, connection_uid, expected_revi
         if connection is None or connection.state not in {"pending", "connected"}:
             raise GitHubManifestUnavailable()
         revision = connection_revision(connection)
+        if expected_connection_revision is not None and revision != expected_connection_revision:
+            raise GitHubResourceConflict()
         board = _board(service, actor, project_uid)
         binding = db.exec(
             SqlBuilder.select.table(BoardAppBinding).where(
@@ -202,6 +214,8 @@ def refresh_resources(service, actor, project_uid, connection_uid, expected_revi
         if snapshot["revision"] != expected_revision:
             raise GitHubResourceConflict()
         rows = [item for item in snapshot["items"] if item["connection_uid"] == connection_uid and item["selected"]]
+    if installation_scope is not None:
+        rows = [item for item in rows if tuple(part.get("id") for part in item["path"][:2]) == installation_scope]
     if after is not None:
         if not isinstance(after, str) or len(after) > 11 or not any(item["uid"] == after for item in rows):
             raise ValueError("Invalid resource cursor")

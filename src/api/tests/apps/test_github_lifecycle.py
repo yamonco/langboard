@@ -617,3 +617,136 @@ def test_signed_ping_is_receipt_only_without_installation(receipt_storage, failu
             assert receipts[0].installation_id == "" and receipts[0].account_id == ""
             assert receipts[0].event == "ping" and receipts[0].invalidated and receipts[0].added_repository_ids == []
             assert "zen" not in receipts[0].model_dump()
+
+
+@pytest.mark.parametrize("failure", [None, "permission", "ping", "owner_inactive", "connection_changed"])
+def test_receipt_refresh_revalidates_authority_and_scopes_installation(receipt_storage, monkeypatch, failure):
+    from langboard.apps import GitHubResources as resources
+    from langboard.apps.GitHubHealth import refresh_receipt_resources
+    from langboard.apps.GitHubLifecycle import receive_lifecycle
+    from langboard_shared.core.db import SqlBuilder
+    from langboard_shared.domain.models import AppResourceBinding, BoardAppBinding
+
+    lifecycle, migration, engine = receipt_storage
+    service, board, connection, payload = lifecycle
+    with DbSession.use(readonly=False) as db:
+        binding = BoardAppBinding(project_id=board[2].id, app_key="github")
+        db.insert(binding)
+        rows = []
+        for installation_id in (17, 18):
+            row = AppResourceBinding(
+                board_binding_id=binding.id,
+                connection_id=connection.id,
+                resource_type="repository",
+                external_resource_id=str(installation_id),
+                access_state="unknown",
+                health="unavailable",
+                resource_path=[{"type": "installation", "id": str(installation_id)}, {"type": "account", "id": "7"}],
+            )
+            db.insert(row)
+            rows.append(row)
+    if failure == "ping":
+        payload = {"hook_id": 123}
+    else:
+        payload = {"action": "unsuspend", "installation": payload["installation"]}
+    body, signature = signed(payload)
+    event = "ping" if failure == "ping" else "installation"
+    receipt = receive_lifecycle(service, board[1], connection.get_uid(), body, signature, event, str(uuid4()))
+    with DbSession.use(readonly=False) as db:
+        if failure == "permission":
+            board[4].actions = ["read"]
+            db.update(board[4])
+        elif failure == "connection_changed":
+            connection.external_account_id = "43"
+            db.update(connection)
+        elif failure == "owner_inactive":
+            board[1].activated_at = None
+            db.update(board[1])
+    calls = []
+
+    def inspect(*args, **kwargs):
+        calls.append((args, kwargs))
+        assert args[4] == 17 and kwargs["repository_ids"] == (17,)
+        return {"repositories": [{"id": 17, "archived": False}]}
+
+    monkeypatch.setattr(resources, "inspect_installation", inspect)
+    if failure:
+        with pytest.raises(GitHubManifestUnavailable):
+            refresh_receipt_resources(service, receipt["receipt_uid"], board[2].get_uid())
+        assert not calls
+    else:
+        result = refresh_receipt_resources(service, receipt["receipt_uid"], board[2].get_uid())
+        assert result["refreshed_count"] == 1 and len(calls) == 1
+        with DbSession.use(readonly=False) as db:
+            own = db.exec(
+                SqlBuilder.select.table(AppResourceBinding).where(AppResourceBinding.id == rows[0].id)
+            ).first()
+            other = db.exec(
+                SqlBuilder.select.table(AppResourceBinding).where(AppResourceBinding.id == rows[1].id)
+            ).first()
+            assert own.health == "healthy" and other.health == "unavailable"
+
+
+def test_receipt_refresh_is_limited_to_25_resource_pages(receipt_storage, monkeypatch):
+    from langboard.apps import GitHubResources as resources
+    from langboard.apps.GitHubHealth import refresh_receipt_resources
+    from langboard.apps.GitHubLifecycle import receive_lifecycle
+    from langboard_shared.domain.models import AppResourceBinding, BoardAppBinding
+
+    lifecycle, migration, engine = receipt_storage
+    service, board, connection, payload = lifecycle
+    with DbSession.use(readonly=False) as db:
+        binding = BoardAppBinding(project_id=board[2].id, app_key="github")
+        db.insert(binding)
+        for i in range(40):
+            db.insert(
+                AppResourceBinding(
+                    board_binding_id=binding.id,
+                    connection_id=connection.id,
+                    resource_type="repository",
+                    external_resource_id=str(100 + i),
+                    resource_path=[{"type": "installation", "id": "17"}, {"type": "account", "id": "7"}],
+                )
+            )
+    body, signature = signed({"action": "created", "installation": payload["installation"]})
+    receipt = receive_lifecycle(service, board[1], connection.get_uid(), body, signature, "installation", str(uuid4()))
+    sizes = []
+
+    def inspect(*args, **kwargs):
+        ids = kwargs["repository_ids"]
+        sizes.append(len(ids))
+        return {"repositories": [{"id": uid, "archived": False} for uid in ids]}
+
+    monkeypatch.setattr(resources, "inspect_installation", inspect)
+    first = refresh_receipt_resources(service, receipt["receipt_uid"], board[2].get_uid())
+    assert first["refreshed_count"] == 25 and first["next_cursor"]
+    second = refresh_receipt_resources(service, receipt["receipt_uid"], board[2].get_uid(), first["next_cursor"])
+    assert second["refreshed_count"] == 15 and second["next_cursor"] is None and sizes == [25, 15]
+
+
+def test_receipt_refresh_fences_connection_changed_between_snapshot_and_query(receipt_storage, monkeypatch):
+    from langboard.apps import GitHubHealth as health
+    from langboard.apps.GitHubLifecycle import receive_lifecycle
+    from langboard.apps.GitHubResources import GitHubResourceConflict
+    from langboard_shared.domain.models import BoardAppBinding
+
+    lifecycle, migration, engine = receipt_storage
+    service, board, connection, payload = lifecycle
+    with DbSession.use(readonly=False) as db:
+        db.insert(BoardAppBinding(project_id=board[2].id, app_key="github"))
+    body, signature = signed(payload)
+    receipt = receive_lifecycle(
+        service, board[1], connection.get_uid(), body, signature, "installation_repositories", str(uuid4())
+    )
+    snapshot = health.get_resources
+
+    def change(*args):
+        result = snapshot(*args)
+        with DbSession.use(readonly=False) as db:
+            connection.external_account_id = "43"
+            db.update(connection)
+        return result
+
+    monkeypatch.setattr(health, "get_resources", change)
+    with pytest.raises(GitHubResourceConflict):
+        health.refresh_receipt_resources(service, receipt["receipt_uid"], board[2].get_uid())
