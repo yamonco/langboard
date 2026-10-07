@@ -6,12 +6,16 @@ import os
 from concurrent.futures import ThreadPoolExecutor
 from uuid import uuid4
 import pytest
+from bcrypt import gensalt, hashpw
 from langboard_shared.core.db import DbSession
 from langboard_shared.core.types import SnowflakeID
 from langboard_shared.domain.models import User
 from sqlalchemy import create_engine, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+
+
+FIXTURE_PASSWORD_HASH = hashpw(b"test-only", gensalt(rounds=4)).decode()
 
 
 module = importlib.import_module("langboard_shared.core.types.SnowflakeID")
@@ -120,7 +124,7 @@ def make_user(email):
         lastname="Fixture",
         email=email,
         username="fixture-" + email.split("@", 1)[0],
-        password="test-only",
+        password=FIXTURE_PASSWORD_HASH,
     )
 
 
@@ -161,7 +165,7 @@ def test_id_allocation_exhaustion_preserves_existing_row_and_resets_new_model(mo
         engine.dispose()
 
 
-def _persist_worker_batch(database_url, worker, queue):
+def _persist_worker_batch(database_url, worker, queue, batch_size=8):
     SnowflakeID._last_timestamp = -1
     SnowflakeID._sequence = 0
     SnowflakeID._machine_id = 950
@@ -170,31 +174,44 @@ def _persist_worker_batch(database_url, worker, queue):
     try:
         with Session(engine) as session, session.begin():
             db = DbSession(session, readonly=False)
-            users = [make_user(f"worker-{worker}-{index}@example.invalid") for index in range(8)]
+            users = [make_user(f"worker-{worker}-{index}@example.invalid") for index in range(batch_size)]
             db.insert_all(users)
         queue.put([int(user.id) for user in users])
+    except Exception as error:
+        queue.put({"error": type(error).__name__, "detail": str(error)})
+        raise
     finally:
         engine.dispose()
 
 
-def test_independent_processes_with_same_node_and_clock_persist_unique_rows(tmp_path):
-    url = f"sqlite:///{tmp_path / 'worker-ids.sqlite'}"
-    engine = create_engine(url)
-    User.__table__.create(engine)
+@pytest.mark.parametrize("batch_size", [8, 64])
+def test_independent_processes_with_same_node_and_clock_persist_unique_rows(tmp_path, batch_size, storage_engine):
+    if storage_engine.dialect.name == "postgresql":
+        engine = storage_engine
+        with engine.connect() as connection:
+            schema = connection.execute(text("SELECT current_schema()")).scalar_one()
+        url = engine.url.update_query_dict({"options": f"-csearch_path={schema}"}).render_as_string(hide_password=False)
+    else:
+        url = f"sqlite:///{tmp_path / 'worker-ids.sqlite'}"
+        engine = create_engine(url)
+        User.__table__.create(engine)
     context = multiprocessing.get_context("spawn")
     queue = context.Queue()
-    workers = [context.Process(target=_persist_worker_batch, args=(url, worker, queue)) for worker in range(4)]
+    workers = [
+        context.Process(target=_persist_worker_batch, args=(url, worker, queue, batch_size)) for worker in range(4)
+    ]
     try:
         for worker in workers:
             worker.start()
-        batches = [queue.get(timeout=15) for _ in workers]
+        batches = [queue.get(timeout=20) for _ in workers]
+        assert all(isinstance(batch, list) for batch in batches), batches
         for worker in workers:
             worker.join(15)
             assert worker.exitcode == 0
         identifiers = [value for batch in batches for value in batch]
-        assert len(identifiers) == len(set(identifiers)) == 32
+        assert len(identifiers) == len(set(identifiers)) == 4 * batch_size
         with engine.connect() as connection:
-            assert len(connection.execute(select(User.__table__)).all()) == 32
+            assert len(connection.execute(select(User.__table__)).all()) == 4 * batch_size
     finally:
         for worker in workers:
             if worker.is_alive():
@@ -203,3 +220,45 @@ def test_independent_processes_with_same_node_and_clock_persist_unique_rows(tmp_
         queue.close()
         queue.join_thread()
         engine.dispose()
+
+
+def test_collision_skip_preserves_node_rollback_and_63bit_boundary(fixed_clock, monkeypatch):
+    first = SnowflakeID()
+    SnowflakeID.advance_after_collision(first)
+    skipped = SnowflakeID()
+    assert int(skipped) >> 22 == (int(first) >> 22) + 1
+    assert ((int(skipped) >> 12) & 0x3FF) == 950 and int(skipped) & 0xFFF == 0
+    SnowflakeID.advance_after_collision(first)
+    assert SnowflakeID() == skipped + 1
+    SnowflakeID.advance_after_collision(SnowflakeID.MAX_VALUE)
+    with pytest.raises(OverflowError):
+        SnowflakeID()
+
+
+def test_allocator_hot_path_measurement(record_property):
+    from time import perf_counter
+
+    started = perf_counter()
+    values = [SnowflakeID() for _ in range(100000)]
+    elapsed = perf_counter() - started
+    assert len(set(values)) == len(values)
+    record_property("allocator_ids_per_second", 100000 / elapsed)
+    print(f"100000 IDs in {elapsed:.4f}s; {100000 / elapsed:.0f} IDs/s")
+
+
+def test_used_sequence_range_exhausts_old_retry_but_collision_skip_recovers(storage_engine, fixed_clock, monkeypatch):
+    engine = storage_engine
+    with Session(engine) as session, session.begin():
+        db = DbSession(session, readonly=False)
+        db.insert_all([make_user(f"seed-{index}@example.invalid") for index in range(64)])
+        SnowflakeID._last_timestamp = -1
+        SnowflakeID._sequence = 0
+        candidate = make_user("after-collision@example.invalid")
+        with monkeypatch.context() as patch:
+            patch.setattr(SnowflakeID, "advance_after_collision", lambda value: None)
+            with pytest.raises(RuntimeError, match="allocation exhausted"):
+                db.insert(candidate)
+            assert candidate.id == 0
+        db.insert(candidate)
+        assert int(candidate.id) >> 22 == 100001
+        assert len(session.execute(select(User.__table__)).all()) == 65
