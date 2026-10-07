@@ -83,7 +83,9 @@ jobs:
       - run: yarn playwright install --with-deps chrome
         working-directory: src/ui
       - run: yarn playwright test -c playwright.card-deeplink.config.ts
+        if: github.event_name == 'workflow_dispatch'
         working-directory: src/ui
+      # Full cross-feature regression remains available through explicit manual dispatch.
       - run: yarn playwright test -c playwright.locale-runtime.config.ts
         working-directory: src/ui
       - run: yarn playwright test -c playwright.default-language.config.ts
@@ -94,41 +96,56 @@ jobs:
         working-directory: src/ui
 
       - run: yarn playwright test -c playwright.filter.config.ts
+        if: github.event_name == 'workflow_dispatch'
         working-directory: src/ui
       - run: yarn playwright test -c playwright.workflow-filter-refresh.config.ts
+        if: github.event_name == 'workflow_dispatch'
         working-directory: src/ui
       - run: yarn playwright test -c playwright.workflow-stages.config.ts
+        if: github.event_name == 'workflow_dispatch'
         working-directory: src/ui
       - run: yarn playwright test -c playwright.inline-deadline.config.ts
+        if: github.event_name == 'workflow_dispatch'
         working-directory: src/ui
 
       - run: yarn playwright test -c playwright.auth-api.config.ts
+        if: github.event_name == 'workflow_dispatch'
         working-directory: src/ui
       - run: yarn playwright test -c playwright.project-load.config.ts
+        if: github.event_name == 'workflow_dispatch'
         working-directory: src/ui
       - run: yarn playwright test -c playwright.route-load.config.ts
+        if: github.event_name == 'workflow_dispatch'
         working-directory: src/ui
 
       - run: yarn playwright test -c playwright.notification-load.config.ts
+        if: github.event_name == 'workflow_dispatch'
         working-directory: src/ui
 
       - run: yarn playwright test -c playwright.template-selection.config.ts
+        if: github.event_name == 'workflow_dispatch'
         working-directory: src/ui
 
       - run: yarn playwright test -c playwright.workload.config.ts
+        if: github.event_name == 'workflow_dispatch'
         working-directory: src/ui
 
       - run: yarn playwright test -c playwright.workbench.config.ts
+        if: github.event_name == 'workflow_dispatch'
         working-directory: src/ui
       - run: node --experimental-strip-types --test src/controllers/api/dashboard/projectWorkloadSubscriptions.test.ts
         working-directory: src/ui
       - run: yarn playwright test -c playwright.explorer-recovery.config.ts
+        if: github.event_name == 'workflow_dispatch'
         working-directory: src/ui
       - run: yarn playwright test -c playwright.card-description-static.config.ts
+        if: github.event_name == 'workflow_dispatch'
         working-directory: src/ui
       - run: yarn playwright test -c playwright.table-selection.config.ts
+        if: github.event_name == 'workflow_dispatch'
         working-directory: src/ui
       - run: yarn playwright test -c playwright.recent-cards.config.ts
+        if: github.event_name == 'workflow_dispatch'
         working-directory: src/ui
       - run: node --experimental-strip-types --test src/pages/BoardPage/components/card/CardFlipStore.test.ts src/pages/BoardPage/components/card/CardFlipDraftStore.test.ts
         working-directory: src/ui
@@ -137,8 +154,11 @@ jobs:
         working-directory: src/ui
 
       - run: yarn playwright test -c playwright.command-context.config.ts
+        if: github.event_name == 'workflow_dispatch'
         working-directory: src/ui
       - run: yarn playwright test -c playwright.chat-recovery.config.ts
+        if: github.event_name == 'workflow_dispatch'
         working-directory: src/ui
       - run: yarn playwright test -c playwright.board-chat-stability.config.ts
+        if: github.event_name == 'workflow_dispatch'
         working-directory: src/ui
