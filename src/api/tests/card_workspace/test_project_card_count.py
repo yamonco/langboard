@@ -9,8 +9,9 @@ os.environ.setdefault("PROJECT_NAME", "langboard")
 
 from langboard_shared.core.db import DbSession  # noqa: E402
 from langboard_shared.domain.models import Card, ProjectColumn  # noqa: E402
+from langboard_shared.domain.services.CardVisibilityPolicy import CardVisibilityContext, CollaborationChannel
 from langboard_shared.infrastructure.repositories.factory.CardRepository import CardRepository  # noqa: E402
-from sqlalchemy import Column, Integer, MetaData, Table, create_engine  # noqa: E402
+from sqlalchemy import Column, Integer, MetaData, String, Table, create_engine  # noqa: E402
 
 
 def test_page_total_excludes_deleted_cards_and_columns_but_keeps_archive(monkeypatch):
@@ -24,12 +25,15 @@ def test_page_total_excludes_deleted_cards_and_columns_but_keeps_archive(monkeyp
         Column("project_column_id", Integer),
         Column("deleted_at", Integer),
         Column("archived_at", Integer),
+        Column("visibility", String, default="SHARED"),
+        Column("owner_user_id", Integer),
     )
     columns = Table(
         ProjectColumn.__tablename__,
         metadata,
         Column("id", Integer, primary_key=True),
         Column("deleted_at", Integer),
+        Column("project_id", Integer, default=1),
     )
     metadata.create_all(engine)
     with engine.begin() as connection:
@@ -57,11 +61,12 @@ def test_page_total_excludes_deleted_cards_and_columns_but_keeps_archive(monkeyp
 
         @contextmanager
         def use(*, readonly):
-            assert readonly
+            assert readonly is False
             yield SimpleNamespace(exec=lambda statement: connection.execute(statement).scalars())
 
         monkeypatch.setattr(DbSession, "use", use)
         repository = CardRepository(lambda _: None, lambda _: None)
-        assert repository.count_by_project(1) == 225
-        assert repository.count_by_project(2) == 1
-        assert repository.count_by_project(99) == 0
+        context = CardVisibilityContext(CollaborationChannel.Api, True, True, False)
+        assert repository.count_by_project(1, context=context) == 225
+        assert repository.count_by_project(2, context=context) == 0
+        assert repository.count_by_project(99, context=context) == 0
