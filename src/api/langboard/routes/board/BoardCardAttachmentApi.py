@@ -179,9 +179,12 @@ def process_card_attachment_document(
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
     try:
-        result = service.card_attachment.request_document_processing(
-            project_uid, card_uid, attachment_uid, reprocess=form.reprocess
-        )
+        if form.mode == "embedding":
+            result = service.card_attachment.request_document_embedding(project_uid, card_uid, attachment_uid)
+        else:
+            result = service.card_attachment.request_document_processing(
+                project_uid, card_uid, attachment_uid, reprocess=form.reprocess
+            )
     except ValueError as error:
         raise ApiException.BadRequest_400(ApiErrorCode.VA0000) from error
     if result is None:

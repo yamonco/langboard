@@ -366,6 +366,7 @@ class DoclingMetadataService(BaseDomainService):
         embedding: dict,
         *,
         expected_embedding: dict | None = None,
+        embedding_config: dict | None = None,
     ) -> bool:
         """Publish a staged vector generation only while its live source still matches."""
         with DbSession.atomic() as db:
@@ -392,9 +393,10 @@ class DoclingMetadataService(BaseDomainService):
                 or (expected_embedding is not None and (document.get("embedding") or {}) != expected_embedding)
             ):
                 return False
-            return self.upsert_document(
-                CardMetadata, card, {**document, "embedding": embedding}, expected_generation=generation
-            )
+            updated = {**document, "embedding": embedding}
+            if embedding_config is not None:
+                updated["embedding_config"] = embedding_config
+            return self.upsert_document(CardMetadata, card, updated, expected_generation=generation)
 
     def delete_document_by_attachment_uid(
         self, model_cls: type[BaseMetadataModel], foreign_model: BaseDbModel, attachment_uid: str

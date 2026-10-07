@@ -91,6 +91,14 @@ def test_staged_generation_uses_public_board_uid_and_is_removed_on_failed_public
     )
 
 
+def test_replaced_explicit_request_never_starts_inference(monkeypatch, tmp_path):
+    service, document, _ = fixture(monkeypatch, tmp_path)
+    document["embedding"]["request_uid"] = "new-request"
+    task.embed_transcription(service, "attachment", "current", "old-request")
+    task.create_document_embeddings.assert_not_called()
+    service.docling_metadata.publish_document_embedding.assert_not_called()
+
+
 def test_provider_failure_retains_prior_pointer_and_redacts_error(monkeypatch, tmp_path):
     service, _, _ = fixture(monkeypatch, tmp_path)
     task.replace_attachment_generation.side_effect = RuntimeError("secret-key and confidential document")

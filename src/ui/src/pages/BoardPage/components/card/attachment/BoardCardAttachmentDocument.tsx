@@ -12,11 +12,12 @@ import { Routing } from "@langboard/core/constants";
 import { Utils } from "@langboard/core/utils";
 import { useTranslation } from "react-i18next";
 
-export function BoardCardAttachmentDocumentAction(): React.JSX.Element | null {
+export function BoardCardAttachmentDocumentAction({ mode = "transcription" }: { mode?: "transcription" | "embedding" }): React.JSX.Element | null {
     const [t] = useTranslation();
     const { projectUID, card, hasRoleAction } = useBoardCard();
     const { model: attachment } = ModelRegistry.ProjectCardAttachment.useContext();
     const name = attachment.useField("name");
+    const actionLabel = t(mode === "embedding" ? "card.Index document embeddings" : "card.Process document");
     if (!hasRoleAction(ProjectRole.EAction.CardUpdate) || !/\.(pdf|png|jpe?g|tiff?|bmp|webp|docx|pptx|xlsx|html?|md|markdown|csv)$/i.test(name))
         return null;
     const process = (endCallback: (close: bool) => void) => {
@@ -25,9 +26,9 @@ export function BoardCardAttachmentDocumentAction(): React.JSX.Element | null {
             card_uid: card.uid,
             attachment_uid: attachment.uid,
         });
-        Toast.Add.promise(api.post(url, { reprocess: true }, { env: { interceptToast: true } as never }), {
+        Toast.Add.promise(api.post(url, { reprocess: true, mode }, { env: { interceptToast: true } as never }), {
             loading: t("common.Changing..."),
-            success: () => t("card.Document processing requested"),
+            success: () => t(mode === "embedding" ? "card.Embedding requested" : "card.Document processing requested"),
             error: (error) => {
                 const message = { message: "" };
                 setupApiErrorHandler({}, message).handle(error);
@@ -37,8 +38,10 @@ export function BoardCardAttachmentDocumentAction(): React.JSX.Element | null {
         });
     };
     return (
-        <MoreMenu.PopoverItem menuName={t("card.Process document")} saveText={t("card.Process document")} onSave={process}>
-            <p className="max-w-72 text-sm text-muted-foreground">{t("card.Process only this attachment")}</p>
+        <MoreMenu.PopoverItem menuName={actionLabel} saveText={actionLabel} onSave={process}>
+            <p className="max-w-72 text-sm text-muted-foreground">
+                {t(mode === "embedding" ? "card.Embed only this transcription" : "card.Process only this attachment")}
+            </p>
         </MoreMenu.PopoverItem>
     );
 }
@@ -57,7 +60,15 @@ export function BoardCardAttachmentDocumentProgress({
     return record && currentUser ? <DocumentProgress record={record} attachmentUID={attachmentUID} currentUser={currentUser} /> : null;
 }
 
-function DocumentProgress({ record, attachmentUID, currentUser }: { record: MetadataModel.TModel; attachmentUID?: string; currentUser: NonNullable<ReturnType<typeof useAuth>["currentUser"]> }): React.JSX.Element | null {
+function DocumentProgress({
+    record,
+    attachmentUID,
+    currentUser,
+}: {
+    record: MetadataModel.TModel;
+    attachmentUID?: string;
+    currentUser: NonNullable<ReturnType<typeof useAuth>["currentUser"]>;
+}): React.JSX.Element | null {
     const [t] = useTranslation();
     const preferredLanguage = currentUser.useField("preferred_lang");
     const metadata = record.useField("metadata");
@@ -90,6 +101,17 @@ function DocumentProgress({ record, attachmentUID, currentUser }: { record: Meta
                 {pages ? ` · ${pages}` : ""}
                 {running && percent !== undefined ? ` · ${percent}%` : ""}
             </span>
+            {attachmentUID && document.embedding && (
+                <span className="mt-0.5 block">
+                    {t(
+                        document.embedding.status === "indexed"
+                            ? "card.Embedding indexed"
+                            : document.embedding.status === "failed"
+                              ? "card.Embedding failed"
+                              : "card.Embedding queued"
+                    )}
+                </span>
+            )}
             {running && <progress className="mt-1 block h-1 w-full accent-primary" max={100} value={percent} aria-label={label} />}
             {tags.length > 0 && (
                 <div className="mt-1 flex max-w-full flex-wrap gap-x-2 gap-y-0.5 text-primary/70">

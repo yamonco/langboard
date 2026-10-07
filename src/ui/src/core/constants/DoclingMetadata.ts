@@ -18,6 +18,7 @@ export interface IDoclingMetadataEntry {
     content_hash?: string;
     indexed_at?: string;
     error_message?: string;
+    embedding?: { status?: "pending" | "indexed" | "failed"; error?: string };
     content: Record<string, unknown>;
 }
 

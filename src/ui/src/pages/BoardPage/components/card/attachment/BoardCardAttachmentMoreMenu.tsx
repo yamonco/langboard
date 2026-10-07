@@ -18,6 +18,7 @@ function BoardCardAttachmentMoreMenu({ attachment, isValidating, setIsValidating
             <MoreMenu.Root triggerProps={{ className: "h-8 w-5 sm:size-8" }}>
                 <BoardCardAttachmentMoreMenuDownload />
                 <BoardCardAttachmentDocumentAction />
+                <BoardCardAttachmentDocumentAction mode="embedding" />
                 <BoardCardAttachmentMoreMenuRename />
                 <BoardCardAttachmentMoreMenuDelete />
             </MoreMenu.Root>
