@@ -103,6 +103,7 @@ __all__ = [
     "CardAssignedProjectLabel",
     "CardAssignedUser",
     "CardAttachment",
+    "CardDocumentArtifact",
     "CardBotLog",
     "CardBotSchedule",
     "CardBotScope",
