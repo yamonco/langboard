@@ -93,3 +93,24 @@ def test_upload_snapshot_freezes_settings_excludes_secrets_and_accepts_credentia
     assert snapshot_embedding_config(json.dumps(current), "binding", explicit=True) is not None
     with pytest.raises(ValueError, match="endpoint changed"):
         resolve_embedding_snapshot(snapshot, json.dumps({**current, "base_url": "https://other.invalid/v1"}))
+
+
+def test_vector_snapshot_refreshes_only_same_endpoint_credentials():
+    from json import dumps, loads
+    from langboard_shared.tasks.docling.DocumentEmbedding import resolve_embedding_snapshot, snapshot_embedding_config
+
+    config = {
+        "agent_llm": "OpenAI Compatible",
+        "base_url": "https://embed.invalid",
+        "model_name": "embed",
+        "api_key": "secret",
+        "retrieval": {"store": "qdrant", "external_url": "https://vectors.invalid", "external_api_key": "old-key"},
+    }
+    snapshot = snapshot_embedding_config(dumps(config), "binding", explicit=True)
+    assert "old-key" not in str(snapshot) and "secret" not in str(snapshot)
+    config["retrieval"]["external_api_key"] = "rotated-key"
+    resolved = loads(resolve_embedding_snapshot(snapshot, dumps(config)))
+    assert resolved["retrieval"]["external_api_key"] == "rotated-key"
+    config["retrieval"]["external_url"] = "https://different.invalid"
+    with pytest.raises(ValueError, match="Vector endpoint changed"):
+        resolve_embedding_snapshot(snapshot, dumps(config))

@@ -9,8 +9,10 @@ from ...domain.models.InternalBot import InternalBotType
 from ...domain.services import DomainService
 from ...Env import Env
 from .DocumentEmbedding import create_document_embeddings, resolve_embedding_snapshot, validate_embedding_config
+from .DocumentRetrievalSettings import DocumentRetrievalSettings
 from .DocumentSqliteStore import open_document_store, remove_document_generation
 from .DocumentVectorGeneration import delete_attachment_generation, embedding_fingerprint, replace_attachment_generation
+from .DocumentVectorStore import delete_vector_generation, open_qdrant_store, stage_vector_generation
 
 
 @Broker.wrap_async_task_decorator
@@ -32,7 +34,32 @@ async def remove_attachment_embedding(request: str):
     pointer = loads(request)
     if not isinstance(pointer, dict):
         raise ValueError("A recorded embedding pointer is required")
-    remove_document_generation(Env.DATA_DIR / "document-retrieval", pointer)
+    storage = pointer.get("storage") or {}
+    if storage.get("type", "sqlite") == "sqlite":
+        remove_document_generation(Env.DATA_DIR / "document-retrieval", pointer)
+        return
+    if storage.get("type") != "qdrant":
+        raise ValueError("Unsupported recorded vector storage")
+    service = DomainService()
+    try:
+        binding = service.internal_bot.get_by_id_like(storage.get("binding_uid"))
+        if not binding or binding.bot_type != InternalBotType.DocumentEmbedding:
+            raise ValueError("Recorded vector binding is unavailable")
+        _, current = validate_embedding_config(binding.value)
+        if str(current.external_url).rstrip("/") != storage.get("endpoint"):
+            raise ValueError("Recorded vector endpoint changed; cleanup requires the original connection")
+        settings = DocumentRetrievalSettings(
+            store="qdrant",
+            external_url=current.external_url,
+            external_api_key=current.external_api_key,
+            dimensions=storage["dimensions"],
+        )
+        allowed = set(Env.get_from_env("DOCUMENT_VECTOR_ALLOWED_BASE_URLS", "").split(","))
+        with open_qdrant_store(settings, None, pointer["embedding_fingerprint"], allowed, create=False) as store:
+            if store is not None:
+                delete_vector_generation(store, pointer)
+    finally:
+        service.close()
 
 
 def embed_transcription(service, attachment_uid: str, generation: str, request_uid: str | None = None) -> None:
@@ -63,8 +90,6 @@ def embed_transcription(service, attachment_uid: str, generation: str, request_u
             raise ValueError("Embedding binding is unavailable")
         private = resolve_embedding_snapshot(snapshot, binding.value)
         config, settings = validate_embedding_config(private)
-        if settings.store != "sqlite":
-            raise ValueError("External vector storage is not connected yet")
         allowed = set(Env.get_from_env("MODEL_PROVIDER_ALLOWED_BASE_URLS", "").split(","))
         embeddings = create_document_embeddings(private, allowed)
         fingerprint = embedding_fingerprint(
@@ -74,26 +99,58 @@ def embed_transcription(service, attachment_uid: str, generation: str, request_u
             old.get("status") == "indexed"
             and old.get("source_generation") == generation
             and (old.get("pointer") or {}).get("embedding_fingerprint") == fingerprint
+            and ((old.get("pointer") or {}).get("storage") or {}).get("type", "sqlite") == settings.store
+            and (
+                settings.store == "sqlite"
+                or ((old.get("pointer") or {}).get("storage") or {}).get("endpoint")
+                == str(settings.external_url).rstrip("/")
+            )
         ):
             return
         directory = Env.DATA_DIR / "document-retrieval"
         directory.mkdir(parents=True, exist_ok=True)
         path = directory / (fingerprint + ".sqlite")
         # No PostgreSQL row lock is held during remote inference.
-        with open_document_store(
-            path, embeddings, dimensions=settings.dimensions, timeout_seconds=settings.timeout_seconds
-        ) as store:
-            pointer = replace_attachment_generation(
-                store,
+        vector_allowed = set(Env.get_from_env("DOCUMENT_VECTOR_ALLOWED_BASE_URLS", "").split(","))
+        context = (
+            open_document_store(
+                path, embeddings, dimensions=settings.dimensions, timeout_seconds=settings.timeout_seconds
+            )
+            if settings.store == "sqlite"
+            else open_qdrant_store(settings, embeddings, fingerprint, vector_allowed)
+        )
+        with context as store:
+            source = dict(
                 board_uid=project.get_uid(),
                 card_uid=card.get_uid(),
                 attachment_uid=attachment_uid,
                 content_hash=content_hash,
-                fingerprint=fingerprint,
-                text=(document.get("content") or {}).get("markdown", ""),
-                splitter=settings.splitter,
-                publish_pointer=False,
+                embedding_fingerprint=fingerprint,
             )
+            if settings.store == "sqlite":
+                pointer = replace_attachment_generation(
+                    store,
+                    **{key: value for key, value in source.items() if key != "embedding_fingerprint"},
+                    fingerprint=fingerprint,
+                    text=(document.get("content") or {}).get("markdown", ""),
+                    splitter=settings.splitter,
+                    publish_pointer=False,
+                )
+                remove = delete_attachment_generation
+            else:
+                pointer = stage_vector_generation(
+                    store,
+                    source=source,
+                    text=(document.get("content") or {}).get("markdown", ""),
+                    splitter=settings.splitter,
+                    storage={
+                        "type": "qdrant",
+                        "endpoint": str(settings.external_url).rstrip("/"),
+                        "binding_uid": snapshot["binding_uid"],
+                        "dimensions": settings.dimensions,
+                    },
+                )
+                remove = delete_vector_generation
             try:
                 committed = service.docling_metadata.publish_document_embedding(
                     card,
@@ -104,15 +161,19 @@ def embed_transcription(service, attachment_uid: str, generation: str, request_u
                     expected_embedding=old,
                 )
             except Exception:
-                delete_attachment_generation(store, pointer)
+                remove(store, pointer)
                 raise
             if not committed:
-                delete_attachment_generation(store, pointer)
+                remove(store, pointer)
                 return
             prior = old.get("pointer")
-            if isinstance(prior, dict) and prior.get("embedding_fingerprint") == fingerprint:
+            if (
+                isinstance(prior, dict)
+                and prior.get("embedding_fingerprint") == fingerprint
+                and prior.get("storage") == pointer.get("storage")
+            ):
                 try:
-                    delete_attachment_generation(store, prior)
+                    remove(store, prior)
                 except Exception:
                     # The new source pointer is already committed. Cleanup cannot downgrade it.
                     pass

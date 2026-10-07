@@ -132,3 +132,23 @@ def test_missing_binding_reports_safe_failure_without_inference(monkeypatch, tmp
     task.embed_transcription(service, "attachment", "current")
     task.create_document_embeddings.assert_not_called()
     assert service.docling_metadata.publish_document_embedding.call_args.args[-1]["status"] == "failed"
+
+
+def test_qdrant_generation_publishes_backend_independent_ids_and_cleans_rejected_stage(monkeypatch, tmp_path):
+    service, document, _ = fixture(monkeypatch, tmp_path)
+    document["embedding_config"]["binding_uid"] = "binding"
+    config, settings = task.validate_embedding_config.return_value
+    settings.store = "qdrant"
+    settings.external_url = "https://vectors.invalid"
+    monkeypatch.setattr(task, "open_qdrant_store", Mock(return_value=nullcontext(object())))
+    pointer = {"embedding_fingerprint": "new", "chunk_ids": ["chunk"], "storage": {"type": "qdrant"}}
+    monkeypatch.setattr(task, "stage_vector_generation", Mock(return_value=pointer))
+    monkeypatch.setattr(task, "delete_vector_generation", Mock())
+    service.docling_metadata.publish_document_embedding.return_value = False
+    task.embed_transcription(service, "attachment", "current")
+    task.open_document_store.assert_not_called()
+    task.replace_attachment_generation.assert_not_called()
+    task.delete_vector_generation.assert_called_once()
+    source = task.stage_vector_generation.call_args.kwargs["source"]
+    assert source["board_uid"] == "board-uid" and source["attachment_uid"] == "attachment"
+    assert service.docling_metadata.publish_document_embedding.call_args.args[-1]["pointer"] == pointer
