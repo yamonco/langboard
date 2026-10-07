@@ -25,6 +25,7 @@ class ColumnDescriptionForm(BaseFormModel):
 
 @form_model
 class ColumnWorkflowStageForm(BaseFormModel):
+    expected_workflow_stage: str | None = Field(default=None, max_length=64, pattern=r"^[a-z][a-z0-9_]{0,63}$")
     workflow_stage: str | None = Field(..., max_length=64, pattern=r"^[a-z][a-z0-9_]{0,63}$")
 
 
