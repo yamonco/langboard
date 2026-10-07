@@ -97,6 +97,10 @@ jobs:
 
       - run: yarn playwright test -c playwright.auth-api.config.ts
         working-directory: src/ui
+      - run: yarn playwright test -c playwright.project-load.config.ts
+        working-directory: src/ui
+      - run: yarn playwright test -c playwright.route-load.config.ts
+        working-directory: src/ui
 
       - run: yarn playwright test -c playwright.notification-load.config.ts
         working-directory: src/ui
