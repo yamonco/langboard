@@ -258,12 +258,15 @@ export default function BoardSettingsGitHub() {
                     <Button
                         size="sm"
                         variant="outline"
-                        disabled={!connection.installation_url}
-                        onClick={() => {
-                            const url = new URL(connection.installation_url!);
-                            if (url.origin === "https://github.com" && /^\/apps\/[a-zA-Z0-9-]+\/installations\/new$/.test(url.pathname))
+                        onClick={() =>
+                            void run(async () => {
+                                const result = (await api.get<Connection>(`${root}/connections/${connection.connection_uid}/app`)).data;
+                                const url = new URL(result.installation_url!);
+                                if (url.origin !== "https://github.com" || !/^\/apps\/[a-zA-Z0-9-]+\/installations\/new$/.test(url.pathname))
+                                    throw new Error("Invalid installation target");
                                 location.assign(url.href);
-                        }}
+                            })
+                        }
                     >
                         {text("Install GitHub App")}
                     </Button>

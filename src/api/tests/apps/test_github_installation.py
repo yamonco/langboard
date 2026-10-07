@@ -48,11 +48,25 @@ def installation(secrets, monkeypatch):
         calls.append(request)
         assert request.url.host == "api.github.com"
         token = request.headers["authorization"].removeprefix("Bearer ")
-        if request.url.path.startswith("/app/installations/"):
+        if request.url.path == "/app" or request.url.path.startswith("/app/installations/"):
             claims = jwt.decode(token, key.public_key(), algorithms=["RS256"], issuer="42")
             assert claims["exp"] - claims["iat"] <= 600
         else:
             assert token == "fixture-ephemeral-token"
+        if request.url.path == "/app":
+            if responses["revoke_host"]:
+                with DbSession.use(readonly=False) as db:
+                    connection.state = "revoked"
+                    db.update(connection)
+            return httpx.Response(
+                responses["status"],
+                json={
+                    "id": responses["app_id"],
+                    "slug": responses.get("slug", "langboard-fixture"),
+                    "html_url": "https://untrusted.invalid",
+                    "pem": "must-not-return",
+                },
+            )
         if request.url.path.endswith("access_tokens"):
             body = json.loads(request.content)
             assert body["permissions"] == {"metadata": "read"}
@@ -275,3 +289,68 @@ def test_connection_discovery_is_owner_scoped_bounded_and_secret_free(installati
         db.update(board[4])
     with pytest.raises(github.GitHubManifestUnavailable):
         list_connections(service, board[1], board[2].get_uid())
+
+
+@pytest.mark.parametrize("failure", [None, "app", "slug", "host_revoke", "denied", "permission"])
+def test_app_metadata_rechecks_identity_and_builds_fixed_install_url(installation, failure):
+    from langboard.apps.GitHubConnections import inspect_app
+
+    service, board, connection, calls, responses = installation
+    if failure == "app":
+        responses["app_id"] = 43
+    elif failure == "slug":
+        responses["slug"] = "../../bad"
+    elif failure == "host_revoke":
+        responses["revoke_host"] = True
+    elif failure == "denied":
+        responses["status"] = 403
+    elif failure == "permission":
+        with DbSession.use(readonly=False) as db:
+            board[4].actions = ["read"]
+            db.update(board[4])
+    if failure:
+        with pytest.raises(github.GitHubManifestUnavailable):
+            inspect_app(service, board[1], board[2].get_uid(), connection.get_uid())
+        if failure == "permission":
+            assert not calls
+    else:
+        result = inspect_app(service, board[1], board[2].get_uid(), connection.get_uid())
+        assert result["installation_url"] == "https://github.com/apps/langboard-fixture/installations/new"
+        assert "must-not-return" not in json.dumps(result) and "untrusted.invalid" not in json.dumps(result)
+
+
+@pytest.mark.parametrize("board", ["sqlite-http"], indirect=True)
+def test_native_http_app_metadata_is_authenticated_and_sanitized(installation, monkeypatch):
+    import importlib
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from langboard.middlewares.ApiAuthMiddleware import ApiAuthMiddleware
+    from langboard.routes.board.BoardGitHubAppApi import get_github_app
+    from langboard_shared.core.db.DbEngine import DbEngine
+    from langboard_shared.core.routing import AppRouter
+    from langboard_shared.core.security import AuthSecurity
+    from langboard_shared.Env import Env
+
+    service, board, connection, calls, responses = installation
+    service.close = lambda: None
+    monkeypatch.setattr(DbEngine, "get_readonly_engine", DbEngine.get_main_engine)
+    monkeypatch.setattr(
+        importlib.import_module("langboard.middlewares.ApiAuthMiddleware"), "DomainService", lambda: service
+    )
+    app = FastAPI()
+    app.include_router(AppRouter.api)
+    for route in app.routes:
+        if getattr(route, "endpoint", None) == get_github_app:
+            for dependency in route.dependant.dependencies:
+                if dependency.name == "service":
+                    app.dependency_overrides[dependency.call] = lambda: service
+    app.add_middleware(ApiAuthMiddleware, routes=AppRouter.api.routes)
+    access, refresh = AuthSecurity.authenticate(board[1].id)
+    with TestClient(app, base_url="https://testserver") as client:
+        url = f"/board/{board[2].get_uid()}/settings/apps/github/connections/{connection.get_uid()}/app"
+        assert client.get(url).status_code == 401 and not calls
+        client.cookies.set(Env.REFRESH_TOKEN_NAME, refresh)
+        result = client.get(url, headers={"Authorization": f"Bearer {access}"})
+        assert result.status_code == 200, result.text
+        assert result.json()["installation_url"] == "https://github.com/apps/langboard-fixture/installations/new"
+        assert "must-not-return" not in result.text and "secret://" not in result.text

@@ -54,8 +54,18 @@ test("fresh tab can reselect owned connection and reset", async ({ page }) => {
     await page.goto("/src/pages/BoardPage/components/settings/GitHubOnboarding.fixture.html?existing");
     await page.getByRole("combobox", { name: "Existing GitHub connection" }).selectOption("stored");
     await expect(page.getByRole("button", { name: "Verify GitHub account" })).toBeEnabled();
-    await expect(page.getByRole("button", { name: "Install GitHub App" })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Install GitHub App" })).toBeEnabled();
     expect(await page.evaluate(() => JSON.parse(sessionStorage.getItem("github-onboarding:me:fixture")!).connection_uid)).toBe("stored");
     await page.getByRole("combobox", { name: "Existing GitHub connection" }).selectOption("");
     await expect(page.getByRole("button", { name: "Create GitHub App" })).toBeEnabled();
+});
+
+test("reused connection refreshes app metadata before install", async ({ page }) => {
+    await page.goto("/src/pages/BoardPage/components/settings/GitHubOnboarding.fixture.html?existing");
+    await page.getByRole("combobox", { name: "Existing GitHub connection" }).selectOption("stored");
+    await page.route("https://github.com/apps/current-app/installations/new", (route) =>
+        route.fulfill({ contentType: "text/html", body: "<p>Install current App</p>" })
+    );
+    await page.getByRole("button", { name: "Install GitHub App" }).click();
+    await expect(page).toHaveURL("https://github.com/apps/current-app/installations/new");
 });
