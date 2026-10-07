@@ -707,6 +707,7 @@ def test_receipt_refresh_is_limited_to_25_resource_pages(receipt_storage, monkey
     from langboard.apps.GitHubHealth import refresh_receipt_resources
     from langboard.apps.GitHubLifecycle import receive_lifecycle
     from langboard_shared.domain.models import AppResourceBinding, BoardAppBinding
+    from sqlalchemy import insert
 
     lifecycle, migration, engine = receipt_storage
     service, board, connection, payload = lifecycle
@@ -714,32 +715,112 @@ def test_receipt_refresh_is_limited_to_25_resource_pages(receipt_storage, monkey
         binding = BoardAppBinding(project_id=board[2].id, app_key="github")
         db.insert(binding)
         for i in range(40):
+            row = AppResourceBinding(
+                id=100 + i,
+                board_binding_id=binding.id,
+                connection_id=connection.id,
+                resource_type="repository",
+                external_resource_id=str(100 + i),
+                resource_path=[{"type": "installation", "id": "17"}, {"type": "account", "id": "7"}],
+            )
+            db.exec(insert(AppResourceBinding).values({column.name: getattr(row, column.name) for column in row.__table__.columns}))
+        for i in range(100):
             db.insert(
                 AppResourceBinding(
                     board_binding_id=binding.id,
                     connection_id=connection.id,
                     resource_type="repository",
-                    external_resource_id=str(100 + i),
-                    resource_path=[{"type": "installation", "id": "17"}, {"type": "account", "id": "7"}],
+                    external_resource_id=str(1000 + i),
+                    resource_path=[{"type": "installation", "id": "18"}, {"type": "account", "id": "7"}],
                 )
             )
     body, signature = signed({"action": "created", "installation": payload["installation"]})
     receipt = receive_lifecycle(service, board[1], connection.get_uid(), body, signature, "installation", str(uuid4()))
     sizes = []
+    visited = []
 
     def inspect(*args, **kwargs):
         ids = kwargs["repository_ids"]
         sizes.append(len(ids))
+        visited.extend(ids)
         return {"repositories": [{"id": uid, "archived": False} for uid in ids]}
 
     monkeypatch.setattr(resources, "inspect_installation", inspect)
-    first = refresh_receipt_resources(service, receipt["receipt_uid"], board[2].get_uid())
-    assert first["refreshed_count"] == 25 and first["next_cursor"]
-    second = refresh_receipt_resources(service, receipt["receipt_uid"], board[2].get_uid(), first["next_cursor"])
-    assert second["refreshed_count"] == 15 and second["next_cursor"] is None and sizes == [25, 15]
+    monkeypatch.setattr(
+        resources, "resource_snapshot", lambda *args: pytest.fail("Receipt refresh must not load every board resource")
+    )
+    from sqlalchemy import event
+
+    selects = []
+
+    def capture(_connection, _cursor, statement, _parameters, _context, _many):
+        if statement.lstrip().upper().startswith("SELECT") and "FROM app_resource_binding" in statement:
+            selects.append(statement)
+
+    event.listen(engine, "before_cursor_execute", capture)
+    try:
+        first = refresh_receipt_resources(service, receipt["receipt_uid"], board[2].get_uid())
+        assert first["refreshed_count"] == 25 and first["next_cursor"]
+        second = refresh_receipt_resources(service, receipt["receipt_uid"], board[2].get_uid(), first["next_cursor"])
+        assert second["refreshed_count"] == 15 and second["next_cursor"] is None and sizes == [25, 15]
+        assert visited == list(range(100, 140))
+        assert selects and all(
+            "LIMIT" in statement.upper() or "WHERE app_resource_binding.id =" in statement for statement in selects
+        )
+    finally:
+        event.remove(engine, "before_cursor_execute", capture)
 
 
-def test_receipt_refresh_fences_connection_changed_between_snapshot_and_query(receipt_storage, monkeypatch):
+@pytest.mark.parametrize("change", ["selection", "access_revision", "unrelated"])
+def test_receipt_page_rechecks_scoped_changes_after_api(receipt_storage, monkeypatch, change):
+    from langboard.apps import GitHubResources as resources
+    from langboard.apps.GitHubHealth import refresh_receipt_resources
+    from langboard.apps.GitHubLifecycle import receive_lifecycle
+    from langboard.apps.GitHubResources import GitHubResourceConflict
+    from langboard_shared.core.db import SqlBuilder
+    from langboard_shared.domain.models import AppResourceBinding, BoardAppBinding
+
+    lifecycle, _migration, _engine = receipt_storage
+    service, board, connection, payload = lifecycle
+    with DbSession.use(readonly=False) as db:
+        binding = BoardAppBinding(project_id=board[2].id, app_key="github")
+        db.insert(binding)
+        rows = []
+        for uid, installation in [(99, 17), (100, 17), (101, 18)]:
+            row = AppResourceBinding(
+                board_binding_id=binding.id, connection_id=connection.id,
+                resource_type="repository", external_resource_id=str(uid),
+                resource_path=[{"type": "installation", "id": str(installation)}, {"type": "account", "id": "7"}],
+            )
+            db.insert(row)
+            rows.append(row)
+    body, signature = signed({"action": "created", "installation": payload["installation"]})
+    receipt = receive_lifecycle(service, board[1], connection.get_uid(), body, signature, "installation", str(uuid4()))
+
+    def inspect(*args, **kwargs):
+        assert kwargs["repository_ids"] == (99, 100)
+        with DbSession.use(readonly=False) as db:
+            row = rows[2] if change == "unrelated" else rows[0]
+            if change == "selection":
+                row.is_selected = False
+            else:
+                row.access_revision += 1
+            db.update(row)
+        return {"repositories": [{"id": uid, "archived": False} for uid in (99, 100)]}
+
+    monkeypatch.setattr(resources, "inspect_installation", inspect)
+    if change == "unrelated":
+        assert refresh_receipt_resources(service, receipt["receipt_uid"], board[2].get_uid())["refreshed_count"] == 2
+    else:
+        with pytest.raises(GitHubResourceConflict):
+            refresh_receipt_resources(service, receipt["receipt_uid"], board[2].get_uid())
+    with DbSession.use(readonly=False) as db:
+        stored = db.exec(SqlBuilder.select.table(AppResourceBinding).where(AppResourceBinding.id == rows[0].id)).first()
+        assert stored.health == ("healthy" if change == "unrelated" else "unknown")
+        assert stored.is_selected == (change != "selection")
+
+
+def test_receipt_refresh_fences_connection_changed_between_receipt_and_query(receipt_storage, monkeypatch):
     from langboard.apps import GitHubHealth as health
     from langboard.apps.GitHubLifecycle import receive_lifecycle
     from langboard.apps.GitHubResources import GitHubResourceConflict
@@ -753,16 +834,15 @@ def test_receipt_refresh_fences_connection_changed_between_snapshot_and_query(re
     receipt = receive_lifecycle(
         service, board[1], connection.get_uid(), body, signature, "installation_repositories", str(uuid4())
     )
-    snapshot = health.get_resources
+    refresh = health.refresh_resources
 
-    def change(*args):
-        result = snapshot(*args)
+    def change(*args, **kwargs):
         with DbSession.use(readonly=False) as db:
             connection.external_account_id = "43"
             db.update(connection)
-        return result
+        return refresh(*args, **kwargs)
 
-    monkeypatch.setattr(health, "get_resources", change)
+    monkeypatch.setattr(health, "refresh_resources", change)
     with pytest.raises(GitHubResourceConflict):
         health.refresh_receipt_resources(service, receipt["receipt_uid"], board[2].get_uid())
 

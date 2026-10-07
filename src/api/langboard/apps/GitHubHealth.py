@@ -5,7 +5,7 @@ from langboard_shared.domain.models import AppConnection, BoardAppBinding, GitHu
 from langboard_shared.helpers import InfraHelper
 from .GitHubInstallation import connection_revision
 from .GitHubManifest import GitHubManifestUnavailable
-from .GitHubResources import get_resources, refresh_resources
+from .GitHubResources import refresh_resources
 
 
 def refresh_receipt_resources(service, receipt_uid, project_uid, after=None):
@@ -40,17 +40,17 @@ def refresh_receipt_resources(service, receipt_uid, project_uid, after=None):
         ).first()
         if binding is None:
             raise GitHubManifestUnavailable()
-    current = get_resources(service, actor, project_uid)
     return refresh_resources(
         service,
         actor,
         project_uid,
         connection.get_uid(),
-        current["revision"],
+        None,
         after,
         installation_scope=(receipt.installation_id, receipt.account_id),
         repository_scope=tuple(str(value) for value in (*receipt.added_repository_ids, *receipt.removed_repository_ids))
         if receipt.event == "installation_repositories"
         else None,
         expected_connection_revision=receipt.connection_revision,
+        receipt_page=True,
     )
