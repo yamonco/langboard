@@ -20,6 +20,7 @@ export default function DocumentRetrievalSettings({
     const splitter = settings.splitter && typeof settings.splitter === "object" ? (settings.splitter as Settings) : {};
     const [splitterType, setSplitterType] = useState(String(splitter.type ?? "recursive"));
     const [lengthUnit, setLengthUnit] = useState(String(splitter.length_unit ?? "characters"));
+    const [storeType, setStoreType] = useState(String(settings.store ?? "sqlite"));
     const numeric = (name: string, fallback: number, min: number, max: number, step = 1) => (
         <label className="grid gap-1 text-xs" key={name}>
             {t(`internalBot.retrieval.${name}`)}
@@ -88,7 +89,16 @@ export default function DocumentRetrievalSettings({
                     const raw = String(input);
                     const field = name.startsWith("splitter.") ? name.slice(9) : name;
                     const target = name.startsWith("splitter.") ? nextSplitter : next;
-                    target[field] = ["type", "length_unit", "encoding", "separator", "keep_separator"].includes(field)
+                    target[field] = [
+                        "type",
+                        "length_unit",
+                        "encoding",
+                        "separator",
+                        "keep_separator",
+                        "store",
+                        "external_url",
+                        "external_api_key",
+                    ].includes(field)
                         ? field === "keep_separator" && raw === "false"
                             ? false
                             : raw
@@ -123,6 +133,11 @@ export default function DocumentRetrievalSettings({
                     }
                 }
                 next.enabled = form.has("enabled");
+                if (storeType === "sqlite") {
+                    delete next.external_url;
+                    delete next.external_api_key;
+                    next.search_type = "similarity";
+                } else if (!next.external_api_key) delete next.external_api_key;
                 next.splitter = nextSplitter;
                 onSave(next);
             }}
@@ -134,9 +149,35 @@ export default function DocumentRetrievalSettings({
                     {t("internalBot.retrieval.enabled")}
                 </label>
                 <p className="text-xs text-muted-foreground">{t("internalBot.Existing attachments require explicit processing")}</p>
-                <p className="text-xs text-muted-foreground">
-                    {t("internalBot.retrieval.store")}: {String(settings.store ?? "sqlite")}
-                </p>
+                <label className="grid gap-1 text-xs">
+                    {t("internalBot.retrieval.store")}
+                    <select
+                        name="store"
+                        defaultValue={storeType}
+                        onChange={(event) => setStoreType(event.target.value)}
+                        className="h-9 rounded-md border bg-background px-2 text-sm"
+                    >
+                        <option value="sqlite">{t("internalBot.retrieval.store_sqlite")}</option>
+                        <option value="qdrant">{t("internalBot.retrieval.store_qdrant")}</option>
+                    </select>
+                </label>
+                {storeType === "qdrant" && (
+                    <div className="grid gap-3 sm:grid-cols-2">
+                        <label className="grid gap-1 text-xs">
+                            {t("internalBot.retrieval.external_url")}
+                            <Input name="external_url" type="url" required defaultValue={String(settings.external_url ?? "")} />
+                        </label>
+                        <label className="grid gap-1 text-xs">
+                            {t("internalBot.retrieval.external_api_key")}
+                            <Input
+                                name="external_api_key"
+                                type="password"
+                                autoComplete="off"
+                                defaultValue={String(settings.external_api_key ?? "")}
+                            />
+                        </label>
+                    </div>
+                )}
                 <div className="grid gap-3 sm:grid-cols-2">
                     {numeric("dimensions", 1536, 1, 65536)}
                     {select("splitter.type", "recursive", ["recursive", "character", "markdown"])}
