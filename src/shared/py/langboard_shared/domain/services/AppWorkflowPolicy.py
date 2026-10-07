@@ -2,6 +2,7 @@
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from types import MappingProxyType
 from typing import Literal
 from ..models import ProjectColumn, WorkflowStageDefinition
 
@@ -19,6 +20,15 @@ class WorkflowRequirements:
 
 GITHUB_WORKFLOW_REQUIREMENTS = WorkflowRequirements(("active", "review", "closed"), ("ready",))
 GLITCHTIP_WORKFLOW_REQUIREMENTS = WorkflowRequirements(("active", "review", "closed"))
+
+# Host-owned presets. Unknown providers cannot grant transitions by supplying a
+# smaller requirements object. Other providers join after their contract exists.
+APP_WORKFLOW_REQUIREMENTS = MappingProxyType(
+    {
+        "github": GITHUB_WORKFLOW_REQUIREMENTS,
+        "glitchtip": GLITCHTIP_WORKFLOW_REQUIREMENTS,
+    }
+)
 
 
 @dataclass(frozen=True)
