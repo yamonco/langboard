@@ -354,3 +354,61 @@ def test_native_http_app_metadata_is_authenticated_and_sanitized(installation, m
         assert result.status_code == 200, result.text
         assert result.json()["installation_url"] == "https://github.com/apps/langboard-fixture/installations/new"
         assert "must-not-return" not in result.text and "secret://" not in result.text
+
+
+@pytest.mark.parametrize("failure", [None, "external", "host_revoke", "stale"])
+def test_explicit_health_refresh_preserves_selection_and_foreign_board(installation, failure):
+    from langboard.apps.GitHubResources import GitHubResourceConflict, get_resources, refresh_resources
+    from langboard_shared.domain.models import AppResourceBinding, BoardAppBinding
+    from sqlalchemy import select
+
+    service, board, connection, calls, responses = installation
+    with DbSession.use(readonly=False) as db:
+        own = BoardAppBinding(project_id=board[2].id, app_key="github", workflow_mapping={"active": "column"})
+        foreign = BoardAppBinding(project_id=11, app_key="github")
+        db.insert(own)
+        db.insert(foreign)
+        for binding in [own, foreign]:
+            db.insert(
+                AppResourceBinding(
+                    board_binding_id=binding.id,
+                    connection_id=connection.id,
+                    resource_type="repository",
+                    external_resource_id="99",
+                    resource_path=[
+                        {"type": "installation", "id": "17"},
+                        {"type": "account", "id": "7"},
+                        {"type": "repository", "id": "99"},
+                    ],
+                    access_state="granted",
+                    health="unknown",
+                )
+            )
+    snapshot = get_resources(service, board[1], board[2].get_uid())
+    if failure == "external":
+        responses["status"] = 403
+    elif failure == "host_revoke":
+        responses["revoke_host"] = True
+    if failure in {"host_revoke", "stale"}:
+        with pytest.raises(GitHubResourceConflict):
+            refresh_resources(
+                service,
+                board[1],
+                board[2].get_uid(),
+                connection.get_uid(),
+                "0" * 64 if failure == "stale" else snapshot["revision"],
+            )
+    else:
+        result = refresh_resources(service, board[1], board[2].get_uid(), connection.get_uid(), snapshot["revision"])
+        assert result["items"][0]["selected"]
+        assert result["items"][0]["health"] == ("healthy" if failure is None else "unavailable")
+        assert result["items"][0]["access_state"] == ("granted" if failure is None else "unknown")
+    with DbSession.use(readonly=False) as db:
+        untouched = db.exec(
+            select(AppResourceBinding).where(AppResourceBinding.board_binding_id == foreign.id)
+        ).first()[0]
+        persisted = db.exec(select(BoardAppBinding).where(BoardAppBinding.id == own.id)).first()[0]
+        assert untouched.is_selected and untouched.health == "unknown"
+        assert persisted.state == "disabled" and persisted.workflow_mapping == {"active": "column"}
+    if failure == "stale":
+        assert not calls

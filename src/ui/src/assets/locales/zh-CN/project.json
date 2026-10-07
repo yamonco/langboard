@@ -192,6 +192,8 @@
     "Existing GitHub connection": "现有 GitHub 连接",
     "Create new GitHub connection": "创建新连接",
     "Current GitHub connection": "当前连接",
-    "More GitHub connections": "更多连接"
+    "More GitHub connections": "更多连接",
+    "Refresh GitHub resource health": "刷新仓库状态",
+    "GitHub health refreshed": "已刷新资源状态，请查看 App 资源状态。"
   }
 }
