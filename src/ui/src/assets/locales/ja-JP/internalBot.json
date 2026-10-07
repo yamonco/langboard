@@ -32,6 +32,7 @@
     "splitter.strip_headers": "チャンク本文から見出しを削除",
     "overlap_error": "重複はチャンクサイズ未満にしてください。",
     "separators_error": "各32文字以内の文字列を1～16個指定し、最後は空文字列にしてください。",
-    "headers_error": "Markdown 見出しレベルを1つ以上選択してください。"
+    "headers_error": "Markdown 見出しレベルを1つ以上選択してください。",
+    "header_level": "見出し {{level}}"
   }
 }

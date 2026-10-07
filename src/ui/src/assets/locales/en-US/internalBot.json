@@ -32,6 +32,7 @@
     "splitter.strip_headers": "Remove headers from chunk text",
     "overlap_error": "Overlap must be smaller than chunk size.",
     "separators_error": "Use 1–16 strings, each at most 32 characters; the final separator must be an empty string.",
-    "headers_error": "Select at least one Markdown header level."
+    "headers_error": "Select at least one Markdown header level.",
+    "header_level": "Heading {{level}}"
   }
 }

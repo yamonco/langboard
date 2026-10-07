@@ -32,6 +32,7 @@
     "splitter.strip_headers": "从分块正文中移除标题",
     "overlap_error": "重叠必须小于分块大小。",
     "separators_error": "请输入1–16个不超过32字符的字符串，最后一个分隔符必须为空字符串。",
-    "headers_error": "请选择至少一个 Markdown 标题级别。"
+    "headers_error": "请选择至少一个 Markdown 标题级别。",
+    "header_level": "标题 {{level}}"
   }
 }
