@@ -180,6 +180,7 @@ function ResizableSidebar({
                     className="group/sidebar border-r transition-all data-[resizing=true]:transition-none"
                     style={{ maxWidth: `${isCollapsed ? collapsedWidth : initialWidth}px` }}
                     data-collapsed={isCollapsed ? "true" : "false"}
+                    data-workbench-sidebar=""
                     id={sidebarIdRef.current}
                     hidden={hidden}
                 >

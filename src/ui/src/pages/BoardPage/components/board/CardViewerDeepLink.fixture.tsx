@@ -12,6 +12,7 @@ import { BoardController } from "@/core/providers/BoardController";
 import BoardCardPage from "@/pages/BoardPage/BoardCardPage";
 import useAuthStore from "@/core/stores/AuthStore";
 import { AuthUser } from "@/core/models";
+import ResizableSidebar from "@/components/ResizableSidebar";
 import Floating from "@/components/base/Floating";
 import CardFlipTray from "@/pages/BoardPage/components/card/CardFlipTray";
 import { SkeletonBoard } from "@/pages/BoardPage/components/board/Board";
@@ -182,7 +183,7 @@ function BoardRouteFixture(): React.JSX.Element {
         return <SkeletonBoard />;
     }
 
-    return (
+    const content = (
         <div className="flex h-[100dvh] w-full flex-col">
             {hasUser ? (
                 <div className="relative min-w-0 flex-1">
@@ -196,6 +197,13 @@ function BoardRouteFixture(): React.JSX.Element {
                 <SkeletonBoard />
             )}
         </div>
+    );
+    return query.has("sidebar") ? (
+        <ResizableSidebar initialWidth={280} defaultCollapsed={false} floatingHidden main={content}>
+            <p>Fixture Explorer</p>
+        </ResizableSidebar>
+    ) : (
+        content
     );
 }
 

@@ -24,7 +24,7 @@ function Sidebar({ navs, main, floatingIcon = "plus", floatingTitle = "common.Ac
                 )}
                 data-collapsed={isCollapsed}
             >
-                <Box position="relative" display={{ initial: "hidden", md: "block" }} size="full">
+                <Box position="relative" display={{ initial: "hidden", md: "block" }} size="full" data-workbench-sidebar="">
                     <aside
                         className={cn(
                             "sticky z-50 flex size-full flex-col items-start border-r text-sm font-medium transition-all duration-100",
