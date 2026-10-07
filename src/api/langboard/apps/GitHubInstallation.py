@@ -1,5 +1,6 @@
 """Re-read installation and repository authority from GitHub before binding."""
 
+import hashlib
 import json
 import time
 import httpx
@@ -16,6 +17,22 @@ API = "https://api.github.com"
 HEADERS = {"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2026-03-10"}
 
 
+def connection_revision(connection):
+    return hashlib.sha256(
+        json.dumps(
+            {
+                "id": int(connection.id),
+                "owner": int(connection.owner_id),
+                "app": connection.app_key,
+                "credential": connection.credential_reference,
+                "state": connection.state,
+                "account": connection.external_account_id,
+            },
+            sort_keys=True,
+        ).encode()
+    ).hexdigest()
+
+
 def inspect_installation(
     service: DomainService,
     actor: User,
@@ -24,10 +41,18 @@ def inspect_installation(
     installation_id: int,
     account_id: int,
     page: int = 1,
+    repository_ids: tuple[int, ...] | None = None,
 ) -> dict:
     if type(installation_id) is not int or installation_id <= 0 or type(account_id) is not int or account_id <= 0:
         raise GitHubManifestUnavailable()
     if type(page) is not int or not 1 <= page <= 10000:
+        raise GitHubManifestUnavailable()
+    if repository_ids is not None and (
+        not repository_ids
+        or len(repository_ids) > 25
+        or any(type(uid) is not int or uid <= 0 for uid in repository_ids)
+        or len(set(repository_ids)) != len(repository_ids)
+    ):
         raise GitHubManifestUnavailable()
     _board(service, actor, project_uid)
     with DbSession.use(readonly=False) as db:
@@ -76,7 +101,10 @@ def inspect_installation(
             response = client.post(
                 f"{API}/app/installations/{installation_id}/access_tokens",
                 headers={**HEADERS, "Authorization": "Bearer " + app_token},
-                json={"permissions": {"metadata": "read"}},
+                json={
+                    "permissions": {"metadata": "read"},
+                    **({"repository_ids": list(repository_ids)} if repository_ids is not None else {}),
+                },
             )
             if response.status_code != 201:
                 raise GitHubManifestUnavailable()
@@ -111,6 +139,12 @@ def inspect_installation(
                             "archived": repository.get("archived") is True,
                         }
                     )
+                if repository_ids is not None and (
+                    {item["id"] for item in items} != set(repository_ids)
+                    or len(items) != len(repository_ids)
+                    or count != len(repository_ids)
+                ):
+                    raise GitHubManifestUnavailable()
             finally:
                 # Ephemeral access token is never persisted or returned. Failure
                 # to revoke prevents successful inspection; no leaked token errors.
@@ -127,6 +161,7 @@ def inspect_installation(
                 raise GitHubManifestUnavailable()
         return {
             "connection_uid": connection.get_uid(),
+            "connection_revision": connection_revision(connection),
             "installation_id": installation_id,
             "account": {"id": account_id, "login": account["login"], "type": account["type"]},
             "repositories": items,

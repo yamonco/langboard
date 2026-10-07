@@ -8,7 +8,7 @@ from langboard_shared.domain.models import User
 from langboard_shared.domain.services import DomainService
 from langboard_shared.Env import Env
 from langboard_shared.security import Auth
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StrictInt
 from ...apps.GitHubManifest import COOKIE, TTL, GitHubManifestUnavailable, begin_manifest, complete_manifest
 
 
@@ -93,3 +93,66 @@ def get_github_installation_repositories(
     except GitHubManifestUnavailable:
         raise ApiException.NotFound_404() from None
     return JsonResponse(content=result)
+
+
+class GitHubResourceDelta(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    connection_uid: str = Field(min_length=1, max_length=11)
+    installation_id: int = Field(strict=True, gt=0)
+    account_id: int = Field(strict=True, gt=0)
+    add: list[StrictInt] = Field(default_factory=list, max_length=25)
+    remove: list[StrictInt] = Field(default_factory=list, max_length=25)
+    expected_revision: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
+@AppRouter.api.get(
+    "/board/{project_uid}/settings/apps/github/resources",
+    tags=["Board.Settings"],
+    responses=OpenApiSchema().auth().get(),
+)
+@AuthFilter.add("user")
+def get_github_resources(
+    project_uid: str, user: User = Auth.scope("user"), service: DomainService = DomainService.scope()
+) -> JsonResponse:
+    from ...apps.GitHubResources import get_resources
+
+    try:
+        return JsonResponse(content=get_resources(service, user, project_uid))
+    except GitHubManifestUnavailable:
+        raise ApiException.NotFound_404() from None
+
+
+@AppRouter.api.put(
+    "/board/{project_uid}/settings/apps/github/resources",
+    tags=["Board.Settings"],
+    responses=OpenApiSchema().auth().get(),
+)
+@AuthFilter.add("user")
+def save_github_resources(
+    project_uid: str,
+    form: GitHubResourceDelta,
+    user: User = Auth.scope("user"),
+    service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    from ...apps.GitHubResources import GitHubResourceConflict, update_resources
+
+    try:
+        return JsonResponse(
+            content=update_resources(
+                service,
+                user,
+                project_uid,
+                form.connection_uid,
+                form.installation_id,
+                form.account_id,
+                tuple(form.add),
+                tuple(form.remove),
+                form.expected_revision,
+            )
+        )
+    except GitHubManifestUnavailable:
+        raise ApiException.NotFound_404() from None
+    except GitHubResourceConflict:
+        raise ApiException.Conflict_409() from None
+    except ValueError:
+        raise ApiException.BadRequest_400() from None

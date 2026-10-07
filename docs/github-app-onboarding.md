@@ -27,9 +27,9 @@ private key or webhook URL is required by this registration path.
 
 ## Remaining acceptance
 
-Board Apps UI form submission and return handling, authenticated installation
-account/organization/each-repository API verification, multi-repository selection,
-resource binding, reinstall/uninstall lifecycle and webhook processing remain
+Board Apps UI form submission and return handling, live installation acceptance,
+installation callback state, UI multi-repository selection, reinstall/uninstall
+lifecycle and webhook processing remain
 pending. Store onboarding availability must remain false until these paths work.
 Current tests use actual native authentication, SQLite/PostgreSQL storage and
 mock GitHub transport, not live GitHub installation acceptance. No production
@@ -55,6 +55,25 @@ not tokens or arbitrary external URLs. Inspection does not create a Binding or
 mark the Connection connected.
 
 Tests sign and verify actual RSA JWTs with mock GitHub transport. Live GitHub
-acceptance, installation callback state, UI account selection and selected-repository
-Binding remain pending. API verification supplements the earlier Manifest flow;
+acceptance, installation callback state and UI account/repository selection
+remain pending. API verification supplements the earlier Manifest flow;
 it does not claim the remaining acceptance list is complete.
+
+## Incremental repository resources
+
+Authenticated GET and PUT `/board/{uid}/settings/apps/github/resources` share
+current board update authority. GET returns repository resource metadata and a
+snapshot revision. PUT accepts one current-owner Connection, installation/account
+identity, up to 25 positive IDs to add and 25 to remove, and `expected_revision`.
+Empty, overlapping or duplicate deltas are rejected. Additions mint a metadata-only
+token restricted to the requested IDs and require an exact returned ID set and
+count; the token is revoked before persistence. Missing, substituted or duplicate
+external repositories fail without changing selection.
+
+The transaction locks the board, Connection and Binding and rejects stale resource
+snapshots or changed Connection identity. Removal only deselects the targeted
+board/Connection repository; re-addition reuses its existing row. Other repositories
+and other boards remain intact. New Binding stays disabled; resource access does
+not grant workflow capabilities, enable webhook processing or connect the App.
+No schema migration is added by this delta. SQLite/PostgreSQL regression covers
+preservation, re-selection and stale-edit rejection with mock GitHub transport.
