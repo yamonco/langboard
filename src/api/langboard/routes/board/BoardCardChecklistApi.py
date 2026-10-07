@@ -1,4 +1,4 @@
-from fastapi import status
+from fastapi import Request, status
 from langboard_shared.core.filter import AuthFilter
 from langboard_shared.core.routing import (
     ApiErrorCode,
@@ -18,6 +18,7 @@ from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.domain.services import DomainService
 from langboard_shared.filter import RoleFilter
 from langboard_shared.security import Auth, RoleFinder
+from .CardAccess import require_card_child, require_visible_card
 from .forms import CardChecklistNotifyForm, CardCheckRelatedForm, ChangeRootOrderForm
 
 
@@ -61,7 +62,14 @@ from .forms import CardChecklistNotifyForm, CardCheckRelatedForm, ChangeRootOrde
 )
 @RoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
 @AuthFilter.add()
-def get_card_checklists(card_uid: str, service: DomainService = DomainService.scope()) -> JsonResponse:
+def get_card_checklists(
+    project_uid: str,
+    card_uid: str,
+    request: Request,
+    user_or_bot: User | Bot = Auth.scope("all"),
+    service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    require_visible_card(project_uid, card_uid, request, user_or_bot, service)
     checklists = service.checklist.get_api_list_by_card(card_uid)
     return JsonResponse(content={"checklists": checklists})
 
@@ -80,10 +88,12 @@ def get_card_checklists(card_uid: str, service: DomainService = DomainService.sc
 def create_checklist(
     project_uid: str,
     card_uid: str,
+    request: Request,
     form: CardCheckRelatedForm,
     user_or_bot: User | Bot = Auth.scope("all"),
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
+    require_visible_card(project_uid, card_uid, request, user_or_bot, service)
     result = service.checklist.create(user_or_bot, project_uid, card_uid, form.title)
     if not result:
         raise ApiException.NotFound_404(ApiErrorCode.NF2003)
@@ -111,11 +121,14 @@ def create_checklist(
 def create_checkitem(
     project_uid: str,
     card_uid: str,
+    request: Request,
     checklist_uid: str,
     form: CardCheckRelatedForm,
     user_or_bot: User | Bot = Auth.scope("all"),
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
+    card = require_visible_card(project_uid, card_uid, request, user_or_bot, service)
+    require_card_child(card, Checklist, checklist_uid)
     result = service.checkitem.create(user_or_bot, project_uid, card_uid, checklist_uid, form.title)
     if not result:
         raise ApiException.NotFound_404(ApiErrorCode.NF2010)
@@ -137,11 +150,14 @@ def create_checkitem(
 def notify_checklist(
     project_uid: str,
     card_uid: str,
+    request: Request,
     checklist_uid: str,
     form: CardChecklistNotifyForm,
     user_or_bot: User | Bot = Auth.scope("all"),
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
+    card = require_visible_card(project_uid, card_uid, request, user_or_bot, service)
+    require_card_child(card, Checklist, checklist_uid)
     result = service.checklist.notify(user_or_bot, project_uid, card_uid, checklist_uid, form.user_uids)
     if not result:
         raise ApiException.NotFound_404(ApiErrorCode.NF2010)
@@ -170,11 +186,14 @@ def notify_checklist(
 def change_checklist_title(
     project_uid: str,
     card_uid: str,
+    request: Request,
     checklist_uid: str,
     form: CardCheckRelatedForm,
     user_or_bot: User | Bot = Auth.scope("all"),
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
+    card = require_visible_card(project_uid, card_uid, request, user_or_bot, service)
+    require_card_child(card, Checklist, checklist_uid)
     result = service.checklist.change_title(user_or_bot, project_uid, card_uid, checklist_uid, form.title)
     if not result:
         raise ApiException.NotFound_404(ApiErrorCode.NF2010)
@@ -194,10 +213,14 @@ def change_checklist_title(
 def change_checklist_order(
     project_uid: str,
     card_uid: str,
+    request: Request,
     checklist_uid: str,
     form: ChangeRootOrderForm,
+    user_or_bot: User | Bot = Auth.scope("all"),
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
+    card = require_visible_card(project_uid, card_uid, request, user_or_bot, service)
+    require_card_child(card, Checklist, checklist_uid)
     result = service.checklist.change_order(project_uid, card_uid, checklist_uid, form.order)
     if not result:
         raise ApiException.NotFound_404(ApiErrorCode.NF2010)
@@ -217,10 +240,13 @@ def change_checklist_order(
 def toggle_checklist_checked(
     project_uid: str,
     card_uid: str,
+    request: Request,
     checklist_uid: str,
     user_or_bot: User | Bot = Auth.scope("all"),
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
+    card = require_visible_card(project_uid, card_uid, request, user_or_bot, service)
+    require_card_child(card, Checklist, checklist_uid)
     result = service.checklist.toggle_checked(user_or_bot, project_uid, card_uid, checklist_uid)
     if not result:
         raise ApiException.NotFound_404(ApiErrorCode.NF2010)
@@ -247,10 +273,13 @@ def toggle_checklist_checked(
 def delete_checklist(
     project_uid: str,
     card_uid: str,
+    request: Request,
     checklist_uid: str,
     user_or_bot: User | Bot = Auth.scope("all"),
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
+    card = require_visible_card(project_uid, card_uid, request, user_or_bot, service)
+    require_card_child(card, Checklist, checklist_uid)
     result = service.checklist.delete(user_or_bot, project_uid, card_uid, checklist_uid)
     if not result:
         raise ApiException.NotFound_404(ApiErrorCode.NF2010)
