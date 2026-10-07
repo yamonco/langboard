@@ -19,6 +19,7 @@ class ToolAnnotationTransform(Transform):
 READ_ONLY_TOOLS = frozenset(
     {
         "get_secret_reference_metadata",
+        "get_secret_input_status",
         "diagnose_connection",
         "get_projects",
         "get_starred_projects",
