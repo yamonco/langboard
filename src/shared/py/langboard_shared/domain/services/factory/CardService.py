@@ -837,13 +837,16 @@ class CardService(BaseDomainService):
         self,
         project: TProjectParam | None,
         user_or_bot: TUserOrBot | None = None,
+        *,
+        channel: CollaborationChannel = CollaborationChannel.Api,
     ) -> list[dict[str, Any]]:
-        project = InfraHelper.get_by_id_like(Project, project)
-        if not project:
+        resolved = self.resolve_visibility_context(project, user_or_bot, channel)
+        if resolved is None:
             return []
+        project, context = resolved
 
-        records = self.repo.card.get_all_by_project(project)
-        work_states = self.get_work_states([card for card, _ in records])
+        records = self.repo.card.get_all_by_project(project, context=context)
+        work_states = self.get_work_states([card for card, _ in records], context=context)
         resource_payloads = self._get_linked_resource_payloads(
             user_or_bot,
             project,

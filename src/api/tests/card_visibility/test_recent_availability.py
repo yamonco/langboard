@@ -76,8 +76,9 @@ def test_recent_cards_revalidate_actor_and_filter_visibility_before_return(monke
             card=CardRepository(lambda _: None, lambda _: None),
             project_assigned_user=ProjectAssignedUserRepository(lambda _: None, lambda _: None),
         )
+        content_reader = SimpleNamespace(api_blocks_by_cards=lambda ids: {card_id: [{"uid": str(card_id)}] for card_id in ids})
         scim = SimpleNamespace(is_employee=lambda user: False)
-        service = CardService(lambda _: scim, lambda _: None, repository)
+        service = CardService(lambda cls: content_reader if cls.__name__ == "CardContentBlockService" else scim, lambda _: None, repository)
         uids = [card.get_uid() for card in cards]
         for channel in CollaborationChannel:
             expected = {uids[0], uids[2]} if channel in (CollaborationChannel.HumanUI, CollaborationChannel.Mcp) else {uids[0]}
@@ -109,6 +110,11 @@ def test_recent_cards_revalidate_actor_and_filter_visibility_before_return(monke
             assert api_cards[0]["work_state"] == {"scoped": True}
             assert (cursor is not None) == (len(expected) > 1)
             assert service.get_api_page_by_project(project, 1, user_or_bot=None, channel=channel) is None
+            settings_cards = service.get_api_list_by_project(project, member, channel=channel)
+            assert {row["uid"] for row in settings_cards} == expected
+            assert all(row["content_blocks"][0]["uid"] in {str(card.id) for card in cards if card.get_uid() in expected} for row in settings_cards)
+            assert service.get_api_list_by_project(project, None, channel=channel) == []
+
 
             for candidate in cards:
                 resolved_card = service.resolve_readable_card(project, candidate, member, channel)
@@ -167,6 +173,7 @@ def test_recent_cards_revalidate_actor_and_filter_visibility_before_return(monke
             inactive.activated_at = None
             db.update(inactive)
         assert member.activated_at is not None
+        assert service.get_api_list_by_project(project, member, channel=CollaborationChannel.Mcp) == []
         assert service.get_api_page_by_project(project, 1, user_or_bot=member, channel=CollaborationChannel.Mcp) is None
         assert service.resolve_readable_card(project, cards[0], member, CollaborationChannel.Mcp) is None
         assert service.get_existing_uids(project, uids, user=member, channel=CollaborationChannel.Mcp) == []
@@ -179,6 +186,7 @@ def test_recent_cards_revalidate_actor_and_filter_visibility_before_return(monke
             db.delete(assignment)
         assert service.get_existing_uids(project, uids, user=member, channel=CollaborationChannel.Mcp) == []
         assert service.get_api_page_by_project(project, 1, user_or_bot=member, channel=CollaborationChannel.Mcp) == ([], 0, None)
+        assert service.get_api_list_by_project(project, member, channel=CollaborationChannel.Mcp) == []
         assert set(service.get_existing_uids(project, uids, user=owner, channel=CollaborationChannel.HumanUI)) == {uids[0], uids[3]}
         with DbSession.use(readonly=False) as db:
             removed_project = project.model_copy(deep=True)
