@@ -141,6 +141,16 @@
     "New workflow column name": "新工作流列名称",
     "Create column with stage": "创建带阶段的列",
     "Replace column stage warning": "更改阶段会改变此看板所有应用中的列含义。",
-    "Confirm stage replacement": "确认更改阶段"
+    "Confirm stage replacement": "确认更改阶段",
+    "Apps": "应用",
+    "Back to App Store": "返回应用商店",
+    "App Store": "应用商店",
+    "App Store help": "浏览看板集成并配置工作流。",
+    "App github summary": "代码仓库、拉取请求和审核工作流。",
+    "App glitchtip summary": "项目、问题和解决工作流。",
+    "App dokploy summary": "项目、环境和应用程序。",
+    "App connection setup pending": "外部连接设置尚未提供。",
+    "App workflow contract pending": "工作流契约准备中",
+    "Configure workflow": "配置工作流"
   }
 }
