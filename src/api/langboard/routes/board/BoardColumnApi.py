@@ -95,7 +95,16 @@ def create_project_column(
     user_or_bot: User | Bot = Auth.scope("all"),
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
-    column = service.project_column.create(user_or_bot, project_uid, form.name, description=form.description)
+    try:
+        column = service.project_column.create(
+            user_or_bot,
+            project_uid,
+            form.name,
+            description=form.description,
+            workflow_stage=form.workflow_stage,
+        )
+    except ValueError as exc:
+        raise ApiException.BadRequest_400(ApiErrorCode.VA0000) from exc
     if not column:
         raise ApiException.NotFound_404(ApiErrorCode.NF2001)
 

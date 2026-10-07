@@ -26,3 +26,33 @@ for (const width of [1440, 390]) {
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     });
 }
+
+for (const width of [1440, 390]) {
+    for (const create of [false, true]) {
+        test(`repair missing stage ${create ? "create" : "assign"} at ${width}px`, async ({ page }) => {
+            await page.setViewportSize({ width, height: 850 });
+            await page.goto(`${path}?missing`);
+            if (create) {
+                await page.getByRole("textbox", { name: "New workflow column name" }).fill("In progress");
+                await page.getByRole("button", { name: "Create column with stage" }).click();
+            } else {
+                await page.getByRole("combobox", { name: "Existing column for stage" }).selectOption("two");
+                await page.getByRole("button", { name: "Assign stage to column" }).click();
+            }
+            await expect(page.getByRole("textbox", { name: "New workflow column name" })).toHaveCount(0);
+            const writes = await page.evaluate(() => (window as unknown as { workflowWrites: unknown[] }).workflowWrites);
+            expect(writes).toEqual([
+                create
+                    ? { name: "In progress", workflow_stage: "active", url: "/board/fixture/column" }
+                    : { workflow_stage: "active", url: "/board/fixture/column/two/workflow-stage" },
+            ]);
+            expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+        });
+    }
+}
+test("read-only users cannot repair missing stages", async ({ page }) => {
+    await page.goto(`${path}?missing&readonly`);
+    await expect(page.getByRole("combobox", { name: "Existing column for stage" })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Assign stage to column" })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Create column with stage" })).toBeDisabled();
+});

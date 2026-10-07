@@ -135,6 +135,10 @@
     "Mapping invalid": "기존 매핑을 확인하세요.",
     "Save workflow mapping": "매핑 저장",
     "Prepare workflow settings": "워크플로우 설정 준비",
-    "Discard workflow changes": "변경 취소"
+    "Discard workflow changes": "변경 취소",
+    "Existing column for stage": "스테이지를 지정할 기존 칼럼",
+    "Assign stage to column": "칼럼에 스테이지 지정",
+    "New workflow column name": "새 워크플로우 칼럼 이름",
+    "Create column with stage": "스테이지와 함께 칼럼 생성"
   }
 }

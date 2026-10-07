@@ -11,7 +11,8 @@ class ColumnForm(BaseFormModel):
 class CreateColumnForm(BaseFormModel):
     """Create a named column with optional workflow guidance."""
 
-    name: str = Field(..., description="Project column name")
+    name: str = Field(..., min_length=1, max_length=100, description="Project column name")
+    workflow_stage: str | None = Field(default=None, max_length=64, pattern=r"^[a-z][a-z0-9_]{0,63}$")
     description: str = Field(default="", max_length=4096, description="When cards should enter this column")
 
 
