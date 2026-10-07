@@ -23,6 +23,7 @@ export default function BoardSettingsAppWorkflow() {
     const [dirty, setDirty] = useState(false);
     const [draftRevision, setDraftRevision] = useState<string | null>(null);
     const [repairColumns, setRepairColumns] = useState<Record<string, string>>({});
+    const [replacement, setReplacement] = useState<{ stage: string; columnUID: string } | null>(null);
     const [newNames, setNewNames] = useState<Record<string, string>>({});
     const [error, setError] = useState(false);
     const { query } = useQueryMutation();
@@ -40,6 +41,7 @@ export default function BoardSettingsAppWorkflow() {
     useEffect(() => {
         setRepairColumns({});
         setNewNames({});
+        setReplacement(null);
     }, [app]);
     const save = async () => {
         if (pending || !canEditBasicInfo || !data) return;
@@ -62,11 +64,17 @@ export default function BoardSettingsAppWorkflow() {
             setPending(false);
         }
     };
-    const repair = async (stage: string, create: boolean) => {
+    const repair = async (stage: string, create: boolean, confirmed = false) => {
         if (pending || dirty || !canEditBasicInfo || !data?.binding) return;
         const columnUID = repairColumns[stage];
         const name = newNames[stage]?.trim();
         if (create ? !name : !columnUID) return;
+        const currentColumn = data.available_columns.find((column) => column.uid === columnUID);
+        if (!create && currentColumn?.workflow_stage && currentColumn.workflow_stage !== stage && !confirmed) {
+            setReplacement({ stage, columnUID });
+            return;
+        }
+        setReplacement(null);
         setPending(true);
         setError(false);
         try {
@@ -144,7 +152,10 @@ export default function BoardSettingsAppWorkflow() {
                                             className="min-w-0 rounded-md border border-input bg-background p-2"
                                             value={repairColumns[choice.stage] ?? ""}
                                             disabled={!canEditBasicInfo || pending || dirty || !data.binding}
-                                            onChange={(event) => setRepairColumns((current) => ({ ...current, [choice.stage]: event.target.value }))}
+                                            onChange={(event) => {
+                                                setReplacement(null);
+                                                setRepairColumns((current) => ({ ...current, [choice.stage]: event.target.value }));
+                                            }}
                                         >
                                             <option value="">{t("project.settings.Select column")}</option>
                                             {(data.available_columns ?? []).map((column) => (
@@ -165,6 +176,25 @@ export default function BoardSettingsAppWorkflow() {
                                         >
                                             {t("project.settings.Assign stage to column")}
                                         </Button>
+                                        {replacement?.stage === choice.stage && replacement.columnUID === repairColumns[choice.stage] && (
+                                            <div className="flex flex-col gap-2 rounded-md bg-muted p-2">
+                                                <p role="status" className="text-xs">
+                                                    {t("project.settings.Replace column stage warning")}
+                                                </p>
+                                                <Button
+                                                    type="button"
+                                                    size="sm"
+                                                    variant="outline"
+                                                    disabled={!canEditBasicInfo || pending || dirty || !data.binding}
+                                                    onClick={() => void repair(choice.stage, false, true)}
+                                                >
+                                                    {t("project.settings.Confirm stage replacement")}
+                                                </Button>
+                                                <Button type="button" size="sm" variant="ghost" onClick={() => setReplacement(null)}>
+                                                    {t("common.Cancel")}
+                                                </Button>
+                                            </div>
+                                        )}
                                         <input
                                             aria-label={t("project.settings.New workflow column name")}
                                             className="min-w-0 rounded-md border border-input bg-background p-2"

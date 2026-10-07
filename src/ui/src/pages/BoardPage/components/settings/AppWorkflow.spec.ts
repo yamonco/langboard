@@ -56,3 +56,16 @@ test("read-only users cannot repair missing stages", async ({ page }) => {
     await expect(page.getByRole("button", { name: "Assign stage to column" })).toBeDisabled();
     await expect(page.getByRole("button", { name: "Create column with stage" })).toBeDisabled();
 });
+
+test("replacing a board-wide stage requires confirmation", async ({ page }) => {
+    await page.goto(`${path}?missing&replace`);
+    await page.getByRole("combobox", { name: "Existing column for stage" }).selectOption("two");
+    await page.getByRole("button", { name: "Assign stage to column" }).click();
+    await expect(page.getByText("Replacing this stage changes")).toBeVisible();
+    expect(await page.evaluate(() => (window as unknown as { workflowWrites: unknown[] }).workflowWrites.length)).toBe(0);
+    await page.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Confirm stage replacement" })).toHaveCount(0);
+    await page.getByRole("button", { name: "Assign stage to column" }).click();
+    await page.getByRole("button", { name: "Confirm stage replacement" }).click();
+    await expect.poll(() => page.evaluate(() => (window as unknown as { workflowWrites: unknown[] }).workflowWrites.length)).toBe(1);
+});

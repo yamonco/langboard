@@ -79,3 +79,81 @@ def test_authenticated_http_workflow_and_current_revocation(board, binding, monk
         with DbSession.use(readonly=False) as db:
             db.delete(board[3])
         assert client.get(url, headers=headers).status_code == 404
+
+
+@pytest.mark.parametrize("board", ["sqlite-http"], indirect=True)
+def test_authenticated_missing_stage_creation_persists_and_resolves(board, binding, monkeypatch):
+    from langboard_shared.core.db import SqlBuilder
+    from langboard.routes.board.BoardColumnApi import create_project_column
+    from langboard_shared.domain.models import ProjectColumn
+    from langboard_shared.domain.services.factory.ProjectColumnService import ProjectColumnService
+    from langboard_shared.infrastructure.repositories import Repository
+
+    monkeypatch.setattr(DbEngine, "get_readonly_engine", DbEngine.get_main_engine)
+    monkeypatch.setattr(Cache, "get", lambda *a, **k: None)
+    monkeypatch.setattr(Cache, "set", lambda *a, **k: None)
+    with DbSession.use(readonly=False) as db:
+        column = board[5][0]
+        column.workflow_stage = None
+        db.update(column)
+        binding.workflow_mapping = {}
+        db.update(binding)
+    repository = Repository()
+    column_service = ProjectColumnService(lambda _: None, lambda _: None, repository)
+    # External socket/activity/bot dispatch is outside this isolated DB test.
+    # Validation, order allocation and persistence use the real service/repository.
+    monkeypatch.setattr(ProjectColumnService, "dispatch_created", lambda *args, **kwargs: None)
+    service = SimpleNamespace(workflow_stage=board[0], project_column=column_service, close=lambda: None)
+    monkeypatch.setattr(
+        importlib.import_module("langboard.middlewares.ApiAuthMiddleware"), "DomainService", lambda: service
+    )
+    app = FastAPI()
+    app.include_router(AppRouter.api)
+    for route in app.routes:
+        if getattr(route, "endpoint", None) in (get_app_workflow_mapping, create_project_column):
+            for dependency in route.dependant.dependencies:
+                if dependency.name == "service":
+                    app.dependency_overrides[dependency.call] = lambda: service
+    app.add_middleware(RoleMiddleware, routes=AppRouter.api.routes)
+    app.add_middleware(ApiAuthMiddleware, routes=AppRouter.api.routes)
+    access, refresh = AuthSecurity.authenticate(board[1].id)
+    headers = {"Authorization": f"Bearer {access}"}
+    board_url = f"/board/{board[2].get_uid()}"
+    with TestClient(app) as client:
+        client.cookies.set(Env.REFRESH_TOKEN_NAME, refresh)
+        url = f"{board_url}/settings/apps/github/workflow"
+        assert client.get(url, headers=headers).json()["choices"][0]["status"] == "missing"
+        assert (
+            client.post(f"{board_url}/column", json={"name": "Started", "workflow_stage": "active"}).status_code == 401
+        )
+        created = client.post(
+            f"{board_url}/column", headers=headers, json={"name": "Started", "workflow_stage": "active"}
+        )
+        assert created.status_code == 201, created.text
+        uid = created.json()["column"]["uid"]
+        snapshot = client.get(url, headers=headers).json()
+        assert snapshot["choices"][0]["status"] == "resolved"
+        assert snapshot["choices"][0]["column_uid"] == uid
+        assert snapshot["binding"]["stage_transitions_enabled"] is False
+        with DbSession.use(readonly=False) as db:
+            rows = db.exec(SqlBuilder.select.table(ProjectColumn).where(ProjectColumn.name == "Started")).all()
+            assert len(rows) == 1 and rows[0].workflow_stage == "active" and rows[0].project_id == board[2].id
+            stage = board[6][0]
+            stage.is_active = False
+            db.update(stage)
+        assert (
+            client.post(
+                f"{board_url}/column", headers=headers, json={"name": "Invalid", "workflow_stage": "active"}
+            ).status_code
+            == 400
+        )
+        with DbSession.use(readonly=False) as db:
+            assert not db.exec(SqlBuilder.select.table(ProjectColumn).where(ProjectColumn.name == "Invalid")).all()
+            board[4].actions = ["read"]
+            db.update(board[4])
+        assert (
+            client.post(
+                f"{board_url}/column", headers=headers, json={"name": "Denied", "workflow_stage": "review"}
+            ).status_code
+            == 403
+        )
