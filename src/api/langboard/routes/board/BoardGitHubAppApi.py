@@ -69,3 +69,27 @@ def finish_github_manifest(
     response = JsonResponse(content=payload)
     response.delete_cookie(COOKIE, path=f"/board/{project_uid}/settings/apps/github")
     return response
+
+
+@AppRouter.api.get(
+    "/board/{project_uid}/settings/apps/github/installations/{installation_id}/repositories",
+    tags=["Board.Settings"],
+    responses=OpenApiSchema().auth().get(),
+)
+@AuthFilter.add("user")
+def get_github_installation_repositories(
+    project_uid: str,
+    installation_id: int,
+    connection_uid: str,
+    account_id: int,
+    page: int = 1,
+    user: User = Auth.scope("user"),
+    service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    from ...apps.GitHubInstallation import inspect_installation
+
+    try:
+        result = inspect_installation(service, user, project_uid, connection_uid, installation_id, account_id, page)
+    except GitHubManifestUnavailable:
+        raise ApiException.NotFound_404() from None
+    return JsonResponse(content=result)
