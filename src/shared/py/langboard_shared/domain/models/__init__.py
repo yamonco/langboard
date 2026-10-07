@@ -12,6 +12,7 @@ from .Card import Card
 from .CardAssignedProjectLabel import CardAssignedProjectLabel
 from .CardAssignedUser import CardAssignedUser
 from .CardAttachment import CardAttachment
+from .CardDocumentArtifact import CardDocumentArtifact
 from .CardBotDefaultScope import CardBotDefaultScope
 from .CardBotLog import CardBotLog
 from .CardBotSchedule import CardBotSchedule
