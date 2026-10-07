@@ -1,4 +1,4 @@
-from fastapi import File, UploadFile, status
+from fastapi import File, Request, UploadFile, status
 from langboard_shared.core.filter import AuthFilter
 from langboard_shared.core.routing import (
     ApiErrorCode,
@@ -19,6 +19,7 @@ from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.domain.services import DomainService
 from langboard_shared.filter import RoleFilter
 from langboard_shared.security import Auth, RoleFinder, RoleSecurity
+from .CardAccess import require_card_child, require_visible_card
 from .forms import ChangeAttachmentNameForm, ChangeChildOrderForm
 from .forms.Attachment import ProcessAttachmentDocumentForm
 
@@ -41,10 +42,12 @@ from .forms.Attachment import ProcessAttachmentDocumentForm
 def upload_card_attachment(
     project_uid: str,
     card_uid: str,
+    request: Request,
     attachment: UploadFile = File(),
     user: User = Auth.scope("user"),
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
+    require_visible_card(project_uid, card_uid, request, user, service)
     if not attachment:
         raise MissingException("body", "attachment")
 
@@ -72,10 +75,14 @@ def upload_card_attachment(
 def change_attachment_order(
     project_uid: str,
     card_uid: str,
+    request: Request,
     attachment_uid: str,
     form: ChangeChildOrderForm,
+    user: User = Auth.scope("user"),
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
+    card = require_visible_card(project_uid, card_uid, request, user, service)
+    require_card_child(card, CardAttachment, attachment_uid)
     result = service.card_attachment.change_order(project_uid, card_uid, attachment_uid, form.order)
     if not result:
         raise ApiException.NotFound_404(ApiErrorCode.NF2009)
@@ -102,11 +109,14 @@ def change_attachment_order(
 def change_card_attachment_name(
     project_uid: str,
     card_uid: str,
+    request: Request,
     attachment_uid: str,
     form: ChangeAttachmentNameForm,
     user: User = Auth.scope("user"),
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
+    card = require_visible_card(project_uid, card_uid, request, user, service)
+    require_card_child(card, CardAttachment, attachment_uid)
     card_attachment = service.card_attachment.get_by_id_like(attachment_uid)
     if not card_attachment:
         raise ApiException.NotFound_404(ApiErrorCode.NF2009)
@@ -142,10 +152,13 @@ def change_card_attachment_name(
 def delete_card_attachment(
     project_uid: str,
     card_uid: str,
+    request: Request,
     attachment_uid: str,
     user: User = Auth.scope("user"),
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
+    card = require_visible_card(project_uid, card_uid, request, user, service)
+    require_card_child(card, CardAttachment, attachment_uid)
     card_attachment = service.card_attachment.get_by_id_like(attachment_uid)
     if not card_attachment:
         raise ApiException.NotFound_404(ApiErrorCode.NF2009)
@@ -174,10 +187,14 @@ def delete_card_attachment(
 def process_card_attachment_document(
     project_uid: str,
     card_uid: str,
+    request: Request,
     attachment_uid: str,
     form: ProcessAttachmentDocumentForm,
+    user: User = Auth.scope("user"),
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
+    card = require_visible_card(project_uid, card_uid, request, user, service)
+    require_card_child(card, CardAttachment, attachment_uid)
     try:
         if form.mode == "embedding":
             result = service.card_attachment.request_document_embedding(project_uid, card_uid, attachment_uid)

@@ -1,4 +1,4 @@
-from fastapi import status
+from fastapi import Request, status
 from langboard_shared.core.db import EditorContentModel
 from langboard_shared.core.filter import AuthFilter
 from langboard_shared.core.routing import (
@@ -19,6 +19,7 @@ from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.domain.services import DomainService
 from langboard_shared.filter import RoleFilter
 from langboard_shared.security import Auth, RoleFinder
+from .CardAccess import require_card_child, require_visible_card
 from .forms import CreateCardCommentForm, ToggleCardCommentReactionForm
 
 
@@ -34,10 +35,12 @@ from .forms import CreateCardCommentForm, ToggleCardCommentReactionForm
 def add_card_comment(
     project_uid: str,
     card_uid: str,
+    request: Request,
     comment: CreateCardCommentForm,
     user_or_bot: User | Bot = Auth.scope("all"),
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
+    require_visible_card(project_uid, card_uid, request, user_or_bot, service)
     result = service.card_comment.create(
         user_or_bot,
         project_uid,
@@ -79,7 +82,16 @@ def add_card_comment(
 )
 @RoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
 @AuthFilter.add()
-def get_card_comment(card_uid: str, comment_uid: str, service: DomainService = DomainService.scope()) -> JsonResponse:
+def get_card_comment(
+    project_uid: str,
+    card_uid: str,
+    request: Request,
+    comment_uid: str,
+    user_or_bot: User | Bot = Auth.scope("all"),
+    service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    card = require_visible_card(project_uid, card_uid, request, user_or_bot, service)
+    require_card_child(card, CardComment, comment_uid)
     result = service.card_comment.get_as_api(card_uid, comment_uid)
     if not result:
         raise ApiException.NotFound_404(ApiErrorCode.NF2003)
@@ -105,11 +117,14 @@ def get_card_comment(card_uid: str, comment_uid: str, service: DomainService = D
 def update_card_comment(
     project_uid: str,
     card_uid: str,
+    request: Request,
     comment_uid: str,
     comment: EditorContentModel,
     user_or_bot: User | Bot = Auth.scope("all"),
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
+    card = require_visible_card(project_uid, card_uid, request, user_or_bot, service)
+    require_card_child(card, CardComment, comment_uid)
     card_comment = service.card_comment.get_by_id_like(comment_uid)
     if not card_comment:
         raise ApiException.NotFound_404(ApiErrorCode.NF2012)
@@ -139,10 +154,13 @@ def update_card_comment(
 def delete_card_comment(
     project_uid: str,
     card_uid: str,
+    request: Request,
     comment_uid: str,
     user_or_bot: User | Bot = Auth.scope("all"),
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
+    card = require_visible_card(project_uid, card_uid, request, user_or_bot, service)
+    require_card_child(card, CardComment, comment_uid)
     card_comment = service.card_comment.get_by_id_like(comment_uid)
     if not card_comment:
         raise ApiException.NotFound_404(ApiErrorCode.NF2012)
@@ -167,11 +185,14 @@ def delete_card_comment(
 def toggle_reaction_card_comment(
     project_uid: str,
     card_uid: str,
+    request: Request,
     comment_uid: str,
     form: ToggleCardCommentReactionForm,
     user_or_bot: User | Bot = Auth.scope("all"),
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
+    card = require_visible_card(project_uid, card_uid, request, user_or_bot, service)
+    require_card_child(card, CardComment, comment_uid)
     card_comment = service.card_comment.get_by_id_like(comment_uid)
     if not card_comment:
         raise ApiException.NotFound_404(ApiErrorCode.NF2012)

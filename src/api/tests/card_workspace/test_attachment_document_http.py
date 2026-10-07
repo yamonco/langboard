@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 from langboard.middlewares.ApiAuthMiddleware import ApiAuthMiddleware
 from langboard.middlewares.RoleMiddleware import RoleMiddleware
 from langboard.routes.board import BoardCardAttachmentApi
-from langboard_shared.core.routing import AppRouter
+from langboard_shared.core.routing import ApiException, AppRouter
 from langboard_shared.domain.models import User
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.helpers import MiddlewareHelper
@@ -22,6 +22,8 @@ def document_http(monkeypatch):
         "actor": User.model_construct(id=1, is_admin=False, email="fixture@example.invalid"),
         "allowed": False,
         "result": "pending",
+        "visible": True,
+        "child_valid": True,
     }
 
     def process(project, card, attachment, *, reprocess):
@@ -30,7 +32,17 @@ def document_http(monkeypatch):
             raise state["result"]
         return state["result"]
 
-    service = SimpleNamespace(card_attachment=SimpleNamespace(request_document_processing=process), close=lambda: None)
+    def resolve_card(project, card, actor, channel):
+        assert (project, card, actor) == ("board", "card", state["actor"])
+        return (object(), SimpleNamespace(id=1), object()) if state["visible"] else None
+
+    def validate_child(card, model, uid):
+        assert card.id == 1 and uid == "source"
+        if not state["child_valid"]:
+            raise ApiException.NotFound_404()
+
+    monkeypatch.setattr(BoardCardAttachmentApi, "require_card_child", validate_child)
+    service = SimpleNamespace(card=SimpleNamespace(resolve_readable_card=resolve_card), card_attachment=SimpleNamespace(request_document_processing=process), close=lambda: None)
 
     def validate(scope):
         scope["auth"] = state["actor"]
@@ -51,7 +63,8 @@ def document_http(monkeypatch):
     for route in AppRouter.api.routes:
         if getattr(route, "endpoint", None) is BoardCardAttachmentApi.process_card_attachment_document:
             for dependency in route.dependant.dependencies:
-                app.dependency_overrides[dependency.call] = lambda: service
+                if dependency.name == "service":
+                    app.dependency_overrides[dependency.call] = lambda: service
     app.add_middleware(RoleMiddleware, routes=AppRouter.api.routes)
     app.add_middleware(ApiAuthMiddleware, routes=AppRouter.api.routes)
     with TestClient(app) as client:
@@ -80,3 +93,12 @@ def test_document_processing_http_preserves_scope_and_handles_rejection(document
     assert client.post(path, json={}).status_code == 404
     state["result"] = ValueError("Provider not configured")
     assert client.post(path, json={}).status_code == 400
+
+
+@pytest.mark.parametrize("invalid", ["visible", "child_valid"])
+def test_document_http_card_or_child_denial_never_enqueues(document_http, invalid):
+    client, state, calls = document_http
+    state["allowed"] = True
+    state[invalid] = False
+    assert client.post("/board/board/card/card/attachment/source/document-processing", json={}).status_code == 404
+    assert calls == []
