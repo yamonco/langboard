@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import BoardLoadError from "@/pages/BoardPage/BoardLoadError";
 import { AxiosError } from "axios";
 import { api } from "@/core/helpers/Api";
 import { Project } from "@/core/models";
@@ -9,6 +10,8 @@ import useGetCards from "./useGetCards";
 import "@/i18n";
 
 const uid = "project-load-fixture";
+const unavailable = new URLSearchParams(location.search).has("unavailable");
+let projectReads = 0;
 const deny = new URLSearchParams(location.search).has("deny");
 let release: () => void = () => {};
 let reject: () => void = () => {};
@@ -30,6 +33,7 @@ api.defaults.adapter = async (config) => {
             ...response,
             data: { cards: [], columns: [], checklists: [], global_relationships: [], column_bot_scopes: [], column_bot_schedules: [] },
         };
+    if (unavailable && ++projectReads === 1) throw new AxiosError("Canceled transport", "ERR_CANCELED", config);
     if (deny) throw new AxiosError("Forbidden", "ERR_BAD_REQUEST", config, undefined, { ...response, status: 403, data: {} });
     return {
         ...response,
@@ -51,6 +55,7 @@ function Fixture() {
     return (
         <>
             <h1>{result.isError ? "Project denied" : result.data ? "Project ready" : "Project loading"}</h1>
+            {result.error && <BoardLoadError isFetching={result.isFetching} retry={() => void result.refetch()} />}
             {result.data && <Cards />}
             {result.data && <DockRevision project={result.data.project} />}
             <button onClick={() => release()}>Release dock</button>

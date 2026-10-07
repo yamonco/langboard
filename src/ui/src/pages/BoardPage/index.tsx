@@ -16,6 +16,7 @@ import useIsBoardChatAvailableHandlers from "@/controllers/socket/board/chat/use
 import { useSocket } from "@/core/providers/SocketProvider";
 import { useAuth } from "@/core/providers/AuthProvider";
 import { usePageNavigateRef } from "@/core/hooks/usePageNavigate";
+import BoardLoadError from "./BoardLoadError";
 import BoardPage from "@/pages/BoardPage/BoardPage";
 import SuspenseComponent from "@/components/base/SuspenseComponent";
 import { IHeaderNavItem } from "@/components/Header/types";
@@ -125,13 +126,6 @@ const BoardProxy = memo((): React.JSX.Element => {
                     navigate(ROUTES.ERROR(EHttpStatus.HTTP_404_NOT_FOUND), { replace: true });
                 },
             },
-            network: {
-                after: () => {
-                    setTimeout(() => {
-                        refetch();
-                    }, 5000);
-                },
-            },
         });
 
         handle(error);
@@ -159,7 +153,7 @@ const BoardProxy = memo((): React.JSX.Element => {
     }, [data, isFetching, pageRoute, projectUID]);
 
     if (!data) {
-        return <SkeletonBoard />;
+        return error ? <BoardLoadError isFetching={isFetching} retry={() => void refetch()} /> : <SkeletonBoard />;
     }
 
     return (
