@@ -33,3 +33,25 @@ It does not execute arbitrary extension Python, claim an in-process sandbox, or
 provide a dynamic package installation/uninstallation lifecycle. Custom business
 integrations should use the standalone transport SDK against native commands;
 untrusted code requires a separate process and deployment boundary.
+
+## Board Apps declarations
+
+Board Settings Apps discovery uses the immutable host-owned `APP_MANIFESTS`
+registry in `langboard_shared.domain.services.AppManifest`. GitHub, GlitchTip
+and Dokploy declare resource types, supported capability names, native read and
+configuration permission actions, workflow requirements and the v1 signal
+provenance fields. The compact signal declaration describes required envelope
+fields; it is not a payload validator or an installed event consumer.
+
+Declarations are catalog metadata. They do not register Python handlers, grant
+capabilities, enable transitions, create connections or resolve credentials.
+The catalog combines these declarations with current board-owned bindings after
+its existing primary database authority check. Declared capabilities and saved
+`granted_capabilities` remain separate. Unknown App keys cannot mutate bindings.
+Returned lists are copies; clients cannot edit the registry through responses.
+
+Connection onboarding remains unavailable until each provider's authenticated
+installation and resource access verification are implemented. Dokploy currently
+declares read capabilities only; deployment/redeployment writes require a later
+explicit host permission contract. SDK transport and native command composition
+remain the existing extension boundary.
