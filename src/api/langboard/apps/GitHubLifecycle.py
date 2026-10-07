@@ -19,6 +19,7 @@ MAX_BODY = 1024 * 1024
 ACTIONS = {
     "installation": {"created", "deleted", "suspend", "unsuspend", "new_permissions_accepted"},
     "installation_repositories": {"added", "removed"},
+    "ping": {"ping"},
 }
 
 
@@ -31,8 +32,8 @@ class VerifiedLifecycle:
     event: str
     action: str
     app_id: int
-    installation_id: int
-    account_id: int
+    installation_id: int | None
+    account_id: int | None
     added_repository_ids: tuple[int, ...]
     removed_repository_ids: tuple[int, ...]
 
@@ -90,21 +91,34 @@ def verify_lifecycle(service, actor, connection_uid, body: bytes, signature: str
             raise GitHubManifestUnavailable()
         # Decode only after verification of the unmodified bytes.
         payload = json.loads(body)
-        action = payload.get("action")
-        if action not in ACTIONS[event]:
-            raise GitHubManifestUnavailable()
-        installation = payload.get("installation", {})
-        if _positive(installation.get("app_id")) != app_id:
-            raise GitHubManifestUnavailable()
-        account = installation.get("account", {})
-        if account.get("type") not in {"User", "Organization"}:
-            raise GitHubManifestUnavailable()
-        added = _repositories(payload.get("repositories_added", []))
-        removed = _repositories(payload.get("repositories_removed", []))
-        if set(added) & set(removed) or event == "installation" and (added or removed):
-            raise GitHubManifestUnavailable()
-        if event == "installation_repositories" and (action == "added" and removed or action == "removed" and added):
-            raise GitHubManifestUnavailable()
+        if event == "ping":
+            if payload.get("action") is not None or payload.get("installation") is not None:
+                raise GitHubManifestUnavailable()
+            hook_id = _positive(payload.get("hook_id"))
+            hook = payload.get("hook", {})
+            if _positive(hook.get("id", hook_id)) != hook_id:
+                raise GitHubManifestUnavailable()
+            action, installation_id, account_id = "ping", None, None
+            added, removed = (), ()
+        else:
+            action = payload.get("action")
+            if action not in ACTIONS[event]:
+                raise GitHubManifestUnavailable()
+            installation = payload.get("installation", {})
+            if _positive(installation.get("app_id")) != app_id:
+                raise GitHubManifestUnavailable()
+            account = installation.get("account", {})
+            if account.get("type") not in {"User", "Organization"}:
+                raise GitHubManifestUnavailable()
+            installation_id, account_id = _positive(installation.get("id")), _positive(account.get("id"))
+            added = _repositories(payload.get("repositories_added", []))
+            removed = _repositories(payload.get("repositories_removed", []))
+            if set(added) & set(removed) or event == "installation" and (added or removed):
+                raise GitHubManifestUnavailable()
+            if event == "installation_repositories" and (
+                action == "added" and removed or action == "removed" and added
+            ):
+                raise GitHubManifestUnavailable()
         with DbSession.use(readonly=False) as db:
             current = db.exec(SqlBuilder.select.table(AppConnection).where(AppConnection.id == connection.id)).first()
             if current is None or connection_revision(current) != revision:
@@ -117,8 +131,8 @@ def verify_lifecycle(service, actor, connection_uid, body: bytes, signature: str
             event,
             action,
             app_id,
-            _positive(installation.get("id")),
-            _positive(account.get("id")),
+            installation_id,
+            account_id,
             added,
             removed,
         )
@@ -146,8 +160,8 @@ def receive_lifecycle(service, actor, connection_uid, body: bytes, signature: st
             "event": verified.event,
             "action": verified.action,
             "app_id": str(verified.app_id),
-            "installation_id": str(verified.installation_id),
-            "account_id": str(verified.account_id),
+            "installation_id": str(verified.installation_id) if verified.installation_id is not None else "",
+            "account_id": str(verified.account_id) if verified.account_id is not None else "",
             "added_repository_ids": list(verified.added_repository_ids),
             "removed_repository_ids": list(verified.removed_repository_ids),
         }
@@ -174,7 +188,9 @@ def receive_lifecycle(service, actor, connection_uid, body: bytes, signature: st
         return {"receipt_uid": receipt.get_uid(), "duplicate": False}
 
 
-def receive_external_lifecycle(service, body: bytes, signature: str, event: str, delivery_id: str):
+def receive_external_lifecycle(
+    service, body: bytes, signature: str, event: str, delivery_id: str, target_app_id: str | None = None
+):
     """Unverified App ID routes a bounded candidate; only HMAC verification authorizes receipt."""
     try:
         if not isinstance(body, bytes) or not body or len(body) > MAX_BODY:
@@ -184,7 +200,12 @@ def receive_external_lifecycle(service, body: bytes, signature: str, event: str,
         if event not in ACTIONS or str(UUID(delivery_id)) != delivery_id.lower():
             raise GitHubManifestUnavailable()
         candidate = json.loads(body)
-        app_id = _positive(candidate.get("installation", {}).get("app_id"))
+        if event == "ping":
+            if not isinstance(target_app_id, str) or not re.fullmatch(r"[1-9][0-9]{0,19}", target_app_id):
+                raise GitHubManifestUnavailable()
+            app_id = int(target_app_id)
+        else:
+            app_id = _positive(candidate.get("installation", {}).get("app_id"))
         with DbSession.use(readonly=False) as db:
             connections = db.exec(
                 SqlBuilder.select.table(AppConnection)
@@ -209,6 +230,10 @@ def receive_external_lifecycle(service, body: bytes, signature: str, event: str,
 
 def _invalidate_resources(db, receipt):
     """Events invalidate evidence; only a fresh scoped GitHub query can restore access."""
+    if receipt.event == "ping":
+        receipt.invalidated = True
+        db.update(receipt)
+        return
     conditions = [
         AppResourceBinding.connection_id == receipt.connection_id,
         AppResourceBinding.resource_type == "repository",
