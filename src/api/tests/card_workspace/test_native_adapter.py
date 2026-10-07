@@ -983,6 +983,7 @@ def test_project_card_page_resolves_policies_once_for_only_visible_stages():
         workflow_stage=SimpleNamespace(get_api_by_keys=resolve),
     )
     page = NativeCardWorkspaceAdapter(object(), service).get_project_card_page("p", 3, None, None)
+    assert service.card.get_api_page_by_project.call_args.kwargs["channel"] == native_module.CollaborationChannel.Mcp
     resolve.assert_called_once_with({"released"})
     assert page.workflow_stages == {
         "released": {"key": "released", "counts_as_completed": True, "entry_effects": ["stop_running_timers"]}

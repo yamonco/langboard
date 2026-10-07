@@ -83,6 +83,7 @@ def test_paginated_project_cards_include_permission_safe_linked_titles(monkeypat
     project = SimpleNamespace(id=1)
     column = SimpleNamespace(name="Reference")
     linked = SimpleNamespace(
+        id=2,
         is_linked_resource=True,
         api_response=lambda: {"uid": "card-linked", "title": ""},
         get_uid=lambda: "card-linked",
@@ -108,6 +109,8 @@ def test_paginated_project_cards_include_permission_safe_linked_titles(monkeypat
             )
         ),
         _get_linked_resource_payloads=payloads,
+        resolve_visibility_context=lambda *_: (project, object()),
+        get_work_states=lambda cards, **kwargs: {card.id: {} for card in cards},
     )
 
     cards, total_count, next_fields = CardService.get_api_page_by_project(service, project, 10, user_or_bot=actor)

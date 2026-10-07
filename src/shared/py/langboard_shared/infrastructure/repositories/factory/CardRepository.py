@@ -520,6 +520,7 @@ class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
         before_updated_at: SafeDateTime | None = None,
         before_card: TCardParam | None = None,
         *,
+        context: CardVisibilityContext,
         include_closed: bool = True,
         workflow_stages: list[str] | None = None,
     ) -> list[tuple[Card, ProjectColumn]]:
@@ -530,6 +531,8 @@ class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
             SqlBuilder.select.tables(Card, ProjectColumn)
             .join(ProjectColumn, Card.column("project_column_id") == ProjectColumn.column("id"))
             .where(Card.column("project_id") == project_id)
+            .where(ProjectColumn.column("project_id") == project_id)
+            .where(card_visibility_scope(context))
         )
         query = self._filter_project_workflow(query, include_closed, workflow_stages)
         if before_updated_at is not None:
@@ -541,7 +544,7 @@ class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
                 | ((Card.column("updated_at") == before_updated_at) & (Card.column("id") < before_card_id))
             )
         query = query.order_by(Card.column("updated_at").desc(), Card.column("id").desc()).limit(limit + 1)
-        with DbSession.use(readonly=True) as db:
+        with DbSession.use(readonly=False) as db:
             return list(db.exec(query).all())
 
     @staticmethod
@@ -559,7 +562,8 @@ class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
         return query
 
     def count_by_project(
-        self, project: TProjectParam, *, include_closed: bool = True, workflow_stages: list[str] | None = None
+        self, project: TProjectParam, *, context: CardVisibilityContext,
+        include_closed: bool = True, workflow_stages: list[str] | None = None
     ) -> int:
         """Count with the same workflow filters as project pagination."""
         project_id = InfraHelper.convert_id(project)
@@ -567,11 +571,13 @@ class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
             SqlBuilder.select.count(Card, Card.column("id"))
             .join(ProjectColumn, Card.column("project_column_id") == ProjectColumn.column("id"))
             .where(Card.column("project_id") == project_id)
+            .where(ProjectColumn.column("project_id") == project_id)
+            .where(card_visibility_scope(context))
             .where(Card.column("deleted_at").is_(None))
             .where(ProjectColumn.column("deleted_at").is_(None))
         )
         query = self._filter_project_workflow(query, include_closed, workflow_stages)
-        with DbSession.use(readonly=True) as db:
+        with DbSession.use(readonly=False) as db:
             return db.exec(query).first() or 0
 
     def get_all_by_column(self, column: TColumnParam):

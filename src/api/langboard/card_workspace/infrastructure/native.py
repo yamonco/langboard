@@ -317,6 +317,7 @@ class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPor
             before,
             before_card_uid,
             user_or_bot=self._actor,
+            channel=self._channel,
             include_closed=include_closed,
             workflow_stages=workflow_stages,
         )
