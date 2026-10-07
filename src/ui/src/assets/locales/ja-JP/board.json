@@ -115,5 +115,6 @@
   "Start after prerequisite work is complete": "前提作業の完了後に開始",
   "References": "参照",
   "Link designs, evidence and related work": "設計・根拠・関連作業を接続",
-  "Workflow stage display": "ワークフローステージ: {{stage}}"
+  "Workflow stage display": "ワークフローステージ: {{stage}}",
+  "Could not load board": "ボードを読み込めませんでした"
 }

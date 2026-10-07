@@ -115,5 +115,6 @@
   "Start after prerequisite work is complete": "前置工作完成后开始",
   "References": "参考",
   "Link designs, evidence and related work": "关联设计、证据和相关工作",
-  "Workflow stage display": "工作流阶段：{{stage}}"
+  "Workflow stage display": "工作流阶段：{{stage}}",
+  "Could not load board": "无法加载看板"
 }

@@ -253,3 +253,18 @@ test("mobile floating Sidebar retains tooltip and link navigation", async ({ pag
     await expect(page).toHaveURL(/#explorer$/);
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
 });
+
+test("failed board list exposes retry and suppresses endless skeletons", async ({ page }) => {
+    await page.goto("/src/pages/BoardPage/board-load.fixture.html");
+    await expect(page.getByRole("alert")).toBeVisible();
+    await expect(page.locator(".animate-pulse")).toHaveCount(0);
+    const retry = page.getByRole("button", { name: /Retry|다시 시도/ });
+    await retry.press("Enter");
+    await expect(page.locator("output")).toHaveText("2");
+    await expect(retry).toHaveCount(0);
+    await expect(page.locator("output")).toHaveText("2");
+    await page.getByRole("button", { name: "Release retry" }).click();
+    await expect(retry).toBeEnabled();
+    await expect(page.getByRole("alert")).toBeVisible();
+    await expect(page.locator(".animate-pulse")).toHaveCount(0);
+});

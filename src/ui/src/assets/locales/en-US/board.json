@@ -115,5 +115,6 @@
   "Start after prerequisite work is complete": "Start after prerequisite work is complete",
   "References": "References",
   "Link designs, evidence and related work": "Link designs, evidence and related work",
-  "Workflow stage display": "Workflow stage: {{stage}}"
+  "Workflow stage display": "Workflow stage: {{stage}}",
+  "Could not load board": "Could not load board"
 }

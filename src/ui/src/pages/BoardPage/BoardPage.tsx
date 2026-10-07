@@ -19,7 +19,8 @@ import { IBoardRelatedPageProps } from "@/pages/BoardPage/types";
 
 const BoardPage = memo(({ project, currentUser }: IBoardRelatedPageProps) => {
     const navigate = usePageNavigateRef();
-    const { data, error } = useGetCards({ project_uid: project.uid });
+    const [t] = useTranslation();
+    const { data, error, isFetching, refetch } = useGetCards({ project_uid: project.uid });
 
     useEffect(() => {
         if (!error) {
@@ -40,8 +41,25 @@ const BoardPage = memo(({ project, currentUser }: IBoardRelatedPageProps) => {
 
     return (
         <>
+            {error && (
+                <Box role="alert" className="m-4 shrink-0 rounded-xl border bg-background p-4">
+                    <p className="text-sm text-muted-foreground">{t("board.Could not load board")}</p>
+                    <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="mt-2"
+                        disabled={isFetching}
+                        onClick={() => {
+                            if (!isFetching) void refetch();
+                        }}
+                    >
+                        {t("common.Retry")}
+                    </Button>
+                </Box>
+            )}
             {!data ? (
-                <SkeletonBoard />
+                !error && <SkeletonBoard />
             ) : (
                 <BoardProvider project={project} currentUser={currentUser}>
                     <BoardResult key={`board-result-${project.uid}`} project={project} />
