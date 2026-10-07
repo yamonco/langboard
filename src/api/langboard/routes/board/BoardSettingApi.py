@@ -680,6 +680,7 @@ def _app_workflow_response(snapshot: dict) -> dict:
         },
         "choices": [asdict(choice) for choice in result.choices],
         "mapping_valid": result.transitions_enabled,
+        "column_names": snapshot["column_names"],
     }
 
 

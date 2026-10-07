@@ -32,6 +32,7 @@ def test_route_reads_and_saves_persisted_mapping(board, binding):
     response = get_app_workflow_mapping(board[2].get_uid(), "github", board[1], service(board))
     data = json.loads(response.body)
     assert data["mapping_valid"] and data["binding"]["revision"] == binding.edit_revision()
+    assert data["column_names"] == {column.get_uid(): column.name for column in board[5]}
     response = update_app_workflow_mapping(board[2].get_uid(), "github", form(binding), board[1], service(board))
     data = json.loads(response.body)
     assert data["binding"]["stage_transitions_enabled"]
