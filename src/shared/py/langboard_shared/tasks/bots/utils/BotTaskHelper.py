@@ -197,7 +197,10 @@ class BotTaskHelper:
             if card_id is None:
                 return True
             card = db.exec(SqlBuilder.select.table(Card).where(Card.id == card_id)).first()
-            if card is None or card.deleted_at or card.visibility == "PRIVATE":
+            if card is None or card.deleted_at or card.visibility not in {"SHARED", "INTERNAL"}:
+                return False
+            current_project = db.exec(SqlBuilder.select.table(Project).where(Project.id == card.project_id)).first()
+            if current_project is None or current_project.deleted_at:
                 return False
             if project is not None and card.project_id != project.id:
                 return False

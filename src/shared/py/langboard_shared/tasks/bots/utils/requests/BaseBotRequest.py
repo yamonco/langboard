@@ -38,7 +38,14 @@ class BaseBotRequest(ABC):
         self._project = project
         self._scope_model = scope_model
 
+    def _can_dispatch_scope(self) -> bool:
+        from ..BotTaskHelper import BotTaskHelper
+
+        return BotTaskHelper.can_dispatch_card_scope(self._data, self._project, self._scope_model)
+
     async def execute(self) -> None:
+        if not self._can_dispatch_scope():
+            return
         bot_log = await self._create_log(BotLogType.Info, f"'{self._event}' task started")
 
         request_data = self.create_request_data(bot_log)
@@ -60,6 +67,8 @@ class BaseBotRequest(ABC):
         bot_log: tuple[BotLog, BaseBotLogModel | None],
         retried: int = 0,
     ) -> None:
+        if not self._can_dispatch_scope():
+            return
         res = None
         request_data["data"] = convert_python_data(request_data["data"], recursive=True)
 
