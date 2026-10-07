@@ -158,3 +158,33 @@ test("comment layout follows card width even within a wide viewport and reserves
     await page.getByRole("button", { name: "Narrow card" }).click();
     await expect(mode).toHaveText("mobile");
 });
+
+test("description markers remain within the card viewport and track its internal scroll", async ({ page }) => {
+    await page.goto("/src/pages/BoardPage/components/card/description/description-scroll.fixture.html");
+    const viewport = page.locator("[data-card-content-viewport]");
+    const markers = page.getByRole("button", { name: /Go to description|번째 설명으로 이동/ });
+    await expect(markers).toHaveCount(60);
+    const first = markers.first();
+    const bounds = await viewport.boundingBox();
+    const initial = await first.boundingBox();
+    expect(initial!.y).toBeGreaterThanOrEqual(bounds!.y);
+    expect(initial!.y + initial!.height).toBeLessThanOrEqual(bounds!.y + bounds!.height);
+    await viewport.focus();
+    await viewport.press("PageDown");
+    await viewport.press("PageDown");
+    await expect
+        .poll(async () => page.locator("button[aria-current='location']").getAttribute("aria-label"))
+        .not.toBe(await first.getAttribute("aria-label"));
+    await markers.nth(35).click();
+    await expect
+        .poll(() => page.locator("button[aria-current='location']").getAttribute("aria-label"))
+        .toBe(await markers.nth(35).getAttribute("aria-label"));
+    await page.getByRole("button", { name: "Resize card" }).click();
+    await page.getByRole("button", { name: "Expand header" }).click();
+    await markers.first().click();
+    await expect(first).toHaveAttribute("aria-current", "location");
+    await page.getByRole("button", { name: "Short description" }).click();
+    await expect(markers).toHaveCount(2);
+    await markers.last().click();
+    await expect(markers.last()).toHaveAttribute("aria-current", "location");
+});
