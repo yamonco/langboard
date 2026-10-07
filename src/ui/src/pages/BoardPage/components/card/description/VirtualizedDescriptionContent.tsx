@@ -37,6 +37,7 @@ export const VirtualizedDescriptionContent = memo(
         const containerRef = useRef<HTMLDivElement | null>(null);
         const [scrollMargin, setScrollMargin] = useState(0);
         const [activeIndex, setActiveIndex] = useState(0);
+        const [viewportHeight, setViewportHeight] = useState(320);
 
         const measureScrollMargin = useCallback(() => {
             const scrollElement = scrollParentRef.current;
@@ -45,6 +46,7 @@ export const VirtualizedDescriptionContent = memo(
                 return;
             }
 
+            setViewportHeight(scrollElement.clientHeight);
             const scrollRect = scrollElement.getBoundingClientRect();
             const containerRect = container.getBoundingClientRect();
             const next = containerRect.top - scrollRect.top + scrollElement.scrollTop;
@@ -119,7 +121,7 @@ export const VirtualizedDescriptionContent = memo(
         );
 
         return (
-            <Box ref={containerRef} position="relative" className="pr-7">
+            <Box ref={containerRef} position="relative" className="grid grid-cols-[minmax(0,1fr)_28px] items-start">
                 <Box position="relative" style={{ height: `${virtualizer.getTotalSize()}px` }}>
                     {virtualizer.getVirtualItems().map((virtualItem) => {
                         const chunk = chunks[virtualItem.index];
@@ -156,7 +158,9 @@ export const VirtualizedDescriptionContent = memo(
                     })}
                 </Box>
 
-                {chunks.length > 1 && <DescriptionOverviewRail chunks={chunks} activeIndex={activeIndex} onNavigate={scrollToChunk} />}
+                {chunks.length > 1 && (
+                    <DescriptionOverviewRail chunks={chunks} activeIndex={activeIndex} onNavigate={scrollToChunk} viewportHeight={viewportHeight} />
+                )}
             </Box>
         );
     }
