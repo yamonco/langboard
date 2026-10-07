@@ -1,3 +1,4 @@
+import re
 from tempfile import TemporaryFile
 from zlib import MAX_WBITS, decompressobj
 from zlib import error as ZlibError
@@ -23,6 +24,11 @@ class GZipDecompressMiddleware(BaseMiddleware):
         is_gzip_encoded = "gzip" in headers.getlist("content-encoding")
         if not is_gzip_encoded:
             await self.app(scope, receive, send)
+            return
+
+        if re.search(r"(?:^|/)secret-input(?:/|$)", scope.get("path", "")):
+            # Credential bodies must not reach the generic disk spool.
+            await self._send_invalid_body(scope, receive, send)
             return
 
         decompressor = decompressobj(MAX_WBITS | 16)

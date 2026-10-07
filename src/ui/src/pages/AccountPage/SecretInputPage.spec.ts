@@ -39,3 +39,37 @@ for (const width of [1440, 390]) {
         expect(posts).toBe(1);
     });
 }
+
+for (const status of [200, 422, 503]) {
+    test(`secret transport does not gzip or replay material on ${status}`, async ({ page }) => {
+        await page.goto("/src/pages/AccountPage/secret-input.fixture.html");
+        let posts = 0;
+        let refreshes = 0;
+        await page.route("**/secret-input/transport-proof", async (route) => {
+            posts++;
+            expect(route.request().headers()["content-encoding"]).toBeUndefined();
+            expect(route.request().postDataJSON().value.length).toBe(4096);
+            await route.fulfill({ status, json: { state: "completed" } });
+        });
+        await page.route("**/auth/refresh", async (route) => {
+            refreshes++;
+            await route.fulfill({ status: 401, json: {} });
+        });
+        const result = await page.evaluate(async () => {
+            const path = "/src/core/helpers/Api.ts";
+            const { api, submitSecretInput } = await import(path);
+            api.defaults.baseURL = location.origin;
+            try {
+                const response = await submitSecretInput("/secret-input/transport-proof", "x".repeat(4096));
+                return { status: response.status, retained: !!response.config.data, message: "" };
+            } catch (error) {
+                return { status: "failed", retained: JSON.stringify(error).includes("xxxxxxxx"), message: String(error) };
+            }
+        });
+        expect(posts).toBe(1);
+        expect(refreshes).toBe(0);
+        expect(result.retained).toBe(false);
+        if (status === 200) expect(result.status).toBe(200);
+        else expect(result.message).toBe("Error: Secret input failed");
+    });
+}
