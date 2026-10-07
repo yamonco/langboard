@@ -183,7 +183,16 @@ test("description markers remain within the card viewport and track its internal
     await page.getByRole("button", { name: "Expand header" }).click();
     await markers.first().click();
     await expect(first).toHaveAttribute("aria-current", "location");
+    const rail = page.locator("[data-card-description-rail]");
+    const beforeEnd = await rail.boundingBox();
     await markers.last().click();
+    await expect
+        .poll(async () => {
+            const current = await rail.boundingBox();
+            return !!current && Math.abs(current.y - beforeEnd!.y) < 1 && Math.abs(current.height - beforeEnd!.height) < 1;
+        })
+        .toBe(true);
+    await expect(viewport).toHaveCSS("scrollbar-width", "none");
     await expect
         .poll(async () => {
             const viewportBounds = await viewport.boundingBox();
@@ -280,4 +289,28 @@ test("failed board list exposes retry and suppresses endless skeletons", async (
     await expect(retry).toBeEnabled();
     await expect(page.getByRole("alert")).toBeVisible();
     await expect(page.locator(".animate-pulse")).toHaveCount(0);
+});
+
+test("mobile description navigator fills a fixed viewport while keyboard scrolling remains available", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/src/pages/BoardPage/components/card/description/description-scroll.fixture.html");
+    const viewport = page.locator("[data-card-content-viewport]");
+    const rail = page.locator("[data-card-description-rail]");
+    const markers = rail.getByRole("button");
+    await expect(markers).toHaveCount(60);
+    await expect(rail).toBeVisible();
+    const initial = await rail.boundingBox();
+    await viewport.focus();
+    await viewport.press("PageDown");
+    await expect.poll(() => viewport.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+    await markers.last().click();
+    await expect
+        .poll(async () => {
+            const current = await rail.boundingBox();
+            return !!current && Math.abs(current.y - initial!.y) < 1 && Math.abs(current.height - initial!.height) < 1;
+        })
+        .toBe(true);
+    const bounds = await viewport.boundingBox();
+    expect(initial!.height).toBeGreaterThan(bounds!.height - 20);
+    await expect(viewport).toHaveCSS("scrollbar-width", "none");
 });

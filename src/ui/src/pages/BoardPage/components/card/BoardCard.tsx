@@ -558,105 +558,115 @@ function BoardTaskCardResult({
                                 </Flex>
                             </Dialog.Header>
                             <Flex gap="3" direction={{ initial: "col-reverse", sm: "row" }} className="min-h-0 flex-1">
-                                <Box ref={contentViewportRef} data-card-content-viewport="" className="min-h-0 flex-1 overflow-y-auto">
-                                    <Flex direction="col" gap="4" className="min-w-0 pb-6 pr-1">
-                                        {isCheckCardView ? (
-                                            <BoardCardCheckBody key={`board-card-check-body-${card.uid}`} scrollParentRef={contentViewportRef} />
-                                        ) : (
-                                            <>
-                                                <Flex direction={{ initial: "col", sm: "row" }} gap="4">
-                                                    <BoardCardSection title="card.Members" className="sm:w-1/2" contentClassName="flex gap-1">
-                                                        <BoardCardMemberList key={`board-card-member-list-${card.uid}`} />
-                                                    </BoardCardSection>
-                                                    <BoardCardSection title="card.Deadline" className="sm:w-1/2">
-                                                        <BoardCardDeadline key={`board-card-deadline-${card.uid}`} />
-                                                    </BoardCardSection>
-                                                </Flex>
-                                                <BoardTaskMetadataSection cardUID={card.uid} />
-                                                {linkedWikis.length > 0 && (
-                                                    <BoardCardSection title="wiki.Linked wiki">
-                                                        <ul className="space-y-1 text-sm">
-                                                            {linkedWikis.map((wiki) => (
-                                                                <li key={wiki.wiki_uid}>
-                                                                    <a
-                                                                        className="text-primary hover:underline"
-                                                                        href={ROUTES.BOARD.WIKI_PAGE(projectUID, wiki.wiki_uid)}
-                                                                    >
-                                                                        {wiki.title}
-                                                                    </a>
-                                                                </li>
-                                                            ))}
-                                                        </ul>
-                                                    </BoardCardSection>
-                                                )}
-                                                <BoardCardMobileActions />
-                                                <BoardCardSection
-                                                    title="card.Description"
-                                                    className="relative min-h-56"
-                                                    data-card-outline-section="description"
-                                                    tabIndex={-1}
-                                                >
-                                                    <BoardCardDescription
-                                                        key={`board-card-description-${card.uid}`}
-                                                        scrollParentRef={contentViewportRef}
-                                                    />
-                                                </BoardCardSection>
-                                                {executionReceipts.length > 0 && (
-                                                    <BoardCardSection title="card.Execution records">
-                                                        <div className="space-y-3">
-                                                            {executionReceipts.map(({ generation, receipt, checklist_projection }) => (
-                                                                <div key={generation} className="rounded-md border p-3 text-sm">
-                                                                    <div className="font-medium">
-                                                                        #{generation} · {receipt.status}
-                                                                    </div>
-                                                                    <p className="mt-1 whitespace-pre-wrap">{receipt.summary}</p>
-                                                                    {receipt.artifacts.map((artifact) => (
+                                <Box data-card-content-frame="" className="relative min-h-0 min-w-0 flex-1">
+                                    <Box
+                                        ref={contentViewportRef}
+                                        data-card-content-viewport=""
+                                        className="h-full min-h-0 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                                    >
+                                        <Flex direction="col" gap="4" className="min-w-0 pb-6 pr-1">
+                                            {isCheckCardView ? (
+                                                <BoardCardCheckBody key={`board-card-check-body-${card.uid}`} scrollParentRef={contentViewportRef} />
+                                            ) : (
+                                                <>
+                                                    <Flex direction={{ initial: "col", sm: "row" }} gap="4">
+                                                        <BoardCardSection title="card.Members" className="sm:w-1/2" contentClassName="flex gap-1">
+                                                            <BoardCardMemberList key={`board-card-member-list-${card.uid}`} />
+                                                        </BoardCardSection>
+                                                        <BoardCardSection title="card.Deadline" className="sm:w-1/2">
+                                                            <BoardCardDeadline key={`board-card-deadline-${card.uid}`} />
+                                                        </BoardCardSection>
+                                                    </Flex>
+                                                    <BoardTaskMetadataSection cardUID={card.uid} />
+                                                    {linkedWikis.length > 0 && (
+                                                        <BoardCardSection title="wiki.Linked wiki">
+                                                            <ul className="space-y-1 text-sm">
+                                                                {linkedWikis.map((wiki) => (
+                                                                    <li key={wiki.wiki_uid}>
                                                                         <a
-                                                                            key={artifact.url}
-                                                                            href={artifact.url}
-                                                                            target="_blank"
-                                                                            rel="noopener noreferrer"
-                                                                            className="mt-1 block break-all underline"
+                                                                            className="text-primary hover:underline"
+                                                                            href={ROUTES.BOARD.WIKI_PAGE(projectUID, wiki.wiki_uid)}
                                                                         >
-                                                                            {artifact.type}: {artifact.url}
+                                                                            {wiki.title}
                                                                         </a>
-                                                                    ))}
-                                                                    {checklist_projection?.length > 0 && (
-                                                                        <ul
-                                                                            className="mt-2 space-y-1"
-                                                                            aria-label={t("card.Execution evidence checklist")}
-                                                                        >
-                                                                            {checklist_projection.map((item) => (
-                                                                                <li key={item.item_uid}>
-                                                                                    {item.is_checked ? "☑" : "☐"} {item.item_uid}: {item.kind}
-                                                                                    {item.refs.length > 0 && ` · ${item.refs.join(", ")}`}
-                                                                                </li>
-                                                                            ))}
-                                                                        </ul>
-                                                                    )}
-                                                                </div>
-                                                            ))}
-                                                        </div>
-                                                    </BoardCardSection>
-                                                )}
-                                                {checklists.length > 0 && (
-                                                    <BoardCardSection title="card.Checklists" data-card-outline-section="checklists" tabIndex={-1}>
-                                                        <BoardCardChecklistGroup key={`board-card-checklist-${card.uid}`} />
-                                                    </BoardCardSection>
-                                                )}
-                                                {attachments.length > 0 && (
+                                                                    </li>
+                                                                ))}
+                                                            </ul>
+                                                        </BoardCardSection>
+                                                    )}
+                                                    <BoardCardMobileActions />
                                                     <BoardCardSection
-                                                        title="card.Attached files"
-                                                        data-card-outline-section="attachments"
+                                                        title="card.Description"
+                                                        className="relative min-h-56"
+                                                        data-card-outline-section="description"
                                                         tabIndex={-1}
                                                     >
-                                                        <BoardCardAttachmentList key={`board-card-attachment-list-${card.uid}`} />
+                                                        <BoardCardDescription
+                                                            key={`board-card-description-${card.uid}`}
+                                                            scrollParentRef={contentViewportRef}
+                                                        />
                                                     </BoardCardSection>
-                                                )}
-                                            </>
-                                        )}
-                                        <BoardCardMobileComments scrollableRef={contentViewportRef} />
-                                    </Flex>
+                                                    {executionReceipts.length > 0 && (
+                                                        <BoardCardSection title="card.Execution records">
+                                                            <div className="space-y-3">
+                                                                {executionReceipts.map(({ generation, receipt, checklist_projection }) => (
+                                                                    <div key={generation} className="rounded-md border p-3 text-sm">
+                                                                        <div className="font-medium">
+                                                                            #{generation} · {receipt.status}
+                                                                        </div>
+                                                                        <p className="mt-1 whitespace-pre-wrap">{receipt.summary}</p>
+                                                                        {receipt.artifacts.map((artifact) => (
+                                                                            <a
+                                                                                key={artifact.url}
+                                                                                href={artifact.url}
+                                                                                target="_blank"
+                                                                                rel="noopener noreferrer"
+                                                                                className="mt-1 block break-all underline"
+                                                                            >
+                                                                                {artifact.type}: {artifact.url}
+                                                                            </a>
+                                                                        ))}
+                                                                        {checklist_projection?.length > 0 && (
+                                                                            <ul
+                                                                                className="mt-2 space-y-1"
+                                                                                aria-label={t("card.Execution evidence checklist")}
+                                                                            >
+                                                                                {checklist_projection.map((item) => (
+                                                                                    <li key={item.item_uid}>
+                                                                                        {item.is_checked ? "☑" : "☐"} {item.item_uid}: {item.kind}
+                                                                                        {item.refs.length > 0 && ` · ${item.refs.join(", ")}`}
+                                                                                    </li>
+                                                                                ))}
+                                                                            </ul>
+                                                                        )}
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </BoardCardSection>
+                                                    )}
+                                                    {checklists.length > 0 && (
+                                                        <BoardCardSection
+                                                            title="card.Checklists"
+                                                            data-card-outline-section="checklists"
+                                                            tabIndex={-1}
+                                                        >
+                                                            <BoardCardChecklistGroup key={`board-card-checklist-${card.uid}`} />
+                                                        </BoardCardSection>
+                                                    )}
+                                                    {attachments.length > 0 && (
+                                                        <BoardCardSection
+                                                            title="card.Attached files"
+                                                            data-card-outline-section="attachments"
+                                                            tabIndex={-1}
+                                                        >
+                                                            <BoardCardAttachmentList key={`board-card-attachment-list-${card.uid}`} />
+                                                        </BoardCardSection>
+                                                    )}
+                                                </>
+                                            )}
+                                            <BoardCardMobileComments scrollableRef={contentViewportRef} />
+                                        </Flex>
+                                    </Box>
                                 </Box>
                                 <BoardCardCommentPanel />
                                 {!!boardChat && <BoardCardExpandedChatScope isExpanded={isExpanded} />}
