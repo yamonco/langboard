@@ -7,9 +7,10 @@ import re
 from dataclasses import dataclass
 from uuid import UUID
 from langboard_shared.core.db import DbSession, SqlBuilder
-from langboard_shared.domain.models import AppConnection, GitHubLifecycleReceipt, User
+from langboard_shared.domain.models import AppConnection, AppResourceBinding, GitHubLifecycleReceipt, User
 from langboard_shared.domain.services.factory.SecretReferenceService import SecretAuditSource
 from langboard_shared.helpers import InfraHelper
+from sqlalchemy import update
 from .GitHubInstallation import connection_revision
 from .GitHubManifest import GitHubManifestUnavailable
 
@@ -130,7 +131,7 @@ class GitHubDeliveryConflict(Exception):
 
 
 def receive_lifecycle(service, actor, connection_uid, body: bytes, signature: str, event: str, delivery_id: str):
-    """Durably record verified input before any resource processing; replay is not processing."""
+    """Atomically record verified input and invalidate affected resource evidence once."""
     verified = verify_lifecycle(service, actor, connection_uid, body, signature, event, delivery_id)
     with DbSession.atomic() as db:
         connection = db.exec(
@@ -159,6 +160,8 @@ def receive_lifecycle(service, actor, connection_uid, body: bytes, signature: st
         if receipt is not None:
             if any(getattr(receipt, key) != value for key, value in values.items()):
                 raise GitHubDeliveryConflict()
+            if not receipt.invalidated:
+                _invalidate_resources(db, receipt)
             return {"receipt_uid": receipt.get_uid(), "duplicate": True}
         receipt = GitHubLifecycleReceipt(
             connection_id=connection.id,
@@ -167,6 +170,7 @@ def receive_lifecycle(service, actor, connection_uid, body: bytes, signature: st
             **values,
         )
         db.insert(receipt)
+        _invalidate_resources(db, receipt)
         return {"receipt_uid": receipt.get_uid(), "duplicate": False}
 
 
@@ -201,3 +205,32 @@ def receive_external_lifecycle(service, body: bytes, signature: str, event: str,
     except Exception:
         raise GitHubManifestUnavailable() from None
     return receive_lifecycle(service, actor, connection.get_uid(), body, signature, event, delivery_id)
+
+
+def _invalidate_resources(db, receipt):
+    """Events invalidate evidence; only a fresh scoped GitHub query can restore access."""
+    conditions = [
+        AppResourceBinding.connection_id == receipt.connection_id,
+        AppResourceBinding.resource_type == "repository",
+        AppResourceBinding.is_selected == True,  # noqa: E712
+        AppResourceBinding.resource_path[0]["type"].as_string() == "installation",
+        AppResourceBinding.resource_path[0]["id"].as_string() == receipt.installation_id,
+        AppResourceBinding.resource_path[1]["type"].as_string() == "account",
+        AppResourceBinding.resource_path[1]["id"].as_string() == receipt.account_id,
+    ]
+    if receipt.event == "installation_repositories":
+        ids = [str(value) for value in (*receipt.added_repository_ids, *receipt.removed_repository_ids)]
+        conditions.append(AppResourceBinding.external_resource_id.in_(ids))
+    # One scoped DB update across selected boards; no per-resource API/token loop.
+    db.exec(
+        update(AppResourceBinding)
+        .where(*conditions)
+        .values(
+            access_state="unknown",
+            health="unavailable",
+            access_revision=AppResourceBinding.access_revision + 1,
+        ),
+        execution_options={"synchronize_session": False},
+    )
+    receipt.invalidated = True
+    db.update(receipt)

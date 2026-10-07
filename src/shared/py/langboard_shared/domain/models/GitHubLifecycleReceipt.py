@@ -12,6 +12,7 @@ class GitHubLifecycleReceipt(BaseDbModel, table=True):
     connection_id: SnowflakeID = SnowflakeIDField(foreign_key=AppConnection, nullable=False, index=True)
     connection_revision: str = Field(nullable=False)
     delivery_id: str = Field(nullable=False)
+    invalidated: bool = Field(default=False, nullable=False)
     payload_digest: str = Field(nullable=False)
     event: str = Field(nullable=False)
     action: str = Field(nullable=False)

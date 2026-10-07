@@ -42,6 +42,11 @@ def storage(request):
         db.execute(text("INSERT INTO project VALUES (10),(11)"))
         with Operations.context(MigrationContext.configure(db)):
             migration.upgrade()
+            for filename in ("20261008093000-b541ef460d80.py", "20261008095000-c652f0571e91.py"):
+                spec = importlib.util.spec_from_file_location("app_lifecycle_migration", path.with_name(filename))
+                followup = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(followup)
+                followup.upgrade()
     with Session(engine, expire_on_commit=False) as db:
         connection = AppConnection(
             id=20, app_key="github", owner_id=1, state="connected", credential_reference="opaque-host-reference"
@@ -149,5 +154,12 @@ def test_downgrade_refuses_data_loss_then_removes_empty_tables(storage):
             assert db.execute(text("SELECT COUNT(*) FROM app_resource_binding")).scalar_one() == 4
             for table in ("app_resource_binding", "board_app_binding", "app_connection"):
                 db.execute(text(f"DELETE FROM {table}"))
+            for filename in ("20261008095000-c652f0571e91.py", "20261008093000-b541ef460d80.py"):
+                spec = importlib.util.spec_from_file_location(
+                    "app_lifecycle_downgrade", Path(__file__).parents[2] / "langboard/migrations/versions" / filename
+                )
+                followup = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(followup)
+                followup.downgrade()
             migration.downgrade()
         assert "app_connection" not in inspect(db).get_table_names()

@@ -35,6 +35,7 @@ def resource_snapshot(db, binding):
                 "selected": row.is_selected,
                 "path": row.resource_path,
                 "access_state": row.access_state,
+                "access_revision": row.access_revision,
                 "health": row.health,
             }
             for row in rows
