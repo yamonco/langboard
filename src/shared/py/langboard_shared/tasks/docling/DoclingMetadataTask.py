@@ -11,6 +11,7 @@ from tempfile import NamedTemporaryFile
 from threading import Thread
 from time import monotonic
 from ...core.broker import Broker
+from ...core.broker.TaskParameters import TaskParameters
 from ...core.routing import SocketTopic
 from ...core.storage import Storage
 from ...core.types import SnowflakeID
@@ -50,6 +51,7 @@ def _index_card_attachment(
     if not card or not service.project.get_by_id_like(card.project_id):
         return
 
+    indexed = False
     temp_path = ""
     try:
         document = service.docling_metadata.get_document_by_attachment_uid(
@@ -121,7 +123,7 @@ def _index_card_attachment(
         markdown = _convert_to_markdown(
             temp_path, on_progress=progress, vision_value=dumps(private_config), on_keywords=collect_keywords
         )
-        service.docling_metadata.mark_document_indexed(
+        indexed = service.docling_metadata.mark_document_indexed(
             CardMetadata,
             card,
             current_attachment.get_uid(),
@@ -151,6 +153,40 @@ def _index_card_attachment(
                 unlink(temp_path)
             except OSError:
                 pass
+
+    if indexed and isinstance(document.get("embedding_config") if document else None, dict):
+        _queue_embedding(service, card, current_attachment.get_uid(), generation)
+
+
+def _queue_embedding(service, card, attachment_uid: str, generation: str) -> None:
+    """Queue optional enrichment without turning a committed transcription into a failure."""
+    try:
+        args, kwargs = TaskParameters(dumps({"attachment_uid": attachment_uid, "generation": generation})).pack()
+        Broker.celery.send_task(
+            "langboard_shared.tasks.docling.DocumentEmbeddingTask.index_transcribed_attachment",
+            args=args,
+            kwargs=kwargs,
+            time_limit=600,
+            soft_time_limit=570,
+        )
+    except Exception:
+        try:
+            latest = service.docling_metadata.get_document_by_attachment_uid(CardMetadata, card, attachment_uid)
+            if latest:
+                old = latest.get("embedding") or {}
+                changed = service.docling_metadata.publish_document_embedding(
+                    card,
+                    attachment_uid,
+                    generation,
+                    latest.get("content_hash"),
+                    {**old, "status": "failed", "error": "Embedding queue unavailable; request processing again"},
+                    expected_embedding=old,
+                )
+                if changed:
+                    service.docling_metadata.publish_update(CardMetadata, card, SocketTopic.BoardCard)
+        except Exception:
+            # Enrichment bookkeeping must not corrupt the successful transcription.
+            pass
 
 
 def _convert_to_markdown(

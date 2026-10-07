@@ -109,7 +109,12 @@ class CardAttachmentService(BaseDomainService):
                 },
             }
         if vision_config and docling_metadata.queue_document(
-            CardMetadata, card, card_attachment.get_uid(), card_attachment.filename, vision_config=vision_config
+            CardMetadata,
+            card,
+            card_attachment.get_uid(),
+            card_attachment.filename,
+            vision_config=vision_config,
+            embedding_config=self._snapshot_embedding_config(),
         ):
             docling_metadata.publish_update(CardMetadata, card, SocketTopic.BoardCard)
             self._queue_docling_index_task(card_attachment)
@@ -118,6 +123,18 @@ class CardAttachmentService(BaseDomainService):
         CardAttachmentActivityTask.card_attachment_uploaded(user, project, card, card_attachment)
         if include_bot:
             CardAttachmentBotTask.card_attachment_uploaded(user, project, card, card_attachment)
+
+    def _snapshot_embedding_config(self) -> dict | None:
+        from ....tasks.docling.DocumentEmbedding import snapshot_embedding_config
+
+        binding = self._get_service(InternalBotService).get_document_embedding_binding()
+        if not binding:
+            return None
+        try:
+            return snapshot_embedding_config(binding.value, binding.get_uid())
+        except (ValueError, TypeError):
+            # Invalid optional embedding configuration must not break attachment storage/transcription.
+            return None
 
     def request_document_processing(
         self, project: TProjectParam, card: TCardParam, attachment: TAttachmentParam, *, reprocess: bool = False
@@ -152,7 +169,13 @@ class CardAttachmentService(BaseDomainService):
         if not docling.detect_document_type(attachment.filename):
             raise ValueError("Attachment format does not support document processing")
         if docling.queue_document(
-            CardMetadata, card, attachment.get_uid(), attachment.filename, vision_config=vision_config, force=reprocess
+            CardMetadata,
+            card,
+            attachment.get_uid(),
+            attachment.filename,
+            vision_config=vision_config,
+            embedding_config=self._snapshot_embedding_config(),
+            force=reprocess,
         ):
             docling.publish_update(CardMetadata, card, SocketTopic.BoardCard)
             self._queue_docling_index_task(attachment)

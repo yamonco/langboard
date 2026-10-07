@@ -64,3 +64,32 @@ def test_binding_validation_rejects_invalid_settings_and_unapproved_destinations
             validate_embedding_config(json.dumps({**valid, **patch}))
     with pytest.raises(ValueError, match="approved"):
         create_document_embeddings(json.dumps(valid), set())
+
+
+def test_upload_snapshot_freezes_settings_excludes_secrets_and_accepts_credential_rotation():
+    from langboard_shared.tasks.docling.DocumentEmbedding import resolve_embedding_snapshot, snapshot_embedding_config
+
+    original = {
+        "agent_llm": "OpenAI Compatible",
+        "base_url": "https://fixture.invalid/v1/",
+        "model_name": "original",
+        "api_key": "old-secret",
+        "retrieval": {"enabled": True, "splitter": {"chunk_size": 128, "chunk_overlap": 16}},
+    }
+    snapshot = snapshot_embedding_config(json.dumps(original), "binding")
+    assert "old-secret" not in json.dumps(snapshot)
+    current = {
+        **original,
+        "api_key": "rotated-secret",
+        "model_name": "new-global-model",
+        "retrieval": {"enabled": False},
+    }
+    resolved = json.loads(resolve_embedding_snapshot(snapshot, json.dumps(current)))
+    assert resolved["api_key"] == "rotated-secret"
+    assert resolved["model_name"] == "original"
+    assert resolved["retrieval"]["splitter"]["chunk_size"] == 128
+    assert resolved["retrieval"]["enabled"] is True
+    assert snapshot_embedding_config(json.dumps(current), "binding") is None
+    assert snapshot_embedding_config(json.dumps(current), "binding", explicit=True) is not None
+    with pytest.raises(ValueError, match="endpoint changed"):
+        resolve_embedding_snapshot(snapshot, json.dumps({**current, "base_url": "https://other.invalid/v1"}))

@@ -30,6 +30,7 @@ def replace_attachment_generation(
     text: str,
     splitter: DocumentSplitterSettings,
     page: int | None = None,
+    publish_pointer: bool = True,
 ) -> dict:
     """Caller must lock and revalidate the current, readable attachment before publishing.
 
@@ -63,15 +64,15 @@ def replace_attachment_generation(
         raise ValueError("Attachment exceeds the embedding chunk limit")
     namespace = ("documents", board_uid, attachment_uid, fingerprint, generation)
     pointer = {**source, "chunk_count": len(chunks), "namespace": list(namespace)}
-    store.batch(
-        [
-            *(
-                PutOp(namespace, str(index), {**chunk.metadata, "text": chunk.page_content})
-                for index, chunk in enumerate(chunks)
-            ),
-            PutOp(("document_active", board_uid), attachment_uid, pointer, index=False),
-        ]
-    )
+    operations = [
+        *(
+            PutOp(namespace, str(index), {**chunk.metadata, "text": chunk.page_content})
+            for index, chunk in enumerate(chunks)
+        ),
+    ]
+    if publish_pointer:
+        operations.append(PutOp(("document_active", board_uid), attachment_uid, pointer, index=False))
+    store.batch(operations)
     return pointer
 
 

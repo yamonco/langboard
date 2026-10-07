@@ -83,6 +83,19 @@ def test_document_generation_fences_old_results_and_preserves_previous_text_on_f
         content={"markdown": "이전 전사", "search_keywords": {"en": ["document search"], "ja": ["文書検索"]}},
         generation=first,
     )
+    first_embedding = {"status": "indexed", "pointer": {"generation": "first-vector"}}
+    assert docling.publish_document_embedding(
+        card, attachment.get_uid(), first, None, first_embedding, expected_embedding={}
+    )
+    assert not docling.publish_document_embedding(
+        card, attachment.get_uid(), first, None, {"status": "failed"}, expected_embedding={}
+    )
+    assert not docling.publish_document_embedding(
+        card, attachment.get_uid(), first, "different-hash", {"status": "failed"}
+    )
+    assert (
+        docling.get_document_by_attachment_uid(CardMetadata, card, attachment.get_uid())["embedding"] == first_embedding
+    )
     assert docling.queue_document(
         CardMetadata, card, attachment.get_uid(), attachment.filename, vision_config=config, force=True
     )

@@ -68,6 +68,7 @@ class DoclingMetadataService(BaseDomainService):
         filename: str,
         *,
         vision_config: dict[str, Any] | None = None,
+        embedding_config: dict[str, Any] | None = None,
         force: bool = False,
     ) -> bool:
         with DbSession.atomic() as db:
@@ -94,6 +95,7 @@ class DoclingMetadataService(BaseDomainService):
                 "generation": uuid4().hex,
                 "content": (current or {}).get("content", {}),
                 "vision_config": vision_config,
+                "embedding_config": embedding_config,
             }
             self.upsert_document(model_cls, foreign_model, document)
             return True
@@ -354,6 +356,45 @@ class DoclingMetadataService(BaseDomainService):
             )
             self.repo.metadata.update_value_by_key(model_cls, foreign_model, DOCLING_DOCUMENTS_METADATA_KEY, merge)
         return changed
+
+    def publish_document_embedding(
+        self,
+        card,
+        attachment_uid: str,
+        generation: str,
+        content_hash: str,
+        embedding: dict,
+        *,
+        expected_embedding: dict | None = None,
+    ) -> bool:
+        """Publish a staged vector generation only while its live source still matches."""
+        with DbSession.atomic() as db:
+            current_card = db.exec(
+                SqlBuilder.select.table(type(card)).where(type(card).column("id") == card.id).with_for_update()
+            ).first()
+            if not current_card or current_card.is_linked_resource:
+                return False
+            attachment = db.exec(
+                SqlBuilder.select.table(CardAttachment)
+                .where(CardAttachment.column("id") == InfraHelper.convert_id(attachment_uid))
+                .where(CardAttachment.column("card_id") == card.id)
+                .where(CardAttachment.column("deleted_at").is_(None))
+                .with_for_update()
+            ).first()
+            if not attachment:
+                return False
+            document = self.get_document_by_attachment_uid(CardMetadata, card, attachment_uid)
+            if (
+                not document
+                or document.get("generation") != generation
+                or document.get("content_hash") != content_hash
+                or document.get("status") != "indexed"
+                or (expected_embedding is not None and (document.get("embedding") or {}) != expected_embedding)
+            ):
+                return False
+            return self.upsert_document(
+                CardMetadata, card, {**document, "embedding": embedding}, expected_generation=generation
+            )
 
     def delete_document_by_attachment_uid(
         self, model_cls: type[BaseMetadataModel], foreign_model: BaseDbModel, attachment_uid: str
