@@ -141,6 +141,16 @@
     "New workflow column name": "New workflow column name",
     "Create column with stage": "Create column with stage",
     "Replace column stage warning": "Replacing this stage changes the column meaning for all Apps on this board.",
-    "Confirm stage replacement": "Confirm stage replacement"
+    "Confirm stage replacement": "Confirm stage replacement",
+    "Apps": "Apps",
+    "Back to App Store": "Back to App Store",
+    "App Store": "App Store",
+    "App Store help": "Discover board integrations and configure their workflow.",
+    "App github summary": "Repositories, pull requests and review workflows.",
+    "App glitchtip summary": "Projects, issues and resolution workflows.",
+    "App dokploy summary": "Projects, environments and applications.",
+    "App connection setup pending": "External connection setup is not available yet.",
+    "App workflow contract pending": "Workflow contract pending",
+    "Configure workflow": "Configure workflow"
   }
 }

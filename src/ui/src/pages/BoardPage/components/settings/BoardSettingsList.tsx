@@ -1,6 +1,6 @@
 import Flex from "@/components/base/Flex";
 import { useBoardSettings } from "@/core/providers/BoardSettingsProvider";
-import BoardSettingsAppWorkflow from "@/pages/BoardPage/components/settings/BoardSettingsAppWorkflow";
+import BoardSettingsApps from "@/pages/BoardPage/components/settings/BoardSettingsApps";
 import BoardSettingsBasic from "@/pages/BoardPage/components/settings/BoardSettingsBasic";
 import BoardSettingsDock from "@/pages/BoardPage/components/settings/BoardSettingsDock";
 import BoardSettingsEmailNotifications from "@/pages/BoardPage/components/settings/BoardSettingsEmailNotifications";
@@ -37,8 +37,8 @@ const BoardSettingsList = memo(() => {
             <BoardSettingsSection title="board.Shared dock">
                 <BoardSettingsDock key={project.uid} />
             </BoardSettingsSection>
-            <BoardSettingsSection title="project.settings.Apps workflow">
-                <BoardSettingsAppWorkflow key={project.uid} />
+            <BoardSettingsSection title="project.settings.Apps">
+                <BoardSettingsApps key={project.uid} />
             </BoardSettingsSection>
             <BoardSettingsSection title="project.settings.Email notifications">
                 <BoardSettingsEmailNotifications />

@@ -69,3 +69,26 @@ test("replacing a board-wide stage requires confirmation", async ({ page }) => {
     await page.getByRole("button", { name: "Confirm stage replacement" }).click();
     await expect.poll(() => page.evaluate(() => (window as unknown as { workflowWrites: unknown[] }).workflowWrites.length)).toBe(1);
 });
+
+for (const width of [1440, 390]) {
+    test(`App Store entry and draft preservation at ${width}px`, async ({ page }) => {
+        await page.setViewportSize({ width, height: 850 });
+        await page.goto(`${path}?store`);
+        await expect(page.getByRole("heading", { name: "App Store" })).toBeVisible();
+        await expect(page.getByRole("heading", { name: "Dokploy" })).toBeVisible();
+        await expect(page.getByRole("button", { name: "Workflow contract pending" })).toBeDisabled();
+        await page
+            .getByRole("article")
+            .filter({ has: page.getByRole("heading", { name: "GitHub" }) })
+            .getByRole("button")
+            .click();
+        const mapping = page.getByRole("combobox");
+        await expect(mapping).toHaveValue("one");
+        await mapping.selectOption("two");
+        await expect(page.getByRole("button", { name: "Back to App Store" })).toBeDisabled();
+        await page.getByRole("button", { name: "Discard changes" }).click();
+        await page.getByRole("button", { name: "Back to App Store" }).click();
+        await expect(page.getByRole("heading", { name: "App Store" })).toBeVisible();
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    });
+}
