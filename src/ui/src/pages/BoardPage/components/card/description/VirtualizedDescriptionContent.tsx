@@ -123,6 +123,17 @@ export const VirtualizedDescriptionContent = memo(
             [virtualizer]
         );
 
+        const scrollFromRail = useCallback(
+            (key: string) => {
+                const viewport = scrollParentRef.current;
+                if (!viewport || !["PageUp", "PageDown", "Home", "End"].includes(key)) return false;
+                if (key === "Home" || key === "End") viewport.scrollTo({ top: key === "Home" ? 0 : viewport.scrollHeight });
+                else viewport.scrollBy({ top: viewport.clientHeight * (key === "PageDown" ? 0.9 : -0.9) });
+                return true;
+            },
+            [scrollParentRef]
+        );
+
         return (
             <Box ref={containerRef} position="relative" className="grid grid-cols-[minmax(0,1fr)_28px] items-start">
                 <Box position="relative" style={{ height: `${virtualizer.getTotalSize()}px` }}>
@@ -169,6 +180,7 @@ export const VirtualizedDescriptionContent = memo(
                             activeIndex={activeIndex}
                             onNavigate={scrollToChunk}
                             viewportHeight={viewportHeight}
+                            onScrollKey={scrollFromRail}
                         />,
                         railHost
                     )}
