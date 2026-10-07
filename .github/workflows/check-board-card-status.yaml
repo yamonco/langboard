@@ -43,9 +43,14 @@ on:
       - src/ui/src/pages/BoardPage/components/card/CardColumnHistory.tsx
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   backend:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     env:
       PROJECT_NAME: langboard
     steps:
@@ -61,6 +66,7 @@ jobs:
 
   ui:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

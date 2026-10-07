@@ -20,9 +20,14 @@ on:
       - src/shared/py/uv.lock
       - uv.lock
   workflow_dispatch:
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   official-store-and-settings:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     env:
       PROJECT_NAME: langboard
       PYTHONPATH: src/shared/py

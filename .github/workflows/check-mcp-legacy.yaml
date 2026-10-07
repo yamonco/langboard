@@ -23,9 +23,14 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   vault-dependencies:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     env:
       PROJECT_NAME: langboard
     steps:
@@ -64,6 +69,7 @@ jobs:
           PY
   document-vision:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
@@ -84,6 +90,7 @@ jobs:
           VERIFY_DOCUMENT_FONTS=1 PYTHONPATH=src/shared/py uv run --no-sync pytest -q -p no:tach src/shared/py/langboard_shared/tasks/docling/DocumentVision_test.py
   catalog:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     env:
       PROJECT_NAME: langboard
       PYTHONPATH: .
