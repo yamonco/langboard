@@ -192,6 +192,8 @@
     "Existing GitHub connection": "기존 GitHub 연결",
     "Create new GitHub connection": "새 연결 생성",
     "Current GitHub connection": "현재 연결",
-    "More GitHub connections": "연결 더 보기"
+    "More GitHub connections": "연결 더 보기",
+    "Refresh GitHub resource health": "저장소 상태 새로 확인",
+    "GitHub health refreshed": "저장소 상태 갱신됨. App 리소스 상태에서 결과를 확인하세요."
   }
 }

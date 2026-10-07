@@ -74,7 +74,7 @@ export default function BoardSettingsApps() {
                 <>
                     {error && <p role="alert">{t("project.settings.App workflow save failed")}</p>}
                     <h3 className="text-base font-semibold">{t("project.settings.App Store")}</h3>
-                    <BoardSettingsGitHub />
+                    <BoardSettingsGitHub onStatusChange={() => void refetch()} />
                     <p className="text-sm text-muted-foreground">{t("project.settings.App Store help")}</p>
                     {isLoading && <p role="status">{t("common.Loading...")}</p>}
                     {isError && (

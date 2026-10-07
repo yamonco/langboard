@@ -69,3 +69,14 @@ test("reused connection refreshes app metadata before install", async ({ page })
     await page.getByRole("button", { name: "Install GitHub App" }).click();
     await expect(page).toHaveURL("https://github.com/apps/current-app/installations/new");
 });
+
+test("explicit health refresh uses current resource revision", async ({ page }) => {
+    await page.goto(path);
+    await page.getByRole("button", { name: "Refresh repository health" }).click();
+    await expect(page.getByRole("status")).toContainText("Stored resource health refreshed");
+    const calls = await page.evaluate(() => (window as unknown as { githubCalls: { url: string; data: unknown }[] }).githubCalls);
+    expect(calls.find((call) => call.url.endsWith("/resources/refresh"))?.data).toMatchObject({
+        connection_uid: "conn",
+        expected_revision: "a".repeat(64),
+    });
+});

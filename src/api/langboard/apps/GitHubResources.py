@@ -174,3 +174,73 @@ def update_resources(
         # Resource access does not authorize workflow actions, webhook processing,
         # or activation. Existing state/grants/mapping and shared Connection remain.
         return resource_snapshot(db, binding)
+
+
+def refresh_resources(service, actor, project_uid, connection_uid, expected_revision):
+    """Explicit bounded health refresh; unavailable evidence never means uninstall."""
+    _board(service, actor, project_uid)
+    with DbSession.use(readonly=False) as db:
+        connection = db.exec(
+            SqlBuilder.select.table(AppConnection).where(
+                AppConnection.id == InfraHelper.convert_id(connection_uid),
+                AppConnection.owner_id == actor.id,
+                AppConnection.app_key == "github",
+            )
+        ).first()
+        if connection is None or connection.state not in {"pending", "connected"}:
+            raise GitHubManifestUnavailable()
+        revision = connection_revision(connection)
+        board = _board(service, actor, project_uid)
+        binding = db.exec(
+            SqlBuilder.select.table(BoardAppBinding).where(
+                BoardAppBinding.project_id == board.id,
+                BoardAppBinding.app_key == "github",
+            )
+        ).first()
+        snapshot = resource_snapshot(db, binding)
+        if snapshot["revision"] != expected_revision:
+            raise GitHubResourceConflict()
+        rows = [item for item in snapshot["items"] if item["connection_uid"] == connection_uid and item["selected"]]
+    if not rows or len(rows) > 25:
+        raise ValueError("Refresh requires 1 to 25 selected repositories")
+    results = {}
+    for item in rows:
+        path = {part["type"]: part["id"] for part in item["path"]}
+        try:
+            verified = inspect_installation(
+                service,
+                actor,
+                project_uid,
+                connection_uid,
+                int(path["installation"]),
+                int(path["account"]),
+                repository_ids=(int(item["repository_id"]),),
+            )
+            repository = verified["repositories"][0]
+            results[item["uid"]] = ("granted", "degraded" if repository["archived"] else "healthy")
+        except GitHubManifestUnavailable:
+            # Includes ambiguous external denial, transport and credential errors.
+            # Do not infer removal or erase selection from missing evidence.
+            results[item["uid"]] = ("unknown", "unavailable")
+    with DbSession.atomic() as db:
+        board = db.exec(SqlBuilder.select.table(Project).where(Project.id == board.id).with_for_update()).first()
+        _board(service, actor, project_uid)
+        current = db.exec(
+            SqlBuilder.select.table(AppConnection).where(AppConnection.id == connection.id).with_for_update()
+        ).first()
+        if current is None or connection_revision(current) != revision:
+            raise GitHubResourceConflict()
+        binding = db.exec(
+            SqlBuilder.select.table(BoardAppBinding).where(BoardAppBinding.id == binding.id).with_for_update()
+        ).first()
+        if resource_snapshot(db, binding)["revision"] != expected_revision:
+            raise GitHubResourceConflict()
+        for uid, (access, health) in results.items():
+            row = db.exec(
+                SqlBuilder.select.table(AppResourceBinding)
+                .where(AppResourceBinding.id == InfraHelper.convert_id(uid))
+                .with_for_update()
+            ).first()
+            row.access_state, row.health = access, health
+            db.update(row)
+        return resource_snapshot(db, binding)

@@ -258,3 +258,31 @@ def get_github_app(
         return JsonResponse(content=inspect_app(service, user, project_uid, connection_uid))
     except GitHubManifestUnavailable:
         raise ApiException.NotFound_404() from None
+
+
+class GitHubResourceRefresh(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    connection_uid: str = Field(min_length=1, max_length=11)
+    expected_revision: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
+@AppRouter.api.post("/board/{project_uid}/settings/apps/github/resources/refresh", tags=["Board.Settings"])
+@AuthFilter.add("user")
+def refresh_github_resources(
+    project_uid: str,
+    form: GitHubResourceRefresh,
+    user: User = Auth.scope("user"),
+    service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    from ...apps.GitHubResources import GitHubResourceConflict, refresh_resources
+
+    try:
+        return JsonResponse(
+            content=refresh_resources(service, user, project_uid, form.connection_uid, form.expected_revision)
+        )
+    except GitHubManifestUnavailable:
+        raise ApiException.NotFound_404() from None
+    except GitHubResourceConflict:
+        raise ApiException.Conflict_409() from None
+    except ValueError:
+        raise ApiException.BadRequest_400() from None

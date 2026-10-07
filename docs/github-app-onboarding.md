@@ -152,3 +152,20 @@ No persisted metadata migration or automatic lifecycle activation is introduced.
 
 Live GitHub App creation/install acceptance, validated lifecycle callbacks and
 health propagation remain pending.
+
+## Explicit resource health refresh
+
+Authenticated POST `/board/{uid}/settings/apps/github/resources/refresh` takes
+Connection UID and resource snapshot revision. Current board authority and owned
+Connection are required. One to 25 selected repositories are individually checked
+with restricted ephemeral metadata tokens. Successful access becomes granted/healthy
+(or degraded for an archived repository). Missing external evidence, suspension,
+denial, transport or credential failure becomes unknown/unavailable. This does not
+prove uninstall or revoke selection.
+
+Before persistence the transaction locks board/Connection/Binding, rechecks host
+authority, Connection identity and resource revision. Other boards, unselected
+resources, mapping/grants/activation and Connection state remain unchanged. UI has
+an explicit refresh control and refreshes Store status after success. Automatic
+signature-verified lifecycle events, resource batches above 25 and live GitHub
+health acceptance remain pending.
