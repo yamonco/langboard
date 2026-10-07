@@ -45,8 +45,9 @@ def test_card_schema_enforces_atomic_and_unique_source_identity() -> None:
 def test_dashboard_projects_linked_titles_and_states_in_project_batches() -> None:
     project = SimpleNamespace(id=1, owner_id=2, api_response=lambda: {"uid": "project-1"})
     column = SimpleNamespace(name="Reference")
-    ordinary = SimpleNamespace(is_linked_resource=False, api_response=lambda: {"uid": "card-ordinary", "title": "Task"})
+    ordinary = SimpleNamespace(id=1, is_linked_resource=False, api_response=lambda: {"uid": "card-ordinary", "title": "Task"})
     linked = SimpleNamespace(
+        id=2,
         is_linked_resource=True,
         api_response=lambda: {"uid": "card-linked", "title": ""},
         get_uid=lambda: "card-linked",
@@ -68,11 +69,13 @@ def test_dashboard_projects_linked_titles_and_states_in_project_batches() -> Non
             )
         ),
         _get_linked_resource_payloads=project_payloads,
+        resolve_work_visibility_contexts=lambda *args: {1: object()},
+        get_work_states=lambda cards, **kwargs: {card.id: {} for card in cards},
     )
 
     cards, projects = CardService.get_dashboard_list(service, FakeUser(2), object())
 
-    assert cards[0] == {"uid": "card-ordinary", "title": "Task", "project_column_name": "Reference"}
+    assert cards[0] == {"uid": "card-ordinary", "title": "Task", "project_column_name": "Reference", "work_state": {}}
     assert cards[1]["linked_resource"]["title"] == "Reference title"
     assert projects == [{"uid": "project-1"}]
     project_payloads.assert_called_once_with(ANY, project, [linked], include_content=False)

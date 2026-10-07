@@ -98,7 +98,7 @@ def work_db(monkeypatch):
 def my_work(data, purposes=None):
     now = SafeDateTime.now()
     return CardRepository(None, None).get_my_work_page(
-        data.user, [data.project], purposes or {"created"}, [], now, now, "updated_at", None, None, 50
+        data.user, [data.project], purposes or {"created"}, [], now, now, "updated_at", None, None, 50, contexts={int(data.project.id): TEST_SCOPE}
     )
 
 

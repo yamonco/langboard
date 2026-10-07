@@ -8,6 +8,7 @@ from langboard_shared.core.storage import FileModel
 from langboard_shared.core.types import SafeDateTime
 from langboard_shared.domain.models import (
     Card,
+    CardAssignedUser,
     CardAttachment,
     CardComment,
     CardRelationship,
@@ -17,6 +18,7 @@ from langboard_shared.domain.models import (
     Project,
     ProjectAssignedUser,
     ProjectColumn,
+    ProjectRole,
     User,
     WorkflowStageDefinition,
 )
@@ -35,7 +37,7 @@ from sqlalchemy import create_engine
 
 def test_recent_cards_revalidate_actor_and_filter_visibility_before_return(monkeypatch):
     engine = create_engine("sqlite://")
-    for model in (User, Project, ProjectColumn, ProjectAssignedUser, Card, CardComment, CardAttachment, WorkflowStageDefinition, Checklist, Checkitem, CardRelationship, GlobalCardRelationshipType):
+    for model in (User, Project, ProjectColumn, ProjectAssignedUser, Card, CardComment, CardAttachment, WorkflowStageDefinition, Checklist, Checkitem, CardRelationship, GlobalCardRelationshipType, ProjectRole, CardAssignedUser):
         model.__table__.create(engine)
     monkeypatch.setattr(DbEngine, "get_main_engine", lambda: engine)
     monkeypatch.setattr(DbEngine, "get_readonly_engine", lambda: engine)
@@ -53,6 +55,7 @@ def test_recent_cards_revalidate_actor_and_filter_visibility_before_return(monke
             db.insert(ProjectColumn(project_id=project.id, name="Archive", is_archive=True))
             assignment = ProjectAssignedUser(project_id=project.id, user_id=member.id)
             db.insert(assignment)
+            db.insert(ProjectRole(project_id=project.id, user_id=member.id, actions=["read"]))
             cards = [Card(project_id=project.id, project_column_id=column.id, title=visibility,
                           visibility=visibility, owner_user_id=vault_owner,
                           created_by_user_id=vault_owner) for visibility, vault_owner in (
@@ -60,6 +63,7 @@ def test_recent_cards_revalidate_actor_and_filter_visibility_before_return(monke
                               ("PRIVATE", member.id), ("PRIVATE", owner.id))]
             for card in cards:
                 db.insert(card)
+                db.insert(CardAssignedUser(card_id=card.id, user_id=member.id))
                 db.insert(Checklist(card_id=card.id, title="Scoped checklist"))
                 db.insert(CardAttachment(card_id=card.id, user_id=owner.id,
                     filename="proof.pdf", file=FileModel(storage_type="test", storage_name="test", original_filename="proof.pdf", path="/tmp/fixture", filename="proof.pdf"),
@@ -110,6 +114,15 @@ def test_recent_cards_revalidate_actor_and_filter_visibility_before_return(monke
             assert api_cards[0]["work_state"] == {"scoped": True}
             assert (cursor is not None) == (len(expected) > 1)
             assert service.get_api_page_by_project(project, 1, user_or_bot=None, channel=channel) is None
+            work_contexts = service.resolve_work_visibility_contexts(member, channel)
+            assert work_contexts[int(project.id)] == context
+            now = SafeDateTime.now()
+            work_rows = repository.card.get_my_work_page(member, [project], {"assigned"}, [], now, now, "updated_at", None, None, 1, contexts=work_contexts)
+            assert len(work_rows) == 1 and work_rows[0][0].get_uid() in expected
+            all_work = repository.card.get_my_work_page(member, [project], {"assigned"}, [], now, now, "updated_at", None, None, 25, contexts=work_contexts)
+            assert {row[0].get_uid() for row in all_work} == expected
+            dashboard = repository.card.get_dashboard_list_scroller(member, SimpleNamespace(refer_time=now, page=1, limit=25), contexts=work_contexts)
+            assert {row[0].get_uid() for row in dashboard} == expected
             settings_cards = service.get_api_list_by_project(project, member, channel=channel)
             assert {row["uid"] for row in settings_cards} == expected
             assert all(row["content_blocks"][0]["uid"] in {str(card.id) for card in cards if card.get_uid() in expected} for row in settings_cards)
@@ -141,6 +154,30 @@ def test_recent_cards_revalidate_actor_and_filter_visibility_before_return(monke
             assert {cards[i].id for i, uid in enumerate(uids) if uid in expected} == set(excerpts)
             limited = repository.card.search_context_by_project(project, "SearchProof", limit=1, context=context)
             assert len(limited) == 1 and limited[0][0].get_uid() in expected
+        # A role/assignment on a foreign board cannot stand in for membership.
+        with DbSession.use(readonly=False) as db:
+            foreign_project = Project(owner_id=owner.id, title="Not a member")
+            db.insert(foreign_project)
+            foreign_column = ProjectColumn(project_id=foreign_project.id, name="Foreign")
+            db.insert(foreign_column)
+            foreign_card = Card(project_id=foreign_project.id, project_column_id=foreign_column.id, title="Foreign hidden", visibility="SHARED")
+            db.insert(foreign_card)
+            db.insert(CardAssignedUser(card_id=foreign_card.id, user_id=member.id))
+            db.insert(ProjectRole(project_id=foreign_project.id, user_id=member.id, actions=["*"]))
+            role = db.exec(SqlBuilder.select.table(ProjectRole).where(ProjectRole.project_id == project.id)).first()
+        contexts = service.resolve_work_visibility_contexts(member, CollaborationChannel.Mcp)
+        assert set(contexts) == {int(project.id)}
+        now = SafeDateTime.now()
+        rows = repository.card.get_my_work_page(member, [project, foreign_project], {"assigned"}, [], now, now, "updated_at", None, None, 25, contexts=contexts)
+        assert foreign_card.id not in {row[0].id for row in rows}
+        with DbSession.use(readonly=False) as db:
+            no_read = role.model_copy(deep=True)
+            no_read.actions = ["update"]
+            db.update(no_read)
+        assert service.resolve_work_visibility_contexts(member, CollaborationChannel.Mcp) == {}
+        assert repository.card.get_my_work_page(member, [project], {"assigned"}, [], now, now, "updated_at", None, None, 25, contexts={}) == []
+        with DbSession.use(readonly=False) as db:
+            db.update(role)
         # A cached SHARED object cannot bypass a committed visibility change.
         with DbSession.use(readonly=False) as db:
             changed = cards[0].model_copy(deep=True)
@@ -173,6 +210,7 @@ def test_recent_cards_revalidate_actor_and_filter_visibility_before_return(monke
             inactive.activated_at = None
             db.update(inactive)
         assert member.activated_at is not None
+        assert service.resolve_work_visibility_contexts(member, CollaborationChannel.Mcp) == {}
         assert service.get_api_list_by_project(project, member, channel=CollaborationChannel.Mcp) == []
         assert service.get_api_page_by_project(project, 1, user_or_bot=member, channel=CollaborationChannel.Mcp) is None
         assert service.resolve_readable_card(project, cards[0], member, CollaborationChannel.Mcp) is None
@@ -187,6 +225,7 @@ def test_recent_cards_revalidate_actor_and_filter_visibility_before_return(monke
         assert service.get_existing_uids(project, uids, user=member, channel=CollaborationChannel.Mcp) == []
         assert service.get_api_page_by_project(project, 1, user_or_bot=member, channel=CollaborationChannel.Mcp) == ([], 0, None)
         assert service.get_api_list_by_project(project, member, channel=CollaborationChannel.Mcp) == []
+        assert service.resolve_work_visibility_contexts(member, CollaborationChannel.Mcp) == {}
         assert set(service.get_existing_uids(project, uids, user=owner, channel=CollaborationChannel.HumanUI)) == {uids[0], uids[3]}
         with DbSession.use(readonly=False) as db:
             removed_project = project.model_copy(deep=True)

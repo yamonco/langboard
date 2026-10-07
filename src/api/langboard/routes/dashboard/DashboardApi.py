@@ -1,8 +1,9 @@
 from datetime import timedelta
-from fastapi import Depends, Query, status
+from fastapi import Depends, Query, Request, status
 from langboard_shared.core.filter import AuthFilter
 from langboard_shared.core.routing import ApiErrorCode, ApiException, AppRouter, JsonResponse
 from langboard_shared.core.schema import OpenApiSchema
+from langboard_shared.core.security.CollaborationChannel import CollaborationChannel
 from langboard_shared.core.types import SafeDateTime
 from langboard_shared.domain.models import Card, Checkitem, Project, ProjectColumn, User
 from langboard_shared.domain.services import DomainService
@@ -161,11 +162,12 @@ def toggle_star_project(
 )
 @AuthFilter.add("user")
 def get_card_list(
+    request: Request,
     pagination: DashboardPagination = Depends(),
     user: User = Auth.scope("user"),
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
-    cards, projects = service.card.get_dashboard_list(user, pagination)
+    cards, projects = service.card.get_dashboard_list(user, pagination, channel=request.scope.get("collaboration_channel", CollaborationChannel.Api))
 
     return JsonResponse(content={"cards": cards, "projects": projects})
 
@@ -196,6 +198,7 @@ def get_card_list(
 )
 @AuthFilter.add("user")
 def get_my_work(
+    request: Request,
     project_uid: str | None = None,
     limit: int = Query(default=50, ge=1, le=50),
     user: User = Auth.scope("user"),
@@ -217,6 +220,7 @@ def get_my_work(
         None,
         None,
         limit,
+        channel=request.scope.get("collaboration_channel", CollaborationChannel.Api),
     )
     return JsonResponse(content={"cards": cards})
 
@@ -229,6 +233,7 @@ def get_my_work(
 )
 @AuthFilter.add("user")
 def get_assigned_work(
+    request: Request,
     project_uid: str | None = None,
     cursor: str | None = Query(default=None, max_length=512),
     limit: int = Query(default=20, ge=1, le=25),
@@ -236,7 +241,7 @@ def get_assigned_work(
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
     try:
-        result = service.card.list_assigned_work(user, project_uid, cursor, limit)
+        result = service.card.list_assigned_work(user, project_uid, cursor, limit, channel=request.scope.get("collaboration_channel", CollaborationChannel.Api))
     except ValueError as exc:
         raise ApiException.BadRequest_400(ApiErrorCode.VA0000) from exc
     return JsonResponse(content=result)
