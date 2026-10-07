@@ -43,13 +43,14 @@ def get_shared_user_activities(
         project_uid,
         since,
         until,
+        channel=CollaborationChannel.Mcp,
     )
 
 
 @McpTool.add("user", description="Get activities for the current user.")
 def get_current_user_activities(user: User, service: DomainService, limit: int = 50) -> dict:
     pagination = ActivityPagination(limit=limit)
-    result = service.activity.get_api_list_by_user(user, pagination)
+    result = service.activity.get_api_list_by_user(user, pagination, channel=CollaborationChannel.Mcp)
     if not result:
         return {"activities": [], "count_new_records": 0}
     activities, count_new_records, _ = result
