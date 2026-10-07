@@ -135,6 +135,9 @@ def embed_transcription(service, attachment_uid: str, generation: str, request_u
                 store,
                 source=source,
                 text=(document.get("content") or {}).get("markdown", ""),
+                document_json=service.docling_metadata.get_structural_document(
+                    card, attachment_uid, generation=generation, content_hash=content_hash
+                ),
                 splitter=settings.splitter,
                 storage=storage,
             )

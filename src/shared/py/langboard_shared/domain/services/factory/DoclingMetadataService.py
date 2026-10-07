@@ -340,6 +340,26 @@ class DoclingMetadataService(BaseDomainService):
             None,
         )
 
+    def get_structural_document(
+        self, card: BaseDbModel, attachment_uid: str, *, generation: str, content_hash: str | None
+    ) -> dict[str, Any] | None:
+        """Read private structure only for the current live attachment generation."""
+        with DbSession.atomic() as db:
+            db.exec(
+                SqlBuilder.select.table(type(card)).where(type(card).column("id") == card.id).with_for_update()
+            )
+            current = self.get_document_by_attachment_uid(CardMetadata, card, attachment_uid)
+            if not current or current.get("generation") != generation or current.get("content_hash") != content_hash:
+                return None
+            artifact = db.exec(
+                SqlBuilder.select.table(CardDocumentArtifact)
+                .join(CardAttachment, CardAttachment.id == CardDocumentArtifact.attachment_id)
+                .where(CardAttachment.id == InfraHelper.convert_id(attachment_uid))
+                .where(CardAttachment.card_id == card.id)
+                .where(CardAttachment.deleted_at.is_(None))
+            ).first()
+            return json.loads(artifact.document_json) if artifact else None
+
     def upsert_document(
         self,
         model_cls: type[BaseMetadataModel],

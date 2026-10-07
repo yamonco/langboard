@@ -58,6 +58,13 @@ def test_backend_source_or_identifier_mismatch_is_never_returned():
         == []
     )
 
+    store.similarity_search_with_score.return_value = [
+        (Document(id="chunk", page_content="authorized page excerpt", metadata={**source, "pages": [2, 1, 2, -1, True, "3"]}), 1.0),
+    ]
+    hits = search_vector_generation(store, pointer, "alpha", DocumentRetrievalSettings(store="qdrant", external_url="https://fixture.invalid"))
+    assert hits[0]["pages"] == [1, 2]
+    assert hits[0]["source"] == source
+
 
 def test_mmr_and_score_threshold_are_not_silently_combined():
     pointer = dict(
