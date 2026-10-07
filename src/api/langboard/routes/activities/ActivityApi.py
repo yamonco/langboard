@@ -31,6 +31,7 @@ USER_ACTIVITY_SCHEMA = InfiniteRefreshableList.api_schema(
 @AuthFilter.add("user")
 def get_shared_user_activities(
     user_uid: str,
+    request: Request,
     pagination: ActivityPagination = Depends(),
     activity_uid: str | None = None,
     scope: Literal["project", "wiki"] | None = None,
@@ -44,7 +45,8 @@ def get_shared_user_activities(
 ) -> JsonResponse:
     try:
         result = service.activity.get_shared_user_activities(
-            user, user_uid, pagination, activity_uid, scope, offset, max_chars, project_uid, since, until
+            user, user_uid, pagination, activity_uid, scope, offset, max_chars, project_uid, since, until,
+            channel=request.scope.get("collaboration_channel", CollaborationChannel.Api),
         )
     except ValueError as exc:
         raise ApiException.BadRequest_400(ApiErrorCode.VA0000) from exc
@@ -70,15 +72,16 @@ def _create_project_activity_schema(
 )
 @AuthFilter.add("user")
 def get_current_user_activities(
+    request: Request,
     pagination: ActivityPagination = Depends(),
     user: User = Auth.scope("user"),
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
     if pagination.only_count:
-        result = service.activity.get_api_list_by_user(user, pagination, only_count=True)
+        result = service.activity.get_api_list_by_user(user, pagination, only_count=True, channel=request.scope.get("collaboration_channel", CollaborationChannel.Api))
         return JsonResponse(content={"count_new_records": result or 0})
 
-    result = service.activity.get_api_list_by_user(user, pagination)
+    result = service.activity.get_api_list_by_user(user, pagination, channel=request.scope.get("collaboration_channel", CollaborationChannel.Api))
     if not result:
         return JsonResponse(content=InfiniteRefreshableList())
     activities, count_new_records, _ = result
