@@ -290,3 +290,53 @@ def refresh_github_resources(
         raise ApiException.Conflict_409() from None
     except ValueError:
         raise ApiException.BadRequest_400() from None
+
+
+@AppRouter.api.post("/apps/github/events", tags=["Apps.GitHub"])
+async def receive_github_lifecycle(request: Request, service: DomainService = DomainService.scope()) -> JsonResponse:
+    from starlette.concurrency import run_in_threadpool
+    from ...apps.GitHubLifecycle import (
+        MAX_BODY,
+        GitHubDeliveryConflict,
+        receive_external_lifecycle,
+    )
+
+    # GitHub authenticates original bytes with its webhook HMAC, not browser cookies.
+    for name in (
+        "content-type",
+        "content-length",
+        "content-encoding",
+        "x-hub-signature-256",
+        "x-github-event",
+        "x-github-delivery",
+    ):
+        if len(request.headers.getlist(name)) > 1:
+            return JsonResponse(status_code=400)
+    if request.headers.get("content-type", "").split(";", 1)[0].strip().lower() != "application/json":
+        return JsonResponse(status_code=415)
+    if request.headers.get("content-encoding", "identity").lower() != "identity":
+        return JsonResponse(status_code=415)
+    length = request.headers.get("content-length")
+    if length is not None:
+        if not length.isascii() or not length.isdigit():
+            return JsonResponse(status_code=400)
+        if len(length) > 10 or int(length) > MAX_BODY:
+            return JsonResponse(status_code=413)
+    signature = request.headers.get("x-hub-signature-256", "")
+    event = request.headers.get("x-github-event", "")
+    delivery = request.headers.get("x-github-delivery", "")
+    body = bytearray()
+    async for chunk in request.stream():
+        if len(body) + len(chunk) > MAX_BODY:
+            return JsonResponse(status_code=413)
+        body.extend(chunk)
+    if length is not None and int(length) != len(body):
+        return JsonResponse(status_code=400)
+    try:
+        await run_in_threadpool(receive_external_lifecycle, service, bytes(body), signature, event, delivery)
+    except GitHubDeliveryConflict:
+        return JsonResponse(status_code=409)
+    except GitHubManifestUnavailable:
+        return JsonResponse(status_code=400)
+    # Receipt is durable, but no asynchronous resource consumer is claimed yet.
+    return JsonResponse(status_code=202)

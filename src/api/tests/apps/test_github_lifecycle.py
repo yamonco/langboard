@@ -270,3 +270,104 @@ def test_concurrent_postgres_delivery_reuses_receipt(receipt_storage, monkeypatc
         results = list(pool.map(lambda _: receive(), range(2)))
     assert results[0]["receipt_uid"] == results[1]["receipt_uid"]
     assert sorted(result["duplicate"] for result in results) == [False, True]
+
+
+@pytest.mark.parametrize("board", ["sqlite-http"], indirect=True)
+def test_native_webhook_receipt_without_browser_identity(receipt_storage, monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from langboard.routes.board.BoardGitHubAppApi import receive_github_lifecycle
+    from langboard_shared.core.db import SqlBuilder
+    from langboard_shared.core.routing import AppRouter
+    from langboard_shared.domain.models import GitHubLifecycleReceipt
+
+    lifecycle, migration, engine = receipt_storage
+    service, board, connection, payload = lifecycle
+    import importlib
+    from langboard.middlewares.ApiAuthMiddleware import ApiAuthMiddleware
+
+    service.close = lambda: None
+    monkeypatch.setattr(
+        importlib.import_module("langboard.middlewares.ApiAuthMiddleware"), "DomainService", lambda: service
+    )
+    app = FastAPI()
+    app.include_router(AppRouter.api)
+    app.add_middleware(ApiAuthMiddleware, routes=AppRouter.api.routes)
+    for route in app.routes:
+        if getattr(route, "endpoint", None) is receive_github_lifecycle:
+            for dependency in route.dependant.dependencies:
+                if dependency.name == "service":
+                    app.dependency_overrides[dependency.call] = lambda: service
+    body, signature = signed(payload)
+    headers = {
+        "Content-Type": "application/json",
+        "X-Hub-Signature-256": signature,
+        "X-GitHub-Event": "installation_repositories",
+        "X-GitHub-Delivery": str(uuid4()),
+    }
+    with TestClient(app) as client:
+        first = client.post("/apps/github/events", content=body, headers=headers)
+        assert first.status_code == 202, first.text
+        assert client.post("/apps/github/events", content=body, headers=headers).status_code == 202
+        payload["repositories_removed"] = [{"id": 100}]
+        changed, changed_signature = signed(payload)
+        assert (
+            client.post(
+                "/apps/github/events", content=changed, headers={**headers, "X-Hub-Signature-256": changed_signature}
+            ).status_code
+            == 409
+        )
+        assert client.post("/apps/github/events", content=body + b" ", headers=headers).status_code == 400
+        assert (
+            client.post(
+                "/apps/github/events", content=body, headers={**headers, "Content-Type": "text/plain"}
+            ).status_code
+            == 415
+        )
+        assert (
+            client.post(
+                "/apps/github/events", content=body, headers={**headers, "Content-Encoding": "gzip"}
+            ).status_code
+            == 415
+        )
+        assert client.post("/apps/github/events", content=b"x" * (MAX_BODY + 1), headers=headers).status_code == 413
+        assert (
+            client.post("/apps/github/events", content=body, headers={**headers, "Content-Length": "0"}).status_code
+            == 400
+        )
+        assert client.post("/apps/github/events", content=iter([body]), headers=headers).status_code == 202
+        assert (
+            client.post("/apps/github/events", content=iter([b"x" * MAX_BODY, b"x"]), headers=headers).status_code
+            == 413
+        )
+        duplicated = list(headers.items()) + [("X-GitHub-Event", "installation")]
+        assert client.post("/apps/github/events", content=body, headers=duplicated).status_code == 400
+    with DbSession.use(readonly=False) as db:
+        assert len(db.exec(SqlBuilder.select.table(GitHubLifecycleReceipt)).all()) == 1
+
+
+@pytest.mark.parametrize("failure", ["unknown", "ambiguous", "inactive_owner", "forged_app"])
+def test_external_routing_does_not_trust_sender_or_candidate(receipt_storage, failure):
+    from langboard.apps.GitHubLifecycle import receive_external_lifecycle
+    from langboard_shared.core.db import SqlBuilder
+    from langboard_shared.domain.models import AppConnection, GitHubLifecycleReceipt
+
+    lifecycle, migration, engine = receipt_storage
+    service, board, connection, payload = lifecycle
+    payload["sender"] = {"id": int(board[1].id), "is_admin": True}
+    if failure == "unknown":
+        payload["installation"]["app_id"] = 43
+    elif failure == "ambiguous":
+        with DbSession.use(readonly=False) as db:
+            db.insert(AppConnection(app_key="github", owner_id=board[1].id, external_account_id="42"))
+    elif failure == "inactive_owner":
+        with DbSession.use(readonly=False) as db:
+            board[1].activated_at = None
+            db.update(board[1])
+    body, signature = signed(payload)
+    if failure == "forged_app":
+        signature = "sha256=" + "0" * 64
+    with pytest.raises(GitHubManifestUnavailable):
+        receive_external_lifecycle(service, body, signature, "installation_repositories", str(uuid4()))
+    with DbSession.use(readonly=False) as db:
+        assert not db.exec(SqlBuilder.select.table(GitHubLifecycleReceipt)).all()
