@@ -65,7 +65,7 @@ def begin_manifest(
             "redirect_url": root + f"/board/{board.get_uid()}/settings?github_app_manifest=1",
             "callback_urls": [root + f"/board/{board.get_uid()}/settings"],
             "setup_url": root + f"/board/{board.get_uid()}/settings",
-            # Signals are not enabled before an authenticated receiver exists.
+            # Lifecycle invalidation alone does not enable signal processing.
             "hook_attributes": {"url": api + "/apps/github/events", "active": False},
             "public": False,
             "default_permissions": {
