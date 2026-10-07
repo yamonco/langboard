@@ -62,6 +62,18 @@ from .forms import (
 )
 
 
+def _require_visible_card(
+    project_uid: str, card_uid: str, request: Request,
+    user_or_bot: User | Bot, service: DomainService,
+) -> None:
+    """Keep existing action permissions and additionally hide unreadable card IDs."""
+    if service.card.resolve_readable_card(
+        project_uid, card_uid, user_or_bot,
+        request.scope.get("collaboration_channel", CollaborationChannel.Api),
+    ) is None:
+        raise ApiException.NotFound_404(ApiErrorCode.NF2003)
+
+
 @AppRouter.api.post(
     "/board/{project_uid}/cards/available",
     tags=["Board.Card"],
@@ -388,10 +400,12 @@ def create_card(
 def change_card_details(
     project_uid: str,
     card_uid: str,
+    request: Request,
     form: ChangeCardDetailsForm,
     user_or_bot: User | Bot = Auth.scope("all"),
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
+    _require_visible_card(project_uid, card_uid, request, user_or_bot, service)
     form_dict = {}
     for key in ChangeCardDetailsForm.model_fields:
         value = getattr(form, key)
@@ -443,10 +457,12 @@ def change_card_details(
 def update_card_assigned_users(
     project_uid: str,
     card_uid: str,
+    request: Request,
     form: AssignUsersForm,
     user_or_bot: User | Bot = Auth.scope("all"),
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
+    _require_visible_card(project_uid, card_uid, request, user_or_bot, service)
     result = service.card.update_assigned_users(user_or_bot, project_uid, card_uid, form.assigned_users)
     if result is None:
         raise ApiException.NotFound_404(ApiErrorCode.NF2003)
@@ -466,10 +482,12 @@ def update_card_assigned_users(
 def add_card_assignee(
     project_uid: str,
     card_uid: str,
+    request: Request,
     assignee_uid: str,
     user_or_bot: User | Bot = Auth.scope("all"),
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
+    _require_visible_card(project_uid, card_uid, request, user_or_bot, service)
     try:
         result = service.card.assign_member(user_or_bot, project_uid, card_uid, assignee_uid)
     except LookupError as exc:
@@ -491,10 +509,12 @@ def add_card_assignee(
 def change_card_order_or_move_column(
     project_uid: str,
     card_uid: str,
+    request: Request,
     form: ChangeChildOrderForm,
     user_or_bot: User | Bot = Auth.scope("all"),
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
+    _require_visible_card(project_uid, card_uid, request, user_or_bot, service)
     result = service.card.change_order(user_or_bot, project_uid, card_uid, form.order, form.parent_uid)
     if not result:
         raise ApiException.NotFound_404(ApiErrorCode.NF2003)
@@ -521,10 +541,12 @@ def change_card_order_or_move_column(
 def update_card_labels(
     project_uid: str,
     card_uid: str,
+    request: Request,
     form: UpdateCardLabelsForm,
     user_or_bot: User | Bot = Auth.scope("all"),
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
+    _require_visible_card(project_uid, card_uid, request, user_or_bot, service)
     result = service.card.update_labels(user_or_bot, project_uid, card_uid, form.labels)
     if not result:
         raise ApiException.NotFound_404(ApiErrorCode.NF2003)
@@ -556,10 +578,12 @@ def update_card_labels(
 def update_card_relationships(
     project_uid: str,
     card_uid: str,
+    request: Request,
     form: UpdateCardRelationshipsForm,
     user_or_bot: User | Bot = Auth.scope("all"),
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
+    _require_visible_card(project_uid, card_uid, request, user_or_bot, service)
     try:
         result = service.card_relationship.update(
             user_or_bot, project_uid, card_uid, form.is_parent, form.relationships
@@ -592,10 +616,12 @@ def update_card_relationships(
 def patch_card_relationships(
     project_uid: str,
     card_uid: str,
+    request: Request,
     form: PatchCardGraphForm,
     user_or_bot: User | Bot = Auth.scope("all"),
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
+    _require_visible_card(project_uid, card_uid, request, user_or_bot, service)
     patch = validate_card_graph_patch(
         project_uid,
         card_uid,
@@ -654,10 +680,12 @@ def patch_card_relationships(
 def set_card_completed(
     project_uid: str,
     card_uid: str,
+    request: Request,
     form: SetCardCompletedForm,
     user_or_bot: User | Bot = Auth.scope("all"),
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
+    _require_visible_card(project_uid, card_uid, request, user_or_bot, service)
     result = service.card.set_card_completed(user_or_bot, project_uid, card_uid, form.completed)
     if not result:
         raise ApiException.NotFound_404(ApiErrorCode.NF2003)
@@ -689,10 +717,12 @@ def set_card_completed(
 def cardify_selection(
     project_uid: str,
     card_uid: str,
+    request: Request,
     form: CardifySelectionForm,
     user_or_bot: User | Bot = Auth.scope("all"),
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
+    _require_visible_card(project_uid, card_uid, request, user_or_bot, service)
     result = service.card.cardify_selection(user_or_bot, project_uid, card_uid, form.selected_markdown)
     if not result:
         raise ApiException.NotFound_404(ApiErrorCode.NF2003)
@@ -726,9 +756,11 @@ def cardify_selection(
 def convert_card_checkboxes(
     project_uid: str,
     card_uid: str,
+    request: Request,
     user_or_bot: User | Bot = Auth.scope("all"),
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
+    _require_visible_card(project_uid, card_uid, request, user_or_bot, service)
     result = service.card.convert_description_checkboxes(user_or_bot, project_uid, card_uid)
     if not result:
         raise ApiException.NotFound_404(ApiErrorCode.NF2003)
@@ -763,8 +795,11 @@ def convert_card_checkboxes(
 def get_card_comment_counts(
     project_uid: str,
     card_uid: str,
+    request: Request,
+    user_or_bot: User | Bot = Auth.scope("all"),
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
+    _require_visible_card(project_uid, card_uid, request, user_or_bot, service)
     counts = service.card.get_section_comment_counts(project_uid, card_uid)
     if counts is None:
         raise ApiException.NotFound_404(ApiErrorCode.NF2003)
@@ -796,10 +831,12 @@ def get_card_comment_counts(
 def copy_selection_to_wiki(
     project_uid: str,
     card_uid: str,
+    request: Request,
     form: CopySelectionToWikiForm,
     user_or_bot: User | Bot = Auth.scope("all"),
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
+    _require_visible_card(project_uid, card_uid, request, user_or_bot, service)
     result = service.card.copy_selection_to_wiki(
         user_or_bot, project_uid, card_uid, form.selected_markdown, form.wiki_title
     )
@@ -820,9 +857,11 @@ def copy_selection_to_wiki(
 def archive_card(
     project_uid: str,
     card_uid: str,
+    request: Request,
     user_or_bot: User | Bot = Auth.scope("all"),
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
+    _require_visible_card(project_uid, card_uid, request, user_or_bot, service)
     project = service.project.get_by_id_like(project_uid)
     if project is None:
         raise ApiException.NotFound_404(ApiErrorCode.NF2003)
@@ -865,9 +904,11 @@ def archive_card(
 def delete_card(
     project_uid: str,
     card_uid: str,
+    request: Request,
     user_or_bot: User | Bot = Auth.scope("all"),
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
+    _require_visible_card(project_uid, card_uid, request, user_or_bot, service)
     try:
         result = service.card.delete(user_or_bot, project_uid, card_uid)
     except CardDeleteForbidden as exc:
@@ -945,10 +986,12 @@ def mark_card_unread(
 def replace_card_content_blocks(
     project_uid: str,
     card_uid: str,
+    request: Request,
     blocks: list[dict] = None,
     user_or_bot: User | Bot = Auth.scope("all"),
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
+    _require_visible_card(project_uid, card_uid, request, user_or_bot, service)
     result = service.card_content_block.replace_blocks(user_or_bot, project_uid, card_uid, blocks or [])
     if result is None and blocks is None:
         raise ApiException.NotFound_404(ApiErrorCode.NF2004)
