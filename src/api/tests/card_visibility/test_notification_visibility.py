@@ -94,3 +94,19 @@ def test_notification_service_uses_current_actor_and_trusted_channel(current_car
         db.update(user)
     assert service.get_api_list(user, "all", channel=CollaborationChannel.Mcp) == ([], False, 0)
     query.assert_not_called()
+
+
+def test_mysql_notification_reference_query_compiles(monkeypatch):
+    from contextlib import contextmanager
+    from types import SimpleNamespace
+    from sqlalchemy.dialects import mysql
+
+    statements = []
+    @contextmanager
+    def session(**_kwargs):
+        yield SimpleNamespace(exec=lambda query: statements.append(str(query.compile(dialect=mysql.dialect(), compile_kwargs={"literal_binds": True}))) or SimpleNamespace(first=lambda: 0, all=lambda: []))
+    monkeypatch.setattr(DbSession, "use", session)
+    monkeypatch.setattr(DbEngine, "get_main_engine", lambda: SimpleNamespace(dialect=SimpleNamespace(name="mysql")))
+    assert UserNotificationRepository(None, None).get_scoped_list(1, "all", 1, 1, False, contexts={}) == ([], 0)
+    assert len(statements) == 2
+    assert all("JSON_TABLE(user_notification.record_list, '$[*]' COLUMNS (" in sql for sql in statements)

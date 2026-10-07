@@ -52,8 +52,8 @@ class UserNotificationRepository(BaseRepository[UserNotification]):
             record_id = sql_cast(refs.c.value.op("->>")(1), BigInteger)
         elif dialect in {"mysql", "mariadb"}:
             refs = func.JSON_TABLE(
-                UserNotification.record_list, "$[*]",
-                literal_column("COLUMNS (ref_table VARCHAR(64) PATH '$[0]', ref_id BIGINT PATH '$[1]')"),
+                UserNotification.record_list,
+                literal_column("'$[*]' COLUMNS (ref_table VARCHAR(64) PATH '$[0]', ref_id BIGINT PATH '$[1]')"),
             ).table_valued("ref_table", "ref_id").alias("notification_refs")
             table, record_id = refs.c.ref_table, refs.c.ref_id
         else:
