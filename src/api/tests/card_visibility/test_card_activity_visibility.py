@@ -10,7 +10,7 @@ from langboard_shared.core.db.DbEngine import DbEngine
 from langboard_shared.core.routing import ApiException
 from langboard_shared.core.security.CollaborationChannel import CollaborationChannel
 from langboard_shared.core.types import SafeDateTime
-from langboard_shared.domain.models import Card, ProjectActivity
+from langboard_shared.domain.models import Card, ProjectActivity, User
 from langboard_shared.domain.models.ProjectActivity import ProjectActivityType
 from langboard_shared.domain.services.CardVisibilityPolicy import CardVisibilityContext
 from langboard_shared.infrastructure.repositories.factory.ActivityRepository import ActivityRepository
@@ -18,13 +18,16 @@ from langboard_shared.infrastructure.repositories.factory.ActivityRepository imp
 
 @pytest.mark.parametrize("channel", list(CollaborationChannel))
 @pytest.mark.parametrize("internal", (True, False))
+@pytest.mark.parametrize("current_card", ["sqlite://", "postgresql-test"], indirect=True)
 def test_change_feed_filters_before_limit_and_uses_only_visible_cursor(current_card, channel, internal):
     user, project, private, service = current_card
     ProjectActivity.__table__.create(DbEngine.get_main_engine())
     with DbSession.use(readonly=False) as db:
+        other = User(firstname="Other", lastname="Owner", email="other-owner@example.invalid", password="test-only")
+        db.insert(other)
         shared = Card(project_id=project.id, title="Shared", visibility="SHARED")
         internal_card = Card(project_id=project.id, title="Internal", visibility="INTERNAL")
-        foreign = Card(project_id=project.id, title="Foreign vault", visibility="PRIVATE", owner_user_id=user.id + 1, created_by_user_id=user.id + 1)
+        foreign = Card(project_id=project.id, title="Foreign vault", visibility="PRIVATE", owner_user_id=other.id, created_by_user_id=other.id)
         deleted = Card(project_id=project.id, title="Deleted", visibility="SHARED", deleted_at=SafeDateTime.now())
         for card in (shared, internal_card, foreign, deleted):
             db.insert(card)
@@ -97,6 +100,7 @@ def test_board_feed_route_forwards_actor_and_server_channel():
     feed.assert_called_once_with("p", limit=3, before_activity_uid="cursor", user=actor, channel=CollaborationChannel.Mcp)
 
 
+@pytest.mark.parametrize("current_card", ["sqlite://", "postgresql-test"], indirect=True)
 def test_feed_revalidates_cached_actor_and_current_card_visibility(current_card):
     user, project, card, service = current_card
     ProjectActivity.__table__.create(DbEngine.get_main_engine())
@@ -108,7 +112,9 @@ def test_feed_revalidates_cached_actor_and_current_card_visibility(current_card)
     assert len(service.get_change_feed(project, user=user, channel=CollaborationChannel.Mcp)["entries"]) == 1
     assert service.get_change_feed(project, user=user, channel=CollaborationChannel.Api)["entries"] == []
     with DbSession.use(readonly=False) as db:
-        card.owner_user_id = user.id + 1
+        other = User(firstname="Other", lastname="Owner", email="other-owner@example.invalid", password="test-only")
+        db.insert(other)
+        card.owner_user_id = other.id
         card.created_by_user_id = card.owner_user_id
         db.update(card)
     assert service.get_change_feed(project, user=user, channel=CollaborationChannel.Mcp)["entries"] == []
