@@ -120,6 +120,11 @@ class DbSession:
     _atomic_session: ClassVar[ContextVar["DbSession | None"]] = ContextVar("atomic_db_session", default=None)
 
     @staticmethod
+    def has_active_transaction() -> bool:
+        """Whether this context already owns a host atomic unit."""
+        return DbSession._atomic_session.get() is not None
+
+    @staticmethod
     @contextmanager
     def atomic():
         """Share one write transaction across nested repository operations."""

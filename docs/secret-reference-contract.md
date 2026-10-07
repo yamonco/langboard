@@ -106,3 +106,21 @@ the existing authenticated HTTP/MCP transports without a plugin dependency.
 Wiki documents may retain canonical URI text as a non-secret reference. Dedicated
 wiki reference rendering, CLI convenience UX, and real GitHub provider consumers
 remain pending; storing URI text does not imply that those integrations execute.
+
+## Credential rotation
+
+Trusted `rotate(actor, uri, SecretStr, expected_revision)` preserves the stable
+reference URI and name/scope. It locks the reference, rechecks current authority,
+rejects revoked references and mismatched providers, writes fresh opaque storage,
+updates the locator/revision and records a `rotated` audit fact atomically.
+Stale revision or audit failure preserves the old reference/material. The old
+locator is retired only after the database commit. Cleanup failure preserves a
+valid new reference but leaves an old-material cleanup obligation; KMS deletion
+retains the previously documented limitations.
+
+Create and rotate must own their database transaction. They reject calls within
+an outer host atomic transaction before any vault effect, so a later outer rollback
+cannot orphan an untracked successful storage write. This unit does not implement
+cross-provider migration, rotation scheduling, cleanup retry jobs or an HTTP/MCP
+credential write interface. Provider installation adapters must call these trusted
+units with the returned reference URI rather than embedding values in a board.
