@@ -55,7 +55,8 @@ def test_unactivated_visibility_and_audit_do_not_leak_into_generic_payloads():
 
     card = Card(project_id=1, project_column_id=2, title="Private")
     assert card.visibility == "INTERNAL"
-    assert "visibility" not in card.api_response()
+    assert card.owner_user_id is None
+    assert not {"visibility", "owner_user_id"}.intersection(card.api_response())
     audit = CardVisibilityChange(
         card_id=card.id, changed_by_user_id=3, channel="human_ui", previous_visibility="INTERNAL", next_visibility="SHARED"
     )
