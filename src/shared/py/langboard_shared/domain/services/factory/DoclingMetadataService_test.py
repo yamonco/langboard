@@ -139,7 +139,12 @@ def test_document_generation_fences_old_results_and_preserves_previous_text_on_f
         docling.get_document_by_attachment_uid(CardMetadata, card, attachment.get_uid())["content"]["markdown"]
         == "이전 전사"
     )
+    docling.delete_document_by_attachment_uid(CardMetadata, Card(id=card.id + 1, title="Foreign", project_id=other_project.id, project_column_id=column.id), attachment.get_uid())
+    with DbSession.use(readonly=True) as db:
+        assert db.exec(SqlBuilder.select.table(CardDocumentArtifact)).first() is not None
     docling.delete_document_by_attachment_uid(CardMetadata, card, attachment.get_uid())
+    with DbSession.use(readonly=True) as db:
+        assert db.exec(SqlBuilder.select.table(CardDocumentArtifact)).first() is None
     assert not docling.mark_document_failed(
         CardMetadata, card, attachment.get_uid(), attachment.filename, "late failure", generation=second
     )
