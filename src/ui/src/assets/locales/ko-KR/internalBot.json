@@ -32,6 +32,7 @@
     "splitter.strip_headers": "청크 본문에서 헤더 제거",
     "overlap_error": "겹침은 청크 크기보다 작아야 합니다.",
     "separators_error": "32자 이하 문자열 1–16개를 입력하고 마지막 구분자는 빈 문자열로 지정하세요.",
-    "headers_error": "Markdown 헤더 수준을 하나 이상 선택하세요."
+    "headers_error": "Markdown 헤더 수준을 하나 이상 선택하세요.",
+    "header_level": "헤더 {{level}}"
   }
 }

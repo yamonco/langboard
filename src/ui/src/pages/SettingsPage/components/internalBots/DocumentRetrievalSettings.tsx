@@ -188,7 +188,7 @@ export default function DocumentRetrievalSettings({
                                             level
                                         )}
                                     />
-                                    H{level}
+                                    {t("internalBot.retrieval.header_level", { level })}
                                 </label>
                             ))}
                         </div>
