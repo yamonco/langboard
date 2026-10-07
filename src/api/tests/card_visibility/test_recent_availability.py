@@ -2,7 +2,7 @@
 
 from types import SimpleNamespace
 import pytest
-from langboard_shared.core.db import DbSession
+from langboard_shared.core.db import DbSession, SqlBuilder
 from langboard_shared.core.db.DbEngine import DbEngine
 from langboard_shared.core.storage import FileModel
 from langboard_shared.core.types import SafeDateTime
@@ -21,6 +21,7 @@ from langboard_shared.domain.models import (
     WorkflowStageDefinition,
 )
 from langboard_shared.domain.services.CardVisibilityPolicy import CollaborationChannel
+from langboard_shared.domain.services.factory.CardAttachmentService import CardAttachmentService
 from langboard_shared.domain.services.factory.CardService import CardService
 from langboard_shared.infrastructure.repositories.factory.CardRelationshipRepository import CardRelationshipRepository
 from langboard_shared.infrastructure.repositories.factory.CardRepository import CardRepository
@@ -81,6 +82,7 @@ def test_recent_cards_revalidate_actor_and_filter_visibility_before_return(monke
         for channel in CollaborationChannel:
             expected = {uids[0], uids[2]} if channel in (CollaborationChannel.HumanUI, CollaborationChannel.Mcp) else {uids[0]}
             assert set(service.get_existing_uids(project, uids, user=member, channel=channel)) == expected
+            assert {card.get_uid() for card in service.get_visible_by_project(project, member, channel)} == expected
             found = service.search_context_by_project(project, "SearchProof", user=member, channel=channel)
             assert {row["uid"] for row in found} == expected
             assert all(row["document_matches"][0]["snippet"] == "SearchProof document" for row in found)
@@ -121,6 +123,14 @@ def test_recent_cards_revalidate_actor_and_filter_visibility_before_return(monke
             changed.visibility = "SHARED"
             db.update(changed)
         assert service.resolve_readable_card(project, cards[0], member, CollaborationChannel.Mcp) is not None
+        attachment_service = CardAttachmentService(lambda _: None, lambda _: None, repository)
+        with DbSession.use(readonly=False) as db:
+            attachment = db.exec(SqlBuilder.select.table(CardAttachment).where(CardAttachment.card_id == cards[0].id)).first()
+            deleted_attachment = attachment.model_copy(deep=True)
+            deleted_attachment.deleted_at = SafeDateTime.now()
+            db.update(deleted_attachment)
+        assert attachment.deleted_at is None
+        assert attachment_service.get_by_id_like(attachment, consistent=True) is None
         scim.is_employee = lambda user: True
         assert set(service.get_existing_uids(project, uids, user=member, channel=CollaborationChannel.Mcp)) == set(uids[:3])
         _, internal_context = service.resolve_visibility_context(project, member, CollaborationChannel.Mcp)

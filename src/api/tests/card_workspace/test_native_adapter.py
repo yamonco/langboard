@@ -708,7 +708,7 @@ def test_checklist_projection_deletes_stale_native_item_and_commits_receipt_last
 
     service = SimpleNamespace(
         project=SimpleNamespace(get_by_id_like=lambda _uid: project),
-        card=SimpleNamespace(get_by_id_like=lambda _uid: card),
+        card=SimpleNamespace(get_by_id_like=lambda _uid: card, resolve_readable_card=lambda *args: (project, card, object())),
         checklist=SimpleNamespace(get_api_list_by_card=checklists),
         checkitem=SimpleNamespace(delete=delete),
         metadata=SimpleNamespace(
