@@ -93,6 +93,7 @@ const Content = React.forwardRef<React.ComponentRef<typeof DialogPrimitive.Conte
             disableOverlayClick,
             onPointerDownOutside,
             onOverlayInteract,
+            onEscapeKeyDown,
             ...props
         },
         ref
@@ -161,6 +162,15 @@ const Content = React.forwardRef<React.ComponentRef<typeof DialogPrimitive.Conte
                             "relative w-full max-w-lg gap-4 border bg-background p-6 shadow-lg duration-200 focus-visible:outline-none sm:rounded-lg",
                             className
                         )}
+                        onEscapeKeyDown={(event) => {
+                            // Sidebar label previews retain focus outside their portaled layer.
+                            // Let that focused control collapse before dismissing this dialog.
+                            if ((event.target as Element)?.closest?.("[data-compact-label][aria-expanded='true']")) {
+                                event.preventDefault();
+                                return;
+                            }
+                            onEscapeKeyDown?.(event);
+                        }}
                         data-dialog-content="true"
                         onPointerDownOutside={(e) => {
                             onOverlayClick(e);

@@ -358,3 +358,17 @@ test("compact labels expand on hover and collapse without moving neighboring lab
     await page.getByRole("button", { name: "Outside" }).hover();
     await expect(page.getByRole("dialog")).toHaveCount(0);
 });
+
+test("compact sidebar label Escape collapses the label and preserves the open parent card", async ({ page }) => {
+    await page.goto("/src/components/LabelBadge/compact-labels.fixture.html?nested=1");
+    const label = page.getByRole("button", { name: "🧩 Contract", exact: true });
+    await label.focus();
+    await expect(page.getByRole("dialog", { name: "🧩 Contract", exact: true })).toBeVisible();
+    await expect(page.getByRole("dialog", { name: "Parent card" })).toBeVisible();
+    await label.press("Escape");
+    await expect(page.getByRole("dialog", { name: "🧩 Contract", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("dialog", { name: "Parent card" })).toBeVisible();
+    await expect(label).toBeFocused();
+    await page.getByRole("button", { name: "Parent action", exact: true }).press("Escape");
+    await expect(page.getByRole("dialog", { name: "Parent card" })).toHaveCount(0);
+});

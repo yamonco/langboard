@@ -70,6 +70,7 @@ export const LabelBadge = memo(({ name, color, textColor, description, noTooltip
                 <Popover.Anchor asChild>
                     <button
                         type="button"
+                        data-compact-label=""
                         aria-label={name}
                         aria-expanded={expanded}
                         className={cn(
@@ -83,6 +84,12 @@ export const LabelBadge = memo(({ name, color, textColor, description, noTooltip
                         }}
                         onPointerLeave={(event) => {
                             if (event.pointerType !== "touch") setExpanded(false);
+                        }}
+                        onKeyDown={(event) => {
+                            if (event.key !== "Escape" || !expanded) return;
+                            event.preventDefault();
+                            event.stopPropagation();
+                            setExpanded(false);
                         }}
                         onFocus={() => setExpanded(true)}
                         onBlur={() => setExpanded(false)}
