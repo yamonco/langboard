@@ -1,6 +1,4 @@
 import { memo, useEffect } from "react";
-import Box from "@/components/base/Box";
-import Flex from "@/components/base/Flex";
 import { ROUTES } from "@/core/routing/constants";
 import setupApiErrorHandler from "@/core/helpers/setupApiErrorHandler";
 import { IBoardRelatedPageProps } from "@/pages/BoardPage/types";

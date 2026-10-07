@@ -147,7 +147,7 @@ function WebhookCreateFormDialog({ opened, setOpened }: ISharedSettingsModalProp
                 </Dialog.Header>
                 {revealedSecret ? (
                     <>
-                        <Box mt="4" as="p" textSize="sm" className="text-muted-foreground">
+                        <Box mt="4" as="div" textSize="sm" className="text-muted-foreground">
                             {t("settings.Copy this signing secret now. It will not be shown again.")}
                         </Box>
                         <Box mt="3">

@@ -131,12 +131,12 @@ const BoardCard = memo(
         });
         useEffect(() => {
             const listener = {
-                topic: ESocketTopic.Board,
+                topic: ESocketTopic.Board as const,
                 topicId: projectUID,
                 event: SocketEvents.SERVER.BOARD.CARD.DETAILS_CHANGED.replace("{uid}", cardUID),
                 eventKey: `card-execution-receipt-${projectUID}-${cardUID}`,
-                callback: (data: { execution_receipt_changed?: boolean }) => {
-                    if (data.execution_receipt_changed) {
+                callback: (data: unknown) => {
+                    if (data && typeof data === "object" && "execution_receipt_changed" in data && data.execution_receipt_changed === true) {
                         void queryClient.invalidateQueries({ queryKey: [`get-card-details-${projectUID}-${cardUID}`] });
                     }
                 },

@@ -36,7 +36,6 @@ import {
 } from "@/pages/BoardPage/components/board/BoardColumnCardStatus";
 import { BoardCardAttachmentDocumentProgress } from "@/pages/BoardPage/components/card/attachment/BoardCardAttachmentDocument";
 import BoardTaskMetadataBadges from "@/pages/BoardPage/components/task/BoardTaskMetadataBadges";
-import BoardCardMove from "@/pages/BoardPage/components/board/BoardCardMove";
 import { getBoardCardWidgetVisibility } from "@/pages/BoardPage/components/board/BoardCardWidgetVisibility";
 import useSetCardCompleted from "@/controllers/api/board/useSetCardCompleted";
 import { captureCardOrigin } from "@/pages/BoardPage/components/board/CardAnimation";

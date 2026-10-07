@@ -43,7 +43,7 @@ export default function CardColumnHistory({ card }: { card: ProjectCard.TModel }
         // Column changes can precede the asynchronous activity write. Refresh after its committed event too.
         // The dashboard project loader owns this subscription; only add a listener here.
         const listener = {
-            topic: ESocketTopic.Dashboard,
+            topic: ESocketTopic.Dashboard as const,
             topicId: projectUID,
             event: SocketEvents.SERVER.DASHBOARD.PROJECT.ACTIVITY_RECORDED.replace("{uid}", projectUID),
             eventKey: `card-column-history-${projectUID}-${card.uid}`,

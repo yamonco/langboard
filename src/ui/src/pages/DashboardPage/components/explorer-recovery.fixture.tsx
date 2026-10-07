@@ -11,7 +11,10 @@ import "@/assets/styles/main.css";
 
 const client = new QueryClient();
 const cached = new URLSearchParams(location.search).has("cached");
-const data = { projects: [{ uid: "fixture", title: "Retained board", starred: false, project_type: "Other" }], columns: [] };
+const data = {
+    projects: [{ created_at: new Date(), updated_at: new Date(), uid: "fixture", title: "Retained board", starred: false, project_type: "Other" }],
+    columns: [],
+};
 if (cached)
     client.setQueryData(["get-dashboard-projects"], { projects: Project.Model.fromArray(data.projects, true), columns: [] }, { updatedAt: 1 });
 let fail = true;
