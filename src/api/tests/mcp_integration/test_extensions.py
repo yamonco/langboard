@@ -1,12 +1,13 @@
 """Extension catalogs reuse current native authority and per-call resource cleanup."""
 
+from types import SimpleNamespace
 from unittest.mock import Mock
 import pytest
 from fastmcp import Client, FastMCP
 from langboard.Loader import ModuleLoader
 from langboard.mcp_integration.Extensions import create_native_extension_provider
 from langboard.mcp_integration.Providers import create_native_domain_provider
-from langboard.mcp_integration.Server import McpServer
+from langboard.mcp_integration.Server import McpServer, _create_fastmcp
 from langboard.mcp_integration.Tool import McpTool
 from langboard.middlewares.McpAuthMiddleware import mcp_auth_context
 from langboard_shared.domain.models import User
@@ -82,3 +83,47 @@ async def test_host_role_revocation_and_injected_service_cleanup(monkeypatch, fa
     finally:
         mcp_auth_context.reset(token)
         McpTool._tools.pop("extension_native_contract", None)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("installed", [False, True])
+@pytest.mark.parametrize("gate", ["allowed", "group", "role", "identity", "handler_error"])
+async def test_mounted_native_extension_retains_host_gates_and_cleanup(monkeypatch, installed, gate):
+    actor = User(
+        id=1,
+        firstname="Fixture",
+        lastname="Actor",
+        username="fixture",
+        email="fixture@example.invalid",
+        password="fixture-only",
+    )
+    calls, closed = Mock(), Mock()
+
+    def mount_probe(user: User, service: DomainService):
+        assert user is actor
+        calls()
+        if gate == "handler_error":
+            raise RuntimeError("fixture failure")
+        return {"applied": True}
+
+    McpTool.add("user")(mount_probe)
+    monkeypatch.setattr(DomainService, "close", lambda self: closed())
+    monkeypatch.setattr(McpServer, "_validate_role", lambda *args, **kwargs: gate != "role")
+    parent = _create_fastmcp()
+    if installed:
+        child = FastMCP("selected-native-catalog", mask_error_details=True)
+        child.add_provider(create_native_extension_provider(["mount_probe"], McpServer._wrap_tool))
+        parent.mount(child)
+    group = SimpleNamespace(activated_at=object(), tools=[] if gate == "group" else ["mount_probe"])
+    token = mcp_auth_context.set({"user_or_bot": None if gate == "identity" else actor, "tool_group": group})
+    try:
+        async with Client(parent) as client:
+            names = {tool.name for tool in await client.list_tools()}
+            assert ("mount_probe" in names) is (installed and gate != "group")
+            result = await client.call_tool("mount_probe", {}, raise_on_error=False)
+            ran = installed and gate in {"allowed", "handler_error"}
+            assert calls.call_count == closed.call_count == int(ran)
+            assert result.is_error is (not installed or gate != "allowed")
+    finally:
+        mcp_auth_context.reset(token)
+        McpTool._tools.pop("mount_probe", None)
