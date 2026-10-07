@@ -54,7 +54,9 @@ def installation(secrets, monkeypatch):
         else:
             assert token == "fixture-ephemeral-token"
         if request.url.path.endswith("access_tokens"):
-            assert json.loads(request.content) == {"permissions": {"metadata": "read"}}
+            body = json.loads(request.content)
+            assert body["permissions"] == {"metadata": "read"}
+            responses["repository_ids"] = body.get("repository_ids")
             return httpx.Response(201, json={"token": "fixture-ephemeral-token"})
         if request.url.path == "/installation/repositories":
             if responses["revoke_host"]:
@@ -64,9 +66,10 @@ def installation(secrets, monkeypatch):
             return httpx.Response(
                 200,
                 json={
-                    "total_count": 101,
+                    "total_count": len(responses["repository_ids"]) if responses.get("repository_ids") else 101,
                     "repositories": [
-                        {"id": 99, "full_name": "fixture/repo", "owner": {"id": 7}, "private": True},
+                        {"id": uid, "full_name": f"fixture/repo-{uid}", "owner": {"id": 7}, "private": True}
+                        for uid in responses.get("returned_ids", responses.get("repository_ids") or [99])
                     ],
                 },
             )
@@ -92,7 +95,7 @@ def test_repository_inspection_checks_rsa_identity_and_pages_without_token_leak(
     service, board, connection, calls, responses = installation
     result = github.inspect_installation(service, board[1], board[2].get_uid(), connection.get_uid(), 17, 7)
     assert result["next_page"] == 2 and not result["binding_created"]
-    assert result["repositories"] == [{"id": 99, "name": "fixture/repo", "private": True, "archived": False}]
+    assert result["repositories"] == [{"id": 99, "name": "fixture/repo-99", "private": True, "archived": False}]
     assert "fixture-ephemeral-token" not in json.dumps(result)
     assert [call.method for call in calls] == ["GET", "POST", "GET", "DELETE"]
 
@@ -122,3 +125,57 @@ def test_installation_and_current_authority_failure_is_closed(installation, fail
         github.inspect_installation(service, board[1], board[2].get_uid(), connection.get_uid(), 17, 7)
     if failure == "host_permission":
         assert not calls
+
+
+def test_multi_repository_delta_preserves_foreign_binding_and_other_selection(installation):
+    from langboard.apps.GitHubResources import GitHubResourceConflict, get_resources, update_resources
+    from langboard_shared.domain.models import AppResourceBinding, BoardAppBinding
+    from sqlalchemy import select
+
+    service, board, connection, calls, responses = installation
+    snapshot = get_resources(service, board[1], board[2].get_uid())
+    added = update_resources(
+        service, board[1], board[2].get_uid(), connection.get_uid(), 17, 7, (99, 100), (), snapshot["revision"]
+    )
+    assert len(added["items"]) == 2 and all(item["selected"] for item in added["items"])
+    with DbSession.use(readonly=False) as db:
+        foreign = BoardAppBinding(project_id=11, app_key="github", state="enabled")
+        db.insert(foreign)
+        other = AppResourceBinding(
+            board_binding_id=foreign.id,
+            connection_id=connection.id,
+            resource_type="repository",
+            external_resource_id="99",
+        )
+        db.insert(other)
+    removed = update_resources(
+        service, board[1], board[2].get_uid(), connection.get_uid(), 17, 7, (), (99,), added["revision"]
+    )
+    assert {item["repository_id"]: item["selected"] for item in removed["items"]} == {"99": False, "100": True}
+    with pytest.raises(GitHubResourceConflict):
+        update_resources(
+            service, board[1], board[2].get_uid(), connection.get_uid(), 17, 7, (), (100,), added["revision"]
+        )
+    with DbSession.use(readonly=False) as db:
+        persisted = db.exec(select(AppResourceBinding).where(AppResourceBinding.id == other.id)).first()[0]
+        own = db.exec(select(BoardAppBinding).where(BoardAppBinding.project_id == board[2].id)).first()[0]
+        assert persisted.is_selected and own.state == "disabled" and not own.granted_capabilities
+    restored = update_resources(
+        service, board[1], board[2].get_uid(), connection.get_uid(), 17, 7, (99,), (), removed["revision"]
+    )
+    assert len(restored["items"]) == 2 and all(item["selected"] for item in restored["items"])
+
+
+@pytest.mark.parametrize("returned_ids", [[99], [99, 101], [99, 100, 100]])
+def test_resource_delta_rejects_incomplete_wrong_or_duplicate_external_set(installation, returned_ids):
+    from langboard.apps.GitHubResources import get_resources, update_resources
+
+    service, board, connection, calls, responses = installation
+    snapshot = get_resources(service, board[1], board[2].get_uid())
+    responses["returned_ids"] = returned_ids
+    with pytest.raises(github.GitHubManifestUnavailable):
+        update_resources(
+            service, board[1], board[2].get_uid(), connection.get_uid(), 17, 7, (99, 100), (), snapshot["revision"]
+        )
+    assert get_resources(service, board[1], board[2].get_uid()) == snapshot
+    assert calls[-1].method == "DELETE"
