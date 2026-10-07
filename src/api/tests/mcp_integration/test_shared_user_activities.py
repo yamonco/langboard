@@ -6,6 +6,7 @@ import pytest
 from langboard_shared.core.db import DbSession
 from langboard_shared.core.db.DbEngine import DbEngine
 from langboard_shared.core.schema import TimeBasedPagination
+from langboard_shared.core.types import SafeDateTime
 from langboard_shared.domain.models import (
     Bot,
     Card,
@@ -22,6 +23,7 @@ from langboard_shared.domain.models import (
 from langboard_shared.domain.models.ProjectActivity import ProjectActivityType
 from langboard_shared.domain.models.ProjectWikiActivity import ProjectWikiActivityType
 from langboard_shared.domain.services.factory.ActivityService import ActivityService
+from langboard_shared.domain.services.factory.CardService import CardService
 from langboard_shared.infrastructure.repositories.factory.ActivityRepository import ActivityRepository
 from sqlalchemy import create_engine, event
 
@@ -45,9 +47,10 @@ def test_shared_history_filters_before_paging_and_reauthorizes_detail(monkeypatc
     monkeypatch.setattr(DbEngine, "get_main_engine", lambda: engine)
     monkeypatch.setattr(DbEngine, "get_readonly_engine", lambda: engine)
     repository = ActivityRepository(lambda _: None, lambda _: None)
-    service = ActivityService(lambda _: None, lambda _: None, SimpleNamespace(activity=repository))
-    viewer = User(firstname="Viewer", lastname="Test", email="viewer@example.invalid", password="test")
-    target = User(firstname="Target", lastname="Test", email="target@example.invalid", password="test")
+    card_service = CardService(lambda _: SimpleNamespace(is_employee=lambda _: False), lambda _: None, SimpleNamespace())
+    service = ActivityService(lambda _: card_service, lambda _: None, SimpleNamespace(activity=repository))
+    viewer = User(firstname="Viewer", lastname="Test", email="viewer@example.invalid", password="test", activated_at=SafeDateTime.now())
+    target = User(firstname="Target", lastname="Test", email="target@example.invalid", password="test", activated_at=SafeDateTime.now())
     with DbSession.use(readonly=False) as db:
         db.insert(viewer)
         db.insert(target)
@@ -167,7 +170,7 @@ def test_shared_history_filters_before_paging_and_reauthorizes_detail(monkeypatc
         == []
     )
     admin = SimpleNamespace(id=viewer.id, is_admin=True)
-    assert repository.get_shared_user_activities(admin, target, pagination, hidden.get_uid(), "project") == []
+    assert repository.get_shared_user_activities(admin, target, pagination, hidden.get_uid(), "project", contexts=card_service.resolve_work_visibility_contexts(viewer, "api")) == []
     with pytest.raises(ValueError, match="scope"):
         service.get_shared_user_activities(viewer, target.get_uid(), pagination, visible.get_uid())
     with pytest.raises(ValueError, match="bounds"):

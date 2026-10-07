@@ -1,7 +1,7 @@
 import json
 from datetime import datetime
 from typing import Any, Literal, cast, overload
-from ....core.db import BaseDbModel
+from ....core.db import BaseDbModel, DbSession, SqlBuilder
 from ....core.domain import BaseDomainService
 from ....core.schema import TimeBasedPagination
 from ....core.security.CollaborationChannel import CollaborationChannel
@@ -35,6 +35,7 @@ class ActivityService(BaseDomainService):
         project_uid: str | None = None,
         since: str | None = None,
         until: str | None = None,
+        *, channel: CollaborationChannel = CollaborationChannel.Api,
     ) -> dict[str, Any]:
         """Read another person's currently shared workspace history without side effects."""
         if pagination.page < 1 or not 1 <= pagination.limit <= 50 or offset < 0 or not 1 <= max_chars <= 8000:
@@ -47,11 +48,15 @@ class ActivityService(BaseDomainService):
             raise ValueError("Period timestamps must include a timezone")
         if start and end and start >= end:
             raise ValueError("since must be earlier than until")
-        target = InfraHelper.get_by_id_like(User, target_uid)
-        if not target or target.deleted_at:
+        from .CardService import CardService
+
+        contexts = self._get_service(CardService).resolve_work_visibility_contexts(viewer, channel)
+        with DbSession.use(readonly=False) as db:
+            target = db.exec(SqlBuilder.select.table(User).where(User.id == InfraHelper.convert_id(target_uid))).first()
+        if not contexts or not target or target.deleted_at or not target.activated_at:
             return {"activities": [], "has_more": False}
         rows = self.repo.activity.get_shared_user_activities(
-            viewer, target, pagination, activity_uid, scope, project_uid, start, end
+            viewer, target, pagination, activity_uid, scope, project_uid, start, end, contexts=contexts
         )
         items = []
         for row in rows[: pagination.limit]:
@@ -88,25 +93,27 @@ class ActivityService(BaseDomainService):
 
     @overload
     def get_api_list_by_user(
-        self, user: TUserParam | None, pagination: TimeBasedPagination
+        self, user: TUserParam | None, pagination: TimeBasedPagination, *, channel: CollaborationChannel = CollaborationChannel.Api,
     ) -> tuple[list[dict[str, Any]], int, User] | None: ...
     @overload
     def get_api_list_by_user(
-        self, user: TUserParam | None, pagination: TimeBasedPagination, only_count: Literal[True]
+        self, user: TUserParam | None, pagination: TimeBasedPagination, only_count: Literal[True], *, channel: CollaborationChannel = CollaborationChannel.Api,
     ) -> int: ...
     def get_api_list_by_user(
-        self, user: TUserParam | None, pagination: TimeBasedPagination, only_count: bool = False
+        self, user: TUserParam | None, pagination: TimeBasedPagination, only_count: bool = False, *, channel: CollaborationChannel = CollaborationChannel.Api,
     ) -> tuple[list[dict[str, Any]], int, User] | int | None:
-        user = InfraHelper.get_by_id_like(User, user)
-        if not user:
-            if only_count:
-                return 0
-            return None
+        from .CardService import CardService
+
+        if not isinstance(user, User):
+            return 0 if only_count else None
+        contexts = self._get_service(CardService).resolve_work_visibility_contexts(user, channel)
+        if not contexts:
+            return 0 if only_count else None
 
         if only_count:
-            return self.repo.activity.get_list_by_user(user, pagination, only_count=True)
+            return self.repo.activity.get_list_by_user(user, pagination, only_count=True, contexts=contexts)
 
-        activities, count_new_records = self.repo.activity.get_list_by_user(user, pagination, only_count=False)
+        activities, count_new_records = self.repo.activity.get_list_by_user(user, pagination, only_count=False, contexts=contexts)
 
         api_activties = []
         cached_dict = self.__get_cached_references(activities)

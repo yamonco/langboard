@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Literal, TypeAlias, TypeVar, overload, override
-from sqlalchemy import String, and_, cast, literal, or_, select, union_all
+from sqlalchemy import String, and_, cast, false, literal, or_, select, union_all
 from ....core.db import DbSession, SqlBuilder
 from ....core.db.queries.Select import SelectOfScalar
 from ....core.domain import BaseRepository
@@ -34,6 +34,23 @@ _TUserOrBotActivityParam: TypeAlias = User | Bot | SnowflakeID | int | str
 
 
 class ActivityRepository(BaseRepository[BaseActivityModel]):
+    @staticmethod
+    def _activity_visibility_scope(contexts: dict[int, CardVisibilityContext]):
+        grouped: dict[CardVisibilityContext, list[int]] = {}
+        for project_id, context in contexts.items():
+            grouped.setdefault(context, []).append(project_id)
+        scopes = []
+        for context, project_ids in grouped.items():
+            card_visible = select(Card.id).where(
+                Card.id == ProjectActivity.card_id, Card.project_id == ProjectActivity.project_id,
+                Card.deleted_at.is_(None), card_visibility_scope(context),
+            ).correlate(ProjectActivity).exists()
+            scopes.append(and_(
+                ProjectActivity.project_id.in_(project_ids),
+                or_(ProjectActivity.card_id.is_(None), card_visible),
+            ))
+        return or_(false(), *scopes)
+
     def get_scoped_project_activities(
         self, project: Project, pagination: TimeBasedPagination, *, context: CardVisibilityContext,
         column: TColumnParam | None = None, card: TCardParam | None = None,
@@ -134,12 +151,15 @@ class ActivityRepository(BaseRepository[BaseActivityModel]):
         project_uid: str | None = None,
         since: datetime | None = None,
         until: datetime | None = None,
+        *, contexts: dict[int, CardVisibilityContext],
     ) -> list:
         """Authorize before paging; list queries never select editing history.
 
         Even administrators must belong to the same board as the target here.
         This is a collaboration history endpoint, not an administrator audit feed.
         """
+        if not contexts:
+            return []
         queries = []
         for kind, model in (("project", ProjectActivity), ("wiki", ProjectWikiActivity)):
             if scope and kind != scope:
@@ -166,11 +186,12 @@ class ActivityRepository(BaseRepository[BaseActivityModel]):
             query = select(*columns).join(Project, Project.column("id") == model.column("project_id"))
             if kind == "project":
                 query = query.outerjoin(Card, Card.column("id") == ProjectActivity.column("card_id"))
+                query = query.where(self._activity_visibility_scope(contexts))
             else:
                 query = query.join(
                     ProjectWiki, ProjectWiki.column("id") == ProjectWikiActivity.column("project_wiki_id")
                 )
-                query = query.where(ProjectWiki.column("deleted_at").is_(None))
+                query = query.where(ProjectWiki.column("deleted_at").is_(None), ProjectWikiActivity.project_id.in_(list(contexts)))
             query = query.where(
                 model.column("user_id") == target.id,
                 Project.column("deleted_at").is_(None),
@@ -229,7 +250,7 @@ class ActivityRepository(BaseRepository[BaseActivityModel]):
             statement = statement.offset((pagination.page - 1) * pagination.limit).limit(pagination.limit + 1)
         else:
             statement = statement.limit(1)
-        with DbSession.use(readonly=True) as db:
+        with DbSession.use(readonly=False) as db:
             return list(db.exec(statement).all())
 
     @staticmethod
@@ -237,22 +258,46 @@ class ActivityRepository(BaseRepository[BaseActivityModel]):
     def name() -> str:
         return "activity"
 
-    @overload
     def get_list_by_user(
-        self, user: TUserParam, pagination: TimeBasedPagination, only_count: Literal[False] = False
-    ) -> tuple[list[UserActivity], int]: ...
-    @overload
-    def get_list_by_user(self, user: TUserParam, pagination: TimeBasedPagination, only_count: Literal[True]) -> int: ...
-    def get_list_by_user(
-        self, user: TUserParam, pagination: TimeBasedPagination, only_count: bool = False
+        self, user: TUserParam, pagination: TimeBasedPagination, only_count: bool = False,
+        *, contexts: dict[int, CardVisibilityContext],
     ) -> tuple[list[UserActivity], int] | int:
+        """Revalidate referenced workspace/card access before page and count queries."""
+        if not contexts:
+            return 0 if only_count else ([], 0)
         user_id = InfraHelper.convert_id(user)
-
-        if only_count:
-            return self.__count_new_records(UserActivity, pagination.refer_time, user_id=user_id)
-
-        result = self.__get_list(UserActivity, pagination, user_id=user_id)
-        return result
+        wiki_assigned = select(ProjectWikiAssignedUser.id).where(
+            ProjectWikiAssignedUser.project_wiki_id == ProjectWiki.id,
+            ProjectWikiAssignedUser.user_id == user_id,
+        ).exists()
+        wiki_scope = and_(
+            ProjectWikiActivity.project_id.in_(list(contexts)), ProjectWiki.deleted_at.is_(None),
+            ProjectWiki.project_id == ProjectWikiActivity.project_id,
+            or_(ProjectWiki.is_public.is_(True), Project.owner_id == user_id, wiki_assigned),
+        )
+        def scoped(query):
+            return query.outerjoin(ProjectActivity, and_(
+                UserActivity.refer_activity_table == ProjectActivity.__tablename__,
+                UserActivity.refer_activity_id == ProjectActivity.id,
+            )).outerjoin(ProjectWikiActivity, and_(
+                UserActivity.refer_activity_table == ProjectWikiActivity.__tablename__,
+                UserActivity.refer_activity_id == ProjectWikiActivity.id,
+            )).outerjoin(ProjectWiki, ProjectWiki.id == ProjectWikiActivity.project_wiki_id).outerjoin(
+                Project, Project.id == ProjectWikiActivity.project_id,
+            ).where(
+                UserActivity.user_id == user_id,
+                or_(self._activity_visibility_scope(contexts), wiki_scope),
+            )
+        with DbSession.use(readonly=False) as db:
+            count = db.exec(scoped(SqlBuilder.select.count(UserActivity, UserActivity.id)).where(
+                UserActivity.created_at > pagination.refer_time,
+            )).first() or 0
+            if only_count:
+                return count
+            query = scoped(SqlBuilder.select.table(UserActivity)).where(
+                UserActivity.created_at <= pagination.refer_time,
+            ).order_by(UserActivity.created_at.desc(), UserActivity.id.desc())
+            return list(db.exec(InfraHelper.paginate(query, pagination.page, pagination.limit)).all()), count
 
     @overload
     def get_list_by_project(
