@@ -101,3 +101,24 @@ def test_connection_factory_validates_collection_and_supports_provider_free_clea
     with pytest.raises(ValueError, match="configuration"):
         with open_qdrant_store(settings, None, fingerprint, {"https://fixture.invalid"}, create=False):
             pass
+
+
+@pytest.mark.parametrize("vector", [[1.0], [float("nan"), 0.0, 0.0], [True, 0.0, 0.0]])
+def test_external_store_rejects_invalid_provider_vectors_before_write(monkeypatch, tmp_path, vector):
+    client = QdrantClient(path=str(tmp_path / "invalid"))
+    monkeypatch.setattr("qdrant_client.QdrantClient", lambda **_: client)
+    settings = DocumentRetrievalSettings(store="qdrant", external_url="https://fixture.invalid", dimensions=3)
+    provider = Fixture()
+    provider.embed_documents = lambda texts: [vector for _ in texts]
+    with open_qdrant_store(settings, provider, "a" * 64, {"https://fixture.invalid"}) as store:
+        with pytest.raises(ValueError, match="dimension"):
+            stage_vector_generation(
+                store,
+                source=dict(
+                    board_uid="b", card_uid="c", attachment_uid="a", content_hash="h", embedding_fingerprint="a" * 64
+                ),
+                text="alpha",
+                splitter=DocumentSplitterSettings(),
+                storage={"type": "qdrant"},
+            )
+        assert client.count("langboard_documents_" + "a" * 64).count == 0

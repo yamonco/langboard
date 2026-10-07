@@ -20,6 +20,7 @@ def open_qdrant_store(
     import re
     from langchain_qdrant import QdrantVectorStore
     from qdrant_client import QdrantClient, models
+    from .DocumentEmbedding import validated_embeddings
 
     endpoint = str(settings.external_url).rstrip("/")
     if endpoint not in {url.strip().rstrip("/") for url in allowed_urls if url.strip()}:
@@ -56,7 +57,7 @@ def open_qdrant_store(
         yield QdrantVectorStore(
             client=client,
             collection_name=collection,
-            embedding=embeddings,
+            embedding=validated_embeddings(embeddings, settings.dimensions) if embeddings is not None else None,
             validate_embeddings=embeddings is not None,
             validate_collection_config=False,
         )

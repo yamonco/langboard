@@ -100,3 +100,34 @@ def create_document_embeddings(value: str, allowed_base_urls: set[str]) -> "Embe
         max_retries=1,
         request_timeout=settings.timeout_seconds,
     )
+
+
+def validated_embeddings(embeddings: "Embeddings", dimensions: int) -> "Embeddings":
+    """Apply the same finite-vector contract before any backend receives vectors."""
+    from math import isfinite
+    from langchain_core.embeddings import Embeddings
+
+    if type(dimensions) is not int or not 1 <= dimensions <= 65536:
+        raise ValueError("dimensions must be an integer from 1 to 65536")
+
+    class ValidatedEmbeddings(Embeddings):
+        """Reject invalid upstream vectors before the official transaction commits."""
+
+        def embed_documents(self, texts: list[str]) -> list[list[float]]:
+            vectors = embeddings.embed_documents(texts)
+            if len(vectors) != len(texts):
+                raise ValueError("Embedding provider returned an unexpected vector count")
+            return [self._validate(vector) for vector in vectors]
+
+        def embed_query(self, text: str) -> list[float]:
+            return self._validate(embeddings.embed_query(text))
+
+        @staticmethod
+        def _validate(vector: list[float]) -> list[float]:
+            if len(vector) != dimensions or any(
+                type(value) not in (int, float) or not isfinite(value) for value in vector
+            ):
+                raise ValueError("Embedding vector dimension or numeric values do not match the configured model")
+            return vector
+
+    return ValidatedEmbeddings()
