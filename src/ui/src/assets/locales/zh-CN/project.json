@@ -175,6 +175,18 @@
     "App resource state disconnected": "已断开",
     "Disable App": "禁用应用",
     "Confirm disable App": "确认禁用应用",
-    "Disable App help": "禁用此看板应用及自动转换，保留资源选择和共享连接。"
+    "Disable App help": "禁用此看板应用及自动转换，保留资源选择和共享连接。",
+    "GitHub connection": "GitHub 连接",
+    "GitHub onboarding help": "创建并安装 App，验证 GitHub 账户后选择仓库。",
+    "GitHub onboarding failed": "请求失败。请重新验证账户或刷新仓库后重试。",
+    "GitHub repositories saved": "仓库选择已保存。工作流启用需单独操作。",
+    "GitHub organization optional": "Organization（可选，个人账户留空）",
+    "Create GitHub App": "创建 GitHub App",
+    "Install GitHub App": "安装 GitHub App",
+    "Verify GitHub account": "验证 GitHub 账户",
+    "GitHub installation limit": "显示前100个安装，暂不支持后续查询。",
+    "GitHub repository selection help": "选择仓库，每次最多新增及移除各25个。验证5分钟后过期。",
+    "More GitHub repositories": "更多仓库",
+    "Save GitHub repositories": "保存仓库选择"
   }
 }

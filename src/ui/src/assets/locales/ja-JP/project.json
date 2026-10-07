@@ -175,6 +175,18 @@
     "App resource state disconnected": "接続解除",
     "Disable App": "アプリを無効にする",
     "Confirm disable App": "無効化を確認",
-    "Disable App help": "このボードのアプリと自動遷移を無効にします。リソース選択と共有接続は保持されます。"
+    "Disable App help": "このボードのアプリと自動遷移を無効にします。リソース選択と共有接続は保持されます。",
+    "GitHub connection": "GitHub 接続",
+    "GitHub onboarding help": "Appを作成・インストールし、GitHubアカウントを確認してリポジトリを選択します。",
+    "GitHub onboarding failed": "失敗しました。アカウントを再確認するかリポジトリを再読込してください。",
+    "GitHub repositories saved": "リポジトリ選択を保存しました。ワークフロー有効化は別操作です。",
+    "GitHub organization optional": "Organization（任意・個人アカウントは空欄）",
+    "Create GitHub App": "GitHub Appを作成",
+    "Install GitHub App": "GitHub Appをインストール",
+    "Verify GitHub account": "GitHubアカウントを確認",
+    "GitHub installation limit": "最初の100件を表示。以降の取得は未対応です。",
+    "GitHub repository selection help": "リポジトリを選択。追加・削除は各25件まで。確認は5分で失効します。",
+    "More GitHub repositories": "リポジトリをもっと見る",
+    "Save GitHub repositories": "リポジトリ選択を保存"
   }
 }
