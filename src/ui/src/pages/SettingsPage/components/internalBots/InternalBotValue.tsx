@@ -1,3 +1,4 @@
+import DocumentRetrievalSettings from "./DocumentRetrievalSettings";
 import Checkbox from "@/components/base/Checkbox";
 import Switch from "@/components/base/Switch";
 import { EInternalBotType } from "@/core/models/InternalBotModel";
@@ -74,6 +75,13 @@ const InternalBotValue = memo(() => {
                 return;
             }
         }
+        if (botType === EInternalBotType.DocumentEmbedding && documentSettings) {
+            try {
+                newValue = JSON.stringify({ ...JSON.parse(newValue), retrieval: documentSettings.retrieval ?? {} });
+            } catch {
+                return;
+            }
+        }
         if (value.trim() === newValue || !newValue) {
             newValueRef.current = newValue;
             setIsEditing(false);
@@ -130,12 +138,10 @@ const InternalBotValue = memo(() => {
         setIsEditing(false);
     };
 
-    const setKeywordLanguage = (language: string, enabled: boolean) => {
-        if (!documentSettings || !canUpdateInternalBot || isEditing || isValidating) return;
-        const selected = Array.isArray(documentSettings.keyword_languages) ? documentSettings.keyword_languages : ["ko", "en", "ja", "zh"];
-        const languages = enabled ? [...new Set([...selected, language])] : selected.filter((value: string) => value !== language);
+    const saveDocumentSettings = (config: Record<string, unknown>) => {
+        if (!canUpdateInternalBot || isEditing || isValidating) return;
         setIsValidating(true);
-        Toast.Add.promise(mutateAsync({ value: JSON.stringify({ ...documentSettings, keyword_languages: languages }) }), {
+        Toast.Add.promise(mutateAsync({ value: JSON.stringify(config) }), {
             loading: t("common.Changing..."),
             success: () => t("successes.Internal bot value changed successfully."),
             error: (error) => {
@@ -147,19 +153,15 @@ const InternalBotValue = memo(() => {
         });
     };
 
+    const setKeywordLanguage = (language: string, enabled: boolean) => {
+        if (!documentSettings) return;
+        const selected = Array.isArray(documentSettings.keyword_languages) ? documentSettings.keyword_languages : ["ko", "en", "ja", "zh"];
+        const languages = enabled ? [...new Set([...selected, language])] : selected.filter((value: string) => value !== language);
+        saveDocumentSettings({ ...documentSettings, keyword_languages: languages });
+    };
+
     const setDocumentProcessing = (enabled: bool) => {
-        if (!documentSettings || !canUpdateInternalBot || isEditing || isValidating) return;
-        setIsValidating(true);
-        Toast.Add.promise(mutateAsync({ value: JSON.stringify({ ...documentSettings, document_processing_enabled: enabled }) }), {
-            loading: t("common.Changing..."),
-            success: () => t("successes.Internal bot value changed successfully."),
-            error: (error) => {
-                const message = { message: "" };
-                setupApiErrorHandler({}, message).handle(error);
-                return message.message;
-            },
-            finally: () => setIsValidating(false),
-        });
+        if (documentSettings) saveDocumentSettings({ ...documentSettings, document_processing_enabled: enabled });
     };
 
     return (
@@ -205,6 +207,14 @@ const InternalBotValue = memo(() => {
                     </div>
                     <p className="mt-2 text-xs text-muted-foreground">{t("internalBot.Keywords apply to requested processing")}</p>
                 </fieldset>
+            )}
+            {botType === EInternalBotType.DocumentEmbedding && documentSettings && (
+                <DocumentRetrievalSettings
+                    key={value}
+                    value={documentSettings}
+                    disabled={!canUpdateInternalBot || isEditing || isValidating}
+                    onSave={(retrieval) => saveDocumentSettings({ ...documentSettings, retrieval })}
+                />
             )}
             <BotValueInput
                 purpose={botType === EInternalBotType.DocumentEmbedding ? "embedding" : "chat"}

@@ -9,5 +9,29 @@
   "Process new uploads": "自动处理新上传的文档",
   "Existing attachments require explicit processing": "仅在上传时应用。请在卡片中手动处理现有附件。更改此设置不会重新处理旧文件。",
   "Search keyword languages": "搜索关键词语言",
-  "Keywords apply to requested processing": "在转录之外单独提取搜索词。仅适用于新上传或手动重新处理的附件。"
+  "Keywords apply to requested processing": "在转录之外单独提取搜索词。仅适用于新上传或手动重新处理的附件。",
+  "retrieval": {
+    "title": "文档检索与嵌入设置",
+    "enabled": "自动嵌入新上传文件",
+    "store": "向量存储",
+    "dimensions": "嵌入维度",
+    "splitter.type": "分割器",
+    "splitter.chunk_size": "分块大小",
+    "splitter.chunk_overlap": "分块重叠",
+    "splitter.length_unit": "长度单位",
+    "splitter.encoding": "令牌编码",
+    "splitter.keep_separator": "保留分隔符",
+    "k": "结果数量",
+    "max_return_tokens": "最大返回令牌",
+    "timeout_seconds": "提供商超时（秒）",
+    "overlap_help": "重叠必须小于分块大小。保存设置不会重新索引现有附件。",
+    "splitter.strip_whitespace": "去除分块首尾空白",
+    "splitter.separator": "字符分隔符",
+    "splitter.separators": "递归分隔符 (JSON 数组)",
+    "splitter.markdown_headers": "Markdown 标题级别",
+    "splitter.strip_headers": "从分块正文中移除标题",
+    "overlap_error": "重叠必须小于分块大小。",
+    "separators_error": "请输入1–16个不超过32字符的字符串，最后一个分隔符必须为空字符串。",
+    "headers_error": "请选择至少一个 Markdown 标题级别。"
+  }
 }

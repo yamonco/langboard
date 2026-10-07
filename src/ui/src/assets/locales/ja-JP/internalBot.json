@@ -9,5 +9,29 @@
   "Process new uploads": "新しい文書アップロードを自動処理",
   "Existing attachments require explicit processing": "アップロード時に適用します。既存の添付はカードから個別に処理してください。設定変更で古いファイルは再処理しません。",
   "Search keyword languages": "検索キーワードの言語",
-  "Keywords apply to requested processing": "転記とは別に検索語を抽出します。新規アップロードまたは明示的に再処理した添付のみに適用します。"
+  "Keywords apply to requested processing": "転記とは別に検索語を抽出します。新規アップロードまたは明示的に再処理した添付のみに適用します。",
+  "retrieval": {
+    "title": "文書検索・埋め込み設定",
+    "enabled": "新規アップロードを埋め込む",
+    "store": "ベクトルストア",
+    "dimensions": "埋め込み次元",
+    "splitter.type": "スプリッター",
+    "splitter.chunk_size": "チャンクサイズ",
+    "splitter.chunk_overlap": "重複サイズ",
+    "splitter.length_unit": "長さの単位",
+    "splitter.encoding": "トークンエンコーディング",
+    "splitter.keep_separator": "区切り文字の保持",
+    "k": "検索結果数",
+    "max_return_tokens": "最大返却トークン",
+    "timeout_seconds": "プロバイダーのタイムアウト（秒）",
+    "overlap_help": "重複はチャンクサイズ未満にしてください。設定を保存しても既存の添付は再索引されません。",
+    "splitter.strip_whitespace": "チャンクの前後の空白を削除",
+    "splitter.separator": "文字区切り",
+    "splitter.separators": "再帰区切り (JSON 配列)",
+    "splitter.markdown_headers": "Markdown 見出しレベル",
+    "splitter.strip_headers": "チャンク本文から見出しを削除",
+    "overlap_error": "重複はチャンクサイズ未満にしてください。",
+    "separators_error": "各32文字以内の文字列を1～16個指定し、最後は空文字列にしてください。",
+    "headers_error": "Markdown 見出しレベルを1つ以上選択してください。"
+  }
 }
