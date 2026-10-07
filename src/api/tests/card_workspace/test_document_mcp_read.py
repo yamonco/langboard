@@ -81,7 +81,7 @@ def test_pending_document_does_not_expose_stale_content(monkeypatch):
     assert result["content"] == "" and result["next_offset"] is None
 
 
-@pytest.mark.parametrize("changed", ["permission", "generation", "pointer", "deleted", "unchanged"])
+@pytest.mark.parametrize("changed", ["permission", "generation", "pointer", "embedding_config", "deleted", "binding_deleted", "binding_disabled", "binding_type", "binding_endpoint", "unchanged"])
 def test_vector_search_rechecks_current_source_after_provider_call(monkeypatch, changed):
     from contextlib import nullcontext
     from langboard_shared.domain.models.InternalBot import InternalBotType
@@ -110,14 +110,18 @@ def test_vector_search_rechecks_current_source_after_provider_call(monkeypatch, 
         },
     }
     service.internal_bot = SimpleNamespace(
-        get_by_id_like=Mock(return_value=SimpleNamespace(value="binding", bot_type=InternalBotType.DocumentEmbedding))
+        get_current_by_id_like=Mock(return_value=SimpleNamespace(value="binding", bot_type=InternalBotType.DocumentEmbedding))
     )
     monkeypatch.setattr(
         embedding,
         "validate_embedding_config",
-        lambda *_: (config, DocumentRetrievalSettings(enabled=True, dimensions=3)),
+        lambda value: (config, DocumentRetrievalSettings(enabled=value != "disabled", dimensions=3)),
     )
-    monkeypatch.setattr(embedding, "resolve_embedding_snapshot", lambda *_: "private")
+    def resolve(_snapshot, value):
+        if value == "endpoint_changed":
+            raise ValueError("Embedding endpoint changed")
+        return "private"
+    monkeypatch.setattr(embedding, "resolve_embedding_snapshot", resolve)
     monkeypatch.setattr(embedding, "create_document_embeddings", lambda *_: object())
     monkeypatch.setattr(sqlite_module, "open_sqlite_vector_store", lambda *_, **kw: nullcontext(object()))
 
@@ -135,10 +139,20 @@ def test_vector_search_rechecks_current_source_after_provider_call(monkeypatch, 
             service.project.get_user_role_actions_by_project.return_value = []
         elif changed == "deleted":
             attachment.deleted_at = "deleted"
+        elif changed == "binding_deleted":
+            service.internal_bot.get_current_by_id_like.return_value = None
+        elif changed == "binding_type":
+            service.internal_bot.get_current_by_id_like.return_value.bot_type = InternalBotType.ProjectChat
+        elif changed in {"binding_disabled", "binding_endpoint"}:
+            service.internal_bot.get_current_by_id_like.return_value.value = (
+                "disabled" if changed == "binding_disabled" else "endpoint_changed"
+            )
         elif changed != "unchanged":
             latest = {**document, "embedding": {**document["embedding"]}}
             if changed == "generation":
                 latest["generation"] = "replacement"
+            elif changed == "embedding_config":
+                latest["embedding_config"] = {"binding_uid": "replacement"}
             else:
                 latest["embedding"]["pointer"] = {**document["embedding"]["pointer"], "generation": "replacement"}
             service.docling_metadata.get_document_by_attachment_uid.return_value = latest
@@ -152,3 +166,97 @@ def test_vector_search_rechecks_current_source_after_provider_call(monkeypatch, 
     else:
         with pytest.raises(ValueError, match="unavailable|generation changed"):
             CardMcp.search_card_document("board", "card", "attachment", "query", object(), service)
+
+
+@pytest.fixture(params=["sqlite://", "postgresql-test"])
+def binding_store(monkeypatch, request):
+    from uuid import uuid4
+    from langboard_shared.core.db.DbEngine import DbEngine
+    from langboard_shared.domain.models import InternalBot
+    from sqlalchemy import create_engine, text
+
+    url = request.param
+    if url == "postgresql-test":
+        url = os.environ.get("LANGBOARD_FILE_TEST_DATABASE_URL")
+        if not url:
+            pytest.skip("Dedicated PostgreSQL proof URL not set")
+    admin = create_engine(url)
+    schema = None
+    if admin.dialect.name == "postgresql":
+        schema = f"document_binding_{uuid4().hex}"
+        with admin.begin() as connection:
+            connection.execute(text(f"CREATE SCHEMA {schema}"))
+        engine = create_engine(url, connect_args={"options": f"-csearch_path={schema}"})
+    else:
+        engine = admin
+    InternalBot.__table__.create(engine)
+    monkeypatch.setattr(DbEngine, "get_main_engine", lambda: engine)
+
+    def no_replica():
+        pytest.fail("Document retrieval must read current binding from the primary")
+
+    monkeypatch.setattr(DbEngine, "get_readonly_engine", no_replica)
+    try:
+        yield engine
+    finally:
+        engine.dispose()
+        if schema:
+            with admin.begin() as connection:
+                connection.execute(text(f"DROP SCHEMA {schema} CASCADE"))
+            admin.dispose()
+
+
+@pytest.mark.parametrize("change", ["disabled", "deleted", "endpoint", "unchanged"])
+def test_vector_return_uses_current_primary_binding(monkeypatch, binding_store, change):
+    from contextlib import nullcontext
+    from json import dumps
+    from langboard_shared.core.db import DbSession
+    from langboard_shared.domain.models import InternalBot
+    from langboard_shared.domain.models.BaseBotModel import BotPlatform, BotPlatformRunningType
+    from langboard_shared.domain.models.InternalBot import InternalBotType
+    from langboard_shared.domain.services.factory.InternalBotService import InternalBotService
+    from langboard_shared.tasks.docling import DocumentEmbedding as embedding
+    from langboard_shared.tasks.docling import DocumentVectorQuery as query_module
+    from langboard_shared.tasks.docling import DocumentVectorStore as vector_module
+    from langboard_shared.tasks.docling.DocumentVectorGeneration import embedding_fingerprint
+
+    config = {"agent_llm": "OpenAI Compatible", "base_url": "https://fixture.invalid/v1", "model_name": "fixture",
+              "api_key": "test-only", "retrieval": {"enabled": True, "dimensions": 3}}
+    with DbSession.use(readonly=False) as db:
+        binding = InternalBot(bot_type=InternalBotType.DocumentEmbedding, display_name="Fixture",
+                              platform=BotPlatform.Default, platform_running_type=BotPlatformRunningType.Default,
+                              value=dumps(config))
+        db.insert(binding)
+    service, _card, _attachment, document = fixture(monkeypatch)
+    service.internal_bot = InternalBotService(lambda _: None, lambda _: None, None)
+    document["embedding_config"] = embedding.snapshot_embedding_config(binding.value, binding.get_uid())
+    document["embedding"] = {"source_generation": "current", "pointer": {
+        "board_uid": "board", "card_uid": "card", "attachment_uid": "attachment", "content_hash": "hash",
+        "embedding_fingerprint": embedding_fingerprint(provider=config["base_url"], model="fixture", dimensions=3, version="v1"),
+        "chunk_ids": ["chunk"], "storage": {"type": "sqlite"},
+    }}
+    monkeypatch.setattr(embedding, "create_document_embeddings", lambda *_: object())
+    monkeypatch.setattr(vector_module, "open_document_vector_store", lambda *a, **kw: nullcontext(object()))
+
+    def search(*args, **kwargs):
+        if change != "unchanged":
+            with DbSession.use(readonly=False) as db:
+                if change == "deleted":
+                    db.delete(binding)
+                else:
+                    if change == "disabled":
+                        config["retrieval"]["enabled"] = False
+                    else:
+                        config["base_url"] = "https://other.invalid/v1"
+                    binding.value = dumps(config)
+                    db.update(binding)
+        return [{"content": "authorized excerpt"}]
+
+    monkeypatch.setattr(query_module, "search_vector_generation", search)
+    if change == "unchanged":
+        assert CardMcp.search_card_document("board", "card", "attachment", "query", object(), service)["matches"]
+    else:
+        with pytest.raises(ValueError, match="binding unavailable"):
+            CardMcp.search_card_document("board", "card", "attachment", "query", object(), service)
+    if change == "deleted":
+        assert service.internal_bot.get_current_by_id_like(binding) is None
