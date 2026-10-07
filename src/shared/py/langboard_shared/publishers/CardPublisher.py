@@ -8,11 +8,13 @@ from ..domain.models import Card, Checkitem, Project, ProjectColumn, ProjectLabe
 @staticclass
 class CardPublisher(BaseSocketPublisher):
     @staticmethod
-    def read_state_changed(card: Card):
+    def read_state_changed(card: Card, user: User):
         """Invalidate read receipts without changing content timestamps."""
+        shared = card.visibility == "SHARED"
         CardPublisher.put_dispather(
             {"read_state_changed": True},
-            SocketPublishModel(topic=SocketTopic.Board, topic_id=card.project_id.to_short_code(),
+            SocketPublishModel(topic=SocketTopic.Board if shared else SocketTopic.UserPrivate,
+                               topic_id=card.project_id.to_short_code() if shared else user.get_uid(),
                                event=f"board:card:details:changed:{card.get_uid()}", data_keys="read_state_changed"),
         )
 

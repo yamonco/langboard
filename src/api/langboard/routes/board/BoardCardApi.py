@@ -895,10 +895,11 @@ def delete_card(
 def mark_card_seen(
     project_uid: str,
     card_uid: str,
+    request: Request,
     user: User = Auth.scope("user"),
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
-    result = service.card.mark_card_seen(user, card_uid, project_uid)
+    result = service.card.mark_card_seen(user, card_uid, project_uid, channel=request.scope.get("collaboration_channel", CollaborationChannel.Api))
     if result is None:
         raise ApiException.NotFound_404(ApiErrorCode.NF2004)
 
@@ -910,9 +911,10 @@ def mark_card_seen(
 @RoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
 @AuthFilter.add("user")
 def get_card_read_state(
-    project_uid: str, card_uid: str, service: DomainService = DomainService.scope()
+    project_uid: str, card_uid: str, request: Request,
+    user: User = Auth.scope("user"), service: DomainService = DomainService.scope()
 ) -> JsonResponse:
-    result = service.card.get_card_read_state(project_uid, card_uid)
+    result = service.card.get_card_read_state(project_uid, card_uid, user=user, channel=request.scope.get("collaboration_channel", CollaborationChannel.Api))
     if result is None:
         raise ApiException.NotFound_404(ApiErrorCode.NF2004)
     return JsonResponse(content=result)
@@ -923,9 +925,10 @@ def get_card_read_state(
 @RoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
 @AuthFilter.add("user")
 def mark_card_unread(
-    project_uid: str, card_uid: str, user: User = Auth.scope("user"), service: DomainService = DomainService.scope()
+    project_uid: str, card_uid: str, request: Request,
+    user: User = Auth.scope("user"), service: DomainService = DomainService.scope()
 ) -> JsonResponse:
-    result = service.card.set_card_read_state(user, project_uid, card_uid, False)
+    result = service.card.set_card_read_state(user, project_uid, card_uid, False, channel=request.scope.get("collaboration_channel", CollaborationChannel.Api))
     if result is None:
         raise ApiException.NotFound_404(ApiErrorCode.NF2004)
     return JsonResponse(content=result)

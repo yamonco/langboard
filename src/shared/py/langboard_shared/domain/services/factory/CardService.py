@@ -122,32 +122,42 @@ class CardService(BaseDomainService):
         with DbSession.use(readonly=False) as db:
             db.after_commit(lambda: CardPublisher.metadata_changed(changed_card))
 
-    def get_card_read_state(self, project: TProjectParam, card: TCardParam) -> dict[str, Any] | None:
-        records = InfraHelper.get_records_with_foreign_by_params((Project, project), (Card, card))
-        if not records:
+    def get_card_read_state(
+        self, project: TProjectParam, card: TCardParam, *, user: User,
+        channel: CollaborationChannel = CollaborationChannel.Api,
+    ) -> dict[str, Any] | None:
+        resolved = self.resolve_readable_card(project, card, user, channel)
+        if resolved is None:
             return None
-        project, card = records
-        if card.project_id != project.id:
-            return None
+        _, card, _ = resolved
         return {"card_uid": card.get_uid(), "readers": self.repo.user_card_read_state.get_readers(card)}
 
-    def mark_card_seen(self, user: User, card: TCardParam | None, project: TProjectParam) -> dict[str, Any] | None:
-        return self.set_card_read_state(user, project, card, True)
+    def mark_card_seen(
+        self, user: User, card: TCardParam | None, project: TProjectParam, *,
+        channel: CollaborationChannel = CollaborationChannel.Api,
+    ) -> dict[str, Any] | None:
+        return self.set_card_read_state(user, project, card, True, channel=channel)
 
     def set_card_read_state(
-        self, user: User, project: TProjectParam, card: TCardParam | None, seen: bool
+        self, user: User, project: TProjectParam, card: TCardParam | None, seen: bool, *,
+        channel: CollaborationChannel = CollaborationChannel.Api,
     ) -> dict[str, Any] | None:
-        if not isinstance(user, User):
+        if not isinstance(user, User) or card is None:
             return None
-        records = InfraHelper.get_records_with_foreign_by_params((Project, project), (Card, card))
-        if not records:
-            return None
-        project, card = records
-        if card.project_id != project.id:
-            return None
-        state = self.repo.user_card_read_state.set_read_state(user, card, seen)
-        CardPublisher.read_state_changed(card)
-        return {"card_uid": card.get_uid(), "seen_change_seq": state.seen_change_seq}
+        with DbSession.atomic() as db:
+            # Lock before resolving current visibility; a cached Card is not authority.
+            current = db.exec(SqlBuilder.select.table(Card).where(
+                Card.id == InfraHelper.convert_id(card),
+            ).with_for_update()).first()
+            if current is None:
+                return None
+            resolved = self.resolve_readable_card(project, current, user, channel)
+            if resolved is None:
+                return None
+            _, current, _ = resolved
+            state = self.repo.user_card_read_state.set_read_state(user, current, seen)
+            db.after_commit(lambda: CardPublisher.read_state_changed(current, user))
+            return {"card_uid": current.get_uid(), "seen_change_seq": state.seen_change_seq}
 
     def get_by_id_like(self, card: TCardParam | None) -> Card | None:
         card = InfraHelper.get_by_id_like(Card, card)
