@@ -217,10 +217,9 @@ def search_card_document(
         resolve_embedding_snapshot,
         validate_embedding_config,
     )
-    from langboard_shared.tasks.docling.DocumentSqliteStore import open_sqlite_vector_store
     from langboard_shared.tasks.docling.DocumentVectorGeneration import embedding_fingerprint
     from langboard_shared.tasks.docling.DocumentVectorQuery import search_vector_generation
-    from langboard_shared.tasks.docling.DocumentVectorStore import open_qdrant_store
+    from langboard_shared.tasks.docling.DocumentVectorStore import open_document_vector_store
 
     if (
         not isinstance(query, str)
@@ -270,21 +269,14 @@ def search_card_document(
         embeddings = create_document_embeddings(
             private, set(Env.get_from_env("MODEL_PROVIDER_ALLOWED_BASE_URLS", "").split(","))
         )
-        if settings.store == "sqlite":
-            path = Env.DATA_DIR / "document-retrieval" / (fingerprint + ".sqlite")
-            if not path.is_file():
-                raise ValueError("Document vectors unavailable")
-            context = open_sqlite_vector_store(
-                path, embeddings, dimensions=settings.dimensions, timeout_seconds=settings.timeout_seconds
-            )
-        else:
-            context = open_qdrant_store(
-                settings,
-                embeddings,
-                fingerprint,
-                set(Env.get_from_env("DOCUMENT_VECTOR_ALLOWED_BASE_URLS", "").split(",")),
-                create=False,
-            )
+        context = open_document_vector_store(
+            settings,
+            embeddings,
+            fingerprint,
+            Env.DATA_DIR / "document-retrieval",
+            set(Env.get_from_env("DOCUMENT_VECTOR_ALLOWED_BASE_URLS", "").split(",")),
+            create=False,
+        )
         with context as store:
             if store is None:
                 raise ValueError("Document vectors unavailable")

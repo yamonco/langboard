@@ -50,7 +50,7 @@ def fixture(monkeypatch, tmp_path):
         ),
     )
     monkeypatch.setattr(task, "create_document_embeddings", Mock(return_value=object()))
-    monkeypatch.setattr(task, "open_sqlite_vector_store", Mock(return_value=nullcontext(object())))
+    monkeypatch.setattr(task, "open_document_vector_store", Mock(return_value=nullcontext(object())))
     monkeypatch.setattr(
         task,
         "stage_vector_generation",
@@ -146,7 +146,7 @@ def test_qdrant_generation_publishes_backend_independent_ids_and_cleans_rejected
     monkeypatch.setattr(task, "delete_vector_generation", Mock())
     service.docling_metadata.publish_document_embedding.return_value = False
     task.embed_transcription(service, "attachment", "current")
-    task.open_sqlite_vector_store.assert_not_called()
+    assert task.open_document_vector_store.call_args.args[0].store == "qdrant"
     task.stage_vector_generation.assert_called_once()
     task.delete_vector_generation.assert_called_once()
     source = task.stage_vector_generation.call_args.kwargs["source"]
@@ -188,7 +188,9 @@ def test_sqlite_reindex_removes_legacy_only_after_pointer_commit(monkeypatch, tm
         )
     document["embedding"] = {"status": "pending", "pointer": legacy}
     task.create_document_embeddings.return_value = validated_embeddings(Fixture(), 3)
-    monkeypatch.setattr(task, "open_sqlite_vector_store", open_sqlite_vector_store)
+    from langboard_shared.tasks.docling.DocumentVectorStore import open_document_vector_store
+
+    monkeypatch.setattr(task, "open_document_vector_store", open_document_vector_store)
     monkeypatch.setattr(task, "stage_vector_generation", stage_vector_generation)
     monkeypatch.setattr(task, "delete_vector_generation", delete_vector_generation)
     service.docling_metadata.publish_document_embedding.return_value = False

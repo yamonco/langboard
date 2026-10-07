@@ -10,9 +10,14 @@ from ...domain.services import DomainService
 from ...Env import Env
 from .DocumentEmbedding import create_document_embeddings, resolve_embedding_snapshot, validate_embedding_config
 from .DocumentRetrievalSettings import DocumentRetrievalSettings
-from .DocumentSqliteStore import open_sqlite_vector_store, remove_document_generation
+from .DocumentSqliteStore import remove_document_generation
 from .DocumentVectorGeneration import embedding_fingerprint
-from .DocumentVectorStore import delete_vector_generation, open_qdrant_store, stage_vector_generation
+from .DocumentVectorStore import (
+    delete_vector_generation,
+    open_document_vector_store,
+    open_qdrant_store,
+    stage_vector_generation,
+)
 
 
 @Broker.wrap_async_task_decorator
@@ -108,17 +113,9 @@ def embed_transcription(service, attachment_uid: str, generation: str, request_u
         ):
             return
         directory = Env.DATA_DIR / "document-retrieval"
-        directory.mkdir(parents=True, exist_ok=True)
-        path = directory / (fingerprint + ".sqlite")
         # No PostgreSQL row lock is held during remote inference.
         vector_allowed = set(Env.get_from_env("DOCUMENT_VECTOR_ALLOWED_BASE_URLS", "").split(","))
-        context = (
-            open_sqlite_vector_store(
-                path, embeddings, dimensions=settings.dimensions, timeout_seconds=settings.timeout_seconds
-            )
-            if settings.store == "sqlite"
-            else open_qdrant_store(settings, embeddings, fingerprint, vector_allowed)
-        )
+        context = open_document_vector_store(settings, embeddings, fingerprint, directory, vector_allowed)
         with context as store:
             source = dict(
                 board_uid=project.get_uid(),
