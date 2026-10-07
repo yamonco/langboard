@@ -1,25 +1,41 @@
 """Actual migration storage preserves board/resource isolation and provenance."""
 
 import importlib.util
+import json
+import os
 from pathlib import Path
+from uuid import uuid4
 import pytest
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from langboard_shared.domain.models import AppConnection, AppResourceBinding, BoardAppBinding
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import create_engine, inspect, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 
-@pytest.fixture
-def storage():
+@pytest.fixture(params=["sqlite://", "postgresql-test"])
+def storage(request):
     path = Path(__file__).parents[2] / "langboard/migrations/versions/20261008032000-719dab02cf46.py"
     spec = importlib.util.spec_from_file_location("app_storage_migration", path)
     migration = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(migration)
-    engine = create_engine("sqlite://")
+    database_url = request.param
+    if database_url == "postgresql-test":
+        database_url = os.environ.get("LANGBOARD_FILE_TEST_DATABASE_URL")
+        if not database_url:
+            pytest.skip("Set LANGBOARD_FILE_TEST_DATABASE_URL to a disposable PostgreSQL database")
+    engine = create_engine(database_url)
+    schema = None
+    if engine.dialect.name == "postgresql":
+        schema = "app_binding_test_" + uuid4().hex
+        with engine.begin() as db:
+            db.execute(text(f'CREATE SCHEMA "{schema}"'))
+        engine.dispose()
+        engine = create_engine(database_url, connect_args={"options": f"-csearch_path={schema}"})
     with engine.begin() as db:
-        db.execute(text("PRAGMA foreign_keys=ON"))
+        if engine.dialect.name == "sqlite":
+            db.execute(text("PRAGMA foreign_keys=ON"))
         db.execute(text('CREATE TABLE "user" (id BIGINT PRIMARY KEY)'))
         db.execute(text("CREATE TABLE project (id BIGINT PRIMARY KEY)"))
         db.execute(text('INSERT INTO "user" VALUES (1)'))
@@ -54,6 +70,9 @@ def storage():
     try:
         yield engine, migration
     finally:
+        if schema:
+            with engine.begin() as db:
+                db.execute(text(f'DROP SCHEMA "{schema}" CASCADE'))
         engine.dispose()
 
 
@@ -83,19 +102,16 @@ def test_shared_connection_has_independent_board_mapping_and_resource_lifecycle(
     engine, _ = storage
     with engine.begin() as db:
         db.execute(
-            text("UPDATE board_app_binding SET workflow_mapping=:mapping WHERE id=30"),
-            {"mapping": '{"active": "new-column"}'},
+            update(BoardAppBinding).where(BoardAppBinding.id == 30).values(workflow_mapping={"active": "new-column"})
         )
         db.execute(
-            text(
-                "UPDATE app_resource_binding SET access_state='revoked', health='unavailable', is_selected=0 WHERE id=40"
-            )
+            update(AppResourceBinding)
+            .where(AppResourceBinding.id == 40)
+            .values(access_state="revoked", health="unavailable", is_selected=False)
         )
     with engine.begin() as db:
-        assert (
-            db.execute(text("SELECT workflow_mapping FROM board_app_binding WHERE id=31")).scalar_one()
-            == '{"active": "column-1"}'
-        )
+        mapping = db.execute(text("SELECT workflow_mapping FROM board_app_binding WHERE id=31")).scalar_one()
+        assert (json.loads(mapping) if isinstance(mapping, str) else mapping) == {"active": "column-1"}
         assert db.execute(text("SELECT health FROM app_resource_binding WHERE id=41")).scalar_one() == "healthy"
         assert db.execute(text("SELECT access_state FROM app_resource_binding WHERE id=42")).scalar_one() == "granted"
         db.execute(text("DELETE FROM app_resource_binding WHERE id=40"))
