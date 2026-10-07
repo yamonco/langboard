@@ -24,6 +24,7 @@ def fixture(monkeypatch, tmp_path):
     }
     metadata = Mock()
     metadata.get_document_by_attachment_uid.return_value = document
+    metadata.get_structural_document.return_value = None
     metadata.publish_document_embedding.return_value = True
     card = SimpleNamespace(project_id=123, is_linked_resource=False, get_uid=lambda: "card-uid")
     attachment = SimpleNamespace(card_id=4, deleted_at=None)

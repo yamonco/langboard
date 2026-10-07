@@ -3,7 +3,7 @@
 from contextlib import contextmanager
 from typing import TYPE_CHECKING
 from uuid import uuid4
-from .DocumentSplitter import split_document
+from .DocumentSplitter import split_document, split_structural_document
 from .DocumentVectorGeneration import MAX_ATTACHMENT_CHUNKS
 
 
@@ -109,7 +109,9 @@ def document_source_filter(storage: dict, source: dict):
     )
 
 
-def stage_vector_generation(store: "VectorStore", *, source: dict, text: str, splitter, storage: dict) -> dict:
+def stage_vector_generation(
+    store: "VectorStore", *, source: dict, text: str, splitter, storage: dict, document_json: dict | None = None
+) -> dict:
     """No active pointer changes until the caller's authoritative source fence commits."""
     if not all(
         isinstance(source.get(key), str) and source[key]
@@ -119,7 +121,12 @@ def stage_vector_generation(store: "VectorStore", *, source: dict, text: str, sp
     if not text.strip():
         raise ValueError("An empty transcription cannot replace a searchable generation")
     generation = uuid4().hex
-    chunks = split_document(text, splitter, metadata={**source, "generation": generation})
+    metadata = {**source, "generation": generation}
+    chunks = (
+        split_structural_document(document_json, splitter, metadata=metadata)
+        if document_json is not None
+        else split_document(text, splitter, metadata=metadata)
+    )
     if not 1 <= len(chunks) <= MAX_ATTACHMENT_CHUNKS:
         raise ValueError("Attachment exceeds the embedding chunk limit")
     ids = [str(uuid4()) for _ in chunks]
