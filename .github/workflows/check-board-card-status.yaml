@@ -44,15 +44,18 @@ on:
       - src/ui/src/pages/BoardPage/components/card/CardColumnHistory.tsx
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
   backend:
-    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false
+    if: vars.CI_RUNNER != '' && (github.event_name == 'workflow_dispatch' || (github.event.pull_request.draft == false && github.event.pull_request.head.repo.full_name == github.repository))
     timeout-minutes: 20
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"unconfigured"') }}
     env:
       PROJECT_NAME: langboard
     steps:
@@ -67,9 +70,9 @@ jobs:
       - run: uv run --no-sync pytest -q src/shared/py/langboard_shared/domain/services/factory/CardService_board_progress_test.py src/shared/py/langboard_shared/domain/services/factory/CheckitemService_timer_batch_test.py src/shared/py/langboard_shared/domain/services/CardApprovalGate_test.py src/shared/py/langboard_shared/domain/services/ExecutionGeneration_test.py src/shared/py/langboard_shared/domain/services/CardWorkState_test.py src/api/tests/card_workspace/test_archive_cold_store.py src/api/tests/card_workspace/test_verification_evidence_route.py src/api/tests/mcp_integration/test_card_mcp_contract.py src/shared/py/langboard_shared/domain/services/CardVerification_test.py src/shared/py/langboard_shared/domain/services/factory/CardService_verification_test.py src/shared/py/langboard_shared/domain/services/factory/CardService_work_state_test.py src/shared/py/langboard_shared/infrastructure/repositories/factory/CardVerificationRepository_test.py
 
   ui:
-    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false
+    if: vars.CI_RUNNER != '' && (github.event_name == 'workflow_dispatch' || (github.event.pull_request.draft == false && github.event.pull_request.head.repo.full_name == github.repository))
     timeout-minutes: 20
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"unconfigured"') }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

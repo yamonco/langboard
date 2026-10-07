@@ -10,15 +10,18 @@ on:
       - src/ui/src/pages/BoardPage/components/card/comment/BoardCommentReaction.tsx
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
   lint:
-    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false
+    if: vars.CI_RUNNER != '' && (github.event_name == 'workflow_dispatch' || (github.event.pull_request.draft == false && github.event.pull_request.head.repo.full_name == github.repository))
     timeout-minutes: 20
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"unconfigured"') }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
