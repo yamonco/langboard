@@ -57,3 +57,21 @@ def get_secret_input_status(
         return input_status(service, user, input_uid)
     except (SecretReferenceUnavailable, ValueError):
         raise ValueError("Secret input unavailable") from None
+
+
+@McpTool.add(
+    "user",
+    description="Only on explicit user instruction, issue an authenticated one-use browser URL to replace an existing secret's value. Read its metadata revision first. Never accept secret values in chat or tool arguments. The target reference and revision are fixed; show the URL for user consent.",
+)
+def request_secret_rotation_input(
+    uri: Annotated[str, Field(min_length=1, max_length=320)],
+    expected_revision: Annotated[int, Field(strict=True, ge=0)],
+    user: User,
+    service: DomainService,
+) -> dict[str, Any]:
+    from ..secrets.SecretInput import begin_rotation
+
+    try:
+        return begin_rotation(service, user, uri, expected_revision)
+    except (SecretReferenceUnavailable, ValueError):
+        raise ValueError("Secret input unavailable") from None

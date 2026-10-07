@@ -12,12 +12,16 @@ for (const width of [1440, 390]) {
             }
             if (method === "DELETE") cancelled = true;
             await route.fulfill({
-                json: method === "GET" ? { name: "provider/api-key", scope: "personal" } : { state: "completed", secret_ref: "secret://ref/fixture" },
+                json:
+                    method === "GET"
+                        ? { name: "provider/api-key", scope: "personal", operation: "rotate" }
+                        : { state: "completed", secret_ref: "secret://ref/fixture" },
             });
         });
         await page.goto("/src/pages/AccountPage/secret-input.fixture.html");
         const input = page.locator('input[type="password"]');
         await expect(input).toBeVisible();
+        await expect(page.getByText("Replace existing secret value", { exact: false })).toBeVisible();
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
         await page.screenshot({ path: `test-results/secret-input-${width}.png` });
         await input.fill("fixture-sensitive");
