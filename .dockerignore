@@ -13,3 +13,5 @@
 **/.ruff_cache
 **/*.tsbuildinfo
 **/.DS_Store
+
+**/.env*
