@@ -46,7 +46,7 @@ export const DescriptionOverviewRail = memo(
                 position="sticky"
                 top="2"
                 className="pointer-events-none hidden w-7 justify-center md:flex"
-                style={{ height: Math.max(32, viewportHeight - 16) }}
+                style={{ height: Math.max(0, viewportHeight - 16), visibility: viewportHeight <= 16 ? "hidden" : undefined }}
                 aria-hidden={false}
             >
                 <Box className="pointer-events-auto flex max-h-full min-h-0 flex-1 flex-col items-end justify-center gap-px py-2">
