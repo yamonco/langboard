@@ -103,6 +103,7 @@ class GitHubResourceDelta(BaseModel):
     add: list[StrictInt] = Field(default_factory=list, max_length=25)
     remove: list[StrictInt] = Field(default_factory=list, max_length=25)
     expected_revision: str = Field(pattern=r"^[0-9a-f]{64}$")
+    installation_proof: str | None = Field(default=None, min_length=40, max_length=64)
 
 
 @AppRouter.api.get(
@@ -148,6 +149,7 @@ def save_github_resources(
                 tuple(form.add),
                 tuple(form.remove),
                 form.expected_revision,
+                form.installation_proof,
             )
         )
     except GitHubManifestUnavailable:

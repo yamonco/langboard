@@ -87,6 +87,15 @@ def test_user_installations_require_pkce_and_return_no_token(authorized):
     with pytest.raises(authorization.GitHubManifestUnavailable):
         authorization.complete_authorization(service, board[1], board[2].get_uid(), state, "a" * 40, session)
     assert len(calls) == 4
+    authorization.require_installation_proof(
+        board[1],
+        board[2].get_uid(),
+        connection.get_uid(),
+        17,
+        7,
+        result["installation_proof"],
+        authorization.connection_revision(connection),
+    )
 
 
 @pytest.mark.parametrize("failure", ["session", "expired", "revoked", "app", "revoke_token", "host_revoke"])

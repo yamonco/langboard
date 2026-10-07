@@ -91,11 +91,20 @@ App. Discovery is bounded to 100 installations with `has_more` explicitly return
 The user access token is neither stored nor returned; its revoke must succeed.
 Current host authority and Connection identity are checked again after external IO.
 
-This endpoint proves user visibility for its returned snapshot, not permission to
-activate a Binding. The snapshot is not yet consumed as a mandatory proof by the
-repository delta endpoint. UI integration, continuation for more than 100
-installations, proof consumption at Binding mutation and live GitHub authorization
-remain acceptance work. Older registered Apps require their callback URL updated.
+Completion issues an opaque five-minute installation proof only after token
+revocation and current host checks. Its server-side cache record binds actor,
+board, Connection revision and each non-suspended installation/account pair.
+Repository additions require this proof before GitHub IO and check it again with
+the locked current Connection before persistence. Missing, expired, mismatched or
+suspended proof rejects without changes. Removal alone does not require a proof,
+so a board owner can deselect resources after external access disappears.
+
+The proof is a bounded snapshot of GitHub user visibility, not a continuous user
+revocation feed or permission to activate a Binding. GitHub App repository access
+is independently revalidated for every addition. User access revocation after
+proof issuance may remain unobserved for up to five minutes. UI integration,
+continuation for more than 100 installations, lifecycle handling and live GitHub
+authorization remain acceptance work. Older registered Apps require their callback URL updated.
 
 Official user flow:
 https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-a-user-access-token-for-a-github-app

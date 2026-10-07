@@ -18,6 +18,41 @@ from .GitHubManifest import TTL, GitHubManifestUnavailable, _board, _digest
 
 
 COOKIE = "langboard_github_authorization_session"
+PROOF_TTL = 300
+
+
+def _issue_installation_proof(actor, project_uid, connection, installations):
+    proof = secrets.token_urlsafe(32)
+    Cache.set(
+        "github-installation-proof:" + _digest(proof),
+        {
+            "actor": int(actor.id),
+            "board": project_uid,
+            "connection": connection.get_uid(),
+            "revision": connection_revision(connection),
+            "installations": {
+                str(item["id"]): item["account"]["id"] for item in installations if not item["suspended"]
+            },
+        },
+        PROOF_TTL,
+    )
+    return proof
+
+
+def require_installation_proof(actor, project_uid, connection_uid, installation_id, account_id, proof, revision=None):
+    if not isinstance(proof, str) or not re.fullmatch(r"[A-Za-z0-9_-]{40,64}", proof):
+        raise GitHubManifestUnavailable()
+    context = Cache.get("github-installation-proof:" + _digest(proof))
+    if (
+        not isinstance(context, dict)
+        or context.get("actor") != int(actor.id)
+        or context.get("board") != project_uid
+        or context.get("connection") != connection_uid
+        or context.get("installations", {}).get(str(installation_id)) != account_id
+        or revision is not None
+        and context.get("revision") != revision
+    ):
+        raise GitHubManifestUnavailable()
 
 
 def _credential(service, actor, project_uid, connection_uid):
@@ -178,6 +213,8 @@ def complete_authorization(service, actor, project_uid, state, code, session):
         current, _ = _credential(service, actor, project_uid, context["connection"])
         if connection_revision(current) != context["revision"]:
             raise GitHubManifestUnavailable()
+        if len({item["id"] for item in installations}) != len(installations):
+            raise GitHubManifestUnavailable()
         return {
             "connection_uid": context["connection"],
             "github_user": {"id": user["id"], "login": user["login"]},
@@ -185,6 +222,8 @@ def complete_authorization(service, actor, project_uid, state, code, session):
             "total_count": count,
             "has_more": count > len(rows),
             "binding_created": False,
+            "installation_proof": _issue_installation_proof(actor, project_uid, current, installations),
+            "proof_expires_in": PROOF_TTL,
         }
     except Exception:
         raise GitHubManifestUnavailable() from None
