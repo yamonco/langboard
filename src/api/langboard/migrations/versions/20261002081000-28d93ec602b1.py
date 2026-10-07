@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 import sqlalchemy as sa
 from alembic import op
 from langboard_shared.core.types import SnowflakeID
+from langboard_shared.core.types.SnowflakeID import SnowflakeID as SnowflakeAllocator
 
 
 revision = "28d93ec602b1"
@@ -195,6 +196,7 @@ def _rows_to_insert(existing_names: list[str], existing_ids: set[int] | None = N
             if candidate not in used_ids:
                 used_ids.add(candidate)
                 return candidate
+            SnowflakeAllocator.advance_after_collision(candidate)
         raise RuntimeError("Builtin label ID allocation exhausted; no seed rows inserted")
 
     return [
