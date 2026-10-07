@@ -217,3 +217,27 @@ def test_queued_work_event_rechecks_current_source_and_recipient(current_card):
         user.activated_at = None
         db.update(user)
     assert not service.can_dispatch_work_event(model)
+
+
+def test_dispatch_context_requires_current_recipient_access(current_card):
+    from types import SimpleNamespace
+    from langboard_shared.domain.models import User
+    from langboard_shared.domain.services.factory.NotificationService import NotificationService
+
+    user, project, card, card_service = current_card
+    UserNotification.__table__.create(DbEngine.get_main_engine())
+    with DbSession.use(readonly=False) as db:
+        card.visibility = "SHARED"
+        card.owner_user_id = None
+        db.update(card)
+        notification = UserNotification(receiver_id=user.id, notifier_type="user", notifier_id=user.id,
+            notification_type=NotificationType.MentionedInCard,
+            record_list=[("project", project.id), ("card", card.id)])
+        db.insert(notification)
+    service = NotificationService(lambda _: card_service, lambda _: None, SimpleNamespace())
+    assert service.get_dispatch_context(user, notification.id)["email"] == user.email
+    assert service.get_dispatch_context(User.model_construct(id=user.id+1), notification.id) is None
+    with DbSession.use(readonly=False) as db:
+        card.visibility = "INTERNAL"
+        db.update(card)
+    assert service.get_dispatch_context(user, notification.id) is None

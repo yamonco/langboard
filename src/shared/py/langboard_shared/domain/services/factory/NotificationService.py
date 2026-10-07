@@ -416,6 +416,31 @@ class NotificationService(BaseDomainService):
                 dumped_models.append((type(model).__tablename__, model.model_dump()))
             BotDefaultTask.bot_mentioned(notifier, target_bot, mentioned_in, dumped_models)
 
+    def get_dispatch_context(self, user: User, notification_id: int) -> dict[str, Any] | None:
+        """Return current recipient facts only for their authorized durable notification."""
+        if not isinstance(user, User):
+            return None
+        with DbSession.use(readonly=False) as db:
+            notification = db.exec(SqlBuilder.select.table(UserNotification).where(
+                UserNotification.id == notification_id, UserNotification.receiver_id == user.id,
+            )).first()
+        if notification is None:
+            return None
+        models = {cls.__tablename__: cls for cls in (
+            Project, ProjectInvitation, ProjectWiki, Card, CardComment, Checklist, Checkitem,
+        )}
+        references = []
+        for table, record_id in notification.record_list:
+            cls = models.get(table)
+            if cls is None:
+                return None
+            references.append(cls.model_construct(id=record_id))
+        resolved = self._resolve_notification_recipient(user.id, notification.notification_type, references)
+        if resolved is None:
+            return None
+        current, _ = resolved
+        return {"email": current.email, "preferred_lang": current.preferred_lang, "firstname": current.firstname}
+
     def can_dispatch_work_event(self, model) -> bool:
         """Revalidate the durable source and its recipient at each outbound attempt."""
         from ....tasks.webhooks.utils import build_notification_work_event
