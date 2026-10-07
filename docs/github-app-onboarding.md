@@ -36,3 +36,25 @@ mock GitHub transport, not live GitHub installation acceptance. No production
 migration, deployment or external App creation was performed.
 
 Official protocol: https://docs.github.com/en/apps/sharing-github-apps/registering-a-github-app-from-a-manifest
+
+## Installation and repository inspection
+
+Native authenticated `GET /board/{uid}/settings/apps/github/installations/{id}/repositories`
+requires `connection_uid`, expected `account_id` and a bounded page. Host checks
+current board update authority and Connection owner/state, resolves its secret
+only in runtime, and signs an RS256 App JWT with the existing PyJWT dependency.
+The fixed GitHub API re-reads the installation and validates App ID, installation
+ID, expected account identity/type and suspension state.
+
+A metadata-only ephemeral installation token lists up to 100 repository identities
+per page. Each repository owner must match the verified account. Token is never
+persisted or returned and is revoked after inspection; revocation failure prevents
+a successful result. Current board authority and Connection state/reference are
+rechecked after external IO. Responses contain repository IDs/names and pagination,
+not tokens or arbitrary external URLs. Inspection does not create a Binding or
+mark the Connection connected.
+
+Tests sign and verify actual RSA JWTs with mock GitHub transport. Live GitHub
+acceptance, installation callback state, UI account selection and selected-repository
+Binding remain pending. API verification supplements the earlier Manifest flow;
+it does not claim the remaining acceptance list is complete.
