@@ -35,6 +35,7 @@ function estimateChunkHeight(chunk: IDescriptionChunk): number {
 export const VirtualizedDescriptionContent = memo(
     ({ chunks, currentUser, mentionables, cards, projectUID, cardUID, scrollParentRef }: IVirtualizedDescriptionContentProps): React.JSX.Element => {
         const containerRef = useRef<HTMLDivElement | null>(null);
+        const contentRef = useRef<HTMLDivElement | null>(null);
         const [scrollMargin, setScrollMargin] = useState(0);
         const [activeIndex, setActiveIndex] = useState(0);
         const [viewportHeight, setViewportHeight] = useState(320);
@@ -46,9 +47,13 @@ export const VirtualizedDescriptionContent = memo(
                 return;
             }
 
-            setViewportHeight(scrollElement.clientHeight);
             const scrollRect = scrollElement.getBoundingClientRect();
             const containerRect = container.getBoundingClientRect();
+            const contentRect = contentRef.current?.getBoundingClientRect() ?? containerRect;
+            // Sticky elements are constrained by their parent at the description's end.
+            // Fit the rail to the visible intersection so trailing card sections cannot push it above the viewport.
+            const visibleHeight = Math.max(0, Math.min(scrollRect.bottom, contentRect.bottom) - Math.max(scrollRect.top, contentRect.top));
+            setViewportHeight((previous) => (Math.abs(previous - visibleHeight) < 1 ? previous : visibleHeight));
             const next = containerRect.top - scrollRect.top + scrollElement.scrollTop;
             setScrollMargin((previous) => (Math.abs(previous - next) < 1 ? previous : next));
         }, [scrollParentRef]);
@@ -74,11 +79,13 @@ export const VirtualizedDescriptionContent = memo(
             observer.observe(scrollElement);
             observer.observe(container);
             window.addEventListener("resize", scheduleMeasure);
+            scrollElement.addEventListener("scroll", scheduleMeasure, { passive: true });
 
             return () => {
                 cancelAnimationFrame(frame);
                 observer.disconnect();
                 window.removeEventListener("resize", scheduleMeasure);
+                scrollElement.removeEventListener("scroll", scheduleMeasure);
             };
         }, [measureScrollMargin, scrollParentRef]);
 
@@ -122,7 +129,7 @@ export const VirtualizedDescriptionContent = memo(
 
         return (
             <Box ref={containerRef} position="relative" className="grid grid-cols-[minmax(0,1fr)_28px] items-start">
-                <Box position="relative" style={{ height: `${virtualizer.getTotalSize()}px` }}>
+                <Box ref={contentRef} position="relative" style={{ height: `${virtualizer.getTotalSize()}px` }}>
                     {virtualizer.getVirtualItems().map((virtualItem) => {
                         const chunk = chunks[virtualItem.index];
                         if (!chunk) {

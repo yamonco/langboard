@@ -183,6 +183,19 @@ test("description markers remain within the card viewport and track its internal
     await page.getByRole("button", { name: "Expand header" }).click();
     await markers.first().click();
     await expect(first).toHaveAttribute("aria-current", "location");
+    await markers.last().click();
+    await expect
+        .poll(async () => {
+            const viewportBounds = await viewport.boundingBox();
+            const railBounds = await page.locator("[data-card-description-rail]").boundingBox();
+            return (
+                !!viewportBounds &&
+                !!railBounds &&
+                railBounds.y >= viewportBounds.y &&
+                railBounds.y + railBounds.height <= viewportBounds.y + viewportBounds.height
+            );
+        })
+        .toBe(true);
     await page.getByRole("button", { name: "Short description" }).click();
     await expect(markers).toHaveCount(2);
     await markers.last().click();
