@@ -197,6 +197,19 @@
     "GitHub health refreshed": "保存済みリソース状態を更新しました。Appリソース状態を確認してください。",
     "Continue GitHub health refresh": "次のリポジトリ状態を確認",
     "Previous GitHub installations": "前のインストール",
-    "More GitHub installations": "次のインストール"
+    "More GitHub installations": "次のインストール",
+    "Show GitHub connection health": "GitHub接続状態を表示",
+    "GitHub connection health": "GitHub接続状態",
+    "GitHub stored health guidance": "保存済みの証拠です。現在のアクセス確認にはリソース状態の更新を使用してください。",
+    "Connection state": "接続状態",
+    "No selected GitHub resources": "選択したGitHubリソースなし",
+    "Installation": "インストール",
+    "Account": "アカウント",
+    "Selected": "選択",
+    "Healthy": "正常",
+    "Degraded": "注意",
+    "Unavailable": "確認不可",
+    "Unverified": "未検証",
+    "More installation health": "他のインストール状態"
   }
 }

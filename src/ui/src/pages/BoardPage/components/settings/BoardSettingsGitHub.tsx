@@ -8,6 +8,19 @@ interface Connection {
     connection_uid: string;
     installation_url?: string;
 }
+interface ConnectionHealth {
+    state: string;
+    next_cursor: string | null;
+    items: {
+        installation_id: string;
+        account_id: string;
+        selected_count: number;
+        healthy_count: number;
+        degraded_count: number;
+        unavailable_count: number;
+        unverified_count: number;
+    }[];
+}
 interface Installation {
     id: number;
     account: { id: number; login: string; type: string };
@@ -56,6 +69,7 @@ export default function BoardSettingsGitHub({ onStatusChange }: { onStatusChange
     const [error, setError] = useState(false);
     const [saved, setSaved] = useState(false);
     const [healthCursor, setHealthCursor] = useState<string | null>(null);
+    const [connectionHealth, setConnectionHealth] = useState<ConnectionHealth | null>(null);
     const [refreshed, setRefreshed] = useState(false);
     const callbackStarted = useRef(false);
     const text = (name: string) => t(`project.settings.${name}`);
@@ -116,6 +130,12 @@ export default function BoardSettingsGitHub({ onStatusChange }: { onStatusChange
             }
         });
     }, [key, root, canEditBasicInfo]);
+    const loadConnectionHealth = async (after?: string) => {
+        const result = (
+            await api.get<ConnectionHealth>(`${root}/connections/${connection!.connection_uid}/health`, { params: after ? { after } : {} })
+        ).data;
+        setConnectionHealth((previous) => (after && previous ? { ...result, items: [...previous.items, ...result.items] } : result));
+    };
     const register = () =>
         run(async () => {
             const result = (
@@ -220,6 +240,7 @@ export default function BoardSettingsGitHub({ onStatusChange }: { onStatusChange
                             const item = connections.find((row) => row.connection_uid === event.target.value);
                             const next = item ? { connection_uid: item.connection_uid } : null;
                             setConnection(next);
+                            setConnectionHealth(null);
                             setHealthCursor(null);
                             setAuthorization(null);
                             setInstallation(null);
@@ -296,12 +317,48 @@ export default function BoardSettingsGitHub({ onStatusChange }: { onStatusChange
                                 setSnapshot(result);
                                 setHealthCursor(result.next_cursor);
                                 setRefreshed(true);
+                                await loadConnectionHealth();
                                 onStatusChange?.();
                             })
                         }
                     >
                         {text(healthCursor ? "Continue GitHub health refresh" : "Refresh GitHub resource health")}
                     </Button>
+                    <Button size="sm" variant="outline" onClick={() => void run(() => loadConnectionHealth())}>
+                        {text("Show GitHub connection health")}
+                    </Button>
+                    {connectionHealth && (
+                        <div className="min-w-0 space-y-2 rounded-md border p-3" aria-label={text("GitHub connection health")}>
+                            <p className="text-sm text-muted-foreground">{text("GitHub stored health guidance")}</p>
+                            <p className="text-sm">
+                                {text("Connection state")}: {connectionHealth.state}
+                            </p>
+                            {connectionHealth.items.length === 0 && <p className="text-sm">{text("No selected GitHub resources")}</p>}
+                            <ul className="space-y-2 text-sm">
+                                {connectionHealth.items.map((item) => (
+                                    <li key={`${item.installation_id}:${item.account_id}`} className="flex flex-col gap-1">
+                                        <span>
+                                            {text("Installation")}: {item.installation_id} · {text("Account")}: {item.account_id}
+                                        </span>
+                                        <span className="text-muted-foreground">
+                                            {text("Selected")}: {item.selected_count} · {text("Healthy")}: {item.healthy_count} · {text("Degraded")}:{" "}
+                                            {item.degraded_count} · {text("Unavailable")}: {item.unavailable_count} · {text("Unverified")}:{" "}
+                                            {item.unverified_count}
+                                        </span>
+                                    </li>
+                                ))}
+                            </ul>
+                            {connectionHealth.next_cursor && (
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => void run(() => loadConnectionHealth(connectionHealth.next_cursor!))}
+                                >
+                                    {text("More installation health")}
+                                </Button>
+                            )}
+                        </div>
+                    )}
                     <Button size="sm" variant="outline" onClick={() => void authorize()}>
                         {text("Verify GitHub account")}
                     </Button>
