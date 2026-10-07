@@ -56,3 +56,36 @@ def test_checkitem_without_card_uid_still_inherits_private_parent(current_card):
         card.owner_user_id = None
         db.update(card)
     assert BotTaskHelper.can_dispatch_card_scope({'checkitem_uid': item.get_uid()}, project, None)
+
+
+@pytest.mark.asyncio
+async def test_direct_request_and_retry_recheck_private_scope(current_card, monkeypatch):
+    from langboard_shared.tasks.bots.utils.requests.BaseBotRequest import BaseBotRequest, RequestData
+
+    _, project, card, _ = current_card
+    class Request(BaseBotRequest):
+        def create_request_data(self, _log) -> RequestData:
+            raise AssertionError('private scope must not create payload')
+    request = Request(SimpleNamespace(), 'http://example.invalid', 'test', {'card_uid': card.get_uid()}, project, card)
+    log = Mock(side_effect=AssertionError('private scope must not create logs'))
+    monkeypatch.setattr(request, '_create_log', log)
+    module = importlib.import_module('langboard_shared.tasks.bots.utils.requests.BaseBotRequest')
+    post = Mock(side_effect=AssertionError('private scope must not post'))
+    monkeypatch.setattr(module, 'post', post)
+    await request.execute()
+    await request.request({'url': 'http://example.invalid', 'data': {}}, {}, (None, None), retried=1)
+    log.assert_not_called()
+    post.assert_not_called()
+
+
+def test_deleted_project_blocks_current_card_scope(current_card):
+    from langboard_shared.core.types import SafeDateTime
+
+    _, project, card, _ = current_card
+    with DbSession.use(readonly=False) as db:
+        card.visibility = 'SHARED'
+        card.owner_user_id = None
+        db.update(card)
+        project.deleted_at = SafeDateTime.now()
+        db.update(project)
+    assert not BotTaskHelper.can_dispatch_card_scope({}, project, card)
