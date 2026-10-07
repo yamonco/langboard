@@ -6,7 +6,7 @@ import IconComponent from "@/components/base/IconComponent";
 import Tooltip from "@/components/base/Tooltip";
 import { cn } from "@/core/utils/ComponentUtils";
 
-const SidebarNavItems = memo(({ isFloating, navs }: TSidebarNavItemsProps): React.JSX.Element => {
+const SidebarNavItems = memo(({ isFloating, isCollapsed, navs }: TSidebarNavItemsProps): React.JSX.Element => {
     return (
         <>
             {navs.map((item, index) => {
@@ -14,15 +14,17 @@ const SidebarNavItems = memo(({ isFloating, navs }: TSidebarNavItemsProps): Reac
                 const Comp = isFloating ? FloatingNavItem : SidebarNavItem;
 
                 return (
-                    <Tooltip.Root key={key}>
+                    <Tooltip.Root key={key} open={isFloating || isCollapsed ? undefined : false}>
                         <Tooltip.Trigger asChild>
                             <span className="w-full">
                                 <Comp item={item} />
                             </span>
                         </Tooltip.Trigger>
-                        <Tooltip.Content side="right" className="group-data-[collapsed=true]/sidebar:block">
-                            {item.name}
-                        </Tooltip.Content>
+                        {(isFloating || isCollapsed) && (
+                            <Tooltip.Portal>
+                                <Tooltip.Content side="right">{item.name}</Tooltip.Content>
+                            </Tooltip.Portal>
+                        )}
                     </Tooltip.Root>
                 );
             })}
@@ -44,6 +46,7 @@ const FloatingNavItem = forwardRef<HTMLAnchorElement, ISidebarNavItemProps>(({ i
             <a
                 href={item.href}
                 onClick={item.onClick}
+                aria-label={item.name}
                 aria-current={item.current ? "page" : undefined}
                 className={ButtonVariants({
                     variant: "secondary",
@@ -69,6 +72,7 @@ const SidebarNavItem = forwardRef<HTMLAnchorElement, ISidebarNavItemProps>(({ it
             {...props}
             href={item.href}
             onClick={item.onClick}
+            aria-label={item.name}
             aria-current={item.current ? "page" : undefined}
             className={cn(
                 item.current ? "text-primary group-data-[collapsed=false]/sidebar:bg-muted" : "text-muted-foreground",

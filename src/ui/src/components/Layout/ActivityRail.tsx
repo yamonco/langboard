@@ -12,18 +12,19 @@ export interface IActivityRailItem {
     hidden?: boolean;
 }
 
-export default function ActivityRail({ items }: { items: IActivityRailItem[] }) {
+export default function ActivityRail({ items, contextExpanded = false }: { items: IActivityRailItem[]; contextExpanded?: boolean }) {
     const [t] = useTranslation();
     return (
         <nav
             aria-label={t("common.Workspace")}
             data-workbench-context=""
+            data-context-expanded={contextExpanded}
             className="hidden w-12 shrink-0 flex-col items-center gap-1 overflow-y-auto border-r bg-background py-2 md:flex"
         >
             {items
                 .filter((item) => !item.hidden)
                 .map((item) => (
-                    <Tooltip.Root key={item.label}>
+                    <Tooltip.Root key={item.label} open={contextExpanded ? false : undefined}>
                         <Tooltip.Trigger asChild>
                             <button
                                 type="button"
@@ -45,7 +46,11 @@ export default function ActivityRail({ items }: { items: IActivityRailItem[] }) 
                                 ) : null}
                             </button>
                         </Tooltip.Trigger>
-                        <Tooltip.Content side="right">{item.label}</Tooltip.Content>
+                        {!contextExpanded && (
+                            <Tooltip.Portal>
+                                <Tooltip.Content side="right">{item.label}</Tooltip.Content>
+                            </Tooltip.Portal>
+                        )}
                     </Tooltip.Root>
                 ))}
         </nav>
