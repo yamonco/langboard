@@ -26,6 +26,7 @@ export interface IResizableSidebarProps {
     maxWidth?: number;
     showCollapseButton?: bool;
     autoCollapseAt?: number;
+    onCollapsedChange?: (collapsed: bool) => void;
 }
 
 function ResizableSidebar({
@@ -45,9 +46,13 @@ function ResizableSidebar({
     maxWidth,
     showCollapseButton = true,
     autoCollapseAt,
+    onCollapsedChange,
 }: IResizableSidebarProps) {
     const [t] = useTranslation();
     const [isCollapsed, setIsCollapsed] = useState(defaultCollapsed);
+    useEffect(() => {
+        onCollapsedChange?.(isCollapsed);
+    }, [isCollapsed, onCollapsedChange]);
     const [isMobile, setIsMobile] = useState(window.innerWidth < ScreenMap.size.md);
 
     const collapsedWidth = 52;

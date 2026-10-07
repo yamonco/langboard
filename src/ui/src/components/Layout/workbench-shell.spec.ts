@@ -188,3 +188,39 @@ test("description markers remain within the card viewport and track its internal
     await markers.last().click();
     await expect(markers.last()).toHaveAttribute("aria-current", "location");
 });
+
+test("expanded Explorer suppresses Activity Rail tooltip and collapsed Explorer restores it", async ({ page }) => {
+    await page.goto("/src/components/Layout/workbench-shell.fixture.html");
+    const explorer = page.getByRole("button", { name: "Explorer", exact: true });
+    await explorer.focus();
+    await expect(page.getByRole("tooltip")).toHaveCount(0);
+    await page.getByRole("button", { name: "Collapse", exact: true }).click();
+    await page.getByRole("button", { name: "Expand", exact: true }).focus();
+    const rail = page.getByRole("navigation", { name: "Workspace", exact: true });
+    if (await rail.count()) await expect(rail).toHaveAttribute("data-context-expanded", "false");
+    await explorer.focus();
+    await expect(page.getByRole("tooltip")).toBeVisible();
+    await expect(page.getByRole("tooltip")).toHaveText("Explorer");
+    await page.getByRole("button", { name: "Expand", exact: true }).click();
+    await explorer.focus();
+    await expect(page.getByRole("tooltip")).toHaveCount(0);
+});
+
+test("common Sidebar tooltips follow explicit collapse state", async ({ page }) => {
+    await page.goto("/src/components/Layout/sidebar-tooltip.fixture.html");
+    const explorer = page.getByRole("link", { name: "Explorer", exact: true });
+    await explorer.focus();
+    await expect(page.getByRole("tooltip")).toHaveCount(0);
+    await page.getByRole("button", { name: "Collapse", exact: true }).click();
+    await page.getByRole("button", { name: "Expand", exact: true }).focus();
+    const rail = page.getByRole("navigation", { name: "Workspace", exact: true });
+    if (await rail.count()) await expect(rail).toHaveAttribute("data-context-expanded", "false");
+    await explorer.focus();
+    await expect(page.getByRole("tooltip")).toBeVisible();
+    await expect(page.getByRole("tooltip")).toHaveText("Explorer");
+    await explorer.click();
+    await expect(page).toHaveURL(/#explorer$/);
+    await page.getByRole("button", { name: "Expand", exact: true }).click();
+    await explorer.focus();
+    await expect(page.getByRole("tooltip")).toHaveCount(0);
+});

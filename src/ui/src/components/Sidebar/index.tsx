@@ -32,7 +32,7 @@ function Sidebar({ navs, main, floatingIcon = "plus", floatingTitle = "common.Ac
                             "group-data-[collapsed=false]/sidebar:p-2 lg:group-data-[collapsed=false]/sidebar:p-3"
                         )}
                     >
-                        <SidebarNavItems navs={navs} />
+                        <SidebarNavItems navs={navs} isCollapsed={isCollapsed} />
                     </aside>
 
                     <Button

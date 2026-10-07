@@ -1,4 +1,4 @@
-import { createContext, forwardRef, useContext, useLayoutEffect, useRef } from "react";
+import { createContext, forwardRef, useContext, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useLocation } from "react-router";
 import { useTranslation } from "react-i18next";
@@ -80,6 +80,7 @@ export const DashboardStyledLayoutFrame = forwardRef<HTMLDivElement, TDashboardS
         ref
     ) => {
         const [t] = useTranslation();
+        const [contextCollapsed, setContextCollapsed] = useState(false);
         const mobileNavigationTrigger = useRef<HTMLButtonElement>(null);
         const mobileContext = useRef<HTMLElement>(null);
         const closeMobileContext = () => {
@@ -178,7 +179,12 @@ export const DashboardStyledLayoutFrame = forwardRef<HTMLDivElement, TDashboardS
                 >
                     {hasWorkbench ? (
                         <div className="flex size-full">
-                            {activityRailItems && <ActivityRail items={activityRailItems} />}
+                            {activityRailItems && (
+                                <ActivityRail
+                                    items={activityRailItems}
+                                    contextExpanded={!!workbenchContext && !workbenchContextHidden && !contextCollapsed}
+                                />
+                            )}
                             <div className="min-w-0 flex-1">
                                 <ResizableSidebar
                                     main={<div className="min-w-0 flex-1">{sidebar}</div>}
@@ -190,6 +196,7 @@ export const DashboardStyledLayoutFrame = forwardRef<HTMLDivElement, TDashboardS
                                     floatingHidden
                                     showCollapseButton
                                     autoCollapseAt={1280}
+                                    onCollapsedChange={setContextCollapsed}
                                     hidden={!workbenchContext || workbenchContextHidden}
                                 >
                                     {workbenchContextHidden ? null : workbenchContext}
