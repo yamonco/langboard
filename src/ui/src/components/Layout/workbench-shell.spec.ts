@@ -321,3 +321,40 @@ test("mobile description navigator fills a fixed viewport while keyboard scrolli
     await markers.first().press("PageDown");
     await expect.poll(() => viewport.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
 });
+
+test.describe("compact label touch", () => {
+    test.use({ hasTouch: true });
+    test("compact child labels preserve dots, keyboard and touch expansion without row shifts", async ({ page }) => {
+        await page.setViewportSize({ width: 390, height: 844 });
+        await page.emulateMedia({ reducedMotion: "reduce" });
+        await page.goto("/src/components/LabelBadge/compact-labels.fixture.html");
+        const global = page.getByRole("button", { name: "🧩 Contract", exact: true });
+        const local = page.getByRole("button", { name: "Local", exact: true });
+        await expect(global).toHaveText("🧩");
+        await expect(local).toHaveText("");
+        const before = await page.getByTestId("row").boundingBox();
+        await global.focus();
+        await expect(page.getByRole("dialog", { name: "🧩 Contract" })).toBeVisible();
+        await expect(page.getByRole("dialog", { name: "🧩 Contract" })).toHaveCSS("animation-name", "none");
+        expect(await page.getByTestId("row").boundingBox()).toEqual(before);
+        await global.press("Escape");
+        await expect(page.getByRole("dialog")).toHaveCount(0);
+        await local.tap();
+        await expect(page.getByRole("dialog", { name: "Local" })).toBeVisible();
+        await page.getByRole("button", { name: "Outside" }).click();
+        await expect(page.getByRole("dialog")).toHaveCount(0);
+        await expect(page.getByText("Ordinary", { exact: true })).toBeVisible();
+    });
+});
+
+test("compact labels expand on hover and collapse without moving neighboring labels", async ({ page }) => {
+    await page.goto("/src/components/LabelBadge/compact-labels.fixture.html");
+    const label = page.getByRole("button", { name: "🧩 Contract", exact: true });
+    const next = page.getByRole("button", { name: "Local", exact: true });
+    const before = await next.boundingBox();
+    await label.hover();
+    await expect(page.getByRole("dialog", { name: "🧩 Contract" })).toBeVisible();
+    expect(await next.boundingBox()).toEqual(before);
+    await page.getByRole("button", { name: "Outside" }).hover();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+});

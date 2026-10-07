@@ -320,10 +320,10 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
                 )}
                 <Collapsible.Root open>
                     <Card.Header className={cn("relative block space-y-0", compact ? "px-3 py-2" : "py-4")}>
-                        {!compact && !!labels.length && (
+                        {!!labels.length && (
                             <Flex items="center" gap="1" mb="1.5" wrap>
                                 {labels.map((label) => (
-                                    <LabelModelBadge key={`board-card-label-${label.uid}`} model={label} />
+                                    <LabelModelBadge key={`board-card-label-${label.uid}`} model={label} compact={compact} />
                                 ))}
                             </Flex>
                         )}
