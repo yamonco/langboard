@@ -194,6 +194,7 @@
     "Current GitHub connection": "現在の接続",
     "More GitHub connections": "接続をもっと見る",
     "Refresh GitHub resource health": "リポジトリ状態を再確認",
-    "GitHub health refreshed": "保存済みリソース状態を更新しました。Appリソース状態を確認してください。"
+    "GitHub health refreshed": "保存済みリソース状態を更新しました。Appリソース状態を確認してください。",
+    "Continue GitHub health refresh": "次のリポジトリ状態を確認"
   }
 }

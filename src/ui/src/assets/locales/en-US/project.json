@@ -194,6 +194,7 @@
     "Current GitHub connection": "Current connection",
     "More GitHub connections": "More connections",
     "Refresh GitHub resource health": "Refresh repository health",
-    "GitHub health refreshed": "Stored resource health refreshed. See App resource status for results."
+    "GitHub health refreshed": "Stored resource health refreshed. See App resource status for results.",
+    "Continue GitHub health refresh": "Refresh next repositories"
   }
 }

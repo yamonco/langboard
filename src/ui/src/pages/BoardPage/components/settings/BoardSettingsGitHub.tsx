@@ -53,6 +53,7 @@ export default function BoardSettingsGitHub({ onStatusChange }: { onStatusChange
     const [pending, setPending] = useState(false);
     const [error, setError] = useState(false);
     const [saved, setSaved] = useState(false);
+    const [healthCursor, setHealthCursor] = useState<string | null>(null);
     const [refreshed, setRefreshed] = useState(false);
     const callbackStarted = useRef(false);
     const text = (name: string) => t(`project.settings.${name}`);
@@ -65,6 +66,7 @@ export default function BoardSettingsGitHub({ onStatusChange }: { onStatusChange
             await action();
         } catch {
             setError(true);
+            setHealthCursor(null);
         } finally {
             setPending(false);
         }
@@ -215,6 +217,7 @@ export default function BoardSettingsGitHub({ onStatusChange }: { onStatusChange
                             const item = connections.find((row) => row.connection_uid === event.target.value);
                             const next = item ? { connection_uid: item.connection_uid } : null;
                             setConnection(next);
+                            setHealthCursor(null);
                             setAuthorization(null);
                             setInstallation(null);
                             setRepositories([]);
@@ -279,18 +282,22 @@ export default function BoardSettingsGitHub({ onStatusChange }: { onStatusChange
                         variant="outline"
                         onClick={() =>
                             void run(async () => {
-                                const current = (await api.get<Snapshot>(`${root}/resources`)).data;
-                                await api.post(`${root}/resources/refresh`, {
-                                    connection_uid: connection.connection_uid,
-                                    expected_revision: current.revision,
-                                });
-                                setSnapshot((await api.get<Snapshot>(`${root}/resources`)).data);
+                                const current = healthCursor && snapshot ? snapshot : (await api.get<Snapshot>(`${root}/resources`)).data;
+                                const result = (
+                                    await api.post<Snapshot & { next_cursor: string | null }>(`${root}/resources/refresh`, {
+                                        connection_uid: connection.connection_uid,
+                                        expected_revision: current.revision,
+                                        after: healthCursor,
+                                    })
+                                ).data;
+                                setSnapshot(result);
+                                setHealthCursor(result.next_cursor);
                                 setRefreshed(true);
                                 onStatusChange?.();
                             })
                         }
                     >
-                        {text("Refresh GitHub resource health")}
+                        {text(healthCursor ? "Continue GitHub health refresh" : "Refresh GitHub resource health")}
                     </Button>
                     <Button size="sm" variant="outline" onClick={() => void authorize()}>
                         {text("Verify GitHub account")}

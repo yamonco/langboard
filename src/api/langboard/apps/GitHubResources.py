@@ -176,7 +176,7 @@ def update_resources(
         return resource_snapshot(db, binding)
 
 
-def refresh_resources(service, actor, project_uid, connection_uid, expected_revision):
+def refresh_resources(service, actor, project_uid, connection_uid, expected_revision, after=None):
     """Explicit bounded health refresh; unavailable evidence never means uninstall."""
     _board(service, actor, project_uid)
     with DbSession.use(readonly=False) as db:
@@ -201,27 +201,38 @@ def refresh_resources(service, actor, project_uid, connection_uid, expected_revi
         if snapshot["revision"] != expected_revision:
             raise GitHubResourceConflict()
         rows = [item for item in snapshot["items"] if item["connection_uid"] == connection_uid and item["selected"]]
-    if not rows or len(rows) > 25:
-        raise ValueError("Refresh requires 1 to 25 selected repositories")
-    results = {}
+    if after is not None:
+        if not isinstance(after, str) or len(after) > 11 or not any(item["uid"] == after for item in rows):
+            raise ValueError("Invalid resource cursor")
+        rows = [item for item in rows if item["uid"] > after]
+    if not rows:
+        raise ValueError("No selected repositories to refresh")
+    next_cursor = rows[24]["uid"] if len(rows) > 25 else None
+    rows = rows[:25]
+    groups = {}
     for item in rows:
         path = {part["type"]: part["id"] for part in item["path"]}
+        groups.setdefault((int(path["installation"]), int(path["account"])), []).append(item)
+    results = {}
+    for (installation_id, account_id), items in groups.items():
         try:
             verified = inspect_installation(
                 service,
                 actor,
                 project_uid,
                 connection_uid,
-                int(path["installation"]),
-                int(path["account"]),
-                repository_ids=(int(item["repository_id"]),),
+                installation_id,
+                account_id,
+                repository_ids=tuple(int(item["repository_id"]) for item in items),
             )
-            repository = verified["repositories"][0]
-            results[item["uid"]] = ("granted", "degraded" if repository["archived"] else "healthy")
+            repositories = {str(item["id"]): item for item in verified["repositories"]}
+            for item in items:
+                repository = repositories[item["repository_id"]]
+                results[item["uid"]] = ("granted", "degraded" if repository["archived"] else "healthy")
         except GitHubManifestUnavailable:
-            # Includes ambiguous external denial, transport and credential errors.
-            # Do not infer removal or erase selection from missing evidence.
-            results[item["uid"]] = ("unknown", "unavailable")
+            # Ambiguous group failure cannot identify a specific inaccessible repo.
+            for item in items:
+                results[item["uid"]] = ("unknown", "unavailable")
     with DbSession.atomic() as db:
         board = db.exec(SqlBuilder.select.table(Project).where(Project.id == board.id).with_for_update()).first()
         _board(service, actor, project_uid)
@@ -243,4 +254,4 @@ def refresh_resources(service, actor, project_uid, connection_uid, expected_revi
             ).first()
             row.access_state, row.health = access, health
             db.update(row)
-        return resource_snapshot(db, binding)
+        return {**resource_snapshot(db, binding), "next_cursor": next_cursor, "refreshed_count": len(results)}
