@@ -249,3 +249,9 @@
         transform: none;
     }
 }
+
+/* Compact labels are visual previews. Radix's positioning wrapper must also
+   pass pointer input through to the anchored dot below it. */
+[data-radix-popper-content-wrapper]:has(> [data-compact-label-preview]) {
+    pointer-events: none;
+}

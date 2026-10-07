@@ -403,3 +403,28 @@ test("sidebar preview focus does not dismiss the parent card", async ({ page }) 
     await expect(preview).toHaveCount(0);
     await expect(parent).toBeVisible();
 });
+
+test("hovered sidebar preview wrapper does not intercept a click intended for its dot", async ({ page }) => {
+    await page.goto("/src/components/LabelBadge/compact-labels.fixture.html?nested=1");
+    const label = page.getByRole("button", { name: "🧩 Contract", exact: true });
+    await label.focus();
+    const parent = page.getByRole("dialog", { name: "Parent card" });
+    await expect(parent).toBeVisible();
+    await page.getByRole("button", { name: "Parent action", exact: true }).focus();
+    await label.hover();
+    const preview = page.getByRole("dialog", { name: "🧩 Contract", exact: true });
+    await expect(preview).toBeVisible();
+    await expect
+        .poll(() =>
+            label.evaluate((element) => {
+                const rect = element.getBoundingClientRect();
+                return document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2)?.closest("[data-compact-label]") === element;
+            })
+        )
+        .toBe(true);
+    await label.click();
+    await expect(parent).toBeVisible();
+    await label.press("Escape");
+    await expect(preview).toHaveCount(0);
+    await expect(parent).toBeVisible();
+});
