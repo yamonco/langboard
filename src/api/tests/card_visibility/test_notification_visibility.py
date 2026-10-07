@@ -112,6 +112,7 @@ def test_mysql_notification_reference_query_compiles(monkeypatch):
     assert all("JSON_TABLE(user_notification.record_list, '$[*]' COLUMNS (" in sql for sql in statements)
 
 
+@pytest.mark.parametrize("current_card", ["sqlite://", "postgresql-test"], indirect=True)
 @pytest.mark.parametrize("visibility,allowed", [("PRIVATE", False), ("INTERNAL", False), ("SHARED", True)])
 def test_outbound_creation_checks_current_visibility_before_any_side_effect(current_card, monkeypatch, visibility, allowed):
     from types import SimpleNamespace
@@ -182,6 +183,7 @@ def test_outbound_uses_live_actor_and_reference_provenance(current_card):
     assert resolve(cached_user, NotificationType.MentionedInCard, [project, card]) is None
 
 
+@pytest.mark.parametrize("current_card", ["sqlite://", "postgresql-test"], indirect=True)
 def test_queued_work_event_rechecks_current_source_and_recipient(current_card):
     from types import SimpleNamespace
     from langboard_shared.domain.services.factory.NotificationService import NotificationService
@@ -200,6 +202,8 @@ def test_queued_work_event_rechecks_current_source_and_recipient(current_card):
     model = build_notification_work_event(notification)
     service = NotificationService(lambda _: card_service, lambda _: None, SimpleNamespace())
     assert service.can_dispatch_work_event(model)
+    assert not service.can_dispatch_work_event(model.model_copy(update={"occurred_at": "2020-01-01T00:00:00Z"}))
+    assert not service.can_dispatch_work_event(model.model_copy(update={"occurred_at": "invalid"}))
     forged = model.model_copy(deep=True)
     forged.data["scope"]["card_uid"] = "forged"
     assert not service.can_dispatch_work_event(forged)
