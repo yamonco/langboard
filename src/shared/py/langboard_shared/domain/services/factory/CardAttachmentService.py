@@ -1,9 +1,12 @@
 from json import dumps, loads
 from typing import Any
 from uuid import uuid4
+from sqlalchemy import Text, cast, func
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from ....core.broker import Broker
 from ....core.broker.TaskParameters import TaskParameters
 from ....core.db import DbSession, SqlBuilder
+from ....core.db.DbEngine import DbEngine
 from ....core.domain import BaseDomainService
 from ....core.routing import SocketTopic
 from ....core.storage import FileModel
@@ -41,6 +44,30 @@ class CardAttachmentService(BaseDomainService):
                 return db.exec(SqlBuilder.select.table(CardAttachment).where(CardAttachment.id == InfraHelper.convert_id(attachment))).first()
         attachment = InfraHelper.get_by_id_like(CardAttachment, attachment)
         return attachment
+
+    def resolve_file_owner(self, storage_type: str, storage_name: str, filename: str) -> CardAttachment | None:
+        """Find exact committed provenance, rejecting orphaned or ambiguous objects."""
+        dialect = DbEngine.get_main_engine().dialect.name
+        column = CardAttachment.column("file")
+        if dialect == "postgresql":
+            decoded = cast(cast(column, JSONB).op("#>>")(cast([], ARRAY(Text))), JSONB)
+            def value(key):
+                return decoded[key].astext
+        elif dialect == "sqlite":
+            def value(key):
+                return func.json_extract(func.json_extract(column, "$"), f"$.{key}")
+        elif dialect in {"mysql", "mariadb"}:
+            def value(key):
+                return func.json_unquote(func.json_extract(func.json_unquote(column), f"$.{key}"))
+        else:
+            raise ValueError("Unsupported database dialect for file provenance")
+        with DbSession.use(readonly=False) as db:
+            matches = db.exec(SqlBuilder.select.table(CardAttachment).where(
+                value("storage_type") == storage_type,
+                value("storage_name") == storage_name,
+                value("filename") == filename,
+            ).limit(2)).all()
+        return matches[0] if len(matches) == 1 else None
 
     def get_api_list_by_card(self, card: TCardParam | None, limit: int | None = None) -> list[dict[str, Any]]:
         """Return attachment metadata, optionally enforcing a repository row limit."""
