@@ -224,3 +224,18 @@ test("common Sidebar tooltips follow explicit collapse state", async ({ page }) 
     await explorer.focus();
     await expect(page.getByRole("tooltip")).toHaveCount(0);
 });
+
+test("mobile floating Sidebar retains tooltip and link navigation", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/src/components/Layout/sidebar-tooltip.fixture.html");
+    const floating = page.locator(".floating-wrapper");
+    await floating.locator("button svg").click();
+    const explorer = floating.getByRole("link", { name: "Explorer", exact: true });
+    await expect(explorer).toBeVisible();
+    await explorer.focus();
+    await expect(page.getByRole("tooltip")).toBeVisible();
+    await expect(page.getByRole("tooltip")).toHaveText("Explorer");
+    await explorer.click();
+    await expect(page).toHaveURL(/#explorer$/);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+});
