@@ -22,18 +22,25 @@ function Fixture() {
             <button onClick={() => setShort((value) => !value)}>Short description</button>
             <button onClick={() => setHeight((h) => (h === 360 ? 520 : 360))}>Resize card</button>
             <button onClick={() => setBefore((h) => (h === 120 ? 240 : 120))}>Expand header</button>
-            <div ref={scrollParentRef} data-card-content-viewport tabIndex={0} style={{ height, width: 900, overflowY: "auto", border: "1px solid" }}>
-                <div style={{ height: before }}>Card metadata</div>
-                <VirtualizedDescriptionContent
-                    chunks={short ? chunks.slice(0, 2) : chunks}
-                    currentUser={user}
-                    mentionables={[]}
-                    cards={[]}
-                    projectUID="fixture"
-                    cardUID="fixture"
-                    scrollParentRef={scrollParentRef}
-                />
-                <div style={{ height: 400 }}>Card attachments</div>
+            <div data-card-content-frame style={{ position: "relative", height, width: "100%", maxWidth: 900 }}>
+                <div
+                    ref={scrollParentRef}
+                    data-card-content-viewport
+                    tabIndex={0}
+                    style={{ height, width: "100%", maxWidth: 900, overflowY: "auto", scrollbarWidth: "none", border: "1px solid" }}
+                >
+                    <div style={{ height: before }}>Card metadata</div>
+                    <VirtualizedDescriptionContent
+                        chunks={short ? chunks.slice(0, 2) : chunks}
+                        currentUser={user}
+                        mentionables={[]}
+                        cards={[]}
+                        projectUID="fixture"
+                        cardUID="fixture"
+                        scrollParentRef={scrollParentRef}
+                    />
+                    <div style={{ height: 400 }}>Card attachments</div>
+                </div>
             </div>
         </>
     );

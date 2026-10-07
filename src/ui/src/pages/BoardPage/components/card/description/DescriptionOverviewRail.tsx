@@ -43,13 +43,14 @@ export const DescriptionOverviewRail = memo(
         return (
             <Box
                 data-card-description-rail
-                position="sticky"
+                position="absolute"
                 top="2"
-                className="pointer-events-none hidden w-7 justify-center md:flex"
-                style={{ height: Math.max(0, viewportHeight - 16), visibility: viewportHeight <= 16 ? "hidden" : undefined }}
+                right="0"
+                className="pointer-events-none z-10 flex w-7 justify-center"
+                style={{ height: Math.max(0, viewportHeight - 16) }}
                 aria-hidden={false}
             >
-                <Box className="pointer-events-auto flex max-h-full min-h-0 flex-1 flex-col items-end justify-center gap-px py-2">
+                <Box className="pointer-events-auto flex max-h-full min-h-0 flex-1 flex-col items-end justify-between gap-px py-2">
                     {markers.map((marker, markerIndex) => {
                         const distance = Math.abs(markerIndex - nearestActiveMarkerIndex);
                         const active = distance === 0;
