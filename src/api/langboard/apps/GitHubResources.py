@@ -6,6 +6,7 @@ from langboard_shared.core.db import DbSession, SqlBuilder
 from langboard_shared.domain.models import AppConnection, AppResourceBinding, BoardAppBinding, Project, User
 from langboard_shared.domain.services import DomainService
 from langboard_shared.helpers import InfraHelper
+from .GitHubAuthorization import require_installation_proof
 from .GitHubInstallation import connection_revision, inspect_installation
 from .GitHubManifest import GitHubManifestUnavailable, _board
 
@@ -66,6 +67,7 @@ def update_resources(
     add: tuple[int, ...],
     remove: tuple[int, ...],
     expected_revision: str,
+    installation_proof: str | None = None,
 ) -> dict:
     if not add and not remove or len(add) > 25 or len(remove) > 25 or set(add) & set(remove):
         raise ValueError("Invalid repository delta")
@@ -75,6 +77,8 @@ def update_resources(
         or len(set(remove)) != len(remove)
     ):
         raise ValueError("Invalid repository identifiers")
+    if add:
+        require_installation_proof(actor, project_uid, connection_uid, installation_id, account_id, installation_proof)
     verified = (
         inspect_installation(
             service, actor, project_uid, connection_uid, installation_id, account_id, repository_ids=add
@@ -100,6 +104,16 @@ def update_resources(
         ).first()
         if connection is None or connection.state not in {"pending", "connected"}:
             raise GitHubManifestUnavailable()
+        if add:
+            require_installation_proof(
+                actor,
+                project_uid,
+                connection_uid,
+                installation_id,
+                account_id,
+                installation_proof,
+                connection_revision(connection),
+            )
         if verified and connection_revision(connection) != verified["connection_revision"]:
             raise GitHubResourceConflict()
         binding = db.exec(

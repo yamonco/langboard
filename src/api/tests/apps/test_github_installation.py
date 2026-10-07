@@ -133,9 +133,14 @@ def test_multi_repository_delta_preserves_foreign_binding_and_other_selection(in
     from sqlalchemy import select
 
     service, board, connection, calls, responses = installation
+    from langboard.apps.GitHubAuthorization import _issue_installation_proof
+
+    proof = _issue_installation_proof(
+        board[1], board[2].get_uid(), connection, [{"id": 17, "account": {"id": 7}, "suspended": False}]
+    )
     snapshot = get_resources(service, board[1], board[2].get_uid())
     added = update_resources(
-        service, board[1], board[2].get_uid(), connection.get_uid(), 17, 7, (99, 100), (), snapshot["revision"]
+        service, board[1], board[2].get_uid(), connection.get_uid(), 17, 7, (99, 100), (), snapshot["revision"], proof
     )
     assert len(added["items"]) == 2 and all(item["selected"] for item in added["items"])
     with DbSession.use(readonly=False) as db:
@@ -161,7 +166,7 @@ def test_multi_repository_delta_preserves_foreign_binding_and_other_selection(in
         own = db.exec(select(BoardAppBinding).where(BoardAppBinding.project_id == board[2].id)).first()[0]
         assert persisted.is_selected and own.state == "disabled" and not own.granted_capabilities
     restored = update_resources(
-        service, board[1], board[2].get_uid(), connection.get_uid(), 17, 7, (99,), (), removed["revision"]
+        service, board[1], board[2].get_uid(), connection.get_uid(), 17, 7, (99,), (), removed["revision"], proof
     )
     assert len(restored["items"]) == 2 and all(item["selected"] for item in restored["items"])
 
@@ -171,11 +176,71 @@ def test_resource_delta_rejects_incomplete_wrong_or_duplicate_external_set(insta
     from langboard.apps.GitHubResources import get_resources, update_resources
 
     service, board, connection, calls, responses = installation
+    from langboard.apps.GitHubAuthorization import _issue_installation_proof
+
+    proof = _issue_installation_proof(
+        board[1], board[2].get_uid(), connection, [{"id": 17, "account": {"id": 7}, "suspended": False}]
+    )
     snapshot = get_resources(service, board[1], board[2].get_uid())
     responses["returned_ids"] = returned_ids
     with pytest.raises(github.GitHubManifestUnavailable):
         update_resources(
-            service, board[1], board[2].get_uid(), connection.get_uid(), 17, 7, (99, 100), (), snapshot["revision"]
+            service,
+            board[1],
+            board[2].get_uid(),
+            connection.get_uid(),
+            17,
+            7,
+            (99, 100),
+            (),
+            snapshot["revision"],
+            proof,
         )
     assert get_resources(service, board[1], board[2].get_uid()) == snapshot
     assert calls[-1].method == "DELETE"
+
+
+@pytest.mark.parametrize(
+    "failure",
+    ["missing", "expired", "actor", "board", "connection", "installation", "account", "revision", "suspended"],
+)
+def test_repository_add_requires_scoped_user_installation_proof(installation, failure):
+    from types import SimpleNamespace
+    from langboard.apps.GitHubAuthorization import _digest, _issue_installation_proof
+    from langboard.apps.GitHubResources import get_resources, update_resources
+    from langboard_shared.core.caching import Cache
+
+    service, board, connection, calls, responses = installation
+    actor = SimpleNamespace(id=board[1].id + 1) if failure == "actor" else board[1]
+    proof = _issue_installation_proof(
+        actor,
+        "other" if failure == "board" else board[2].get_uid(),
+        connection,
+        [
+            {
+                "id": 18 if failure == "installation" else 17,
+                "account": {"id": 8 if failure == "account" else 7},
+                "suspended": failure == "suspended",
+            }
+        ],
+    )
+    if failure == "missing":
+        proof = None
+    elif failure == "expired":
+        Cache.delete("github-installation-proof:" + _digest(proof))
+    elif failure == "connection":
+        context = Cache.get("github-installation-proof:" + _digest(proof))
+        context["connection"] = "other"
+        Cache.set("github-installation-proof:" + _digest(proof), context, 300)
+    elif failure == "revision":
+        with DbSession.use(readonly=False) as db:
+            connection.external_account_id = "43"
+            db.update(connection)
+    snapshot = get_resources(service, board[1], board[2].get_uid())
+    with pytest.raises(github.GitHubManifestUnavailable):
+        update_resources(
+            service, board[1], board[2].get_uid(), connection.get_uid(), 17, 7, (99,), (), snapshot["revision"], proof
+        )
+    assert get_resources(service, board[1], board[2].get_uid()) == snapshot
+    if failure != "revision":
+        assert not calls
