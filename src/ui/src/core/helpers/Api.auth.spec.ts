@@ -267,9 +267,7 @@ test("a replayed 422 terminates without recursively refreshing again", async ({ 
     });
     const result = await page.evaluate(async () => {
         const apiPath = "/src/core/helpers/Api.ts";
-        const authPath = "/src/core/stores/AuthStore.ts";
         const { api } = await import(apiPath);
-        const { getAuthStore } = await import(authPath);
         api.defaults.baseURL = location.origin;
         try {
             await api.get(`${location.origin}/__token-replay-proof`);

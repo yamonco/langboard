@@ -20,7 +20,6 @@ import { IBoardRelatedPageProps } from "@/pages/BoardPage/types";
 
 const BoardPage = memo(({ project, currentUser }: IBoardRelatedPageProps) => {
     const navigate = usePageNavigateRef();
-    const [t] = useTranslation();
     const { data, error, isFetching, refetch } = useGetCards({ project_uid: project.uid });
 
     useEffect(() => {

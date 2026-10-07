@@ -13,6 +13,7 @@ export default function useSearchWikis(projectUID: string | undefined, queryText
     return query<IWikiSearchResponse>(
         ["wiki-search", projectUID, queryText],
         async () => {
+            if (!projectUID) throw new Error("Board is required for wiki search");
             const url = `${Utils.String.format(Routing.API.BOARD.WIKI.GET_ALL, { uid: projectUID })}/search`;
             const response = await api.get(url, { params: { query: queryText } });
             return response.data;

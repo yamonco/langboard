@@ -1,7 +1,7 @@
 /** Tree grouping: collapse all, expand all, and grouped-card visual state. */
 
 import type { ITreeCard } from "./ColumnCardTree.ts";
-import { computeDisplayList, toggleCollapse, type CollapseState } from "./TreeRenderer.ts";
+import { computeDisplayList, type CollapseState } from "./TreeRenderer.ts";
 
 export interface IGroupSummary {
     total_cards: number;
@@ -14,10 +14,7 @@ export interface IGroupSummary {
 /**
  * Summarize the tree state for UI badges.
  */
-export const summarizeGroup = (
-    trees: ITreeCard[],
-    collapsed: CollapseState
-): IGroupSummary => {
+export const summarizeGroup = (trees: ITreeCard[], collapsed: CollapseState): IGroupSummary => {
     const display = computeDisplayList(trees, collapsed);
     const all = flattenAll(trees);
 
@@ -62,11 +59,7 @@ export const expandAll = (_trees: ITreeCard[]): CollapseState => new Set();
 /**
  * Toggle a group and all its descendants' collapse state.
  */
-export const toggleGroupRecursive = (
-    trees: ITreeCard[],
-    uid: string,
-    collapsed: CollapseState
-): CollapseState => {
+export const toggleGroupRecursive = (trees: ITreeCard[], uid: string, collapsed: CollapseState): CollapseState => {
     const node = findNode(trees, uid);
     if (!node) return collapsed;
 
@@ -90,11 +83,7 @@ export const toggleGroupRecursive = (
  * Check if a node's subtree contains any collapsed descendants.
  * Useful for showing a "has hidden children" indicator.
  */
-export const hasCollapsedDescendant = (
-    trees: ITreeCard[],
-    uid: string,
-    collapsed: CollapseState
-): boolean => {
+export const hasCollapsedDescendant = (trees: ITreeCard[], uid: string, collapsed: CollapseState): boolean => {
     const node = findNode(trees, uid);
     if (!node) return false;
     return getDescendantUids(node).some((d) => collapsed.has(d));

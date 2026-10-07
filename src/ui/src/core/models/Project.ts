@@ -59,6 +59,7 @@ export interface IStore extends Interface {
     all_members: User.Interface[];
     invited_member_uids: string[];
     starred: bool;
+    board_has_unread_change?: bool;
     internal_bots: InternalBotModel.Interface[];
     internal_bot_settings: Record<
         InternalBotModel.EInternalBotType,

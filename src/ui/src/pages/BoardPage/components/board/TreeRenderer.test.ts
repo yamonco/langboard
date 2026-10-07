@@ -1,14 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildCardTree, flattenTree, type ITreeCard } from "./ColumnCardTree.ts";
-import {
-    TREE_INDENT_PX,
-    TREE_MAX_DEPTH,
-    canDropAsChild,
-    computeDisplayList,
-    connectorLines,
-    toggleCollapse,
-} from "./TreeRenderer.ts";
+import { buildCardTree, type ITreeCard } from "./ColumnCardTree.ts";
+import { TREE_INDENT_PX, canDropAsChild, computeDisplayList, connectorLines, toggleCollapse } from "./TreeRenderer.ts";
 
 const makeTree = (): ITreeCard[] => {
     const cards = [
