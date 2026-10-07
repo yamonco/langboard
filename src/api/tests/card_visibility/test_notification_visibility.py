@@ -180,3 +180,36 @@ def test_outbound_uses_live_actor_and_reference_provenance(current_card):
         user.activated_at = None
         db.update(user)
     assert resolve(cached_user, NotificationType.MentionedInCard, [project, card]) is None
+
+
+def test_queued_work_event_rechecks_current_source_and_recipient(current_card):
+    from types import SimpleNamespace
+    from langboard_shared.domain.services.factory.NotificationService import NotificationService
+    from langboard_shared.tasks.webhooks.utils import build_notification_work_event
+
+    user, project, card, card_service = current_card
+    UserNotification.__table__.create(DbEngine.get_main_engine())
+    with DbSession.use(readonly=False) as db:
+        card.visibility = "SHARED"
+        card.owner_user_id = None
+        db.update(card)
+        notification = UserNotification(receiver_id=user.id, notifier_type="user", notifier_id=user.id,
+            notification_type=NotificationType.MentionedInCard,
+            record_list=[("project", project.id), ("card", card.id)])
+        db.insert(notification)
+    model = build_notification_work_event(notification)
+    service = NotificationService(lambda _: card_service, lambda _: None, SimpleNamespace())
+    assert service.can_dispatch_work_event(model)
+    forged = model.model_copy(deep=True)
+    forged.data["scope"]["card_uid"] = "forged"
+    assert not service.can_dispatch_work_event(forged)
+    with DbSession.use(readonly=False) as db:
+        card.visibility = "INTERNAL"
+        db.update(card)
+    assert not service.can_dispatch_work_event(model)
+    with DbSession.use(readonly=False) as db:
+        card.visibility = "SHARED"
+        db.update(card)
+        user.activated_at = None
+        db.update(user)
+    assert not service.can_dispatch_work_event(model)

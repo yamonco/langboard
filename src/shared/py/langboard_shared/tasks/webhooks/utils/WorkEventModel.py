@@ -115,3 +115,14 @@ def _short_uid(value: Any) -> str:
     if isinstance(value, SnowflakeID):
         return value.to_short_code()
     return SnowflakeID(int(value)).to_short_code()
+
+
+def can_dispatch_work_event(model: WebhookModel) -> bool:
+    """Use current source permissions; queued payloads are never authority."""
+    from ....domain.services import DomainService
+
+    service = DomainService()
+    try:
+        return service.notification.can_dispatch_work_event(model)
+    finally:
+        service.close()
