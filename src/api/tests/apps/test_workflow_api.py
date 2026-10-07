@@ -172,7 +172,7 @@ def test_catalog_resource_summary_is_board_scoped_and_selection_scoped(board, bi
 
 
 def test_disable_is_scoped_revision_checked_and_preserves_other_bindings(board, binding):
-    from langboard_shared.domain.models import BoardAppBinding, AppConnection, AppResourceBinding
+    from langboard_shared.domain.models import AppConnection, AppResourceBinding, BoardAppBinding
     from langboard_shared.domain.services.factory.WorkflowStageService import WorkflowStageEditConflict
     with DbSession.use(readonly=False) as db:
         other = BoardAppBinding(project_id=11, app_key="github", state="enabled", granted_capabilities=["signals.read"])
@@ -224,3 +224,25 @@ def test_postgresql_same_revision_disable_serializes(board, binding):
     with ThreadPoolExecutor(max_workers=2) as workers:
         results = [workers.submit(disable) for _ in range(2)]
         assert sorted(result.result(timeout=15) for result in results) == ["conflict", "disabled"]
+
+
+def test_catalog_declarations_do_not_grant_binding_authority(board, binding):
+    from langboard_shared.domain.services.AppManifest import APP_MANIFESTS
+
+    items = board[0].get_app_catalog(board[1], board[2].get_uid())
+    github = items[0]
+    assert github["resource_types"] == ["repository"]
+    assert github["permissions"] == {"read": "read", "configure": "update"}
+    assert "workflow.transition" in github["capabilities"]
+    assert github["binding"]["granted_capabilities"] == ["signals.read"]
+    assert not github["binding"]["stage_transitions_enabled"]
+    assert github["signal_schema"]["required"][-2:] == ["connection_uid", "resource_uid"]
+    assert items[2]["resource_types"] == ["project", "environment", "application", "compose"]
+    assert "deployments.write" not in items[2]["capabilities"]
+    github["capabilities"].clear()
+    github["signal_schema"]["required"].clear()
+    assert APP_MANIFESTS["github"].capabilities
+    assert board[0].get_app_catalog(board[1], board[2].get_uid())[0]["signal_schema"]["required"]
+    with pytest.raises(TypeError):
+        APP_MANIFESTS["caller"] = APP_MANIFESTS["github"]
+    assert board[0].disable_app_binding(board[1], board[2].get_uid(), "caller", binding.get_uid(), binding.edit_revision()) is None

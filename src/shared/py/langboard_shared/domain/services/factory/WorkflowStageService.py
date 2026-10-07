@@ -1,6 +1,6 @@
 import re
-from sqlalchemy import select, func
 from collections.abc import Mapping
+from sqlalchemy import func, select
 from ....core.db import DbSession, SqlBuilder
 from ....core.domain import BaseDomainService
 from ....helpers import InfraHelper
@@ -18,6 +18,7 @@ from ...models import (
     WorkflowStageDefinition,
 )
 from ...models.ProjectRole import ProjectRoleAction
+from ..AppManifest import APP_MANIFESTS
 from ..AppWorkflowPolicy import (
     APP_WORKFLOW_REQUIREMENTS,
     WorkflowMappingResult,
@@ -74,15 +75,10 @@ class WorkflowStageService(BaseDomainService):
                     summary[field][state] = summary[field].get(state, 0) + count
 
             items = []
-            for key, name in (("github", "GitHub"), ("glitchtip", "GlitchTip"), ("dokploy", "Dokploy")):
+            for key, manifest in APP_MANIFESTS.items():
                 binding = by_app.get(key)
-                requirements = APP_WORKFLOW_REQUIREMENTS.get(key)
                 items.append({
-                    "key": key, "name": name,
-                    "workflow_requirements": None if requirements is None else {
-                        "required": list(requirements.required), "optional": list(requirements.optional),
-                    },
-                    "connection_setup_available": False,
+                    **manifest.catalog_fields(),
                     "resources": summaries.get(binding.id if binding else None, {
                         "selected_count": 0, "access_counts": {}, "health_counts": {}, "connection_counts": {},
                     }),
@@ -98,7 +94,7 @@ class WorkflowStageService(BaseDomainService):
         self, user: User, project_uid: str, app_key: str, binding_uid: str, expected_revision: str,
     ) -> BoardAppBinding | None:
         """Disable this board configuration without deleting shared connections or resources."""
-        if app_key not in {"github", "glitchtip", "dokploy"}:
+        if app_key not in APP_MANIFESTS:
             return None
         with DbSession.atomic() as db:
             board = db.exec(SqlBuilder.select.table(Project).where(
