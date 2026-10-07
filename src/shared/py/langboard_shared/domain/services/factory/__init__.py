@@ -32,6 +32,7 @@ from .ProjectTemplateService import ProjectTemplateService
 from .ProjectWikiService import ProjectWikiService
 from .ReactionService import ReactionService
 from .ScimProvisioningService import ScimProvisioningService
+from .SecretReferenceService import SecretReferenceService
 from .UserGroupService import UserGroupService
 from .UserNotificationSettingService import UserNotificationSettingService
 from .UserService import UserService
@@ -65,6 +66,7 @@ __all__ = [
     "NotificationService",
     "OrchestrationTaskService",
     "OrganizationService",
+    "SecretReferenceService",
     "ProjectColumnService",
     "ProjectEmailNotificationService",
     "ProjectInvitationService",
