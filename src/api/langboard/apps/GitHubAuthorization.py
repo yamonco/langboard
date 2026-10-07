@@ -85,8 +85,10 @@ def _callback(project_uid):
     return Env.PUBLIC_UI_URL.rstrip("/") + f"/board/{project_uid}/settings"
 
 
-def begin_authorization(service, actor, project_uid, connection_uid):
+def begin_authorization(service, actor, project_uid, connection_uid, page=1):
     try:
+        if type(page) is not int or not 1 <= page <= 10000:
+            raise GitHubManifestUnavailable()
         connection, credential = _credential(service, actor, project_uid, connection_uid)
         state, session, verifier = (secrets.token_urlsafe(32) for _ in range(3))
         challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).decode().rstrip("=")
@@ -99,6 +101,7 @@ def begin_authorization(service, actor, project_uid, connection_uid):
                 "revision": connection_revision(connection),
                 "session": _digest(session),
                 "verifier": verifier,
+                "page": page,
             },
             TTL,
         )
@@ -170,7 +173,9 @@ def complete_authorization(service, actor, project_uid, state, code, session):
                 if type(user.get("id")) is not int or user["id"] <= 0 or not isinstance(user.get("login"), str):
                     raise GitHubManifestUnavailable()
                 # Bounded discovery, explicit pagination; never infer absence beyond this page.
-                response = client.get(API + "/user/installations", headers=headers, params={"per_page": 100, "page": 1})
+                response = client.get(
+                    API + "/user/installations", headers=headers, params={"per_page": 100, "page": context["page"]}
+                )
                 if response.status_code != 200:
                     raise GitHubManifestUnavailable()
                 data = response.json()
@@ -220,7 +225,9 @@ def complete_authorization(service, actor, project_uid, state, code, session):
             "github_user": {"id": user["id"], "login": user["login"]},
             "installations": installations,
             "total_count": count,
-            "has_more": count > len(rows),
+            "has_more": count > context["page"] * 100,
+            "page": context["page"],
+            "next_page": context["page"] + 1 if count > context["page"] * 100 else None,
             "binding_created": False,
             "installation_proof": _issue_installation_proof(actor, project_uid, current, installations),
             "proof_expires_in": PROOF_TTL,

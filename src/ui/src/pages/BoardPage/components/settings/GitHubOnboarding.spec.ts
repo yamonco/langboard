@@ -92,3 +92,16 @@ test("health refresh continues only on explicit request", async ({ page }) => {
     expect(calls).toHaveLength(2);
     expect(calls[1].data).toMatchObject({ after: "cursor" });
 });
+
+test("next installation page requests a new page-bound authorization", async ({ page }) => {
+    await page.goto(path + "&installpages");
+    // Native API adapter calls are inspected before navigation via a route hold.
+    await page.route("https://github.com/login/oauth/authorize?*", async (route) => {
+        await route.fulfill({ contentType: "text/html", body: "<p>Authorize next page</p>" });
+    });
+    const callPromise = page.waitForEvent("console", (message) => message.text().startsWith("authorization-page:"));
+    await page.getByRole("button", { name: "More installations" }).click();
+    const message = await callPromise;
+    expect(message.text()).toBe("authorization-page:2");
+    await expect(page).toHaveURL(/github.com\/login\/oauth\/authorize/);
+});

@@ -195,6 +195,8 @@
     "More GitHub connections": "연결 더 보기",
     "Refresh GitHub resource health": "저장소 상태 새로 확인",
     "GitHub health refreshed": "저장소 상태 갱신됨. App 리소스 상태에서 결과를 확인하세요.",
-    "Continue GitHub health refresh": "다음 저장소 상태 확인"
+    "Continue GitHub health refresh": "다음 저장소 상태 확인",
+    "Previous GitHub installations": "이전 설치 목록",
+    "More GitHub installations": "다음 설치 목록"
   }
 }
