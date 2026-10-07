@@ -8,6 +8,7 @@ import SwallowErrorBoundary from "@/components/SwallowErrorBoundary";
 import { EHttpStatus } from "@langboard/core/enums";
 import { IS_OLLAMA_RUNNING } from "@/constants";
 import WorkbenchRouteLayout from "@/components/Layout/WorkbenchRouteLayout";
+import RouteLoadError from "@/components/RouteLoadError";
 
 interface IRouteConfig {
     routes: RouteObject[];
@@ -58,6 +59,7 @@ const Router = memo(({ children }: IRouterProps) => {
         return createBrowserRouter([
             {
                 path: "/",
+                errorElement: <RouteLoadError />,
                 element: (
                     <SwallowErrorBoundary>
                         <SuspenseComponent shouldWrapChildren={false} isPage>
