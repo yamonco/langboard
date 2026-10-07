@@ -91,6 +91,7 @@ def test_deleted_project_blocks_current_card_scope(current_card):
     assert not BotTaskHelper.can_dispatch_card_scope({}, project, card)
 
 
+@pytest.mark.parametrize("current_card", ["sqlite://", "postgresql-test"], indirect=True)
 @pytest.mark.parametrize("kind", ["comment", "checklist", "checkitem"])
 def test_payload_child_uid_cannot_override_current_scope(current_card, kind):
     from langboard_shared.core.db.DbEngine import DbEngine
