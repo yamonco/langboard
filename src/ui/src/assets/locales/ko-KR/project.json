@@ -139,6 +139,8 @@
     "Existing column for stage": "스테이지를 지정할 기존 칼럼",
     "Assign stage to column": "칼럼에 스테이지 지정",
     "New workflow column name": "새 워크플로우 칼럼 이름",
-    "Create column with stage": "스테이지와 함께 칼럼 생성"
+    "Create column with stage": "스테이지와 함께 칼럼 생성",
+    "Replace column stage warning": "스테이지를 바꾸면 이 보드의 모든 앱에서 칼럼의 의미가 변경됩니다.",
+    "Confirm stage replacement": "스테이지 교체 확인"
   }
 }
