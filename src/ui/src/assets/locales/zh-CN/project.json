@@ -197,6 +197,19 @@
     "GitHub health refreshed": "已刷新资源状态，请查看 App 资源状态。",
     "Continue GitHub health refresh": "刷新下一批仓库",
     "Previous GitHub installations": "上一页安装",
-    "More GitHub installations": "下一页安装"
+    "More GitHub installations": "下一页安装",
+    "Show GitHub connection health": "查看GitHub连接状态",
+    "GitHub connection health": "GitHub连接状态",
+    "GitHub stored health guidance": "仅为已保存的证据。请刷新资源状态以验证当前GitHub访问。",
+    "Connection state": "连接状态",
+    "No selected GitHub resources": "没有已选GitHub资源",
+    "Installation": "安装",
+    "Account": "账户",
+    "Selected": "已选",
+    "Healthy": "正常",
+    "Degraded": "警告",
+    "Unavailable": "无法验证",
+    "Unverified": "未验证",
+    "More installation health": "更多安装状态"
   }
 }

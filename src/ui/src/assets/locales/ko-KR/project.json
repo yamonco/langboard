@@ -197,6 +197,19 @@
     "GitHub health refreshed": "저장소 상태 갱신됨. App 리소스 상태에서 결과를 확인하세요.",
     "Continue GitHub health refresh": "다음 저장소 상태 확인",
     "Previous GitHub installations": "이전 설치 목록",
-    "More GitHub installations": "다음 설치 목록"
+    "More GitHub installations": "다음 설치 목록",
+    "Show GitHub connection health": "GitHub 연결 상태 보기",
+    "GitHub connection health": "GitHub 연결 상태",
+    "GitHub stored health guidance": "저장된 근거입니다. 현재 GitHub 접근 확인은 리소스 상태 갱신을 사용하세요.",
+    "Connection state": "연결 상태",
+    "No selected GitHub resources": "선택한 GitHub 저장소 없음",
+    "Installation": "설치",
+    "Account": "계정",
+    "Selected": "선택",
+    "Healthy": "정상",
+    "Degraded": "주의",
+    "Unavailable": "확인 불가",
+    "Unverified": "미검증",
+    "More installation health": "설치 상태 더 보기"
   }
 }

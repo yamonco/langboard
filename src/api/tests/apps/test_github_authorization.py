@@ -132,6 +132,7 @@ def test_native_authorization_http_cookie_and_replay(authorized, monkeypatch):
     from langboard.middlewares.ApiAuthMiddleware import ApiAuthMiddleware
     from langboard.routes.board.BoardGitHubAppApi import (
         finish_github_authorization,
+        get_github_connection_health,
         get_github_connections,
         start_github_authorization,
     )
@@ -152,6 +153,7 @@ def test_native_authorization_http_cookie_and_replay(authorized, monkeypatch):
             start_github_authorization,
             finish_github_authorization,
             get_github_connections,
+            get_github_connection_health,
         ):
             for dependency in route.dependant.dependencies:
                 if dependency.name == "service":
@@ -164,9 +166,13 @@ def test_native_authorization_http_cookie_and_replay(authorized, monkeypatch):
         assert client.post(url, json={"connection_uid": connection.get_uid()}).status_code == 401
         listing_url = url.removesuffix("authorization") + "connections"
         assert client.get(listing_url).status_code == 401
+        health_url = listing_url + f"/{connection.get_uid()}/health"
+        assert client.get(health_url).status_code == 401
         client.cookies.set(Env.REFRESH_TOKEN_NAME, refresh)
         listed = client.get(listing_url, headers=headers)
         assert listed.status_code == 200, listed.text
+        health = client.get(health_url, headers=headers)
+        assert health.status_code == 200 and health.json()["evidence"] == "stored" and health.json()["items"] == []
         assert listed.json()["items"] == [{"connection_uid": connection.get_uid(), "app_id": "42", "state": "pending"}]
         assert "secret://" not in listed.text and "credential" not in listed.text
         # Use prepared PKCE state so the mock validates its exact verifier.

@@ -66,3 +66,78 @@ def inspect_app(service, actor, project_uid, connection_uid):
         }
     except Exception:
         raise GitHubManifestUnavailable() from None
+
+
+def connection_health(service, actor, project_uid, connection_uid, after=None):
+    """Board-scoped stored evidence, not a new GitHub API verification."""
+    import re
+    from langboard_shared.domain.models import AppResourceBinding, BoardAppBinding
+    from sqlalchemy import and_, case, func, or_
+
+    board = _board(service, actor, project_uid)
+    with DbSession.use(readonly=False) as db:
+        connection = db.exec(
+            select(AppConnection).where(
+                AppConnection.id == InfraHelper.convert_id(connection_uid),
+                AppConnection.owner_id == actor.id,
+                AppConnection.app_key == "github",
+            )
+        ).first()
+        if connection is None:
+            raise GitHubManifestUnavailable()
+        connection = connection[0]
+        installation = AppResourceBinding.resource_path[0]["id"].as_string()
+        account = AppResourceBinding.resource_path[1]["id"].as_string()
+        statement = (
+            select(
+                installation,
+                account,
+                func.count(),
+                func.sum(
+                    case(
+                        (and_(AppResourceBinding.access_state == "granted", AppResourceBinding.health == "healthy"), 1),
+                        else_=0,
+                    )
+                ),
+                func.sum(case((AppResourceBinding.health == "degraded", 1), else_=0)),
+                func.sum(case((AppResourceBinding.health == "unavailable", 1), else_=0)),
+            )
+            .join(BoardAppBinding, BoardAppBinding.id == AppResourceBinding.board_binding_id)
+            .where(
+                BoardAppBinding.project_id == board.id,
+                BoardAppBinding.app_key == "github",
+                AppResourceBinding.connection_id == connection.id,
+                AppResourceBinding.resource_type == "repository",
+                AppResourceBinding.is_selected == True,  # noqa: E712
+                AppResourceBinding.resource_path[0]["type"].as_string() == "installation",
+                AppResourceBinding.resource_path[1]["type"].as_string() == "account",
+            )
+        )
+        if after is not None:
+            if not isinstance(after, str) or not re.fullmatch(r"[1-9][0-9]{0,19}:[1-9][0-9]{0,19}", after):
+                raise ValueError("Invalid installation cursor")
+            install_after, account_after = after.split(":")
+            statement = statement.where(
+                or_(installation > install_after, and_(installation == install_after, account > account_after))
+            )
+        rows = db.exec(statement.group_by(installation, account).order_by(installation, account).limit(26)).all()
+        items = []
+        for install_id, account_id, total, healthy, degraded, unavailable in rows[:25]:
+            items.append(
+                {
+                    "installation_id": install_id,
+                    "account_id": account_id,
+                    "selected_count": total,
+                    "healthy_count": healthy,
+                    "degraded_count": degraded,
+                    "unavailable_count": unavailable,
+                    "unverified_count": total - healthy - degraded - unavailable,
+                }
+            )
+        return {
+            "connection_uid": connection.get_uid(),
+            "state": connection.state,
+            "evidence": "stored",
+            "items": items,
+            "next_cursor": f"{rows[24][0]}:{rows[24][1]}" if len(rows) > 25 else None,
+        }

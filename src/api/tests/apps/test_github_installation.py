@@ -449,3 +449,65 @@ def test_health_refresh_pages_and_groups_repository_checks(installation):
     assert len(calls) == 8
     with pytest.raises(ValueError):
         refresh_resources(service, board[1], board[2].get_uid(), connection.get_uid(), second["revision"], "invalid")
+
+
+def test_stored_connection_health_is_board_scoped_paged_and_secret_free(installation):
+    from langboard.apps.GitHubConnections import connection_health
+    from langboard_shared.domain.models import AppResourceBinding, BoardAppBinding
+
+    service, board, connection, calls, responses = installation
+    with DbSession.use(readonly=False) as db:
+        bindings = []
+        for project_id in (10, 11):
+            binding = BoardAppBinding(project_id=project_id, app_key="github")
+            db.insert(binding)
+            bindings.append(binding)
+        for i in range(27):
+            for access, health in [
+                ("granted", "healthy"),
+                ("unknown", "unavailable"),
+                ("granted", "degraded"),
+                ("unknown", "unknown"),
+            ]:
+                db.insert(
+                    AppResourceBinding(
+                        board_binding_id=bindings[0].id,
+                        connection_id=connection.id,
+                        resource_type="repository",
+                        external_resource_id=f"{i}-{health}",
+                        access_state=access,
+                        health=health,
+                        resource_path=[{"type": "installation", "id": str(100 + i)}, {"type": "account", "id": "7"}],
+                    )
+                )
+        db.insert(
+            AppResourceBinding(
+                board_binding_id=bindings[1].id,
+                connection_id=connection.id,
+                resource_type="repository",
+                external_resource_id="foreign",
+                health="unavailable",
+                resource_path=[{"type": "installation", "id": "100"}, {"type": "account", "id": "7"}],
+            )
+        )
+        foreign = AppConnection(owner_id=board[2].owner_id, app_key="github", external_account_id="43")
+        db.insert(foreign)
+    first = connection_health(service, board[1], board[2].get_uid(), connection.get_uid())
+    second = connection_health(service, board[1], board[2].get_uid(), connection.get_uid(), first["next_cursor"])
+    assert len(first["items"]) == 25 and len(second["items"]) == 2 and second["next_cursor"] is None
+    assert first["evidence"] == "stored" and not calls and "secret" not in json.dumps(first)
+    assert len({item["installation_id"] for item in first["items"] + second["items"]}) == 27
+    for item in first["items"] + second["items"]:
+        assert item["selected_count"] == 4
+        assert all(
+            item[key] == 1 for key in ("healthy_count", "degraded_count", "unavailable_count", "unverified_count")
+        )
+    with pytest.raises(github.GitHubManifestUnavailable):
+        connection_health(service, board[1], board[2].get_uid(), foreign.get_uid())
+    with pytest.raises(ValueError):
+        connection_health(service, board[1], board[2].get_uid(), connection.get_uid(), "invalid")
+    with DbSession.use(readonly=False) as db:
+        board[4].actions = ["read"]
+        db.update(board[4])
+    with pytest.raises(github.GitHubManifestUnavailable):
+        connection_health(service, board[1], board[2].get_uid(), connection.get_uid())

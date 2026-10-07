@@ -31,6 +31,28 @@ api.defaults.adapter = async (config) => {
                 refreshed_count: 25,
             },
         };
+    if (config.url?.endsWith("/health"))
+        return {
+            config,
+            status: 200,
+            statusText: "OK",
+            headers: {},
+            data: {
+                state: "pending",
+                next_cursor: config.params?.after ? null : "17:7",
+                items: [
+                    {
+                        installation_id: config.params?.after ? "18" : "17",
+                        account_id: "7",
+                        selected_count: 4,
+                        healthy_count: 1,
+                        degraded_count: 1,
+                        unavailable_count: 1,
+                        unverified_count: 1,
+                    },
+                ],
+            },
+        };
     if (config.url?.endsWith("/app"))
         return {
             config,

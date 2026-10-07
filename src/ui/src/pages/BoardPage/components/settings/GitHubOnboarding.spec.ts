@@ -105,3 +105,22 @@ test("next installation page requests a new page-bound authorization", async ({ 
     expect(message.text()).toBe("authorization-page:2");
     await expect(page).toHaveURL(/github.com\/login\/oauth\/authorize/);
 });
+
+for (const width of [1440, 390])
+    test(`stored connection health is explicit and paged ${width}`, async ({ page }) => {
+        await page.setViewportSize({ width, height: 900 });
+        await page.goto("/src/pages/BoardPage/components/settings/GitHubOnboarding.fixture.html?existing");
+        await page.getByRole("combobox", { name: "Existing GitHub connection" }).selectOption("stored");
+        await page.getByRole("button", { name: "Show GitHub connection health" }).click();
+        const health = page.getByLabel("GitHub connection health", { exact: true });
+        await expect(health).toContainText("Stored evidence only");
+        await expect(health).toContainText("Selected: 4");
+        await expect(health).toContainText("Unavailable: 1");
+        await page.getByRole("button", { name: "More installation health" }).click();
+        await expect(health.getByRole("listitem")).toHaveCount(2);
+        await expect(page.getByRole("button", { name: "More installation health" })).toHaveCount(0);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+        await page.screenshot({ path: `test-results/github-health-${width}.png`, fullPage: true });
+        await page.getByRole("combobox", { name: "Existing GitHub connection" }).selectOption("");
+        await expect(health).toHaveCount(0);
+    });
