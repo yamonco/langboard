@@ -12,7 +12,6 @@ from .Card import Card
 from .CardAssignedProjectLabel import CardAssignedProjectLabel
 from .CardAssignedUser import CardAssignedUser
 from .CardAttachment import CardAttachment
-from .CardDocumentArtifact import CardDocumentArtifact
 from .CardBotDefaultScope import CardBotDefaultScope
 from .CardBotLog import CardBotLog
 from .CardBotSchedule import CardBotSchedule
@@ -20,9 +19,11 @@ from .CardBotScope import CardBotScope
 from .CardComment import CardComment
 from .CardCommentReaction import CardCommentReaction
 from .CardContentBlock import CardContentBlock
+from .CardDocumentArtifact import CardDocumentArtifact
 from .CardMetadata import CardMetadata
 from .CardRelationship import CardRelationship
 from .CardVerificationRecord import CardVerificationRecord
+from .CardVisibilityChange import CardVisibilityChange
 from .ChatGraphApprovalRequest import ChatGraphApprovalRequest
 from .ChatHistory import ChatHistory
 from .ChatSession import ChatSession
@@ -113,6 +114,7 @@ __all__ = [
     "CardMetadata",
     "CardRelationship",
     "CardVerificationRecord",
+    "CardVisibilityChange",
     "ChatHistory",
     "ChatSession",
     "ChatTemplate",
