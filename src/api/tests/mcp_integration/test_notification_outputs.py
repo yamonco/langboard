@@ -107,7 +107,7 @@ async def test_notification_transport_preserves_native_unread_query(monkeypatch,
             result = await client.call_tool(name, {"page": 2, "limit": 1})
             expected = {"notifications": [item], "returned_count": 1}
             assert result.structured_content == TypeAdapter(dict).dump_python(expected, mode="json")
-            assert calls == [((actor, "all", 2, 1), {"unread_only": True, "authorized_projects_only": True})]
+            assert calls == [((actor, "all", 2, 1), {"unread_only": True, "authorized_projects_only": True, "channel": UserMcp.CollaborationChannel.Mcp})]
             assert "mutation_receipt" not in (result.meta or {})
     finally:
         mcp_auth_context.reset(token)

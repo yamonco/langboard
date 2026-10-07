@@ -39,7 +39,7 @@ def test_unread_query_is_bounded_side_effect_free_and_project_governed() -> None
     assert result["returned_count"] == 2
     assert "has_more" not in result
     assert "unread_count" not in result
-    assert calls == [((user, "all", 1, 10), {"unread_only": True, "authorized_projects_only": True})]
+    assert calls == [((user, "all", 1, 10), {"unread_only": True, "authorized_projects_only": True, "channel": UserMcp.CollaborationChannel.Mcp})]
 
 
 def test_notification_read_tools_mutate_only_when_called() -> None:
@@ -81,7 +81,7 @@ def test_unread_service_query_does_not_cleanup_missing_references(monkeypatch: p
     )
     monkeypatch.setattr(InfraHelper, "get_references", lambda *_args, **_kwargs: {})
 
-    assert service.get_api_list(SimpleNamespace(), "all", unread_only=True) == ([], False, 1)
+    assert service.get_api_list(SimpleNamespace(), "all", unread_only=True) == ([], False, 0)
     assert deleted == []
 
 
@@ -131,7 +131,7 @@ def test_my_work_lookup_is_governed_read_only_and_notified_read_state_independen
     calls: list[list[str]] = []
     user = SimpleNamespace()
 
-    def get_my_work_cards(_user, project_uids, _purposes, _mentioned, _due, _field, _since, _until, _limit):
+    def get_my_work_cards(_user, project_uids, _purposes, _mentioned, _due, _field, _since, _until, _limit, **_kwargs):
         calls.append(project_uids)
         return [{"uid": "c1"}]
 
@@ -159,7 +159,7 @@ def test_my_work_due_filters_include_mentioned_cards_and_normalize_bounds() -> N
     captured: list[object] = []
     user = SimpleNamespace()
 
-    def get_my_work_cards(*args):
+    def get_my_work_cards(*args, **_kwargs):
         captured.extend(args)
         return []
 

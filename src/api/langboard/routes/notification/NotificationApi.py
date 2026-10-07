@@ -1,8 +1,9 @@
 from typing import Literal, cast
-from fastapi import Depends
+from fastapi import Depends, Request
 from langboard_shared.core.filter import AuthFilter
 from langboard_shared.core.routing import AppRouter, JsonResponse
 from langboard_shared.core.schema import OpenApiSchema
+from langboard_shared.core.security.CollaborationChannel import CollaborationChannel
 from langboard_shared.domain.models import User, UserNotification
 from langboard_shared.domain.services import DomainService
 from langboard_shared.security import Auth
@@ -16,6 +17,7 @@ from .NotificationForm import NotificationForm
 )
 @AuthFilter.add("user")
 def toggle_all_notification_subscription(
+    request: Request,
     form: NotificationForm = Depends(), user: User = Auth.scope("user"), service: DomainService = DomainService.scope()
 ) -> JsonResponse:
     if form.time_range not in ["3d", "7d", "1m", "all"]:
@@ -26,5 +28,6 @@ def toggle_all_notification_subscription(
         form.page,
         form.limit,
         unread_only=form.unread_only,
+        channel=request.scope.get("collaboration_channel", CollaborationChannel.Api),
     )
     return JsonResponse(content={"notifications": notifications, "has_more": has_more, "unread_count": unread_count})
