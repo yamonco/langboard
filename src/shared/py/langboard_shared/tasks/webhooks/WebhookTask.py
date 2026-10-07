@@ -23,6 +23,7 @@ from .utils import (
     cloudevents_fields,
     ensure_public_webhook_url,
 )
+from .utils.WorkEventModel import can_dispatch_work_event
 
 
 WEBHOOK_TIMEOUT = Timeout(5.0, connect=2.0)
@@ -96,6 +97,9 @@ async def run_webhook(model: WebhookModel) -> None:
         Broker.logger.error("Execution event requires the transactional outbox path: event=%s", model.event_id)
         return
 
+    if model.event == WORK_EVENT_NAME and not can_dispatch_work_event(model):
+        return
+
     after_id: SnowflakeID | None = None
     while True:
         settings = _get_webhook_settings() if after_id is None else _get_webhook_settings(after_id)
@@ -133,6 +137,9 @@ async def post_signed_webhook(model: WebhookModel, webhook_uid: str, setting: We
     delivery, so callers with a retry budget can retry; execution outbox claims
     rely on this to release and eventually mark the attempt as failed.
     """
+
+    if model.event == WORK_EVENT_NAME and not can_dispatch_work_event(model):
+        return
 
     if setting is None:
         setting = _get_webhook_setting(webhook_uid)

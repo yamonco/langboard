@@ -157,6 +157,7 @@ async def test_durable_work_event_retry_keeps_the_same_identity_until_marked(
         if len(attempts) == 1:
             raise RuntimeError("delivery scheduling unavailable")
 
+    monkeypatch.setattr(NotificationWorkEventTask, "can_dispatch_work_event", lambda _: True)
     monkeypatch.setattr(NotificationWorkEventTask, "run_webhook", fail_once)
     with pytest.raises(RuntimeError, match="unavailable"):
         await NotificationWorkEventTask.drain_pending_work_events(repository)
@@ -192,6 +193,7 @@ async def test_work_event_delivery_requires_explicit_endpoint_subscription(
         return SimpleNamespace(events=events, get_uid=lambda: uid)
 
     scheduled: list[str] = []
+    monkeypatch.setattr(WebhookTask, "can_dispatch_work_event", lambda _: True)
     monkeypatch.setattr(
         WebhookTask,
         "_get_webhook_settings",
@@ -237,3 +239,29 @@ def test_work_event_scope_rejects_unknown_or_unscoped_identifiers() -> None:
         WorkEventData.model_validate(
             {**common, "scope": {"project_uid": "project", "email": "private@example.invalid"}}
         )
+
+
+@pytest.mark.asyncio
+async def test_revoked_backlog_is_drained_without_fanout(monkeypatch):
+    from unittest.mock import AsyncMock
+    notification = _notification("mentioned_in_card")
+    marks = []
+    repository = SimpleNamespace(user_notification=SimpleNamespace(
+        get_pending_work_events=lambda **_: [notification], mark_work_event_dispatched=marks.append))
+    fanout = AsyncMock()
+    monkeypatch.setattr(NotificationWorkEventTask, "can_dispatch_work_event", lambda _: False)
+    monkeypatch.setattr(NotificationWorkEventTask, "run_webhook", fanout)
+    await NotificationWorkEventTask.drain_pending_work_events(repository)
+    fanout.assert_not_called()
+    assert marks == [notification]
+
+
+@pytest.mark.asyncio
+async def test_revoked_work_event_stops_before_signing_or_http(monkeypatch):
+    from unittest.mock import Mock
+    model = build_notification_work_event(_notification("mentioned_in_card"))
+    signing = Mock(side_effect=AssertionError("must not sign revoked content"))
+    monkeypatch.setattr(WebhookTask, "can_dispatch_work_event", lambda _: False)
+    monkeypatch.setattr(WebhookTask, "signed_request", signing)
+    await WebhookTask.post_signed_webhook(model, "unused", SimpleNamespace())
+    signing.assert_not_called()
