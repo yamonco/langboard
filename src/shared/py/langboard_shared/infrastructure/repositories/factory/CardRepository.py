@@ -296,6 +296,7 @@ class CardRepository(BaseOrderRepository[Card, ProjectColumn]):
                 )
                 .where(Card.column("project_id") == project_id)
                 .where(card_visibility_scope(context) if context is not None else True)
+                .where(ProjectColumn.project_id == project_id if context is not None else True)
                 .where(Card.deleted_at.is_(None))
                 .order_by(Card.column("order").asc())
             )

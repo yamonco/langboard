@@ -171,11 +171,16 @@ def search_project_member_candidates(
 )
 @RoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
 @AuthFilter.add()
-def get_project_columns(project_uid: str, service: DomainService = DomainService.scope()) -> JsonResponse:
-    project = service.project.get_by_id_like(project_uid)
-    if project is None:
+def get_project_columns(
+    project_uid: str, request: Request,
+    user_or_bot: User | Bot = Auth.scope("all"), service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    channel = request.scope.get("collaboration_channel", CollaborationChannel.Api)
+    resolved = service.card.resolve_visibility_context(project_uid, user_or_bot, channel)
+    if resolved is None:
         raise ApiException.NotFound_404(ApiErrorCode.NF2001)
-    columns = service.project_column.get_api_list_by_project(project)
+    project, context = resolved
+    columns = service.project_column.get_api_list_by_project(project, context=context)
     return JsonResponse(content={"columns": columns})
 
 

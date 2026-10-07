@@ -1,4 +1,4 @@
-from fastapi import status
+from fastapi import Request, status
 from langboard_shared.core.db import DbSession, SqlBuilder
 from langboard_shared.core.filter import AuthFilter
 from langboard_shared.core.routing import (
@@ -14,6 +14,7 @@ from langboard_shared.core.routing import (
     create_editor_collaboration_document_id,
 )
 from langboard_shared.core.schema import OpenApiSchema
+from langboard_shared.core.security.CollaborationChannel import CollaborationChannel
 from langboard_shared.core.utils.Converter import convert_python_data
 from langboard_shared.domain.models import (
     Bot,
@@ -316,8 +317,14 @@ def copy_project_as_template(
 @RoleFilter.add(ProjectRole, [ProjectRoleAction.Update], RoleFinder.project)
 @AuthFilter.add()
 def get_project_details(
-    project_uid: str, user_or_bot: User | Bot = Auth.scope("all"), service: DomainService = DomainService.scope()
+    project_uid: str, request: Request,
+    user_or_bot: User | Bot = Auth.scope("all"), service: DomainService = DomainService.scope()
 ) -> JsonResponse:
+    channel = request.scope.get("collaboration_channel", CollaborationChannel.Api)
+    resolved = service.card.resolve_visibility_context(project_uid, user_or_bot, channel)
+    if resolved is None:
+        raise ApiException.NotFound_404(ApiErrorCode.NF2001)
+    _, context = resolved
     result = service.project.get_details(user_or_bot, project_uid, is_setting=True)
     if not result:
         raise ApiException.NotFound_404(ApiErrorCode.NF2001)
@@ -330,8 +337,8 @@ def get_project_details(
     response["internal_bot_settings"] = internal_bot_settings
 
     internal_bots = service.internal_bot.get_api_list(is_setting=False)
-    columns = service.project_column.get_api_list_by_project(project)
-    cards = service.card.get_api_list_by_project(project)
+    columns = service.project_column.get_api_list_by_project(project, context=context)
+    cards = service.card.get_api_list_by_project(project, user_or_bot, channel=channel)
     templates = service.chat.get_api_template_list(Project.__tablename__, project_uid)
 
     return JsonResponse(
