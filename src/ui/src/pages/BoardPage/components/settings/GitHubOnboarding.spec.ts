@@ -116,6 +116,14 @@ for (const width of [1440, 390])
         await expect(health).toContainText("Stored evidence only");
         await expect(health).toContainText("Selected: 4");
         await expect(health).toContainText("Unavailable: 1");
+        const jobs = page.getByLabel("Background verification", { exact: true });
+        await expect(jobs).toContainText("Needs attention");
+        await expect(jobs).toContainText("shared across boards");
+        await jobs.getByRole("button", { name: "Reload job status" }).click();
+        const jobCalls = await page.evaluate(() =>
+            (window as unknown as { githubCalls: { url: string }[] }).githubCalls.filter((call) => call.url.endsWith("/jobs"))
+        );
+        expect(jobCalls).toHaveLength(2);
         await page.getByRole("button", { name: "More installation health" }).click();
         await expect(health.getByRole("listitem")).toHaveCount(2);
         await expect(page.getByRole("button", { name: "More installation health" })).toHaveCount(0);
