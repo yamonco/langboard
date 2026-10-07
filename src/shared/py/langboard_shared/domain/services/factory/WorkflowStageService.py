@@ -62,6 +62,35 @@ class WorkflowStageService(BaseDomainService):
                 return None
             return {"binding": binding, "mapping": result}
 
+    def prepare_app_mapping(self, user: User, project_uid: str, app_key: str) -> BoardAppBinding | None:
+        """Create only a disabled workflow draft; this is not App installation."""
+        requirements = APP_WORKFLOW_REQUIREMENTS.get(app_key)
+        if requirements is None:
+            return None
+        with DbSession.atomic() as db:
+            project_id = InfraHelper.convert_id(project_uid)
+            board = db.exec(SqlBuilder.select.table(Project).where(
+                Project.id == project_id,
+            ).with_for_update()).first()
+            if board is None:
+                return None
+            binding = db.exec(SqlBuilder.select.table(BoardAppBinding).where(
+                BoardAppBinding.project_id == project_id, BoardAppBinding.app_key == app_key,
+            ).with_for_update()).first()
+            result = self._resolve_app_mapping(
+                user, project_id, requirements, {}, ProjectRoleAction.Update, lock=True,
+            )
+            if result is None:
+                return None
+            if binding is not None:
+                return binding
+            binding = BoardAppBinding(
+                project_id=project_id, app_key=app_key,
+                workflow_mapping={choice.stage: choice.column_uid for choice in result.choices if choice.status == "resolved"},
+            )
+            db.insert(binding)
+            return binding
+
     def save_app_mapping(
         self, user: User, binding_uid: str,
         explicit: Mapping[str, str] | None, *, project_uid: str, app_key: str, expected_revision: str,
@@ -74,6 +103,12 @@ class WorkflowStageService(BaseDomainService):
         This does not authorize future transition execution.
         """
         with DbSession.atomic() as db:
+            # Match draft creation's lock order: board before binding.
+            board = db.exec(SqlBuilder.select.table(Project).where(
+                Project.id == InfraHelper.convert_id(project_uid),
+            ).with_for_update()).first()
+            if board is None:
+                return None
             binding = db.exec(SqlBuilder.select.table(BoardAppBinding).where(
                 BoardAppBinding.id == InfraHelper.convert_id(binding_uid),
                 BoardAppBinding.project_id == InfraHelper.convert_id(project_uid),
