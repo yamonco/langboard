@@ -10,6 +10,7 @@ from langboard.middlewares.ApiAuthMiddleware import ApiAuthMiddleware
 from langboard.middlewares.RoleMiddleware import RoleMiddleware
 from langboard.routes.board.BoardSettingApi import (
     get_app_workflow_mapping,
+    get_board_app_catalog,
     prepare_app_workflow_mapping,
     update_app_workflow_mapping,
 )
@@ -38,6 +39,7 @@ def test_authenticated_http_workflow_and_current_revocation(board, binding, monk
     for route in app.routes:
         if getattr(route, "endpoint", None) in (
             get_app_workflow_mapping,
+            get_board_app_catalog,
             update_app_workflow_mapping,
             prepare_app_workflow_mapping,
         ):
@@ -50,6 +52,8 @@ def test_authenticated_http_workflow_and_current_revocation(board, binding, monk
     url = f"/board/{board[2].get_uid()}/settings/apps/github/workflow"
     headers = {"Authorization": f"Bearer {access}"}
     with TestClient(app) as client:
+        catalog_url = f"/board/{board[2].get_uid()}/settings/apps"
+        assert client.get(catalog_url).status_code == 401
         assert client.get(url).status_code == 401
         client.cookies.set(Env.REFRESH_TOKEN_NAME, refresh)
         assert client.get(url, headers={"Authorization": "Bearer invalid"}).status_code == 401
@@ -58,6 +62,9 @@ def test_authenticated_http_workflow_and_current_revocation(board, binding, monk
         assert first.status_code == 200
         assert first.json()["binding"]["stage_transitions_enabled"] is False
         assert client.post(draft_url, headers=headers).json()["binding"]["uid"] == first.json()["binding"]["uid"]
+        catalog = client.get(catalog_url, headers=headers)
+        assert catalog.status_code == 200
+        assert [item["key"] for item in catalog.json()["apps"]] == ["github", "glitchtip", "dokploy"]
         response = client.get(url, headers=headers)
         assert response.status_code == 200
         payload = {
@@ -79,6 +86,7 @@ def test_authenticated_http_workflow_and_current_revocation(board, binding, monk
         with DbSession.use(readonly=False) as db:
             db.delete(board[3])
         assert client.get(url, headers=headers).status_code == 404
+        assert client.get(catalog_url, headers=headers).status_code == 404
 
 
 @pytest.mark.parametrize("board", ["sqlite-http"], indirect=True)

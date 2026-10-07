@@ -151,6 +151,11 @@
     "App dokploy summary": "プロジェクト、環境、アプリケーション。",
     "App connection setup pending": "外部接続の設定はまだ利用できません。",
     "App workflow contract pending": "ワークフロー契約を準備中",
-    "Configure workflow": "ワークフローを設定"
+    "Configure workflow": "ワークフローを設定",
+    "App state unconfigured": "未設定",
+    "App state disabled": "無効",
+    "App state enabled": "有効",
+    "App state needs_attention": "確認が必要",
+    "App state disconnected": "接続解除"
   }
 }
