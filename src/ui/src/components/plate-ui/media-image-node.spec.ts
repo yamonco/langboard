@@ -66,7 +66,7 @@ for (const width of [390, 1440]) {
 }
 
 test("Plate inline and preview authenticate protected images without changing persisted URLs", async ({ page }) => {
-    const imageBody = '<svg xmlns="http://www.w3.org/2000/svg" width="900" height="600"><rect width="900" height="600" fill="teal"/></svg>';
+    const imageBody = `<svg xmlns="http://www.w3.org/2000/svg" width="900" height="600"><rect width="900" height="600" fill="teal"/></svg>`;
     let reads = 0;
     let denied = false;
     await page.route("**/file/encrypted/card_attachment/proof.png", async (route) => {
