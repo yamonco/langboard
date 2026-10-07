@@ -1,5 +1,5 @@
 from typing import Any, Literal
-from fastapi import Depends, Query
+from fastapi import Depends, Query, Request
 from langboard_shared.core.filter import AuthFilter
 from langboard_shared.core.routing import ApiErrorCode, ApiException, ApiPermission, AppRouter, JsonResponse
 from langboard_shared.core.schema import InfiniteRefreshableList, OpenApiSchema
@@ -9,6 +9,7 @@ from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.domain.services import DomainService
 from langboard_shared.filter import RoleFilter
 from langboard_shared.security import Auth, RoleFinder
+from ..board.CardAccess import require_visible_card
 from .ActivityForm import ActivityPagination
 
 
@@ -184,10 +185,12 @@ def get_project_column_activities(
 def get_card_activities(
     project_uid: str,
     card_uid: str,
+    request: Request,
     pagination: ActivityPagination = Depends(),
     user: User = Auth.scope("user"),
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
+    require_visible_card(project_uid, card_uid, request, user, service)
     assignee = service.activity.get_user_or_bot(pagination.assignee_uid) if pagination.assignee_uid else None
     if not _can_view_other_assignee_activities(project_uid, user, assignee, service):
         return JsonResponse(content=InfiniteRefreshableList())
@@ -224,8 +227,11 @@ def get_card_activities(
 def get_card_column_history(
     project_uid: str,
     card_uid: str,
+    request: Request,
+    user: User = Auth.scope("user"),
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
+    require_visible_card(project_uid, card_uid, request, user, service)
     return JsonResponse(content={"records": service.activity.get_card_column_history(project_uid, card_uid)})
 
 
