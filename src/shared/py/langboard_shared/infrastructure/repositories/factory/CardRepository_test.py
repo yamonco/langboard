@@ -29,6 +29,7 @@ from ....domain.models import (
 )
 from ....domain.models.BaseBotModel import BotPlatform, BotPlatformRunningType
 from ....domain.models.UserNotification import NotificationType
+from ....domain.services.CardVisibilityPolicy import CardVisibilityContext, CollaborationChannel
 from .CardRepository import CardRepository, _editor_search_text
 
 
@@ -417,13 +418,14 @@ def test_recent_availability_excludes_missing_deleted_and_foreign_project_cards(
             removed_uid = removed.get_uid()
             db.delete(removed)
         repo = CardRepository(lambda _: None, lambda _: None)
-        assert repo.get_existing_uids(project, [valid.get_uid(), removed_uid, foreign.get_uid()]) == [valid.get_uid()]
-        assert repo.get_existing_uids(project, []) == []
+        context = CardVisibilityContext(CollaborationChannel.HumanUI, True, True, True, actor_user_id=int(owner.id))
+        assert repo.get_existing_uids(project, [valid.get_uid(), removed_uid, foreign.get_uid()], context=context) == [valid.get_uid()]
+        assert repo.get_existing_uids(project, [], context=context) == []
         with pytest.raises(ValueError):
-            repo.get_existing_uids(project, [valid.get_uid()] * 201)
+            repo.get_existing_uids(project, [valid.get_uid()] * 201, context=context)
         with DbSession.use(readonly=False) as db:
             project.deleted_at = SafeDateTime.now()
             db.update(project)
-        assert repo.get_existing_uids(project, [valid.get_uid()]) == []
+        assert repo.get_existing_uids(project, [valid.get_uid()], context=context) == []
     finally:
         engine.dispose()

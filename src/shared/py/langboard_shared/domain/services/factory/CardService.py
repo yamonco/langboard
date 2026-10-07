@@ -12,6 +12,7 @@ from ....core.domain.BaseDomainService import TMutableValidatorMap
 from ....core.exceptions.CardDeleteForbidden import CardDeleteForbidden
 from ....core.exceptions.CardDescriptionConflict import CardDescriptionConflict
 from ....core.schema import TimeBasedPagination
+from ....core.security.CollaborationChannel import CollaborationChannel
 from ....core.types import SafeDateTime, SnowflakeID
 from ....core.types.ParamTypes import (
     TCardParam,
@@ -48,6 +49,7 @@ from ...models.Checkitem import CheckitemStatus
 from ...models.ProjectRole import ProjectRoleAction
 from ..CardApprovalGate import pending_card_approvals
 from ..CardVerification import VerificationConflict, VerificationSubmission
+from ..CardVisibilityPolicy import CardVisibilityContext
 from ..CardWorkState import project_work_state
 from ..DependencyPolicy import dependency_blockers
 from ..ExecutionGeneration import execution_generations
@@ -59,6 +61,7 @@ from .NotificationService import NotificationService
 from .ProjectLabelService import ProjectLabelService
 from .ProjectService import ProjectService
 from .ProjectWikiService import ProjectWikiService
+from .ScimProvisioningService import ScimProvisioningService
 from .WorkflowStagePolicyService import WorkflowStagePolicyService
 
 
@@ -147,9 +150,33 @@ class CardService(BaseDomainService):
         card = InfraHelper.get_by_id_like(Card, card)
         return card
 
-    def get_existing_uids(self, project: TProjectParam, card_uids: list[str]) -> list[str]:
-        """Return only current cards in the already authorized project, without content."""
-        return self.repo.card.get_existing_uids(project, card_uids)
+    def get_existing_uids(
+        self, project: TProjectParam, card_uids: list[str], *, user: User,
+        channel: CollaborationChannel = CollaborationChannel.Api,
+    ) -> list[str]:
+        """Resolve current server facts before exposing even card existence."""
+        if len(card_uids) > 200:
+            raise ValueError("At most 200 recent cards may be checked")
+        if not card_uids or not isinstance(user, User):
+            return []
+        # Read the primary: cached auth and replica membership may outlive revocation.
+        project_id = InfraHelper.convert_id(project)
+        with DbSession.use(readonly=False) as db:
+            project = db.exec(SqlBuilder.select.table(Project).where(Project.column("id") == project_id)).first()
+            current_user = db.exec(SqlBuilder.select.table(User).where(User.column("id") == user.id)).first()
+        if project is None or project.deleted_at is not None:
+            return []
+        if current_user is None or current_user.deleted_at is not None or not current_user.activated_at:
+            return []
+        member = project.owner_id == current_user.id or bool(
+            self.repo.project_assigned_user.get_all_by_project(project, [current_user], limit=1, consistent=True)
+        )
+        internal = self._get_service(ScimProvisioningService).is_employee(current_user) if member else False
+        context = CardVisibilityContext(
+            channel=channel, active=True, project_member=member,
+            internal_member=internal, actor_user_id=int(current_user.id),
+        )
+        return self.repo.card.get_existing_uids(project, card_uids, context=context)
 
     def get_by_project(self, project: TProjectParam | None) -> list[Card]:
         project = InfraHelper.get_by_id_like(Project, project)

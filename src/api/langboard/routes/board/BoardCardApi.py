@@ -1,5 +1,5 @@
 from datetime import datetime
-from fastapi import status
+from fastapi import Request, status
 from langboard_shared.core.db import EditorContentModel
 from langboard_shared.core.exceptions.CardDeleteForbidden import CardDeleteForbidden
 from langboard_shared.core.exceptions.RelationshipCycle import RelationshipCycle
@@ -18,6 +18,7 @@ from langboard_shared.core.routing import (
     create_editor_collaboration_document_id,
 )
 from langboard_shared.core.schema import OpenApiSchema
+from langboard_shared.core.security.CollaborationChannel import CollaborationChannel
 from langboard_shared.core.types import SafeDateTime
 from langboard_shared.core.utils.Converter import convert_python_data
 from langboard_shared.domain.models import (
@@ -73,9 +74,14 @@ from .forms import (
 def get_available_recent_cards(
     project_uid: str,
     form: RecentCardsAvailabilityForm,
+    request: Request,
+    user: User = Auth.scope("user"),
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
-    return JsonResponse(content={"card_uids": service.card.get_existing_uids(project_uid, form.card_uids)})
+    return JsonResponse(content={"card_uids": service.card.get_existing_uids(
+        project_uid, form.card_uids, user=user,
+        channel=request.scope.get("collaboration_channel", CollaborationChannel.Api),
+    )})
 
 
 @AppRouter.schema(permission=ApiPermission.Read)
