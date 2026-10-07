@@ -15,7 +15,12 @@ from ...models import (
     WorkflowStageDefinition,
 )
 from ...models.ProjectRole import ProjectRoleAction
-from ..AppWorkflowPolicy import WorkflowMappingResult, WorkflowRequirements, resolve_app_workflow
+from ..AppWorkflowPolicy import (
+    APP_WORKFLOW_REQUIREMENTS,
+    WorkflowMappingResult,
+    WorkflowRequirements,
+    resolve_app_workflow,
+)
 
 
 class WorkflowStageEditConflict(Exception):
@@ -39,11 +44,11 @@ class WorkflowStageService(BaseDomainService):
         return self._resolve_app_mapping(user, project, requirements, explicit, ProjectRoleAction.Read)
 
     def save_app_mapping(
-        self, user: User, binding_uid: str, requirements: WorkflowRequirements,
+        self, user: User, binding_uid: str,
         explicit: Mapping[str, str] | None, *, expected_revision: str,
         enable_transitions: bool,
     ) -> BoardAppBinding | None:
-        """Host supplies the installed App requirements; request bodies do not.
+        """Resolve requirements from the saved App key, never from request bodies.
 
         Persist current choices without changing resource selections, grants or
         App activation. Incomplete mappings may be saved with transitions off.
@@ -54,6 +59,9 @@ class WorkflowStageService(BaseDomainService):
                 BoardAppBinding.id == InfraHelper.convert_id(binding_uid),
             ).with_for_update()).first()
             if binding is None:
+                return None
+            requirements = APP_WORKFLOW_REQUIREMENTS.get(binding.app_key)
+            if requirements is None:
                 return None
             mapping = dict(binding.workflow_mapping if explicit is None else explicit)
             result = self._resolve_app_mapping(
