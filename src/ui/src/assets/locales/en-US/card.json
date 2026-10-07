@@ -175,5 +175,11 @@
   "Document indexed": "Document searchable",
   "Document processing failed": "Document processing failed",
   "Document processing disabled": "Attachment only",
-  "Document page progress": "{{completed}} / {{total}} pages"
+  "Document page progress": "{{completed}} / {{total}} pages",
+  "Index document embeddings": "Index document embeddings",
+  "Embed only this transcription": "Use the current embedding settings for this attachment only. Existing transcription and the original file are preserved.",
+  "Embedding requested": "Embedding requested",
+  "Embedding indexed": "Embedding indexed",
+  "Embedding failed": "Embedding failed",
+  "Embedding queued": "Embedding queued"
 }

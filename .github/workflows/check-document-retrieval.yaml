@@ -10,7 +10,7 @@ on:
       - src/shared/py/langboard_shared/tasks/docling/DocumentVectorGeneration*
       - src/shared/py/langboard_shared/tasks/docling/DoclingMetadataTask*
       - src/shared/py/langboard_shared/domain/services/factory/DoclingMetadataService*
-      - src/shared/py/langboard_shared/domain/services/factory/CardAttachmentService.py
+      - src/shared/py/langboard_shared/domain/services/factory/CardAttachmentService*
       - src/shared/py/pyproject.toml
       - src/shared/py/uv.lock
       - uv.lock
@@ -30,7 +30,7 @@ jobs:
         with:
           python-version: "3.12"
       - run: uv sync --frozen --extra document-retrieval
-      - run: uv run --no-sync pytest -q src/shared/py/langboard_shared/tasks/docling/DocumentRetrievalSettings_test.py src/shared/py/langboard_shared/tasks/docling/DocumentSplitter_test.py src/shared/py/langboard_shared/tasks/docling/DocumentEmbedding_test.py src/shared/py/langboard_shared/tasks/docling/DocumentVectorGeneration_test.py src/shared/py/langboard_shared/tasks/docling/DocumentEmbeddingTask_test.py src/shared/py/langboard_shared/tasks/docling/DoclingMetadataTask_test.py src/shared/py/langboard_shared/domain/services/factory/DoclingMetadataService_test.py
+      - run: uv run --no-sync pytest -q src/shared/py/langboard_shared/tasks/docling/DocumentRetrievalSettings_test.py src/shared/py/langboard_shared/tasks/docling/DocumentSplitter_test.py src/shared/py/langboard_shared/tasks/docling/DocumentEmbedding_test.py src/shared/py/langboard_shared/tasks/docling/DocumentVectorGeneration_test.py src/shared/py/langboard_shared/tasks/docling/DocumentEmbeddingTask_test.py src/shared/py/langboard_shared/tasks/docling/DoclingMetadataTask_test.py src/shared/py/langboard_shared/domain/services/factory/DoclingMetadataService_test.py src/shared/py/langboard_shared/domain/services/factory/CardAttachmentService_document_test.py
       - name: Verify retrieval does not install local inference runtimes
         run: |
           uv run --no-sync python - <<'PY'

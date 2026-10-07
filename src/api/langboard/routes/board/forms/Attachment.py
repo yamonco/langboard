@@ -1,3 +1,4 @@
+from typing import Literal
 from langboard_shared.core.routing import BaseFormModel, form_model
 
 
@@ -9,3 +10,4 @@ class ChangeAttachmentNameForm(BaseFormModel):
 @form_model
 class ProcessAttachmentDocumentForm(BaseFormModel):
     reprocess: bool = False
+    mode: Literal["transcription", "embedding"] = "transcription"

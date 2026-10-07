@@ -84,8 +84,19 @@ def test_document_generation_fences_old_results_and_preserves_previous_text_on_f
         generation=first,
     )
     first_embedding = {"status": "indexed", "pointer": {"generation": "first-vector"}}
+    embedding_snapshot = {"binding_uid": "embedding-provider", "model_name": "embedding-model"}
     assert docling.publish_document_embedding(
-        card, attachment.get_uid(), first, None, first_embedding, expected_embedding={}
+        card,
+        attachment.get_uid(),
+        first,
+        None,
+        first_embedding,
+        expected_embedding={},
+        embedding_config=embedding_snapshot,
+    )
+    assert (
+        docling.get_document_by_attachment_uid(CardMetadata, card, attachment.get_uid())["embedding_config"]
+        == embedding_snapshot
     )
     assert not docling.publish_document_embedding(
         card, attachment.get_uid(), first, None, {"status": "failed"}, expected_embedding={}

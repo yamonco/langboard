@@ -18,12 +18,14 @@ async def index_transcribed_attachment(request: str):
     try:
         payload = loads(request)
         if isinstance(payload, dict):
-            embed_transcription(service, payload.get("attachment_uid"), payload.get("generation"))
+            embed_transcription(
+                service, payload.get("attachment_uid"), payload.get("generation"), payload.get("request_uid")
+            )
     finally:
         service.close()
 
 
-def embed_transcription(service, attachment_uid: str, generation: str) -> None:
+def embed_transcription(service, attachment_uid: str, generation: str, request_uid: str | None = None) -> None:
     if not isinstance(attachment_uid, str) or not isinstance(generation, str):
         return
     attachment = service.card_attachment.get_by_id_like(attachment_uid)
@@ -44,6 +46,8 @@ def embed_transcription(service, attachment_uid: str, generation: str) -> None:
     binding = service.internal_bot.get_by_id_like(snapshot.get("binding_uid"))
     content_hash = document.get("content_hash")
     old = document.get("embedding") or {}
+    if request_uid is not None and old.get("request_uid") != request_uid:
+        return
     try:
         if not binding or binding.bot_type != InternalBotType.DocumentEmbedding:
             raise ValueError("Embedding binding is unavailable")

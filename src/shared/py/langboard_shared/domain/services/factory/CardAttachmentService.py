@@ -1,5 +1,6 @@
 from json import dumps, loads
 from typing import Any
+from uuid import uuid4
 from ....core.broker import Broker
 from ....core.broker.TaskParameters import TaskParameters
 from ....core.db import DbSession
@@ -181,6 +182,81 @@ class CardAttachmentService(BaseDomainService):
             self._queue_docling_index_task(attachment)
         document = docling.get_document_by_attachment_uid(CardMetadata, card, attachment.get_uid())
         return document.get("status", "pending") if document else None
+
+    def request_document_embedding(
+        self, project: TProjectParam, card: TCardParam, attachment: TAttachmentParam
+    ) -> str | None:
+        """Explicitly embed one existing transcription without rerunning VLM or scanning files."""
+        from ....tasks.docling.DocumentEmbedding import snapshot_embedding_config
+
+        params = InfraHelper.get_records_with_foreign_by_params(
+            (Project, project), (Card, card), (CardAttachment, attachment)
+        )
+        if not params:
+            return None
+        project, card, attachment = params
+        if (
+            card.project_id != project.id
+            or attachment.card_id != card.id
+            or attachment.deleted_at is not None
+            or card.is_linked_resource
+        ):
+            return None
+        binding = self._get_service(InternalBotService).get_document_embedding_binding()
+        if not binding:
+            raise ValueError("Configure an embedding provider before indexing attachments")
+        snapshot = snapshot_embedding_config(binding.value, binding.get_uid(), explicit=True)
+        metadata = self._get_service(DoclingMetadataService)
+        document = metadata.get_document_by_attachment_uid(CardMetadata, card, attachment.get_uid())
+        if not document or document.get("status") != "indexed" or not document.get("content_hash"):
+            raise ValueError("Process this attachment before requesting embeddings")
+        old = document.get("embedding") or {}
+        request_uid = uuid4().hex
+        queued = {**old, "status": "pending", "request_uid": request_uid}
+        queued.pop("error", None)
+        args, kwargs = TaskParameters(
+            dumps(
+                {
+                    "attachment_uid": attachment.get_uid(),
+                    "generation": document["generation"],
+                    "request_uid": request_uid,
+                }
+            )
+        ).pack()
+
+        def enqueue():
+            try:
+                Broker.celery.send_task(
+                    "langboard_shared.tasks.docling.DocumentEmbeddingTask.index_transcribed_attachment",
+                    args=args,
+                    kwargs=kwargs,
+                    time_limit=600,
+                    soft_time_limit=570,
+                )
+            except Exception:
+                metadata.publish_document_embedding(
+                    card,
+                    attachment.get_uid(),
+                    document["generation"],
+                    document["content_hash"],
+                    {**queued, "status": "failed", "error": "Embedding queue unavailable; request indexing again"},
+                    expected_embedding=queued,
+                )
+            metadata.publish_update(CardMetadata, card, SocketTopic.BoardCard)
+
+        with DbSession.atomic() as db:
+            if not metadata.publish_document_embedding(
+                card,
+                attachment.get_uid(),
+                document["generation"],
+                document["content_hash"],
+                queued,
+                expected_embedding=old,
+                embedding_config=snapshot,
+            ):
+                raise ValueError("Attachment changed; read its current state before retrying")
+            db.after_commit(enqueue)
+        return "pending"
 
     def change_order(
         self,
