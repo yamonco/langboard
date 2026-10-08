@@ -218,6 +218,11 @@ def test_composed_plan_transaction(monkeypatch, mode, promote, presentation):
         service.card.resolve_readable_card = Mock(return_value=None)
         with pytest.raises(ValueError, match="unavailable"):
             plans.apply(plan, reviewed["revision"], "request-one")
+        service.card.resolve_readable_card = lambda project, uid, *args: (
+            None if uid == child.get_uid() else authorized_resolver(project, uid, *args)
+        )
+        with pytest.raises(ValueError, match="unavailable"):
+            plans.apply(plan, reviewed["revision"], "request-one")
         service.card.resolve_readable_card = authorized_resolver
         replay = plans.apply(plan, reviewed["revision"], "request-one")
         assert replay == {**initial, "replayed": True}

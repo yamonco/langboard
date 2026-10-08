@@ -326,7 +326,16 @@ class WorkPlanService:
                 stored = loads(receipt["value"])
                 if stored.get("payload_digest") != payload_digest or stored.get("revision") != expected_revision:
                     raise ValueError("Work plan request ID reused with another plan")
-                return {**stored["result"], "replayed": True}
+                result = stored["result"]
+                graph = result.get("graph") or {}
+                visible_refs = {card["uid"] for card in graph.get("created_cards", [])}
+                visible_refs.update(item["card"]["uid"] for item in result.get("cardifications", []))
+                visible_refs.update(item["target_card_uid"] for item in result.get("checklists", []))
+                for edge in graph.get("created_relationships", []):
+                    visible_refs.update((edge["parent_card_uid"], edge["child_card_uid"]))
+                for uid in visible_refs:
+                    self._card(uid, project)
+                return {**result, "replayed": True}
             preview, cards, project = self._preview(plan)
             if preview["revision"] != expected_revision:
                 raise ValueError("Work plan changed after review; preview again")
