@@ -18,10 +18,14 @@ import useUserSettingsStore, { getUserSettingsStore, useUserSettings } from "@/c
 import { boardGraphViewForUser, TBoardGraphView } from "@/pages/BoardPage/BoardGraphPreference";
 import { useTheme } from "next-themes";
 import { EHttpStatus } from "@langboard/core/enums";
+import CardVisibilityBadge from "@/pages/BoardPage/components/card/CardVisibilityBadge";
 
 const BoardNetworkGraph = lazy(() => import("@/pages/BoardPage/BoardNetworkGraph"));
 
-type TCardNode = Node<{ title: string; column: string; onOpen: () => void; onFocus: () => void; onBlur: () => void }, "card">;
+type TCardNode = Node<
+    { title: string; column: string; card: ProjectCard.TModel; onOpen: () => void; onFocus: () => void; onBlur: () => void },
+    "card"
+>;
 
 function GraphCard({ data }: NodeProps<TCardNode>) {
     return (
@@ -37,8 +41,11 @@ function GraphCard({ data }: NodeProps<TCardNode>) {
                 onFocus={data.onFocus}
                 onBlur={data.onBlur}
             >
-                <span className="line-clamp-3 break-words text-sm font-medium leading-5" title={data.title}>
-                    {data.title}
+                <span className="min-w-0">
+                    <CardVisibilityBadge card={data.card} />
+                    <span className="line-clamp-3 break-words text-sm font-medium leading-5" title={data.title}>
+                        {data.title}
+                    </span>
                 </span>
             </button>
             {[Position.Left, Position.Right].map((position) => (
@@ -124,6 +131,7 @@ const BoardGraphPage = ({ project }: IBoardRelatedPageProps): React.JSX.Element 
                     position: { x: (GRAPH_LANE_WIDTH - GRAPH_CARD_WIDTH) / 2, y },
                     data: {
                         title: card.title,
+                        card: card as ProjectCard.TModel,
                         column: column.name,
                         onOpen: () => navigate(ROUTES.BOARD.CARD(project.uid, card.uid)),
                         onFocus: () => setActiveCard(card.uid),
