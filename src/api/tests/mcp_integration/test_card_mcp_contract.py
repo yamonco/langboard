@@ -184,10 +184,13 @@ def test_comment_tools_use_native_owner_without_workspace_adapter(monkeypatch: p
 
 def test_public_metadata_mutations_use_native_owner_and_bounded_response(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[tuple[str, Any]] = []
-    card = object()
+    card = SimpleNamespace(is_linked_resource=False, get_uid=lambda: "card")
     monkeypatch.setattr(CardMcp, "_require_task_card", lambda *_: (object(), card))
     monkeypatch.setattr(CardMcp, "_adapter", lambda *args: pytest.fail("workspace adapter used"))
+    monkeypatch.setattr(CardMcp.MetadataPublisher, "updated_metadata", lambda *args: None)
+    monkeypatch.setattr(CardMcp.MetadataPublisher, "deleted_metadata", lambda *args: None)
     service = SimpleNamespace(
+        card=SimpleNamespace(resolve_readable_card=lambda *args: (object(), card, object())),
         metadata=SimpleNamespace(
             save=lambda model, target, key, value, old_key: (
                 calls.append(("save", (target, key, value, old_key))) or SimpleNamespace(value=value)
