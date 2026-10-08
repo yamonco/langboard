@@ -50,6 +50,7 @@ from ...models import (
 )
 from ...models.Checkitem import CheckitemStatus
 from ...models.ProjectRole import ProjectRoleAction
+from ..AppSignalProjection import card_signal_projections
 from ..CardApprovalGate import pending_card_approvals
 from ..CardVerification import VerificationConflict, VerificationSubmission
 from ..CardVisibilityPolicy import CardVisibility, CardVisibilityContext
@@ -294,6 +295,7 @@ class CardService(BaseDomainService):
         blockers = dependency_blockers([card.id for card in cards], context=context)
         generations = execution_generations([card.id for card in cards])
         approvals = pending_card_approvals([card.id for card in cards])
+        signals = card_signal_projections(cards) if context is not None else {}
         states = {}
         for card in cards:
             column = columns.get(card.project_column_id)
@@ -324,6 +326,7 @@ class CardService(BaseDomainService):
                 pending_approval_count=approvals.get(int(card.id), 0),
                 verification_record=self._verification_projection(record) if record else None,
                 direct_blockers=blockers.get(int(card.id)),
+                external_signals=signals.get(card.id, []) if context is not None else None,
             )
             states[card.id]["dependency_state"]["scope"] = "readable_relationships" if context else None
         return states

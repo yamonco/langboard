@@ -154,3 +154,16 @@ def test_native_pending_approval_blocks_without_inventing_clear_or_verified_stat
     result = state(pending_approval_count=1, direct_blockers=[{"accessible": False}])
     assert result["blocker_state"] == "blocked"
     assert any(reason["code"] == "approval_pending" for reason in result["reasons"])
+
+@pytest.mark.parametrize('outcome', ['failed', 'conflict', 'passed', 'stale', 'unknown', 'unavailable'])
+def test_external_check_axes_preserve_workflow_and_reviewer_authority(outcome):
+    proof = {'binding_uid': 'binding', 'state': outcome}
+    result = state(workflow_stage='active', started=1, change_seq=7, external_signals=[proof])
+    assert result['workflow_stage'] == 'active' and result['completed'] is False
+    assert result['verification_state'] == 'unverified' and result['verification'] is None
+    assert result['external_signal_evidence'] == [proof]
+    assert result['human_execution_state'] == 'human_active'
+    blocked = outcome in {'failed', 'conflict'}
+    assert result['execution_state'] == ('failed' if blocked else 'human_active')
+    assert result['blocker_state'] == ('blocked' if blocked else None)
+    assert result['active_queue_eligible'] is (False if blocked else None)
