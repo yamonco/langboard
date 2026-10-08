@@ -12,6 +12,8 @@ interface HistoryItem {
     revision_before: number | null;
     revision_after: number;
     source_kind: string;
+    request_id?: string | null;
+    reason_code?: string | null;
 }
 export default function SecretHistoryPage() {
     const { referenceUID } = useParams();
@@ -72,6 +74,11 @@ export default function SecretHistoryPage() {
                                                 ? `v${item.revision_after}`
                                                 : `v${item.revision_before} → v${item.revision_after}`}
                                         </p>
+                                        {item.reason_code && (
+                                            <p className="text-xs text-muted-foreground" title={item.request_id ?? undefined}>
+                                                {t(`myAccount.secretHistory.reasons.${item.reason_code}`, { defaultValue: item.reason_code })}
+                                            </p>
+                                        )}
                                     </li>
                                 ))}
                             </ol>

@@ -63,6 +63,15 @@
       "moved": "移动",
       "revoked": "撤销",
       "rotated": "替换值"
+    },
+    "reasons": {
+      "user_input": "用户明确提交网页输入",
+      "runtime_use": "已授权的运行时使用",
+      "reference_created": "创建引用",
+      "reference_renamed": "重命名引用",
+      "reference_moved": "更改引用范围",
+      "reference_revoked": "撤销引用",
+      "value_rotated": "替换秘密值"
     }
   }
 }

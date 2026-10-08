@@ -34,6 +34,19 @@ class SecretAuditSource:
 
     kind: Literal["runtime", "card", "app_connection", "api", "cli", "workflow"] = "runtime"
     uid: str | None = None
+    request_id: str | None = None
+    reason_code: (
+        Literal[
+            "user_input",
+            "runtime_use",
+            "reference_created",
+            "reference_renamed",
+            "reference_moved",
+            "reference_revoked",
+            "value_rotated",
+        ]
+        | None
+    ) = None
 
     def __post_init__(self):
         if self.kind not in {"runtime", "card", "app_connection", "api", "cli", "workflow"}:
@@ -42,6 +55,21 @@ class SecretAuditSource:
             not isinstance(self.uid, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", self.uid)
         ):
             raise ValueError("Invalid secret audit source identifier")
+        if self.request_id is not None and (
+            not isinstance(self.request_id, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", self.request_id)
+        ):
+            raise ValueError("Invalid secret audit request identifier")
+        if self.reason_code not in {
+            None,
+            "user_input",
+            "runtime_use",
+            "reference_created",
+            "reference_renamed",
+            "reference_moved",
+            "reference_revoked",
+            "value_rotated",
+        }:
+            raise ValueError("Invalid secret audit reason code")
 
 
 class SecretReferenceService(BaseDomainService):
@@ -60,6 +88,16 @@ class SecretReferenceService(BaseDomainService):
                 scope=reference.scope,
                 scope_id=reference.scope_id,
                 reference_revision=reference.revision,
+                request_id=source.request_id or uuid4().hex,
+                reason_code=source.reason_code
+                or {
+                    "created": "reference_created",
+                    "resolved": "runtime_use",
+                    "renamed": "reference_renamed",
+                    "moved": "reference_moved",
+                    "revoked": "reference_revoked",
+                    "rotated": "value_rotated",
+                }[action],
             )
         )
 
@@ -204,6 +242,8 @@ class SecretReferenceService(BaseDomainService):
                         "revision_after": row.reference_revision,
                         # Cross-resource source links require their own current ACL.
                         "source_kind": row.source_kind,
+                        "request_id": row.request_id,
+                        "reason_code": row.reason_code,
                     }
                     for row in rows[:limit]
                 ],
