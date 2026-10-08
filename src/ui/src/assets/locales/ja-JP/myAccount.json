@@ -48,5 +48,21 @@
     "cancelled": "キャンセルしました。シークレットは保存されていません。",
     "create": "シークレットを作成",
     "rotate": "既存の秘密値を置換"
+  },
+  "secretHistory": {
+    "title": "シークレット履歴",
+    "help": "この参照の監査記録です。秘密値やVaultの場所は表示されません。",
+    "failed": "履歴を取得できないか権限が変更されました。",
+    "empty": "履歴はまだありません。",
+    "older": "過去の記録",
+    "actor": "ユーザー",
+    "actions": {
+      "created": "作成",
+      "resolved": "使用",
+      "renamed": "名前変更",
+      "moved": "移動",
+      "revoked": "失効",
+      "rotated": "値を置換"
+    }
   }
 }

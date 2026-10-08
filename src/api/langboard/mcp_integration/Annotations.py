@@ -20,6 +20,7 @@ READ_ONLY_TOOLS = frozenset(
     {
         "get_secret_reference_metadata",
         "get_secret_input_status",
+        "list_secret_reference_history",
         "diagnose_connection",
         "get_projects",
         "get_starred_projects",
