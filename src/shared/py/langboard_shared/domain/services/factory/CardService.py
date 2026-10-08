@@ -24,6 +24,7 @@ from ....core.types.ParamTypes import (
     TWikiParam,
 )
 from ....core.utils.Converter import convert_python_data
+from ....Env import Env
 from ....helpers import InfraHelper
 from ....publishers import CardPublisher
 from ....tasks.activities import CardActivityTask
@@ -198,7 +199,7 @@ class CardService(BaseDomainService):
         member = project.owner_id == current_user.id or bool(
             self.repo.project_assigned_user.get_all_by_project(project, [current_user], limit=1, consistent=True)
         )
-        internal = self._get_service(ScimProvisioningService).is_employee(current_user) if member else False
+        internal = self._resolve_internal_access(current_user) if member else False
         context = CardVisibilityContext(
             channel=channel, active=True, project_member=member,
             internal_member=internal, actor_user_id=int(current_user.id),
@@ -227,9 +228,22 @@ class CardService(BaseDomainService):
             projects = db.exec(SqlBuilder.select.table(Project).where(
                 or_(Project.owner_id == current.id, membership & read_grant),
             )).all()
-        internal = self._get_service(ScimProvisioningService).is_employee(current)
+        internal = self._resolve_internal_access(current)
         context = CardVisibilityContext(channel, True, True, internal, actor_user_id=int(current.id))
         return {int(project.id): context for project in projects}
+
+    def _resolve_internal_access(self, user: User) -> bool | None:
+        """Resolve card access independently of employee classification.
+
+        Callers separately validate current account and project membership.
+        This explicit compatibility policy retains existing board ACLs for
+        deployments that have not provisioned an employee directory.
+        """
+        if Env.CARD_INTERNAL_ACCESS_MODE == "project_members":
+            return True
+        if Env.CARD_INTERNAL_ACCESS_MODE == "scim":
+            return self._get_service(ScimProvisioningService).is_employee(user)
+        return False
 
     def get_by_project(self, project: TProjectParam | None) -> list[Card]:
         project = InfraHelper.get_by_id_like(Project, project)
