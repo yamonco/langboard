@@ -63,6 +63,15 @@
       "moved": "移動",
       "revoked": "失効",
       "rotated": "値を置換"
+    },
+    "reasons": {
+      "user_input": "ユーザーの明示的なWeb入力",
+      "runtime_use": "認可済みの実行時使用",
+      "reference_created": "参照作成",
+      "reference_renamed": "参照名変更",
+      "reference_moved": "参照範囲変更",
+      "reference_revoked": "参照失効",
+      "value_rotated": "秘密値の更新"
     }
   }
 }

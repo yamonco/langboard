@@ -24,6 +24,8 @@ class SecretReferenceAudit(BaseDbModel, table=True):
     scope: str = Field(nullable=False)
     scope_id: SnowflakeID = SnowflakeIDField(nullable=False)
     reference_revision: int = Field(nullable=False)
+    request_id: str | None = Field(default=None, nullable=True)
+    reason_code: str | None = Field(default=None, nullable=True)
 
     def notification_data(self) -> dict[str, Any]:
         return {}
