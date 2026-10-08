@@ -2,7 +2,7 @@ import fs from "node:fs";
 import assert from "node:assert/strict";
 import ts from "typescript";
 import { setImmediate } from "node:timers";
-import { Connection, Document, OutgoingMessage } from "@hocuspocus/server";
+import { Connection, Document, OutgoingMessage, IncomingMessage, MessageType } from "@hocuspocus/server";
 import * as Y from "yjs";
 
 const source =
@@ -17,7 +17,24 @@ let allowed = true;
 let unavailable = false;
 let canEdit = false;
 const validations = [];
-const hooks = new Function("Hocuspocus", "Subscription", "ESocketTopic", "EEditorCollaborationType", "resolveCardAudience", output)(
+const guardSource =
+    fs
+        .readFileSync("src/core/server/guardEditorConnection.ts", "utf8")
+        .replace(/^import .*;\n/gm, "")
+        .replace("export default function", "function") + "\nreturn guardEditorConnection;";
+const guard = new Function(
+    ts.transpileModule(guardSource, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText
+)();
+const hooks = new Function(
+    "Hocuspocus",
+    "Subscription",
+    "ESocketTopic",
+    "EEditorCollaborationType",
+    "resolveCardAudience",
+    "guardEditorConnection",
+    "EditorSyncStorage",
+    output
+)(
     class {
         constructor(options) {
             return options;
@@ -32,7 +49,9 @@ const hooks = new Function("Hocuspocus", "Subscription", "ESocketTopic", "EEdito
     },
     { BoardCard: "card" },
     { Card: "card" },
-    async () => new Set(canEdit ? ["recipient"] : [])
+    async () => new Set(canEdit ? ["recipient"] : []),
+    guard,
+    { load: async () => null }
 );
 const user = { uid: "recipient" };
 const connectionConfig = {};
@@ -80,3 +99,35 @@ draft.destroy();
 await assert.rejects(hooks.patchEditorSyncText(document.name, "body", "denied", user), /permission-denied/);
 await assert.rejects(hooks.requestEditorSyncRichPatch(document.name, "denied", user), /permission-denied/);
 await assert.rejects(hooks.clearInactiveEditorSyncDocument(document.name, user), /permission-denied/);
+
+// Constructor awareness must be guarded before the connected hook.
+for (const permitted of [false, true]) {
+    const initial = new Document("card:fixture:description");
+    await hooks.onLoadDocument({ documentName: initial.name, document: initial });
+    initial.awareness.setLocalState({ user: { name: "participant" } });
+    const sent = [];
+    allowed = permitted;
+    const wire = new Connection(
+        {
+            readyState: 1,
+            send: (message, callback) => {
+                sent.push(message);
+                callback?.();
+            },
+        },
+        { headers: {} },
+        initial,
+        "initial",
+        authenticated
+    );
+    assert.equal(sent.length, 0);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(initial.getConnectionsCount(), permitted ? 1 : 0);
+    assert.equal(sent.length, 1);
+    const frame = new IncomingMessage(sent[0]);
+    assert.equal(frame.readVarString(), initial.name);
+    assert.equal(frame.readVarUint(), permitted ? MessageType.Awareness : MessageType.CLOSE);
+    // Both cases send one frame: permitted awareness or denied close, never denied awareness.
+    wire.close();
+    initial.destroy();
+}
