@@ -7,7 +7,7 @@ import ISocketClient from "@/core/server/ISocketClient";
 export const resolveCardAudience = async (
     clients: ISocketClient[],
     cardUIDs: string[],
-    operation: "read" | "remove" = "read"
+    operation: "read" | "remove" | "edit" = "read"
 ): Promise<Set<string>> => {
     const allowed = new Set<string>();
     const references = Array.from(new Set(cardUIDs));

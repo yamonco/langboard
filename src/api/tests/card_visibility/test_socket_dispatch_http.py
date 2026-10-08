@@ -11,7 +11,7 @@ from langboard_shared.core.db import DbSession
 from langboard_shared.core.db.DbEngine import DbEngine
 from langboard_shared.core.routing import AppRouter
 from langboard_shared.core.types import SafeDateTime
-from langboard_shared.domain.models import Bot, ProjectAssignedUser, User
+from langboard_shared.domain.models import Bot, ProjectAssignedUser, ProjectRole, User
 from langboard_shared.Env import Env
 
 
@@ -48,6 +48,19 @@ def test_socket_dispatch_checks_current_recipient_and_internal_credential(curren
             return
         assert response.status_code == 200
         assert response.json() == {"allowed_recipient_uids": [owner.get_uid()]}
+        edit = {**body, "operation": "edit"}
+        assert client.post("/socket/card-dispatch-context", json=edit, headers=headers).json() == {
+            "allowed_recipient_uids": []}
+        with DbSession.use(readonly=False) as db:
+            role = ProjectRole(project_id=project.id, user_id=owner.id, actions=["read", "card_update"])
+            db.insert(role)
+        assert client.post("/socket/card-dispatch-context", json=edit, headers=headers).json() == {
+            "allowed_recipient_uids": [owner.get_uid()]}
+        with DbSession.use(readonly=False) as db:
+            role.actions = ["read"]
+            db.update(role)
+        assert client.post("/socket/card-dispatch-context", json=edit, headers=headers).json() == {
+            "allowed_recipient_uids": []}
         invalid = {**body, "card_uids": ["invalid-code!"]}
         assert client.post("/socket/card-dispatch-context", json=invalid, headers=headers).json() == {
             "allowed_recipient_uids": []}

@@ -8,10 +8,11 @@ from langboard_shared.core.schema import OpenApiSchema
 from langboard_shared.core.security import AuthSecurity
 from langboard_shared.core.security.CollaborationChannel import CollaborationChannel
 from langboard_shared.core.types import SnowflakeID
-from langboard_shared.domain.models import Card, User, UserNotification
+from langboard_shared.domain.models import Card, ProjectRole, User, UserNotification
+from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.domain.services import DomainService
 from langboard_shared.domain.services.CardVisibilityPolicy import CardVisibility
-from langboard_shared.security import Auth
+from langboard_shared.security import Auth, RoleFinder, RoleSecurity
 from pydantic import BaseModel, Field
 from .NotificationForm import NotificationForm
 
@@ -55,7 +56,7 @@ def notification_dispatch_context(
 class SocketCardDispatchForm(BaseModel):
     card_uids: list[str] = Field(min_length=1, max_length=2)
     recipient_uids: list[str] = Field(max_length=100)
-    operation: Literal["read", "remove"] = "read"
+    operation: Literal["read", "remove", "edit"] = "read"
 
 
 @AppRouter.api.post("/socket/card-dispatch-context", tags=["Notification"])
@@ -79,10 +80,16 @@ def socket_card_dispatch_context(
             with DbSession.use(readonly=False) as db:
                 recipient = db.exec(SqlBuilder.select.table(User).where(User.id == recipient_id)).first()
             def can_deliver(card_id):
-                if form.operation == "read":
-                    return service.card.resolve_readable_card(
+                if form.operation in ("read", "edit"):
+                    card = service.card.resolve_readable_card(
                         None, card_id, recipient, CollaborationChannel.HumanUI,
-                    ) is not None
+                    )
+                    if card is None:
+                        return False
+                    return form.operation == "read" or RoleSecurity(ProjectRole).is_authorized(
+                        recipient.id, {"project_uid": card[0].get_uid()},
+                        [ProjectRoleAction.CardUpdate.value], RoleFinder.project,
+                    )
                 # A soft-deleted row authorizes only a payload-free removal signal.
                 with DbSession.use(readonly=False) as db:
                     card = db.exec(SqlBuilder.select.table(Card, with_deleted=True).where(Card.id == card_id)).first()
