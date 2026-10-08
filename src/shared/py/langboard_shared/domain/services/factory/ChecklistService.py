@@ -62,7 +62,7 @@ class ChecklistService(BaseDomainService):
         checkitem_service = self._get_service(CheckitemService)
         checkitems_map = (
             checkitem_service.get_api_map_by_card(card)
-            if checkitems_limit is None and not open_only and include_work_tracking
+            if limit is None and checkitems_limit is None and not open_only and include_work_tracking
             else checkitem_service.get_api_map_by_checklists(
                 card,
                 [checklist.id for checklist in raw_checklists],
