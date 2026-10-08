@@ -154,3 +154,120 @@ test("connection change clears consent and deployment results", async ({ page })
     await expect(page.getByText("Deployment succeeded · Success")).toHaveCount(0);
     await expect(page.getByText("Board read access enabled.")).toHaveCount(0);
 });
+
+async function prepareWebhookRead(page: import("@playwright/test").Page) {
+    await page.getByRole("button", { name: "Load projects" }).click();
+    await page.getByRole("combobox", { name: "Project", exact: true }).selectOption("project-1");
+    await page.getByRole("combobox", { name: "Environment", exact: true }).selectOption("env-1");
+    await page.getByRole("checkbox").first().check();
+    await page.getByRole("button", { name: "Enable read access", exact: true }).click();
+    await page.getByRole("button", { name: "Confirm read access", exact: true }).click();
+    await page.getByRole("button", { name: "Refresh notification health" }).click();
+}
+for (const width of [1920, 390])
+    test(`webhook explicit configuration and receipt truth ${width}`, async ({ page }) => {
+        await page.clock.install({ time: new Date("2026-10-08T01:32:03Z") });
+        await page.setViewportSize({ width, height: 1080 });
+        await page.goto(path + "?receipt");
+        await page.getByRole("combobox", { name: "Existing connection" }).selectOption("conn");
+        await expect(page.getByText("Notifications unconfigured", { exact: true })).toBeVisible();
+        await prepareWebhookRead(page);
+        await expect(page.getByText("Provider configuration is unknown.", { exact: false })).toBeVisible();
+        await expect(page.locator("time[datetime='2026-10-08T01:02:03Z']")).toHaveText("30 minutes ago");
+        await expect(page.getByRole("button", { name: "Configure notifications", exact: true })).toBeDisabled();
+        await page.getByRole("button", { name: "Store webhook token securely" }).click();
+        await expect(page.getByRole("link", { name: "Open secure webhook token input" })).toHaveAttribute("href", /\/secret-input\/w{43}$/);
+        await page.getByRole("button", { name: "Check webhook token input" }).click();
+        await page.getByLabel("Notification ID (optional)").fill("notification-1");
+        await page.getByRole("button", { name: "Configure notifications", exact: true }).click();
+        await page.getByRole("button", { name: "Cancel", exact: true }).click();
+        expect(
+            await page.evaluate(
+                () =>
+                    (window as unknown as { dokployCalls: { url: string }[] }).dokployCalls.filter((row) => row.url.endsWith("/webhook-config"))
+                        .length
+            )
+        ).toBe(0);
+        await page.getByRole("button", { name: "Configure notifications", exact: true }).click();
+        await page.getByRole("button", { name: "Confirm notification configuration" }).click();
+        await expect(page.getByText("Notifications enabled", { exact: true })).toBeVisible();
+        await expect(page.getByLabel("Receiver path", { exact: true })).toHaveValue("/apps/dokploy/notifications/config");
+        await expect(page.getByLabel("Webhook credential reference")).toHaveValue("");
+        await page.getByRole("button", { name: "Disable notifications", exact: true }).click();
+        await page.getByRole("button", { name: "Cancel", exact: true }).click();
+        await page.getByRole("button", { name: "Disable notifications", exact: true }).click();
+        await page.getByRole("button", { name: "Confirm disable notifications" }).click();
+        await expect(page.getByText("Notifications disabled", { exact: true })).toBeVisible();
+        await expect(page.locator("time[datetime='2026-10-08T01:02:03Z']")).toHaveText("30 minutes ago");
+        const calls = await page.evaluate(
+            () => (window as unknown as { dokployCalls: { method: string; url: string; data: unknown }[] }).dokployCalls
+        );
+        expect(calls.find((row) => row.url.endsWith("/webhook-config"))?.data).toEqual({
+            expected_revision: "c".repeat(64),
+            expected_binding_revision: "d".repeat(64),
+            expected_config_revision: 0,
+            credential_reference: "secret://ref/abcdefghijk",
+            notification_id: "notification-1",
+        });
+        expect(calls.find((row) => row.url.endsWith("/webhook-disable"))?.data).toEqual({
+            expected_revision: "c".repeat(64),
+            expected_binding_revision: "d".repeat(64),
+            expected_config_revision: 1,
+        });
+        expect(calls.filter((row) => row.url.endsWith("/webhook-health"))).toHaveLength(2);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+        await page.screenshot({ path: `test-results/dokploy-webhook-${width}.png`, fullPage: true });
+        await page.getByRole("button", { name: "Refresh notification health" }).click();
+        await expect(page.getByText("Notifications disabled", { exact: true })).toBeVisible();
+        await page.getByRole("combobox", { name: "Existing connection" }).selectOption("");
+        await expect(page.getByText("Notifications disabled", { exact: true })).toHaveCount(0);
+    });
+for (const action of ["Switch board", "Remove permission"])
+    test(`late webhook health discarded on ${action}`, async ({ page }) => {
+        await page.goto(path + "?delayed-health&webhook-enabled");
+        await page.getByRole("combobox", { name: "Existing connection" }).selectOption("conn");
+        await page.getByRole("button", { name: action }).click();
+        await page.waitForTimeout(500);
+        await expect(page.getByText("Notifications enabled", { exact: true })).toHaveCount(0);
+        await expect(page.getByLabel("Webhook credential reference")).toHaveCount(0);
+    });
+test("unknown receipt and revoked connection", async ({ page }) => {
+    await page.goto(path);
+    await page.getByRole("combobox", { name: "Existing connection" }).selectOption("conn");
+    await expect(page.getByText("No authenticated receipt recorded", { exact: false })).toBeVisible();
+    await page.goto(path + "?revoked");
+    await page.getByRole("combobox", { name: "Existing connection" }).selectOption("conn");
+    await expect(page.getByRole("alert")).toBeVisible();
+    await expect(page.getByLabel("Webhook credential reference")).toHaveCount(0);
+});
+
+for (const action of ["Switch board", "Remove permission"])
+    test(`late webhook configuration discarded on ${action}`, async ({ page }) => {
+        await page.goto(path + "?delayed-webhook-post");
+        await page.getByRole("combobox", { name: "Existing connection" }).selectOption("conn");
+        await prepareWebhookRead(page);
+        await page.getByLabel("Webhook credential reference").fill("secret://ref/webhook");
+        await page.getByRole("button", { name: "Configure notifications", exact: true }).click();
+        await page.getByRole("button", { name: "Confirm notification configuration" }).click();
+        await page.getByRole("button", { name: action }).click();
+        await page.waitForTimeout(500);
+        await expect(page.getByText("Notifications enabled", { exact: true })).toHaveCount(0);
+        await expect(page.getByText("Changes saved.", { exact: true })).toHaveCount(0);
+        await expect(page.getByLabel("Webhook credential reference")).toHaveCount(0);
+    });
+
+for (const width of [1920, 390])
+    test(`initial unconfigured webhook without selection ${width}`, async ({ page }) => {
+        await page.setViewportSize({ width, height: 1080 });
+        await page.goto(path);
+        await page.getByRole("combobox", { name: "Existing connection" }).selectOption("conn");
+        await expect(page.getByText("Notifications unconfigured", { exact: true })).toBeVisible();
+        await expect(page.getByRole("alert")).toHaveCount(0);
+        await page.getByLabel("Webhook credential reference").fill("secret://ref/webhook");
+        await expect(page.getByRole("button", { name: "Configure notifications", exact: true })).toBeDisabled();
+        await expect(page.getByRole("button", { name: "Confirm notification configuration" })).toHaveCount(0);
+        const calls = await page.evaluate(() => (window as unknown as { dokployCalls: { url: string }[] }).dokployCalls);
+        expect(calls.some((row) => row.url.endsWith("/webhook-config"))).toBe(false);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+        await page.screenshot({ path: `test-results/dokploy-webhook-initial-${width}.png`, fullPage: true });
+    });

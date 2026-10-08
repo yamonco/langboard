@@ -45,6 +45,19 @@ interface IssueResult {
     semantics: string;
     items: { event_type: string; external_id: string; outcome: string; occurred_at: string }[];
 }
+interface WebhookHealth {
+    config_revision: number;
+    state: "unconfigured" | "enabled" | "disabled";
+    receiver_path: string | null;
+    notification_id: string | null;
+    provider_config: "unknown";
+    last_received_at: string | null;
+    local_evidence: "authenticated_notification_receipt";
+    connection_state: string;
+    connection_revision: string;
+    binding_revision: string | null;
+    resources: { resource_uid: string; health: string }[];
+}
 interface Page<T> {
     binding?: ReadAccess | null;
     items: T[];
@@ -84,6 +97,18 @@ export default function BoardSettingsMetadataConnection({
     const [consenting, setConsenting] = useState(false);
     const [deployments, setDeployments] = useState<DeploymentResult | null>(null);
     const [issues, setIssues] = useState<IssueResult | null>(null);
+    const [webhook, setWebhook] = useState<WebhookHealth | null>(null);
+    const [webhookReference, setWebhookReference] = useState("");
+    const [notificationID, setNotificationID] = useState("");
+    const [webhookInput, setWebhookInput] = useState<{ input_uid: string; input_url: string } | null>(null);
+    const [webhookConfirm, setWebhookConfirm] = useState<"configure" | "disable" | null>(null);
+    const clearWebhook = () => {
+        setWebhook(null);
+        setWebhookReference("");
+        setNotificationID("");
+        setWebhookInput(null);
+        setWebhookConfirm(null);
+    };
     const clearReadResults = () => {
         setIssues(null);
         setConsenting(false);
@@ -105,6 +130,7 @@ export default function BoardSettingsMetadataConnection({
         };
     };
     const clearResources = () => {
+        clearWebhook();
         setOrganizations({ items: [], next_cursor: null });
         setProjects({ items: [], next_cursor: null });
         setBindings({ items: [], next_cursor: null });
@@ -162,9 +188,14 @@ export default function BoardSettingsMetadataConnection({
         };
     }, [scope]);
     const selectConnection = (uid: string) => {
-        setConnection(connections.items.find((item) => item.connection_uid === uid) ?? null);
+        generation.current++;
+        busy.current = false;
+        setPending(false);
+        const selected = connections.items.find((item) => item.connection_uid === uid) ?? null;
+        setConnection(selected);
         clearResources();
         setSaved(false);
+        if (dokploy && selected) void refreshWebhook(selected.connection_uid);
     };
     const credentialInput = () =>
         run(async (valid) => {
@@ -197,6 +228,83 @@ export default function BoardSettingsMetadataConnection({
             onStatusChange?.();
         });
     const connectionRoot = `${root}/connections/${connection?.connection_uid}`;
+    const acceptWebhook = (result: WebhookHealth) => {
+        if (
+            !/^[a-f0-9]{64}$/.test(result.connection_revision) ||
+            !Array.isArray(result.resources) ||
+            (result.binding_revision === null
+                ? result.state !== "unconfigured" ||
+                  result.resources.length !== 0 ||
+                  result.config_revision !== 0 ||
+                  result.receiver_path !== null ||
+                  result.last_received_at !== null
+                : !/^[a-f0-9]{64}$/.test(result.binding_revision)) ||
+            !Number.isInteger(result.config_revision) ||
+            result.config_revision < 0 ||
+            !["unconfigured", "enabled", "disabled"].includes(result.state) ||
+            result.provider_config !== "unknown" ||
+            result.local_evidence !== "authenticated_notification_receipt" ||
+            (result.receiver_path !== null && !/^\/apps\/dokploy\/notifications\/[A-Za-z0-9_-]+$/.test(result.receiver_path)) ||
+            (result.last_received_at !== null &&
+                (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|\+00:00)$/.test(result.last_received_at) ||
+                    !Number.isFinite(Date.parse(result.last_received_at))))
+        )
+            throw new Error("Invalid webhook health");
+        if (result.connection_state === "revoked" || result.connection_state === "disconnected") throw new Error("Connection unavailable");
+        setWebhook(result);
+        setWebhookConfirm(null);
+        setNotificationID(result.notification_id ?? "");
+    };
+    const refreshWebhook = (uid = connection?.connection_uid) =>
+        run(async (valid) => {
+            if (!dokploy || !uid) return;
+            clearWebhook();
+            const result = (await api.get<WebhookHealth>(`${root}/connections/${uid}/webhook-health`)).data;
+            if (valid()) acceptWebhook(result);
+        });
+    const webhookSecretInput = () =>
+        run(async (valid) => {
+            const result = (await api.post<{ input_uid: string; input_url: string }>(`${root}/webhook-secret-input`)).data;
+            const url = new URL(result.input_url);
+            if (url.origin !== location.origin || !/^\/secret-input\/[A-Za-z0-9_-]{43}$/.test(url.pathname) || url.search || url.hash)
+                throw new Error("Invalid input URL");
+            if (valid()) setWebhookInput(result);
+        });
+    const checkWebhookInput = () =>
+        run(async (valid) => {
+            if (!webhookInput) return;
+            const status = (await api.get<{ state: string; secret_ref?: string }>(`${root}/secret-input/${webhookInput.input_uid}`)).data;
+            if (!valid()) return;
+            if (status.state === "completed" && /^secret:\/\/ref\/[A-Za-z0-9]{1,11}$/.test(status.secret_ref ?? "")) {
+                setWebhookReference(status.secret_ref!);
+                setWebhookInput(null);
+            } else if (status.state !== "pending") throw new Error("Input unavailable");
+        });
+    const saveWebhook = () =>
+        run(async (valid) => {
+            if (!dokploy || !connection || !webhook?.binding_revision || !webhookConfirm) return;
+            const configuring = webhookConfirm === "configure";
+            if (
+                configuring &&
+                (!webhookCanConfigure ||
+                    !/^secret:\/\/ref\/[A-Za-z0-9]{1,11}$/.test(webhookReference.trim()) ||
+                    !/^[A-Za-z0-9_-]{0,200}$/.test(notificationID.trim()))
+            )
+                return;
+            const result = (
+                await api.post<WebhookHealth>(`${connectionRoot}/webhook-${configuring ? "config" : "disable"}`, {
+                    expected_revision: webhook.connection_revision,
+                    expected_binding_revision: webhook.binding_revision,
+                    expected_config_revision: webhook.config_revision,
+                    ...(configuring ? { credential_reference: webhookReference.trim(), notification_id: notificationID.trim() || null } : {}),
+                })
+            ).data;
+            if (!valid()) return;
+            acceptWebhook(result);
+            setWebhookReference("");
+            setSaved(true);
+            onStatusChange?.();
+        });
     const selectedRoot = `${connectionRoot}/${dokploy ? "selected" : "projects"}`;
     const loadOrganizations = (cursor?: string) =>
         run(async (valid) => {
@@ -256,6 +364,7 @@ export default function BoardSettingsMetadataConnection({
         });
     const toggle = (item: Resource) =>
         run(async (valid) => {
+            if (dokploy) clearWebhook();
             clearReadResults();
             const existing = bindings.items.find((row) => matches(row, item));
             if (existing?.selected) {
@@ -311,6 +420,13 @@ export default function BoardSettingsMetadataConnection({
         (dokploy ? ["signals.read", "deployments.read"] : ["resources.read", "signals.read"]).every((capability) =>
             readAccess.granted_capabilities.includes(capability)
         );
+    const webhookCanConfigure =
+        !!webhook?.binding_revision &&
+        readEnabled &&
+        !!selectedServices.length &&
+        !bindings.next_cursor &&
+        !!readAccess?.granted_capabilities.includes("resources.read") &&
+        selectedServices.some((row) => webhook.resources.some((resource) => resource.resource_uid === row.resource_uid));
     const enableRead = () =>
         run(async (valid) => {
             if (!connection || !readAccess || !consenting || !selectedReadResources.length || bindings.next_cursor) return;
@@ -322,6 +438,7 @@ export default function BoardSettingsMetadataConnection({
                 })
             ).data;
             if (!valid()) return;
+            if (dokploy) clearWebhook();
             setReadAccess(result);
             clearReadResults();
             setSaved(true);
@@ -493,6 +610,127 @@ export default function BoardSettingsMetadataConnection({
                 </>
             ) : (
                 <>
+                    {dokploy && (
+                        <fieldset className="fieldset flex min-w-0 flex-col gap-2 rounded-md border p-3">
+                            <legend className="fieldset-legend">{text("Dokploy notification health")}</legend>
+                            <Button size="sm" variant="outline" onClick={() => void refreshWebhook()}>
+                                {text("Refresh Dokploy notification health")}
+                            </Button>
+                            {webhook && (
+                                <>
+                                    <p>{text(`Dokploy notifications ${webhook.state}`)}</p>
+                                    <p className="text-xs text-muted-foreground">{text("Dokploy provider configuration unknown")}</p>
+                                    <p className="text-sm">
+                                        {text("Dokploy authenticated local receipt")}:{" "}
+                                        {webhook.last_received_at ? (
+                                            <time
+                                                dateTime={webhook.last_received_at}
+                                                title={formatDateTime(new Date(webhook.last_received_at), i18n.resolvedLanguage)}
+                                            >
+                                                {formatDateDistance(new Date(webhook.last_received_at), i18n.resolvedLanguage)}
+                                            </time>
+                                        ) : (
+                                            text("Dokploy no authenticated receipt")
+                                        )}
+                                    </p>
+                                    {webhook.receiver_path && (
+                                        <label className="flex min-w-0 flex-col gap-1 text-sm">
+                                            {text("Dokploy receiver path")}
+                                            <input
+                                                className="input min-h-10 w-full min-w-0 rounded-md border bg-background px-3 py-2"
+                                                readOnly
+                                                value={webhook.receiver_path}
+                                                onFocus={(event) => event.target.select()}
+                                            />
+                                        </label>
+                                    )}
+                                    <p className="text-xs text-muted-foreground">{text("Dokploy notification setup help")}</p>
+                                    <label className="flex flex-col gap-1 text-sm">
+                                        {text("Dokploy webhook credential reference")}
+                                        <input
+                                            className="input min-h-10 w-full min-w-0 rounded-md border bg-background px-3 py-2"
+                                            value={webhookReference}
+                                            placeholder="secret://ref/"
+                                            onChange={(event) => {
+                                                setWebhookReference(event.target.value);
+                                                setWebhookConfirm(null);
+                                            }}
+                                        />
+                                    </label>
+                                    <Button size="sm" variant="outline" onClick={() => void webhookSecretInput()}>
+                                        {text("Store Dokploy webhook token securely")}
+                                    </Button>
+                                    {webhookInput && (
+                                        <div className="flex flex-col gap-2">
+                                            <a className="underline" href={webhookInput.input_url} target="_blank" rel="noopener noreferrer">
+                                                {text("Open secure webhook token input")}
+                                            </a>
+                                            <Button size="sm" variant="outline" onClick={() => void checkWebhookInput()}>
+                                                {text("Check webhook token input")}
+                                            </Button>
+                                        </div>
+                                    )}
+                                    <label className="flex flex-col gap-1 text-sm">
+                                        {text("Dokploy notification ID optional")}
+                                        <input
+                                            className="input min-h-10 w-full min-w-0 rounded-md border bg-background px-3 py-2"
+                                            maxLength={200}
+                                            value={notificationID}
+                                            onChange={(event) => {
+                                                setNotificationID(event.target.value);
+                                                setWebhookConfirm(null);
+                                            }}
+                                        />
+                                    </label>
+                                    {!webhookConfirm ? (
+                                        <>
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                disabled={
+                                                    !webhookCanConfigure ||
+                                                    !/^secret:\/\/ref\/[A-Za-z0-9]{1,11}$/.test(webhookReference.trim()) ||
+                                                    !/^[A-Za-z0-9_-]{0,200}$/.test(notificationID.trim())
+                                                }
+                                                onClick={() => setWebhookConfirm("configure")}
+                                            >
+                                                {text("Configure Dokploy notifications")}
+                                            </Button>
+                                            {webhook.state === "enabled" && (
+                                                <Button size="sm" variant="outline" onClick={() => setWebhookConfirm("disable")}>
+                                                    {text("Disable Dokploy notifications")}
+                                                </Button>
+                                            )}
+                                        </>
+                                    ) : (
+                                        <>
+                                            <p className="text-sm">
+                                                {text(
+                                                    webhookConfirm === "configure"
+                                                        ? "Dokploy notification confirm help"
+                                                        : "Dokploy notification disable help"
+                                                )}
+                                            </p>
+                                            <Button
+                                                size="sm"
+                                                disabled={webhookConfirm === "configure" && !webhookCanConfigure}
+                                                onClick={() => void saveWebhook()}
+                                            >
+                                                {text(
+                                                    webhookConfirm === "configure"
+                                                        ? "Confirm Dokploy notification configuration"
+                                                        : "Confirm disable Dokploy notifications"
+                                                )}
+                                            </Button>
+                                            <Button size="sm" variant="outline" onClick={() => setWebhookConfirm(null)}>
+                                                {t("common.Cancel")}
+                                            </Button>
+                                        </>
+                                    )}
+                                </>
+                            )}
+                        </fieldset>
+                    )}
                     <Button size="sm" variant="outline" onClick={() => void loadOrganizations()}>
                         {text("Load GlitchTip organizations")}
                     </Button>

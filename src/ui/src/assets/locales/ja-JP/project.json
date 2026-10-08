@@ -309,6 +309,27 @@
     "GlitchTip observed unresolved": "未解決を観測",
     "GlitchTip observed resolved": "解決済みを観測",
     "GlitchTip observed ignored": "無視を観測",
-    "More GlitchTip issue observations": "課題の観測をもっと表示"
+    "More GlitchTip issue observations": "課題の観測をもっと表示",
+    "Dokploy notification health": "通知の状態",
+    "Refresh Dokploy notification health": "通知の状態を更新",
+    "Dokploy notifications unconfigured": "通知未設定",
+    "Dokploy notifications enabled": "通知有効",
+    "Dokploy notifications disabled": "通知無効",
+    "Dokploy provider configuration unknown": "プロバイダー設定は未確認です。ローカル設定ではDokploy設定や配信を確認できません。",
+    "Dokploy authenticated local receipt": "最後に認証されたローカル通知の受信",
+    "Dokploy no authenticated receipt": "認証された受信記録なし",
+    "Dokploy receiver path": "受信パス",
+    "Dokploy notification setup help": "公開受信ホストのこのパスでDokploy通知URLを設定してください。専用Webhookシークレットで固定Authorization: Bearerトークンを別途設定してください。",
+    "Dokploy webhook credential reference": "Webhook認証情報の参照",
+    "Store Dokploy webhook token securely": "Webhookトークンを安全に保存",
+    "Open secure webhook token input": "安全なWebhookトークン入力を開く",
+    "Check webhook token input": "Webhookトークン入力を確認",
+    "Dokploy notification ID optional": "通知ID（任意）",
+    "Configure Dokploy notifications": "通知を設定",
+    "Disable Dokploy notifications": "通知を無効化",
+    "Dokploy notification confirm help": "選択した別のWebhook認証情報でローカル受信を有効化します。Dokployは別途設定してください。",
+    "Dokploy notification disable help": "ローカル受信を無効化します。既存の受信履歴は保持されます。",
+    "Confirm Dokploy notification configuration": "通知設定を確認",
+    "Confirm disable Dokploy notifications": "通知の無効化を確認"
   }
 }

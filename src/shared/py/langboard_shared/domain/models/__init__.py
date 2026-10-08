@@ -37,6 +37,8 @@ from .ChatTemplate import ChatTemplate
 from .Checkitem import Checkitem
 from .CheckitemTimerRecord import CheckitemTimerRecord
 from .Checklist import Checklist
+from .DokployNotificationReceipt import DokployNotificationReceipt
+from .DokployWebhookBinding import DokployWebhookBinding
 from .EditorGraphApprovalRequest import EditorGraphApprovalRequest
 from .EmployeeMembershipPolicy import EmployeeMembershipPolicy
 from .ExternalImportRecord import ExternalImportRecord
@@ -105,6 +107,8 @@ __all__ = [
     "GitHubHealthJob",
     "AppConnection",
     "BoardAppBinding",
+    "DokployWebhookBinding",
+    "DokployNotificationReceipt",
     "AppResourceBinding",
     "AppSignal",
     "ApiComfortTool",
