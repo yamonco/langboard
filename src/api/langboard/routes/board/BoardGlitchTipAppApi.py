@@ -7,7 +7,7 @@ from langboard_shared.domain.models import User
 from langboard_shared.domain.services import DomainService
 from langboard_shared.domain.services.factory.SecretReferenceService import SecretReferenceUnavailable
 from langboard_shared.security import Auth
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StrictInt
 from ...apps import GlitchTipConnection as glitchtip
 
 
@@ -25,6 +25,12 @@ class RevisionForm(BaseModel):
 class ProjectForm(RevisionForm):
     organization: str = Field(pattern=r"^[A-Za-z0-9_-]{1,200}$")
     project_slug: str = Field(pattern=r"^[A-Za-z0-9_-]{1,200}$")
+    expected_resource_revision: StrictInt | None = Field(default=None, ge=0)
+
+
+class ResourceRevisionForm(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    expected_revision: StrictInt = Field(ge=0)
 
 
 def _response(command, *args, **kwargs):
@@ -100,7 +106,69 @@ def bind_glitchtip_project(
         form.organization,
         form.project_slug,
         form.expected_revision,
+        form.expected_resource_revision,
     )
+
+
+@AppRouter.api.get(
+    "/board/{project_uid}/settings/apps/glitchtip/connections/{connection_uid}/projects", tags=["Board.Settings"]
+)
+@AuthFilter.add("user")
+def get_glitchtip_selected_projects(
+    project_uid: str,
+    connection_uid: str,
+    after: str | None = None,
+    user: User = Auth.scope("user"),
+    service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    return _response(glitchtip.selected_projects, service, user, project_uid, connection_uid, after)
+
+
+@AppRouter.api.post(
+    "/board/{project_uid}/settings/apps/glitchtip/connections/{connection_uid}/projects/{resource_uid}/remove",
+    tags=["Board.Settings"],
+)
+@AuthFilter.add("user")
+def remove_glitchtip_project(
+    project_uid: str,
+    connection_uid: str,
+    resource_uid: str,
+    form: ResourceRevisionForm,
+    user: User = Auth.scope("user"),
+    service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    return _response(
+        glitchtip.remove_project, service, user, project_uid, connection_uid, resource_uid, form.expected_revision
+    )
+
+
+@AppRouter.api.post("/board/{project_uid}/settings/apps/glitchtip/secret-input", tags=["Board.Settings"])
+@AuthFilter.add("user")
+def request_glitchtip_secret_input(
+    project_uid: str, user: User = Auth.scope("user"), service: DomainService = DomainService.scope()
+) -> JsonResponse:
+    from uuid import uuid4
+    from ...secrets.SecretInput import begin_input
+
+    def begin():
+        glitchtip._board(service, user, project_uid)
+        return begin_input(service, user, "personal", "me", "glitchtip/api-" + uuid4().hex)
+
+    return _response(begin)
+
+
+@AppRouter.api.get("/board/{project_uid}/settings/apps/glitchtip/secret-input/{input_uid}", tags=["Board.Settings"])
+@AuthFilter.add("user")
+def get_glitchtip_secret_input(
+    project_uid: str, input_uid: str, user: User = Auth.scope("user"), service: DomainService = DomainService.scope()
+) -> JsonResponse:
+    from ...secrets.SecretInput import input_status
+
+    def status():
+        glitchtip._board(service, user, project_uid)
+        return input_status(service, user, input_uid)
+
+    return _response(status)
 
 
 @AppRouter.api.post(

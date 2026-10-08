@@ -5,6 +5,7 @@ import { useQueryMutation } from "@/core/helpers/QueryMutation";
 import { useBoardSettings } from "@/core/providers/BoardSettingsProvider";
 import Button from "@/components/base/Button";
 import BoardSettingsGitHub from "./BoardSettingsGitHub";
+import BoardSettingsGlitchTip from "./BoardSettingsGlitchTip";
 import BoardSettingsAppWorkflow from "./BoardSettingsAppWorkflow";
 
 interface CatalogApp {
@@ -75,6 +76,7 @@ export default function BoardSettingsApps() {
                     {error && <p role="alert">{t("project.settings.App workflow save failed")}</p>}
                     <h3 className="text-base font-semibold">{t("project.settings.App Store")}</h3>
                     <BoardSettingsGitHub onStatusChange={() => void refetch()} />
+                    <BoardSettingsGlitchTip key={`${project.uid}:${canEditBasicInfo}`} onStatusChange={() => void refetch()} />
                     <p className="text-sm text-muted-foreground">{t("project.settings.App Store help")}</p>
                     {isLoading && <p role="status">{t("common.Loading...")}</p>}
                     {isError && (

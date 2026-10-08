@@ -17,6 +17,10 @@ from pydantic import SecretStr
 
 @pytest.fixture
 def setup(secrets, monkeypatch):
+    from langboard_shared.core.caching import Cache
+    from langboard_shared.core.caching.InMemoryCache import InMemoryCache
+
+    monkeypatch.setattr(Cache, "_cache", InMemoryCache())
     secret_service, board, _ = secrets
     with DbSession.use(readonly=False) as db:
         board[4].actions = ["read", "update"]
@@ -173,6 +177,29 @@ def test_owner_scope_and_bounded_connection_pages(setup):
     assert not calls
 
 
+def test_selection_removal_revision_and_board_scope(setup):
+    service, board, _, calls, _ = setup
+    connection = connect(setup)
+    args = (service, board[1], board[2].get_uid(), connection["connection_uid"])
+    selected = gt.bind_project(*args, "test-org", "test-project", connection["revision"])
+    before_calls = len(calls)
+    removed = gt.remove_project(*args, selected["resource_uid"], selected["access_revision"])
+    assert not removed["selected"] and len(calls) == before_calls
+    page = gt.selected_projects(*args)
+    assert page["items"][0]["selected"] is False
+    with pytest.raises(gt.GlitchTipConflict):
+        gt.remove_project(*args, selected["resource_uid"], selected["access_revision"])
+    with pytest.raises(gt.GlitchTipConflict):
+        gt.bind_project(*args, "test-org", "test-project", connection["revision"])
+    again = gt.bind_project(*args, "test-org", "test-project", connection["revision"], removed["access_revision"])
+    assert again["resource_uid"] == selected["resource_uid"]
+    assert gt.selected_projects(*args)["items"][0]["selected"] is True
+    with pytest.raises(gt.GlitchTipUnavailable):
+        gt.remove_project(
+            service, board[1], "b", connection["connection_uid"], selected["resource_uid"], again["access_revision"]
+        )
+
+
 @pytest.mark.parametrize("failure", ["role", "rotation", "endpoint", "disconnect", "oversize", "redirect"])
 def test_inflight_changes_never_bind_or_return_stale_metadata(setup, failure):
     service, board, reference, calls, state = setup
@@ -231,6 +258,10 @@ def test_authenticated_native_http_metadata_only(setup, monkeypatch):
         api.get_glitchtip_resources,
         api.bind_glitchtip_project,
         api.disconnect_glitchtip_connection,
+        api.get_glitchtip_selected_projects,
+        api.remove_glitchtip_project,
+        api.request_glitchtip_secret_input,
+        api.get_glitchtip_secret_input,
     }
     for route in app.routes:
         if getattr(route, "endpoint", None) in endpoints:
@@ -252,10 +283,39 @@ def test_authenticated_native_http_metadata_only(setup, monkeypatch):
         connection = response.json()
         resource_url = url + "/" + connection["connection_uid"]
         assert client.get(resource_url + "/resources?organization=test-org", headers=headers).status_code == 200
+        selected = client.post(
+            resource_url + "/projects",
+            headers=headers,
+            json={
+                "organization": "test-org",
+                "project_slug": "test-project",
+                "expected_revision": connection["revision"],
+            },
+        )
+        assert selected.status_code == 200
+        assert client.get(resource_url + "/projects", headers=headers).json()["items"][0]["selected"]
+        removal = resource_url + "/projects/" + selected.json()["resource_uid"] + "/remove"
+        payload = {"expected_revision": selected.json()["access_revision"]}
+        assert client.post(removal, headers=headers, json=payload).status_code == 200
+        assert client.post(removal, headers=headers, json=payload).status_code == 409
+        input_url = url.removesuffix("/connections") + "/secret-input"
+        secure = client.post(input_url, headers=headers)
+        assert secure.status_code == 200 and secure.json()["state"] == "pending"
+        uid = secure.json()["input_uid"]
+        assert client.get(input_url + "/" + uid, headers=headers).json()["state"] == "pending"
+        from langboard.secrets.SecretInput import complete_input, open_input
+
+        _, proof = open_input(service, board[1], uid)
+        completed = complete_input(service, board[1], uid, SecretStr("second-fixture-api-token"), proof)
+        status = client.get(input_url + "/" + uid, headers=headers)
+        assert status.json() == {"state": "completed", "secret_ref": completed["secret_ref"]}
+        assert "second-fixture-api-token" not in status.text
         with DbSession.use(readonly=False) as db:
             board[4].actions = ["read"]
             db.update(board[4])
         count = len(calls)
         assert client.get(url, headers=headers).status_code == 404
         assert client.get(resource_url + "/resources", headers=headers).status_code == 404
+        assert client.post(input_url, headers=headers).status_code == 404
+        assert client.get(input_url + "/" + uid, headers=headers).status_code == 404
         assert len(calls) == count
