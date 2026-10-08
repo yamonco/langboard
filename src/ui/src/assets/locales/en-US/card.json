@@ -201,5 +201,21 @@
     "unavailable": "Unavailable",
     "moreResources": "More repositories",
     "noResources": "No available selected repositories."
+  },
+  "inbox": {
+    "title": "Signal Inbox",
+    "refresh": "Refresh",
+    "hint": "Unlinked GitHub checks. Linking provides evidence, not approval or completion.",
+    "loading": "Loading signals…",
+    "error": "Could not load or link. Refresh and try again.",
+    "empty": "No available unlinked checks.",
+    "conflict": "Conflict",
+    "passed": "Passed",
+    "failed": "Failed",
+    "other": "Other result",
+    "more": "More signals",
+    "card": "Card",
+    "choose": "Choose a card",
+    "link": "Link evidence"
   }
 }

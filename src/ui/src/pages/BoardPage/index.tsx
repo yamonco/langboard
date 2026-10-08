@@ -69,6 +69,7 @@ const BoardCardPage = lazy(() => import("@/pages/BoardPage/BoardCardPage"));
 const BoardSettingsPage = lazy(() => import("@/pages/BoardPage/BoardSettingsPage"));
 const BoardGraphPage = lazy(() => import("@/pages/BoardPage/BoardGraphPage"));
 const BoardWikiPage = lazy(() => import("@/pages/BoardPage/BoardWikiPage"));
+const BoardSignalInbox = lazy(() => import("@/pages/BoardPage/components/board/BoardSignalInbox"));
 const BoardChangesSidebar = lazy(() => import("@/pages/BoardPage/components/board/BoardChangesSidebar"));
 const MyWorkSidebar = lazy(() => import("@/pages/DashboardPage/MyWorkPage"));
 const BoardRelationsSidebar = lazy(() => import("@/pages/BoardPage/components/board/BoardRelationsSidebar"));
@@ -92,7 +93,7 @@ const getCurrentPage = (pageRoute?: string): TBoardViewType => {
 };
 
 type TBoardSidePanel = "botScope" | "switchProject";
-type TWorkbenchContext = "explorer" | "my-work" | "changes" | "activity" | "relations" | "outline" | "wiki" | "chat";
+type TWorkbenchContext = "explorer" | "my-work" | "changes" | "inbox" | "activity" | "relations" | "outline" | "wiki" | "chat";
 
 const BoardProxy = memo((): React.JSX.Element => {
     const { setPageAliasRef } = usePageHeader();
@@ -195,6 +196,7 @@ function BoardProxyDisplay({ pageRoute, isFetching, isProjectLoading, project }:
         explorer: t("common.Explorer"),
         "my-work": t("dashboard.My Work"),
         changes: t("dashboard.Changes"),
+        inbox: t("card.inbox.title"),
         activity: t("board.Activity"),
         relations: t("dashboard.Relations"),
         outline: t("dashboard.Outline"),
@@ -603,6 +605,12 @@ function BoardProxyDisplay({ pageRoute, isFetching, isProjectLoading, project }:
                         active: isWorkbenchContextVisible && workbenchContextMode === "my-work",
                     },
                     {
+                        icon: "inbox",
+                        label: t("card.inbox.title"),
+                        onClick: () => showWorkbenchContext("inbox"),
+                        active: isWorkbenchContextVisible && workbenchContextMode === "inbox",
+                    },
+                    {
                         icon: "circle-dot",
                         label: t("dashboard.Changes"),
                         onClick: () => showWorkbenchContext("changes"),
@@ -692,6 +700,8 @@ function BoardProxyDisplay({ pageRoute, isFetching, isProjectLoading, project }:
                                                 onNavigate={() => isMobile && setActiveSidePanel(undefined)}
                                             />
                                         </div>
+                                    ) : workbenchContextMode === "inbox" ? (
+                                        <BoardSignalInbox projectUID={project.uid} />
                                     ) : workbenchContextMode === "changes" ? (
                                         <BoardChangesSidebar projectUID={project.uid} onNavigate={() => isMobile && setActiveSidePanel(undefined)} />
                                     ) : workbenchContextMode === "activity" && currentUser ? (
@@ -730,6 +740,7 @@ function BoardProxyDisplay({ pageRoute, isFetching, isProjectLoading, project }:
                                         explorer: "panel-left",
                                         "my-work": "list-checks",
                                         changes: "circle-dot",
+                                        inbox: "inbox",
                                         activity: "history",
                                         relations: "network",
                                         outline: "list-tree",
