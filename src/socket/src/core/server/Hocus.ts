@@ -286,14 +286,7 @@ const getDocumentAccess = (documentName: string): IHocusDocumentAccess | null =>
 };
 
 const Hocus = new Hocuspocus({
-    async connected({ documentName, context, connection }) {
-        if (getDocumentAccess(documentName)?.topic === ESocketTopic.BoardCard) {
-            guardEditorConnection(connection, async () => {
-                const user = context.user as User | undefined;
-                if (!user) throw createPermissionDeniedError("unauthorized");
-                await validateDocumentAccess(documentName, user);
-            });
-        }
+    async connected({ documentName }) {
         await setActiveDocument(documentName, 1);
     },
     async onAuthenticate({ context, documentName, requestParameters, token, connectionConfig }) {
@@ -312,6 +305,17 @@ const Hocus = new Hocuspocus({
         return { user };
     },
     async onLoadDocument({ documentName, document }) {
+        if (getDocumentAccess(documentName)?.topic === ESocketTopic.BoardCard) {
+            const addConnection = document.addConnection.bind(document);
+            document.addConnection = (connection) => {
+                guardEditorConnection(connection, async () => {
+                    const user = connection.context.user as User | undefined;
+                    if (!user) throw createPermissionDeniedError("unauthorized");
+                    await validateDocumentAccess(documentName, user);
+                });
+                return addConnection(connection);
+            };
+        }
         const state = await EditorSyncStorage.load(documentName);
         if (!state) {
             return;
