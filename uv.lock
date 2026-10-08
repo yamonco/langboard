@@ -479,6 +479,18 @@ wheels = [
 ]
 
 [[package]]
+name = "croniter"
+version = "6.2.4"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "python-dateutil" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/37/57/2e2a65aee2a70483cb28e2b7e15a072d00a523207593b44400d4717bb100/croniter-6.2.4.tar.gz", hash = "sha256:fc124f751b1b04805c2a04b061898b436b45ab2320b045e1e052ea895de65189", size = 166267, upload-time = "2026-07-10T09:52:59.955Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/cd/ba/d678e5bd329646ca51d3c92addbc77804e86d21f4b6b6a027218e6abb010/croniter-6.2.4-py3-none-any.whl", hash = "sha256:8ef3d544107a5c05a150a2d78f8bf5a8eb9c5c4d93405a736b824109574e3f4d", size = 46677, upload-time = "2026-07-10T09:52:58.425Z" },
+]
+
+[[package]]
 name = "cryptocode"
 version = "0.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1430,7 +1442,7 @@ dependencies = [
     { name = "psycopg", extra = ["binary"] },
     { name = "pydantic" },
     { name = "pyjwt" },
-    { name = "python-crontab" },
+    { name = "python-crontab", extra = ["cron-schedule"] },
     { name = "python-multipart" },
     { name = "pyyaml" },
     { name = "redis" },
@@ -1488,7 +1500,7 @@ requires-dist = [
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2.12" },
     { name = "pydantic", specifier = ">=2.10.0,<2.20.0" },
     { name = "pyjwt", specifier = ">=2.10.1" },
-    { name = "python-crontab", specifier = ">=3.3.0" },
+    { name = "python-crontab", extras = ["cron-schedule"], specifier = ">=3.3.0" },
     { name = "python-multipart", specifier = ">=0.0.20,<0.1.0" },
     { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "redis", specifier = ">=5.2.1,<6.0.0" },
@@ -1533,7 +1545,7 @@ dependencies = [
     { name = "psycopg", extra = ["binary"] },
     { name = "pydantic" },
     { name = "pyjwt" },
-    { name = "python-crontab" },
+    { name = "python-crontab", extra = ["cron-schedule"] },
     { name = "python-multipart" },
     { name = "pyyaml" },
     { name = "redis" },
@@ -1600,7 +1612,7 @@ requires-dist = [
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2.12" },
     { name = "pydantic", specifier = ">=2.10.0,<2.20.0" },
     { name = "pyjwt", specifier = ">=2.10.1" },
-    { name = "python-crontab", specifier = ">=3.3.0" },
+    { name = "python-crontab", extras = ["cron-schedule"], specifier = ">=3.3.0" },
     { name = "python-multipart", specifier = ">=0.0.20,<0.1.0" },
     { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "redis", specifier = ">=5.2.1,<6.0.0" },
@@ -2636,6 +2648,11 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/99/7f/c54fb7e70b59844526aa4ae321e927a167678660ab51dda979955eafb89a/python_crontab-3.3.0.tar.gz", hash = "sha256:007c8aee68dddf3e04ec4dce0fac124b93bd68be7470fc95d2a9617a15de291b", size = 57626, upload-time = "2025-07-13T20:05:35.535Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/47/42/bb4afa5b088f64092036221843fc989b7db9d9d302494c1f8b024ee78a46/python_crontab-3.3.0-py3-none-any.whl", hash = "sha256:739a778b1a771379b75654e53fd4df58e5c63a9279a63b5dfe44c0fcc3ee7884", size = 27533, upload-time = "2025-07-13T20:05:34.266Z" },
+]
+
+[package.optional-dependencies]
+cron-schedule = [
+    { name = "croniter" },
 ]
 
 [[package]]
