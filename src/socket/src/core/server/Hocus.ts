@@ -9,6 +9,7 @@ import { ESettingSocketTopicID, ESocketTopic } from "@langboard/core/enums";
 import { EEditorCollaborationType } from "@langboard/core/constants";
 import * as Y from "yjs";
 import Logger from "@/core/utils/Logger";
+import guardEditorConnection from "@/core/server/guardEditorConnection";
 
 const EDITOR_SYNC_ACTIVE_DOCUMENT_CACHE_TTL_SECONDS = 60 * 60;
 const EDITOR_SYNC_RECENT_ACTIVE_DOCUMENT_CACHE_TTL_SECONDS = 60;
@@ -276,7 +277,14 @@ const getDocumentAccess = (documentName: string): IHocusDocumentAccess | null =>
 };
 
 const Hocus = new Hocuspocus({
-    async connected({ documentName }) {
+    async connected({ documentName, context, connection }) {
+        if (getDocumentAccess(documentName)?.topic === ESocketTopic.BoardCard) {
+            guardEditorConnection(connection, async () => {
+                const user = context.user as User | undefined;
+                if (!user) throw createPermissionDeniedError("unauthorized");
+                await validateDocumentAccess(documentName, user);
+            });
+        }
         await setActiveDocument(documentName, 1);
     },
     async onAuthenticate({ context, documentName, requestParameters, token }) {
