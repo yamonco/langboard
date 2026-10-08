@@ -10,6 +10,7 @@ class InMemoryCache extends BaseCache {
     constructor() {
         super();
         this.#db = new sqlite3.Database(path.join(CACHE_DIR, "cache.db"));
+        this.#db.serialize();
         this.#db.run(`CREATE TABLE IF NOT EXISTS cache (
             key TEXT PRIMARY KEY,
             value TEXT NOT NULL,
