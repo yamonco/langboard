@@ -4,7 +4,7 @@ import "@xyflow/react/dist/style.css";
 import { Background, Controls, Edge, Handle, MarkerType, MiniMap, Node, NodeProps, Position, ReactFlow, ReactFlowInstance } from "@xyflow/react";
 import Button from "@/components/base/Button";
 import useGetCards from "@/controllers/api/board/useGetCards";
-import { GlobalRelationshipType, ProjectCard, ProjectColumn } from "@/core/models";
+import { GlobalRelationshipType, Project, ProjectCard, ProjectColumn } from "@/core/models";
 import { usePageNavigateRef } from "@/core/hooks/usePageNavigate";
 import setupApiErrorHandler from "@/core/helpers/setupApiErrorHandler";
 import { ROUTES } from "@/core/routing/constants";
@@ -19,17 +19,26 @@ import { boardGraphViewForUser, TBoardGraphView } from "@/pages/BoardPage/BoardG
 import { useTheme } from "next-themes";
 import { EHttpStatus } from "@langboard/core/enums";
 import CardVisibilityBadge from "@/pages/BoardPage/components/card/CardVisibilityBadge";
+import { cardVisibilityPresentation } from "@/pages/BoardPage/components/card/cardVisibilityPresentation";
 
 const BoardNetworkGraph = lazy(() => import("@/pages/BoardPage/BoardNetworkGraph"));
 
 type TCardNode = Node<
-    { title: string; column: string; card: ProjectCard.TModel; onOpen: () => void; onFocus: () => void; onBlur: () => void },
+    { title: string; column: string; card: ProjectCard.TModel; project: Project.TModel; onOpen: () => void; onFocus: () => void; onBlur: () => void },
     "card"
 >;
 
 function GraphCard({ data }: NodeProps<TCardNode>) {
+    const visibility = data.card.useField("visibility");
+    const members = data.project.useForeignFieldArray("all_members");
     return (
-        <div className="size-full rounded-xl border bg-card text-card-foreground shadow-sm hover:border-primary">
+        <div
+            data-card-privacy={cardVisibilityPresentation(
+                visibility,
+                members.some((member) => member.isValidUser() && member.membership_classification === "external")
+            )}
+            className="size-full rounded-xl border bg-card text-card-foreground shadow-sm hover:border-primary"
+        >
             <button
                 type="button"
                 className={cn(
@@ -132,6 +141,7 @@ const BoardGraphPage = ({ project }: IBoardRelatedPageProps): React.JSX.Element 
                     data: {
                         title: card.title,
                         card: card as ProjectCard.TModel,
+                        project,
                         column: column.name,
                         onOpen: () => navigate(ROUTES.BOARD.CARD(project.uid, card.uid)),
                         onFocus: () => setActiveCard(card.uid),
@@ -143,7 +153,7 @@ const BoardGraphPage = ({ project }: IBoardRelatedPageProps): React.JSX.Element 
                 }))
             ),
         ],
-        [layout, navigate, project.uid]
+        [layout, navigate, project]
     );
     const edges = useMemo<Edge[]>(() => {
         const names = new Map(relationshipTypes.map((type) => [type.uid, type.child_name]));
