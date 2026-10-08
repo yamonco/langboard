@@ -5,6 +5,7 @@ from json import dumps, loads
 from typing import Annotated, Any
 from langboard_shared.core.db import DbSession
 from langboard_shared.core.routing import SocketTopic
+from langboard_shared.core.security.CollaborationChannel import CollaborationChannel
 from langboard_shared.domain.constants.CardPresentation import CARD_PRESENTATION_KEY, validate_card_presentation
 from langboard_shared.domain.models import (
     Card,
@@ -127,7 +128,8 @@ class WorkPlanService:
         self.actor, self.service = actor, service
 
     def _card(self, uid, project):
-        card = self.service.card.get_by_id_like(uid)
+        resolved = self.service.card.resolve_readable_card(project, uid, self.actor, CollaborationChannel.Mcp)
+        card = resolved[1] if resolved else None
         if not card or card.project_id != project.id or card.archived_at or card.deleted_at or card.is_linked_resource:
             raise ValueError("Work plan card is unavailable")
         return card
