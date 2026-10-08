@@ -1,3 +1,4 @@
+import CardSignalEvidence from "./CardSignalEvidence";
 import CardFlipTray from "./CardFlipTray";
 import { useCardFlipStore } from "./CardFlipStore";
 import Box from "@/components/base/Box";
@@ -565,6 +566,7 @@ function BoardTaskCardResult({
                                         className="h-full min-h-0 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
                                     >
                                         <Flex direction="col" gap="4" className="min-w-0 py-6 pr-1">
+                                            <BoardCardSignalSection />
                                             {isCheckCardView ? (
                                                 <BoardCardCheckBody key={`board-card-check-body-${card.uid}`} scrollParentRef={contentViewportRef} />
                                             ) : (
@@ -1076,3 +1078,10 @@ const BoardCardSection = forwardRef<HTMLDivElement, IBoardCardSectionProps>(
 );
 
 export default BoardCard;
+
+function BoardCardSignalSection() {
+    const { projectUID, card, canEditCard } = useBoardCard();
+    const client = useQueryClient();
+    return <CardSignalEvidence projectUID={projectUID} cardUID={card.uid} canEdit={canEditCard}
+        onChanged={() => { void client.invalidateQueries({ queryKey: [`get-card-details-${projectUID}-${card.uid}`] }); }} />;
+}

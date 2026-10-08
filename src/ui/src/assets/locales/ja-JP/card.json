@@ -181,5 +181,25 @@
   "Embedding requested": "埋め込みを要求しました",
   "Embedding indexed": "埋め込み検索が可能",
   "Embedding failed": "埋め込み失敗",
-  "Embedding queued": "埋め込み待機中"
+  "Embedding queued": "埋め込み待機中",
+  "signals": {
+    "title": "チェック証拠",
+    "hint": "証拠のリンクはカードの承認や完了を意味しません。",
+    "error": "証拠の取得または保存に失敗しました。更新して再試行してください。",
+    "loading": "読み込み中…",
+    "refresh": "証拠を更新",
+    "empty": "リンクされたチェックなし",
+    "link": "チェックをリンク",
+    "repository": "リポジトリ",
+    "unlink": "リンク解除",
+    "more": "チェックをさらに表示",
+    "passed": "成功",
+    "failed": "失敗",
+    "conflict": "結果の競合",
+    "stale": "古い証拠",
+    "unknown": "結果未確定",
+    "unavailable": "取得不可",
+    "moreResources": "リポジトリをさらに表示",
+    "noResources": "参照可能な選択済みリポジトリがありません。"
+  }
 }
