@@ -24,6 +24,7 @@ def project_work_state(
     verification_record: dict[str, Any] | None = None,
     direct_blockers: list[dict[str, Any]] | None = None,
     workflow_policy: dict[str, Any] | None = None,
+    external_signals: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Interpret native facts equally for every authorized reader.
 
@@ -129,6 +130,13 @@ def project_work_state(
                 "checkitems",
             )
         )
+    signal_blocked = any(item["state"] in {"failed", "conflict"} for item in external_signals or [])
+    for item in external_signals or []:
+        reasons.append({
+            "code": "external_check_" + item["state"],
+            "message": "External check evidence does not grant reviewer approval or change workflow.",
+            "source_ref": "app_signal_binding:" + item["binding_uid"],
+        })
     return {
         "version": 1,
         "workflow_stage": stage,
@@ -143,9 +151,11 @@ def project_work_state(
         "verification_state": verification,
         "verification_source_change_seq": change_seq,
         "verification": verification_record,
-        "execution_state": execution,
+        "execution_state": "failed" if signal_blocked else execution,
+        "human_execution_state": execution,
+        "external_signal_evidence": external_signals,
         "execution_generation": execution_generation,
-        "blocker_state": "blocked" if direct_blockers else "needs_approval" if pending_approval_count else None,
+        "blocker_state": "blocked" if direct_blockers or signal_blocked else "needs_approval" if pending_approval_count else None,
         "pending_approval_count": pending_approval_count,
         "dependency_state": {
             "state": "blocked" if direct_blockers else "clear" if direct_blockers is not None else None,
@@ -159,6 +169,7 @@ def project_work_state(
         or queue_policy == "exclude"
         or linked_resource
         or direct_blockers
+        or signal_blocked
         or pending_approval_count
         else None,
         "checklist_progress": {"total": total, "completed": completed},

@@ -94,3 +94,31 @@ indexed due-job set, not every repository or file. The API broker command regist
 health and Signal tasks from its API module. No shared package imports API policy.
 Raw global delivery diagnostics and explicit terminal-job retry UI are not implemented.
 Populated delivery downgrades are refused. No production migration has been applied.
+
+## Explicit card evidence scopes
+
+`POST /board/{project_uid}/card/{card_uid}/signals` selects an existing signed
+check signal using `connection_uid`, `resource_uid`, `signal_uid`, and the current
+`source_change_seq`. The caller needs current card visibility and `card_update`.
+A new scope omits `expected_revision`; updating or re-enabling an existing scope
+requires its exact revision. Each card permits at most 25 enabled scopes.
+
+`GET` on the same path exposes current evidence. The scope matches the exact
+repository resource, check ID and commit, ordered by provider occurrence time.
+Older deliveries cannot replace newer outcomes. Equal-time contradictory outcomes
+are `conflict`. A card edit makes the scope `stale` until explicitly rebound.
+Current connection owner, membership, board grants, repository selection and
+personal/project/workspace SecretRef authority are checked on primary storage.
+Secret values and provider output are never returned.
+
+`POST /board/{project_uid}/card/{card_uid}/signals/{binding_uid}/unlink` requires
+`expected_revision` and current card modification authority. It preserves the
+binding history and remains available after provider access is withdrawn.
+
+Authorized Work State reads expose `external_signal_evidence`. Failed or
+conflicting current checks project execution `failed`, blocker `blocked` and
+exclude active execution; `human_execution_state` retains the timer diagnostic.
+Successful checks provide evidence, never reviewer approval, completion or an
+automatic workflow transition. Actorless socket projections omit this evidence;
+clients obtain it through authorized reads. GlitchTip/Dokploy signals, deployment
+proof, presets and provider-driven live refresh remain separate work.
