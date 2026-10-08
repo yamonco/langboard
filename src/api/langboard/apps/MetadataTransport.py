@@ -61,5 +61,5 @@ def read_json(base, path, headers, params=None):
                 raise MetadataUnavailable()
             try:
                 return json.loads(body), response.links
-            except (ValueError, UnicodeError):
+            except (ValueError, UnicodeError, RecursionError):
                 raise MetadataUnavailable() from None

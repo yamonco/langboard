@@ -58,6 +58,15 @@ interface WebhookHealth {
     binding_revision: string | null;
     resources: { resource_uid: string; health: string }[];
 }
+const verificationChecks = ["notification_id", "custom_type", "endpoint", "authorization", "build_success", "build_error"] as const;
+interface WebhookVerification {
+    provider_config: "matched" | "mismatch" | "unavailable";
+    checked_at: string;
+    config_revision: number;
+    connection_revision: string;
+    binding_revision: string;
+    checks: Record<(typeof verificationChecks)[number], boolean> | null;
+}
 interface Page<T> {
     binding?: ReadAccess | null;
     items: T[];
@@ -102,7 +111,18 @@ export default function BoardSettingsMetadataConnection({
     const [notificationID, setNotificationID] = useState("");
     const [webhookInput, setWebhookInput] = useState<{ input_uid: string; input_url: string } | null>(null);
     const [webhookConfirm, setWebhookConfirm] = useState<"configure" | "disable" | null>(null);
+    const [callbackURL, setCallbackURL] = useState("");
+    const [verificationPending, setVerificationPending] = useState(false);
+    const [verification, setVerification] = useState<WebhookVerification | null>(null);
+    const verificationGeneration = useRef(0);
+    const clearVerification = () => {
+        verificationGeneration.current++;
+        setVerification(null);
+    };
     const clearWebhook = () => {
+        clearVerification();
+        setCallbackURL("");
+        setVerificationPending(false);
         setWebhook(null);
         setWebhookReference("");
         setNotificationID("");
@@ -141,12 +161,14 @@ export default function BoardSettingsMetadataConnection({
         setReadAccess(null);
         clearReadResults();
     };
-    const run = async (action: (valid: () => boolean) => Promise<void>) => {
+    const run = async (action: (valid: () => boolean) => Promise<void>, allowVerificationEdits = false) => {
         if (busy.current || !canEditBasicInfo) return;
+        clearVerification();
         busy.current = true;
         const version = ++generation.current;
         const valid = () => version === generation.current && currentScope.current === scope;
         setPending(true);
+        setVerificationPending(allowVerificationEdits);
         setError(false);
         setSaved(false);
         try {
@@ -162,6 +184,7 @@ export default function BoardSettingsMetadataConnection({
             if (valid()) {
                 busy.current = false;
                 setPending(false);
+                setVerificationPending(false);
             }
         }
     };
@@ -251,6 +274,9 @@ export default function BoardSettingsMetadataConnection({
         )
             throw new Error("Invalid webhook health");
         if (result.connection_state === "revoked" || result.connection_state === "disconnected") throw new Error("Connection unavailable");
+        if (result.notification_id !== null && (typeof result.notification_id !== "string" || !/^[A-Za-z0-9_-]{1,200}$/.test(result.notification_id)))
+            throw new Error("Invalid notification identity");
+        clearVerification();
         setWebhook(result);
         setWebhookConfirm(null);
         setNotificationID(result.notification_id ?? "");
@@ -427,6 +453,78 @@ export default function BoardSettingsMetadataConnection({
         !bindings.next_cursor &&
         !!readAccess?.granted_capabilities.includes("resources.read") &&
         selectedServices.some((row) => webhook.resources.some((resource) => resource.resource_uid === row.resource_uid));
+    const validCallbackURL = (() => {
+        if (!webhook?.receiver_path || !/^https:\/\/[^/]/.test(callbackURL) || callbackURL.length > 2048 || /[\x00-\x20\x7f%\\?#]/.test(callbackURL))
+            return false;
+        try {
+            const url = new URL(callbackURL);
+            return (
+                url.protocol === "https:" &&
+                !!url.hostname &&
+                !url.username &&
+                !url.password &&
+                !callbackURL.split("/").some((part) => part === "." || part === "..") &&
+                url.pathname.endsWith(webhook.receiver_path)
+            );
+        } catch {
+            return false;
+        }
+    })();
+    const webhookCanVerify =
+        webhookCanConfigure &&
+        webhook?.state === "enabled" &&
+        webhook.config_revision >= 1 &&
+        !!webhook.notification_id &&
+        notificationID === webhook.notification_id &&
+        !webhookReference &&
+        !webhookConfirm &&
+        validCallbackURL;
+    const verifyWebhook = () =>
+        run(async (valid) => {
+            if (!webhookCanVerify || !webhook?.binding_revision) return;
+            const attempt = verificationGeneration.current;
+            const current = () => valid() && attempt === verificationGeneration.current;
+            const expected = {
+                expected_revision: webhook.connection_revision,
+                expected_binding_revision: webhook.binding_revision,
+                expected_config_revision: webhook.config_revision,
+                callback_url: callbackURL,
+            };
+            let result: WebhookVerification;
+            try {
+                result = (await api.post<WebhookVerification>(`${connectionRoot}/webhook-verify`, expected)).data;
+            } catch (failure) {
+                if (!current()) return;
+                const status = (failure as { response?: { status?: number } }).response?.status;
+                // Authority failures use the existing connection invalidation boundary.
+                if (status && status !== 502 && status !== 503 && status !== 504) throw failure;
+                setError(true);
+                return;
+            }
+            if (!current()) return;
+            if (
+                !result ||
+                Object.keys(result).length !== 6 ||
+                !["matched", "mismatch", "unavailable"].includes(result.provider_config) ||
+                result.connection_revision !== expected.expected_revision ||
+                result.binding_revision !== expected.expected_binding_revision ||
+                result.config_revision !== expected.expected_config_revision ||
+                !Number.isInteger(result.config_revision) ||
+                typeof result.checked_at !== "string" ||
+                !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|\+00:00)$/.test(result.checked_at) ||
+                !Number.isFinite(Date.parse(result.checked_at)) ||
+                new Date(result.checked_at).toISOString().slice(0, 19) !== result.checked_at.slice(0, 19) ||
+                (result.provider_config === "unavailable"
+                    ? result.checks !== null
+                    : !result.checks ||
+                      Object.keys(result.checks).length !== verificationChecks.length ||
+                      verificationChecks.some((key) => typeof result.checks?.[key] !== "boolean")) ||
+                (result.provider_config === "matched" && verificationChecks.some((key) => !result.checks?.[key])) ||
+                (result.provider_config === "mismatch" && verificationChecks.every((key) => result.checks?.[key]))
+            )
+                throw new Error("Invalid notification verification");
+            setVerification(result);
+        }, true);
     const enableRead = () =>
         run(async (valid) => {
             if (!connection || !readAccess || !consenting || !selectedReadResources.length || bindings.next_cursor) return;
@@ -531,7 +629,10 @@ export default function BoardSettingsMetadataConnection({
             }
         });
     return (
-        <fieldset className="fieldset flex min-w-0 flex-col gap-3 rounded-lg border p-3" disabled={pending || !canEditBasicInfo}>
+        <fieldset
+            className="fieldset flex min-w-0 flex-col gap-3 rounded-lg border p-3"
+            disabled={(pending && !verificationPending) || !canEditBasicInfo}
+        >
             <legend className="fieldset-legend px-1 font-semibold">{text("GlitchTip connection")}</legend>
             <p className="text-sm text-muted-foreground">{text("GlitchTip connection help")}</p>
             {!canEditBasicInfo && <p>{text("GlitchTip update permission required")}</p>}
@@ -619,7 +720,9 @@ export default function BoardSettingsMetadataConnection({
                             {webhook && (
                                 <>
                                     <p>{text(`Dokploy notifications ${webhook.state}`)}</p>
-                                    <p className="text-xs text-muted-foreground">{text("Dokploy provider configuration unknown")}</p>
+                                    {!verification && (
+                                        <p className="text-xs text-muted-foreground">{text("Dokploy provider configuration unknown")}</p>
+                                    )}
                                     <p className="text-sm">
                                         {text("Dokploy authenticated local receipt")}:{" "}
                                         {webhook.last_received_at ? (
@@ -652,6 +755,7 @@ export default function BoardSettingsMetadataConnection({
                                             value={webhookReference}
                                             placeholder="secret://ref/"
                                             onChange={(event) => {
+                                                clearVerification();
                                                 setWebhookReference(event.target.value);
                                                 setWebhookConfirm(null);
                                             }}
@@ -677,11 +781,57 @@ export default function BoardSettingsMetadataConnection({
                                             maxLength={200}
                                             value={notificationID}
                                             onChange={(event) => {
+                                                clearVerification();
                                                 setNotificationID(event.target.value);
                                                 setWebhookConfirm(null);
                                             }}
                                         />
                                     </label>
+                                    <label className="flex min-w-0 flex-col gap-1 text-sm">
+                                        {text("Dokploy public callback URL")}
+                                        <input
+                                            className="input min-h-10 w-full min-w-0 rounded-md border bg-background px-3 py-2"
+                                            type="url"
+                                            maxLength={2048}
+                                            value={callbackURL}
+                                            onChange={(event) => {
+                                                clearVerification();
+                                                setCallbackURL(event.target.value);
+                                            }}
+                                        />
+                                    </label>
+                                    <p className="text-xs text-muted-foreground">{text("Dokploy verification help")}</p>
+                                    <Button size="sm" variant="outline" disabled={!webhookCanVerify || pending} onClick={() => void verifyWebhook()}>
+                                        {text("Verify Dokploy notification configuration")}
+                                    </Button>
+                                    {verification && (
+                                        <div className="flex min-w-0 flex-col gap-1 text-sm" role="status">
+                                            <p>{text(`Dokploy verification ${verification.provider_config}`)}</p>
+                                            <p>
+                                                {text("Dokploy verification checked at")}:{" "}
+                                                <time
+                                                    dateTime={verification.checked_at}
+                                                    title={formatDateTime(new Date(verification.checked_at), i18n.resolvedLanguage)}
+                                                >
+                                                    {formatDateDistance(new Date(verification.checked_at), i18n.resolvedLanguage)}
+                                                </time>
+                                            </p>
+                                            {verification.checks && (
+                                                <ul className="list-disc pl-4">
+                                                    {verificationChecks.map((key) => (
+                                                        <li key={key}>
+                                                            {text(`Dokploy verification check ${key}`)}:{" "}
+                                                            {text(
+                                                                verification.checks?.[key]
+                                                                    ? "Dokploy verification check matched"
+                                                                    : "Dokploy verification check mismatch"
+                                                            )}
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            )}
+                                        </div>
+                                    )}
                                     {!webhookConfirm ? (
                                         <>
                                             <Button
@@ -692,12 +842,22 @@ export default function BoardSettingsMetadataConnection({
                                                     !/^secret:\/\/ref\/[A-Za-z0-9]{1,11}$/.test(webhookReference.trim()) ||
                                                     !/^[A-Za-z0-9_-]{0,200}$/.test(notificationID.trim())
                                                 }
-                                                onClick={() => setWebhookConfirm("configure")}
+                                                onClick={() => {
+                                                    clearVerification();
+                                                    setWebhookConfirm("configure");
+                                                }}
                                             >
                                                 {text("Configure Dokploy notifications")}
                                             </Button>
                                             {webhook.state === "enabled" && (
-                                                <Button size="sm" variant="outline" onClick={() => setWebhookConfirm("disable")}>
+                                                <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    onClick={() => {
+                                                        clearVerification();
+                                                        setWebhookConfirm("disable");
+                                                    }}
+                                                >
                                                     {text("Disable Dokploy notifications")}
                                                 </Button>
                                             )}

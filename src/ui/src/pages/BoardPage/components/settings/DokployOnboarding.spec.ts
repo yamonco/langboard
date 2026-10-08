@@ -271,3 +271,82 @@ for (const width of [1920, 390])
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
         await page.screenshot({ path: `test-results/dokploy-webhook-initial-${width}.png`, fullPage: true });
     });
+
+async function prepareVerification(page: import("@playwright/test").Page, query = "") {
+    await page.goto(path + "?webhook-enabled&receipt&" + query);
+    await page.getByRole("combobox", { name: "Existing connection" }).selectOption("conn");
+    await prepareWebhookRead(page);
+    await page.getByLabel("Public HTTPS callback URL").fill("https://receiver.example.invalid/proxy/apps/dokploy/notifications/config");
+}
+for (const width of [1920, 390])
+    for (const outcome of ["matched", "mismatch", "unavailable"])
+        test(`explicit provider verification ${outcome} ${width}`, async ({ page }) => {
+            await page.clock.install({ time: new Date("2026-10-08T01:32:03Z") });
+            await page.setViewportSize({ width, height: 1080 });
+            await prepareVerification(page, outcome);
+            expect(
+                await page.evaluate(
+                    () =>
+                        (window as unknown as { dokployCalls: { url: string }[] }).dokployCalls.filter((row) => row.url.endsWith("/webhook-verify"))
+                            .length
+                )
+            ).toBe(0);
+            await page.getByRole("button", { name: "Verify notification configuration", exact: true }).click();
+            await expect(page.getByRole("status")).toContainText(`Provider configuration ${outcome}`);
+            await expect(page.getByText("Provider configuration is unknown.", { exact: false })).toHaveCount(0);
+            await expect(page.getByRole("status").locator("time")).toHaveText("30 minutes ago");
+            await expect(page.getByRole("status").locator("time")).toHaveAttribute("title", /2026/);
+            await expect(page.getByText("Notifications enabled", { exact: true })).toBeVisible();
+            await expect(page.locator("time[datetime='2026-10-08T01:02:03Z']")).toHaveCount(2);
+            expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+            const calls = await page.evaluate(() => (window as unknown as { dokployCalls: { url: string; data: unknown }[] }).dokployCalls);
+            expect(calls.filter((row) => row.url.endsWith("/webhook-verify"))).toHaveLength(1);
+            expect(calls.find((row) => row.url.endsWith("/webhook-verify"))?.data).toEqual({
+                expected_revision: "c".repeat(64),
+                expected_binding_revision: "d".repeat(64),
+                expected_config_revision: 7,
+                callback_url: "https://receiver.example.invalid/proxy/apps/dokploy/notifications/config",
+            });
+            await expect(page.locator("body")).not.toContainText("raw-secret-provider-value");
+            await page.screenshot({ path: `test-results/dokploy-verify-${outcome}-${width}.png`, fullPage: true });
+            await page.getByLabel("Notification ID (optional)").fill("draft-id");
+            await expect(page.getByRole("status")).toHaveCount(0);
+            await expect(page.getByRole("button", { name: "Verify notification configuration", exact: true })).toBeDisabled();
+        });
+for (const action of ["Switch board", "Remove permission", "callback", "notification", "connection"])
+    test(`late provider verification discarded after ${action}`, async ({ page }) => {
+        await prepareVerification(page, "delayed-verify");
+        await page.getByRole("button", { name: "Verify notification configuration", exact: true }).click();
+        if (action === "callback")
+            await page.getByLabel("Public HTTPS callback URL").fill("https://other.example.invalid/apps/dokploy/notifications/config");
+        else if (action === "notification") await page.getByLabel("Notification ID (optional)").fill("draft-id");
+        else if (action === "connection") await page.getByRole("combobox", { name: "Existing connection" }).selectOption("");
+        else await page.getByRole("button", { name: action }).click();
+        await page.waitForTimeout(550);
+        await expect(page.getByRole("status")).toHaveCount(0);
+    });
+for (const query of ["invalid-verify", "stale-verify"])
+    test(`invalid provider verification rejected ${query}`, async ({ page }) => {
+        await prepareVerification(page, query);
+        await page.getByRole("button", { name: "Verify notification configuration", exact: true }).click();
+        await expect(page.getByRole("alert")).toBeVisible();
+        await expect(page.getByRole("status")).toHaveCount(0);
+        await expect(page.locator("body")).not.toContainText("raw-secret-provider-value");
+    });
+test("provider verification requires valid explicit HTTPS callback", async ({ page }) => {
+    await prepareVerification(page);
+    for (const url of [
+        "http://receiver.example.invalid/apps/dokploy/notifications/config",
+        "https://u:p@receiver.example.invalid/apps/dokploy/notifications/config",
+        "https://receiver.example.invalid/a/../apps/dokploy/notifications/config",
+        "https://receiver.example.invalid/apps/dokploy/notifications/config?q=1",
+        "https://receiver.example.invalid/apps/dokploy/notifications/config#x",
+        "https://receiver.example.invalid/apps/dokploy/notifications/%63onfig",
+        "",
+    ]) {
+        await page.getByLabel("Public HTTPS callback URL").fill(url);
+        await expect(page.getByRole("button", { name: "Verify notification configuration", exact: true })).toBeDisabled();
+    }
+    await page.goto(path + "?readonly&webhook-enabled");
+    await expect(page.getByRole("button", { name: "Verify notification configuration", exact: true })).toHaveCount(0);
+});

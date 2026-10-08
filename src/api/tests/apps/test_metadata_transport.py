@@ -34,3 +34,26 @@ def test_stream_elapsed_budget_closes_response(monkeypatch, slow):
     else:
         assert transport.read_json("https://deploy.example.invalid", "/api/project.all", {})[0] == {"safe": True}
     assert closed == [True]
+
+
+def test_deep_json_within_byte_limit_closes_response(monkeypatch):
+    closed = []
+
+    class Stream(httpx.SyncByteStream):
+        def __iter__(self):
+            yield b"[" * 50000 + b"0" + b"]" * 50000
+
+        def close(self):
+            closed.append(True)
+
+    client = httpx.Client
+    monkeypatch.setattr(
+        transport.httpx,
+        "Client",
+        lambda **kwargs: client(
+            transport=httpx.MockTransport(lambda _: httpx.Response(200, stream=Stream())), **kwargs
+        ),
+    )
+    with pytest.raises(transport.MetadataUnavailable):
+        transport.read_json("https://deploy.example.invalid", "/api/notification.one", {})
+    assert closed == [True]

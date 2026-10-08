@@ -23,11 +23,12 @@ let revision = 0;
 const connection = { connection_uid: "conn", instance_url: "https://deploy.example.invalid", revision: "a".repeat(64) };
 let webhookRevision = params.has("webhook-enabled") ? 7 : 0;
 let webhookState = params.has("webhook-enabled") ? "enabled" : "unconfigured";
+let notificationID: string | null = params.has("webhook-enabled") ? "notification-1" : null;
 const webhookHealth = () => ({
     config_revision: webhookRevision,
     state: webhookState,
     receiver_path: webhookRevision ? "/apps/dokploy/notifications/config" : null,
-    notification_id: null,
+    notification_id: notificationID,
     provider_config: "unknown",
     last_received_at: params.has("receipt") && (resources.size || webhookRevision) ? "2026-10-08T01:02:03Z" : null,
     local_evidence: "authenticated_notification_receipt",
@@ -47,7 +48,30 @@ api.defaults.adapter = async (config) => {
     if (params.has("delayed-webhook-post") && config.method === "post" && config.url?.includes("/webhook-"))
         await new Promise((resolve) => setTimeout(resolve, 400));
     let result: unknown = {};
-    if (config.url?.endsWith("/webhook-health")) result = webhookHealth();
+    if (config.url?.endsWith("/webhook-verify")) {
+        if (params.has("delayed-verify")) await new Promise((resolve) => setTimeout(resolve, 400));
+        const outcome = params.has("mismatch") ? "mismatch" : params.has("unavailable") ? "unavailable" : "matched";
+        result = {
+            provider_config: outcome,
+            checked_at: "2026-10-08T01:02:03Z",
+            config_revision: webhookRevision,
+            connection_revision: "c".repeat(64),
+            binding_revision: "d".repeat(64),
+            checks:
+                outcome === "unavailable"
+                    ? null
+                    : {
+                          notification_id: true,
+                          custom_type: true,
+                          endpoint: outcome !== "mismatch",
+                          authorization: true,
+                          build_success: true,
+                          build_error: true,
+                      },
+        };
+        if (params.has("invalid-verify")) result = { ...(result as object), checks: { endpoint: "raw-secret-provider-value" } };
+        if (params.has("stale-verify")) result = { ...(result as object), config_revision: webhookRevision - 1 };
+    } else if (config.url?.endsWith("/webhook-health")) result = webhookHealth();
     else if (config.url?.endsWith("/webhook-config") || config.url?.endsWith("/webhook-disable")) {
         if (
             data.expected_revision !== "c".repeat(64) ||
@@ -55,6 +79,7 @@ api.defaults.adapter = async (config) => {
             data.expected_config_revision !== webhookRevision
         )
             throw new Error("Invalid webhook revisions");
+        if (config.url.endsWith("/webhook-config")) notificationID = data.notification_id;
         webhookRevision++;
         webhookState = config.url.endsWith("/webhook-config") ? "enabled" : "disabled";
         result = webhookHealth();

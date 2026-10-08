@@ -259,6 +259,37 @@ class WebhookConfigForm(WebhookRevisionForm):
     notification_id: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_-]{1,200}$")
 
 
+class WebhookVerifyForm(ReadAccessForm):
+    expected_config_revision: StrictInt = Field(ge=1)
+    callback_url: str = Field(min_length=1, max_length=2048)
+
+
+@AppRouter.api.post(
+    "/board/{project_uid}/settings/apps/dokploy/connections/{connection_uid}/webhook-verify", tags=["Board.Settings"]
+)
+@AuthFilter.add("user")
+def verify_dokploy_webhook(
+    project_uid: str,
+    connection_uid: str,
+    form: WebhookVerifyForm,
+    user: User = Auth.scope("user"),
+    service: DomainService = DomainService.scope(),
+):
+    from ...apps.DokployNotificationConfig import verify
+
+    return _response(
+        verify,
+        service,
+        user,
+        project_uid,
+        connection_uid,
+        form.expected_revision,
+        form.expected_binding_revision,
+        form.expected_config_revision,
+        form.callback_url,
+    )
+
+
 @AppRouter.api.get(
     "/board/{project_uid}/settings/apps/dokploy/connections/{connection_uid}/webhook-health", tags=["Board.Settings"]
 )
