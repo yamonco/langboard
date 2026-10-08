@@ -34,7 +34,8 @@ def test_auth_channel_is_derived_from_validated_credentials(monkeypatch, credent
     if credential == "bot_token":
         expected = CollaborationChannel.Bot
         assert result is bot
-    elif credential == "invalid":
+    elif credential in ("invalid", "key_session"):
+        # An explicitly invalid API key must not fall back to a valid browser session.
         assert result == 401
     else:
         assert result is user
