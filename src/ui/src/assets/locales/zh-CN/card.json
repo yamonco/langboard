@@ -205,12 +205,20 @@
     "running": "运行中",
     "cancelled": "已取消",
     "application": "应用",
-    "compose": "Compose"
+    "compose": "Compose",
+    "project": "项目",
+    "issue": "问题",
+    "observation": "观测时间",
+    "resolved": "已解决",
+    "ignored": "已忽略",
+    "outcome unresolved": "未解决",
+    "outcome resolved": "已解决",
+    "outcome ignored": "已忽略"
   },
   "inbox": {
     "title": "Signal Inbox",
     "refresh": "刷新",
-    "hint": "GitHub 检查和 Dokploy 部署。将信号作为证据关联到卡片。",
+    "hint": "将GitHub检查、Dokploy部署和GlitchTip问题观测关联到卡片作为证据。",
     "loading": "正在加载…",
     "error": "无法加载或关联。请刷新后重试。",
     "empty": "暂无可用信号。",
@@ -240,7 +248,13 @@
     "choose column": "选择列",
     "create card": "创建卡片",
     "created": "已创建关联信号证据的卡片。",
-    "reused": "已返回关联信号证据的现有卡片。"
+    "reused": "已返回关联信号证据的现有卡片。",
+    "issue": "问题",
+    "observation": "观测时间",
+    "outcome unresolved": "未解决",
+    "outcome resolved": "已解决",
+    "outcome ignored": "已忽略",
+    "event issue.status_observed": "问题状态观测"
   },
   "Private": "私密",
   "Whisper": "内部协作",

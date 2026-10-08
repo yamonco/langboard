@@ -307,6 +307,14 @@ def selected_projects(service, actor, project_uid, connection_uid, after=None):
             ).all()
         )
         return {
+            "binding": None
+            if binding is None
+            else {
+                "uid": binding.get_uid(),
+                "revision": binding.edit_revision(),
+                "state": binding.state,
+                "granted_capabilities": list(binding.granted_capabilities),
+            },
             "items": [
                 {
                     "resource_uid": row.get_uid(),
@@ -378,3 +386,50 @@ def disconnect(service, actor, project_uid, connection_uid, expected_revision):
             )
         )
         return _metadata(connection)
+
+
+def enable_read_access(service, actor, project_uid, connection_uid, expected_revision, expected_binding_revision):
+    """Explicit board read consent; no provider writes or workflow authority."""
+    with DbSession.atomic() as db:
+        board = _board(service, actor, project_uid)
+        conn = _connection(db, actor, connection_uid, lock=True)
+        if _revision(conn) != expected_revision:
+            raise GlitchTipConflict()
+        _instance(conn.instance_url)
+        _, secret_revision = _credential(service, actor, conn.credential_reference)
+        _current(service, actor, project_uid, conn, secret_revision)
+        binding = db.exec(
+            SqlBuilder.select.table(BoardAppBinding)
+            .where(
+                BoardAppBinding.project_id == board.id,
+                BoardAppBinding.app_key == "glitchtip",
+            )
+            .with_for_update()
+        ).first()
+        if binding is None:
+            raise GlitchTipUnavailable()
+        if binding.edit_revision() != expected_binding_revision:
+            raise GlitchTipConflict()
+        selected = db.exec(
+            SqlBuilder.select.table(AppResourceBinding)
+            .where(
+                AppResourceBinding.board_binding_id == binding.id,
+                AppResourceBinding.connection_id == conn.id,
+                AppResourceBinding.is_selected == True,  # noqa: E712
+                AppResourceBinding.access_state == "granted",
+                AppResourceBinding.resource_type == "project",
+            )
+            .limit(1)
+        ).first()
+        if selected is None:
+            raise GlitchTipUnavailable()
+        binding.state = "enabled"
+        binding.granted_capabilities = ["resources.read", "signals.read"]
+        binding.stage_transitions_enabled = False
+        db.update(binding)
+        return {
+            "uid": binding.get_uid(),
+            "revision": binding.edit_revision(),
+            "state": binding.state,
+            "granted_capabilities": list(binding.granted_capabilities),
+        }

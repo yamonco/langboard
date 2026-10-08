@@ -205,12 +205,20 @@
     "running": "実行中",
     "cancelled": "キャンセル",
     "application": "アプリケーション",
-    "compose": "Compose"
+    "compose": "Compose",
+    "project": "プロジェクト",
+    "issue": "課題",
+    "observation": "観測時刻",
+    "resolved": "解決済み",
+    "ignored": "無視",
+    "outcome unresolved": "未解決",
+    "outcome resolved": "解決済み",
+    "outcome ignored": "無視"
   },
   "inbox": {
     "title": "Signal Inbox",
     "refresh": "更新",
-    "hint": "GitHubチェックとDokployデプロイ。信号を証拠としてカードにリンクします。",
+    "hint": "GitHubチェック、Dokployデプロイ、GlitchTip課題の観測をカードに証拠としてリンクします。",
     "loading": "読み込み中…",
     "error": "取得または関連付けに失敗しました。更新して再試行してください。",
     "empty": "利用可能な信号はありません。",
@@ -240,7 +248,13 @@
     "choose column": "列を選択",
     "create card": "カードを作成",
     "created": "信号の証拠を持つカードを作成しました。",
-    "reused": "信号の証拠を持つ既存のカードが見つかりました。"
+    "reused": "信号の証拠を持つ既存のカードが見つかりました。",
+    "issue": "課題",
+    "observation": "観測時刻",
+    "outcome unresolved": "未解決",
+    "outcome resolved": "解決済み",
+    "outcome ignored": "無視",
+    "event issue.status_observed": "課題の状態を観測"
   },
   "Private": "プライベート",
   "Whisper": "ウィスパー",

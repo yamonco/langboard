@@ -139,11 +139,21 @@ def project_work_state(
     )
     for item in signals:
         deployment = item.get("provider") == "dokploy"
+        issue_observation = item.get("provider") == "glitchtip"
         reasons.append(
             {
-                "code": ("external_deployment_" if deployment else "external_check_") + item["state"],
+                "code": (
+                    "external_deployment_"
+                    if deployment
+                    else "external_issue_observation_"
+                    if issue_observation
+                    else "external_check_"
+                )
+                + item["state"],
                 "message": "External deployment evidence does not grant reviewer approval or change workflow."
                 if deployment
+                else "Observed external issue status does not establish a lifecycle occurrence, grant reviewer approval or change workflow."
+                if issue_observation
                 else "External check evidence does not grant reviewer approval or change workflow.",
                 "source_ref": "app_signal_binding:" + item["binding_uid"],
             }

@@ -295,6 +295,20 @@
     "Dokploy outcome queued": "Queued",
     "Dokploy outcome success": "Success",
     "Dokploy outcome failure": "Failure",
-    "Dokploy outcome cancelled": "Cancelled"
+    "Dokploy outcome cancelled": "Cancelled",
+    "GlitchTip read scope help": "Read access applies to all selected GlitchTip projects on this board, including projects selected later. Only project metadata and issue status observations are read.",
+    "GlitchTip read confirm help": "Confirm board-wide read access for selected GlitchTip projects.",
+    "Enable GlitchTip read access": "Enable read access",
+    "Confirm GlitchTip read access": "Confirm read access",
+    "GlitchTip read enabled": "Board read access enabled.",
+    "Refresh GlitchTip issues": "Refresh issue observations",
+    "GlitchTip issue observations help": "Observed issue status, up to 25 issues per page. Observation time is when status was read; it is not the time an issue was resolved or reopened.",
+    "GlitchTip no observed issues": "No issues observed. This does not mean all issues are resolved.",
+    "GlitchTip issue ID": "Issue",
+    "GlitchTip observed at": "Observed at",
+    "GlitchTip observed unresolved": "Observed unresolved",
+    "GlitchTip observed resolved": "Observed resolved",
+    "GlitchTip observed ignored": "Observed ignored",
+    "More GlitchTip issue observations": "More issue observations"
   }
 }

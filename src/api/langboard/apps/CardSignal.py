@@ -14,6 +14,8 @@ from .DokployConnection import DokployUnavailable
 from .DokploySignal import _scope as deployment_scope
 from .GitHubManifest import GitHubManifestUnavailable
 from .GitHubSignal import _scope
+from .GlitchTipConnection import GlitchTipUnavailable
+from .GlitchTipSignal import _scope as issue_scope
 
 
 class CardSignalConflict(Exception):
@@ -48,7 +50,7 @@ def authorized_signal_scope(service, db, actor, project_uid, connection_uid, res
     ).first()
     if signal is None or not signal.external_id or signal.provider == "github" and not signal.commit_sha:
         raise GitHubManifestUnavailable()
-    if signal.provider == "dokploy":
+    if signal.provider in {"dokploy", "glitchtip"}:
         stored = db.exec(
             SqlBuilder.select.table(AppConnection)
             .where(AppConnection.id == InfraHelper.convert_id(connection_uid))
@@ -58,10 +60,11 @@ def authorized_signal_scope(service, db, actor, project_uid, connection_uid, res
         if owner is None:
             raise GitHubManifestUnavailable()
         try:
-            connection, _, resource = deployment_scope(
+            provider_scope = deployment_scope if signal.provider == "dokploy" else issue_scope
+            connection, _, resource = provider_scope(
                 service, owner, project_uid, connection_uid, resource_uid, lock=True
             )
-        except (DokployUnavailable, ValueError):
+        except (DokployUnavailable, GlitchTipUnavailable, ValueError):
             raise GitHubManifestUnavailable() from None
     else:
         owner, connection, resource = _scope(service, db, project_uid, connection_uid, resource_uid, actor, lock=True)

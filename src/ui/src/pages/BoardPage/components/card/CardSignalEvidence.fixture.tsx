@@ -24,13 +24,14 @@ let outcome = "passed";
 let linked = !params.has("empty");
 let revision = 0;
 const unlinkedDeployments = new Set<string>();
+let issueAccess = true;
 api.defaults.adapter = async (config) => {
     const data = config.data ? JSON.parse(config.data) : null;
     calls.push({ url: config.url, method: config.method, data });
     if (params.has("delayed") && config.url === "/board/project/card/card/signals") await new Promise((resolve) => setTimeout(resolve, 400));
     if (params.has("error") && config.method === "post") throw new Error("fixture failure");
     if (config.url?.endsWith("/unlink")) {
-        if (config.url.includes("/deployment-")) unlinkedDeployments.add(config.url.split("/").at(-2)!);
+        if (config.url.includes("/issue-") || config.url.includes("/deployment-")) unlinkedDeployments.add(config.url.split("/").at(-2)!);
         else linked = false;
         revision++;
     } else if (config.method === "post") {
@@ -93,13 +94,47 @@ api.defaults.adapter = async (config) => {
                 });
             }
     }
+    if (params.has("glitchtip") && config.method === "get" && !config.url?.includes("/settings/") && !config.url?.endsWith("/resources")) {
+        const snapshot = result as { items: unknown[]; bindings: unknown[] };
+        for (const [index, status] of ["unresolved", "resolved", "ignored"].entries()) {
+            const uid = `issue-${status}`;
+            if (unlinkedDeployments.has(uid)) continue;
+            snapshot.bindings.push({ binding_uid: uid, revision: 5 });
+            if (issueAccess && !params.has("revoked"))
+                snapshot.items.push({
+                    binding_uid: uid,
+                    revision: 5,
+                    provider: "glitchtip",
+                    state: params.get("state") ?? (status === "unresolved" ? "failed" : status),
+                    outcome: status,
+                    resource_uid: "glitchtip-project",
+                    resource_name: "Customer errors",
+                    resource_type: "project",
+                    external_id: String(101 + index),
+                    event_type: "issue.status_observed",
+                    commit_sha: "",
+                    occurred_at: "2026-10-08T00:00:00Z",
+                    time_basis: "observation",
+                });
+        }
+    }
     return { config, status: 200, statusText: "OK", headers: {}, data: result };
 };
 function Fixture() {
+    const [canEdit, setCanEdit] = useState(!params.has("readonly"));
     const [card, setCard] = useState("card");
     const [cardRevision, setCardRevision] = useState(7);
     return (
         <main className="mx-auto max-w-xl p-4">
+            <button onClick={() => setCanEdit(false)}>Remove edit access</button>
+            <button
+                onClick={() => {
+                    issueAccess = false;
+                    emit("board:app-signal:changed", { app_signal_changed: true });
+                }}
+            >
+                Revoke issue access
+            </button>
             <button onClick={() => setCard("other")}>Switch card</button>
             <button
                 onClick={() => {
@@ -117,7 +152,7 @@ function Fixture() {
                 projectUID="project"
                 cardUID={card}
                 cardRevision={cardRevision}
-                canEdit={!params.has("readonly")}
+                canEdit={canEdit}
             />
         </main>
     );

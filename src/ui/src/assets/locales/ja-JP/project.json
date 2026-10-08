@@ -295,6 +295,20 @@
     "Dokploy outcome queued": "待機中",
     "Dokploy outcome success": "成功",
     "Dokploy outcome failure": "失敗",
-    "Dokploy outcome cancelled": "キャンセル"
+    "Dokploy outcome cancelled": "キャンセル",
+    "GlitchTip read scope help": "読み取り権限は、後から選択するものも含め、このボードで選択されたすべてのGlitchTipプロジェクトに適用されます。プロジェクトのメタデータと観測した課題の状態のみを読み取ります。",
+    "GlitchTip read confirm help": "選択されたGlitchTipプロジェクトへのボード全体の読み取り権限を確認してください。",
+    "Enable GlitchTip read access": "読み取り権限を有効化",
+    "Confirm GlitchTip read access": "読み取り権限を確認",
+    "GlitchTip read enabled": "ボードの読み取り権限が有効です。",
+    "Refresh GlitchTip issues": "課題の観測を更新",
+    "GlitchTip issue observations help": "1ページ最大25件の課題状態を観測します。観測時刻は状態を読み取った時刻であり、解決または再開された時刻ではありません。",
+    "GlitchTip no observed issues": "観測された課題はありません。すべて解決済みという意味ではありません。",
+    "GlitchTip issue ID": "課題",
+    "GlitchTip observed at": "観測時刻",
+    "GlitchTip observed unresolved": "未解決を観測",
+    "GlitchTip observed resolved": "解決済みを観測",
+    "GlitchTip observed ignored": "無視を観測",
+    "More GlitchTip issue observations": "課題の観測をもっと表示"
   }
 }

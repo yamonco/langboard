@@ -235,3 +235,87 @@ test("Korean new-card form and readonly", async ({ page }) => {
         await page.evaluate(() => (window as unknown as { inboxCalls: { method: string }[] }).inboxCalls.some((row) => row.method === "post"))
     ).toBe(false);
 });
+
+for (const width of [1920, 390])
+    test(`GlitchTip observations and explicit mutations ${width}`, async ({ page }) => {
+        await page.clock.install({ time: new Date("2026-10-08T00:30:00Z") });
+        await page.setViewportSize({ width, height: width === 1920 ? 1080 : 1000 });
+        await page.goto(path + "?glitchtip&mixed");
+        const posts = () =>
+            page.evaluate(() =>
+                (window as unknown as { inboxCalls: { method: string; data: unknown }[] }).inboxCalls.filter((row) => row.method === "post")
+            );
+        for (const [id, status] of [
+            [101, "Unresolved"],
+            [102, "Resolved"],
+            [103, "Ignored"],
+        ]) {
+            const issue = page.getByRole("button", { name: new RegExp(`GlitchTip · Issue ${id}`) });
+            await expect(issue).toContainText(status.toString());
+            await expect(issue).toContainText("Customer errors");
+            await expect(issue.locator("time")).toHaveText("Observed at · 30 minutes ago");
+            await expect(issue.locator("time")).toHaveAttribute("datetime", "2026-10-08T00:00:00Z");
+            await expect(issue).not.toContainText("Deployment");
+            await expect(issue).not.toContainText("aaaa");
+        }
+        expect(await posts()).toEqual([]);
+        await page.getByRole("button", { name: /GlitchTip · Issue 101/ }).click();
+        await page.getByRole("combobox", { name: "Card", exact: true }).selectOption("card");
+        expect(await posts()).toEqual([]);
+        await page.getByRole("button", { name: "Link evidence", exact: true }).click();
+        await expect(page.getByRole("button", { name: /GlitchTip · Issue 101/ })).toHaveCount(0);
+        expect((await posts())[0].data).toEqual({
+            connection_uid: "glitchtip-connection",
+            resource_uid: "glitchtip-project",
+            signal_uid: "issue-unresolved",
+            source_change_seq: 7,
+            expected_revision: null,
+        });
+        await page.getByRole("button", { name: /GlitchTip · Issue 102/ }).click();
+        await page.getByRole("button", { name: "New card from signal", exact: true }).click();
+        await expect(page.getByRole("textbox", { name: "Card title", exact: true })).toHaveValue(
+            "GlitchTip · Customer errors · Issue 102 · Resolved"
+        );
+        await page.getByRole("combobox", { name: "Column", exact: true }).selectOption("ready");
+        expect(await posts()).toHaveLength(1);
+        await page.screenshot({ path: `test-results/glitchtip-inbox-${width}.png`, fullPage: true });
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+        await page.getByRole("button", { name: "Create card", exact: true }).click();
+        await expect(page.getByText("Card created with signal evidence.", { exact: true })).toBeVisible();
+        expect((await posts())[1].data).toEqual({
+            connection_uid: "glitchtip-connection",
+            resource_uid: "glitchtip-project",
+            signal_uid: "issue-resolved",
+            project_column_uid: "ready",
+            title: "GlitchTip · Customer errors · Issue 102 · Resolved",
+        });
+    });
+test("GlitchTip capability and current revocation gates", async ({ page }) => {
+    await page.goto(path + "?glitchtip&nonlink");
+    await expect(page.getByText(/GlitchTip · Issue 101/)).toBeVisible();
+    await expect(page.getByRole("button", { name: /GlitchTip ·/ })).toHaveCount(0);
+    await page.goto(path + "?glitchtip");
+    await page.getByRole("button", { name: /GlitchTip · Issue 101/ }).click();
+    await page.getByRole("button", { name: "New card from signal", exact: true }).click();
+    await page.getByRole("combobox", { name: "Column", exact: true }).selectOption("ready");
+    await page.getByRole("button", { name: "Revoke issue access", exact: true }).click();
+    await expect(page.getByRole("button", { name: /GlitchTip ·/ })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Create card", exact: true })).toHaveCount(0);
+    await page.goto(path + "?glitchtip");
+    await page.getByRole("button", { name: /GlitchTip · Issue 101/ }).click();
+    await page.getByRole("button", { name: "Remove edit access", exact: true }).click();
+    await expect(page.getByRole("button", { name: /GlitchTip · Issue 101/ })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Link evidence", exact: true })).toHaveCount(0);
+    expect(
+        await page.evaluate(() => (window as unknown as { inboxCalls: { method: string }[] }).inboxCalls.some((row) => row.method === "post"))
+    ).toBe(false);
+});
+test("Korean GlitchTip observed statuses", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 1000 });
+    await page.clock.install({ time: new Date("2026-10-08T00:30:00Z") });
+    await page.goto(path + "?glitchtip&lang=ko-KR");
+    const issue = page.getByRole("button", { name: /GlitchTip · 이슈 101/ });
+    await expect(issue).toContainText("미해결");
+    await expect(issue).toContainText("이슈 상태 관측");
+    await expect(issue.locator("time")).toHaveText("관측 시각 · 30분 전");
+});
