@@ -261,6 +261,7 @@ const BoardGraphPage = ({ project }: IBoardRelatedPageProps): React.JSX.Element 
                     <Suspense fallback={<div className="size-full animate-pulse bg-muted/30" />}>
                         <BoardNetworkGraph
                             layout={layout}
+                            project={project}
                             focusColumn={focusColumn}
                             onOpen={(uid) => navigate(ROUTES.BOARD.CARD(project.uid, uid))}
                         />
