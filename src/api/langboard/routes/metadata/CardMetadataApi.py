@@ -15,11 +15,10 @@ from langboard_shared.core.routing import (
 )
 from langboard_shared.core.schema import OpenApiSchema
 from langboard_shared.core.security.CollaborationChannel import CollaborationChannel
-from langboard_shared.domain.models import Bot, Card, CardMetadata, Project, ProjectRole, User
+from langboard_shared.domain.models import Bot, CardMetadata, ProjectRole, User
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.domain.services import DomainService
 from langboard_shared.filter import RoleFilter
-from langboard_shared.helpers import InfraHelper
 from langboard_shared.publishers import MetadataPublisher
 from langboard_shared.security import Auth, RoleFinder
 from .MetadataForm import MetadataDeleteForm, MetadataForm, MetadataGetModel
@@ -124,14 +123,22 @@ def get_card_metadata_by_key(
 @RoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
 @AuthFilter.add()
 def save_card_metadata(
-    project_uid: str, card_uid: str, form: MetadataForm, service: DomainService = DomainService.scope()
+    project_uid: str, card_uid: str, form: MetadataForm, request: Request,
+    user_or_bot: User | Bot = Auth.scope("all"), service: DomainService = DomainService.scope()
 ) -> JsonResponse:
-    params = InfraHelper.get_records_with_foreign_by_params((Project, project_uid), (Card, card_uid))
+    params = service.card.resolve_readable_card(
+        project_uid, card_uid, user_or_bot, request.scope.get("collaboration_channel", CollaborationChannel.Api)
+    )
     if not params:
         raise ApiException.NotFound_404(ApiErrorCode.NF2016)
-    _, card = params
+    _, card, _ = params
+    if card.is_linked_resource:
+        raise ApiException.NotFound_404(ApiErrorCode.NF2016)
 
-    metadata = service.metadata.save(CardMetadata, card, form.key, form.value, form.old_key)
+    try:
+        metadata = service.metadata.save(CardMetadata, card, form.key, form.value, form.old_key)
+    except ValueError:
+        raise ApiException.BadRequest_400() from None
     if metadata is None:
         raise ApiException.NotFound_404(ApiErrorCode.NF2016)
 
@@ -154,12 +161,17 @@ def save_card_metadata(
 @RoleFilter.add(ProjectRole, [ProjectRoleAction.CardUpdate], RoleFinder.project)
 @AuthFilter.add()
 def delete_card_metadata(
-    form: MetadataDeleteForm, project_uid: str, card_uid: str, service: DomainService = DomainService.scope()
+    form: MetadataDeleteForm, project_uid: str, card_uid: str, request: Request,
+    user_or_bot: User | Bot = Auth.scope("all"), service: DomainService = DomainService.scope()
 ) -> JsonResponse:
-    params = InfraHelper.get_records_with_foreign_by_params((Project, project_uid), (Card, card_uid))
+    params = service.card.resolve_readable_card(
+        project_uid, card_uid, user_or_bot, request.scope.get("collaboration_channel", CollaborationChannel.Api)
+    )
     if not params:
         raise ApiException.NotFound_404(ApiErrorCode.NF2003)
-    _, card = params
+    _, card, _ = params
+    if card.is_linked_resource:
+        raise ApiException.NotFound_404(ApiErrorCode.NF2016)
 
     service.metadata.delete(CardMetadata, card, form.keys)
 

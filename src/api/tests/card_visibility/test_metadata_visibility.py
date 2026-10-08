@@ -79,3 +79,83 @@ def test_sdk_presentation_write_publishes_existing_metadata_update(monkeypatch):
         "truncated": False,
     }
     publisher.assert_called_once()
+
+
+def mutation_callbacks(actor, service, channel):
+    request = SimpleNamespace(scope={"collaboration_channel": channel})
+    form = SimpleNamespace(key="card.presentation.v1", value="{}", old_key=None, keys=["card.presentation.v1"])
+    return [
+        lambda: MetadataMcp.save_card_metadata("p", "c", form.key, form.value, None, actor, service),
+        lambda: MetadataMcp.delete_card_metadata("p", "c", form.keys, actor, service),
+        lambda: CardMcp.delete_public_card_metadata("p", "c", form.keys, actor, service),
+        lambda: CardMetadataApi.save_card_metadata("p", "c", form, request, actor, service),
+        lambda: CardMetadataApi.delete_card_metadata(form, "p", "c", request, actor, service),
+    ]
+
+
+@pytest.mark.parametrize("channel", [CollaborationChannel.Api, CollaborationChannel.HumanUI])
+@pytest.mark.parametrize("index", range(5))
+def test_all_metadata_mutations_block_hidden_cards_before_write_or_publish(monkeypatch, channel, index):
+    writer = Mock(side_effect=AssertionError("hidden write"))
+    events = Mock(side_effect=AssertionError("hidden event"))
+    resolver = Mock(return_value=None)
+    service = SimpleNamespace(
+        card=SimpleNamespace(resolve_readable_card=resolver), metadata=SimpleNamespace(save=writer, delete=writer)
+    )
+    monkeypatch.setattr(CardMcp.MetadataPublisher, "updated_metadata", events)
+    monkeypatch.setattr(CardMcp.MetadataPublisher, "deleted_metadata", events)
+    actor = object()
+    error = ValueError if index < 3 else ApiException.NotFound_404
+    with pytest.raises(error):
+        mutation_callbacks(actor, service, channel)[index]()
+    assert resolver.call_args.args == ("p", "c", actor, CollaborationChannel.Mcp if index < 3 else channel)
+    writer.assert_not_called()
+    events.assert_not_called()
+
+
+@pytest.mark.parametrize("index", range(5))
+def test_linked_resource_metadata_is_read_only_before_publishing(monkeypatch, index):
+    writer = Mock(side_effect=AssertionError("linked resource write"))
+    events = Mock(side_effect=AssertionError("linked resource event"))
+    card = SimpleNamespace(is_linked_resource=True)
+    service = SimpleNamespace(
+        card=SimpleNamespace(resolve_readable_card=lambda *args: (object(), card, object())),
+        metadata=SimpleNamespace(save=writer, delete=writer),
+    )
+    monkeypatch.setattr(CardMcp.MetadataPublisher, "updated_metadata", events)
+    monkeypatch.setattr(CardMcp.MetadataPublisher, "deleted_metadata", events)
+    with pytest.raises(ValueError if index < 3 else ApiException.NotFound_404):
+        mutation_callbacks(object(), service, CollaborationChannel.HumanUI)[index]()
+    writer.assert_not_called()
+    events.assert_not_called()
+
+
+@pytest.mark.parametrize("index", range(5))
+def test_readable_metadata_mutations_reach_current_card_and_publish(monkeypatch, index):
+    card = SimpleNamespace(is_linked_resource=False, get_uid=lambda: "c")
+    save = Mock(return_value=SimpleNamespace(value="{}"))
+    delete = Mock(return_value=True)
+    events = Mock()
+    service = SimpleNamespace(
+        card=SimpleNamespace(resolve_readable_card=lambda *args: (object(), card, object())),
+        metadata=SimpleNamespace(save=save, delete=delete),
+    )
+    monkeypatch.setattr(CardMcp.MetadataPublisher, "updated_metadata", events)
+    monkeypatch.setattr(CardMcp.MetadataPublisher, "deleted_metadata", events)
+    mutation_callbacks(object(), service, CollaborationChannel.HumanUI)[index]()
+    operation = save if index in (0, 3) else delete
+    assert operation.call_args.args[1] is card
+    events.assert_called_once()
+
+
+def test_http_invalid_presentation_is_bad_request_without_event(monkeypatch):
+    card = SimpleNamespace(is_linked_resource=False)
+    service = SimpleNamespace(
+        card=SimpleNamespace(resolve_readable_card=lambda *args: (object(), card, object())),
+        metadata=SimpleNamespace(save=Mock(side_effect=ValueError("invalid metadata"))),
+    )
+    events = Mock()
+    monkeypatch.setattr(CardMcp.MetadataPublisher, "updated_metadata", events)
+    with pytest.raises(ApiException.BadRequest_400):
+        mutation_callbacks(object(), service, CollaborationChannel.HumanUI)[3]()
+    events.assert_not_called()

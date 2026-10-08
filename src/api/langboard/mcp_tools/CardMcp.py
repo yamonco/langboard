@@ -1613,9 +1613,15 @@ def delete_public_card_metadata(
     normalized = [require_public_metadata_key(key) for key in keys]
     if len(normalized) != len(set(normalized)):
         raise ValueError("Duplicate metadata key")
-    _, card = _require_task_card(project_uid, card_uid)
+    params = service.card.resolve_readable_card(project_uid, card_uid, user_or_bot, CollaborationChannel.Mcp)
+    if not params:
+        raise ValueError("Project or card not found")
+    _, card, _ = params
+    if card.is_linked_resource:
+        raise ValueError("Linked resource cards are read-only")
     if not service.metadata.delete(CardMetadata, card, normalized):
         raise ValueError("Metadata not found")
+    MetadataPublisher.deleted_metadata(SocketTopic.BoardCard, card.get_uid(), normalized)
     return {"deleted": True}
 
 
