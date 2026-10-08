@@ -329,6 +329,8 @@ def refresh_resources(
             ).first()
             row.access_state, row.health = access, health
             db.update(row)
+        if results:
+            db.after_commit(lambda: CardPublisher.app_signal_changed(project_uid))
         return {
             **({} if receipt_page else resource_snapshot(db, binding)),
             "next_cursor": next_cursor,

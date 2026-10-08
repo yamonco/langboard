@@ -174,6 +174,9 @@ def receipt_storage(lifecycle, monkeypatch):
     from langboard.apps import GitHubHealthWorker
 
     monkeypatch.setattr(GitHubHealthWorker, "enqueue", lambda uid: None)
+    from langboard_shared.publishers import CardPublisher
+
+    monkeypatch.setattr(CardPublisher, "put_dispather", lambda *args: None)
     migration.health = health
     migration.invalidation = invalidation
     return lifecycle, migration, engine
@@ -420,17 +423,24 @@ def test_external_routing_does_not_trust_sender_or_candidate(receipt_storage, fa
 @pytest.mark.parametrize(
     "action", ["deleted", "suspend", "unsuspend", "created", "new_permissions_accepted", "removed", "added"]
 )
-def test_lifecycle_invalidates_only_matching_selected_resources(receipt_storage, action):
+def test_lifecycle_invalidates_only_matching_selected_resources(receipt_storage, action, monkeypatch):
+    from langboard_shared.helpers import InfraHelper
+    from langboard_shared.publishers import CardPublisher
+
+    notices = []
+    monkeypatch.setattr(CardPublisher, "app_signal_changed", notices.append)
     from langboard.apps.GitHubLifecycle import receive_lifecycle
     from langboard.apps.GitHubResources import resource_snapshot
     from langboard_shared.core.db import SqlBuilder
-    from langboard_shared.domain.models import AppResourceBinding, BoardAppBinding, GitHubLifecycleReceipt
+    from langboard_shared.domain.models import AppResourceBinding, BoardAppBinding, GitHubLifecycleReceipt, Project
 
     lifecycle, migration, engine = receipt_storage
     service, board, connection, payload = lifecycle
     with DbSession.use(readonly=False) as db:
+        unrelated = Project(owner_id=board[1].id, title="Unrelated installation fixture")
+        db.insert(unrelated)
         bindings = []
-        for project_id in (10, 11):
+        for project_id in (10, 11, unrelated.id):
             binding = BoardAppBinding(project_id=project_id, app_key="github")
             db.insert(binding)
             bindings.append(binding)
@@ -439,7 +449,7 @@ def test_lifecycle_invalidates_only_matching_selected_resources(receipt_storage,
             [
                 (bindings[0], 17, 7, True, 99),
                 (bindings[1], 17, 7, True, 99),
-                (bindings[0], 18, 7, True, 100),
+                (bindings[2], 18, 7, True, 100),
                 (bindings[0], 17, 8, True, 101),
                 (bindings[0], 17, 7, False, 102),
                 (bindings[0], 17, 7, True, 103),
@@ -469,7 +479,14 @@ def test_lifecycle_invalidates_only_matching_selected_resources(receipt_storage,
         payload["repositories_" + action] = [{"id": 99}]
     body, signature = signed(payload)
     delivery = str(uuid4())
+    with pytest.raises(RuntimeError, match="notification rollback"):
+        with DbSession.atomic():
+            receive_lifecycle(service, board[1], connection.get_uid(), body, signature, event, delivery)
+            assert not notices
+            raise RuntimeError("notification rollback")
+    assert not notices
     first = receive_lifecycle(service, board[1], connection.get_uid(), body, signature, event, delivery)
+    assert sorted(notices) == sorted(InfraHelper.convert_uid(value) for value in (10, 11))
     # Replay does not invalidate again, even after an explicit API refresh restored health.
     with DbSession.use(readonly=False) as db:
         rows = {row.get_uid(): row for row in db.exec(SqlBuilder.select.table(AppResourceBinding)).all()}
@@ -488,6 +505,7 @@ def test_lifecycle_invalidates_only_matching_selected_resources(receipt_storage,
         assert receipt.invalidated
     duplicate = receive_lifecycle(service, board[1], connection.get_uid(), body, signature, event, delivery)
     assert duplicate["duplicate"] and duplicate["receipt_uid"] == first["receipt_uid"]
+    assert len(notices) == 2
     with DbSession.use(readonly=False) as db:
         row = db.exec(
             SqlBuilder.select.table(AppResourceBinding).where(AppResourceBinding.id == resources[0].id)
@@ -703,6 +721,10 @@ def test_receipt_refresh_revalidates_authority_and_scopes_installation(receipt_s
 
 
 def test_receipt_refresh_is_limited_to_25_resource_pages(receipt_storage, monkeypatch):
+    from langboard_shared.publishers import CardPublisher
+
+    notices = []
+    monkeypatch.setattr(CardPublisher, "app_signal_changed", notices.append)
     from langboard.apps import GitHubResources as resources
     from langboard.apps.GitHubHealth import refresh_receipt_resources
     from langboard.apps.GitHubLifecycle import receive_lifecycle
@@ -736,6 +758,8 @@ def test_receipt_refresh_is_limited_to_25_resource_pages(receipt_storage, monkey
             )
     body, signature = signed({"action": "created", "installation": payload["installation"]})
     receipt = receive_lifecycle(service, board[1], connection.get_uid(), body, signature, "installation", str(uuid4()))
+    assert notices == [board[2].get_uid()]
+    notices.clear()
     sizes = []
     visited = []
 
@@ -761,7 +785,9 @@ def test_receipt_refresh_is_limited_to_25_resource_pages(receipt_storage, monkey
     try:
         first = refresh_receipt_resources(service, receipt["receipt_uid"], board[2].get_uid())
         assert first["refreshed_count"] == 25 and first["next_cursor"]
+        assert notices == [board[2].get_uid()]
         second = refresh_receipt_resources(service, receipt["receipt_uid"], board[2].get_uid(), first["next_cursor"])
+        assert notices == [board[2].get_uid()] * 2
         assert second["refreshed_count"] == 15 and second["next_cursor"] is None and sizes == [25, 15]
         assert visited == list(range(100, 140))
         assert selects and all(

@@ -146,7 +146,8 @@ or GitHub API request occurs. Check pages remain explicit and bounded too.
 ### Event-driven refresh
 
 New signed check evidence, worker evidence insertion, explicit card binding/unlink
-and repository selection changes register a native socket notice after transaction
+repository selection changes, scoped lifecycle invalidation and resource health refresh
+register a native socket notice after transaction
 commit. Rollbacks and duplicate deliveries emit no notice. The board-scoped notice
 contains only `app_signal_changed: true`; it reveals no card ID, repository, commit
 or provider result. Open evidence controls coalesce bursts for 150 ms and reread
@@ -155,7 +156,9 @@ Reconnect, visible-window focus and changes to the card revision also refresh op
 controls. Refresh waits for an active mutation to finish; it does not cancel writes.
 
 Socket transport is best-effort, not a durable outbox. A transport failure does not
-roll back committed evidence. Lifecycle/health, SecretRef and ACL mutations do not
-yet publish this notice; reconnect, focus or explicit refresh reevaluates authority.
+roll back committed evidence. Lifecycle invalidation queries only affected selected repository boards and emits once
+per distinct board; ping and duplicate receipt replay emit nothing. Health refresh emits
+once per nonempty committed resource page. SecretRef and ACL mutations do not yet
+publish this notice; reconnect, focus or explicit refresh reevaluates authority.
 Live provider acceptance and the full mounted card integration on deployed canary,
 other provider types and the remaining Signal contract remain unverified.
