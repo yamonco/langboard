@@ -2,7 +2,6 @@ import BaseModel, { BigIntColumn, TBigIntString } from "@/core/db/BaseModel";
 import { getDatetimeType } from "@/core/db/DbType";
 import SnowflakeID from "@/core/db/SnowflakeID";
 import Card from "@/models/Card";
-import ProjectRole, { EProjectRoleAction } from "@/models/ProjectRole";
 import { Entity, Column } from "typeorm";
 
 @Entity({ name: "project_assigned_user" })
@@ -54,29 +53,6 @@ class ProjectAssignedUser extends BaseModel {
         return result > 0;
     }
 
-    public static async canAccessCardCollaboration(userId: TBigIntString, cardUID: string, isAdmin: bool = false): Promise<bool> {
-        if (isAdmin) {
-            return true;
-        }
-
-        const isAssigned = await ProjectAssignedUser.isAssignedByCard(userId, cardUID);
-        if (isAssigned) {
-            return true;
-        }
-
-        const cardId = SnowflakeID.fromShortCode(cardUID).toString();
-        const card = await Card.findOne({
-            where: {
-                id: cardId,
-            },
-        });
-        if (!card) {
-            return false;
-        }
-
-        const projectUID = new SnowflakeID(card.project_id).toShortCode();
-        return ProjectRole.isGranted(userId, projectUID, EProjectRoleAction.CardUpdate);
-    }
 }
 
 export default ProjectAssignedUser;
