@@ -21,6 +21,21 @@ const readAccess = () => ({
 });
 let revision = 0;
 const connection = { connection_uid: "conn", instance_url: "https://deploy.example.invalid", revision: "a".repeat(64) };
+let webhookRevision = params.has("webhook-enabled") ? 7 : 0;
+let webhookState = params.has("webhook-enabled") ? "enabled" : "unconfigured";
+const webhookHealth = () => ({
+    config_revision: webhookRevision,
+    state: webhookState,
+    receiver_path: webhookRevision ? "/apps/dokploy/notifications/config" : null,
+    notification_id: null,
+    provider_config: "unknown",
+    last_received_at: params.has("receipt") && (resources.size || webhookRevision) ? "2026-10-08T01:02:03Z" : null,
+    local_evidence: "authenticated_notification_receipt",
+    connection_state: params.has("revoked") ? "revoked" : "connected",
+    connection_revision: "c".repeat(64),
+    binding_revision: resources.size || webhookRevision ? "d".repeat(64) : null,
+    resources: [...resources.values()].filter((row) => row.selected).map((row) => ({ resource_uid: row.resource_uid, health: "healthy" })),
+});
 Object.assign(window, { dokployCalls: calls });
 api.defaults.adapter = async (config) => {
     const data = config.data ? JSON.parse(config.data) : null;
@@ -28,8 +43,25 @@ api.defaults.adapter = async (config) => {
     if (params.has("delayed") && (config.url?.endsWith("/resources") || config.url?.endsWith("/refresh") || config.url?.endsWith("/enable-read")))
         await new Promise((resolve) => setTimeout(resolve, 400));
     if (params.has("deny") && config.url?.endsWith("/resources")) throw new Error("Denied");
+    if (params.has("delayed-health") && config.url?.endsWith("/webhook-health")) await new Promise((resolve) => setTimeout(resolve, 400));
+    if (params.has("delayed-webhook-post") && config.method === "post" && config.url?.includes("/webhook-"))
+        await new Promise((resolve) => setTimeout(resolve, 400));
     let result: unknown = {};
-    if (config.url?.endsWith("/secret-input")) result = { input_uid: "s".repeat(43), input_url: location.origin + "/secret-input/" + "s".repeat(43) };
+    if (config.url?.endsWith("/webhook-health")) result = webhookHealth();
+    else if (config.url?.endsWith("/webhook-config") || config.url?.endsWith("/webhook-disable")) {
+        if (
+            data.expected_revision !== "c".repeat(64) ||
+            data.expected_binding_revision !== "d".repeat(64) ||
+            data.expected_config_revision !== webhookRevision
+        )
+            throw new Error("Invalid webhook revisions");
+        webhookRevision++;
+        webhookState = config.url.endsWith("/webhook-config") ? "enabled" : "disabled";
+        result = webhookHealth();
+    } else if (config.url?.endsWith("/webhook-secret-input"))
+        result = { input_uid: "w".repeat(43), input_url: location.origin + "/secret-input/" + "w".repeat(43) };
+    else if (config.url?.endsWith("/secret-input"))
+        result = { input_uid: "s".repeat(43), input_url: location.origin + "/secret-input/" + "s".repeat(43) };
     else if (config.url?.includes("/secret-input/")) result = { state: "completed", secret_ref: "secret://ref/abcdefghijk" };
     else if (config.url?.endsWith("/connections"))
         result = config.method === "post" ? connection : { items: params.has("new") ? [] : [connection], next_cursor: null };
@@ -106,11 +138,12 @@ const readonly = params.has("readonly");
 const user = AuthUser.Model.fromOne({ ...base, uid: "me", type: "user", firstname: "Test", lastname: "User", username: "test", is_admin: !readonly });
 function Fixture() {
     const [uid, setUID] = useState("fixture");
+    const [permission, setPermission] = useState(!readonly);
     const project = Project.Model.fromOne({
         ...base,
         uid,
         title: "Fixture",
-        current_auth_role_actions: readonly ? ["read"] : ["*"],
+        current_auth_role_actions: permission ? ["*"] : ["read"],
         all_members: [],
         labels: [],
         invited_member_uids: [],
@@ -118,7 +151,23 @@ function Fixture() {
     return (
         <>
             <button onClick={() => setUID("other")}>Switch board</button>
-            <BoardSettingsProvider project={project} currentUser={user}>
+            <button onClick={() => setPermission(false)}>Remove permission</button>
+            <BoardSettingsProvider
+                project={project}
+                currentUser={
+                    permission
+                        ? user
+                        : AuthUser.Model.fromOne({
+                              ...base,
+                              uid: "reader",
+                              type: "user",
+                              firstname: "Reader",
+                              lastname: "User",
+                              username: "reader",
+                              is_admin: false,
+                          })
+                }
+            >
                 <main className="mx-auto max-w-xl p-4">
                     <BoardSettingsDokploy />
                 </main>

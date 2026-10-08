@@ -309,6 +309,27 @@
     "GlitchTip observed unresolved": "观测为未解决",
     "GlitchTip observed resolved": "观测为已解决",
     "GlitchTip observed ignored": "观测为已忽略",
-    "More GlitchTip issue observations": "更多问题观测"
+    "More GlitchTip issue observations": "更多问题观测",
+    "Dokploy notification health": "通知状态",
+    "Refresh Dokploy notification health": "刷新通知状态",
+    "Dokploy notifications unconfigured": "通知未配置",
+    "Dokploy notifications enabled": "通知已启用",
+    "Dokploy notifications disabled": "通知已禁用",
+    "Dokploy provider configuration unknown": "提供方配置尚未确认。本地配置无法验证Dokploy设置或通知送达。",
+    "Dokploy authenticated local receipt": "最近一次经身份验证的本地通知接收",
+    "Dokploy no authenticated receipt": "没有经过身份验证的接收记录",
+    "Dokploy receiver path": "接收路径",
+    "Dokploy notification setup help": "在公开接收主机上使用此路径设置Dokploy通知URL。使用独立Webhook密钥单独设置静态Authorization: Bearer令牌。",
+    "Dokploy webhook credential reference": "Webhook凭据引用",
+    "Store Dokploy webhook token securely": "安全保存Webhook令牌",
+    "Open secure webhook token input": "打开安全Webhook令牌输入",
+    "Check webhook token input": "检查Webhook令牌输入",
+    "Dokploy notification ID optional": "通知ID（可选）",
+    "Configure Dokploy notifications": "配置通知",
+    "Disable Dokploy notifications": "禁用通知",
+    "Dokploy notification confirm help": "使用选定的独立Webhook凭据启用本地接收器。请单独配置Dokploy。",
+    "Dokploy notification disable help": "禁用本地接收器。现有接收历史将保留。",
+    "Confirm Dokploy notification configuration": "确认通知配置",
+    "Confirm disable Dokploy notifications": "确认禁用通知"
   }
 }

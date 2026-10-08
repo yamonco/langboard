@@ -309,6 +309,27 @@
     "GlitchTip observed unresolved": "Observed unresolved",
     "GlitchTip observed resolved": "Observed resolved",
     "GlitchTip observed ignored": "Observed ignored",
-    "More GlitchTip issue observations": "More issue observations"
+    "More GlitchTip issue observations": "More issue observations",
+    "Dokploy notification health": "Notification health",
+    "Refresh Dokploy notification health": "Refresh notification health",
+    "Dokploy notifications unconfigured": "Notifications unconfigured",
+    "Dokploy notifications enabled": "Notifications enabled",
+    "Dokploy notifications disabled": "Notifications disabled",
+    "Dokploy provider configuration unknown": "Provider configuration is unknown. Local configuration does not verify Dokploy settings or delivery.",
+    "Dokploy authenticated local receipt": "Last authenticated local notification receipt",
+    "Dokploy no authenticated receipt": "No authenticated receipt recorded",
+    "Dokploy receiver path": "Receiver path",
+    "Dokploy notification setup help": "Configure your Dokploy notification URL with this path on your public receiver host. Set its static Authorization: Bearer token separately using a dedicated webhook secret.",
+    "Dokploy webhook credential reference": "Webhook credential reference",
+    "Store Dokploy webhook token securely": "Store webhook token securely",
+    "Open secure webhook token input": "Open secure webhook token input",
+    "Check webhook token input": "Check webhook token input",
+    "Dokploy notification ID optional": "Notification ID (optional)",
+    "Configure Dokploy notifications": "Configure notifications",
+    "Disable Dokploy notifications": "Disable notifications",
+    "Dokploy notification confirm help": "Enable the local receiver with the selected separate webhook credential. Configure Dokploy separately.",
+    "Dokploy notification disable help": "Disable the local receiver. Existing receipt history is preserved.",
+    "Confirm Dokploy notification configuration": "Confirm notification configuration",
+    "Confirm disable Dokploy notifications": "Confirm disable notifications"
   }
 }
