@@ -122,3 +122,27 @@ Successful checks provide evidence, never reviewer approval, completion or an
 automatic workflow transition. Actorless socket projections omit this evidence;
 clients obtain it through authorized reads. GlitchTip/Dokploy signals, deployment
 proof, presets and provider-driven live refresh remain separate work.
+
+### Card detail evidence controls
+
+The card detail evidence section loads on explicit expansion, with no initial
+provider request or timer polling. It supports current evidence refresh, explicit
+repository/check selection, and revision-fenced unlink. Error paths clear stale
+cached evidence; card navigation aborts pending requests and resets selection.
+English, Korean, Japanese and Chinese labels are provided.
+
+The authorized snapshot includes `bindings` containing only IDs and revisions,
+including scopes whose provider access is revoked, so card editors can unlink
+without retaining hidden provider evidence. `source_change_seq` fences attachment
+against a card edit since the last refresh.
+
+`GET /board/{project_uid}/card/{card_uid}/signals/resources` discovers currently
+consumable selected repositories in explicit 25-row pages. It requires card read
+visibility, rather than board settings Update authority. Connection owners still
+need current board Update permission; SecretRef authorization shares the evidence
+projection's batched primary query. Rows excluded by SecretRef authorization may
+produce a short/empty page with a continuation cursor. No global background scan
+or GitHub API request occurs. Check pages remain explicit and bounded too.
+
+Live provider-triggered refresh, the full mounted card integration on deployed
+canary, other provider types and the remaining Signal contract are unverified.

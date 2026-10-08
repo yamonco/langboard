@@ -136,4 +136,68 @@ def read_checks(service, actor, project_uid, card_uid):
     if resolved is None:
         raise GitHubManifestUnavailable()
     card = resolved[1]
-    return {"items": card_signal_projections([card]).get(card.id, [])}
+    with DbSession.use(readonly=False) as db:
+        bindings = db.exec(
+            SqlBuilder.select.table(CardAppSignalBinding)
+            .where(
+                CardAppSignalBinding.card_id == card.id,
+                CardAppSignalBinding.is_enabled == True,  # noqa: E712
+            )
+            .order_by(CardAppSignalBinding.id)
+            .limit(25)
+        ).all()
+    return {
+        "items": card_signal_projections([card]).get(card.id, []),
+        "bindings": [{"binding_uid": binding.get_uid(), "revision": binding.revision} for binding in bindings],
+        "source_change_seq": card.last_change_seq,
+    }
+
+
+def list_card_resources(service, actor, project_uid, card_uid, after=None):
+    """Read-visible, currently consumable selected repositories; bounded discovery, no provider calls."""
+    import re
+    from langboard_shared.domain.models import AppConnection, AppResourceBinding, BoardAppBinding, Project, User
+    from langboard_shared.domain.services.AppSignalProjection import authorized_signal_rows, signal_resource_conditions
+
+    if service.workflow_stage._authorized_app_board(actor, project_uid, ProjectRoleAction.Read) is None:
+        raise GitHubManifestUnavailable()
+    resolved = service.card.resolve_readable_card(project_uid, card_uid, actor)
+    if resolved is None:
+        raise GitHubManifestUnavailable()
+    if after is not None and not re.fullmatch(r"[A-Za-z0-9]{1,11}", after):
+        raise ValueError("Invalid resource cursor")
+    with DbSession.use(readonly=False) as db:
+        statement = (
+            select(AppResourceBinding, AppConnection, AppResourceBinding.id)
+            .join(
+                BoardAppBinding,
+                BoardAppBinding.id == AppResourceBinding.board_binding_id,
+            )
+            .join(Project, Project.id == BoardAppBinding.project_id)
+            .join(
+                AppConnection,
+                AppConnection.id == AppResourceBinding.connection_id,
+            )
+            .join(User, User.id == AppConnection.owner_id)
+            .where(
+                Project.id == resolved[0].id,
+                *signal_resource_conditions(),
+            )
+        )
+        if after is not None:
+            statement = statement.where(AppResourceBinding.id > InfraHelper.convert_id(after))
+        rows = db.exec(statement.order_by(AppResourceBinding.id).limit(26)).all()
+        allowed = authorized_signal_rows(db, rows[:25]) if rows else []
+        return {
+            "items": [
+                {
+                    "uid": resource.get_uid(),
+                    "connection_uid": InfraHelper.convert_uid(resource.connection_id),
+                    "name": resource.resource_path[-1].get("name", resource.external_resource_id)
+                    if resource.resource_path
+                    else resource.external_resource_id,
+                }
+                for resource in allowed
+            ],
+            "next_cursor": rows[24][0].get_uid() if len(rows) > 25 else None,
+        }

@@ -181,5 +181,25 @@
   "Embedding requested": "임베딩 요청됨",
   "Embedding indexed": "임베딩 검색 가능",
   "Embedding failed": "임베딩 실패",
-  "Embedding queued": "임베딩 대기 중"
+  "Embedding queued": "임베딩 대기 중",
+  "signals": {
+    "title": "체크 증거",
+    "hint": "증거 연결은 카드 승인이나 완료를 의미하지 않습니다.",
+    "error": "증거를 조회하거나 저장하지 못했습니다. 새로고침 후 다시 시도하세요.",
+    "loading": "불러오는 중…",
+    "refresh": "증거 새로고침",
+    "empty": "연결된 체크 없음",
+    "link": "체크 연결",
+    "repository": "저장소",
+    "unlink": "연결 해제",
+    "more": "체크 더 보기",
+    "passed": "통과",
+    "failed": "실패",
+    "conflict": "결과 상충",
+    "stale": "이전 카드의 증거",
+    "unknown": "결과 미확정",
+    "unavailable": "조회 불가",
+    "moreResources": "저장소 더 보기",
+    "noResources": "조회 가능한 선택된 저장소가 없습니다."
+  }
 }

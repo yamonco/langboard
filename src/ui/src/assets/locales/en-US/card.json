@@ -181,5 +181,25 @@
   "Embedding requested": "Embedding requested",
   "Embedding indexed": "Embedding indexed",
   "Embedding failed": "Embedding failed",
-  "Embedding queued": "Embedding queued"
+  "Embedding queued": "Embedding queued",
+  "signals": {
+    "title": "Check evidence",
+    "hint": "Evidence does not approve or close this card.",
+    "error": "Could not load or save evidence. Refresh before retrying.",
+    "loading": "Loading…",
+    "refresh": "Refresh evidence",
+    "empty": "No linked checks",
+    "link": "Link a check",
+    "repository": "Repository",
+    "unlink": "Unlink",
+    "more": "More checks",
+    "passed": "Passed",
+    "failed": "Failed",
+    "conflict": "Conflicting results",
+    "stale": "Stale",
+    "unknown": "Unknown",
+    "unavailable": "Unavailable",
+    "moreResources": "More repositories",
+    "noResources": "No available selected repositories."
+  }
 }

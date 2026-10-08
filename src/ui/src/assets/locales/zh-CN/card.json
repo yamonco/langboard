@@ -181,5 +181,25 @@
   "Embedding requested": "已请求嵌入",
   "Embedding indexed": "嵌入可供搜索",
   "Embedding failed": "嵌入失败",
-  "Embedding queued": "嵌入排队中"
+  "Embedding queued": "嵌入排队中",
+  "signals": {
+    "title": "检查证据",
+    "hint": "关联证据不代表批准或完成卡片。",
+    "error": "无法读取或保存证据。请刷新后重试。",
+    "loading": "加载中…",
+    "refresh": "刷新证据",
+    "empty": "暂无关联检查",
+    "link": "关联检查",
+    "repository": "仓库",
+    "unlink": "解除关联",
+    "more": "更多检查",
+    "passed": "通过",
+    "failed": "失败",
+    "conflict": "结果冲突",
+    "stale": "过期证据",
+    "unknown": "结果未知",
+    "unavailable": "不可用",
+    "moreResources": "更多仓库",
+    "noResources": "暂无可访问的已选仓库。"
+  }
 }

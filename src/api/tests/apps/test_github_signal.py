@@ -271,3 +271,13 @@ def test_postgres_concurrent_redelivery_commits_once(signal_storage, monkeypatch
     assert results[0]["signal_uid"] == results[1]["signal_uid"]
     assert sorted(item["duplicate"] for item in results) == [False, True]
     assert len(read(state)["items"]) == 1
+
+
+def test_secret_revocation_blocks_existing_check_listing(signal_storage):
+    state = signal_storage
+    send(state)
+    service = state[0].secret_reference
+    uri = state[2].credential_reference
+    service.revoke(state[1][1], uri, service.get_metadata(state[1][1], uri)['revision'])
+    with pytest.raises(GitHubManifestUnavailable):
+        read(state)

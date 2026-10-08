@@ -135,7 +135,13 @@ def receive_check(service, project_uid, connection_uid, resource_uid, body, sign
 
 def list_signals(service, actor, project_uid, connection_uid, resource_uid, after=None):
     with DbSession.use(readonly=False) as db:
-        _, connection, resource = _scope(service, db, project_uid, connection_uid, resource_uid, actor)
+        owner, connection, resource = _scope(service, db, project_uid, connection_uid, resource_uid, actor)
+        try:
+            metadata = service.secret_reference._find(owner, connection.credential_reference, lock=True).metadata()
+        except Exception:
+            raise GitHubManifestUnavailable() from None
+        if metadata["state"] != "active":
+            raise GitHubManifestUnavailable()
         query = SqlBuilder.select.table(AppSignal).where(AppSignal.resource_id == resource.id)
         if after is not None:
             if not isinstance(after, str) or not re.fullmatch(r"[0-9A-Za-z]{11}", after):

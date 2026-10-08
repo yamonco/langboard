@@ -208,7 +208,12 @@ def test_native_authenticated_card_binding_http(scoped, monkeypatch):
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
     from langboard.middlewares.ApiAuthMiddleware import ApiAuthMiddleware
-    from langboard.routes.board.CardSignalApi import attach_card_signal, get_card_signals, unlink_card_signal
+    from langboard.routes.board.CardSignalApi import (
+        attach_card_signal,
+        get_card_signal_resources,
+        get_card_signals,
+        unlink_card_signal,
+    )
     from langboard_shared.core.db.DbEngine import DbEngine
     from langboard_shared.core.routing import AppRouter
     from langboard_shared.core.security import AuthSecurity
@@ -233,7 +238,12 @@ def test_native_authenticated_card_binding_http(scoped, monkeypatch):
     app.include_router(AppRouter.api)
     app.add_middleware(ApiAuthMiddleware, routes=AppRouter.api.routes)
     for route in app.routes:
-        if getattr(route, "endpoint", None) in {get_card_signals, attach_card_signal, unlink_card_signal}:
+        if getattr(route, "endpoint", None) in {
+            get_card_signals,
+            attach_card_signal,
+            unlink_card_signal,
+            get_card_signal_resources,
+        }:
             for dependency in route.dependant.dependencies:
                 if dependency.name == "service":
                     app.dependency_overrides[dependency.call] = lambda: service
@@ -250,6 +260,8 @@ def test_native_authenticated_card_binding_http(scoped, monkeypatch):
             result = client.post(url, json=form, headers=headers)
             assert result.status_code == 200, result.text
             linked = result.json()
+            assert client.get(url + "/resources", headers=headers).status_code == 200
+            assert client.get(url + "/resources", headers=headers).json()["items"][0]["uid"] == state[4].get_uid()
             assert client.get(url, headers=headers).json()["items"][0]["state"] == "passed"
             assert client.post(url, json=form, headers=headers).status_code == 409
             assert (
@@ -269,7 +281,10 @@ def test_native_authenticated_card_binding_http(scoped, monkeypatch):
                 db.update(card)
                 state[4].is_selected = False
                 db.update(state[4])
-            assert client.get(url, headers=headers).json()["items"] == []
+            snapshot = client.get(url, headers=headers).json()
+            assert snapshot["items"] == []
+            assert snapshot["bindings"] == [{"binding_uid": linked["binding_uid"], "revision": 0}]
+            assert snapshot["source_change_seq"] == 7
             assert client.post(url, json={**form, "expected_revision": 0}, headers=headers).status_code == 404
             unlink = url + "/" + linked["binding_uid"] + "/unlink"
             assert client.post(unlink, json={"expected_revision": 1}, headers=headers).status_code == 409
@@ -332,10 +347,7 @@ def test_native_mutation_authority_scope_limit_and_revision(scoped):
         with DbSession.use(readonly=False) as db:
             reference = db.exec(
                 SqlBuilder.select.table(SecretReference).where(
-                    SecretReference.id
-                    == InfraHelper.convert_id(
-                        state[2].credential_reference.split("/")[-1]
-                    )
+                    SecretReference.id == InfraHelper.convert_id(state[2].credential_reference.split("/")[-1])
                 )
             ).first()
             reference.state = "revoked"
@@ -380,3 +392,81 @@ def test_current_db_card_revision_overrules_old_snapshot(scoped):
         card.last_change_seq = 8
         db.update(card)
     assert card_signal_projections([old])[card.id][0]["state"] == "stale"
+
+
+def test_card_resource_discovery_is_read_scoped_and_batched(scoped):
+    from langboard.apps.CardSignal import list_card_resources
+    from langboard.apps.GitHubManifest import GitHubManifestUnavailable
+    from langboard_shared.domain.models import AppResourceBinding, BoardAppBinding
+    from langboard_shared.domain.services import DomainService
+
+    state, card, _, _ = scoped
+    domain = DomainService()
+    service = state[0]
+    service.card = domain.card
+    # Read-only caller, different from the connection owner. Owner retains Update consumption authority.
+    with DbSession.use(readonly=False) as db:
+        from langboard_shared.core.types import SafeDateTime
+        from langboard_shared.domain.models import ProjectAssignedUser, ProjectRole, User
+
+        reader = User(
+            firstname="Read",
+            lastname="Only",
+            email="reader2@example.invalid",
+            password="fixture",
+            activated_at=SafeDateTime.now(),
+        )
+        db.insert(reader)
+        db.insert(ProjectAssignedUser(project_id=card.project_id, user_id=reader.id))
+        db.insert(ProjectRole(project_id=card.project_id, user_id=reader.id, actions=["read"]))
+        for number in range(30):
+            db.insert(
+                AppResourceBinding(
+                    board_binding_id=state[3].id,
+                    connection_id=state[2].id,
+                    resource_type="repository",
+                    external_resource_id=str(1000 + number),
+                    access_state="granted",
+                    resource_path=[{"type": "repository", "id": str(1000 + number), "name": f"fixture/{number}"}],
+                )
+            )
+        foreign = BoardAppBinding(
+            project_id=11, app_key="github", state="enabled", granted_capabilities=["signals.read"]
+        )
+        db.insert(foreign)
+        db.insert(
+            AppResourceBinding(
+                board_binding_id=foreign.id,
+                connection_id=state[2].id,
+                resource_type="repository",
+                external_resource_id="foreign",
+                access_state="granted",
+            )
+        )
+    statements = []
+
+    def record(*args):
+        statements.append(args[2])
+
+    event.listen(state[7], "before_cursor_execute", record)
+    try:
+        first = list_card_resources(service, reader, state[1][2].get_uid(), card.get_uid())
+        assert len(first["items"]) == 25 and first["next_cursor"]
+        assert len(statements) <= 12
+        second = list_card_resources(service, reader, state[1][2].get_uid(), card.get_uid(), first["next_cursor"])
+        assert len(second["items"]) == 6 and second["next_cursor"] is None
+        assert "foreign" not in str(first) + str(second)
+        with pytest.raises(ValueError):
+            list_card_resources(service, reader, state[1][2].get_uid(), card.get_uid(), "!invalid")
+        with DbSession.use(readonly=False) as db:
+            state[1][4].actions = ["read"]
+            db.update(state[1][4])
+        assert list_card_resources(service, reader, state[1][2].get_uid(), card.get_uid())["items"] == []
+        with DbSession.use(readonly=False) as db:
+            card.visibility = "INTERNAL"
+            db.update(card)
+        with pytest.raises(GitHubManifestUnavailable):
+            list_card_resources(service, reader, state[1][2].get_uid(), card.get_uid())
+    finally:
+        event.remove(state[7], "before_cursor_execute", record)
+        domain.close()
