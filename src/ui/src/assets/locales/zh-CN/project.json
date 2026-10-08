@@ -295,6 +295,20 @@
     "Dokploy outcome queued": "排队中",
     "Dokploy outcome success": "成功",
     "Dokploy outcome failure": "失败",
-    "Dokploy outcome cancelled": "已取消"
+    "Dokploy outcome cancelled": "已取消",
+    "GlitchTip read scope help": "读取权限适用于此看板所有已选择的GlitchTip项目，包括以后选择的项目。仅读取项目元数据和观测到的问题状态。",
+    "GlitchTip read confirm help": "确认对已选择的GlitchTip项目授予看板范围的读取权限。",
+    "Enable GlitchTip read access": "启用读取权限",
+    "Confirm GlitchTip read access": "确认读取权限",
+    "GlitchTip read enabled": "看板读取权限已启用。",
+    "Refresh GlitchTip issues": "刷新问题观测",
+    "GlitchTip issue observations help": "每页最多观测25个问题的状态。观测时间是读取状态的时间，并非问题解决或重新打开的时间。",
+    "GlitchTip no observed issues": "未观测到问题。这不表示所有问题都已解决。",
+    "GlitchTip issue ID": "问题",
+    "GlitchTip observed at": "观测时间",
+    "GlitchTip observed unresolved": "观测为未解决",
+    "GlitchTip observed resolved": "观测为已解决",
+    "GlitchTip observed ignored": "观测为已忽略",
+    "More GlitchTip issue observations": "更多问题观测"
   }
 }

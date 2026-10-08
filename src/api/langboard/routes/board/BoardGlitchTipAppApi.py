@@ -183,3 +183,67 @@ def disconnect_glitchtip_connection(
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
     return _response(glitchtip.disconnect, service, user, project_uid, connection_uid, form.expected_revision)
+
+
+class ReadAccessForm(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    expected_connection_revision: str = Field(pattern=r"^[0-9a-f]{64}$")
+    expected_binding_revision: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
+class IssueRefreshForm(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    expected_connection_revision: str = Field(pattern=r"^[0-9a-f]{64}$")
+    expected_access_revision: StrictInt = Field(ge=0)
+    cursor: str | None = Field(default=None, pattern=r"^[A-Za-z0-9:_-]{1,256}$")
+
+
+@AppRouter.api.post(
+    "/board/{project_uid}/settings/apps/glitchtip/connections/{connection_uid}/read-access",
+    tags=["Board.Settings"],
+)
+@AuthFilter.add("user")
+def enable_glitchtip_read_access(
+    project_uid: str,
+    connection_uid: str,
+    form: ReadAccessForm,
+    user: User = Auth.scope("user"),
+    service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    return _response(
+        glitchtip.enable_read_access,
+        service,
+        user,
+        project_uid,
+        connection_uid,
+        form.expected_connection_revision,
+        form.expected_binding_revision,
+    )
+
+
+@AppRouter.api.post(
+    "/board/{project_uid}/settings/apps/glitchtip/connections/{connection_uid}/projects/{resource_uid}/issues/refresh",
+    tags=["Board.Settings"],
+)
+@AuthFilter.add("user")
+def refresh_glitchtip_issues(
+    project_uid: str,
+    connection_uid: str,
+    resource_uid: str,
+    form: IssueRefreshForm,
+    user: User = Auth.scope("user"),
+    service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    from ...apps.GlitchTipSignal import refresh_issues
+
+    return _response(
+        refresh_issues,
+        service,
+        user,
+        project_uid,
+        connection_uid,
+        resource_uid,
+        form.expected_connection_revision,
+        form.expected_access_revision,
+        form.cursor,
+    )

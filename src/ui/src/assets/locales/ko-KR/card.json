@@ -205,12 +205,20 @@
     "running": "실행 중",
     "cancelled": "취소",
     "application": "애플리케이션",
-    "compose": "Compose"
+    "compose": "Compose",
+    "project": "프로젝트",
+    "issue": "이슈",
+    "observation": "관측 시각",
+    "resolved": "해결됨",
+    "ignored": "무시됨",
+    "outcome unresolved": "미해결",
+    "outcome resolved": "해결됨",
+    "outcome ignored": "무시됨"
   },
   "inbox": {
     "title": "Signal Inbox",
     "refresh": "새로고침",
-    "hint": "GitHub 검사와 Dokploy 배포입니다. 신호를 카드에 근거로 연결하세요.",
+    "hint": "GitHub 체크, Dokploy 배포 및 GlitchTip 이슈 관측을 카드에 증거로 연결합니다.",
     "loading": "사건 조회 중…",
     "error": "조회 또는 연결하지 못했습니다. 새로고침 후 다시 시도하세요.",
     "empty": "사용 가능한 신호가 없습니다.",
@@ -240,7 +248,13 @@
     "choose column": "열 선택",
     "create card": "카드 만들기",
     "created": "신호 증거가 연결된 카드를 만들었습니다.",
-    "reused": "신호 증거가 연결된 기존 카드를 찾았습니다."
+    "reused": "신호 증거가 연결된 기존 카드를 찾았습니다.",
+    "issue": "이슈",
+    "observation": "관측 시각",
+    "outcome unresolved": "미해결",
+    "outcome resolved": "해결됨",
+    "outcome ignored": "무시됨",
+    "event issue.status_observed": "이슈 상태 관측"
   },
   "Private": "프라이빗",
   "Whisper": "귓속말",

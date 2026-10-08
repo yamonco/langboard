@@ -144,3 +144,68 @@ test("delayed mixed evidence discarded on card switch", async ({ page }) => {
     await expect(page.getByText("Dokploy · Passed", { exact: true })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Signal evidence", exact: true })).toHaveAttribute("aria-expanded", "false");
 });
+
+for (const width of [1920, 390])
+    test(`GlitchTip truthful card observations and unlink ${width}`, async ({ page }) => {
+        await page.clock.install({ time: new Date("2026-10-08T00:30:00Z") });
+        await page.setViewportSize({ width, height: width === 1920 ? 1080 : 1000 });
+        await page.goto(path + "?glitchtip&mixed");
+        await page.getByRole("button", { name: "Signal evidence", exact: true }).click();
+        for (const [id, state, outcome] of [
+            [101, "Failed", "Unresolved"],
+            [102, "Resolved", "Resolved"],
+            [103, "Ignored", "Ignored"],
+        ]) {
+            const issue = page.getByText(`Issue ${id} · ${outcome}`, { exact: true }).locator("..");
+            await expect(issue).toContainText(`GlitchTip · ${state}`);
+            await expect(issue).toContainText("Customer errors · Project");
+            await expect(issue.locator("time")).toHaveText("Observed at · 30 minutes ago");
+            await expect(issue.locator("time")).toHaveAttribute("datetime", "2026-10-08T00:00:00Z");
+            await expect(issue).not.toContainText("Passed");
+            await expect(issue).not.toContainText("Deployment");
+            await expect(issue).not.toContainText("aaaa");
+        }
+        await expect(page.getByText("Evidence does not approve or close this card.")).toBeVisible();
+        await page.screenshot({ path: `test-results/glitchtip-card-${width}.png`, fullPage: true });
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+        expect(
+            await page.evaluate(() =>
+                (window as unknown as { evidenceCalls: { method: string }[] }).evidenceCalls.some((row) => row.method === "post")
+            )
+        ).toBe(false);
+        await page
+            .getByText("Issue 102 · Resolved", { exact: true })
+            .locator("../../..")
+            .getByRole("button", { name: "Unlink", exact: true })
+            .click();
+        await expect(page.getByText("Issue 102 · Resolved", { exact: true })).toHaveCount(0);
+        expect(
+            await page.evaluate(
+                () =>
+                    (window as unknown as { evidenceCalls: { url: string; data: unknown }[] }).evidenceCalls.find((row) =>
+                        row.url.endsWith("/issue-resolved/unlink")
+                    )?.data
+            )
+        ).toEqual({ expected_revision: 5 });
+    });
+test("GlitchTip stale conflict unavailable and current permission revocation", async ({ page }) => {
+    for (const [state, label] of [
+        ["stale", "Stale"],
+        ["conflict", "Conflicting results"],
+        ["unavailable", "Unavailable"],
+    ]) {
+        await page.goto(path + `?glitchtip&state=${state}`);
+        await page.getByRole("button", { name: "Signal evidence", exact: true }).click();
+        await expect(page.getByText(`GlitchTip · ${label}`, { exact: true }).first()).toBeVisible();
+    }
+    await page.goto(path + "?glitchtip");
+    await page.getByRole("button", { name: "Signal evidence", exact: true }).click();
+    await expect(page.getByText("Issue 101 · Unresolved", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Revoke issue access", exact: true }).click();
+    await expect(page.getByText("Issue 101 · Unresolved", { exact: true })).toHaveCount(0);
+    await expect(page.getByText("Unavailable", { exact: true })).toHaveCount(3);
+    await expect(page.getByRole("button", { name: "Unlink", exact: true })).toHaveCount(4);
+    await page.getByRole("button", { name: "Remove edit access", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Unlink", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Link a check", exact: true })).toHaveCount(0);
+});

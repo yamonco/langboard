@@ -8,6 +8,8 @@ import { api } from "@/core/helpers/Api";
 
 interface Evidence {
     provider?: string;
+    outcome?: string;
+    time_basis?: string;
     event_type?: string;
     resource_name?: string;
     resource_type?: string;
@@ -232,7 +234,38 @@ export default function CardSignalEvidence({
                             <div key={binding.binding_uid} className="flex min-w-0 flex-wrap items-center gap-2 rounded-md bg-muted/40 p-2">
                                 <span className="min-w-0 flex-1 break-all">
                                     {proof ? (
-                                        proof.provider === "dokploy" ? (
+                                        proof.provider === "glitchtip" ? (
+                                            <span className="flex min-w-0 flex-col gap-1">
+                                                <span>
+                                                    GlitchTip ·{" "}
+                                                    {text(
+                                                        ["failed", "resolved", "ignored", "conflict", "stale", "unavailable"].includes(proof.state)
+                                                            ? proof.state
+                                                            : "unknown"
+                                                    )}
+                                                </span>
+                                                <span>
+                                                    {proof.resource_name || proof.resource_uid} · {text("project")}
+                                                </span>
+                                                <span>
+                                                    {text("issue")} {proof.external_id} ·{" "}
+                                                    {text(
+                                                        ["unresolved", "resolved", "ignored"].includes(proof.outcome ?? "")
+                                                            ? `outcome ${proof.outcome}`
+                                                            : "unknown"
+                                                    )}
+                                                </span>
+                                                {proof.occurred_at && (
+                                                    <time
+                                                        dateTime={proof.occurred_at}
+                                                        title={formatDateTime(new Date(proof.occurred_at), i18n.language, { timeStyle: "medium" })}
+                                                    >
+                                                        {text(proof.time_basis === "observation" ? "observation" : "unknown")} ·{" "}
+                                                        {formatDateDistance(new Date(proof.occurred_at), i18n.language)}
+                                                    </time>
+                                                )}
+                                            </span>
+                                        ) : proof.provider === "dokploy" ? (
                                             <span className="flex min-w-0 flex-col gap-1">
                                                 <span>
                                                     Dokploy ·{" "}

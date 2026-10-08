@@ -20,6 +20,7 @@ interface Signal {
     outcome: string | null;
     conflict: boolean;
     occurred_at: string;
+    time_basis?: string;
 }
 export default function SignalInboxPanel({
     projectUID,
@@ -134,7 +135,7 @@ export default function SignalInboxPanel({
         setSelected(null);
         void run((signal) => load(signal));
     }, [pending, refresh]);
-    const canBindCard = (item: Signal) => ["github", "dokploy"].includes(item.provider) && item.can_bind_card === true;
+    const canBindCard = (item: Signal) => ["github", "dokploy", "glitchtip"].includes(item.provider) && item.can_bind_card === true;
     const link = () => {
         if (!canEdit || !selected || !canBindCard(selected) || !cardUID || !cards.some((card) => card.uid === cardUID)) return;
         const chosen = selected;
@@ -233,33 +234,40 @@ export default function SignalInboxPanel({
                             <span className="badge badge-outline">
                                 {item.conflict
                                     ? text("conflict")
-                                    : item.provider === "dokploy"
-                                      ? text(
-                                            ["success", "failure", "running", "queued", "cancelled"].includes(item.outcome ?? "")
-                                                ? `outcome ${item.outcome}`
-                                                : "other"
-                                        )
-                                      : text(
-                                            item.outcome === "success"
-                                                ? "passed"
-                                                : item.outcome === "failure" || item.outcome === "timed_out"
-                                                  ? "failed"
+                                    : item.provider === "glitchtip"
+                                      ? text(["unresolved", "resolved", "ignored"].includes(item.outcome ?? "") ? `outcome ${item.outcome}` : "other")
+                                      : item.provider === "dokploy"
+                                        ? text(
+                                              ["success", "failure", "running", "queued", "cancelled"].includes(item.outcome ?? "")
+                                                  ? `outcome ${item.outcome}`
                                                   : "other"
-                                        )}
+                                          )
+                                        : text(
+                                              item.outcome === "success"
+                                                  ? "passed"
+                                                  : item.outcome === "failure" || item.outcome === "timed_out"
+                                                    ? "failed"
+                                                    : "other"
+                                          )}
                             </span>
                             <span className="break-all text-xs">
                                 {item.provider === "github"
                                     ? `GitHub · #${item.external_id} · ${item.commit_sha.slice(0, 12)}`
                                     : item.provider === "dokploy"
                                       ? `Dokploy · ${text(["deployment.started", "deployment.queued", "deployment.succeeded", "deployment.failed", "deployment.cancelled"].includes(item.event_type) ? `event ${item.event_type}` : "event deployment")}`
-                                      : text("other")}
+                                      : item.provider === "glitchtip"
+                                        ? `GlitchTip · ${text("issue")} ${item.external_id} · ${text("event issue.status_observed")}`
+                                        : text("other")}
                             </span>
-                            {item.provider === "dokploy" && item.resource_name && <span className="break-words text-xs">{item.resource_name}</span>}
+                            {["dokploy", "glitchtip"].includes(item.provider) && item.resource_name && (
+                                <span className="break-words text-xs">{item.resource_name}</span>
+                            )}
                             <time
                                 className="text-xs text-muted-foreground"
                                 dateTime={item.occurred_at}
                                 title={formatDateTime(new Date(item.occurred_at), i18n.language, { timeStyle: "medium" })}
                             >
+                                {item.time_basis === "observation" && `${text("observation")} · `}
                                 {formatDateDistance(new Date(item.occurred_at), i18n.language)}
                             </time>
                         </>
@@ -279,21 +287,23 @@ export default function SignalInboxPanel({
                                 setReceipt(null);
                                 setTitle(
                                     [
-                                        item.provider === "github" ? "GitHub" : "Dokploy",
+                                        item.provider === "github" ? "GitHub" : item.provider === "glitchtip" ? "GlitchTip" : "Dokploy",
                                         item.resource_name,
                                         item.provider === "github"
                                             ? text("check")
-                                            : text(
-                                                  [
-                                                      "deployment.started",
-                                                      "deployment.queued",
-                                                      "deployment.succeeded",
-                                                      "deployment.failed",
-                                                      "deployment.cancelled",
-                                                  ].includes(item.event_type)
-                                                      ? `event ${item.event_type}`
-                                                      : "event deployment"
-                                              ),
+                                            : item.provider === "glitchtip"
+                                              ? `${text("issue")} ${item.external_id} · ${text(["unresolved", "resolved", "ignored"].includes(item.outcome ?? "") ? `outcome ${item.outcome}` : "other")}`
+                                              : text(
+                                                    [
+                                                        "deployment.started",
+                                                        "deployment.queued",
+                                                        "deployment.succeeded",
+                                                        "deployment.failed",
+                                                        "deployment.cancelled",
+                                                    ].includes(item.event_type)
+                                                        ? `event ${item.event_type}`
+                                                        : "event deployment"
+                                                ),
                                     ]
                                         .filter(Boolean)
                                         .join(" · ")

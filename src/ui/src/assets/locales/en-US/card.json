@@ -205,12 +205,20 @@
     "running": "Running",
     "cancelled": "Cancelled",
     "application": "Application",
-    "compose": "Compose"
+    "compose": "Compose",
+    "project": "Project",
+    "issue": "Issue",
+    "observation": "Observed at",
+    "resolved": "Resolved",
+    "ignored": "Ignored",
+    "outcome unresolved": "Unresolved",
+    "outcome resolved": "Resolved",
+    "outcome ignored": "Ignored"
   },
   "inbox": {
     "title": "Signal Inbox",
     "refresh": "Refresh",
-    "hint": "GitHub checks and Dokploy deployments. Link signals to a card as evidence.",
+    "hint": "GitHub checks, Dokploy deployments and GlitchTip issue observations. Link signals to a card as evidence.",
     "loading": "Loading signals…",
     "error": "Could not load or link. Refresh and try again.",
     "empty": "No available signals.",
@@ -240,7 +248,13 @@
     "choose column": "Choose a column",
     "create card": "Create card",
     "created": "Card created with signal evidence.",
-    "reused": "Existing card returned with signal evidence."
+    "reused": "Existing card returned with signal evidence.",
+    "issue": "Issue",
+    "observation": "Observed at",
+    "outcome unresolved": "Unresolved",
+    "outcome resolved": "Resolved",
+    "outcome ignored": "Ignored",
+    "event issue.status_observed": "Issue status observed"
   },
   "Private": "Private",
   "Whisper": "Whisper",

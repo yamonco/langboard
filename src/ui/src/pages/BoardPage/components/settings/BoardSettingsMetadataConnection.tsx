@@ -27,6 +27,7 @@ interface Binding {
     path: { type: string; id: string; slug?: string; name?: string }[];
 }
 interface ReadAccess {
+    uid?: string;
     revision: string;
     state: string;
     granted_capabilities: string[];
@@ -35,6 +36,14 @@ interface DeploymentResult {
     resource_uid: string;
     items: { event_type: string; outcome: string; occurred_at: string }[];
     truncated: boolean;
+}
+interface IssueResult {
+    resource_uid: string;
+    accepted_count: number;
+    next_cursor: string | null;
+    limit: number;
+    semantics: string;
+    items: { event_type: string; external_id: string; outcome: string; occurred_at: string }[];
 }
 interface Page<T> {
     binding?: ReadAccess | null;
@@ -74,7 +83,9 @@ export default function BoardSettingsMetadataConnection({
     const [readAccess, setReadAccess] = useState<ReadAccess | null>(null);
     const [consenting, setConsenting] = useState(false);
     const [deployments, setDeployments] = useState<DeploymentResult | null>(null);
+    const [issues, setIssues] = useState<IssueResult | null>(null);
     const clearReadResults = () => {
+        setIssues(null);
         setConsenting(false);
         setDeployments(null);
     };
@@ -282,12 +293,10 @@ export default function BoardSettingsMetadataConnection({
                     }));
             }
             if (valid()) {
-                if (dokploy) {
-                    const page = (await api.get<Page<Binding>>(selectedRoot)).data;
-                    if (!valid()) return;
-                    setBindings(page);
-                    setReadAccess(page.binding ?? null);
-                }
+                const page = (await api.get<Page<Binding>>(selectedRoot)).data;
+                if (!valid()) return;
+                setBindings(page);
+                setReadAccess(page.binding ?? null);
                 setSaved(true);
                 onStatusChange?.();
             }
@@ -295,16 +304,20 @@ export default function BoardSettingsMetadataConnection({
     const selectedServices = bindings.items.filter(
         (row) => row.selected && row.access_state === "granted" && (row.type === "application" || row.type === "compose")
     );
+    const selectedReadResources = dokploy ? selectedServices : bindings.items.filter((row) => row.selected && row.access_state === "granted");
     const readEnabled =
         !!readAccess &&
-        ["enabled", "needs_attention"].includes(readAccess.state) &&
-        ["signals.read", "deployments.read"].every((capability) => readAccess.granted_capabilities.includes(capability));
+        (dokploy ? ["enabled", "needs_attention"].includes(readAccess.state) : readAccess.state === "enabled") &&
+        (dokploy ? ["signals.read", "deployments.read"] : ["resources.read", "signals.read"]).every((capability) =>
+            readAccess.granted_capabilities.includes(capability)
+        );
     const enableRead = () =>
         run(async (valid) => {
-            if (!dokploy || !connection || !readAccess || !consenting || !selectedServices.length || bindings.next_cursor) return;
+            if (!connection || !readAccess || !consenting || !selectedReadResources.length || bindings.next_cursor) return;
+            if (!dokploy && (!/^[a-f0-9]{64}$/.test(connection.revision) || !/^[a-f0-9]{64}$/.test(readAccess.revision))) return;
             const result = (
-                await api.post<ReadAccess>(`${connectionRoot}/enable-read`, {
-                    expected_revision: connection.revision,
+                await api.post<ReadAccess>(`${connectionRoot}/${dokploy ? "enable-read" : "read-access"}`, {
+                    ...(dokploy ? { expected_revision: connection.revision } : { expected_connection_revision: connection.revision }),
                     expected_binding_revision: readAccess.revision,
                 })
             ).data;
@@ -340,6 +353,54 @@ export default function BoardSettingsMetadataConnection({
                 return { event_type: row.event_type, outcome: row.outcome, occurred_at: row.occurred_at };
             });
             setDeployments({ resource_uid: result.resource_uid, items, truncated: result.truncated || result.items.length > 25 });
+        });
+    const refreshIssues = (binding: Binding, cursor?: string) =>
+        run(async (valid) => {
+            if (dokploy || !readEnabled || !connection || bindings.next_cursor || !selectedReadResources.includes(binding)) return;
+            if (!/^[a-f0-9]{64}$/.test(connection.revision) || !Number.isInteger(binding.access_revision)) return;
+            if (cursor && (issues?.resource_uid !== binding.resource_uid || issues.next_cursor !== cursor)) return;
+            if (!cursor) setIssues(null);
+            const result = (
+                await api.post<IssueResult>(`${selectedRoot}/${binding.resource_uid}/issues/refresh`, {
+                    expected_connection_revision: connection.revision,
+                    expected_access_revision: binding.access_revision,
+                    ...(cursor ? { cursor } : {}),
+                })
+            ).data;
+            if (!valid()) return;
+            if (
+                result.resource_uid !== binding.resource_uid ||
+                result.semantics !== "status_observation" ||
+                result.limit !== 25 ||
+                !Array.isArray(result.items) ||
+                result.items.length > 25 ||
+                !Number.isInteger(result.accepted_count) ||
+                result.accepted_count < 0 ||
+                result.accepted_count > 25 ||
+                (result.next_cursor !== null && (typeof result.next_cursor !== "string" || !result.next_cursor.length))
+            )
+                throw new Error("Invalid issue observation page");
+            const items = result.items.map((row) => {
+                if (
+                    row.event_type !== "issue.status_observed" ||
+                    !["unresolved", "resolved", "ignored"].includes(row.outcome) ||
+                    typeof row.external_id !== "string" ||
+                    !/^[A-Za-z0-9_-]{1,128}$/.test(row.external_id) ||
+                    typeof row.occurred_at !== "string" ||
+                    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|\+00:00)$/.test(row.occurred_at) ||
+                    !Number.isFinite(Date.parse(row.occurred_at))
+                )
+                    throw new Error("Invalid issue observation");
+                return { event_type: row.event_type, external_id: row.external_id, outcome: row.outcome, occurred_at: row.occurred_at };
+            });
+            setIssues((old) => {
+                const merged = new Map((cursor && old?.resource_uid === binding.resource_uid ? old.items : []).map((row) => [row.external_id, row]));
+                for (const row of items) {
+                    const previous = merged.get(row.external_id);
+                    if (!previous || Date.parse(row.occurred_at) >= Date.parse(previous.occurred_at)) merged.set(row.external_id, row);
+                }
+                return { ...result, items: [...merged.values()] };
+            });
         });
     const disconnect = () =>
         run(async (valid) => {
@@ -539,16 +600,16 @@ export default function BoardSettingsMetadataConnection({
                         </Button>
                     )}
                     <p className="text-xs text-muted-foreground">{text("GlitchTip project selection help")}</p>
-                    {dokploy && selectedServices.length > 0 && (
+                    {selectedReadResources.length > 0 && (
                         <div className="flex min-w-0 flex-col gap-2 rounded-md border p-2">
-                            <p className="text-sm">{text("Dokploy read scope help")}</p>
+                            <p className="text-sm">{text("GlitchTip read scope help")}</p>
                             {readEnabled ? (
-                                <p>{text("Dokploy read enabled")}</p>
+                                <p>{text("GlitchTip read enabled")}</p>
                             ) : consenting ? (
                                 <>
-                                    <p>{text("Dokploy read confirm help")}</p>
+                                    <p>{text("GlitchTip read confirm help")}</p>
                                     <Button size="sm" disabled={!!bindings.next_cursor || !readAccess} onClick={() => void enableRead()}>
-                                        {text("Confirm Dokploy read access")}
+                                        {text("Confirm GlitchTip read access")}
                                     </Button>
                                     <Button size="sm" variant="ghost" onClick={() => setConsenting(false)}>
                                         {t("common.Cancel")}
@@ -561,22 +622,50 @@ export default function BoardSettingsMetadataConnection({
                                     disabled={!!bindings.next_cursor || !readAccess}
                                     onClick={() => setConsenting(true)}
                                 >
-                                    {text("Enable Dokploy read access")}
+                                    {text("Enable GlitchTip read access")}
                                 </Button>
                             )}
-                            {selectedServices.map((binding) => (
+                            {selectedReadResources.map((binding) => (
                                 <div key={binding.resource_uid} className="flex min-w-0 flex-col gap-2">
                                     <p className="break-all text-sm">
-                                        {binding.path.at(-1)?.name || binding.external_id} · {text(`Dokploy resource ${binding.type}`)}
+                                        {binding.path.at(-1)?.name || binding.external_id || binding.project_id}
+                                        {dokploy && <> · {text(`Dokploy resource ${binding.type}`)}</>}
                                     </p>
                                     <Button
                                         size="sm"
                                         variant="outline"
                                         disabled={!readEnabled || !!bindings.next_cursor}
-                                        onClick={() => void refreshDeployments(binding)}
+                                        onClick={() => void (dokploy ? refreshDeployments(binding) : refreshIssues(binding))}
                                     >
-                                        {text("Refresh Dokploy deployments")}
+                                        {text(dokploy ? "Refresh Dokploy deployments" : "Refresh GlitchTip issues")}
                                     </Button>
+                                    {!dokploy && issues?.resource_uid === binding.resource_uid && (
+                                        <div aria-live="polite" className="flex min-w-0 flex-col gap-2 text-sm">
+                                            <p>{text("GlitchTip issue observations help")}</p>
+                                            {!issues.items.length && <p>{text("GlitchTip no observed issues")}</p>}
+                                            <ul className="list flex flex-col gap-2">
+                                                {issues.items.map((item) => (
+                                                    <li key={item.external_id} className="list-row flex min-w-0 flex-col break-words">
+                                                        <span>
+                                                            {text("GlitchTip issue ID")} {item.external_id} ·{" "}
+                                                            {text(`GlitchTip observed ${item.outcome}`)}
+                                                        </span>
+                                                        <span>
+                                                            {text("GlitchTip observed at")}:{" "}
+                                                            <time dateTime={item.occurred_at}>
+                                                                {formatDateTime(new Date(item.occurred_at), i18n.language, { timeStyle: "medium" })}
+                                                            </time>
+                                                        </span>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                            {issues.next_cursor && (
+                                                <Button size="sm" variant="outline" onClick={() => void refreshIssues(binding, issues.next_cursor!)}>
+                                                    {text("More GlitchTip issue observations")}
+                                                </Button>
+                                            )}
+                                        </div>
+                                    )}
                                     {deployments?.resource_uid === binding.resource_uid && (
                                         <div aria-live="polite" className="flex min-w-0 flex-col gap-2 text-sm">
                                             <p>{text("Dokploy deployment results help")}</p>

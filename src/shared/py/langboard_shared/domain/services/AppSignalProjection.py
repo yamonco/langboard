@@ -69,6 +69,11 @@ def supported_signal_condition():
     return or_(
         and_(AppSignal.provider == "github", AppSignal.event_type == "check.completed"),
         and_(AppSignal.provider == "dokploy", AppSignal.event_type.in_(DOKPLOY_EVENTS), AppSignal.commit_sha == ""),
+        and_(
+            AppSignal.provider == "glitchtip",
+            AppSignal.event_type == "issue.status_observed",
+            AppSignal.commit_sha == "",
+        ),
     )
 
 
@@ -77,6 +82,10 @@ def provider_resource_condition():
 
     return or_(
         and_(*signal_resource_conditions()),
+        and_(
+            *signal_resource_conditions(app_key="glitchtip", resource_type="project"),
+            cast(BoardAppBinding.granted_capabilities, Text).contains('"resources.read"'),
+        ),
         or_(
             *(
                 and_(
@@ -272,6 +281,10 @@ def card_signal_projections(cards):
             state = (
                 "conflict"
                 if proof[1] != proof[2]
+                else "failed"
+                if provider == "glitchtip" and outcome == "unresolved"
+                else outcome
+                if provider == "glitchtip" and outcome in {"resolved", "ignored"}
                 else "passed"
                 if outcome == "success"
                 else "failed"
@@ -296,6 +309,7 @@ def card_signal_projections(cards):
                 "outcome": outcome,
                 "signal_uid": InfraHelper.convert_uid(proof[3]) if proof else None,
                 "occurred_at": proof[4] if proof else None,
+                "time_basis": "observation" if provider == "glitchtip" else "provider_occurrence",
             }
         )
     return result

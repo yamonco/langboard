@@ -10,6 +10,8 @@ const creationCallbacks: string[] = [];
 Object.assign(window, { inboxCalls: calls, creationCallbacks });
 let linked = false;
 const linkedDeployments = new Set<string>();
+const linkedIssues = new Set<string>();
+let issueAccess = true;
 const callbacks = new Map<string, (data?: unknown) => void>();
 const socket = {
     on: (event: { eventKey: string; callback: (data?: unknown) => void }) => callbacks.set(event.eventKey, event.callback),
@@ -23,6 +25,7 @@ api.defaults.adapter = async (config) => {
     if (config.method === "post" && params.has("error")) throw new Error("fixture mutation denied");
     if (config.method === "post" && !config.url?.endsWith("/inbox/card")) {
         if (data.resource_uid === "application" || data.resource_uid === "compose") linkedDeployments.add(data.resource_uid);
+        else if (data.resource_uid === "glitchtip-project") linkedIssues.add(data.signal_uid);
         else linked = true;
     }
     let result: unknown = { source_change_seq: 7, items: [], bindings: [] };
@@ -69,6 +72,28 @@ api.defaults.adapter = async (config) => {
                 }))
         );
     }
+    if (params.has("glitchtip") && config.url?.endsWith("/inbox") && !config.url.includes("other") && issueAccess) {
+        (result as { items: unknown[] }).items.push(
+            ...["unresolved", "resolved", "ignored"]
+                .filter((status) => !linkedIssues.has(`issue-${status}`))
+                .map((status) => ({
+                    signal_uid: `issue-${status}`,
+                    provider: "glitchtip",
+                    connection_uid: "glitchtip-connection",
+                    resource_uid: "glitchtip-project",
+                    resource_name: "Customer errors",
+                    resource_type: "project",
+                    external_id: String(101 + ["unresolved", "resolved", "ignored"].indexOf(status)),
+                    commit_sha: "",
+                    event_type: "issue.status_observed",
+                    outcome: status,
+                    conflict: params.has("conflict"),
+                    time_basis: "observation",
+                    occurred_at: "2026-10-08T00:00:00Z",
+                    can_bind_card: !params.has("nonlink"),
+                }))
+        );
+    }
     if (config.url?.endsWith("/inbox/card")) result = { card_uid: "created-card", created: !params.has("replay") };
     return { config, status: 200, statusText: "OK", headers: {}, data: result };
 };
@@ -78,6 +103,14 @@ function Fixture() {
     const [archiveReady, setArchiveReady] = useState(false);
     return (
         <main className="mx-auto h-screen max-w-md">
+            <button
+                onClick={() => {
+                    issueAccess = false;
+                    callbacks.get(`signal-inbox-${board}`)?.({ app_signal_changed: true });
+                }}
+            >
+                Revoke issue access
+            </button>
             <button onClick={() => setBoard("other")}>Switch board</button>
             <button onClick={() => setCanEdit(false)}>Remove edit access</button>
             <button onClick={() => setArchiveReady(true)}>Archive ready column</button>

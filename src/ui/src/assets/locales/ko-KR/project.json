@@ -295,6 +295,20 @@
     "Dokploy outcome queued": "대기 중",
     "Dokploy outcome success": "성공",
     "Dokploy outcome failure": "실패",
-    "Dokploy outcome cancelled": "취소"
+    "Dokploy outcome cancelled": "취소",
+    "GlitchTip read scope help": "읽기 권한은 나중에 선택할 프로젝트를 포함하여 이 보드의 모든 선택된 GlitchTip 프로젝트에 적용됩니다. 프로젝트 메타데이터와 관찰된 이슈 상태만 읽습니다.",
+    "GlitchTip read confirm help": "선택된 GlitchTip 프로젝트에 대한 보드 전체 읽기 권한을 확인하세요.",
+    "Enable GlitchTip read access": "읽기 권한 활성화",
+    "Confirm GlitchTip read access": "읽기 권한 확인",
+    "GlitchTip read enabled": "보드 읽기 권한이 활성화되었습니다.",
+    "Refresh GlitchTip issues": "이슈 관찰 새로고침",
+    "GlitchTip issue observations help": "페이지당 최대 25개의 이슈 상태를 관찰합니다. 관찰 시간은 상태를 읽은 시간이며 이슈가 해결되거나 다시 열린 시간이 아닙니다.",
+    "GlitchTip no observed issues": "관찰된 이슈가 없습니다. 모든 이슈가 해결되었다는 뜻은 아닙니다.",
+    "GlitchTip issue ID": "이슈",
+    "GlitchTip observed at": "관찰 시간",
+    "GlitchTip observed unresolved": "미해결 상태 관찰",
+    "GlitchTip observed resolved": "해결 상태 관찰",
+    "GlitchTip observed ignored": "무시 상태 관찰",
+    "More GlitchTip issue observations": "이슈 관찰 더 보기"
   }
 }
