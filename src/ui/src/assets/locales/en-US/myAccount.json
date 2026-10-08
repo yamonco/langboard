@@ -62,7 +62,8 @@
       "renamed": "Renamed",
       "moved": "Moved",
       "revoked": "Revoked",
-      "rotated": "Value replaced"
+      "rotated": "Value replaced",
+      "bound": "Bound"
     },
     "reasons": {
       "user_input": "Explicit browser input",
@@ -71,7 +72,8 @@
       "reference_renamed": "Reference rename",
       "reference_moved": "Reference scope change",
       "reference_revoked": "Reference revocation",
-      "value_rotated": "Secret value rotation"
+      "value_rotated": "Secret value rotation",
+      "reference_bound": "Authorized application connection binding"
     }
   }
 }

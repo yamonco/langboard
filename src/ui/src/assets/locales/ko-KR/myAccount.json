@@ -62,7 +62,8 @@
       "renamed": "이름 변경",
       "moved": "이동",
       "revoked": "폐기",
-      "rotated": "값 교체"
+      "rotated": "값 교체",
+      "bound": "연결됨"
     },
     "reasons": {
       "user_input": "사용자의 명시 웹 입력",
@@ -71,7 +72,8 @@
       "reference_renamed": "참조 이름 변경",
       "reference_moved": "참조 범위 변경",
       "reference_revoked": "참조 폐기",
-      "value_rotated": "시크릿 값 교체"
+      "value_rotated": "시크릿 값 교체",
+      "reference_bound": "권한이 확인된 앱 연결 바인딩"
     }
   }
 }
