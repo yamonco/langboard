@@ -56,7 +56,9 @@ export const SOCKET_MAX_IN_FLIGHT_MESSAGES = parseInt(getEnv<string>({ key: "SOC
 
 export const BASE_DIR = path.dirname(fileURLToPath(import.meta.url));
 export const ROOT_DIR = path.join(BASE_DIR, "..", "..", "..");
-export const DATA_DIR = IS_EXECUTABLE ? path.join(BASE_DIR, "data") : path.join(ROOT_DIR, "local");
+export const DATA_DIR = path.resolve(
+    getEnv<string>({ key: "SOCKET_DATA_DIR", defaultValue: IS_EXECUTABLE ? path.join(BASE_DIR, "data") : path.join(ROOT_DIR, "local") })
+);
 export const LOGGING_DIR = getEnv<string>({ key: "SOCKET_LOGGING_DIR", defaultValue: path.join(DATA_DIR, "logs", "socket") });
 
 export const PORT = parseInt(getEnv<string>({ key: "SOCKET_PORT", defaultValue: "5690" }));

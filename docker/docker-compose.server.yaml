@@ -127,6 +127,7 @@ services:
     working_dir: /app
     stop_grace_period: 16m
     volumes:
+      - socket_data:/app/local
       - ../src/socket/package.json:/app/package.json
       - ../src/socket/yarn.lock:/app/yarn.lock
       - ../src/socket/src:/app/src
@@ -212,6 +213,8 @@ services:
     restart: always
 
 volumes:
+  socket_data:
+    driver: local
   mcp-oauth-state:
     driver: local
   shared-py-venv:
