@@ -31,6 +31,12 @@ COPY ./src/api ./src/api
 
 RUN cd /app && uv sync --locked --no-dev --extra document-retrieval
 
+# Runtime writes stay in the dedicated application data directory.
+RUN groupadd --gid 10001 langboard \
+    && useradd --uid 10001 --gid 10001 --create-home langboard \
+    && mkdir -p /app/local /app/.fastmcp \
+    && chown -R langboard:langboard /app/local /app/.fastmcp
+
 FROM base AS with-aws
 
 RUN cd /app && uv sync --locked --no-dev --extra aws --extra document-retrieval
@@ -49,6 +55,8 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 RUN cd /app && uv sync --locked --no-dev --extra document-processing --extra document-retrieval
+ENV UV_NO_SYNC=1
+USER 10001:10001
 
 FROM base AS with-cron
 
@@ -57,10 +65,5 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/* \
     && printf '' | crontab -
 
-# Runtime writes stay in the dedicated application data directory.
-RUN groupadd --gid 10001 langboard \
-    && useradd --uid 10001 --gid 10001 --create-home langboard \
-    && mkdir -p /app/local /app/.fastmcp \
-    && chown -R langboard:langboard /app/local /app/.fastmcp
 ENV UV_NO_SYNC=1
 USER 10001:10001
