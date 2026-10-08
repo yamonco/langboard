@@ -241,14 +241,17 @@ def with_legacy_card_list(handler):
         result = await handler(**kwargs)
         payload = result.model_dump(mode="json") if hasattr(result, "model_dump") else dict(result)
         if payload.get("format") == "tree":
-            return result
+            return payload
         columns = payload.pop("columns", {})
         for card in payload["cards"]["items"]:
             column = columns.get(card.get("project_column_uid"))
             if column is not None:
                 card["project_column_name"] = column["name"]
-        return ProjectCardListResponse.model_validate(payload)
+        return ProjectCardListResponse.model_validate(payload).model_dump(mode="json")
 
+    legacy.__signature__ = signature(handler).replace(
+        return_annotation=dict[str, Any]
+    )
     return legacy
 
 
