@@ -60,3 +60,26 @@ test("Korean mobile evidence labels", async ({ page }) => {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.screenshot({ path: "test-results/card-evidence-ko-390.png", fullPage: true });
 });
+
+test("open evidence coalesces signal burst and refreshes after reconnect", async ({ page }) => {
+    await page.goto(path);
+    await page.getByRole("button", { name: "Signal burst" }).click();
+    expect(await page.evaluate(() => (window as unknown as { evidenceCalls: unknown[] }).evidenceCalls.length)).toBe(0);
+    await page.getByRole("button", { name: "Check evidence", exact: true }).click();
+    await expect(page.getByText("Failed · #55")).toBeVisible();
+    const before = await page.evaluate(() => (window as unknown as { evidenceCalls: unknown[] }).evidenceCalls.length);
+    await page.getByRole("button", { name: "Signal burst" }).click();
+    await expect.poll(() => page.evaluate(() => (window as unknown as { evidenceCalls: unknown[] }).evidenceCalls.length)).toBe(before + 1);
+    await page.getByRole("button", { name: "Reconnect" }).click();
+    await expect.poll(() => page.evaluate(() => (window as unknown as { evidenceCalls: unknown[] }).evidenceCalls.length)).toBe(before + 2);
+    await page.getByRole("button", { name: "Return to window" }).click();
+    await expect.poll(() => page.evaluate(() => (window as unknown as { evidenceCalls: unknown[] }).evidenceCalls.length)).toBe(before + 3);
+    await page.getByRole("button", { name: "Edit card" }).click();
+    await expect.poll(() => page.evaluate(() => (window as unknown as { evidenceCalls: unknown[] }).evidenceCalls.length)).toBe(before + 4);
+    await page.getByRole("button", { name: "Check evidence", exact: true }).click();
+    await page.getByRole("button", { name: "Signal burst" }).click();
+    await page.getByRole("button", { name: "Reconnect" }).click();
+    await page.getByRole("button", { name: "Return to window" }).click();
+    await page.getByRole("button", { name: "Edit card" }).click();
+    expect(await page.evaluate(() => (window as unknown as { evidenceCalls: unknown[] }).evidenceCalls.length)).toBe(before + 4);
+});

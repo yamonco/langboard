@@ -50,8 +50,8 @@ results remain distinct from success.
 
 The unique resource/event key and current Connection lock serialize duplicate submissions.
 Matching redelivery returns the existing UID; a changed signed payload with the same
-delivery ID returns 409. All events remain append-only. No latest Work State projection
-exists yet, so this unit does not claim ordered projection or completion of the Signal card.
+delivery ID returns 409. All events remain append-only. Exact card-bound check scopes use the ordered projection
+described below. The full multi-provider Signal card remains incomplete.
 
 ## Read surface and remaining work
 
@@ -62,7 +62,6 @@ without payload digests, secrets or provider output. Disconnect/unlink/revocatio
 new ingestion and this read surface; persisted audit evidence is retained.
 
 Remaining: PR/deployment/GlitchTip/Dokploy adapters,
-explicit card/resource evidence association, out-of-order-safe Work State projection,
 Inbox, provider presets, optional explicit workflow transitions, and user Automation.
 No card, checklist, column, workflow stage or reviewer verification record is changed here.
 
@@ -121,7 +120,7 @@ exclude active execution; `human_execution_state` retains the timer diagnostic.
 Successful checks provide evidence, never reviewer approval, completion or an
 automatic workflow transition. Actorless socket projections omit this evidence;
 clients obtain it through authorized reads. GlitchTip/Dokploy signals, deployment
-proof, presets and provider-driven live refresh remain separate work.
+proof and presets remain separate work.
 
 ### Card detail evidence controls
 
@@ -144,5 +143,19 @@ projection's batched primary query. Rows excluded by SecretRef authorization may
 produce a short/empty page with a continuation cursor. No global background scan
 or GitHub API request occurs. Check pages remain explicit and bounded too.
 
-Live provider-triggered refresh, the full mounted card integration on deployed
-canary, other provider types and the remaining Signal contract are unverified.
+### Event-driven refresh
+
+New signed check evidence, worker evidence insertion, explicit card binding/unlink
+and repository selection changes register a native socket notice after transaction
+commit. Rollbacks and duplicate deliveries emit no notice. The board-scoped notice
+contains only `app_signal_changed: true`; it reveals no card ID, repository, commit
+or provider result. Open evidence controls coalesce bursts for 150 ms and reread
+through the authorized native API. Closed controls perform no refresh requests.
+Reconnect, visible-window focus and changes to the card revision also refresh open
+controls. Refresh waits for an active mutation to finish; it does not cancel writes.
+
+Socket transport is best-effort, not a durable outbox. A transport failure does not
+roll back committed evidence. Lifecycle/health, SecretRef and ACL mutations do not
+yet publish this notice; reconnect, focus or explicit refresh reevaluates authority.
+Live provider acceptance and the full mounted card integration on deployed canary,
+other provider types and the remaining Signal contract remain unverified.

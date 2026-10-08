@@ -7,6 +7,7 @@ from langboard_shared.domain.services.AppSignalProjection import card_signal_pro
 from langboard_shared.domain.services.CardVisibilityPolicy import CardVisibility
 from langboard_shared.domain.services.factory.SecretReferenceService import SecretReferenceUnavailable
 from langboard_shared.helpers import InfraHelper
+from langboard_shared.publishers import CardPublisher
 from sqlalchemy import func, select
 from .GitHubManifest import GitHubManifestUnavailable
 from .GitHubSignal import _scope
@@ -105,6 +106,7 @@ def bind_check(
             binding.is_enabled = True
             binding.revision += 1
             db.update(binding)
+        db.after_commit(lambda: CardPublisher.app_signal_changed(project_uid))
         return {"binding_uid": binding.get_uid(), "revision": binding.revision}
 
 
@@ -126,6 +128,7 @@ def unlink_check(service, actor, project_uid, card_uid, binding_uid, expected_re
         binding.is_enabled = False
         binding.revision += 1
         db.update(binding)
+        db.after_commit(lambda: CardPublisher.app_signal_changed(project_uid))
         return {"binding_uid": binding.get_uid(), "revision": binding.revision, "is_enabled": False}
 
 

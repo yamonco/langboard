@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@/components/base/Button";
+import type { ISocketContext } from "@/core/providers/SocketProvider";
+import { ESocketTopic } from "@langboard/core/enums";
 import { api } from "@/core/helpers/Api";
 
 interface Evidence {
@@ -34,12 +36,18 @@ export default function CardSignalEvidence({
     cardUID,
     canEdit,
     onChanged,
+    socket,
+    cardRevision,
 }: {
     projectUID: string;
     cardUID: string;
     canEdit: boolean;
     onChanged?: () => void;
+    socket: Pick<ISocketContext, "on" | "off">;
+    cardRevision?: number;
 }) {
+    const [refreshVersion, setRefreshVersion] = useState(0);
+    const lastRefresh = useRef(0);
     const [t] = useTranslation();
     const text = (key: string) => t(`card.signals.${key}`);
     const root = `/board/${projectUID}/card/${cardUID}/signals`;
@@ -58,6 +66,7 @@ export default function CardSignalEvidence({
     const resource = resources.find((row) => row.uid === resourceUID);
     useEffect(() => {
         generation.current++;
+        lastRefresh.current = refreshVersion;
         controller.current?.abort();
         setSnapshot(null);
         setResources([]);
@@ -101,6 +110,59 @@ export default function CardSignalEvidence({
         const result = await api.get<Snapshot>(root, { signal });
         if (!signal.aborted) setSnapshot(result.data);
     };
+    useEffect(() => {
+        if (!open) return;
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const schedule = () => {
+            if (timer) return;
+            timer = setTimeout(() => {
+                timer = undefined;
+                setRefreshVersion((version) => version + 1);
+            }, 150);
+        };
+        const changed = {
+            topic: ESocketTopic.Board as const,
+            topicId: projectUID,
+            event: "board:app-signal:changed",
+            eventKey: `card-evidence-${projectUID}-${cardUID}`,
+            callback: (data: unknown) => {
+                if (data && typeof data === "object" && "app_signal_changed" in data && data.app_signal_changed === true) schedule();
+            },
+        };
+        const connected = { event: "open" as const, eventKey: `card-evidence-reconnect-${projectUID}-${cardUID}`, callback: schedule };
+        const focused = () => {
+            if (document.visibilityState === "visible") schedule();
+        };
+        window.addEventListener("focus", focused);
+        socket.on(changed);
+        socket.on(connected);
+        return () => {
+            if (timer) clearTimeout(timer);
+            window.removeEventListener("focus", focused);
+            socket.off(changed);
+            socket.off(connected);
+        };
+    }, [open, projectUID, cardUID, socket]);
+    const previousRevision = useRef(cardRevision);
+    useEffect(() => {
+        if (cardRevision === previousRevision.current) return;
+        previousRevision.current = cardRevision;
+        if (open) setRefreshVersion((value) => value + 1);
+    }, [cardRevision, open]);
+    useEffect(() => {
+        if (!open || pending || refreshVersion === lastRefresh.current) return;
+        lastRefresh.current = refreshVersion;
+        setResources([]);
+        setResourcesLoaded(false);
+        setResourceUID("");
+        setSignals([]);
+        setCursor(null);
+        setResourceCursor(null);
+        void run(async (signal) => {
+            await load(signal);
+            if (!signal.aborted) onChanged?.();
+        });
+    }, [open, pending, refreshVersion]);
     const show = () => {
         setOpen(!open);
         if (!open) void run(load);
