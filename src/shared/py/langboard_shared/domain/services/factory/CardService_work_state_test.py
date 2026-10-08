@@ -54,7 +54,11 @@ def test_card_batch_uses_bounded_queries_and_no_actor_or_editable_metadata(monke
             get_uid=lambda: "card",
         )
     ]
+    signal_query = Mock(return_value={2: [{"binding_uid": "binding", "state": "failed"}]})
+    monkeypatch.setattr(import_module(CardService.__module__), "card_signal_projections", signal_query)
     result = service.get_work_states(cards)
+    signal_query.assert_not_called()
+    assert result[2]["external_signal_evidence"] is None
     db.exec.assert_called_once()
     counts.assert_called_once_with([2])
     service.repo.workflow_stage.get_by_keys.assert_called_once_with({"review"})
@@ -71,6 +75,11 @@ def test_card_batch_uses_bounded_queries_and_no_actor_or_editable_metadata(monke
     assert result[2]["workflow_stage"] == "review"
     assert result[2]["execution_state"] == "human_active"
     assert result[2]["verification_state"] == "partial"
+    context = SimpleNamespace()
+    projected = service.get_work_states(cards, context=context)[2]
+    signal_query.assert_called_once_with(cards)
+    assert projected["execution_state"] == "failed" and projected["blocker_state"] == "blocked"
+    assert projected["verification_state"] == "partial" and projected["workflow_stage"] == "review"
     # Older archive rows may lack archived_at; the owned column remains authoritative.
     column.is_archive = True
     archived = service.get_work_states(cards)[2]

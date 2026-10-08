@@ -13,6 +13,7 @@ from .BotSchedule import BotSchedule
 from .BotScheduleGraphApprovalRequest import BotScheduleGraphApprovalRequest
 from .BotTriggerGraphApprovalRequest import BotTriggerGraphApprovalRequest
 from .Card import Card
+from .CardAppSignalBinding import CardAppSignalBinding
 from .CardAssignedProjectLabel import CardAssignedProjectLabel
 from .CardAssignedUser import CardAssignedUser
 from .CardAttachment import CardAttachment
@@ -117,6 +118,7 @@ __all__ = [
     "ProjectColumnBotDefaultScope",
     "BotSchedule",
     "Card",
+    "CardAppSignalBinding",
     "CardAssignedProjectLabel",
     "CardAssignedUser",
     "CardAttachment",
