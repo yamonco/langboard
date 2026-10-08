@@ -4,6 +4,7 @@ from .ApiKeySetting import ApiKeySetting
 from .ApiKeyUsage import ApiKeyUsage
 from .AppConnection import AppConnection
 from .AppResourceBinding import AppResourceBinding
+from .AppSignal import AppSignal
 from .BoardAppBinding import BoardAppBinding
 from .Bot import Bot
 from .BotDefaultScopeBranch import BotDefaultScopeBranch
@@ -100,6 +101,7 @@ __all__ = [
     "AppConnection",
     "BoardAppBinding",
     "AppResourceBinding",
+    "AppSignal",
     "ApiComfortTool",
     "ApiKeyRole",
     "ApiKeySetting",

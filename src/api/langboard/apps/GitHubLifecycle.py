@@ -54,6 +54,47 @@ def _repositories(value):
     return ids
 
 
+def verify_signed_payload(service, actor, connection_uid, body: bytes, signature: str, delivery_id: str):
+    """Shared original-byte authentication; event-specific identity is checked by consumers."""
+    if not isinstance(body, bytes) or not body or len(body) > MAX_BODY:
+        raise GitHubManifestUnavailable()
+    if not isinstance(signature, str) or not re.fullmatch(r"sha256=[0-9a-f]{64}", signature):
+        raise GitHubManifestUnavailable()
+    if str(UUID(delivery_id)) != delivery_id.lower():
+        raise GitHubManifestUnavailable()
+    with DbSession.use(readonly=False) as db:
+        connection = db.exec(
+            SqlBuilder.select.table(AppConnection).where(
+                AppConnection.id == InfraHelper.convert_id(connection_uid),
+                AppConnection.app_key == "github",
+                AppConnection.owner_id == actor.id,
+            )
+        ).first()
+    if (
+        connection is None
+        or connection.state not in {"pending", "connected"}
+        or not connection.credential_reference
+    ):
+        raise GitHubManifestUnavailable()
+    revision = connection_revision(connection)
+    credential = json.loads(
+        service.secret_reference.resolve_for_runtime(
+            actor, connection.credential_reference, source=SecretAuditSource("app_connection", connection_uid)
+        ).get_secret_value()
+    )
+    app_id = _positive(credential.get("id"))
+    secret = credential.get("webhook_secret")
+    if str(app_id) != connection.external_account_id or not isinstance(secret, str) or not secret:
+        raise GitHubManifestUnavailable()
+    expected = "sha256=" + hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(expected, signature):
+        raise GitHubManifestUnavailable()
+    payload = json.loads(body)
+    if not isinstance(payload, dict):
+        raise GitHubManifestUnavailable()
+    return payload, connection, revision, app_id
+
+
 def verify_lifecycle(service, actor, connection_uid, body: bytes, signature: str, event: str, delivery_id: str):
     """Only trusted host code supplies actor; no external caller identity fields."""
     try:
@@ -63,35 +104,9 @@ def verify_lifecycle(service, actor, connection_uid, body: bytes, signature: str
             raise GitHubManifestUnavailable()
         if event not in ACTIONS or str(UUID(delivery_id)) != delivery_id.lower():
             raise GitHubManifestUnavailable()
-        with DbSession.use(readonly=False) as db:
-            connection = db.exec(
-                SqlBuilder.select.table(AppConnection).where(
-                    AppConnection.id == InfraHelper.convert_id(connection_uid),
-                    AppConnection.app_key == "github",
-                    AppConnection.owner_id == actor.id,
-                )
-            ).first()
-        if (
-            connection is None
-            or connection.state not in {"pending", "connected"}
-            or not connection.credential_reference
-        ):
-            raise GitHubManifestUnavailable()
-        revision = connection_revision(connection)
-        credential = json.loads(
-            service.secret_reference.resolve_for_runtime(
-                actor, connection.credential_reference, source=SecretAuditSource("app_connection", connection_uid)
-            ).get_secret_value()
+        payload, connection, revision, app_id = verify_signed_payload(
+            service, actor, connection_uid, body, signature, delivery_id
         )
-        app_id = _positive(credential.get("id"))
-        secret = credential.get("webhook_secret")
-        if str(app_id) != connection.external_account_id or not isinstance(secret, str) or not secret:
-            raise GitHubManifestUnavailable()
-        expected = "sha256=" + hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
-        if not hmac.compare_digest(expected, signature):
-            raise GitHubManifestUnavailable()
-        # Decode only after verification of the unmodified bytes.
-        payload = json.loads(body)
         if event == "ping":
             if payload.get("action") is not None or payload.get("installation") is not None:
                 raise GitHubManifestUnavailable()

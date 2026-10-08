@@ -292,14 +292,8 @@ def refresh_github_resources(
         raise ApiException.BadRequest_400() from None
 
 
-@AppRouter.api.post("/apps/github/events", tags=["Apps.GitHub"])
-async def receive_github_lifecycle(request: Request, service: DomainService = DomainService.scope()) -> JsonResponse:
-    from starlette.concurrency import run_in_threadpool
-    from ...apps.GitHubLifecycle import (
-        MAX_BODY,
-        GitHubDeliveryConflict,
-        receive_external_lifecycle,
-    )
+async def github_webhook_body(request: Request) -> bytes | JsonResponse:
+    from ...apps.GitHubLifecycle import MAX_BODY
 
     # GitHub authenticates original bytes with its webhook HMAC, not browser cookies.
     for name in (
@@ -323,9 +317,6 @@ async def receive_github_lifecycle(request: Request, service: DomainService = Do
             return JsonResponse(status_code=400)
         if len(length) > 10 or int(length) > MAX_BODY:
             return JsonResponse(status_code=413)
-    signature = request.headers.get("x-hub-signature-256", "")
-    event = request.headers.get("x-github-event", "")
-    delivery = request.headers.get("x-github-delivery", "")
     body = bytearray()
     async for chunk in request.stream():
         if len(body) + len(chunk) > MAX_BODY:
@@ -333,6 +324,23 @@ async def receive_github_lifecycle(request: Request, service: DomainService = Do
         body.extend(chunk)
     if length is not None and int(length) != len(body):
         return JsonResponse(status_code=400)
+    return bytes(body)
+
+
+@AppRouter.api.post("/apps/github/events", tags=["Apps.GitHub"])
+async def receive_github_lifecycle(request: Request, service: DomainService = DomainService.scope()) -> JsonResponse:
+    from starlette.concurrency import run_in_threadpool
+    from ...apps.GitHubLifecycle import (
+        GitHubDeliveryConflict,
+        receive_external_lifecycle,
+    )
+
+    body = await github_webhook_body(request)
+    if isinstance(body, JsonResponse):
+        return body
+    signature = request.headers.get("x-hub-signature-256", "")
+    event = request.headers.get("x-github-event", "")
+    delivery = request.headers.get("x-github-delivery", "")
     try:
         await run_in_threadpool(
             receive_external_lifecycle,
@@ -387,6 +395,53 @@ def get_github_health_jobs(
 
     try:
         return JsonResponse(content=health_jobs(service, user, project_uid, connection_uid, after))
+    except GitHubManifestUnavailable:
+        raise ApiException.NotFound_404() from None
+    except ValueError:
+        raise ApiException.BadRequest_400() from None
+
+
+@AppRouter.api.post(
+    "/apps/github/boards/{project_uid}/connections/{connection_uid}/resources/{resource_uid}/events",
+    tags=["Apps.GitHub"],
+)
+async def receive_github_check(
+    project_uid: str, connection_uid: str, resource_uid: str, request: Request,
+    service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    from starlette.concurrency import run_in_threadpool
+    from ...apps.GitHubLifecycle import GitHubDeliveryConflict
+    from ...apps.GitHubSignal import receive_check
+
+    body = await github_webhook_body(request)
+    if isinstance(body, JsonResponse):
+        return body
+    try:
+        await run_in_threadpool(
+            receive_check, service, project_uid, connection_uid, resource_uid, body,
+            request.headers.get("x-hub-signature-256", ""),
+            request.headers.get("x-github-event", ""), request.headers.get("x-github-delivery", ""),
+        )
+    except GitHubDeliveryConflict:
+        return JsonResponse(status_code=409)
+    except (GitHubManifestUnavailable, ValueError):
+        return JsonResponse(status_code=400)
+    return JsonResponse(status_code=202)
+
+
+@AppRouter.api.get(
+    "/board/{project_uid}/settings/apps/github/connections/{connection_uid}/resources/{resource_uid}/signals",
+    tags=["Board.Settings"],
+)
+@AuthFilter.add("user")
+def get_github_signals(
+    project_uid: str, connection_uid: str, resource_uid: str, after: str | None = None,
+    user: User = Auth.scope("user"), service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    from ...apps.GitHubSignal import list_signals
+
+    try:
+        return JsonResponse(content=list_signals(service, user, project_uid, connection_uid, resource_uid, after))
     except GitHubManifestUnavailable:
         raise ApiException.NotFound_404() from None
     except ValueError:
