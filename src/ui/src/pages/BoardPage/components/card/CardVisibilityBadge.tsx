@@ -1,5 +1,6 @@
 import { Project, ProjectCard } from "@/core/models";
 import { useTranslation } from "react-i18next";
+import { cardVisibilityPresentation } from "./cardVisibilityPresentation";
 
 export default function CardVisibilityBadge({ card }: { card: ProjectCard.TModel }) {
     const project = Project.Model.useModel(card.project_uid);
@@ -11,8 +12,9 @@ function ResolvedCardVisibilityBadge({ card, project }: { card: ProjectCard.TMod
     const members = project.useForeignFieldArray("all_members");
     const visibility = card.useField("visibility");
     const hasExternal = members.some((member) => member.isValidUser() && member.membership_classification === "external");
-    if (visibility !== "PRIVATE" && !(visibility === "INTERNAL" && hasExternal)) return null;
-    const personal = visibility === "PRIVATE";
+    const presentation = cardVisibilityPresentation(visibility, hasExternal);
+    if (!presentation) return null;
+    const personal = presentation === "private";
     return (
         <span
             data-card-visibility={visibility}

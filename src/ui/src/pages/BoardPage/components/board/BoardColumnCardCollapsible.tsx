@@ -1,5 +1,6 @@
 import Button from "@/components/base/Button";
 import CardVisibilityBadge from "@/pages/BoardPage/components/card/CardVisibilityBadge";
+import { cardVisibilityPresentation } from "@/pages/BoardPage/components/card/cardVisibilityPresentation";
 import Avatar from "@/components/base/Avatar";
 import Card from "@/components/base/Card";
 import Collapsible from "@/components/base/Collapsible";
@@ -260,6 +261,10 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
             <Card.Root
                 id={`board-card-${card.uid}`}
                 data-checklist-completed={isChecklistTerminated}
+                data-card-privacy={cardVisibilityPresentation(
+                    visibility,
+                    projectMembers.some((member) => member.isValidUser() && member.membership_classification === "external")
+                )}
                 data-deadline-pressure-level={deadlinePressureLevel}
                 className={cn(
                     "group/card relative hover:border-primary",
