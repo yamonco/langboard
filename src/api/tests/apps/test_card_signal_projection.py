@@ -470,3 +470,45 @@ def test_card_resource_discovery_is_read_scoped_and_batched(scoped):
     finally:
         event.remove(state[7], "before_cursor_execute", record)
         domain.close()
+
+
+def test_binding_notifications_follow_commit_and_conflicts_do_not_publish(scoped, monkeypatch):
+    from langboard.apps.CardSignal import CardSignalConflict, bind_check, unlink_check
+    from langboard_shared.domain.services import DomainService
+    from langboard_shared.publishers import CardPublisher
+
+    state, card, binding, _ = scoped
+    domain = DomainService()
+    state[0].card = domain.card
+    with DbSession.use(readonly=False) as db:
+        state[1][4].actions = ["read", "update", "card_update"]
+        db.update(state[1][4])
+    signal_uid = send(state)["signal_uid"]
+    notifications = []
+    monkeypatch.setattr(CardPublisher, "app_signal_changed", notifications.append)
+    args = (
+        state[0],
+        state[1][1],
+        state[1][2].get_uid(),
+        card.get_uid(),
+        state[2].get_uid(),
+        state[4].get_uid(),
+        signal_uid,
+    )
+    try:
+        with pytest.raises(RuntimeError, match="rollback fixture"):
+            with DbSession.atomic():
+                bind_check(*args, 7, 0)
+                assert notifications == []
+                raise RuntimeError("rollback fixture")
+        assert notifications == []
+        assert bind_check(*args, 7, 0)["revision"] == 1
+        assert notifications == [state[1][2].get_uid()]
+        with pytest.raises(CardSignalConflict):
+            bind_check(*args, 6, 1)
+        assert len(notifications) == 1
+        unlink_check(state[0], state[1][1], state[1][2].get_uid(), card.get_uid(), binding.get_uid(), 1)
+        assert len(notifications) == 2
+        assert card.last_change_seq == 7
+    finally:
+        domain.close()

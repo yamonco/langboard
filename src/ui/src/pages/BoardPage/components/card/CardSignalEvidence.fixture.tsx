@@ -7,6 +7,20 @@ import "@/assets/styles/main.css";
 const params = new URLSearchParams(location.search);
 const calls: { url?: string; method?: string; data: unknown }[] = [];
 Object.assign(window, { evidenceCalls: calls });
+const listeners = new Set<{ event: string; callback: (data: unknown) => void }>();
+const socket = {
+    on: (entry: { event: string; callback: (data: unknown) => void }) => {
+        listeners.add(entry);
+    },
+    off: (entry: { event: string; callback: (data: unknown) => void }) => {
+        listeners.delete(entry);
+    },
+};
+const emit = (event: string, data: unknown) =>
+    listeners.forEach((entry) => {
+        if (entry.event === event) entry.callback(data);
+    });
+let outcome = "passed";
 let linked = !params.has("empty");
 let revision = 0;
 api.defaults.adapter = async (config) => {
@@ -37,7 +51,7 @@ api.defaults.adapter = async (config) => {
                           {
                               binding_uid: "binding",
                               revision,
-                              state: "passed",
+                              state: outcome,
                               resource_uid: "resource",
                               external_id: "55",
                               commit_sha: "a".repeat(40),
@@ -50,10 +64,28 @@ api.defaults.adapter = async (config) => {
 };
 function Fixture() {
     const [card, setCard] = useState("card");
+    const [cardRevision, setCardRevision] = useState(7);
     return (
         <main className="mx-auto max-w-xl p-4">
             <button onClick={() => setCard("other")}>Switch card</button>
-            <CardSignalEvidence projectUID="project" cardUID={card} canEdit={!params.has("readonly")} />
+            <button
+                onClick={() => {
+                    outcome = "failed";
+                    for (let i = 0; i < 30; i++) emit("board:app-signal:changed", { app_signal_changed: true });
+                }}
+            >
+                Signal burst
+            </button>
+            <button onClick={() => emit("open", {})}>Reconnect</button>
+            <button onClick={() => window.dispatchEvent(new Event("focus"))}>Return to window</button>
+            <button onClick={() => setCardRevision((value) => value + 1)}>Edit card</button>
+            <CardSignalEvidence
+                socket={socket as unknown as import("@/core/providers/SocketProvider").ISocketContext}
+                projectUID="project"
+                cardUID={card}
+                cardRevision={cardRevision}
+                canEdit={!params.has("readonly")}
+            />
         </main>
     );
 }

@@ -180,6 +180,8 @@ def drain_one(service, uid):
                 raise GitHubDeliveryConflict()
             if existing is None:
                 db.insert(AppSignal(resource_id=resource_id, **evidence))
+                from langboard_shared.publishers import CardPublisher
+                db.after_commit(lambda: CardPublisher.app_signal_changed(InfraHelper.convert_uid(project_id)))
             _advance(db, current, resource_id, None, uid)
         return True
     except Exception as failure:

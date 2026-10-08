@@ -373,3 +373,19 @@ def test_signed_noncompletion_actions_are_acknowledged_without_retry_storm(deliv
     state[5]["action"] = action
     assert receive(delivery_storage) == {"ignored": True}
     assert not evidence() and not delivery_storage[1]
+
+
+def test_worker_notifies_only_after_new_resource_evidence_commit(delivery_storage, monkeypatch):
+    from langboard_shared.publishers import CardPublisher
+    state = delivery_storage[0]
+    notified = []
+    def capture(project_uid):
+        assert evidence()
+        notified.append(project_uid)
+    monkeypatch.setattr(CardPublisher, 'app_signal_changed', capture)
+    uid = receive(delivery_storage)['delivery_uid']
+    assert notified == []
+    assert worker.drain_one(state[0], uid)
+    assert notified == [state[1][2].get_uid()]
+    assert worker.drain_one(state[0], uid)
+    assert notified == [state[1][2].get_uid()]

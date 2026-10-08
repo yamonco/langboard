@@ -7,6 +7,7 @@ from langboard_shared.core.db import DbSession, SqlBuilder
 from langboard_shared.domain.models import AppConnection, AppResourceBinding, AppSignal, BoardAppBinding, User
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.helpers import InfraHelper
+from langboard_shared.publishers import CardPublisher
 from .GitHubInstallation import connection_revision
 from .GitHubLifecycle import GitHubDeliveryConflict, _positive, verify_signed_payload
 from .GitHubManifest import GitHubManifestUnavailable
@@ -130,6 +131,7 @@ def receive_check(service, project_uid, connection_uid, resource_uid, body, sign
             return {"signal_uid": existing.get_uid(), "duplicate": True}
         signal = AppSignal(resource_id=resource.id, **values)
         db.insert(signal)
+        db.after_commit(lambda: CardPublisher.app_signal_changed(project_uid))
         return {"signal_uid": signal.get_uid(), "duplicate": False}
 
 
