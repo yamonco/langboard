@@ -188,6 +188,8 @@ def test_native_http_requires_current_board_authority(setup, monkeypatch):
         api.get_dokploy_selected_resources,
         api.remove_dokploy_resource,
         api.disconnect_dokploy_connection,
+        api.request_dokploy_secret_input,
+        api.get_dokploy_secret_input,
     }
     for route in app.routes:
         if getattr(route, "endpoint", None) in endpoints:
@@ -211,6 +213,18 @@ def test_native_http_requires_current_board_authority(setup, monkeypatch):
             resource_url, headers=headers, params={"external_project_id": "project-1", "environment_id": "env-1"}
         )
         assert result.status_code == 200 and len(result.json()["items"]) == 2 and "private" not in result.text
+        input_url = url.removesuffix("/connections") + "/secret-input"
+        secure = client.post(input_url, headers=headers)
+        assert secure.status_code == 200 and secure.json()["state"] == "pending"
+        input_uid = secure.json()["input_uid"]
+        assert client.get(input_url + "/" + input_uid, headers=headers).json()["state"] == "pending"
+        from langboard.secrets.SecretInput import complete_input, open_input
+
+        _, proof = open_input(service, board[1], input_uid)
+        completed = complete_input(service, board[1], input_uid, SecretStr("second-fixture-api-key"), proof)
+        status = client.get(input_url + "/" + input_uid, headers=headers)
+        assert status.json() == {"state": "completed", "secret_ref": completed["secret_ref"]}
+        assert "second-fixture-api-key" not in status.text
         selected_url = resource_url.removesuffix("/resources") + "/selected"
         selection = {
             "resource_type": "application",
@@ -247,6 +261,8 @@ def test_native_http_requires_current_board_authority(setup, monkeypatch):
         assert client.get(url, headers=headers).status_code == 404
         assert client.get(resource_url, headers=headers).status_code == 404
         assert client.post(url, headers=headers, json=form).status_code == 404
+        assert client.post(input_url, headers=headers).status_code == 404
+        assert client.get(input_url + "/" + input_uid, headers=headers).status_code == 404
         assert len(calls) == count
 
 

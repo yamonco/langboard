@@ -161,3 +161,32 @@ def disconnect_dokploy_connection(
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
     return _response(dokploy.disconnect, service, user, project_uid, connection_uid, form.expected_revision)
+
+
+@AppRouter.api.post("/board/{project_uid}/settings/apps/dokploy/secret-input", tags=["Board.Settings"])
+@AuthFilter.add("user")
+def request_dokploy_secret_input(
+    project_uid: str, user: User = Auth.scope("user"), service: DomainService = DomainService.scope()
+) -> JsonResponse:
+    from uuid import uuid4
+    from ...secrets.SecretInput import begin_input
+
+    def begin():
+        dokploy._board(service, user, project_uid)
+        return begin_input(service, user, "personal", "me", "dokploy/api-" + uuid4().hex)
+
+    return _response(begin)
+
+
+@AppRouter.api.get("/board/{project_uid}/settings/apps/dokploy/secret-input/{input_uid}", tags=["Board.Settings"])
+@AuthFilter.add("user")
+def get_dokploy_secret_input(
+    project_uid: str, input_uid: str, user: User = Auth.scope("user"), service: DomainService = DomainService.scope()
+) -> JsonResponse:
+    from ...secrets.SecretInput import input_status
+
+    def status():
+        dokploy._board(service, user, project_uid)
+        return input_status(service, user, input_uid)
+
+    return _response(status)
