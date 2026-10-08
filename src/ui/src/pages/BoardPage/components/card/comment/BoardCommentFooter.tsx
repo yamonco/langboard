@@ -111,6 +111,7 @@ function BoardCommentFooterActions() {
     const isAdmin = currentUser.useField("is_admin");
     const [isValidating, setIsValidating] = useState(false);
     const canEdit = currentUser.uid === author.uid || isAdmin;
+    const visibility = card.useField("visibility");
     const canReply = !isModel(author, "User") || author.isValidUser();
     const { mutateAsync: deleteCommentMutateAsync } = useDeleteCardComment({ interceptToast: true });
     const startEditing = () => {
@@ -153,21 +154,25 @@ function BoardCommentFooterActions() {
     return (
         <>
             <BoardCommentReaction comment={comment} />
-            {currentUser.isValidUser() && <BoardCommentSeen comment={comment} />}
-            {hasRoleAction(ProjectRole.EAction.Read) && currentUser.uid !== author.uid && currentUser.isValidUser() && canReply && (
-                <>
-                    <Separator orientation="vertical" className="h-1/2" />
-                    <Button
-                        variant="link"
-                        size="sm"
-                        data-reply-component
-                        className="h-5 p-0 text-accent-foreground/50"
-                        onClick={() => replyRef.current?.(author)}
-                    >
-                        {t("card.Reply")}
-                    </Button>
-                </>
-            )}
+            {visibility !== "PRIVATE" && currentUser.isValidUser() && <BoardCommentSeen comment={comment} />}
+            {visibility !== "PRIVATE" &&
+                hasRoleAction(ProjectRole.EAction.Read) &&
+                currentUser.uid !== author.uid &&
+                currentUser.isValidUser() &&
+                canReply && (
+                    <>
+                        <Separator orientation="vertical" className="h-1/2" />
+                        <Button
+                            variant="link"
+                            size="sm"
+                            data-reply-component
+                            className="h-5 p-0 text-accent-foreground/50"
+                            onClick={() => replyRef.current?.(author)}
+                        >
+                            {t("card.Reply")}
+                        </Button>
+                    </>
+                )}
             {canEdit && (
                 <>
                     <Separator orientation="vertical" className="h-1/2" />
