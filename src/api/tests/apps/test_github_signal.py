@@ -17,7 +17,9 @@ from test_github_lifecycle import lifecycle, signed  # noqa: F401
 
 
 @pytest.fixture
-def signal_storage(lifecycle):
+def signal_storage(lifecycle, monkeypatch):
+    from langboard_shared.publishers import CardPublisher
+    monkeypatch.setattr(CardPublisher, "put_dispather", lambda *args: None)
     service, board, connection, _ = lifecycle
     path = Path(__file__).resolve().parents[2] / "langboard/migrations/versions/20261008121000-f985238a4bc4.py"
     spec = importlib.util.spec_from_file_location("signal_migration", path)
@@ -281,3 +283,41 @@ def test_secret_revocation_blocks_existing_check_listing(signal_storage):
     service.revoke(state[1][1], uri, service.get_metadata(state[1][1], uri)['revision'])
     with pytest.raises(GitHubManifestUnavailable):
         read(state)
+
+
+def test_signal_notification_is_commit_only_minimal_and_duplicate_free(signal_storage, monkeypatch):
+    from langboard_shared.core.routing import SocketTopic
+    from langboard_shared.publishers import CardPublisher
+    state = signal_storage
+    notifications = []
+    def capture(payload, message):
+        with DbSession.use(readonly=False) as db:
+            assert db.exec(SqlBuilder.select.table(AppSignal)).first() is not None
+        assert payload == {'app_signal_changed': True}
+        assert message.topic == SocketTopic.Board
+        assert message.topic_id == state[1][2].get_uid()
+        assert message.event == 'board:app-signal:changed'
+        assert message.data_keys == 'app_signal_changed' and message.custom_data is None
+        notifications.append(payload)
+    monkeypatch.setattr(CardPublisher, 'put_dispather', capture)
+    delivery = str(uuid4())
+    with pytest.raises(RuntimeError, match='rollback fixture'):
+        with DbSession.atomic():
+            send(state, delivery)
+            assert notifications == []
+            raise RuntimeError('rollback fixture')
+    assert notifications == []
+    send(state, delivery)
+    assert len(notifications) == 1
+    send(state, delivery)
+    assert len(notifications) == 1
+
+
+def test_notification_transport_failure_preserves_committed_evidence(signal_storage, monkeypatch):
+    from langboard_shared.publishers import CardPublisher
+    def unavailable(*args):
+        raise RuntimeError('disposable transport failure')
+    monkeypatch.setattr(CardPublisher, 'app_signal_changed', unavailable)
+    result = send(signal_storage)
+    assert not result['duplicate']
+    assert len(read(signal_storage)['items']) == 1

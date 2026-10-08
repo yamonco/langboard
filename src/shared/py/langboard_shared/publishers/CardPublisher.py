@@ -8,6 +8,19 @@ from ..domain.models import Card, Checkitem, Project, ProjectColumn, ProjectLabe
 @staticclass
 class CardPublisher(BaseSocketPublisher):
     @staticmethod
+    def app_signal_changed(project_uid: str):
+        """Board-scoped invalidation only; never disclose card IDs or provider evidence."""
+        CardPublisher.put_dispather(
+            {"app_signal_changed": True},
+            SocketPublishModel(
+                topic=SocketTopic.Board,
+                topic_id=project_uid,
+                event="board:app-signal:changed",
+                data_keys="app_signal_changed",
+            ),
+        )
+
+    @staticmethod
     def read_state_changed(card: Card, user: User):
         """Invalidate read receipts without changing content timestamps."""
         shared = card.visibility == "SHARED"

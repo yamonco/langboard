@@ -1080,8 +1080,19 @@ const BoardCardSection = forwardRef<HTMLDivElement, IBoardCardSectionProps>(
 export default BoardCard;
 
 function BoardCardSignalSection() {
-    const { projectUID, card, canEditCard } = useBoardCard();
+    const { projectUID, card, canEditCard, socket } = useBoardCard();
     const client = useQueryClient();
-    return <CardSignalEvidence projectUID={projectUID} cardUID={card.uid} canEdit={canEditCard}
-        onChanged={() => { void client.invalidateQueries({ queryKey: [`get-card-details-${projectUID}-${card.uid}`] }); }} />;
+    const cardRevision = card.useField("last_change_seq");
+    return (
+        <CardSignalEvidence
+            cardRevision={cardRevision}
+            socket={socket}
+            projectUID={projectUID}
+            cardUID={card.uid}
+            canEdit={canEditCard}
+            onChanged={() => {
+                void client.invalidateQueries({ queryKey: [`get-card-details-${projectUID}-${card.uid}`] });
+            }}
+        />
+    );
 }

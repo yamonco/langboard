@@ -7,6 +7,7 @@ from langboard_shared.core.db import DbSession, SqlBuilder
 from langboard_shared.domain.models import AppConnection, AppResourceBinding, BoardAppBinding, Project, User
 from langboard_shared.domain.services import DomainService
 from langboard_shared.helpers import InfraHelper
+from langboard_shared.publishers import CardPublisher
 from .GitHubAuthorization import require_installation_proof
 from .GitHubInstallation import connection_revision, inspect_installation
 from .GitHubManifest import GitHubManifestUnavailable, _board
@@ -214,6 +215,7 @@ def update_resources(
                 db.update(row)
         # Resource access does not authorize workflow actions, webhook processing,
         # or activation. Existing state/grants/mapping and shared Connection remain.
+        db.after_commit(lambda: CardPublisher.app_signal_changed(project_uid))
         return resource_snapshot(db, binding)
 
 
