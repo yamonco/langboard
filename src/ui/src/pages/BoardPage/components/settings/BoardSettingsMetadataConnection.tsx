@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { api } from "@/core/helpers/Api";
 import { useBoardSettings } from "@/core/providers/BoardSettingsProvider";
 import Button from "@/components/base/Button";
+import { formatDateDistance, formatDateTime } from "@/core/utils/LocaleFormat";
 
 interface Connection {
     connection_uid: string;
@@ -21,10 +22,22 @@ interface Binding {
     external_id?: string;
     type?: string;
     access_revision: number;
+    access_state?: string;
     selected: boolean;
-    path: { type: string; id: string; slug?: string }[];
+    path: { type: string; id: string; slug?: string; name?: string }[];
+}
+interface ReadAccess {
+    revision: string;
+    state: string;
+    granted_capabilities: string[];
+}
+interface DeploymentResult {
+    resource_uid: string;
+    items: { event_type: string; outcome: string; occurred_at: string }[];
+    truncated: boolean;
 }
 interface Page<T> {
+    binding?: ReadAccess | null;
     items: T[];
     next_cursor: string | null;
 }
@@ -36,7 +49,7 @@ export default function BoardSettingsMetadataConnection({
     provider: "glitchtip" | "dokploy";
     onStatusChange?: () => void;
 }) {
-    const [t] = useTranslation();
+    const [t, i18n] = useTranslation();
     const { project, currentUser, canEditBasicInfo } = useBoardSettings();
     const dokploy = provider === "dokploy";
     const root = `/board/${project.uid}/settings/apps/${provider}`;
@@ -58,6 +71,13 @@ export default function BoardSettingsMetadataConnection({
     const [projects, setProjects] = useState<Page<Resource>>({ items: [], next_cursor: null });
     const [bindings, setBindings] = useState<Page<Binding>>({ items: [], next_cursor: null });
     const [disconnecting, setDisconnecting] = useState(false);
+    const [readAccess, setReadAccess] = useState<ReadAccess | null>(null);
+    const [consenting, setConsenting] = useState(false);
+    const [deployments, setDeployments] = useState<DeploymentResult | null>(null);
+    const clearReadResults = () => {
+        setConsenting(false);
+        setDeployments(null);
+    };
     const text = (key: string) => t(`project.settings.${dokploy ? key.replaceAll("GlitchTip", "Dokploy") : key}`);
     const [environments, setEnvironments] = useState<Page<Resource>>({ items: [], next_cursor: null });
     const [environment, setEnvironment] = useState("");
@@ -81,6 +101,8 @@ export default function BoardSettingsMetadataConnection({
         setEnvironment("");
         setEnvironments({ items: [], next_cursor: null });
         setDisconnecting(false);
+        setReadAccess(null);
+        clearReadResults();
     };
     const run = async (action: (valid: () => boolean) => Promise<void>) => {
         if (busy.current || !canEditBasicInfo) return;
@@ -172,11 +194,16 @@ export default function BoardSettingsMetadataConnection({
             const bound = !cursor ? (await api.get<Page<Binding>>(selectedRoot)).data : null;
             if (!valid()) return;
             setOrganizations((old) => merge(old, page, !!cursor));
-            if (bound) setBindings(bound);
+            if (bound) {
+                setBindings(bound);
+                setReadAccess(bound.binding ?? null);
+                clearReadResults();
+            }
         });
     const loadProjects = (slug: string, cursor?: string) =>
         run(async (valid) => {
             if (!cursor) {
+                clearReadResults();
                 setOrganization(slug);
                 setProjects({ items: [], next_cursor: null });
                 setEnvironments({ items: [], next_cursor: null });
@@ -195,6 +222,7 @@ export default function BoardSettingsMetadataConnection({
         });
     const loadServices = (uid: string) =>
         run(async (valid) => {
+            clearReadResults();
             setEnvironment(uid);
             setProjects({ items: [], next_cursor: null });
             if (!uid) return;
@@ -209,10 +237,15 @@ export default function BoardSettingsMetadataConnection({
     const loadBindings = () =>
         run(async (valid) => {
             const page = (await api.get<Page<Binding>>(selectedRoot, { params: { after: bindings.next_cursor } })).data;
-            if (valid()) setBindings((old) => merge(old, page, true));
+            if (valid()) {
+                setBindings((old) => merge(old, page, true));
+                setReadAccess(page.binding ?? null);
+                clearReadResults();
+            }
         });
     const toggle = (item: Resource) =>
         run(async (valid) => {
+            clearReadResults();
             const existing = bindings.items.find((row) => matches(row, item));
             if (existing?.selected) {
                 const result = (
@@ -249,9 +282,64 @@ export default function BoardSettingsMetadataConnection({
                     }));
             }
             if (valid()) {
+                if (dokploy) {
+                    const page = (await api.get<Page<Binding>>(selectedRoot)).data;
+                    if (!valid()) return;
+                    setBindings(page);
+                    setReadAccess(page.binding ?? null);
+                }
                 setSaved(true);
                 onStatusChange?.();
             }
+        });
+    const selectedServices = bindings.items.filter(
+        (row) => row.selected && row.access_state === "granted" && (row.type === "application" || row.type === "compose")
+    );
+    const readEnabled =
+        !!readAccess &&
+        ["enabled", "needs_attention"].includes(readAccess.state) &&
+        ["signals.read", "deployments.read"].every((capability) => readAccess.granted_capabilities.includes(capability));
+    const enableRead = () =>
+        run(async (valid) => {
+            if (!dokploy || !connection || !readAccess || !consenting || !selectedServices.length || bindings.next_cursor) return;
+            const result = (
+                await api.post<ReadAccess>(`${connectionRoot}/enable-read`, {
+                    expected_revision: connection.revision,
+                    expected_binding_revision: readAccess.revision,
+                })
+            ).data;
+            if (!valid()) return;
+            setReadAccess(result);
+            clearReadResults();
+            setSaved(true);
+            onStatusChange?.();
+        });
+    const refreshDeployments = (binding: Binding) =>
+        run(async (valid) => {
+            if (!dokploy || !readEnabled || !binding.selected || !connection) return;
+            setDeployments(null);
+            const result = (
+                await api.post<DeploymentResult>(`${selectedRoot}/${binding.resource_uid}/refresh`, {
+                    expected_revision: connection.revision,
+                    expected_access_revision: binding.access_revision,
+                })
+            ).data;
+            if (!valid()) return;
+            if (result.resource_uid !== binding.resource_uid) throw new Error("Resource mismatch");
+            const events = ["deployment.started", "deployment.queued", "deployment.succeeded", "deployment.failed", "deployment.cancelled"];
+            const outcomes = ["running", "queued", "success", "failure", "cancelled"];
+            const items = result.items.slice(0, 25).map((row) => {
+                if (
+                    !events.includes(row.event_type) ||
+                    !outcomes.includes(row.outcome) ||
+                    typeof row.occurred_at !== "string" ||
+                    row.occurred_at.length > 40 ||
+                    !Number.isFinite(Date.parse(row.occurred_at))
+                )
+                    throw new Error("Invalid deployment signal");
+                return { event_type: row.event_type, outcome: row.outcome, occurred_at: row.occurred_at };
+            });
+            setDeployments({ resource_uid: result.resource_uid, items, truncated: result.truncated || result.items.length > 25 });
         });
     const disconnect = () =>
         run(async (valid) => {
@@ -451,6 +539,70 @@ export default function BoardSettingsMetadataConnection({
                         </Button>
                     )}
                     <p className="text-xs text-muted-foreground">{text("GlitchTip project selection help")}</p>
+                    {dokploy && selectedServices.length > 0 && (
+                        <div className="flex min-w-0 flex-col gap-2 rounded-md border p-2">
+                            <p className="text-sm">{text("Dokploy read scope help")}</p>
+                            {readEnabled ? (
+                                <p>{text("Dokploy read enabled")}</p>
+                            ) : consenting ? (
+                                <>
+                                    <p>{text("Dokploy read confirm help")}</p>
+                                    <Button size="sm" disabled={!!bindings.next_cursor || !readAccess} onClick={() => void enableRead()}>
+                                        {text("Confirm Dokploy read access")}
+                                    </Button>
+                                    <Button size="sm" variant="ghost" onClick={() => setConsenting(false)}>
+                                        {t("common.Cancel")}
+                                    </Button>
+                                </>
+                            ) : (
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    disabled={!!bindings.next_cursor || !readAccess}
+                                    onClick={() => setConsenting(true)}
+                                >
+                                    {text("Enable Dokploy read access")}
+                                </Button>
+                            )}
+                            {selectedServices.map((binding) => (
+                                <div key={binding.resource_uid} className="flex min-w-0 flex-col gap-2">
+                                    <p className="break-all text-sm">
+                                        {binding.path.at(-1)?.name || binding.external_id} · {text(`Dokploy resource ${binding.type}`)}
+                                    </p>
+                                    <Button
+                                        size="sm"
+                                        variant="outline"
+                                        disabled={!readEnabled || !!bindings.next_cursor}
+                                        onClick={() => void refreshDeployments(binding)}
+                                    >
+                                        {text("Refresh Dokploy deployments")}
+                                    </Button>
+                                    {deployments?.resource_uid === binding.resource_uid && (
+                                        <div aria-live="polite" className="flex min-w-0 flex-col gap-2 text-sm">
+                                            <p>{text("Dokploy deployment results help")}</p>
+                                            {!deployments.items.length && <p>{text("Dokploy no deployments")}</p>}
+                                            <ul className="flex flex-col gap-2">
+                                                {deployments.items.map((item, index) => (
+                                                    <li key={index} className="flex min-w-0 flex-col break-words">
+                                                        <span>
+                                                            {text(`Dokploy event ${item.event_type}`)} · {text(`Dokploy outcome ${item.outcome}`)}
+                                                        </span>
+                                                        <time
+                                                            dateTime={item.occurred_at}
+                                                            title={formatDateTime(new Date(item.occurred_at), i18n.language, { timeStyle: "medium" })}
+                                                        >
+                                                            {formatDateDistance(new Date(item.occurred_at), i18n.language)}
+                                                        </time>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                            {deployments.truncated && <p>{text("Dokploy deployments truncated")}</p>}
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    )}
                     {disconnecting ? (
                         <div className="flex flex-col gap-2">
                             <p className="text-sm">{text("GlitchTip disconnect help")}</p>

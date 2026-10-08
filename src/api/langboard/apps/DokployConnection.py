@@ -207,16 +207,22 @@ def _discover_items(base, token, external_project_id, environment_id):
             # Require the environment in the requested project's authorized list.
             if environment_id not in {_item(row, "environment")["id"] for row in environments}:
                 raise DokployUnavailable()
-            data = _get(base, token, "environment.one", {"environmentId": environment_id})
-            if _item(data, "environment")["id"] != environment_id or data.get("projectId") != external_project_id:
-                raise DokployUnavailable()
-            items = [
-                _item(row, kind)
-                for key, kind in (("applications", "application"), ("compose", "compose"))
-                for row in _rows(data.get(key, []))
-            ]
-            if len(items) > 250:
-                raise DokployUnavailable()
+            items = _environment_resources(base, token, external_project_id, environment_id)
+    return items
+
+
+def _environment_resources(base, token, external_project_id, environment_id):
+    """Caller verified project membership within this same operation."""
+    data = _get(base, token, "environment.one", {"environmentId": environment_id})
+    if _item(data, "environment")["id"] != environment_id or data.get("projectId") != external_project_id:
+        raise DokployUnavailable()
+    items = [
+        _item(row, kind)
+        for key, kind in (("applications", "application"), ("compose", "compose"))
+        for row in _rows(data.get(key, []))
+    ]
+    if len(items) > 250:
+        raise DokployUnavailable()
     return items
 
 
@@ -275,7 +281,7 @@ def bind_resource(
             raise DokployUnavailable()
         path.append(environment)
         if resource_type in {"application", "compose"}:
-            items = _discover_items(base, token, parent_project, parent_env)
+            items = _environment_resources(base, token, parent_project, parent_env)
             item = next((row for row in items if row["id"] == external_id and row["type"] == resource_type), None)
             if item is None:
                 raise DokployUnavailable()
@@ -353,6 +359,61 @@ def selected_resources(service, actor, project_uid, connection_uid, after=None):
         return {
             "items": [_resource_metadata(row) for row in rows[:25]],
             "next_cursor": rows[24].get_uid() if len(rows) > 25 else None,
+            "binding": None
+            if binding is None
+            else {
+                "uid": binding.get_uid(),
+                "revision": binding.edit_revision(),
+                "state": binding.state,
+                "granted_capabilities": list(binding.granted_capabilities),
+            },
+        }
+
+
+def enable_read_access(service, actor, project_uid, connection_uid, expected_revision, expected_binding_revision):
+    """Explicit board read consent; no provider writes or workflow authority."""
+    with DbSession.atomic() as db:
+        board = _board(service, actor, project_uid)
+        conn = _connection(db, actor, connection_uid, lock=True)
+        if _revision(conn) != expected_revision:
+            raise DokployConflict()
+        approved_instance(conn.instance_url)
+        _, secret_revision = _credential(service, actor, conn.credential_reference)
+        _current(service, actor, project_uid, conn, secret_revision)
+        binding = db.exec(
+            SqlBuilder.select.table(BoardAppBinding)
+            .where(
+                BoardAppBinding.project_id == board.id,
+                BoardAppBinding.app_key == "dokploy",
+            )
+            .with_for_update()
+        ).first()
+        if binding is None:
+            raise DokployUnavailable()
+        if binding.edit_revision() != expected_binding_revision:
+            raise DokployConflict()
+        selected = db.exec(
+            SqlBuilder.select.table(AppResourceBinding)
+            .where(
+                AppResourceBinding.board_binding_id == binding.id,
+                AppResourceBinding.connection_id == conn.id,
+                AppResourceBinding.is_selected == True,  # noqa: E712
+                AppResourceBinding.access_state == "granted",
+                AppResourceBinding.resource_type.in_(("application", "compose")),
+            )
+            .limit(1)
+        ).first()
+        if selected is None:
+            raise DokployUnavailable()
+        binding.state = "enabled"
+        binding.granted_capabilities = ["resources.read", "signals.read", "deployments.read"]
+        binding.stage_transitions_enabled = False
+        db.update(binding)
+        return {
+            "uid": binding.get_uid(),
+            "revision": binding.edit_revision(),
+            "state": binding.state,
+            "granted_capabilities": list(binding.granted_capabilities),
         }
 
 

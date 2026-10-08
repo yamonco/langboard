@@ -34,8 +34,16 @@ def selected(setup, monkeypatch, request):
     with DbSession.use(readonly=False) as db:
         AppSignal.__table__.create(DbEngine.get_main_engine(), checkfirst=True)
         binding = db.exec(SqlBuilder.select.table(BoardAppBinding)).first()
-        binding.state, binding.granted_capabilities = "enabled", ["signals.read", "deployments.read"]
-        db.update(binding)
+        binding_revision = binding.edit_revision()
+    enabled = dk.enable_read_access(
+        service,
+        board[1],
+        board[2].get_uid(),
+        connection["connection_uid"],
+        connection["revision"],
+        binding_revision,
+    )
+    assert enabled["granted_capabilities"] == ["resources.read", "signals.read", "deployments.read"]
     state["rows"] = [
         {
             "deploymentId": "dep-1",
@@ -77,6 +85,61 @@ def refresh(selected):
         connection["revision"],
         chosen["access_revision"],
     )
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        "binding_revision",
+        "connection_revision",
+        "role",
+        "unselected",
+        "disconnected",
+        "secret",
+        "foreign_board",
+        "owner",
+    ],
+)
+def test_explicit_read_consent_uses_current_authority(selected, failure):
+    from langboard_shared.domain.models import AppConnection, SecretReference
+
+    setup, conn, chosen, _ = selected
+    service, board, *_ = setup
+    with DbSession.use(readonly=False) as db:
+        binding = db.exec(SqlBuilder.select.table(BoardAppBinding)).first()
+        binding.state, binding.granted_capabilities = "disabled", []
+        db.update(binding)
+        revision = binding.edit_revision()
+        if failure == "role":
+            board[4].actions = ["read"]
+            db.update(board[4])
+        elif failure == "unselected":
+            resource = db.exec(SqlBuilder.select.table(AppResourceBinding)).first()
+            resource.is_selected = False
+            db.update(resource)
+        elif failure == "disconnected":
+            connection = db.exec(SqlBuilder.select.table(AppConnection)).first()
+            connection.state = "disconnected"
+            db.update(connection)
+        elif failure == "secret":
+            secret = db.exec(SqlBuilder.select.table(SecretReference)).first()
+            secret.state = "revoked"
+            db.update(secret)
+    from langboard_shared.domain.services.factory.SecretReferenceService import SecretReferenceUnavailable
+    from langboard_shared.helpers import InfraHelper
+
+    with pytest.raises((dk.DokployConflict, dk.DokployUnavailable, SecretReferenceUnavailable)):
+        dk.enable_read_access(
+            service,
+            board[1].model_copy(update={"id": 2}) if failure == "owner" else board[1],
+            InfraHelper.convert_uid(11) if failure == "foreign_board" else board[2].get_uid(),
+            conn["connection_uid"],
+            "0" * 64 if failure == "connection_revision" else conn["revision"],
+            "0" * 64 if failure == "binding_revision" else revision,
+        )
+    with DbSession.use(readonly=False) as db:
+        current = db.exec(SqlBuilder.select.table(BoardAppBinding)).first()
+        assert current.state == "disabled" and current.granted_capabilities == []
 
 
 def test_append_only_safe_idempotent_refresh(selected):
@@ -126,6 +189,14 @@ def test_lifecycle_appends_without_overwriting_prior_signal(selected):
         rows = db.exec(SqlBuilder.select.table(AppSignal)).all()
         assert {row.event_type for row in rows} == {"deployment.started", "deployment.succeeded"}
     assert len(selected[3]) == 2
+
+
+def test_duplicate_provider_rows_preserve_single_event(selected):
+    rows = selected[0][4]["rows"]
+    rows.append(dict(rows[0]))
+    assert refresh(selected)["inserted"] == 1
+    with DbSession.use(readonly=False) as db:
+        assert len(db.exec(SqlBuilder.select.table(AppSignal)).all()) == 1
 
 
 @pytest.mark.parametrize("failure", ["capability", "disabled", "unselected", "revoked", "revision"])

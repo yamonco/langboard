@@ -134,16 +134,26 @@ def refresh_deployments(
             or current.resource_path != path
         ):
             raise connection.DokployConflict()
+        existing_by_id = (
+            {
+                row.event_id: row
+                for row in db.exec(
+                    SqlBuilder.select.table(AppSignal).where(
+                        AppSignal.resource_id == current.id,
+                        AppSignal.event_id.in_([values["event_id"] for values in page]),
+                    )
+                ).all()
+            }
+            if page
+            else {}
+        )
         inserted = 0
         for values in page:
-            existing = db.exec(
-                SqlBuilder.select.table(AppSignal).where(
-                    AppSignal.resource_id == current.id,
-                    AppSignal.event_id == values["event_id"],
-                )
-            ).first()
+            existing = existing_by_id.get(values["event_id"])
             if existing is None:
-                db.insert(AppSignal(resource_id=current.id, **values))
+                existing = AppSignal(resource_id=current.id, **values)
+                db.insert(existing)
+                existing_by_id[values["event_id"]] = existing
                 inserted += 1
             elif any(getattr(existing, key) != value for key, value in values.items()):
                 raise connection.DokployConflict()

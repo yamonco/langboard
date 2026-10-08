@@ -249,6 +249,22 @@ def test_native_http_requires_current_board_authority(setup, monkeypatch):
         count = len(calls)
         assert client.post(signal_url, headers=headers, json=signal_form).status_code == 404
         assert len(calls) == count  # Resource selection never grants signal capabilities.
+        access_url = resource_url.removesuffix("/resources") + "/enable-read"
+        access = {
+            "expected_revision": response.json()["revision"],
+            "expected_binding_revision": client.get(selected_url, headers=headers).json()["binding"]["revision"],
+        }
+        assert client.post(access_url, json=access).status_code == 401
+        assert client.post(access_url, headers=headers, json={**access, "enable_transitions": True}).status_code == 400
+        assert (
+            client.post(access_url, headers=headers, json={**access, "expected_binding_revision": "0" * 64}).status_code
+            == 409
+        )
+        enabled = client.post(access_url, headers=headers, json=access)
+        assert enabled.status_code == 200
+        assert enabled.json()["granted_capabilities"] == ["resources.read", "signals.read", "deployments.read"]
+        assert client.post(access_url, headers=headers, json=access).status_code == 409
+        assert len(calls) == count  # Consent does not fetch/redeploy the provider.
         assert client.post(selected_url, headers=headers, json=selection).status_code == 409
         assert (
             client.get(selected_url, headers=headers).json()["items"][0]["resource_uid"]
@@ -308,7 +324,14 @@ def test_verified_selection_removal_and_disconnect_preserve_board(setup, kind, u
     service, board, reference, calls, _ = setup
     connection = connect(setup)
     args = service, board[1], board[2].get_uid(), connection["connection_uid"]
+    before_selection = len(calls)
     selected = dk.bind_resource(*args, kind, uid, parent, environment, connection["revision"])
+    assert [request.url.path for request in calls[before_selection:]] == {
+        "project": ["/api/project.all"],
+        "environment": ["/api/project.all", "/api/environment.byProjectId"],
+        "application": ["/api/project.all", "/api/environment.byProjectId", "/api/environment.one"],
+        "compose": ["/api/project.all", "/api/environment.byProjectId", "/api/environment.one"],
+    }[kind]
     assert selected["selected"] and selected["access_state"] == "granted"
     assert selected["path"][-1]["id"] == uid and "private" not in json.dumps(selected)
     with DbSession.use(readonly=False) as db:

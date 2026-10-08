@@ -8,14 +8,25 @@ import i18n from "@/i18n";
 import "@/assets/styles/main.css";
 const calls: unknown[] = [];
 const params = new URLSearchParams(location.search);
-let selected = false;
+const resources = new Map<
+    string,
+    { resource_uid: string; external_id: string; type: string; access_revision: number; selected: boolean; path: { type: string; id: string }[] }
+>();
+let enabled = false;
+const readAccess = () => ({
+    uid: "board-binding",
+    revision: "b".repeat(64),
+    state: enabled ? "enabled" : "configured",
+    granted_capabilities: enabled ? ["resources.read", "signals.read", "deployments.read"] : [],
+});
 let revision = 0;
 const connection = { connection_uid: "conn", instance_url: "https://deploy.example.invalid", revision: "a".repeat(64) };
 Object.assign(window, { dokployCalls: calls });
 api.defaults.adapter = async (config) => {
     const data = config.data ? JSON.parse(config.data) : null;
     calls.push({ method: config.method, url: config.url, data, params: config.params });
-    if (params.has("delayed") && config.url?.endsWith("/resources")) await new Promise((resolve) => setTimeout(resolve, 400));
+    if (params.has("delayed") && (config.url?.endsWith("/resources") || config.url?.endsWith("/refresh") || config.url?.endsWith("/enable-read")))
+        await new Promise((resolve) => setTimeout(resolve, 400));
     if (params.has("deny") && config.url?.endsWith("/resources")) throw new Error("Denied");
     let result: unknown = {};
     if (config.url?.endsWith("/secret-input")) result = { input_uid: "s".repeat(43), input_url: location.origin + "/secret-input/" + "s".repeat(43) };
@@ -34,26 +45,59 @@ api.defaults.adapter = async (config) => {
                   : [{ id: "project-1", type: "project", name: "Customer project" }],
             next_cursor: null,
         };
-    else if (config.url?.endsWith("/remove")) {
-        selected = false;
-        result = { access_revision: ++revision };
+    else if (config.url?.endsWith("/enable-read")) {
+        if (data.expected_revision !== connection.revision || data.expected_binding_revision !== readAccess().revision || !resources.size)
+            throw new Error("Invalid consent request");
+        enabled = true;
+        result = readAccess();
+    } else if (config.url?.endsWith("/refresh")) {
+        const resource = [...resources.values()].find((row) => config.url?.includes(`/selected/${row.resource_uid}/`));
+        if (
+            !enabled ||
+            !resource?.selected ||
+            data.expected_revision !== connection.revision ||
+            data.expected_access_revision !== resource.access_revision
+        )
+            throw new Error("Invalid refresh request");
+        result = {
+            resource_uid: resource.resource_uid,
+            inserted: 1,
+            items: [
+                {
+                    event_type: "deployment.succeeded",
+                    outcome: "success",
+                    occurred_at: "2026-10-08T01:02:03.000000+00:00",
+                    external_id: "deployment-1",
+                    logs: "sensitive-provider-log",
+                    title: "sensitive-provider-title",
+                },
+            ],
+            limit: 25,
+            truncated: true,
+        };
+    } else if (config.url?.endsWith("/remove")) {
+        const resource = [...resources.values()].find((row) => config.url?.includes(`/selected/${row.resource_uid}/`))!;
+        resource.selected = false;
+        resource.access_revision = ++revision;
+        result = { access_revision: revision };
     } else if (config.url?.endsWith("/selected")) {
         if (config.method === "post") {
-            selected = true;
-            revision++;
-        }
-        const item = {
-            resource_uid: "resource",
-            external_id: data?.external_id ?? "app-1",
-            type: data?.resource_type ?? "application",
-            access_revision: revision,
-            selected,
-            path: [
-                { type: "organization", id: "organization" },
-                { type: "project", id: "2", slug: "project" },
-            ],
-        };
-        result = config.method === "post" ? item : { items: revision ? [item] : [], next_cursor: null };
+            const item = {
+                resource_uid: data.external_id === "app-1" ? "resource" : "compose-resource",
+                external_id: data.external_id,
+                type: data.resource_type,
+                access_state: "granted",
+                access_revision: ++revision,
+                selected: true,
+                path: [
+                    { type: "project", id: data.external_project_id },
+                    { type: "environment", id: data.environment_id },
+                    { type: data.resource_type, id: data.external_id, name: data.external_id === "app-1" ? "Customer API" : "Customer stack" },
+                ],
+            };
+            resources.set(item.external_id, item);
+            result = item;
+        } else result = { items: [...resources.values()], next_cursor: null, binding: resources.size ? readAccess() : null };
     }
     return { config, status: 200, statusText: "OK", headers: {}, data: result };
 };

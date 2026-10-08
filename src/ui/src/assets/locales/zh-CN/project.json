@@ -276,6 +276,25 @@
     "Select Dokploy environment": "选择环境",
     "Remove Dokploy environment selection": "取消环境选择",
     "Dokploy resource application": "应用",
-    "Dokploy resource compose": "Compose"
+    "Dokploy resource compose": "Compose",
+    "Dokploy read scope help": "读取权限适用于此看板上所有已选的 Dokploy 资源以及以后选择的资源。仅读取资源元数据和部署信号，不更改 Dokploy 或工作流阶段。",
+    "Dokploy read confirm help": "请确认对所选应用和 Compose 服务启用看板范围的读取权限。",
+    "Enable Dokploy read access": "启用读取权限",
+    "Confirm Dokploy read access": "确认读取权限",
+    "Dokploy read enabled": "看板读取权限已启用。",
+    "Refresh Dokploy deployments": "刷新部署",
+    "Dokploy deployment results help": "最新部署事件、结果和时间。每次刷新最多显示 25 条。",
+    "Dokploy no deployments": "暂无部署事件。",
+    "Dokploy deployments truncated": "仅显示最新的 25 条事件。",
+    "Dokploy event deployment.started": "部署已开始",
+    "Dokploy event deployment.queued": "部署已排队",
+    "Dokploy event deployment.succeeded": "部署成功",
+    "Dokploy event deployment.failed": "部署失败",
+    "Dokploy event deployment.cancelled": "部署已取消",
+    "Dokploy outcome running": "运行中",
+    "Dokploy outcome queued": "排队中",
+    "Dokploy outcome success": "成功",
+    "Dokploy outcome failure": "失败",
+    "Dokploy outcome cancelled": "已取消"
   }
 }
