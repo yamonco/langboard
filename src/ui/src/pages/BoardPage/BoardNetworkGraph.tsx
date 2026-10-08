@@ -1,10 +1,13 @@
 import ForceGraph2D, { ForceGraphMethods, LinkObject, NodeObject } from "react-force-graph-2d";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTheme } from "next-themes";
 import { useTranslation } from "react-i18next";
 import Button from "@/components/base/Button";
 import { cn } from "@/core/utils/ComponentUtils";
 import { layoutBoardGraph, networkBoardGraph } from "@/pages/BoardPage/BoardGraphLayout";
+import { Project, ProjectCard } from "@/core/models";
+import CardVisibilityBadge from "@/pages/BoardPage/components/card/CardVisibilityBadge";
+import { cardVisibilityPresentation } from "@/pages/BoardPage/components/card/cardVisibilityPresentation";
 
 type TDot = ReturnType<typeof networkBoardGraph>["nodes"][number];
 type TDotNode = NodeObject<TDot>;
@@ -12,13 +15,33 @@ type TDotLink = LinkObject<TDot, { id: string }>;
 
 interface IBoardNetworkGraphProps {
     layout: ReturnType<typeof layoutBoardGraph>;
+    project: Project.TModel;
     focusColumn?: { uid: string };
     onOpen: (cardUID: string) => void;
 }
 
 const endpointUID = (node: string | number | TDotNode | undefined) => (typeof node === "object" ? node.id : node);
 
-function BoardNetworkGraph({ layout, focusColumn, onOpen }: IBoardNetworkGraphProps) {
+type TPrivacy = ReturnType<typeof cardVisibilityPresentation>;
+
+function NetworkCardPrivacy({
+    card,
+    hasExternal,
+    onChange,
+}: {
+    card: ProjectCard.TModel;
+    hasExternal: boolean;
+    onChange: (uid: string, value: TPrivacy) => void;
+}) {
+    const visibility = card.useField("visibility");
+    useEffect(() => {
+        onChange(card.uid, cardVisibilityPresentation(visibility, hasExternal));
+        return () => onChange(card.uid, undefined);
+    }, [card.uid, visibility, hasExternal, onChange]);
+    return null;
+}
+
+function BoardNetworkGraph({ layout, project, focusColumn, onOpen }: IBoardNetworkGraphProps) {
     const [t] = useTranslation();
     const { resolvedTheme } = useTheme();
     const containerRef = useRef<HTMLDivElement>(null);
@@ -29,6 +52,20 @@ function BoardNetworkGraph({ layout, focusColumn, onOpen }: IBoardNetworkGraphPr
     const [hoveredUID, setHoveredUID] = useState<string>();
     const [colors, setColors] = useState({ background: "transparent", foreground: "#999", muted: "#666", primary: "#999", hue: 260 });
     const graph = useMemo(() => networkBoardGraph(layout), [layout]);
+    const members = project.useForeignFieldArray("all_members");
+    const hasExternal = members.some((member) => member.isValidUser() && member.membership_classification === "external");
+    const cards = useMemo(
+        () => new Map(layout.lanes.flatMap((lane) => lane.cards.map(({ card }) => [card.uid, card as ProjectCard.TModel] as const))),
+        [layout]
+    );
+    const privacy = useRef(new Map<string, TPrivacy>());
+    const [, setPrivacyRevision] = useState(0);
+    const updatePrivacy = useCallback((uid: string, value: TPrivacy) => {
+        if (privacy.current.get(uid) === value) return;
+        if (value) privacy.current.set(uid, value);
+        else privacy.current.delete(uid);
+        setPrivacyRevision((revision) => revision + 1);
+    }, []);
     const selected = graph.nodes.find((node) => node.id === selectedUID);
     const activeUID = hoveredUID ?? selectedUID;
     const neighbors = useMemo(() => {
@@ -76,6 +113,9 @@ function BoardNetworkGraph({ layout, focusColumn, onOpen }: IBoardNetworkGraphPr
 
     return (
         <div ref={containerRef} className="relative size-full overflow-hidden">
+            {[...cards.values()].map((card) => (
+                <NetworkCardPrivacy key={card.uid} card={card} hasExternal={hasExternal} onChange={updatePrivacy} />
+            ))}
             {size.width > 0 && size.height > 0 && (
                 <ForceGraph2D<TDot, { id: string }>
                     ref={graphRef}
@@ -108,6 +148,17 @@ function BoardNetworkGraph({ layout, focusColumn, onOpen }: IBoardNetworkGraphPr
                     }}
                     nodeCanvasObjectMode={() => "after"}
                     nodeCanvasObject={(node, context, scale) => {
+                        const presentation = privacy.current.get(node.id);
+                        if (presentation) {
+                            context.save();
+                            context.beginPath();
+                            context.arc(node.x ?? 0, node.y ?? 0, 4 * Math.sqrt(1 + Math.min(node.degree, 8)) + 3 / scale, 0, 2 * Math.PI);
+                            context.setLineDash(presentation === "whisper" ? [2 / scale, 2 / scale] : []);
+                            context.lineWidth = 1 / scale;
+                            context.strokeStyle = presentation === "whisper" ? colors.primary : colors.foreground;
+                            context.stroke();
+                            context.restore();
+                        }
                         const active = node.id === activeUID;
                         // Keep a selected neighborhood legible instead of stacking its long titles.
                         if (!active && (activeUID || scale < 1.8 || node.degree < 2)) return;
@@ -144,6 +195,7 @@ function BoardNetworkGraph({ layout, focusColumn, onOpen }: IBoardNetworkGraphPr
                     <option value="">{t("board.Find a card")}</option>
                     {graph.nodes.map((node) => (
                         <option key={node.id} value={node.id}>
+                            {privacy.current.get(node.id) === "private" ? "🔐 " : privacy.current.get(node.id) === "whisper" ? "🤫 " : ""}
                             {node.title} · {node.column}
                         </option>
                     ))}
@@ -154,12 +206,14 @@ function BoardNetworkGraph({ layout, focusColumn, onOpen }: IBoardNetworkGraphPr
             </div>
             {selected && (
                 <div
+                    data-card-privacy={privacy.current.get(selected.id)}
                     className={cn(
                         "absolute bottom-3 left-3 right-3 flex items-center gap-3 rounded-xl border bg-card/95 p-3 shadow-lg",
                         "md:right-auto md:max-w-md"
                     )}
                 >
                     <div className="min-w-0 flex-1">
+                        {cards.get(selected.id) && <CardVisibilityBadge card={cards.get(selected.id)!} />}
                         <p className="text-xs text-muted-foreground">{selected.column}</p>
                         <p className="line-clamp-2 text-sm font-medium">{selected.title}</p>
                     </div>
