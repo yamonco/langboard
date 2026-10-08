@@ -45,7 +45,7 @@ def test_validation_precedes_repository_write_for_every_metadata_entry():
     saver = Mock()
     service = SimpleNamespace(
         repo=SimpleNamespace(metadata=SimpleNamespace(save=saver)),
-        _is_work_plan_receipt=MetadataService._is_work_plan_receipt,
+        _is_work_plan_receipt=lambda _: False,
     )
     card = Card(title="A", project_id=1, project_column_id=2)
     with pytest.raises(ValueError):
