@@ -1,7 +1,9 @@
 """Explicit evidence attachment, separate from approval and workflow transitions."""
 
+from fastapi import Request
 from langboard_shared.core.filter import AuthFilter
 from langboard_shared.core.routing import ApiException, AppRouter, JsonResponse
+from langboard_shared.core.security.CollaborationChannel import CollaborationChannel
 from langboard_shared.domain.models import User
 from langboard_shared.domain.services import DomainService
 from langboard_shared.security import Auth
@@ -24,9 +26,9 @@ class UnlinkSignalForm(BaseModel):
     expected_revision: int = Field(strict=True, ge=0)
 
 
-def response(action, *args):
+def response(action, *args, **kwargs):
     try:
-        return JsonResponse(content=action(*args))
+        return JsonResponse(content=action(*args, **kwargs))
     except GitHubManifestUnavailable:
         raise ApiException.NotFound_404() from None
     except CardSignalConflict:
@@ -36,14 +38,26 @@ def response(action, *args):
 @AppRouter.api.get("/board/{project_uid}/card/{card_uid}/signals", tags=["Board.Card"])
 @AuthFilter.add("user")
 def get_card_signals(
-    project_uid: str, card_uid: str, user: User = Auth.scope("user"), service: DomainService = DomainService.scope()
+    request: Request,
+    project_uid: str,
+    card_uid: str,
+    user: User = Auth.scope("user"),
+    service: DomainService = DomainService.scope(),
 ):
-    return response(read_checks, service, user, project_uid, card_uid)
+    return response(
+        read_checks,
+        service,
+        user,
+        project_uid,
+        card_uid,
+        channel=request.scope.get("collaboration_channel", CollaborationChannel.Api),
+    )
 
 
 @AppRouter.api.post("/board/{project_uid}/card/{card_uid}/signals", tags=["Board.Card"])
 @AuthFilter.add("user")
 def attach_card_signal(
+    request: Request,
     project_uid: str,
     card_uid: str,
     form: CardSignalForm,
@@ -61,12 +75,14 @@ def attach_card_signal(
         form.signal_uid,
         form.source_change_seq,
         form.expected_revision,
+        visibility_channel=request.scope.get("collaboration_channel", CollaborationChannel.Api),
     )
 
 
 @AppRouter.api.post("/board/{project_uid}/card/{card_uid}/signals/{binding_uid}/unlink", tags=["Board.Card"])
 @AuthFilter.add("user")
 def unlink_card_signal(
+    request: Request,
     project_uid: str,
     card_uid: str,
     binding_uid: str,
@@ -74,12 +90,22 @@ def unlink_card_signal(
     user: User = Auth.scope("user"),
     service: DomainService = DomainService.scope(),
 ):
-    return response(unlink_check, service, user, project_uid, card_uid, binding_uid, form.expected_revision)
+    return response(
+        unlink_check,
+        service,
+        user,
+        project_uid,
+        card_uid,
+        binding_uid,
+        form.expected_revision,
+        channel=request.scope.get("collaboration_channel", CollaborationChannel.Api),
+    )
 
 
 @AppRouter.api.get("/board/{project_uid}/card/{card_uid}/signals/resources", tags=["Board.Card"])
 @AuthFilter.add("user")
 def get_card_signal_resources(
+    request: Request,
     project_uid: str,
     card_uid: str,
     after: str | None = None,
@@ -89,6 +115,14 @@ def get_card_signal_resources(
     from ...apps.CardSignal import list_card_resources
 
     try:
-        return response(list_card_resources, service, user, project_uid, card_uid, after)
+        return response(
+            list_card_resources,
+            service,
+            user,
+            project_uid,
+            card_uid,
+            after,
+            channel=request.scope.get("collaboration_channel", CollaborationChannel.Api),
+        )
     except ValueError:
         raise ApiException.BadRequest_400() from None

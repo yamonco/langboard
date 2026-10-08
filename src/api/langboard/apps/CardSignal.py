@@ -137,9 +137,11 @@ def bind_check(
         return {"binding_uid": binding.get_uid(), "revision": binding.revision}
 
 
-def unlink_check(service, actor, project_uid, card_uid, binding_uid, expected_revision):
+def unlink_check(
+    service, actor, project_uid, card_uid, binding_uid, expected_revision, *, channel=CollaborationChannel.Api
+):
     with DbSession.atomic() as db:
-        card = authorized_card(service, actor, project_uid, card_uid)
+        card = authorized_card(service, actor, project_uid, card_uid, channel=channel)
         binding = db.exec(
             SqlBuilder.select.table(CardAppSignalBinding)
             .where(
@@ -159,10 +161,10 @@ def unlink_check(service, actor, project_uid, card_uid, binding_uid, expected_re
         return {"binding_uid": binding.get_uid(), "revision": binding.revision, "is_enabled": False}
 
 
-def read_checks(service, actor, project_uid, card_uid):
+def read_checks(service, actor, project_uid, card_uid, *, channel=CollaborationChannel.Api):
     if service.workflow_stage._authorized_app_board(actor, project_uid, ProjectRoleAction.Read) is None:
         raise GitHubManifestUnavailable()
-    resolved = service.card.resolve_readable_card(project_uid, card_uid, actor)
+    resolved = service.card.resolve_readable_card(project_uid, card_uid, actor, channel)
     if resolved is None:
         raise GitHubManifestUnavailable()
     card = resolved[1]
@@ -183,7 +185,7 @@ def read_checks(service, actor, project_uid, card_uid):
     }
 
 
-def list_card_resources(service, actor, project_uid, card_uid, after=None):
+def list_card_resources(service, actor, project_uid, card_uid, after=None, *, channel=CollaborationChannel.Api):
     """Read-visible, currently consumable selected repositories; bounded discovery, no provider calls."""
     import re
     from langboard_shared.domain.models import AppConnection, AppResourceBinding, BoardAppBinding, Project, User
@@ -191,7 +193,7 @@ def list_card_resources(service, actor, project_uid, card_uid, after=None):
 
     if service.workflow_stage._authorized_app_board(actor, project_uid, ProjectRoleAction.Read) is None:
         raise GitHubManifestUnavailable()
-    resolved = service.card.resolve_readable_card(project_uid, card_uid, actor)
+    resolved = service.card.resolve_readable_card(project_uid, card_uid, actor, channel)
     if resolved is None:
         raise GitHubManifestUnavailable()
     if after is not None and not re.fullmatch(r"[A-Za-z0-9]{1,11}", after):

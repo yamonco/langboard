@@ -29,10 +29,10 @@ from .GitHubManifest import GitHubManifestUnavailable
 _resource_name = signal_resource_name
 
 
-def list_board_signals(service, actor, project_uid, after=None):
+def list_board_signals(service, actor, project_uid, after=None, *, channel=CollaborationChannel.Api):
     if service.workflow_stage._authorized_app_board(actor, project_uid, ProjectRoleAction.Read) is None:
         raise GitHubManifestUnavailable()
-    resolved = service.card.resolve_visibility_context(project_uid, actor)
+    resolved = service.card.resolve_visibility_context(project_uid, actor, channel)
     if resolved is None or not resolved[1].project_member:
         raise GitHubManifestUnavailable()
     if after is not None and not re.fullmatch(r"[A-Za-z0-9]{1,11}", after):
