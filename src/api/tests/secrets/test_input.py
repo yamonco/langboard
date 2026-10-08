@@ -278,3 +278,39 @@ def test_rotation_fixed_reference_revision_and_old_material_retention(flow, chan
                 "other-secret" if change == "rotated" else "old-secret"
             )
     assert "new-secret" not in json.dumps(Cache.get(input_flow._key(uid)))
+
+
+@pytest.mark.parametrize("operation", ["create", "rotate", "cancel"])
+def test_nonce_claim_crossing_expiry_never_stores_or_replaces_material(flow, monkeypatch, operation):
+    service, actor, _ = flow
+    if operation == "rotate":
+        ref = service.secret_reference.create(actor, "personal", "me", "provider/late", SecretStr("previous-value"))
+        pending = input_flow.begin_rotation(service, actor, ref["uri"], 0)
+    else:
+        pending = input_flow.begin_input(service, actor, "personal", "me", "provider/late")
+    uid = pending["input_uid"]
+    _, challenge = input_flow.open_input(service, actor, uid)
+    context = Cache.get(input_flow._key(uid))
+    clock = [context["expires_at"] - 1]
+    monkeypatch.setattr(input_flow, "time", lambda: clock[0])
+    native_claim = Cache.set_if_absent
+
+    def delayed_claim(*args):
+        claimed = native_claim(*args)
+        clock[0] = context["expires_at"]
+        return claimed
+
+    monkeypatch.setattr(Cache, "set_if_absent", delayed_claim)
+    with pytest.raises(SecretReferenceUnavailable):
+        if operation == "cancel":
+            input_flow.cancel_input(service, actor, uid)
+        else:
+            input_flow.complete_input(service, actor, uid, SecretStr("must-not-save"), challenge)
+    assert input_flow.input_status(service, actor, uid) == {"state": "expired"}
+    assert Cache.has(input_flow._key(uid) + ":claimed")
+    if operation == "rotate":
+        assert service.secret_reference.get_metadata(actor, ref["uri"])["revision"] == 0
+        assert service.secret_reference.resolve_for_runtime(actor, ref["uri"]).get_secret_value() == "previous-value"
+    else:
+        with pytest.raises(SecretReferenceUnavailable):
+            service.secret_reference.get_metadata(actor, "secret://me/provider/late")
