@@ -12,7 +12,8 @@ RUN --mount=type=cache,target=/usr/local/share/.cache/yarn cd /shared/ts && yarn
 FROM node:22@sha256:0e5f906573693feaa1e21057ebdcfdb5bd5021f050b2dc7c9deceb629c7da2a8
 RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
-RUN mkdir -p /local /app/local && chown -R node:node /local /app/local
+RUN mkdir -p /app/local && chown -R node:node /app/local
+ENV SOCKET_DATA_DIR=/app/local
 COPY --from=build --chown=node:node /shared/ts /shared/ts
 COPY --from=build --chown=node:node /app/node_modules ./node_modules
 COPY --from=build --chown=node:node /app/dist ./dist
