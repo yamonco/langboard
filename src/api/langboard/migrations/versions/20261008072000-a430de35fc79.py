@@ -11,8 +11,15 @@ depends_on = None
 
 
 def replace_action_constraint(actions):
+    names = {item["name"] for item in sa.inspect(op.get_bind()).get_check_constraints("secret_reference_audit")}
+    candidates = names & {
+        "ck_secret_reference_audit_action",
+        "ck_secret_reference_audit_`ck_secret_reference_audit_action`",
+    }
+    if len(candidates) != 1:
+        raise RuntimeError("Expected exactly one secret audit action constraint")
     with op.batch_alter_table("secret_reference_audit") as batch:
-        batch.drop_constraint(sa.schema.conv("ck_secret_reference_audit_action"), type_="check")
+        batch.drop_constraint(sa.schema.conv(candidates.pop()), type_="check")
         batch.create_check_constraint(sa.schema.conv("ck_secret_reference_audit_action"), f"action IN ({actions})")
 
 
