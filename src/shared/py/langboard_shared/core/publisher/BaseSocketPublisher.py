@@ -11,6 +11,7 @@ class SocketPublishModel(BaseModel):
     event: str
     data_keys: list[str] | str | None = None
     custom_data: dict[str, Any] | None = None
+    card_uids: list[str] | None = None
 
 
 class SocketPublishQueueModel(BaseModel):

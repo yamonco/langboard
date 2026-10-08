@@ -4,14 +4,18 @@ import { timegm } from "@/core/utils/DateTime";
 import { EAgentPermissionLevel } from "@langboard/core/ai";
 import jwt from "jsonwebtoken";
 
-export const createOneTimeToken = (userId: number | SnowflakeID, apiPermissionLevel = EAgentPermissionLevel.Read) => {
+export const createOneTimeToken = (
+    userId: number | SnowflakeID,
+    apiPermissionLevel = EAgentPermissionLevel.Read,
+    internal: "bot" | "socket_dispatch" = "bot"
+) => {
     const date = new Date();
     date.setMinutes(date.getMinutes() + 5);
     const expiry = timegm(date);
     const encoded = jwt.sign(
         {
             sub: userId.toString(),
-            internal: "bot",
+            internal,
             api_permission_level: apiPermissionLevel,
             exp: expiry,
         },

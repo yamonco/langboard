@@ -11,6 +11,7 @@ class ChecklistPublisher(BaseSocketPublisher):
         model = {"checklist": {**checklist.api_response(), "checkitems": []}}
         topic_id = card.project_id.to_short_code()
         publish_model = SocketPublishModel(
+            card_uids=[card.get_uid()],
             topic=SocketTopic.Board,
             topic_id=topic_id,
             event=f"board:card:checklist:created:{card.get_uid()}",
@@ -24,6 +25,7 @@ class ChecklistPublisher(BaseSocketPublisher):
         model = {"uid": checklist.get_uid(), "title": checklist.title}
         topic_id = card.project_id.to_short_code()
         publish_model = SocketPublishModel(
+            card_uids=[card.get_uid()],
             topic=SocketTopic.Board,
             topic_id=topic_id,
             event=f"board:card:checklist:title:changed:{card.get_uid()}",
@@ -37,6 +39,7 @@ class ChecklistPublisher(BaseSocketPublisher):
         model = {"uid": checklist.get_uid(), "order": checklist.order}
         topic_id = card.project_id.to_short_code()
         publish_model = SocketPublishModel(
+            card_uids=[card.get_uid()],
             topic=SocketTopic.Board,
             topic_id=topic_id,
             event=f"board:card:checklist:order:changed:{card.get_uid()}",
@@ -50,6 +53,7 @@ class ChecklistPublisher(BaseSocketPublisher):
         model = {"uid": checklist.get_uid(), "is_checked": checklist.is_checked}
         topic_id = card.project_id.to_short_code()
         publish_model = SocketPublishModel(
+            card_uids=[card.get_uid()],
             topic=SocketTopic.Board,
             topic_id=topic_id,
             event=f"board:card:checklist:checked:changed:{card.get_uid()}",
@@ -63,6 +67,7 @@ class ChecklistPublisher(BaseSocketPublisher):
         model = {"uid": checklist.get_uid()}
         topic_id = card.project_id.to_short_code()
         publish_model = SocketPublishModel(
+            card_uids=[card.get_uid()],
             topic=SocketTopic.Board,
             topic_id=topic_id,
             event=f"board:card:checklist:deleted:{card.get_uid()}",

@@ -11,7 +11,8 @@
     "prettier": "prettier --write .",
     "start": "node dist/index.js",
     "format": "prettier --write \"{tests,src}/**/*.{js,jsx,ts,tsx,json,md}\" --ignore-path .prettierignore",
-    "test": "echo \"No tests specified\" && exit 0"
+    "test": "echo \"No tests specified\" && exit 0",
+    "test:card-audience": "node src/core/helpers/CardAudience.test.cjs"
   },
   "dependencies": {
     "@hocuspocus/server": "^3.4.4",

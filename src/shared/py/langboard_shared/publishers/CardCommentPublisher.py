@@ -15,6 +15,7 @@ class CardCommentPublisher(BaseSocketPublisher):
 
         model = {"comment": api_comment}
         publish_model = SocketPublishModel(
+            card_uids=[card.get_uid()],
             topic=SocketTopic.Board,
             topic_id=project.get_uid(),
             event=f"board:card:comment:added:{card.get_uid()}",
@@ -32,6 +33,7 @@ class CardCommentPublisher(BaseSocketPublisher):
             "updated_at": comment.updated_at,
         }
         publish_model = SocketPublishModel(
+            card_uids=[card.get_uid()],
             topic=SocketTopic.Board,
             topic_id=project.get_uid(),
             event=f"board:card:comment:updated:{card.get_uid()}",
@@ -44,6 +46,7 @@ class CardCommentPublisher(BaseSocketPublisher):
     def deleted(project: Project, card: Card, comment: CardComment):
         model = {"card_uid": card.get_uid(), "comment_uid": comment.get_uid()}
         publish_model = SocketPublishModel(
+            card_uids=[card.get_uid()],
             topic=SocketTopic.Board,
             topic_id=project.get_uid(),
             event=f"board:card:comment:deleted:{card.get_uid()}",
@@ -70,6 +73,7 @@ class CardCommentPublisher(BaseSocketPublisher):
         }
 
         publish_model = SocketPublishModel(
+            card_uids=[card.get_uid()],
             topic=SocketTopic.Board,
             topic_id=project.get_uid(),
             event=f"board:card:comment:reacted:{card.get_uid()}",
