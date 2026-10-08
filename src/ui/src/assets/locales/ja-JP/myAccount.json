@@ -62,7 +62,8 @@
       "renamed": "名前変更",
       "moved": "移動",
       "revoked": "失効",
-      "rotated": "値を置換"
+      "rotated": "値を置換",
+      "bound": "紐付け済み"
     },
     "reasons": {
       "user_input": "ユーザーの明示的なWeb入力",
@@ -71,7 +72,8 @@
       "reference_renamed": "参照名変更",
       "reference_moved": "参照範囲変更",
       "reference_revoked": "参照失効",
-      "value_rotated": "秘密値の更新"
+      "value_rotated": "秘密値の更新",
+      "reference_bound": "認可済みのアプリ接続への紐付け"
     }
   }
 }

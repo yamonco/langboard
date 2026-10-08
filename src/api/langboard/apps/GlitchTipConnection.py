@@ -118,6 +118,9 @@ def register_connection(service, actor, project_uid, instance_url, credential_re
             state="connected",
         )
         db.insert(connection)
+        service.secret_reference.audit_binding(
+            actor, credential_reference, revision, source=SecretAuditSource("app_connection", connection.get_uid())
+        )
         return _metadata(connection)
 
 
@@ -269,6 +272,12 @@ def bind_project(
         row.resource_path, row.is_selected, row.access_state, row.health = path, True, "granted", "healthy"
         row.access_revision += 1
         db.update(row)
+        service.secret_reference.audit_binding(
+            actor,
+            connection.credential_reference,
+            secret_revision,
+            source=SecretAuditSource("app_connection", connection.get_uid()),
+        )
         # Never enable workflow transitions or grant unrelated signal capabilities.
         return {
             "resource_uid": row.get_uid(),

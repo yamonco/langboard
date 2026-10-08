@@ -320,3 +320,37 @@ def test_authenticated_native_http_metadata_only(setup, monkeypatch):
         assert client.post(input_url, headers=headers).status_code == 404
         assert client.get(input_url + "/" + uid, headers=headers).status_code == 404
         assert len(calls) == count
+
+
+def test_binding_audit_is_atomic_with_connection_and_resource(setup, monkeypatch):
+    service, board, reference, *_ = setup
+    connection = connect(setup)
+    events = service.secret_reference.list_audit(board[1], reference["uri"])["items"]
+    assert events[0]["action"] == "bound" and events[0]["reason_code"] == "reference_bound"
+    args = (service, board[1], board[2].get_uid(), connection["connection_uid"])
+
+    def bind():
+        return gt.bind_project(*args, "test-org", "test-project", connection["revision"])
+
+    original = service.secret_reference.audit_binding
+
+    def fail_after_receipt(*args, **kwargs):
+        original(*args, **kwargs)
+        raise RuntimeError("Destination audit failure")
+
+    monkeypatch.setattr(service.secret_reference, "audit_binding", fail_after_receipt)
+    with pytest.raises(RuntimeError):
+        bind()
+    with DbSession.use(readonly=False) as db:
+        assert not db.exec(SqlBuilder.select.table(AppResourceBinding)).all()
+    assert (
+        sum(x["action"] == "bound" for x in service.secret_reference.list_audit(board[1], reference["uri"])["items"])
+        == 1
+    )
+    with pytest.raises(RuntimeError):
+        connect(setup)
+    with DbSession.use(readonly=False) as db:
+        assert len(db.exec(SqlBuilder.select.table(AppConnection)).all()) == 1
+    monkeypatch.setattr(service.secret_reference, "audit_binding", original)
+    bind()
+    assert service.secret_reference.list_audit(board[1], reference["uri"])["items"][0]["action"] == "bound"

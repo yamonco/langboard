@@ -182,3 +182,74 @@ def test_audit_correlation_migration_preserves_legacy_rows_and_guards_downgrade(
     event = service.list_audit(board[1], meta["uri"])["items"][0]
     assert event["action"] == "created"
     assert event["request_id"] is None and event["reason_code"] is None
+
+
+def test_binding_audit_owns_no_material_and_rolls_back_with_destination(secrets, monkeypatch):
+    from langboard_shared.domain.services.factory.SecretReferenceService import (
+        SecretAuditSource,
+        SecretReferenceConflict,
+    )
+
+    service, board, _ = secrets
+    actor = board[1]
+    meta = service.create(actor, "personal", "me", "history/binding", SecretStr("binding-sensitive"))
+    source = SecretAuditSource("app_connection", "trusted_connection")
+    monkeypatch.setattr(KeyVault, "get_key", lambda *_: pytest.fail("Binding audit read material"))
+    monkeypatch.setattr(KeyVault, "store_secret", lambda *_: pytest.fail("Binding audit wrote material"))
+    with pytest.raises(RuntimeError):
+        service.audit_binding(actor, meta["uri"], 0, source=source)
+    with pytest.raises(RuntimeError):
+        with DbSession.atomic():
+            service.audit_binding(actor, meta["uri"], 0, source=source)
+            raise RuntimeError("Destination rollback")
+    assert [x["action"] for x in service.list_audit(actor, meta["uri"])["items"]] == ["created"]
+    with DbSession.atomic():
+        with pytest.raises(SecretReferenceUnavailable):
+            service.audit_binding(board[3], meta["uri"], 0, source=source)
+        with pytest.raises(SecretReferenceConflict):
+            service.audit_binding(actor, meta["uri"], 1, source=source)
+        with pytest.raises(ValueError):
+            service.audit_binding(actor, meta["uri"], 0, source=SecretAuditSource("api", "caller"))
+        service.audit_binding(actor, meta["uri"], 0, source=source)
+    event = service.list_audit(actor, meta["uri"])["items"][0]
+    assert (event["action"], event["revision_before"], event["revision_after"], event["reason_code"]) == (
+        "bound",
+        0,
+        0,
+        "reference_bound",
+    )
+    assert "source_uid" not in event and "binding-sensitive" not in json.dumps(event)
+    service.revoke(actor, meta["uri"], 0)
+    with DbSession.atomic(), pytest.raises(SecretReferenceUnavailable):
+        service.audit_binding(actor, meta["uri"], 1, source=source)
+
+
+def test_binding_migration_preserves_history_and_refuses_evidence_loss(secrets, monkeypatch):
+    import importlib.util
+    from pathlib import Path
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+    from langboard_shared.core.db.DbEngine import DbEngine
+    from langboard_shared.domain.services.factory.SecretReferenceService import SecretAuditSource
+
+    service, board, _ = secrets
+    actor = board[1]
+    meta = service.create(actor, "personal", "me", "history/migrate-binding", SecretStr("fixture-sensitive"))
+    path = Path(__file__).resolve().parents[2] / "langboard/migrations/versions/20261009040000-7c98451eab03.py"
+    spec = importlib.util.spec_from_file_location("binding_audit_migration", path)
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+    engine = DbEngine.get_main_engine()
+    before = service.list_audit(actor, meta["uri"])
+    with engine.begin() as connection:
+        monkeypatch.setattr(migration, "op", Operations(MigrationContext.configure(connection)))
+        migration.downgrade()
+        migration.upgrade()
+    assert service.list_audit(actor, meta["uri"]) == before
+    with DbSession.atomic():
+        service.audit_binding(actor, meta["uri"], 0, source=SecretAuditSource("app_connection", "connection"))
+    with engine.begin() as connection:
+        monkeypatch.setattr(migration, "op", Operations(MigrationContext.configure(connection)))
+        with pytest.raises(RuntimeError, match="Cannot discard"):
+            migration.downgrade()
+    assert [x["action"] for x in service.list_audit(actor, meta["uri"])["items"]] == ["bound", "created"]

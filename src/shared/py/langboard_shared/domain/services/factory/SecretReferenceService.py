@@ -44,6 +44,7 @@ class SecretAuditSource:
             "reference_moved",
             "reference_revoked",
             "value_rotated",
+            "reference_bound",
         ]
         | None
     ) = None
@@ -68,6 +69,7 @@ class SecretAuditSource:
             "reference_moved",
             "reference_revoked",
             "value_rotated",
+            "reference_bound",
         }:
             raise ValueError("Invalid secret audit reason code")
 
@@ -97,6 +99,7 @@ class SecretReferenceService(BaseDomainService):
                     "moved": "reference_moved",
                     "revoked": "reference_revoked",
                     "rotated": "value_rotated",
+                    "bound": "reference_bound",
                 }[action],
             )
         )
@@ -249,6 +252,22 @@ class SecretReferenceService(BaseDomainService):
                 ],
                 "next_cursor": rows[limit - 1].get_uid() if len(rows) > limit else None,
             }
+
+    def audit_binding(self, actor: User, uri: str, expected_revision: int, *, source: SecretAuditSource) -> None:
+        """Trusted host binding receipt, committed atomically with its destination."""
+        if not DbSession.has_active_transaction():
+            raise RuntimeError("Binding audit requires its destination transaction")
+        if source.kind != "app_connection" or source.uid is None or source.reason_code not in {None, "reference_bound"}:
+            raise ValueError("Binding audit requires a trusted connection source")
+        if type(expected_revision) is not int or expected_revision < 0:
+            raise ValueError("Invalid secret binding revision")
+        with DbSession.atomic() as db:
+            reference = self._find(actor, uri, lock=True)
+            if reference.state != "active":
+                raise SecretReferenceUnavailable()
+            if reference.revision != expected_revision:
+                raise SecretReferenceConflict()
+            self._audit(db, actor, reference, "bound", source)
 
     def resolve_for_runtime(
         self, actor: User, uri: str, *, source: SecretAuditSource = SecretAuditSource()
