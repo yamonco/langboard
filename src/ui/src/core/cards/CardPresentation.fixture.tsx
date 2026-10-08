@@ -50,10 +50,34 @@ function VisibilityFixture() {
             >
                 Add external member
             </button>
-            <button onClick={() => User.Model.fromOne({ uid: externalMember.uid, membership_classification: "internal" })}>
+            <button
+                onClick={() =>
+                    User.Model.fromOne({
+                        uid: externalMember.uid,
+                        type: "user" as const,
+                        firstname: "External",
+                        lastname: "Member",
+                        created_at: new Date(),
+                        updated_at: new Date(),
+                        membership_classification: "internal",
+                    })
+                }
+            >
                 Classify member as internal
             </button>
-            <button onClick={() => User.Model.fromOne({ uid: externalMember.uid, membership_classification: "external" })}>
+            <button
+                onClick={() =>
+                    User.Model.fromOne({
+                        uid: externalMember.uid,
+                        type: "user" as const,
+                        firstname: "External",
+                        lastname: "Member",
+                        created_at: new Date(),
+                        updated_at: new Date(),
+                        membership_classification: "external",
+                    })
+                }
+            >
                 Classify member as external
             </button>
             <button
@@ -108,7 +132,19 @@ function Fixture() {
                 <button onClick={() => applyMetadataDeleted("card", appCard.uid, { keys: [CARD_PRESENTATION_KEY] })}>Remove app type</button>
             </section>
             <button onClick={() => setShowVisibility((value) => !value)}>Toggle member view</button>
-            <button onClick={() => User.Model.fromOne({ uid: externalMember.uid, membership_classification: "external" })}>
+            <button
+                onClick={() =>
+                    User.Model.fromOne({
+                        uid: externalMember.uid,
+                        type: "user" as const,
+                        firstname: "External",
+                        lastname: "Member",
+                        created_at: new Date(),
+                        updated_at: new Date(),
+                        membership_classification: "external",
+                    })
+                }
+            >
                 Update hidden member classification
             </button>
             {showVisibility && <VisibilityFixture />}
