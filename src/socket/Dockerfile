@@ -1,5 +1,6 @@
 FROM node:22@sha256:0e5f906573693feaa1e21057ebdcfdb5bd5021f050b2dc7c9deceb629c7da2a8 AS build
 WORKDIR /app
+RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ && rm -rf /var/lib/apt/lists/*
 
 COPY shared/ts /shared/ts
 RUN --mount=type=cache,target=/usr/local/share/.cache/yarn cd /shared/ts && yarn install --frozen-lockfile --network-concurrency 4 --network-timeout 120000 && yarn build
@@ -8,7 +9,8 @@ COPY socket /app
 RUN --mount=type=cache,target=/usr/local/share/.cache/yarn yarn install --frozen-lockfile --network-concurrency 4 --network-timeout 120000 && yarn build
 # Reinstall from empty dependency trees: Yarn file dependencies copy their source tree.
 RUN --mount=type=cache,target=/usr/local/share/.cache/yarn cd /shared/ts && rm -rf node_modules && yarn install --frozen-lockfile --production --network-concurrency 4 --network-timeout 120000
-RUN --mount=type=cache,target=/usr/local/share/.cache/yarn rm -rf node_modules && yarn install --frozen-lockfile --production --network-concurrency 4 --network-timeout 120000
+# Compile native production dependencies against the runtime base libc, not downloaded prebuilds.
+RUN --mount=type=cache,target=/usr/local/share/.cache/yarn rm -rf node_modules && npm_config_build_from_source=true npm_config_nodedir=/usr/local yarn install --frozen-lockfile --production --network-concurrency 4 --network-timeout 120000
 
 FROM node:22@sha256:0e5f906573693feaa1e21057ebdcfdb5bd5021f050b2dc7c9deceb629c7da2a8
 RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/* \
