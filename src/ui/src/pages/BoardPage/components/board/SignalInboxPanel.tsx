@@ -3,12 +3,18 @@ import { useTranslation } from "react-i18next";
 import Button from "@/components/base/Button";
 import { api } from "@/core/helpers/Api";
 import type { ISocketContext } from "@/core/providers/SocketProvider";
+import { formatDateDistance, formatDateTime } from "@/core/utils/LocaleFormat";
 import { ESocketTopic } from "@langboard/core/enums";
 
 interface Signal {
     signal_uid: string;
+    provider: string;
+    event_type: string;
+    can_bind_card: boolean;
     connection_uid: string;
     resource_uid: string;
+    resource_name?: string;
+    resource_type?: string;
     external_id: string;
     commit_sha: string;
     outcome: string | null;
@@ -28,7 +34,7 @@ export default function SignalInboxPanel({
     socket: Pick<ISocketContext, "on" | "off">;
     onLinked?: (cardUID: string) => void;
 }) {
-    const [t] = useTranslation();
+    const [t, i18n] = useTranslation();
     const text = (key: string) => t(`card.inbox.${key}`);
     const [items, setItems] = useState<Signal[]>([]);
     const [cursor, setCursor] = useState<string | null>(null);
@@ -113,8 +119,9 @@ export default function SignalInboxPanel({
         setSelected(null);
         void run((signal) => load(signal));
     }, [pending, refresh]);
+    const canBindCard = (item: Signal) => item.provider === "github" && item.can_bind_card === true;
     const link = () => {
-        if (!selected || !cardUID || !cards.some((card) => card.uid === cardUID)) return;
+        if (!canEdit || !selected || !canBindCard(selected) || !cardUID || !cards.some((card) => card.uid === cardUID)) return;
         const chosen = selected;
         void run(async (signal) => {
             const cardRoot = `/board/${projectUID}/card/${cardUID}/signals`;
@@ -168,45 +175,71 @@ export default function SignalInboxPanel({
             {error && <p role="alert">{text("error")}</p>}
             {!pending && !error && !items.length && <p className="text-sm text-muted-foreground">{text("empty")}</p>}
             <div className="space-y-2">
-                {items.map((item) => (
-                    <Button
-                        key={item.signal_uid}
-                        type="button"
-                        variant="outline"
-                        className="h-auto w-full min-w-0 flex-wrap justify-start gap-2 p-3 text-left"
-                        disabled={pending || !canEdit}
-                        onClick={() => {
-                            setSelected(item);
-                            setCardUID("");
-                        }}
-                        aria-pressed={selected?.signal_uid === item.signal_uid}
-                    >
-                        <span className="badge badge-outline">
-                            {item.conflict
-                                ? text("conflict")
-                                : text(
-                                      item.outcome === "success"
-                                          ? "passed"
-                                          : item.outcome === "failure" || item.outcome === "timed_out"
-                                            ? "failed"
-                                            : "other"
-                                  )}
-                        </span>
-                        <span className="break-all text-xs">
-                            GitHub · #{item.external_id} · {item.commit_sha.slice(0, 12)}
-                        </span>
-                        <time className="text-xs text-muted-foreground" dateTime={item.occurred_at}>
-                            {new Date(item.occurred_at).toLocaleString()}
-                        </time>
-                    </Button>
-                ))}
+                {items.map((item) => {
+                    const content = (
+                        <>
+                            <span className="badge badge-outline">
+                                {item.conflict
+                                    ? text("conflict")
+                                    : item.provider === "dokploy"
+                                      ? text(
+                                            ["success", "failure", "running", "queued", "cancelled"].includes(item.outcome ?? "")
+                                                ? `outcome ${item.outcome}`
+                                                : "other"
+                                        )
+                                      : text(
+                                            item.outcome === "success"
+                                                ? "passed"
+                                                : item.outcome === "failure" || item.outcome === "timed_out"
+                                                  ? "failed"
+                                                  : "other"
+                                        )}
+                            </span>
+                            <span className="break-all text-xs">
+                                {item.provider === "github"
+                                    ? `GitHub · #${item.external_id} · ${item.commit_sha.slice(0, 12)}`
+                                    : item.provider === "dokploy"
+                                      ? `Dokploy · ${text(["deployment.started", "deployment.queued", "deployment.succeeded", "deployment.failed", "deployment.cancelled"].includes(item.event_type) ? `event ${item.event_type}` : "event deployment")}`
+                                      : text("other")}
+                            </span>
+                            {item.provider === "dokploy" && item.resource_name && <span className="break-words text-xs">{item.resource_name}</span>}
+                            <time
+                                className="text-xs text-muted-foreground"
+                                dateTime={item.occurred_at}
+                                title={formatDateTime(new Date(item.occurred_at), i18n.language, { timeStyle: "medium" })}
+                            >
+                                {formatDateDistance(new Date(item.occurred_at), i18n.language)}
+                            </time>
+                        </>
+                    );
+                    return canBindCard(item) ? (
+                        <Button
+                            key={item.signal_uid}
+                            type="button"
+                            variant="outline"
+                            className="h-auto w-full min-w-0 flex-wrap justify-start gap-2 p-3 text-left"
+                            disabled={pending || !canEdit}
+                            onClick={() => {
+                                setSelected(item);
+                                setCardUID("");
+                            }}
+                            aria-pressed={selected?.signal_uid === item.signal_uid}
+                        >
+                            {content}
+                        </Button>
+                    ) : (
+                        <div key={item.signal_uid} className="flex min-w-0 flex-wrap items-center gap-2 rounded-md border p-3">
+                            {content}
+                        </div>
+                    );
+                })}
             </div>
             {cursor && (
                 <Button type="button" variant="ghost" disabled={pending} onClick={() => void run((signal) => load(signal, cursor))}>
                     {text("more")}
                 </Button>
             )}
-            {selected && canEdit && (
+            {selected && canEdit && canBindCard(selected) && (
                 <div className="mt-4 space-y-2 rounded-lg border p-3">
                     <label className="block text-sm" htmlFor={`inbox-card-${projectUID}`}>
                         {text("card")}
