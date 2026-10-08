@@ -432,6 +432,15 @@ class Env:
         return self.__get_from_cache("CARD_INTERNAL_ACCESS_MODE", "scim").strip()
 
     @property
+    def CARD_INTERNAL_OIDC_ISSUERS(self) -> list[str]:
+        """Operator-selected identity authorities for internal collaboration.
+
+        Empty grants nothing; this does not imply employee classification.
+        """
+        raw = self.__get_from_cache("CARD_INTERNAL_OIDC_ISSUERS", "")
+        return list(dict.fromkeys(value.strip().rstrip("/") for value in raw.split(",") if value.strip()))
+
+    @property
     def REFRESH_TOKEN_NAME(self) -> str:
         return f"refresh_token_{self.PROJECT_SHORT_NAME}"
 
