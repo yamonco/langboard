@@ -31,7 +31,7 @@ from test_github_signal import board, installation, lifecycle, secrets, send, si
 from test_signal_inbox import dokploy_inbox  # noqa: F401
 
 
-@pytest.fixture(params=["github", "application", "compose"])
+@pytest.fixture(params=["github", "application", "compose", "glitchtip"])
 def creation_scope(request, monkeypatch, scoped):
     state, card, binding, _ = scoped
     from langboard_shared.domain.models import AppSignal
@@ -44,6 +44,37 @@ def creation_scope(request, monkeypatch, scoped):
         db.update(binding)
     if request.param == "github":
         signal_uid = send(state)["signal_uid"]
+    elif request.param == "glitchtip":
+        from datetime import datetime, timezone
+        from langboard.apps.GlitchTipSignal import normalize_issue
+
+        with DbSession.use(readonly=False) as db:
+            connection.app_key = app_binding.app_key = "glitchtip"
+            app_binding.granted_capabilities = ["resources.read", "signals.read"]
+            resource.resource_type = "project"
+            resource.external_resource_id = "2"
+            resource.resource_path = [
+                {"type": "organization", "id": "1", "slug": "test-org"},
+                {"type": "project", "id": resource.external_resource_id, "slug": "test-project"},
+            ]
+            db.update(connection)
+            db.update(app_binding)
+            db.update(resource)
+            normalized = normalize_issue(
+                {
+                    "id": "101",
+                    "project": {"id": "2", "slug": "test-project"},
+                    "status": "unresolved",
+                    "firstSeen": "2026-10-08T00:00:00Z",
+                    "lastSeen": "2026-10-08T00:01:00Z",
+                },
+                "2",
+                "test-project",
+                datetime.now(timezone.utc),
+            )
+            signal = AppSignal(resource_id=resource.id, event_id=normalized["payload_digest"], **normalized)
+            db.insert(signal)
+            signal_uid = signal.get_uid()
     else:
         from langboard.apps.DokploySignal import normalize_deployment
 
