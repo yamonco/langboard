@@ -42,6 +42,7 @@ from ...models import (
     Checkitem,
     Checklist,
     GlobalCardRelationshipType,
+    IdentityProvider,
     Project,
     ProjectAssignedUser,
     ProjectColumn,
@@ -243,6 +244,9 @@ class CardService(BaseDomainService):
             return True
         if Env.CARD_INTERNAL_ACCESS_MODE == "scim":
             return self._get_service(ScimProvisioningService).is_employee(user)
+        if Env.CARD_INTERNAL_ACCESS_MODE == "oidc_issuers":
+            link = self.repo.user_identity_link.get_by_user_provider(user, IdentityProvider.Oidc, consistent=True)
+            return bool(link and link.external_id and link.issuer.rstrip("/") in Env.CARD_INTERNAL_OIDC_ISSUERS)
         return False
 
     def get_by_project(self, project: TProjectParam | None) -> list[Card]:
