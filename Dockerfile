@@ -55,3 +55,11 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends cron \
     && rm -rf /var/lib/apt/lists/* \
     && printf '' | crontab -
+
+# Runtime writes stay in the dedicated application data directory.
+RUN groupadd --gid 10001 langboard \
+    && useradd --uid 10001 --gid 10001 --create-home langboard \
+    && mkdir -p /app/local /app/.fastmcp \
+    && chown -R langboard:langboard /app/local /app/.fastmcp
+ENV UV_NO_SYNC=1
+USER 10001:10001
