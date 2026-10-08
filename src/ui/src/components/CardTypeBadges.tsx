@@ -1,3 +1,4 @@
+import useHasExternalProjectMember from "@/core/cards/useHasExternalProjectMember";
 import { MetadataModel, Project, ProjectCard } from "@/core/models";
 import { useTranslation } from "react-i18next";
 import {
@@ -21,9 +22,8 @@ export default function CardTypeBadges({ card }: { card: ProjectCard.TModel }) {
 
 function ResolvedCardTypeBadges({ card, project }: { card: ProjectCard.TModel; project: Project.TModel }) {
     const [t] = useTranslation();
-    const members = project.useForeignFieldArray("all_members");
     const visibility = card.useField("visibility");
-    const hasExternal = members.some((member) => member.isValidUser() && member.membership_classification === "external");
+    const hasExternal = useHasExternalProjectMember(project);
     const presentation = cardVisibilityPresentation(visibility, hasExternal);
     if (!presentation) return null;
     const definition = CARD_VISIBILITY_PRESENTATIONS[presentation];

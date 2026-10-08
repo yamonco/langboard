@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { createRoot } from "react-dom/client";
 import { useTranslation } from "react-i18next";
 import { MetadataModel, Project, ProjectCard, User } from "@/core/models";
@@ -49,6 +50,12 @@ function VisibilityFixture() {
             >
                 Add external member
             </button>
+            <button onClick={() => User.Model.fromOne({ uid: externalMember.uid, membership_classification: "internal" })}>
+                Classify member as internal
+            </button>
+            <button onClick={() => User.Model.fromOne({ uid: externalMember.uid, membership_classification: "external" })}>
+                Classify member as external
+            </button>
             <button
                 onClick={() => {
                     visibilityProject.all_members = [];
@@ -72,6 +79,7 @@ const appPresentation = {
 };
 function Fixture() {
     const [t, i18n] = useTranslation();
+    const [showVisibility, setShowVisibility] = useState(true);
     const definition = CARD_VISIBILITY_PRESENTATIONS.whisper;
     return (
         <main className="p-6">
@@ -99,7 +107,11 @@ function Fixture() {
                 </button>
                 <button onClick={() => applyMetadataDeleted("card", appCard.uid, { keys: [CARD_PRESENTATION_KEY] })}>Remove app type</button>
             </section>
-            <VisibilityFixture />
+            <button onClick={() => setShowVisibility((value) => !value)}>Toggle member view</button>
+            <button onClick={() => User.Model.fromOne({ uid: externalMember.uid, membership_classification: "external" })}>
+                Update hidden member classification
+            </button>
+            {showVisibility && <VisibilityFixture />}
         </main>
     );
 }

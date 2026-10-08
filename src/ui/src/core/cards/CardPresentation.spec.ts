@@ -87,3 +87,26 @@ for (const width of [1920, 390]) {
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     });
 }
+
+test("membership classification changes refresh native visibility without replacing project members", async ({ page }) => {
+    await page.goto("/src/core/cards/CardPresentation.fixture.html");
+    await page.getByRole("combobox", { name: "Language" }).selectOption("ko-KR");
+    const internal = page.getByTestId("internal-card");
+    await page.getByRole("button", { name: "Add external member" }).click();
+    await expect(internal).toContainText("귓속말");
+    await page.getByRole("button", { name: "Classify member as internal", exact: true }).click();
+    await expect(internal.locator("[data-card-presentation-axis=visibility]")).toHaveCount(0);
+    await page.getByRole("button", { name: "Classify member as external", exact: true }).click();
+    await expect(internal).toContainText("귓속말");
+    await expect(page.getByTestId("private-card")).toContainText("프라이빗");
+    await expect(page.getByTestId("stored-visibility")).toHaveText("INTERNAL");
+    await page.getByRole("button", { name: "Classify member as internal", exact: true }).click();
+    await expect(internal.locator("[data-card-presentation-axis=visibility]")).toHaveCount(0);
+    await page.getByRole("button", { name: "Toggle member view" }).click();
+    await expect(internal).toHaveCount(0);
+    await page.getByRole("button", { name: "Update hidden member classification" }).click();
+    await page.getByRole("button", { name: "Toggle member view" }).click();
+    await expect(internal).toContainText("귓속말");
+    await page.getByRole("button", { name: "Classify member as internal", exact: true }).click();
+    await expect(internal.locator("[data-card-presentation-axis=visibility]")).toHaveCount(0);
+});

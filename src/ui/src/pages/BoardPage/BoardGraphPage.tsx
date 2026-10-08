@@ -1,3 +1,4 @@
+import useHasExternalProjectMember from "@/core/cards/useHasExternalProjectMember";
 import { formatNumber } from "@/core/utils/LocaleFormat";
 import "@xyflow/react/dist/style.css";
 
@@ -30,13 +31,10 @@ type TCardNode = Node<
 
 function GraphCard({ data }: NodeProps<TCardNode>) {
     const visibility = data.card.useField("visibility");
-    const members = data.project.useForeignFieldArray("all_members");
+    const hasExternal = useHasExternalProjectMember(data.project);
     return (
         <div
-            data-card-privacy={cardVisibilityPresentation(
-                visibility,
-                members.some((member) => member.isValidUser() && member.membership_classification === "external")
-            )}
+            data-card-privacy={cardVisibilityPresentation(visibility, hasExternal)}
             className="size-full rounded-xl border bg-card text-card-foreground shadow-sm hover:border-primary"
         >
             <button

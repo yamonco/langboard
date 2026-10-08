@@ -1,3 +1,4 @@
+import useHasExternalProjectMember from "@/core/cards/useHasExternalProjectMember";
 import ForceGraph2D, { ForceGraphMethods, LinkObject, NodeObject } from "react-force-graph-2d";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTheme } from "next-themes";
@@ -52,8 +53,7 @@ function BoardNetworkGraph({ layout, project, focusColumn, onOpen }: IBoardNetwo
     const [hoveredUID, setHoveredUID] = useState<string>();
     const [colors, setColors] = useState({ background: "transparent", foreground: "#999", muted: "#666", primary: "#999", hue: 260 });
     const graph = useMemo(() => networkBoardGraph(layout), [layout]);
-    const members = project.useForeignFieldArray("all_members");
-    const hasExternal = members.some((member) => member.isValidUser() && member.membership_classification === "external");
+    const hasExternal = useHasExternalProjectMember(project);
     const cards = useMemo(
         () => new Map(layout.lanes.flatMap((lane) => lane.cards.map(({ card }) => [card.uid, card as ProjectCard.TModel] as const))),
         [layout]
