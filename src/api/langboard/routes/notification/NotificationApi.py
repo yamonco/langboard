@@ -8,8 +8,9 @@ from langboard_shared.core.schema import OpenApiSchema
 from langboard_shared.core.security import AuthSecurity
 from langboard_shared.core.security.CollaborationChannel import CollaborationChannel
 from langboard_shared.core.types import SnowflakeID
-from langboard_shared.domain.models import User, UserNotification
+from langboard_shared.domain.models import Card, User, UserNotification
 from langboard_shared.domain.services import DomainService
+from langboard_shared.domain.services.CardVisibilityPolicy import CardVisibility
 from langboard_shared.security import Auth
 from pydantic import BaseModel, Field
 from .NotificationForm import NotificationForm
@@ -54,6 +55,7 @@ def notification_dispatch_context(
 class SocketCardDispatchForm(BaseModel):
     card_uids: list[str] = Field(min_length=1, max_length=2)
     recipient_uids: list[str] = Field(max_length=100)
+    operation: Literal["read", "remove"] = "read"
 
 
 @AppRouter.api.post("/socket/card-dispatch-context", tags=["Notification"])
@@ -76,9 +78,22 @@ def socket_card_dispatch_context(
             recipient_id = SnowflakeID.from_short_code(uid)
             with DbSession.use(readonly=False) as db:
                 recipient = db.exec(SqlBuilder.select.table(User).where(User.id == recipient_id)).first()
-            if recipient is not None and all(service.card.resolve_readable_card(
-                None, card_id, recipient, CollaborationChannel.HumanUI,
-            ) is not None for card_id in card_ids):
+            def can_deliver(card_id):
+                if form.operation == "read":
+                    return service.card.resolve_readable_card(
+                        None, card_id, recipient, CollaborationChannel.HumanUI,
+                    ) is not None
+                # A soft-deleted row authorizes only a payload-free removal signal.
+                with DbSession.use(readonly=False) as db:
+                    card = db.exec(SqlBuilder.select.table(Card, with_deleted=True).where(Card.id == card_id)).first()
+                if card is None or card.deleted_at is None:
+                    return False
+                resolved = service.card.resolve_visibility_context(card.project_id, recipient, CollaborationChannel.HumanUI)
+                return resolved is not None and resolved[1].can_read_card(
+                    CardVisibility(card.visibility), owner_user_id=card.owner_user_id,
+                )
+
+            if recipient is not None and all(can_deliver(card_id) for card_id in card_ids):
                 allowed.append(uid)
         return JsonResponse(content={"allowed_recipient_uids": allowed})
     except (TypeError, ValueError):

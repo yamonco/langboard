@@ -4,7 +4,11 @@ import { createOneTimeToken } from "@/core/ai/BotOneTimeToken";
 import SnowflakeID from "@/core/db/SnowflakeID";
 import ISocketClient from "@/core/server/ISocketClient";
 
-export const resolveCardAudience = async (clients: ISocketClient[], cardUIDs: string[]): Promise<Set<string>> => {
+export const resolveCardAudience = async (
+    clients: ISocketClient[],
+    cardUIDs: string[],
+    operation: "read" | "remove" = "read"
+): Promise<Set<string>> => {
     const allowed = new Set<string>();
     const references = Array.from(new Set(cardUIDs));
     if (!references.length || references.length > 2) return allowed;
@@ -16,6 +20,7 @@ export const resolveCardAudience = async (clients: ISocketClient[], cardUIDs: st
                 {
                     card_uids: references,
                     recipient_uids: batch.map((client) => client.user.uid),
+                    operation,
                 },
                 {
                     timeout: 5000,
