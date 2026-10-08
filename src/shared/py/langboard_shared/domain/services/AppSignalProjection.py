@@ -20,11 +20,8 @@ from ..models import (
 )
 
 
-def card_signal_projections(cards):
-    """Caller supplies its authorized card batch; current consumer authority is checked on primary."""
-    if not cards:
-        return {}
-    card_ids = [card.id for card in cards]
+def signal_resource_conditions():
+    """Current owner consumption authority, shared by evidence and resource discovery."""
     membership = (
         select(ProjectAssignedUser.id)
         .where(
@@ -43,6 +40,113 @@ def card_signal_projections(cards):
         )
         .exists()
     )
+    return (
+        Project.deleted_at.is_(None),
+        BoardAppBinding.app_key == "github",
+        BoardAppBinding.state.in_(["enabled", "needs_attention"]),
+        cast(BoardAppBinding.granted_capabilities, Text).contains('"signals.read"'),
+        AppConnection.app_key == "github",
+        AppConnection.state == "connected",
+        User.deleted_at.is_(None),
+        User.activated_at.is_not(None),
+        or_(User.is_admin == True, Project.owner_id == User.id, and_(membership, update_grant)),  # noqa: E712
+        AppResourceBinding.resource_type == "repository",
+        AppResourceBinding.is_selected == True,  # noqa: E712
+        AppResourceBinding.access_state == "granted",
+    )
+
+
+def authorized_signal_rows(db, rows):
+    """Rows contain a scope/resource, connection and opaque third field. No secret values."""
+    actions = "," + cast(ProjectRole.actions, Text) + ","
+    # Canonical references only; one bounded batch lookup, never resolve secret material.
+    reference_ids = {}
+    for binding, connection, _ in rows:
+        uri = connection.credential_reference or ""
+        if re.fullmatch(r"secret://ref/[A-Za-z0-9]{1,11}", uri):
+            try:
+                reference_ids[binding.id] = InfraHelper.convert_id(uri.removeprefix("secret://ref/"))
+            except (ValueError, TypeError):
+                continue
+    if not reference_ids:
+        return []
+    # Match the native SecretReference scope rules without per-card authority reads.
+    scope_member = (
+        select(ProjectAssignedUser.id)
+        .where(
+            ProjectAssignedUser.project_id == Project.id,
+            ProjectAssignedUser.user_id == AppConnection.owner_id,
+        )
+        .correlate(Project, AppConnection)
+        .exists()
+    )
+    scope_update = (
+        select(ProjectRole.id)
+        .where(
+            ProjectRole.project_id == Project.id,
+            ProjectRole.user_id == AppConnection.owner_id,
+            or_(actions.contains(",*,"), actions.contains(",update,")),
+        )
+        .correlate(Project, AppConnection)
+        .exists()
+    )
+    project_scope = (
+        select(Project.id)
+        .where(
+            Project.id == SecretReference.scope_id,
+            Project.deleted_at.is_(None),
+            or_(
+                User.is_admin == True,  # noqa: E712
+                Project.owner_id == AppConnection.owner_id,  # noqa: E712
+                and_(scope_member, scope_update),
+            ),
+        )
+        .correlate(SecretReference, AppConnection, User)
+        .exists()
+    )
+    workspace_scope = (
+        select(Organization.id)
+        .where(
+            Organization.id == SecretReference.scope_id,
+            Organization.is_active == True,  # noqa: E712
+            Organization.suspended_at.is_(None),
+            Organization.owner_user_id == AppConnection.owner_id,
+        )
+        .correlate(SecretReference, AppConnection)
+        .exists()
+    )
+    pairs = {
+        (reference_ids[binding.id], connection.id) for binding, connection, _ in rows if binding.id in reference_ids
+    }
+    authorized = set(
+        db.exec(
+            select(SecretReference.id, AppConnection.id)
+            .join(
+                AppConnection,
+                tuple_(SecretReference.id, AppConnection.id).in_(pairs),
+            )
+            .join(User, User.id == AppConnection.owner_id)
+            .where(
+                SecretReference.state == "active",
+                or_(
+                    and_(SecretReference.scope == "personal", SecretReference.scope_id == AppConnection.owner_id),
+                    and_(SecretReference.scope == "project", project_scope),
+                    and_(SecretReference.scope == "workspace", workspace_scope),
+                ),
+            )
+        ).all()
+    )
+    eligible = [
+        binding for binding, connection, _ in rows if (reference_ids.get(binding.id), connection.id) in authorized
+    ]
+    return eligible
+
+
+def card_signal_projections(cards):
+    """Caller supplies its authorized card batch; current consumer authority is checked on primary."""
+    if not cards:
+        return {}
+    card_ids = [card.id for card in cards]
     with DbSession.use(readonly=False) as db:
         rows = db.exec(
             select(CardAppSignalBinding, AppConnection, Card.last_change_seq)
@@ -64,104 +168,14 @@ def card_signal_projections(cards):
             .where(
                 Card.id.in_(card_ids),
                 Card.deleted_at.is_(None),
-                Project.deleted_at.is_(None),
+                *signal_resource_conditions(),
                 BoardAppBinding.project_id == Card.project_id,
-                BoardAppBinding.app_key == "github",
-                BoardAppBinding.state.in_(["enabled", "needs_attention"]),
-                cast(BoardAppBinding.granted_capabilities, Text).contains('"signals.read"'),
-                AppConnection.app_key == "github",
-                AppConnection.state == "connected",
-                User.deleted_at.is_(None),
-                User.activated_at.is_not(None),
-                or_(User.is_admin == True, Project.owner_id == User.id, and_(membership, update_grant)),  # noqa: E712
-                AppResourceBinding.resource_type == "repository",
-                AppResourceBinding.is_selected == True,  # noqa: E712
-                AppResourceBinding.access_state == "granted",
                 CardAppSignalBinding.is_enabled == True,  # noqa: E712
             )
         ).all()
         if not rows:
             return {}
-        # Canonical references only; one bounded batch lookup, never resolve secret material.
-        reference_ids = {}
-        for binding, connection, _ in rows:
-            uri = connection.credential_reference or ""
-            if re.fullmatch(r"secret://ref/[A-Za-z0-9]{1,11}", uri):
-                try:
-                    reference_ids[binding.id] = InfraHelper.convert_id(uri.removeprefix("secret://ref/"))
-                except (ValueError, TypeError):
-                    continue
-        if not reference_ids:
-            return {}
-        # Match the native SecretReference scope rules without per-card authority reads.
-        scope_member = (
-            select(ProjectAssignedUser.id)
-            .where(
-                ProjectAssignedUser.project_id == Project.id,
-                ProjectAssignedUser.user_id == AppConnection.owner_id,
-            )
-            .correlate(Project, AppConnection)
-            .exists()
-        )
-        scope_update = (
-            select(ProjectRole.id)
-            .where(
-                ProjectRole.project_id == Project.id,
-                ProjectRole.user_id == AppConnection.owner_id,
-                or_(actions.contains(",*,"), actions.contains(",update,")),
-            )
-            .correlate(Project, AppConnection)
-            .exists()
-        )
-        project_scope = (
-            select(Project.id)
-            .where(
-                Project.id == SecretReference.scope_id,
-                Project.deleted_at.is_(None),
-                or_(
-                    User.is_admin == True,  # noqa: E712
-                    Project.owner_id == AppConnection.owner_id,  # noqa: E712
-                    and_(scope_member, scope_update),
-                ),
-            )
-            .correlate(SecretReference, AppConnection, User)
-            .exists()
-        )
-        workspace_scope = (
-            select(Organization.id)
-            .where(
-                Organization.id == SecretReference.scope_id,
-                Organization.is_active == True,  # noqa: E712
-                Organization.suspended_at.is_(None),
-                Organization.owner_user_id == AppConnection.owner_id,
-            )
-            .correlate(SecretReference, AppConnection)
-            .exists()
-        )
-        pairs = {
-            (reference_ids[binding.id], connection.id) for binding, connection, _ in rows if binding.id in reference_ids
-        }
-        authorized = set(
-            db.exec(
-                select(SecretReference.id, AppConnection.id)
-                .join(
-                    AppConnection,
-                    tuple_(SecretReference.id, AppConnection.id).in_(pairs),
-                )
-                .join(User, User.id == AppConnection.owner_id)
-                .where(
-                    SecretReference.state == "active",
-                    or_(
-                        and_(SecretReference.scope == "personal", SecretReference.scope_id == AppConnection.owner_id),
-                        and_(SecretReference.scope == "project", project_scope),
-                        and_(SecretReference.scope == "workspace", workspace_scope),
-                    ),
-                )
-            ).all()
-        )
-        eligible = [
-            binding for binding, connection, _ in rows if (reference_ids.get(binding.id), connection.id) in authorized
-        ]
+        eligible = authorized_signal_rows(db, rows)
         if not eligible:
             return {}
         matching = and_(

@@ -75,3 +75,20 @@ def unlink_card_signal(
     service: DomainService = DomainService.scope(),
 ):
     return response(unlink_check, service, user, project_uid, card_uid, binding_uid, form.expected_revision)
+
+
+@AppRouter.api.get("/board/{project_uid}/card/{card_uid}/signals/resources", tags=["Board.Card"])
+@AuthFilter.add("user")
+def get_card_signal_resources(
+    project_uid: str,
+    card_uid: str,
+    after: str | None = None,
+    user: User = Auth.scope("user"),
+    service: DomainService = DomainService.scope(),
+):
+    from ...apps.CardSignal import list_card_resources
+
+    try:
+        return response(list_card_resources, service, user, project_uid, card_uid, after)
+    except ValueError:
+        raise ApiException.BadRequest_400() from None
