@@ -468,6 +468,7 @@ class CardService(BaseDomainService):
             return None
 
         api_card = card.api_response()
+        api_card["visibility"] = card.visibility
         api_card["project_column_name"] = column.name
         api_card["work_state"] = self.get_work_states([card], context=context)[card.id]
         progress = api_card["work_state"]["checklist_progress"]
@@ -1346,6 +1347,19 @@ class CardService(BaseDomainService):
             self.repo.checklist.update(checklist)
         return True
 
+    def default_creation_visibility(self, project: Project, actor: TUserOrBot) -> CardVisibility:
+        """Only an active owner's current single-person board defaults to private."""
+        if not isinstance(actor, User) or project.owner_id != actor.id:
+            return CardVisibility.Internal
+        with DbSession.use(readonly=False) as db:
+            other = db.exec(
+                SqlBuilder.select.table(User).join(ProjectAssignedUser, ProjectAssignedUser.user_id == User.id)
+                .where(ProjectAssignedUser.project_id == project.id)
+                .where(User.id != actor.id).where(User.deleted_at.is_(None)).where(User.activated_at.is_not(None))
+                .limit(1)
+            ).first()
+        return CardVisibility.Internal if other else CardVisibility.Private
+
     def create(
         self,
         user_or_bot: TUserOrBot,
@@ -1367,7 +1381,10 @@ class CardService(BaseDomainService):
             return None
 
         with execution_readiness_uow() as execution:
+            visibility = self.default_creation_visibility(project, user_or_bot)
             card = Card(
+                visibility=visibility.value,
+                owner_user_id=user_or_bot.id if visibility == CardVisibility.Private else None,
                 created_by_user_id=user_or_bot.id if isinstance(user_or_bot, User) else None,
                 created_by_bot_id=user_or_bot.id if isinstance(user_or_bot, Bot) else None,
                 project_id=project.id,
@@ -1471,6 +1488,10 @@ class CardService(BaseDomainService):
 
         # Create the child card in the same column
         child = Card(
+            visibility=card.visibility,
+            owner_user_id=card.owner_user_id,
+            created_by_user_id=user_or_bot.id if isinstance(user_or_bot, User) else None,
+            created_by_bot_id=user_or_bot.id if isinstance(user_or_bot, Bot) else None,
             project_id=project.id,
             project_column_id=card.project_column_id,
             title=title,

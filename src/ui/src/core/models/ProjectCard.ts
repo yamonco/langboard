@@ -24,6 +24,7 @@ import { Utils } from "@langboard/core/utils";
 import { ProjectRole } from "@/core/models/roles";
 
 export interface Interface extends IBaseModel {
+    visibility?: "INTERNAL" | "SHARED" | "PRIVATE";
     read_state_version?: number;
     work_state?: IWorkState;
     project_uid: string;
@@ -332,6 +333,10 @@ class ProjectCard extends BaseModel<IStore> {
 
     public get member_uids() {
         return this.getValue("member_uids");
+    }
+
+    public get visibility() {
+        return this.getValue("visibility");
     }
     public set member_uids(value) {
         this.update({ member_uids: value });

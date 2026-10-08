@@ -18,6 +18,7 @@ const BoardCardMemberList = memo(() => {
     const projectMembers = card.useForeignFieldArray("project_members");
     const cardMemberUIDs = card.useField("member_uids");
     const activeWorkers = card.useField("active_workers") ?? [];
+    const visibility = card.useField("visibility");
     const workerByUID = useMemo(() => new Map(activeWorkers.map((worker) => [worker.user_uid, worker])), [activeWorkers]);
     const validProjectMembers = useMemo(() => projectMembers.filter((member) => member.isValidUser()), [projectMembers]);
     const cardMembers = useMemo(
@@ -53,6 +54,8 @@ const BoardCardMemberList = memo(() => {
         });
     };
 
+    if (visibility === "PRIVATE") return null;
+
     return (
         <div className="flex items-center gap-2">
             <MultiSelectAssignee.Popover
@@ -71,6 +74,7 @@ const BoardCardMemberList = memo(() => {
                     align: "start",
                 }}
                 userAvatarListProps={{
+                    groupByMembership: true,
                     maxVisible: 6,
                     size: { initial: "sm", lg: "default" },
                     spacing: "none",

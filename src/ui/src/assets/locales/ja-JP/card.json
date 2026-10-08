@@ -217,5 +217,9 @@
     "card": "カード",
     "choose": "カードを選択",
     "link": "証拠を関連付け"
-  }
+  },
+  "Private": "プライベート",
+  "Whisper": "ウィスパー",
+  "Private visibility guidance": "自分だけが閲覧できます。",
+  "Whisper visibility guidance": "内部協業用カードです。外部メンバーはアクセスできません。"
 }

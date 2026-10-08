@@ -37,6 +37,9 @@ export const INDUSTRIES: string[] = ["Industry 1"];
 export const PURPOSES: string[] = ["Purpose 1"];
 
 class User<TInherit extends Interface = Interface> extends BaseModel<TInherit & Interface> {
+    public get membership_classification() {
+        return this.getValue("membership_classification");
+    }
     static readonly #pendingSubscribers: string[] = [];
     static readonly #subscribedUserUIDs: string[] = [];
     static #subscribeTimeout: NodeJS.Timeout | undefined = undefined;

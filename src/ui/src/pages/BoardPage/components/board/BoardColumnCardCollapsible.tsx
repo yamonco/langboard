@@ -1,4 +1,5 @@
 import Button from "@/components/base/Button";
+import CardVisibilityBadge from "@/pages/BoardPage/components/card/CardVisibilityBadge";
 import Avatar from "@/components/base/Avatar";
 import Card from "@/components/base/Card";
 import Collapsible from "@/components/base/Collapsible";
@@ -144,6 +145,7 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
     const projectMembers = project.useForeignFieldArray("all_members");
     const cardMemberUIDs = card.useField("member_uids") ?? [];
     const activeWorkers = card.useField("active_workers") ?? [];
+    const visibility = card.useField("visibility");
     const workerByUID = useMemo(() => new Map(activeWorkers.map((worker) => [worker.user_uid, worker])), [activeWorkers]);
     const cardMembers = useMemo(
         () => projectMembers.filter((member) => member.isValidUser() && (cardMemberUIDs.includes(member.uid) || workerByUID.has(member.uid))),
@@ -354,6 +356,7 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
                                 className="float-right ml-1"
                             />
                         )}
+                        <CardVisibilityBadge card={card} />
                         <Card.Title
                             className={cn(
                                 "break-all leading-tight",
@@ -455,39 +458,41 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
                                     </span>
                                 )}
                             </Flex>
-                            {cardMembers.length === 0 ? (
-                                <span
-                                    role="img"
-                                    aria-label={t("card.Unassigned")}
-                                    title={t("card.Unassigned")}
-                                    className={cn(
-                                        "flex size-8 shrink-0 items-center justify-center rounded-full border border-dashed",
-                                        "border-amber-500/70 bg-amber-500/10 text-amber-700 dark:text-amber-300"
-                                    )}
-                                >
-                                    <IconComponent icon="user-round-x" size="4" aria-hidden="true" />
-                                </span>
-                            ) : (
-                                <UserAvatarList
-                                    maxVisible={3}
-                                    userOrBots={cardMembers}
-                                    scope={{
-                                        projectUID: project.uid,
-                                        cardUID: card.uid,
-                                    }}
-                                    size="sm"
-                                    renderAvatar={(member, avatar) => (
-                                        <BoardActiveWorkerAvatar
-                                            avatar={avatar}
-                                            worker={workerByUID.get(member.uid)}
-                                            startedLabel={t("card.Active work")}
-                                            pausedLabel={t("card.Paused work")}
-                                        />
-                                    )}
-                                    {...attributes}
-                                    className="cursor-default"
-                                />
-                            )}
+                            {visibility !== "PRIVATE" &&
+                                (cardMembers.length === 0 ? (
+                                    <span
+                                        role="img"
+                                        aria-label={t("card.Unassigned")}
+                                        title={t("card.Unassigned")}
+                                        className={cn(
+                                            "flex size-8 shrink-0 items-center justify-center rounded-full border border-dashed",
+                                            "border-amber-500/70 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                                        )}
+                                    >
+                                        <IconComponent icon="user-round-x" size="4" aria-hidden="true" />
+                                    </span>
+                                ) : (
+                                    <UserAvatarList
+                                        groupByMembership
+                                        maxVisible={3}
+                                        userOrBots={cardMembers}
+                                        scope={{
+                                            projectUID: project.uid,
+                                            cardUID: card.uid,
+                                        }}
+                                        size="sm"
+                                        renderAvatar={(member, avatar) => (
+                                            <BoardActiveWorkerAvatar
+                                                avatar={avatar}
+                                                worker={workerByUID.get(member.uid)}
+                                                startedLabel={t("card.Active work")}
+                                                pausedLabel={t("card.Paused work")}
+                                            />
+                                        )}
+                                        {...attributes}
+                                        className="cursor-default"
+                                    />
+                                ))}
                             <CardTimestamps card={card} compact />
                         </Card.Footer>
                     </Collapsible.Content>

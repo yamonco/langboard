@@ -217,5 +217,9 @@
     "card": "卡片",
     "choose": "选择卡片",
     "link": "关联证据"
-  }
+  },
+  "Private": "私密",
+  "Whisper": "内部协作",
+  "Private visibility guidance": "仅本人可见。",
+  "Whisper visibility guidance": "内部协作卡片。外部成员无法访问。"
 }

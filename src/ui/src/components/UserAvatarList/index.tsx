@@ -15,6 +15,8 @@ import { TUserLikeModel } from "@/core/models/ModelRegistry";
 import { cn } from "@/core/utils/ComponentUtils";
 import { Utils } from "@langboard/core/utils";
 import { forwardRef, Fragment, memo, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { groupMembers } from "./memberGroups";
 
 const SPACING_MAP = {
     1: "-space-x-5",
@@ -52,6 +54,8 @@ export interface IUserAvatarListProps extends Omit<React.ComponentProps<typeof F
     avatarHoverProps?: IUserAvatarProps["hoverProps"];
     onlyList?: bool;
     renderAvatar?: (user: TUserLikeModel, avatar: React.ReactNode) => React.ReactNode;
+    groupByMembership?: boolean;
+    currentUserUID?: string;
 }
 
 export const UserAvatarList = memo(
@@ -67,9 +71,33 @@ export const UserAvatarList = memo(
             avatarHoverProps,
             onlyList,
             renderAvatar,
+            groupByMembership,
+            currentUserUID,
             ...flexProps
         } = props;
+        const [t] = useTranslation();
         const moreUsersCount = userOrBots.length - maxVisible;
+
+        if (groupByMembership) {
+            const labels = { personal: "Personal space", internal: "Internal member", external: "External member", unknown: "Unverified membership" };
+            const groups = groupMembers(userOrBots, currentUserUID);
+            return (
+                <Flex ref={ref} items="center" wrap gap="2" className={className} {...flexProps}>
+                    {groups.map(({ key, members }) => (
+                        <div
+                            key={key}
+                            role="group"
+                            aria-label={t(`user.${labels[key]}`)}
+                            title={t(`user.${labels[key]}`)}
+                            data-member-group={key}
+                            className="rounded-lg border border-border/50 px-1 py-0.5"
+                        >
+                            <UserAvatarList {...props} userOrBots={members} groupByMembership={false} className="" />
+                        </div>
+                    ))}
+                </Flex>
+            );
+        }
 
         return (
             <Flex position="relative" className={cn("rtl:space-x-reverse", SPACING_MAP[spacing], className)} ref={ref} {...flexProps}>
