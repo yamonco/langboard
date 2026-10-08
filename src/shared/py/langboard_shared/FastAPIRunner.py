@@ -26,6 +26,7 @@ def run(app: str, config_file: str | Path, watch_dir: str | Path):
             ssl_cert_reqs=config.ssl_options.get("cert_reqs", CERT_NONE),
             ssl_ca_certs=config.ssl_options.get("ca_certs"),
             workers=config.workers,
+            timeout_worker_healthcheck=config.healthcheck_interval,
             reload=config.watch,
             reload_dirs=([str(watch_dir), dirname(__file__)] if config.watch else None),
             log_config=Logger.get_config(),
