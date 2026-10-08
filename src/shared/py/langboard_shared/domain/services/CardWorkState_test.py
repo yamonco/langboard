@@ -155,15 +155,60 @@ def test_native_pending_approval_blocks_without_inventing_clear_or_verified_stat
     assert result["blocker_state"] == "blocked"
     assert any(reason["code"] == "approval_pending" for reason in result["reasons"])
 
-@pytest.mark.parametrize('outcome', ['failed', 'conflict', 'passed', 'stale', 'unknown', 'unavailable'])
+
+@pytest.mark.parametrize("outcome", ["failed", "conflict", "passed", "stale", "unknown", "unavailable"])
 def test_external_check_axes_preserve_workflow_and_reviewer_authority(outcome):
-    proof = {'binding_uid': 'binding', 'state': outcome}
-    result = state(workflow_stage='active', started=1, change_seq=7, external_signals=[proof])
-    assert result['workflow_stage'] == 'active' and result['completed'] is False
-    assert result['verification_state'] == 'unverified' and result['verification'] is None
-    assert result['external_signal_evidence'] == [proof]
-    assert result['human_execution_state'] == 'human_active'
-    blocked = outcome in {'failed', 'conflict'}
-    assert result['execution_state'] == ('failed' if blocked else 'human_active')
-    assert result['blocker_state'] == ('blocked' if blocked else None)
-    assert result['active_queue_eligible'] is (False if blocked else None)
+    proof = {"binding_uid": "binding", "state": outcome}
+    result = state(workflow_stage="active", started=1, change_seq=7, external_signals=[proof])
+    assert result["workflow_stage"] == "active" and result["completed"] is False
+    assert result["verification_state"] == "unverified" and result["verification"] is None
+    assert result["external_signal_evidence"] == [proof]
+    assert result["human_execution_state"] == "human_active"
+    blocked = outcome in {"failed", "conflict"}
+    assert result["execution_state"] == ("failed" if blocked else "human_active")
+    assert result["blocker_state"] == ("blocked" if blocked else None)
+    assert result["active_queue_eligible"] is (False if blocked else None)
+
+
+@pytest.mark.parametrize(
+    "outcome,external,execution,blocked",
+    [
+        ("queued", "queued", "queued", False),
+        ("running", "running", "external_active", False),
+        ("passed", None, None, False),
+        ("failed", "failed", "failed", True),
+        ("conflict", "conflict", "failed", True),
+        ("cancelled", "cancelled", None, False),
+        ("stale", None, None, False),
+        ("unavailable", None, None, False),
+    ],
+)
+def test_deployment_execution_keeps_reviewer_and_workflow_axes(outcome, external, execution, blocked):
+    proof = {"binding_uid": "deployment", "provider": "dokploy", "state": outcome}
+    result = state(workflow_stage="active", change_seq=7, external_signals=[proof])
+    assert result["external_execution_state"] == external
+    assert result["execution_state"] == execution
+    assert result["human_execution_state"] is None
+    assert result["workflow_stage"] == "active" and result["completed"] is False
+    assert result["verification_state"] == "unverified" and result["verification"] is None
+    assert result["external_signal_evidence"] == [proof]
+    assert result["blocker_state"] == ("blocked" if blocked else None)
+    assert result["active_queue_eligible"] is (False if blocked else None)
+    assert any(reason["code"] == "external_deployment_" + outcome for reason in result["reasons"])
+
+
+def test_deployment_execution_precedence_preserves_human_and_dependency_evidence():
+    proofs = [
+        {"binding_uid": str(index), "provider": "dokploy", "state": value}
+        for index, value in enumerate(("queued", "running", "passed"))
+    ]
+    result = state(started=1, external_signals=proofs, direct_blockers=[{"accessible": False}])
+    assert result["execution_state"] == result["human_execution_state"] == "human_active"
+    assert result["external_execution_state"] == "running"
+    assert result["blocker_state"] == "blocked"
+    proofs.append({"binding_uid": "failed", "provider": "dokploy", "state": "failed"})
+    result = state(started=1, external_signals=proofs)
+    assert result["execution_state"] == "failed" and result["human_execution_state"] == "human_active"
+    assert result["external_execution_state"] == "failed"
+    proofs[-1]["state"] = "stale"
+    assert state(external_signals=proofs)["execution_state"] == "external_active"

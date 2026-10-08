@@ -8,6 +8,7 @@ const params = new URLSearchParams(location.search);
 const calls: { url?: string; method?: string; data: unknown }[] = [];
 Object.assign(window, { inboxCalls: calls });
 let linked = false;
+const linkedDeployments = new Set<string>();
 const callbacks = new Map<string, (data?: unknown) => void>();
 const socket = {
     on: (event: { eventKey: string; callback: (data?: unknown) => void }) => callbacks.set(event.eventKey, event.callback),
@@ -18,7 +19,10 @@ api.defaults.adapter = async (config) => {
     calls.push({ url: config.url, method: config.method, data });
     if (params.has("delayed") && config.url?.includes("/board/project/signals/inbox")) await new Promise((resolve) => setTimeout(resolve, 400));
     if (config.method === "post" && params.has("error")) throw new Error("fixture mutation denied");
-    if (config.method === "post") linked = true;
+    if (config.method === "post") {
+        if (data.resource_uid === "application" || data.resource_uid === "compose") linkedDeployments.add(data.resource_uid);
+        else linked = true;
+    }
     let result: unknown = { source_change_seq: 7, items: [], bindings: [] };
     if (config.url?.endsWith("/inbox"))
         result = {
@@ -44,21 +48,23 @@ api.defaults.adapter = async (config) => {
         };
     if (params.has("mixed") && config.url?.endsWith("/inbox") && !config.url.includes("other")) {
         (result as { items: unknown[] }).items.push(
-            ...["application", "compose"].map((type, index) => ({
-                signal_uid: `dokploy-${type}`,
-                resource_uid: type,
-                connection_uid: "dokploy-connection",
-                provider: "dokploy",
-                resource_name: type === "application" ? "Customer API" : "Customer stack",
-                resource_type: type,
-                event_type: index ? "deployment.failed" : "deployment.succeeded",
-                can_bind_card: params.has("false-capability"),
-                external_id: `deployment-${type}`,
-                commit_sha: "",
-                outcome: index ? "failure" : "success",
-                conflict: false,
-                occurred_at: "2026-10-08T00:00:00Z",
-            }))
+            ...["application", "compose"]
+                .filter((type) => !linkedDeployments.has(type))
+                .map((type) => ({
+                    signal_uid: `dokploy-${type}`,
+                    resource_uid: type,
+                    connection_uid: "dokploy-connection",
+                    provider: "dokploy",
+                    resource_name: type === "application" ? "Customer API" : "Customer stack",
+                    resource_type: type,
+                    event_type: type === "compose" ? "deployment.failed" : "deployment.succeeded",
+                    can_bind_card: !params.has("nonlink"),
+                    external_id: `deployment-${type}`,
+                    commit_sha: "",
+                    outcome: type === "compose" ? "failure" : "success",
+                    conflict: false,
+                    occurred_at: "2026-10-08T00:00:00Z",
+                }))
         );
     }
     return { config, status: 200, statusText: "OK", headers: {}, data: result };

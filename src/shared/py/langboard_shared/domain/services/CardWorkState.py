@@ -130,13 +130,24 @@ def project_work_state(
                 "checkitems",
             )
         )
-    signal_blocked = any(item["state"] in {"failed", "conflict"} for item in external_signals or [])
-    for item in external_signals or []:
-        reasons.append({
-            "code": "external_check_" + item["state"],
-            "message": "External check evidence does not grant reviewer approval or change workflow.",
-            "source_ref": "app_signal_binding:" + item["binding_uid"],
-        })
+    signals = external_signals or []
+    signal_blocked = any(item["state"] in {"failed", "conflict"} for item in signals)
+    deployment_states = {item["state"] for item in signals if item.get("provider") == "dokploy"}
+    external_execution = next(
+        (value for value in ("failed", "conflict", "running", "queued", "cancelled") if value in deployment_states),
+        None,
+    )
+    for item in signals:
+        deployment = item.get("provider") == "dokploy"
+        reasons.append(
+            {
+                "code": ("external_deployment_" if deployment else "external_check_") + item["state"],
+                "message": "External deployment evidence does not grant reviewer approval or change workflow."
+                if deployment
+                else "External check evidence does not grant reviewer approval or change workflow.",
+                "source_ref": "app_signal_binding:" + item["binding_uid"],
+            }
+        )
     return {
         "version": 1,
         "workflow_stage": stage,
@@ -151,11 +162,24 @@ def project_work_state(
         "verification_state": verification,
         "verification_source_change_seq": change_seq,
         "verification": verification_record,
-        "execution_state": "failed" if signal_blocked else execution,
+        "execution_state": "failed"
+        if signal_blocked
+        else execution
+        if execution is not None
+        else "external_active"
+        if external_execution == "running"
+        else "queued"
+        if external_execution == "queued"
+        else None,
+        "external_execution_state": external_execution,
         "human_execution_state": execution,
         "external_signal_evidence": external_signals,
         "execution_generation": execution_generation,
-        "blocker_state": "blocked" if direct_blockers or signal_blocked else "needs_approval" if pending_approval_count else None,
+        "blocker_state": "blocked"
+        if direct_blockers or signal_blocked
+        else "needs_approval"
+        if pending_approval_count
+        else None,
         "pending_approval_count": pending_approval_count,
         "dependency_state": {
             "state": "blocked" if direct_blockers else "clear" if direct_blockers is not None else None,

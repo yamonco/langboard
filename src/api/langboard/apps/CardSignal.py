@@ -1,14 +1,16 @@
 """User-selected card check scope; visibility and revision fencing precede mutation."""
 
 from langboard_shared.core.db import DbSession, SqlBuilder
-from langboard_shared.domain.models import AppSignal, Card, CardAppSignalBinding
+from langboard_shared.domain.models import AppConnection, AppSignal, Card, CardAppSignalBinding, User
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
-from langboard_shared.domain.services.AppSignalProjection import card_signal_projections
+from langboard_shared.domain.services.AppSignalProjection import card_signal_projections, supported_signal_condition
 from langboard_shared.domain.services.CardVisibilityPolicy import CardVisibility
 from langboard_shared.domain.services.factory.SecretReferenceService import SecretReferenceUnavailable
 from langboard_shared.helpers import InfraHelper
 from langboard_shared.publishers import CardPublisher
 from sqlalchemy import func, select
+from .DokployConnection import DokployUnavailable
+from .DokploySignal import _scope as deployment_scope
 from .GitHubManifest import GitHubManifestUnavailable
 from .GitHubSignal import _scope
 
@@ -50,22 +52,39 @@ def bind_check(
         card = authorized_card(service, actor, project_uid, card_uid)
         if card.last_change_seq != source_change_seq:
             raise CardSignalConflict()
-        owner, connection, resource = _scope(service, db, project_uid, connection_uid, resource_uid, actor, lock=True)
+        signal = db.exec(
+            SqlBuilder.select.table(AppSignal).where(
+                AppSignal.id == InfraHelper.convert_id(signal_uid),
+                AppSignal.resource_id == InfraHelper.convert_id(resource_uid),
+                supported_signal_condition(),
+            )
+        ).first()
+        if signal is None or not signal.external_id or signal.provider == "github" and not signal.commit_sha:
+            raise GitHubManifestUnavailable()
+        if signal.provider == "dokploy":
+            stored = db.exec(
+                SqlBuilder.select.table(AppConnection)
+                .where(AppConnection.id == InfraHelper.convert_id(connection_uid))
+                .with_for_update()
+            ).first()
+            owner = db.exec(SqlBuilder.select.table(User).where(User.id == stored.owner_id)).first() if stored else None
+            if owner is None:
+                raise GitHubManifestUnavailable()
+            try:
+                connection, _, resource = deployment_scope(
+                    service, owner, project_uid, connection_uid, resource_uid, lock=True
+                )
+            except (DokployUnavailable, ValueError):
+                raise GitHubManifestUnavailable() from None
+        else:
+            owner, connection, resource = _scope(
+                service, db, project_uid, connection_uid, resource_uid, actor, lock=True
+            )
         try:
             meta = service.secret_reference._find(owner, connection.credential_reference, lock=True).metadata()
         except SecretReferenceUnavailable:
             raise GitHubManifestUnavailable() from None
         if meta["state"] != "active":
-            raise GitHubManifestUnavailable()
-        signal = db.exec(
-            SqlBuilder.select.table(AppSignal).where(
-                AppSignal.id == InfraHelper.convert_id(signal_uid),
-                AppSignal.resource_id == resource.id,
-                AppSignal.provider == "github",
-                AppSignal.event_type == "check.completed",
-            )
-        ).first()
-        if signal is None or not signal.commit_sha or not signal.external_id:
             raise GitHubManifestUnavailable()
         binding = db.exec(
             SqlBuilder.select.table(CardAppSignalBinding)

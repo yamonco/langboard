@@ -426,6 +426,7 @@ def test_project_list_compacts_repeated_workflow_without_inventing_completion():
         "completed": False,
         "verification_state": "unverified",
         "execution_state": None,
+        "external_execution_state": "running",
         "reasons": [{"code": "unknown", "message": "x" * 4000}],
         "state_inconsistency": [{"code": "open_items", "message": "y" * 4000}],
     }
@@ -438,6 +439,7 @@ def test_project_list_compacts_repeated_workflow_without_inventing_completion():
     for item in response.cards.items:
         assert item["work_state"]["completed"] is False
         assert item["work_state"]["execution_state"] is None
+        assert item["work_state"]["external_execution_state"] == "running"
         assert item["work_state"]["reason_codes"] == ["unknown"]
         assert item["work_state"]["inconsistency_codes"] == ["open_items"]
         assert "entry_effects" not in item["work_state"]
