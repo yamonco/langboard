@@ -180,7 +180,15 @@ def test_native_http_requires_current_board_authority(setup, monkeypatch):
     )
     app = FastAPI()
     app.include_router(AppRouter.api)
-    endpoints = {api.create_dokploy_connection, api.get_dokploy_connections, api.get_dokploy_resources}
+    endpoints = {
+        api.create_dokploy_connection,
+        api.get_dokploy_connections,
+        api.get_dokploy_resources,
+        api.bind_dokploy_resource,
+        api.get_dokploy_selected_resources,
+        api.remove_dokploy_resource,
+        api.disconnect_dokploy_connection,
+    }
     for route in app.routes:
         if getattr(route, "endpoint", None) in endpoints:
             for dependency in route.dependant.dependencies:
@@ -203,10 +211,39 @@ def test_native_http_requires_current_board_authority(setup, monkeypatch):
             resource_url, headers=headers, params={"external_project_id": "project-1", "environment_id": "env-1"}
         )
         assert result.status_code == 200 and len(result.json()["items"]) == 2 and "private" not in result.text
+        selected_url = resource_url.removesuffix("/resources") + "/selected"
+        selection = {
+            "resource_type": "application",
+            "external_id": "app-1",
+            "external_project_id": "project-1",
+            "environment_id": "env-1",
+            "expected_revision": response.json()["revision"],
+        }
+        chosen = client.post(selected_url, headers=headers, json=selection)
+        assert chosen.status_code == 200
+        assert client.post(selected_url, headers=headers, json=selection).status_code == 409
+        assert (
+            client.get(selected_url, headers=headers).json()["items"][0]["resource_uid"]
+            == chosen.json()["resource_uid"]
+        )
+        removal_url = selected_url + "/" + chosen.json()["resource_uid"] + "/remove"
+        removal = {"expected_revision": chosen.json()["access_revision"]}
+        assert client.post(removal_url, headers=headers, json=removal).status_code == 200
+        assert client.post(removal_url, headers=headers, json=removal).status_code == 409
+        disconnected_url = resource_url.removesuffix("/resources") + "/disconnect"
+        assert client.post(disconnected_url, headers=headers, json={"expected_revision": "0" * 64}).status_code == 409
         with DbSession.use(readonly=False) as db:
             board[4].actions = ["read"]
             db.update(board[4])
         count = len(calls)
+        assert client.post(selected_url, headers=headers, json=selection).status_code == 404
+        assert client.post(removal_url, headers=headers, json=removal).status_code == 404
+        assert (
+            client.post(
+                disconnected_url, headers=headers, json={"expected_revision": response.json()["revision"]}
+            ).status_code
+            == 404
+        )
         assert client.get(url, headers=headers).status_code == 404
         assert client.get(resource_url, headers=headers).status_code == 404
         assert client.post(url, headers=headers, json=form).status_code == 404
@@ -226,3 +263,137 @@ def test_foreign_connection_owner_and_app_rejected_without_io(setup):
         with pytest.raises(dk.DokployUnavailable):
             dk.discover_resources(service, board[1], board[2].get_uid(), connection["connection_uid"])
         assert len(calls) == count
+
+
+@pytest.mark.parametrize(
+    "kind,uid,parent,environment",
+    [
+        ("project", "project-1", None, None),
+        ("environment", "env-1", "project-1", None),
+        ("application", "app-1", "project-1", "env-1"),
+        ("compose", "compose-1", "project-1", "env-1"),
+    ],
+)
+def test_verified_selection_removal_and_disconnect_preserve_board(setup, kind, uid, parent, environment):
+    service, board, reference, calls, _ = setup
+    connection = connect(setup)
+    args = service, board[1], board[2].get_uid(), connection["connection_uid"]
+    selected = dk.bind_resource(*args, kind, uid, parent, environment, connection["revision"])
+    assert selected["selected"] and selected["access_state"] == "granted"
+    assert selected["path"][-1]["id"] == uid and "private" not in json.dumps(selected)
+    with DbSession.use(readonly=False) as db:
+        binding = db.exec(SqlBuilder.select.table(BoardAppBinding)).first()
+        assert binding.app_key == "dokploy" and binding.state == "disabled"
+        assert not binding.granted_capabilities and not binding.stage_transitions_enabled
+    assert dk.selected_resources(*args)["items"] == [selected]
+    before = len(calls)
+    removed = dk.remove_resource(*args, selected["resource_uid"], selected["access_revision"])
+    assert not removed["selected"] and len(calls) == before
+    with pytest.raises(dk.DokployConflict):
+        dk.remove_resource(*args, selected["resource_uid"], selected["access_revision"])
+    with pytest.raises(dk.DokployConflict):
+        dk.bind_resource(*args, kind, uid, parent, environment, connection["revision"])
+    again = dk.bind_resource(*args, kind, uid, parent, environment, connection["revision"], removed["access_revision"])
+    assert again["resource_uid"] == selected["resource_uid"]
+    with pytest.raises(dk.DokployConflict):
+        dk.disconnect(*args, "0" * 64)
+    dk.disconnect(*args, connection["revision"])
+    with DbSession.use(readonly=False) as db:
+        row = db.exec(SqlBuilder.select.table(AppResourceBinding)).first()
+        assert row.is_selected and row.access_state == "revoked" and row.health == "unavailable"
+        assert row.access_revision == again["access_revision"] + 1
+        assert db.exec(SqlBuilder.select.table(BoardAppBinding)).first().state == "disabled"
+    assert service.secret_reference.get_metadata(board[1], reference["uri"])["state"] == "active"
+    with pytest.raises(dk.DokployUnavailable):
+        dk.discover_resources(*args)
+
+
+@pytest.mark.parametrize(
+    "kind,uid,parent,environment",
+    [
+        ("application", "foreign-app", "project-1", "env-1"),
+        ("compose", "app-1", "project-1", "env-1"),
+        ("environment", "env-1", "foreign-project", None),
+    ],
+)
+def test_invalid_hierarchy_never_creates_bindings(setup, kind, uid, parent, environment):
+    service, board, _, _, _ = setup
+    connection = connect(setup)
+    with pytest.raises(dk.DokployUnavailable):
+        dk.bind_resource(
+            service,
+            board[1],
+            board[2].get_uid(),
+            connection["connection_uid"],
+            kind,
+            uid,
+            parent,
+            environment,
+            connection["revision"],
+        )
+    with DbSession.use(readonly=False) as db:
+        assert not db.exec(SqlBuilder.select.table(AppResourceBinding)).all()
+        assert not db.exec(SqlBuilder.select.table(BoardAppBinding)).all()
+
+
+def test_bindings_are_independent_between_boards(setup):
+    from langboard_shared.domain.models import ProjectAssignedUser, ProjectRole
+
+    service, board, _, calls, _ = setup
+    with DbSession.use(readonly=False) as db:
+        db.insert(ProjectAssignedUser(project_id=11, user_id=board[1].id))
+        db.insert(ProjectRole(project_id=11, user_id=board[1].id, actions=["read", "update"]))
+    connection = connect(setup)
+    from langboard_shared.helpers import InfraHelper
+
+    first_args = service, board[1], board[2].get_uid(), connection["connection_uid"]
+    second_args = service, board[1], InfraHelper.convert_uid(11), connection["connection_uid"]
+    first = dk.bind_resource(*first_args, "project", "project-1", None, None, connection["revision"])
+    second = dk.bind_resource(*second_args, "project", "project-1", None, None, connection["revision"])
+    assert first["resource_uid"] != second["resource_uid"]
+    with pytest.raises(dk.DokployUnavailable):
+        dk.remove_resource(*second_args, first["resource_uid"], first["access_revision"])
+    dk.remove_resource(*first_args, first["resource_uid"], first["access_revision"])
+    assert dk.selected_resources(*second_args)["items"] == [second]
+    dk.disconnect(*first_args, connection["revision"])
+    with DbSession.use(readonly=False) as db:
+        rows = db.exec(SqlBuilder.select.table(AppResourceBinding)).all()
+        assert len(rows) == 2 and all(row.access_state == "revoked" for row in rows)
+        assert sorted(row.is_selected for row in rows) == [False, True]
+        assert len(db.exec(SqlBuilder.select.table(BoardAppBinding)).all()) == 2
+
+
+@pytest.mark.parametrize("failure", ["role", "rotation", "disconnect"])
+def test_inflight_authority_change_rolls_back_binding(setup, failure):
+    service, board, reference, _, state = setup
+    connection = connect(setup)
+
+    def change():
+        if failure == "rotation":
+            service.secret_reference.rotate(board[1], reference["uri"], SecretStr("new-key"), reference["revision"])
+        else:
+            with DbSession.use(readonly=False) as db:
+                if failure == "role":
+                    board[4].actions = ["read"]
+                    db.update(board[4])
+                else:
+                    row = db.exec(SqlBuilder.select.table(AppConnection)).first()
+                    row.state = "disconnected"
+                    db.update(row)
+
+    state["after"] = change
+    with pytest.raises((dk.DokployUnavailable, dk.DokployConflict)):
+        dk.bind_resource(
+            service,
+            board[1],
+            board[2].get_uid(),
+            connection["connection_uid"],
+            "project",
+            "project-1",
+            None,
+            None,
+            connection["revision"],
+        )
+    with DbSession.use(readonly=False) as db:
+        assert not db.exec(SqlBuilder.select.table(AppResourceBinding)).all()
+        assert not db.exec(SqlBuilder.select.table(BoardAppBinding)).all()
