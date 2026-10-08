@@ -940,6 +940,43 @@ def get_project_identity(
     return query_project_identity(_adapter(user_or_bot, service), project_uid)
 
 
+@McpTool.add(
+    "user",
+    description=(
+        "Read approved board App resources with current authority; no credentials or provider calls. "
+        "Optional card context includes workflow guidance and work state. Follow next_cursor."
+    ),
+)
+@McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+def get_connection_context(
+    project_uid: str,
+    user: User,
+    service: DomainService,
+    card_uid: str | None = None,
+    cursor: str | None = None,
+) -> dict[str, Any]:
+    """Consume host-owned generic resource authorization, never provider business logic."""
+    card = None
+    if card_uid is not None:
+        card = query_card_bundle(
+            _adapter(user, service), project_uid, card_uid, CommentPage(limit=1), SectionPage(limit=1), []
+        ).card
+    resources = service.workflow_stage.get_connection_context(user, project_uid, cursor)
+    if resources is None:
+        raise ValueError("Connection context unavailable")
+    return {
+        "project_uid": project_uid,
+        "resources": resources,
+        "card": None
+        if card is None
+        else {
+            "uid": card.core["uid"],
+            "workflow": card.workflow,
+            "work_state": card.work_state,
+        },
+    }
+
+
 @McpTool.add(description="List compact project members without email addresses.")
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
 def list_project_members(project_uid: str, service: DomainService) -> dict[str, Any]:
