@@ -1,6 +1,8 @@
-const fs = require("node:fs");
-const assert = require("node:assert/strict");
-const ts = require(process.cwd() + "/node_modules/typescript");
+import fs from "node:fs";
+import assert from "node:assert/strict";
+import ts from "typescript";
+import process from "node:process";
+import console from "node:console";
 let calls = [];
 let fail = false;
 let mode = "allowed";

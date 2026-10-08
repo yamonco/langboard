@@ -52,7 +52,6 @@ class ProjectAssignedUser extends BaseModel {
 
         return result > 0;
     }
-
 }
 
 export default ProjectAssignedUser;
