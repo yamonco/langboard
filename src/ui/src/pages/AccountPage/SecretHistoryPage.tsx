@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router";
 import { useTranslation } from "react-i18next";
 import { api } from "@/core/helpers/Api";
@@ -22,10 +22,12 @@ export default function SecretHistoryPage() {
     const [cursor, setCursor] = useState<string | null>(null);
     const [busy, setBusy] = useState(true);
     const [failed, setFailed] = useState(false);
-    const currentURL = useRef("");
+    const currentRequest = useRef<object | null>(null);
     const url = `/secret-references/${referenceUID}/history`;
-    currentURL.current = url;
+    const requestGeneration = useMemo(() => ({}), [url]);
+    currentRequest.current = requestGeneration;
     useEffect(() => {
+        currentRequest.current = requestGeneration;
         let active = true;
         setItems([]);
         setBusy(true);
@@ -46,8 +48,9 @@ export default function SecretHistoryPage() {
             });
         return () => {
             active = false;
+            if (currentRequest.current === requestGeneration) currentRequest.current = null;
         };
-    }, [url]);
+    }, [url, requestGeneration]);
     return (
         <main className="mx-auto w-full max-w-2xl px-4 py-10 sm:py-16">
             <section className="card card-border rounded-xl border bg-background">
@@ -91,15 +94,16 @@ export default function SecretHistoryPage() {
                                         setBusy(true);
                                         try {
                                             const { data } = await api.get(url, { params: { cursor } });
-                                            if (currentURL.current !== url) return;
+                                            if (currentRequest.current !== requestGeneration) return;
                                             setItems((previous) => [...previous, ...data.items]);
                                             setCursor(data.next_cursor);
                                         } catch {
+                                            if (currentRequest.current !== requestGeneration) return;
                                             setItems([]);
                                             setCursor(null);
                                             setFailed(true);
                                         } finally {
-                                            setBusy(false);
+                                            if (currentRequest.current === requestGeneration) setBusy(false);
                                         }
                                     }}
                                 >
