@@ -27,6 +27,9 @@ from .utils.WorkEventModel import can_dispatch_work_event
 
 
 WEBHOOK_TIMEOUT = Timeout(5.0, connect=2.0)
+# Execution ingress verifies the current card (up to 20s) before persisting its
+# dispatch. Keep the acknowledgment budget below the outbox's 300s lease.
+EXECUTION_WEBHOOK_TIMEOUT = Timeout(5.0, connect=2.0, read=60.0)
 WEBHOOK_FANOUT_BATCH_SIZE = 100
 _SAFE_EVENT_FIELDS = frozenset(
     {
@@ -153,7 +156,8 @@ async def post_signed_webhook(model: WebhookModel, webhook_uid: str, setting: We
         body, headers = signed_request(model, secret)
         target = await ensure_public_webhook_url(setting.url)
         headers["Host"] = target.host_header
-        async with AsyncClient(timeout=WEBHOOK_TIMEOUT, follow_redirects=False) as client:
+        timeout = EXECUTION_WEBHOOK_TIMEOUT if model.event in WORK_EXECUTION_EVENTS else WEBHOOK_TIMEOUT
+        async with AsyncClient(timeout=timeout, follow_redirects=False) as client:
             response = await client.post(
                 target.url,
                 content=body,
