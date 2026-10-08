@@ -4,13 +4,12 @@ import hashlib
 import json
 import re
 from urllib.parse import urlsplit
-import httpx
 from langboard_shared.core.db import DbSession, SqlBuilder
 from langboard_shared.domain.models import AppConnection, AppResourceBinding, BoardAppBinding
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.domain.services.factory.SecretReferenceService import SecretAuditSource
-from langboard_shared.Env import Env
 from langboard_shared.helpers import InfraHelper
+from .MetadataTransport import MetadataUnavailable, approved_instance, read_json
 
 
 class GlitchTipUnavailable(Exception):
@@ -30,37 +29,7 @@ def _board(service, actor, project_uid):
     return board
 
 
-def _instance(value):
-    """Operator-approved exact bases allow public and self-hosted instances."""
-    if not isinstance(value, str) or len(value) > 2048:
-        raise ValueError("Invalid GlitchTip instance")
-    parsed = urlsplit(value)
-    if (
-        parsed.scheme != "https"
-        or not parsed.hostname
-        or parsed.username
-        or parsed.password
-        or parsed.query
-        or parsed.fragment
-        or "%" in value
-        or "\\" in value
-        or any(ord(char) < 33 for char in value)
-        or any(part in {".", ".."} for part in parsed.path.split("/"))
-    ):
-        raise ValueError("Invalid GlitchTip instance")
-    try:
-        parsed.port
-    except ValueError:
-        raise ValueError("Invalid GlitchTip instance") from None
-    normalized = value.rstrip("/")
-    approved = {
-        item.strip().rstrip("/")
-        for item in Env.get_from_env("APP_CONNECTION_ALLOWED_BASE_URLS", "").split(",")
-        if item.strip()
-    }
-    if normalized not in approved:
-        raise ValueError("Instance must be approved in APP_CONNECTION_ALLOWED_BASE_URLS")
-    return normalized
+_instance = approved_instance
 
 
 def _slug(value):
@@ -109,35 +78,20 @@ def _credential(service, actor, uri):
 
 
 def _get(base, token, path, params=None):
-    # Only metadata endpoints owned by this module; no client URLs or redirects.
-    with httpx.Client(timeout=15, follow_redirects=False, trust_env=False) as client:
-        with client.stream(
-            "GET",
-            base + path,
-            headers={"Authorization": "Bearer " + token, "Accept": "application/json"},
-            params=params,
-        ) as response:
-            if response.status_code != 200:
-                raise GlitchTipUnavailable()
-            body = bytearray()
-            for chunk in response.iter_bytes():
-                if len(body) + len(chunk) > 262144:
-                    raise GlitchTipUnavailable()
-                body.extend(chunk)
-            try:
-                data = json.loads(body)
-            except (ValueError, UnicodeError):
-                raise GlitchTipUnavailable() from None
-            cursor = None
-            for link in response.links.values():
-                if link.get("rel") == "next" and link.get("results") == "true":
-                    from urllib.parse import parse_qs
+    try:
+        data, links = read_json(base, path, {"Authorization": "Bearer " + token, "Accept": "application/json"}, params)
+    except MetadataUnavailable:
+        raise GlitchTipUnavailable() from None
+    cursor = None
+    for link in links.values():
+        if link.get("rel") == "next" and link.get("results") == "true":
+            from urllib.parse import parse_qs
 
-                    values = parse_qs(urlsplit(link.get("url", "")).query).get("cursor", [])
-                    if len(values) != 1 or not re.fullmatch(r"[A-Za-z0-9:_-]{1,256}", values[0]):
-                        raise GlitchTipUnavailable()
-                    cursor = values[0]
-            return data, cursor
+            values = parse_qs(urlsplit(link.get("url", "")).query).get("cursor", [])
+            if len(values) != 1 or not re.fullmatch(r"[A-Za-z0-9:_-]{1,256}", values[0]):
+                raise GlitchTipUnavailable()
+            cursor = values[0]
+    return data, cursor
 
 
 def _fence(service, actor, project_uid, uri, secret_revision):
