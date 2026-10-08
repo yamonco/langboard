@@ -26,13 +26,13 @@ from .CreationOutputs import CREATION_OUTPUTS
 from .GraphOutputs import GRAPH_OUTPUTS
 from .NotificationOutputs import NOTIFICATION_OUTPUTS
 from .Outputs import with_typed_output
-from .ProjectOutputs import PROJECT_OUTPUTS
 from .ProjectDiscovery import with_project_discovery
+from .ProjectOutputs import PROJECT_OUTPUTS
 from .ResourceOutputs import RESOURCE_OUTPUTS
 from .Tool import McpTool
 from .ToolGroupMiddleware import ToolGroupMiddleware
-from .WorkPlanOutputs import WORK_PLAN_OUTPUTS
 from .WorkOutputs import WORK_OUTPUTS
+from .WorkPlanOutputs import WORK_PLAN_OUTPUTS
 
 
 # Existing canonical entry points; profile selection never grants permission.
@@ -49,6 +49,7 @@ AGENT_CORE_TOOLS = frozenset(
         "get_card_bundle",
         "get_card_delta",
         "preview_card_work_plan",
+        "apply_card_work_plan",
         "create_card",
         "update_card",
         "change_card_checklist",
