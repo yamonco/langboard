@@ -41,3 +41,72 @@ for (const width of [1440, 390]) {
         expect(calls).toBe(3);
     });
 }
+
+for (const width of [1440, 390])
+    for (const late of ["denial", "same-reference-return"])
+        test(`late history pagination ignored after navigation ${late} at ${width}`, async ({ page }) => {
+            await page.setViewportSize({ width, height: 900 });
+            let oldPage: import("@playwright/test").Route | undefined;
+            let initial = 0;
+            await page.route("**/secret-references/*/history*", async (route) => {
+                const url = new URL(route.request().url());
+                if (url.searchParams.has("cursor")) {
+                    oldPage = route;
+                    return;
+                }
+                initial++;
+                await route.fulfill({
+                    json: {
+                        items: [
+                            {
+                                uid: `event-${initial}`,
+                                action: "created",
+                                created_at: "2026-10-08T00:00:00Z",
+                                actor_uid: `current-actor-${initial}`,
+                                source_kind: "api",
+                                revision_before: null,
+                                revision_after: 0,
+                            },
+                        ],
+                        next_cursor: "older",
+                    },
+                });
+            });
+            await page.goto("/src/pages/AccountPage/secret-history.fixture.html");
+            await expect(page.getByText(/current-actor-1/)).toBeVisible();
+            await page.getByRole("button", { name: "Older events" }).click();
+            await expect.poll(() => Boolean(oldPage)).toBe(true);
+            await page.getByRole("button", { name: "Other reference", exact: true }).click();
+            await expect(page.getByText(/current-actor-2/)).toBeVisible();
+            if (late === "same-reference-return") {
+                await page.getByRole("button", { name: "Fixture reference", exact: true }).click();
+                await expect(page.getByText(/current-actor-3/)).toBeVisible();
+            }
+            const response = page.waitForResponse((response) => new URL(response.url()).searchParams.has("cursor"));
+            await oldPage!.fulfill(
+                late === "denial"
+                    ? { status: 404, json: {} }
+                    : {
+                          json: {
+                              items: [
+                                  {
+                                      uid: "stale-event",
+                                      action: "revoked",
+                                      created_at: "2026-10-08T00:00:00Z",
+                                      actor_uid: "stale-actor",
+                                      source_kind: "api",
+                                      revision_before: 0,
+                                      revision_after: 1,
+                                  },
+                              ],
+                              next_cursor: null,
+                          },
+                      }
+            );
+            await (await response).finished();
+            await expect(page.getByText(new RegExp(`current-actor-${initial}`))).toBeVisible();
+            await expect(page.getByRole("alert")).toHaveCount(0);
+            await expect(page.locator("li")).toHaveCount(1);
+            await expect(page.getByText(/stale-actor/)).toHaveCount(0);
+            await expect(page.getByRole("button", { name: "Older events" })).toBeEnabled();
+        });
