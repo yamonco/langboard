@@ -12,3 +12,13 @@ async def github_health_task(job_uid: str) -> None:
         drain_one(service, job_uid)
     finally:
         service.close()
+
+
+@Broker.wrap_async_task_decorator
+async def github_signal_task(delivery_uid: str) -> None:
+    from .GitHubSignalWorker import drain_one as drain_signal
+    service = DomainService()
+    try:
+        drain_signal(service, delivery_uid)
+    finally:
+        service.close()

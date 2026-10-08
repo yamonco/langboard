@@ -230,7 +230,10 @@ def test_authority_changes_during_signature_resolution_block_commit(signal_stora
     def change_after(*args, **kwargs):
         result = original(*args, **kwargs)
         if failure == "secret_revoke":
-            state[0].secret_reference.revoke(state[1][1], state[2].credential_reference)
+            state[0].secret_reference.revoke(
+                state[1][1], state[2].credential_reference,
+                state[0].secret_reference.get_metadata(state[1][1], state[2].credential_reference)["revision"],
+            )
         else:
             with DbSession.use(readonly=False) as db:
                 if failure == "unlink":
@@ -242,6 +245,8 @@ def test_authority_changes_during_signature_resolution_block_commit(signal_stora
     monkeypatch.setattr(state[0].secret_reference, "resolve_for_runtime", change_after)
     with pytest.raises(GitHubManifestUnavailable):
         send(state)
+    if failure == "secret_revoke":
+        assert state[0].secret_reference.get_metadata(state[1][1], state[2].credential_reference)["state"] == "revoked"
     with DbSession.use(readonly=False) as db:
         assert not db.exec(SqlBuilder.select.table(AppSignal)).all()
 

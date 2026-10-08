@@ -56,6 +56,31 @@ def _scope(service, db, project_uid, connection_uid, resource_uid, actor=None, *
     return owner, connection, resource
 
 
+def normalize_check(payload, body, delivery_id):
+    if payload.get("action") != "completed":
+        raise GitHubManifestUnavailable()
+    check = payload["check_run"]
+    # check_run.app is the producer, not the receiving App; installation is an InstallationLite.
+    conclusion = check["conclusion"]
+    if check.get("status") != "completed" or conclusion not in CONCLUSIONS:
+        raise GitHubManifestUnavailable()
+    sha = check["head_sha"]
+    if not isinstance(sha, str) or not re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", sha):
+        raise GitHubManifestUnavailable()
+    timestamp = check["completed_at"]
+    if not isinstance(timestamp, str) or len(timestamp) > 40:
+        raise GitHubManifestUnavailable()
+    occurred_at = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+    if occurred_at.tzinfo is None:
+        raise GitHubManifestUnavailable()
+    return dict(
+        provider="github", event_id=str(UUID(delivery_id)), event_type="check.completed",
+        occurred_at=occurred_at.astimezone(timezone.utc).isoformat(timespec="microseconds"),
+        external_id=str(_positive(check["id"])), outcome=conclusion, commit_sha=sha,
+        payload_digest=hashlib.sha256(body).hexdigest(),
+    )
+
+
 def receive_check(service, project_uid, connection_uid, resource_uid, body, signature, event, delivery_id):
     """One configured webhook resource. Current authority and SecretRef revision fenced at commit."""
     try:
@@ -69,13 +94,10 @@ def receive_check(service, project_uid, connection_uid, resource_uid, body, sign
         payload, connection, revision, _ = verify_signed_payload(
             service, owner, connection_uid, body, signature, delivery_id
         )
-        if payload.get("action") != "completed":
-            raise GitHubManifestUnavailable()
-        check = payload["check_run"]
-        repository = payload["repository"]
+        values = normalize_check(payload, body, delivery_id)
         installation_id = str(_positive(payload["installation"]["id"]))
-        account_id = str(_positive(repository["owner"]["id"]))
-        repository_id = str(_positive(repository["id"]))
+        account_id = str(_positive(payload["repository"]["owner"]["id"]))
+        repository_id = str(_positive(payload["repository"]["id"]))
         path = resource.resource_path
         if (
             len(path) != 3 or path[0].get("type") != "installation" or path[0].get("id") != installation_id
@@ -84,25 +106,6 @@ def receive_check(service, project_uid, connection_uid, resource_uid, body, sign
             or repository_id != resource.external_resource_id
         ):
             raise GitHubManifestUnavailable()
-        # check_run.app is the producer, not the receiving App; installation is an InstallationLite.
-        conclusion = check["conclusion"]
-        if check.get("status") != "completed" or conclusion not in CONCLUSIONS:
-            raise GitHubManifestUnavailable()
-        sha = check["head_sha"]
-        if not isinstance(sha, str) or not re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", sha):
-            raise GitHubManifestUnavailable()
-        timestamp = check["completed_at"]
-        if not isinstance(timestamp, str) or len(timestamp) > 40:
-            raise GitHubManifestUnavailable()
-        occurred_at = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
-        if occurred_at.tzinfo is None:
-            raise GitHubManifestUnavailable()
-        values = dict(
-            provider="github", event_id=str(UUID(delivery_id)), event_type="check.completed",
-            occurred_at=occurred_at.astimezone(timezone.utc).isoformat(timespec="microseconds"),
-            external_id=str(_positive(check["id"])), outcome=conclusion, commit_sha=sha,
-            payload_digest=hashlib.sha256(body).hexdigest(),
-        )
     except Exception:
         raise GitHubManifestUnavailable() from None
     with DbSession.atomic() as db:
