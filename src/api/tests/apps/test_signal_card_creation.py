@@ -117,7 +117,9 @@ def creation_scope(request, monkeypatch, scoped):
     )
     # Suppress only external dispatch; CardService creation/readiness remain native.
     events = []
-    monkeypatch.setattr(service.card, "dispatch_created", lambda *args: events.append(args[3].get_uid()))
+    from langboard_shared.domain.services.factory.CardService import CardService
+
+    monkeypatch.setattr(CardService, "dispatch_created", lambda self, *args, **kwargs: events.append(args[3].get_uid()))
     return (
         service,
         board,
