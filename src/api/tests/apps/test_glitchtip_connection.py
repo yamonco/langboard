@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import httpx
 import pytest
 from langboard.apps import GlitchTipConnection as gt
+from langboard.apps import MetadataTransport as transport
 from langboard_shared.core.db import DbSession, SqlBuilder
 from langboard_shared.domain.models import AppConnection, AppResourceBinding, BoardAppBinding
 from langboard_shared.domain.services.factory.SecretReferenceService_test import secrets  # noqa: F401
@@ -71,7 +72,7 @@ def setup(secrets, monkeypatch):
 
     original_client = httpx.Client
     monkeypatch.setattr(
-        gt.httpx, "Client", lambda **kwargs: original_client(transport=httpx.MockTransport(external), **kwargs)
+        transport.httpx, "Client", lambda **kwargs: original_client(transport=httpx.MockTransport(external), **kwargs)
     )
     return service, board, reference, calls, state
 
