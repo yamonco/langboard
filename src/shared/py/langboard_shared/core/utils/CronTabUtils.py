@@ -1,7 +1,10 @@
+import os
 from contextlib import contextmanager
 from os import environ
 from pathlib import Path
+from subprocess import Popen
 from subprocess import run as subprocess_run
+from sys import executable
 from threading import Lock
 from typing import Callable, Iterator
 from zoneinfo import ZoneInfo
@@ -14,6 +17,7 @@ from ..types import SafeDateTime
 
 crontab.SPECIALS_CONVERSION = False
 _cron_lock = Lock()
+_scheduler_process: Popen | None = None
 
 try:
     import fcntl as _fcntl
@@ -93,6 +97,15 @@ class CronTabUtils:
             self.__reload_cron()
 
     def __reload_cron(self) -> None:
+        if hasattr(os, "geteuid") and os.geteuid() != 0:
+            global _scheduler_process
+            if _scheduler_process is not None and _scheduler_process.poll() is None:
+                return
+            _scheduler_process = Popen(
+                [executable, "-m", "langboard_shared.core.utils.CronScheduler", str(self.file_path)],
+                start_new_session=True,
+            )
+            return
         subprocess_run(["crontab", str(self.file_path)], check=True)
         if any(process.info.get("name") == "cron" for process in process_iter(["pid", "name"])):
             return
