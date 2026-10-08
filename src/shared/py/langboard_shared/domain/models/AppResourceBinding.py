@@ -1,5 +1,5 @@
 from typing import Any
-from sqlalchemy import JSON, CheckConstraint, UniqueConstraint
+from sqlalchemy import JSON, CheckConstraint, Index, UniqueConstraint
 from sqlalchemy.schema import conv
 from ...core.db import BaseDbModel, Field, SnowflakeIDField
 from ...core.types import SnowflakeID
@@ -11,6 +11,7 @@ class AppResourceBinding(BaseDbModel, table=True):
     """Independent resource selection, access and health for one board App."""
 
     __table_args__ = (
+        Index("ix_app_resource_signal_lookup", "connection_id", "resource_type", "external_resource_id", "id"),
         UniqueConstraint(
             "board_binding_id",
             "connection_id",

@@ -39,6 +39,7 @@ from .EditorGraphApprovalRequest import EditorGraphApprovalRequest
 from .ExternalImportRecord import ExternalImportRecord
 from .GitHubHealthJob import GitHubHealthJob
 from .GitHubLifecycleReceipt import GitHubLifecycleReceipt
+from .GitHubSignalDelivery import GitHubSignalDelivery
 from .GlobalCardRelationshipType import GlobalCardRelationshipType
 from .GlobalLabel import GlobalLabel
 from .GraphApprovalRequest import GraphApprovalRequest
@@ -97,6 +98,7 @@ from .WorkflowStageDefinition import WorkflowStageDefinition
 
 __all__ = [
     "GitHubLifecycleReceipt",
+    "GitHubSignalDelivery",
     "GitHubHealthJob",
     "AppConnection",
     "BoardAppBinding",

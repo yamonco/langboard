@@ -180,4 +180,6 @@ def drain_one(service, job_uid):
 
 
 if __name__ == "__main__":
-    print(f"queued={recover_pending()}")
+    from .GitHubSignalWorker import recover_pending as recover_signals
+
+    print(f"health_queued={recover_pending()} signal_queued={recover_signals()}")
