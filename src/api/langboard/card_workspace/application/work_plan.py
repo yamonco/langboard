@@ -16,6 +16,7 @@ from langboard_shared.domain.models import (
     Project,
     ProjectColumn,
 )
+from langboard_shared.helpers import InfraHelper
 from langboard_shared.publishers import MetadataPublisher
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, field_validator, model_serializer, model_validator
 from sqlalchemy import select
@@ -151,6 +152,17 @@ class WorkPlanService:
         refs = {plan.anchor_card_uid} | {c.source_card_uid for c in plan.cardify_checkitems}
         refs |= {c.target_card_ref for c in plan.new_checklists if c.target_card_ref not in symbolic}
         refs |= {ref for e in plan.add_edges for ref in (e.parent_ref, e.child_ref) if ref not in symbolic}
+        if plan.remove_relationship_uids:
+            removals = {
+                InfraHelper.convert_uid(edge_id): (parent_id, child_id)
+                for edge_id, parent_id, child_id, _ in service.card_relationship.repo.card_relationship.get_graph_snapshot(
+                    project
+                )
+            }
+            for edge_uid in plan.remove_relationship_uids:
+                if edge_uid not in removals:
+                    raise ValueError("Work plan relationship is unavailable")
+                refs.update(InfraHelper.convert_uid(card_id) for card_id in removals[edge_uid])
         cards = {uid: self._card(uid, project) for uid in refs}
         with DbSession.use(readonly=False) as db:
             card_ids = sorted(c.id for c in cards.values())
@@ -328,7 +340,10 @@ class WorkPlanService:
                     raise ValueError("Work plan request ID reused with another plan")
                 result = stored["result"]
                 graph = result.get("graph") or {}
-                visible_refs = {card["uid"] for card in graph.get("created_cards", [])}
+                if plan.remove_relationship_uids and "visibility_card_uids" not in stored:
+                    raise ValueError("Work plan receipt visibility is unavailable")
+                visible_refs = set(stored.get("visibility_card_uids", []))
+                visible_refs.update(card["uid"] for card in graph.get("created_cards", []))
                 visible_refs.update(item["card"]["uid"] for item in result.get("cardifications", []))
                 visible_refs.update(item["target_card_uid"] for item in result.get("checklists", []))
                 for edge in graph.get("created_relationships", []):
@@ -405,7 +420,13 @@ class WorkPlanService:
             result["replayed"] = False
             result = TypeAdapter(dict).dump_python(result, mode="json")
             value = dumps(
-                {"version": 1, "payload_digest": payload_digest, "revision": expected_revision, "result": result},
+                {
+                    "version": 1,
+                    "payload_digest": payload_digest,
+                    "revision": expected_revision,
+                    "result": result,
+                    "visibility_card_uids": sorted(card.get_uid() for card in mapped.values()),
+                },
                 default=str,
             )
             if self.service.metadata.save(CardMetadata, anchor, receipt_key, value, internal=True) is None:

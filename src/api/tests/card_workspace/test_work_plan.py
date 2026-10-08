@@ -314,3 +314,113 @@ def test_work_plan_card_scope_uses_current_mcp_visibility(available):
             owner._card("card", project)
     resolver.assert_called_once_with(project, "card", actor, CollaborationChannel.Mcp)
     legacy.assert_not_called()
+
+
+@pytest.mark.parametrize("hidden_endpoint", [False, True])
+def test_removed_relationship_endpoints_are_scoped_before_graph_preview(monkeypatch, hidden_endpoint):
+    from langboard_shared.helpers import InfraHelper
+
+    project = Project(id=1, owner_id=1, title="Board")
+    anchor = Card(id=1, project_id=1, project_column_id=3, title="Anchor", order=0)
+    child = Card(id=2, project_id=1, project_column_id=3, title="Child", order=1)
+    hidden = Card(id=3, project_id=1, project_column_id=3, title="Hidden", order=2)
+    engine = create_engine("sqlite://")
+    with engine.begin() as connection:
+        connection.execute(text(f'CREATE TABLE "{Project.__tablename__}" (id INTEGER PRIMARY KEY)'))
+        connection.execute(text(f'INSERT INTO "{Project.__tablename__}" VALUES (1)'))
+    monkeypatch.setattr(DbEngine, "get_main_engine", lambda: engine)
+    monkeypatch.setattr(DbEngine, "get_readonly_engine", lambda: engine)
+    with engine.begin() as connection:
+        connection.execute(text(f'CREATE TABLE "{Card.__tablename__}" (id INTEGER PRIMARY KEY)'))
+        connection.execute(text(f'INSERT INTO "{Card.__tablename__}" VALUES (1), (2), (3)'))
+        connection.execute(text(f'CREATE TABLE "{Checklist.__tablename__}" (id INTEGER PRIMARY KEY, card_id INTEGER)'))
+    checked = []
+
+    def resolve(_, uid, *__):
+        checked.append(uid)
+        card = {anchor.get_uid(): anchor, child.get_uid(): child, hidden.get_uid(): hidden}[uid]
+        return None if card is hidden and hidden_endpoint else (project, card, object())
+
+    graph = Mock(return_value=[(10, child.id, hidden.id, 7)])
+    service = SimpleNamespace(
+        project=SimpleNamespace(get_by_id_like=lambda _: project),
+        card=SimpleNamespace(resolve_readable_card=resolve),
+        checklist=SimpleNamespace(get_api_list_by_card=lambda _: []),
+        card_relationship=SimpleNamespace(
+            preview_graph_patch=Mock(return_value={}),
+            repo=SimpleNamespace(
+                card_relationship=SimpleNamespace(
+                    get_graph_snapshot=graph,
+                    get_global_relationship_types_map=lambda _: {},
+                )
+            ),
+        ),
+    )
+    plan = WorkPlan(
+        project_uid=project.get_uid(),
+        anchor_card_uid=anchor.get_uid(),
+        remove_relationship_uids=[InfraHelper.convert_uid(10)],
+    )
+    try:
+        if hidden_endpoint:
+            with pytest.raises(ValueError, match="unavailable"):
+                WorkPlanService(object(), service).preview(plan)
+            assert hidden.get_uid() in checked
+        else:
+            result = WorkPlanService(object(), service).preview(plan)
+            assert len(result["revision"]) == 64
+            service.card_relationship.preview_graph_patch.assert_called_once()
+            assert set(checked) == {anchor.get_uid(), child.get_uid(), hidden.get_uid()}
+        if hidden_endpoint:
+            service.card_relationship.preview_graph_patch.assert_not_called()
+    finally:
+        engine.dispose()
+
+
+@pytest.mark.parametrize("receipt_scope", ["legacy", "hidden", "visible"])
+def test_removed_relationship_replay_requires_saved_current_endpoint_scope(monkeypatch, receipt_scope):
+    from hashlib import sha256
+    from json import dumps
+
+    project = Project(id=1, owner_id=1, title="Board")
+    anchor = Card(id=1, project_id=1, project_column_id=3, title="Anchor", order=0)
+    endpoint = Card(id=2, project_id=1, project_column_id=3, title="Endpoint", order=1)
+    plan = WorkPlan(project_uid=project.get_uid(), anchor_card_uid=anchor.get_uid(), remove_relationship_uids=["edge"])
+    result = {
+        "graph": {"created_cards": [], "created_relationships": [], "removed_relationship_uids": ["edge"]},
+        "checklists": [],
+        "cardifications": [],
+        "all_succeeded": True,
+    }
+    stored = {
+        "payload_digest": sha256(dumps(plan.model_dump(mode="json"), sort_keys=True).encode()).hexdigest(),
+        "revision": "a" * 64,
+        "result": result,
+    }
+    if receipt_scope != "legacy":
+        stored["visibility_card_uids"] = [anchor.get_uid(), endpoint.get_uid()]
+    engine = create_engine("sqlite://")
+    with engine.begin() as connection:
+        connection.execute(text(f'CREATE TABLE "{Project.__tablename__}" (id INTEGER PRIMARY KEY)'))
+        connection.execute(text(f'INSERT INTO "{Project.__tablename__}" VALUES (1)'))
+    monkeypatch.setattr(DbEngine, "get_main_engine", lambda: engine)
+    monkeypatch.setattr(DbEngine, "get_readonly_engine", lambda: engine)
+
+    def resolve(_, uid, *__):
+        card = anchor if uid == anchor.get_uid() else endpoint
+        return None if card is endpoint and receipt_scope == "hidden" else (project, card, object())
+
+    service = SimpleNamespace(
+        project=SimpleNamespace(get_by_id_like=lambda _: project),
+        card=SimpleNamespace(resolve_readable_card=resolve),
+        metadata=SimpleNamespace(get_by_key_as_api=lambda *_, **__: {"value": dumps(stored)}),
+    )
+    try:
+        owner = WorkPlanService(SimpleNamespace(get_uid=lambda: "actor"), service)
+        if receipt_scope == "visible":
+            assert owner.apply(plan, "a" * 64, "replay") == {**result, "replayed": True}
+        else:
+            with pytest.raises(ValueError, match="unavailable"):
+                owner.apply(plan, "a" * 64, "replay")
+    finally:
+        engine.dispose()
