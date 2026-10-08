@@ -3,6 +3,7 @@ import os
 from types import SimpleNamespace
 from typing import Any
 import pytest
+from langboard_shared.core.security import AuthSecurity
 
 
 os.environ.setdefault("PROJECT_NAME", "langboard")
@@ -413,7 +414,7 @@ async def test_description_conflict_through_http_route(
         response = await client.post(
             "/mcp/tools/patch_card_description",
             json={},
-            headers={route.AuthSecurity.MCP_TOOL_GROUP_UID_HEADER: "test-group", "X-Request-ID": request_id},
+            headers={AuthSecurity.MCP_TOOL_GROUP_UID_HEADER: "test-group", "X-Request-ID": request_id},
         )
     assert response.status_code == (500 if reason == "effect failure" else 400)
     assert closed == [True]
@@ -806,7 +807,7 @@ async def test_missing_card_bundle_http_response_is_bad_request(monkeypatch):
         transport=ASGITransport(app=app, raise_app_exceptions=False), base_url="http://test"
     ) as client:
         response = await client.post(
-            "/mcp/tools/get_card_bundle", json={}, headers={route.AuthSecurity.MCP_TOOL_GROUP_UID_HEADER: "group"}
+            "/mcp/tools/get_card_bundle", json={}, headers={AuthSecurity.MCP_TOOL_GROUP_UID_HEADER: "group"}
         )
     assert response.status_code == 400
     assert response.json() == {

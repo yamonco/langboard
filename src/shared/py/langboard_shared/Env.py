@@ -73,6 +73,22 @@ class Env:
         return self.__get_from_cache("API_INTERNAL_URL", f"http://{self.API_HOST}:{self.API_PORT}").rstrip("/")
 
     @property
+    def MCP_OIDC_DEFAULT_TOOL_GROUP_UID(self) -> str:
+        return self.__get_from_cache("MCP_OIDC_DEFAULT_TOOL_GROUP_UID", "").strip()
+
+    @property
+    def IDENTITY_PROOF_ISSUER(self) -> str:
+        return self.__get_from_cache("IDENTITY_PROOF_ISSUER", "").strip()
+
+    @property
+    def IDENTITY_PROOF_AUDIENCE(self) -> str:
+        return self.__get_from_cache("IDENTITY_PROOF_AUDIENCE", "").strip()
+
+    @property
+    def IDENTITY_PROOF_SIGNING_KEY_PATH(self) -> str:
+        return self.__get_from_cache("IDENTITY_PROOF_SIGNING_KEY_PATH", "").strip()
+
+    @property
     def MCP_ALLOWED_HOSTS(self) -> list[str]:
         """Return explicitly allowed MCP Host header values."""
 
