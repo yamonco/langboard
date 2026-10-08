@@ -555,6 +555,24 @@ def update_card_labels(
         "selected-relationships",
     ),
 )
+@AppRouter.api.get("/board/{project_uid}/card/{card_uid}/relationships", tags=["Board.Card"])
+@RoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+@AuthFilter.add()
+def get_card_relationships(
+    project_uid: str, card_uid: str, request: Request,
+    user_or_bot: User | Bot = Auth.scope("all"), service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    resolved = service.card.resolve_readable_card(
+        project_uid, card_uid, user_or_bot,
+        request.scope.get("collaboration_channel", CollaborationChannel.Api),
+    )
+    if resolved is None:
+        raise ApiException.NotFound_404(ApiErrorCode.NF2003)
+    return JsonResponse(content={"relationships": service.card_relationship.get_api_list_by_card(
+        resolved[1], context=resolved[2],
+    )})
+
+
 @AppRouter.schema(form=UpdateCardRelationshipsForm, permission=ApiPermission.Edit)
 @AppRouter.api.put(
     "/board/{project_uid}/card/{card_uid}/relationships",
