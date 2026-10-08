@@ -19,10 +19,22 @@ from sqlalchemy import create_engine, select, text
 
 @pytest.mark.parametrize(
     "mode",
-    ["commit", "item_failure", "conflict", "column_conflict", "type_conflict", "outer_rollback", "receipt_failure"],
+    [
+        "commit",
+        "item_failure",
+        "conflict",
+        "column_conflict",
+        "type_conflict",
+        "outer_rollback",
+        "receipt_failure",
+        "presentation_failure",
+    ],
 )
 @pytest.mark.parametrize("promote", [False, True])
-def test_composed_plan_transaction(monkeypatch, mode, promote):
+@pytest.mark.parametrize("presentation", [False, True])
+def test_composed_plan_transaction(monkeypatch, mode, promote, presentation):
+    if mode == "presentation_failure" and (not presentation or promote):
+        pytest.skip("Presentation persistence applies to new cards")
     engine = create_engine("sqlite://")
     with engine.begin() as c:
         c.execute(text(f'CREATE TABLE "{Project.__tablename__}" (id INTEGER PRIMARY KEY)'))
@@ -51,6 +63,10 @@ def test_composed_plan_transaction(monkeypatch, mode, promote):
     column = ProjectColumn(id=3, project_id=1, name="Backlog", order=0)
     relationship_type = GlobalCardRelationshipType(id=7, parent_name="Contains", child_name="Part of")
     graph_event, list_event, item_event, cardify_event = Mock(), Mock(), Mock(), Mock()
+    presentation_event = Mock()
+    monkeypatch.setattr(
+        "langboard.card_workspace.application.work_plan.MetadataPublisher.updated_metadata", presentation_event
+    )
 
     def write(kind):
         with DbSession.use(readonly=False) as db:
@@ -88,10 +104,16 @@ def test_composed_plan_transaction(monkeypatch, mode, promote):
             return {"value": row[0]} if row else None
 
     def save_receipt(_, __, key, value, *, internal=False):
-        assert internal
+        if not internal:
+            assert key == "card.presentation.v1"
+            key = "presentation:" + key
         with DbSession.use(readonly=False) as db:
             db.exec(text("INSERT INTO receipts VALUES (:k,:v)").bindparams(k=key, v=value))
-        return None if mode == "receipt_failure" else object()
+        return (
+            None
+            if (internal and mode == "receipt_failure") or (not internal and mode == "presentation_failure")
+            else object()
+        )
 
     service = SimpleNamespace(
         metadata=SimpleNamespace(get_by_key_as_api=read_receipt, save=save_receipt),
@@ -141,11 +163,30 @@ def test_composed_plan_transaction(monkeypatch, mode, promote):
             add_edges=[{"parent_ref": anchor.get_uid(), "child_ref": "cardify:child", "relationship_type_uid": "type"}],
             new_checklists=[{"target_card_ref": "cardify:child", "title": "Steps", "items": ["Verify"]}],
         )
+    if presentation and not promote:
+        plan = WorkPlan.model_validate(
+            {
+                **plan.model_dump(),
+                "new_cards": [
+                    {
+                        "client_ref": "new:child",
+                        "title": "Child",
+                        "presentation": {
+                            "version": 1,
+                            "key": "app.github.issue",
+                            "axis": "origin",
+                            "name": "GitHub issue",
+                            "description": "App-reported origin.",
+                        },
+                    }
+                ],
+            }
+        )
     plans = WorkPlanService(SimpleNamespace(get_uid=lambda: "actor"), service)
     reviewed = plans.preview(plan)
     with engine.connect() as c:
         assert c.execute(text("SELECT count(*) FROM created")).scalar() == 0
-    assert not any(cb.called for cb in (graph_event, list_event, item_event))
+    assert not any(cb.called for cb in (graph_event, list_event, item_event, presentation_event))
     if mode == "conflict":
         anchor.title = "Changed after preview"
 
@@ -158,12 +199,17 @@ def test_composed_plan_transaction(monkeypatch, mode, promote):
         with DbSession.atomic():
             result = plans.apply(plan, reviewed["revision"], "request-one")
             assert result["all_succeeded"] and len(result["checklists"]) == 1
-            assert not any(cb.called for cb in (graph_event, list_event, item_event))
+            assert not any(cb.called for cb in (graph_event, list_event, item_event, presentation_event))
             if mode == "outer_rollback":
                 raise RuntimeError("Outer plan failed")
         return result
 
     if mode == "commit":
+        if presentation and not promote:
+            changed = plan.model_dump(mode="json")
+            changed["new_cards"][0]["presentation"]["description"] = "Changed app origin after review."
+            with pytest.raises(ValueError, match="changed after review"):
+                plans.apply(WorkPlan.model_validate(changed), reviewed["revision"], "changed-presentation")
         initial = apply()
         replay = plans.apply(plan, reviewed["revision"], "request-one")
         assert replay == {**initial, "replayed": True}
@@ -177,9 +223,12 @@ def test_composed_plan_transaction(monkeypatch, mode, promote):
             (4 if promote else 3) if mode == "commit" else 0
         )
     with engine.connect() as c:
-        assert c.execute(text("SELECT count(*) FROM receipts")).scalar() == int(mode == "commit")
+        assert c.execute(text("SELECT count(*) FROM receipts")).scalar() == (
+            1 + int(presentation and not promote)
+        ) * int(mode == "commit")
     assert all(cb.call_count == int(mode == "commit") for cb in (graph_event, list_event, item_event))
     assert cardify_event.call_count == int(mode == "commit" and promote)
+    assert presentation_event.call_count == int(mode == "commit" and presentation and not promote)
     engine.dispose()
 
 
@@ -208,3 +257,26 @@ def test_composed_plan_transaction(monkeypatch, mode, promote):
 def test_plan_rejects_ambiguous_or_empty_payload(changes):
     with pytest.raises(ValueError):
         WorkPlan(project_uid="project", anchor_card_uid="anchor", **changes)
+
+
+def test_app_presentation_is_reviewed_and_absent_trait_preserves_old_plan_shape():
+    original = {"client_ref": "new:child", "title": "Child", "description": None}
+    from langboard.card_workspace.application.work_plan import PlanCard
+
+    assert PlanCard.model_validate(original).model_dump(mode="json") == original
+    trait = {
+        "version": 1,
+        "key": "app.glitchtip.issue",
+        "axis": "origin",
+        "name": "GlitchTip issue",
+        "description": "App-reported origin.",
+    }
+    card = PlanCard.model_validate({**original, "presentation": trait})
+    assert card.model_dump(mode="json")["presentation"] == trait
+    for invalid in (
+        {**trait, "axis": "visibility"},
+        {**trait, "visibility": "SHARED"},
+        {**trait, "key": "visibility.private"},
+    ):
+        with pytest.raises(ValueError):
+            PlanCard.model_validate({**original, "presentation": invalid})

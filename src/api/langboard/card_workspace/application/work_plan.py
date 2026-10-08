@@ -2,8 +2,10 @@
 
 from hashlib import sha256
 from json import dumps, loads
-from typing import Annotated
+from typing import Annotated, Any
 from langboard_shared.core.db import DbSession
+from langboard_shared.core.routing import SocketTopic
+from langboard_shared.domain.constants.CardPresentation import CARD_PRESENTATION_KEY, validate_card_presentation
 from langboard_shared.domain.models import (
     Card,
     CardMetadata,
@@ -13,7 +15,8 @@ from langboard_shared.domain.models import (
     Project,
     ProjectColumn,
 )
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_validator
+from langboard_shared.publishers import MetadataPublisher
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, field_validator, model_serializer, model_validator
 from sqlalchemy import select
 
 
@@ -29,6 +32,28 @@ class PlanCard(PlanModel):
     client_ref: Ref
     title: Text
     description: Annotated[str, Field(max_length=16000)] | None = None
+    presentation: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "Optional card.presentation.v1 display metadata: version=1, key=app.<app>.<kind>, "
+            "axis=type or origin, English name/description, optional icon/translations. Never changes policy."
+        ),
+    )
+
+    @field_validator("presentation")
+    @classmethod
+    def validate_presentation(cls, value):
+        if value is not None:
+            validate_card_presentation(dumps(value, ensure_ascii=False, separators=(",", ":")))
+        return value
+
+    @model_serializer(mode="wrap")
+    def serialize_card(self, handler):
+        result = handler(self)
+        # Preserve revisions/receipt digests for pre-existing plans without traits.
+        if self.presentation is None:
+            result.pop("presentation", None)
+        return result
 
 
 class PlanEdge(PlanModel):
@@ -327,6 +352,16 @@ class WorkPlanService:
                 result["graph"] = graph
                 for proposed, created in zip(plan.new_cards, graph["created_cards"], strict=True):
                     mapped[proposed.client_ref] = self._card(created["uid"], project)
+                    if proposed.presentation is not None:
+                        card = mapped[proposed.client_ref]
+                        value = dumps(proposed.presentation, ensure_ascii=False, separators=(",", ":"))
+                        if service.metadata.save(CardMetadata, card, CARD_PRESENTATION_KEY, value) is None:
+                            raise ValueError("Card presentation persistence failed")
+                        db.after_commit(
+                            lambda uid=card.get_uid(), value=value: MetadataPublisher.updated_metadata(
+                                SocketTopic.BoardCard, uid, CARD_PRESENTATION_KEY, value
+                            )
+                        )
             for proposed in plan.new_checklists:
                 card = mapped[proposed.target_card_ref]
                 checklist = service.checklist.create(self.actor, project, card, proposed.title, dispatch_effects=False)
