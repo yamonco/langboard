@@ -14,6 +14,7 @@ class CardRelationshipPublisher(BaseSocketPublisher):
             "relationships": relationships,
         }
         publish_model = SocketPublishModel(
+            card_uids=[card.get_uid()],
             topic=SocketTopic.Board,
             topic_id=project.get_uid(),
             event=f"board:card:relationships:updated:{project.get_uid()}",

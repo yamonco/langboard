@@ -23,6 +23,7 @@ class CheckitemPublisher(BaseSocketPublisher):
         CheckitemPublisher.put_dispather(
             model,
             SocketPublishModel(
+                card_uids=[card.get_uid()],
                 topic=SocketTopic.Board,
                 topic_id=project_uid,
                 event=f"board:card:checklist:progress:changed:{project_uid}",
@@ -36,6 +37,7 @@ class CheckitemPublisher(BaseSocketPublisher):
         CheckitemPublisher.put_dispather(
             {"card_uid": card.get_uid(), "checkitems": checkitems},
             SocketPublishModel(
+                card_uids=[card.get_uid()],
                 topic=SocketTopic.Board, topic_id=project.get_uid(),
                 event=f"board:card:checklist:progress:changed:{project.get_uid()}",
                 data_keys=["card_uid", "checkitems"],
@@ -52,6 +54,7 @@ class CheckitemPublisher(BaseSocketPublisher):
             }
         }
         publish_model = SocketPublishModel(
+            card_uids=[card.get_uid()],
             topic=SocketTopic.BoardCard,
             topic_id=topic_id,
             event=f"board:card:checkitem:created:{checklist.get_uid()}",
@@ -73,12 +76,14 @@ class CheckitemPublisher(BaseSocketPublisher):
         checkitem_uid = checkitem.get_uid()
         publish_models = [
             SocketPublishModel(
+                card_uids=[card.get_uid()],
                 topic=SocketTopic.BoardCard,
                 topic_id=topic_id,
                 event=f"board:card:checkitem:title:changed:{checkitem_uid}",
                 data_keys="title",
             ),
             SocketPublishModel(
+                card_uids=[card.get_uid()],
                 topic=SocketTopic.Dashboard,
                 topic_id=project_uid,
                 event=f"dashboard:checkitem:title:changed:{project_uid}",
@@ -92,12 +97,14 @@ class CheckitemPublisher(BaseSocketPublisher):
             publish_models.extend(
                 [
                     SocketPublishModel(
+                        card_uids=[card.get_uid()],
                         topic=SocketTopic.Board,
                         topic_id=project_uid,
                         event=f"board:card:details:changed:{cardified_card_uid}",
                         data_keys="title",
                     ),
                     SocketPublishModel(
+                        card_uids=[card.get_uid()],
                         topic=SocketTopic.Dashboard,
                         topic_id=project_uid,
                         event=f"dashboard:card:title:changed:{project_uid}",
@@ -116,12 +123,14 @@ class CheckitemPublisher(BaseSocketPublisher):
         checkitem_uid = checkitem.get_uid()
         publish_models = [
             SocketPublishModel(
+                card_uids=[card.get_uid()],
                 topic=SocketTopic.BoardCard,
                 topic_id=card.get_uid(),
                 event=f"board:card:checkitem:deadline:changed:{checkitem_uid}",
                 data_keys="deadline_at",
             ),
             SocketPublishModel(
+                card_uids=[card.get_uid()],
                 topic=SocketTopic.Dashboard,
                 topic_id=project_uid,
                 event=f"dashboard:checkitem:deadline:changed:{project_uid}",
@@ -146,6 +155,7 @@ class CheckitemPublisher(BaseSocketPublisher):
             publish_models.extend(
                 [
                     SocketPublishModel(
+                        card_uids=[card.get_uid()],
                         topic=SocketTopic.BoardCard,
                         topic_id=topic_id,
                         event=f"board:card:checkitem:order:changed:{new_checklist.get_uid()}",
@@ -156,6 +166,7 @@ class CheckitemPublisher(BaseSocketPublisher):
                         },
                     ),
                     SocketPublishModel(
+                        card_uids=[card.get_uid()],
                         topic=SocketTopic.BoardCard,
                         topic_id=topic_id,
                         event=f"board:card:checkitem:order:changed:{old_checklist.get_uid()}",
@@ -171,6 +182,7 @@ class CheckitemPublisher(BaseSocketPublisher):
             column_uid = checkitem.checklist_id.to_short_code()
             publish_models.append(
                 SocketPublishModel(
+                    card_uids=[card.get_uid()],
                     topic=SocketTopic.BoardCard,
                     topic_id=topic_id,
                     event=f"board:card:checkitem:order:changed:{column_uid}",
@@ -201,12 +213,14 @@ class CheckitemPublisher(BaseSocketPublisher):
         checkitem_uid = checkitem.get_uid()
         publish_models = [
             SocketPublishModel(
+                card_uids=[card.get_uid()],
                 topic=SocketTopic.BoardCard,
                 topic_id=topic_id,
                 event=f"board:card:checkitem:status:changed:{checkitem_uid}",
                 data_keys=list(model.keys()),
             ),
             SocketPublishModel(
+                card_uids=[card.get_uid()],
                 topic=SocketTopic.Dashboard,
                 topic_id=project_uid,
                 event=f"dashboard:checkitem:status:changed:{project_uid}",
@@ -224,12 +238,14 @@ class CheckitemPublisher(BaseSocketPublisher):
         checkitem_uid = checkitem.get_uid()
         publish_models = [
             SocketPublishModel(
+                card_uids=[card.get_uid()],
                 topic=SocketTopic.BoardCard,
                 topic_id=card.get_uid(),
                 event=f"board:card:checkitem:checked:changed:{checkitem_uid}",
                 data_keys="is_checked",
             ),
             SocketPublishModel(
+                card_uids=[card.get_uid()],
                 topic=SocketTopic.Dashboard,
                 topic_id=project_uid,
                 event=f"dashboard:checkitem:checked:changed:{project_uid}",
@@ -251,18 +267,21 @@ class CheckitemPublisher(BaseSocketPublisher):
         topic_id = card.project_id.to_short_code()
         publish_models = [
             SocketPublishModel(
+                card_uids=[card.get_uid()],
                 topic=SocketTopic.BoardCard,
                 topic_id=card.get_uid(),
                 event=f"board:card:checkitem:cardified:{checkitem.get_uid()}",
                 data_keys="card",
             ),
             SocketPublishModel(
+                card_uids=[card.get_uid()],
                 topic=SocketTopic.Board,
                 topic_id=topic_id,
                 event=f"board:card:created:{target_column.get_uid()}",
                 data_keys="card",
             ),
             SocketPublishModel(
+                card_uids=[card.get_uid()],
                 topic=SocketTopic.Dashboard,
                 topic_id=topic_id,
                 event=f"dashboard:card:created:{topic_id}",
@@ -279,12 +298,14 @@ class CheckitemPublisher(BaseSocketPublisher):
         topic_id = card.get_uid()
         publish_models = [
             SocketPublishModel(
+                card_uids=[card.get_uid()],
                 topic=SocketTopic.BoardCard,
                 topic_id=topic_id,
                 event=f"board:card:checkitem:deleted:{checkitem.checklist_id.to_short_code()}",
                 data_keys="uid",
             ),
             SocketPublishModel(
+                card_uids=[card.get_uid()],
                 topic=SocketTopic.Dashboard,
                 topic_id=project_uid,
                 event=f"dashboard:checkitem:deleted:{project_uid}",

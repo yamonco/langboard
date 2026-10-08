@@ -1,6 +1,7 @@
 import ISocketClient from "@/core/server/ISocketClient";
 import { Utils } from "@langboard/core/utils";
 import { ESocketTopic } from "@langboard/core/enums";
+import { resolveCardAudience } from "@/core/helpers/CardAudience";
 
 export interface IValidatorContext {
     client: ISocketClient;
@@ -33,7 +34,7 @@ class _Subscription {
         return await validator(context);
     }
 
-    public async publish(topic: ESocketTopic | string, topicId: string, event: string, data: Record<string, unknown>) {
+    public async publish(topic: ESocketTopic | string, topicId: string, event: string, data: Record<string, unknown>, cardUIDs?: string[]) {
         topic = Utils.String.convertSafeEnum(ESocketTopic, topic);
 
         const subscriptions = this.#subscriptions.get(topic);
@@ -48,8 +49,15 @@ class _Subscription {
         const subscribers = subscriberSet;
 
         const arraySubscribers = Array.from(subscribers);
+        const references = [...(cardUIDs ?? [])];
+        if (topic === ESocketTopic.BoardCard) references.push(topicId);
+        const card = data.card as { uid?: unknown } | undefined;
+        if (card && typeof card.uid === "string") references.push(card.uid);
+        const protectedEvent = references.length > 0 || /^(board:card:|dashboard:(card|checkitem):)/.test(event);
+        const allowed = protectedEvent ? await resolveCardAudience(arraySubscribers, references) : new Set<string>();
         for (let i = 0; i < arraySubscribers.length; ++i) {
             const subscriber = arraySubscribers[i];
+            if (protectedEvent && !allowed.has(subscriber.user.uid)) continue;
 
             subscriber.send({
                 event,

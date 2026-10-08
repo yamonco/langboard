@@ -17,6 +17,7 @@ class CardAttachmentPublisher(BaseSocketPublisher):
         }
 
         publish_model = SocketPublishModel(
+            card_uids=[card.get_uid()],
             topic=SocketTopic.BoardCard,
             topic_id=card.get_uid(),
             event=f"board:card:attachment:uploaded:{card.get_uid()}",
@@ -29,6 +30,7 @@ class CardAttachmentPublisher(BaseSocketPublisher):
     def order_changed(card: Card, card_attachment: CardAttachment):
         model = {"uid": card_attachment.get_uid(), "order": card_attachment.order}
         publish_model = SocketPublishModel(
+            card_uids=[card.get_uid()],
             topic=SocketTopic.BoardCard,
             topic_id=card.get_uid(),
             event="board:card:attachment:order:changed",
@@ -41,6 +43,7 @@ class CardAttachmentPublisher(BaseSocketPublisher):
     def name_changed(card: Card, card_attachment: CardAttachment):
         model = {"name": card_attachment.filename}
         publish_model = SocketPublishModel(
+            card_uids=[card.get_uid()],
             topic=SocketTopic.BoardCard,
             topic_id=card.get_uid(),
             event=f"board:card:attachment:name:changed:{card_attachment.get_uid()}",
@@ -53,6 +56,7 @@ class CardAttachmentPublisher(BaseSocketPublisher):
     def deleted(card: Card, card_attachment: CardAttachment):
         model = {"uid": card_attachment.get_uid()}
         publish_model = SocketPublishModel(
+            card_uids=[card.get_uid()],
             topic=SocketTopic.BoardCard,
             topic_id=card.get_uid(),
             event="board:card:attachment:deleted",
