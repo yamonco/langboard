@@ -27,6 +27,7 @@ from .CardContentBlock import CardContentBlock
 from .CardDocumentArtifact import CardDocumentArtifact
 from .CardMetadata import CardMetadata
 from .CardRelationship import CardRelationship
+from .CardSignalCreation import CardSignalCreation
 from .CardVerificationRecord import CardVerificationRecord
 from .CardVisibilityChange import CardVisibilityChange
 from .ChatGraphApprovalRequest import ChatGraphApprovalRequest
@@ -120,6 +121,7 @@ __all__ = [
     "BotSchedule",
     "Card",
     "CardAppSignalBinding",
+    "CardSignalCreation",
     "CardAssignedProjectLabel",
     "CardAssignedUser",
     "CardAttachment",

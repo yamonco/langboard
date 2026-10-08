@@ -232,7 +232,15 @@
     "outcome failure": "失敗",
     "outcome running": "実行中",
     "outcome queued": "待機中",
-    "outcome cancelled": "キャンセル"
+    "outcome cancelled": "キャンセル",
+    "check": "チェック",
+    "new card": "信号から新規カード",
+    "new title": "カードのタイトル",
+    "column": "列",
+    "choose column": "列を選択",
+    "create card": "カードを作成",
+    "created": "信号の証拠を持つカードを作成しました。",
+    "reused": "信号の証拠を持つ既存のカードが見つかりました。"
   },
   "Private": "プライベート",
   "Whisper": "ウィスパー",

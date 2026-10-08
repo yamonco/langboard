@@ -232,7 +232,15 @@
     "outcome failure": "실패",
     "outcome running": "실행 중",
     "outcome queued": "대기 중",
-    "outcome cancelled": "취소"
+    "outcome cancelled": "취소",
+    "check": "검사",
+    "new card": "신호에서 새 카드 만들기",
+    "new title": "카드 제목",
+    "column": "열",
+    "choose column": "열 선택",
+    "create card": "카드 만들기",
+    "created": "신호 증거가 연결된 카드를 만들었습니다.",
+    "reused": "신호 증거가 연결된 기존 카드를 찾았습니다."
   },
   "Private": "프라이빗",
   "Whisper": "귓속말",

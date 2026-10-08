@@ -141,3 +141,97 @@ for (const width of [1920, 390])
         await expect(page.getByRole("button", { name: /Dokploy · Deployment succeeded/ })).toBeDisabled();
         await expect(page.getByRole("button", { name: "Link evidence", exact: true })).toHaveCount(0);
     });
+
+for (const width of [1920, 390])
+    for (const provider of ["github", "dokploy"])
+        test(`explicit new card ${provider} ${width}`, async ({ page }) => {
+            await page.setViewportSize({ width, height: 1000 });
+            await page.goto(path + "?mixed");
+            await page.getByRole("button", { name: provider === "github" ? /GitHub · #55/ : /Dokploy · Deployment succeeded/ }).click();
+            const posts = () =>
+                page.evaluate(
+                    () => (window as unknown as { inboxCalls: { method: string }[] }).inboxCalls.filter((row) => row.method === "post").length
+                );
+            expect(await posts()).toBe(0);
+            await page.getByRole("button", { name: "New card from signal", exact: true }).click();
+            const title = page.getByRole("textbox", { name: "Card title", exact: true });
+            await expect(title).toHaveValue(provider === "github" ? "GitHub · Check" : "Dokploy · Customer API · Deployment succeeded");
+            const column = page.getByRole("combobox", { name: "Column", exact: true });
+            await expect(column.locator("option")).toHaveText(["Choose a column", "Ready", "In progress"]);
+            await expect(page.getByRole("button", { name: "Create card", exact: true })).toBeDisabled();
+            await column.selectOption("ready");
+            await title.fill("   ");
+            await expect(page.getByRole("button", { name: "Create card", exact: true })).toBeDisabled();
+            await title.fill("  Investigate deployment  ");
+            expect(await posts()).toBe(0);
+            await page.screenshot({ path: `test-results/signal-inbox-new-${provider}-${width}.png`, fullPage: true });
+            expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+            await page.getByRole("button", { name: "Create card", exact: true }).click();
+            await expect(page.getByText("Card created with signal evidence.", { exact: true })).toBeVisible();
+            const calls = await page.evaluate(
+                () => (window as unknown as { inboxCalls: { url: string; method: string; data: unknown }[] }).inboxCalls
+            );
+            expect(calls.filter((row) => row.method === "post")).toHaveLength(1);
+            expect(calls.find((row) => row.url.endsWith("/inbox/card"))?.data).toEqual({
+                connection_uid: provider === "github" ? "connection" : "dokploy-connection",
+                resource_uid: provider === "github" ? "resource" : "application",
+                signal_uid: provider === "github" ? "signal" : "dokploy-application",
+                project_column_uid: "ready",
+                title: "Investigate deployment",
+            });
+            expect(await page.evaluate(() => (window as unknown as { creationCallbacks: string[] }).creationCallbacks)).toEqual(["created-card"]);
+        });
+test("new card replay receipt, cancellation and current columns", async ({ page }) => {
+    await page.goto(path + "?mixed&replay");
+    await page.getByRole("button", { name: /Dokploy · Deployment succeeded/ }).click();
+    await page.getByRole("button", { name: "New card from signal", exact: true }).click();
+    await page.getByRole("combobox", { name: "Column", exact: true }).selectOption("ready");
+    await page.getByRole("button", { name: "Archive ready column" }).click();
+    await expect(page.getByRole("button", { name: "Create card", exact: true })).toBeDisabled();
+    await expect(page.getByRole("combobox", { name: "Column", exact: true }).locator("option")).toHaveText(["Choose a column", "In progress"]);
+    await page.getByRole("button", { name: "Cancel", exact: true }).click();
+    expect(
+        await page.evaluate(() => (window as unknown as { inboxCalls: { method: string }[] }).inboxCalls.some((row) => row.method === "post"))
+    ).toBe(false);
+    await page.getByRole("button", { name: "New card from signal", exact: true }).click();
+    await page.getByRole("combobox", { name: "Column", exact: true }).selectOption("progress");
+    await page.getByRole("button", { name: "Create card", exact: true }).click();
+    await expect(page.getByText("Existing card returned with signal evidence.", { exact: true })).toBeVisible();
+});
+test("new card failure clears form and receipt", async ({ page }) => {
+    await page.goto(path + "?mixed&error");
+    await page.getByRole("button", { name: /Dokploy · Deployment succeeded/ }).click();
+    await page.getByRole("button", { name: "New card from signal", exact: true }).click();
+    await page.getByRole("combobox", { name: "Column", exact: true }).selectOption("ready");
+    await page.getByRole("button", { name: "Create card", exact: true }).click();
+    await expect(page.getByRole("alert")).toBeVisible();
+    await expect(page.getByRole("textbox", { name: "Card title", exact: true })).toHaveCount(0);
+    expect(await page.evaluate(() => (window as unknown as { creationCallbacks: string[] }).creationCallbacks)).toEqual([]);
+});
+for (const change of ["Switch board", "Remove edit access"])
+    test(`new card delayed receipt discarded after ${change}`, async ({ page }) => {
+        await page.goto(path + "?mixed&delayed-create");
+        await page.getByRole("button", { name: /Dokploy · Deployment succeeded/ }).click();
+        await page.getByRole("button", { name: "New card from signal", exact: true }).click();
+        await page.getByRole("combobox", { name: "Column", exact: true }).selectOption("ready");
+        await page.getByRole("button", { name: "Create card", exact: true }).click();
+        await expect(page.getByText("Loading signals…")).toBeVisible();
+        await page.getByRole("button", { name: change, exact: true }).click();
+        await page.waitForTimeout(450);
+        await expect(page.getByText("Card created with signal evidence.", { exact: true })).toHaveCount(0);
+        expect(await page.evaluate(() => (window as unknown as { creationCallbacks: string[] }).creationCallbacks)).toEqual([]);
+    });
+test("Korean new-card form and readonly", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 1000 });
+    await page.goto(path + "?mixed&lang=ko-KR");
+    await page.getByRole("button", { name: /Dokploy · 배포 성공/ }).click();
+    await page.getByRole("button", { name: "신호에서 새 카드 만들기", exact: true }).click();
+    await expect(page.getByRole("textbox", { name: "카드 제목", exact: true })).toHaveValue("Dokploy · Customer API · 배포 성공");
+    await page.getByRole("combobox", { name: "열", exact: true }).selectOption("ready");
+    await page.screenshot({ path: "test-results/signal-inbox-new-ko-390.png", fullPage: true });
+    await page.goto(path + "?mixed&readonly");
+    await expect(page.getByRole("button", { name: "New card from signal", exact: true })).toHaveCount(0);
+    expect(
+        await page.evaluate(() => (window as unknown as { inboxCalls: { method: string }[] }).inboxCalls.some((row) => row.method === "post"))
+    ).toBe(false);
+});

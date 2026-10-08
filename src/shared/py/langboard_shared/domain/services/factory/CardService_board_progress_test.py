@@ -62,7 +62,7 @@ def test_board_progress_and_work_state_share_one_scoped_aggregate(monkeypatch):
     project = SimpleNamespace(id=1, archive_visible_days=7)
     module = import_module(CardService.__module__)
     monkeypatch.setattr(module.InfraHelper, "get_by_id_like", lambda *args: project)
-    for name in ("dependency_blockers", "execution_generations", "pending_card_approvals"):
+    for name in ("dependency_blockers", "execution_generations", "pending_card_approvals", "card_signal_projections"):
         monkeypatch.setattr(module, name, lambda ids, **kwargs: {})
     relations = [SimpleNamespace(card_id_parent=a, card_id_child=b) for a, b in ((1, 2), (2, 3), (1, 4), (1, 101))]
     monkeypatch.setattr(module.CardRelationshipService, "public_relationship", lambda rel, _: {"edge": (rel.card_id_parent, rel.card_id_child)})

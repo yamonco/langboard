@@ -232,7 +232,15 @@
     "outcome failure": "Failure",
     "outcome running": "Running",
     "outcome queued": "Queued",
-    "outcome cancelled": "Cancelled"
+    "outcome cancelled": "Cancelled",
+    "check": "Check",
+    "new card": "New card from signal",
+    "new title": "Card title",
+    "column": "Column",
+    "choose column": "Choose a column",
+    "create card": "Create card",
+    "created": "Card created with signal evidence.",
+    "reused": "Existing card returned with signal evidence."
   },
   "Private": "Private",
   "Whisper": "Whisper",
