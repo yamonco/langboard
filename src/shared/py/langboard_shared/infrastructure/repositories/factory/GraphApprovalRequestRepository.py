@@ -1,6 +1,7 @@
 from typing import Any
 from sqlalchemy import and_, or_, select
 from ....core.db import DbSession, SqlBuilder
+from ....core.db.queries.Select import SelectOfScalar
 from ....core.domain import BaseRepository
 from ....core.types import SafeDateTime
 from ....domain.models import Card, GraphApprovalRequest, Project, ProjectColumn, ProjectWiki
@@ -114,7 +115,7 @@ class GraphApprovalRequestRepository(BaseRepository[GraphApprovalRequest]):
         return records[:limit]
 
     def count_pending_by_project(self, project_id: int, *, board_scope_only: bool = False) -> int:
-        count = 0
+        counts = []
         now = SafeDateTime.now()
         for detail_class in self.__get_model_classes():
             if board_scope_only and detail_class.get_request_type() not in (
@@ -145,9 +146,11 @@ class GraphApprovalRequestRepository(BaseRepository[GraphApprovalRequest]):
                     else self.__project_scope_condition(detail_class, project_id)
                 )
             )
-            with DbSession.use(readonly=True) as db:
-                count += db.exec(query).first() or 0
-        return count
+            counts.append(query.scalar_subquery())
+        if not counts:
+            return 0
+        with DbSession.use(readonly=True) as db:
+            return db.exec(SelectOfScalar(sum(counts))).first() or 0
 
     def get_pending(self, origin_type: GraphApprovalOriginType | None = None) -> list[GraphApprovalRequest]:
         query = SqlBuilder.select.table(GraphApprovalRequest).where(

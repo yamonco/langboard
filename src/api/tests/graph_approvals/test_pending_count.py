@@ -88,10 +88,16 @@ def test_count_preserves_board_scope_and_counts_beyond_list_limit(monkeypatch):
             )
         monkeypatch.setattr(SafeDateTime, "now", classmethod(lambda cls, tz=None: now))
 
+        executions = []
+
+        def execute(statement):
+            executions.append(statement)
+            return connection.execute(statement).scalars()
+
         @contextmanager
         def use(*, readonly):
             assert readonly
-            yield SimpleNamespace(exec=lambda statement: connection.execute(statement).scalars())
+            yield SimpleNamespace(exec=execute)
 
         monkeypatch.setattr(DbSession, "use", use)
         monkeypatch.setattr(
@@ -104,6 +110,7 @@ def test_count_preserves_board_scope_and_counts_beyond_list_limit(monkeypatch):
         assert repository.count_pending_by_project(1) == 128
         assert repository.count_pending_by_project(2, board_scope_only=True) == 1
         assert repository.count_pending_by_project(99, board_scope_only=True) == 0
+        assert len(executions) == 4
 
 
 def test_count_never_resumes_or_expires_unrelated_graphs():
