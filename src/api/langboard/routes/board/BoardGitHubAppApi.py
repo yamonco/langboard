@@ -341,9 +341,14 @@ async def receive_github_lifecycle(request: Request, service: DomainService = Do
     signature = request.headers.get("x-hub-signature-256", "")
     event = request.headers.get("x-github-event", "")
     delivery = request.headers.get("x-github-delivery", "")
+    if event == "check_run":
+        from ...apps.GitHubSignalWorker import receive_external_check
+        receiver = receive_external_check
+    else:
+        receiver = receive_external_lifecycle
     try:
         await run_in_threadpool(
-            receive_external_lifecycle,
+            receiver,
             service,
             bytes(body),
             signature,

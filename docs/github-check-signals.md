@@ -4,12 +4,16 @@
 
 The resource-scoped receiver accepts signed `check_run` / `completed` deliveries at
 `POST /apps/github/boards/{board_uid}/connections/{connection_uid}/resources/{resource_uid}/events`.
-It persists minimal append-only App Signal evidence. This is a backend receiver, not
-an enabled GitHub App subscription or a completed multi-repository dispatch implementation.
-The existing `/apps/github/events` receiver still handles installation lifecycle events only.
-GitHub Apps have one configured webhook URL; routing that shared URL to multiple board
-resource bindings remains required before enabling check subscriptions. The registration
-manifest remains unchanged and check webhook consumption is not advertised as available.
+It persists minimal append-only App Signal evidence. The existing
+`POST /apps/github/events` now routes `check_run` completion deliveries to the durable
+shared dispatcher, alongside its existing installation lifecycle consumer. The routing
+candidate comes from `X-GitHub-Hook-Installation-Target-ID`; exactly one connected native
+App Connection must match, and its HMAC authorizes the original bytes. No credential scan,
+provider sender trust, or check-producing App identity is used for routing. Signed created,
+rerequested and requested-action events are acknowledged without storing completion evidence.
+
+The registration manifest remains unchanged with an inactive hook and no subscriptions.
+This is not live provider acceptance or a completed Work State/Inbox implementation.
 
 The adapter follows GitHub's official webhook contract:
 - [check_run webhook](https://docs.github.com/en/webhooks/webhook-events-and-payloads#check_run)
@@ -57,10 +61,36 @@ consumer authority above. It returns 25 events per page with a scoped opaque cur
 without payload digests, secrets or provider output. Disconnect/unlink/revocation blocks
 new ingestion and this read surface; persisted audit evidence is retained.
 
-Remaining: shared App webhook dispatch and recovery, PR/deployment/GlitchTip/Dokploy adapters,
+Remaining: PR/deployment/GlitchTip/Dokploy adapters,
 explicit card/resource evidence association, out-of-order-safe Work State projection,
 Inbox, provider presets, optional explicit workflow transitions, and user Automation.
 No card, checklist, column, workflow stage or reviewer verification record is changed here.
 
 Migration `f985238a4bc4` follows `e87412793ab3`. A populated downgrade is refused to preserve
 provider evidence. No production migration or live provider acceptance is implied by tests.
+
+
+## Durable shared dispatch
+
+Migration `0a96349b5cd5` persists a verified minimal delivery and its dispatch cursor in
+one transaction. No raw body, signature, arbitrary output or credential is retained.
+The unique Connection/event key serializes duplicate receipts; changed content conflicts.
+The delivery snapshots the highest matching resource ID, preventing newly created bindings
+from receiving old events. Existing bindings are evaluated using their current state at
+processing time; historical backfill is not performed.
+
+Each native broker task claims a 300-second lease and processes at most one matching
+resource. Processing locks current host authority, Connection, resource, SecretRef and
+lease token before atomically storing evidence and advancing the cursor. Replays reuse
+existing resource/event evidence. An unavailable board or revoked resource is skipped,
+retaining a blocked terminal result, while other authorized boards proceed. Connection
+revision or SecretRef rotation/revocation also prevents consumption of the old receipt.
+Transient processing failure retries with 30-second exponential backoff, capped at four
+attempts. Lease expiry permits crash recovery; stale lease holders cannot commit evidence.
+
+After-commit queue dispatch is best effort. The existing GitHub recovery cron now dispatches
+at most 100 due Signal deliveries in addition to at most 100 due health jobs. It reads the
+indexed due-job set, not every repository or file. The API broker command registers both
+health and Signal tasks from its API module. No shared package imports API policy.
+Raw global delivery diagnostics and explicit terminal-job retry UI are not implemented.
+Populated delivery downgrades are refused. No production migration has been applied.
