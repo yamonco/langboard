@@ -174,6 +174,12 @@ def configure(
         config.notification_id, config.state = notification_id, "enabled"
         config.config_revision += 1
         db.insert(config) if expected_config_revision == 0 else db.update(config)
+        service.secret_reference.audit_binding(
+            actor,
+            credential_reference,
+            revision,
+            source=SecretAuditSource("app_connection", conn.get_uid()),
+        )
         return _health(db, conn, binding, resources, config)
 
 

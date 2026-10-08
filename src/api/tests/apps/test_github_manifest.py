@@ -65,6 +65,8 @@ def test_manifest_exchange_is_pending_and_credentials_not_public(setup):
         connection = db.exec(select(AppConnection)).first()[0]
         reference = db.exec(select(SecretReference)).first()[0]
     assert connection.credential_reference == reference.metadata()["uri"]
+    events = service.secret_reference.list_audit(board[1], connection.credential_reference)["items"]
+    assert events[0]["action"] == "bound" and events[0]["reason_code"] == "reference_bound"
     assert (
         json.loads(
             service.secret_reference.resolve_for_runtime(board[1], connection.credential_reference).get_secret_value()
@@ -150,3 +152,23 @@ def test_native_http_manifest_cookie_and_complete(setup, monkeypatch):
             client.post(url + "/complete", headers=headers, json={"state": state, "code": "a" * 40}).status_code == 400
         )
         assert len(calls) == 1
+
+
+def test_manifest_binding_audit_and_failure_revoke_unbound_credential(setup, monkeypatch):
+    service, board, _, session, state, _ = setup
+    original = service.secret_reference.audit_binding
+
+    def fail(*args, **kwargs):
+        original(*args, **kwargs)
+        raise RuntimeError("Binding receipt failure")
+
+    monkeypatch.setattr(service.secret_reference, "audit_binding", fail)
+    with pytest.raises(github.GitHubManifestUnavailable):
+        github.complete_manifest(service, board[1], board[2].get_uid(), state, "a" * 40, session)
+    with DbSession.use(readonly=False) as db:
+        assert not db.exec(select(AppConnection)).all()
+        reference = db.exec(select(SecretReference)).first()[0]
+    assert reference.state == "revoked"
+    events = service.secret_reference.list_audit(board[1], reference.metadata()["uri"])["items"]
+    assert [event["action"] for event in events] == ["revoked", "created"]
+    assert "fixture-private-key" not in json.dumps(events)
