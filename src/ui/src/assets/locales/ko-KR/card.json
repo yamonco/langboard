@@ -201,5 +201,21 @@
     "unavailable": "조회 불가",
     "moreResources": "저장소 더 보기",
     "noResources": "조회 가능한 선택된 저장소가 없습니다."
+  },
+  "inbox": {
+    "title": "Signal Inbox",
+    "refresh": "새로고침",
+    "hint": "연결되지 않은 GitHub 체크입니다. 연결은 증거를 제공하며 승인이나 완료를 의미하지 않습니다.",
+    "loading": "사건 조회 중…",
+    "error": "조회 또는 연결하지 못했습니다. 새로고침 후 다시 시도하세요.",
+    "empty": "연결 가능한 체크가 없습니다.",
+    "conflict": "충돌",
+    "passed": "통과",
+    "failed": "실패",
+    "other": "기타 결과",
+    "more": "사건 더 보기",
+    "card": "카드",
+    "choose": "카드 선택",
+    "link": "증거 연결"
   }
 }

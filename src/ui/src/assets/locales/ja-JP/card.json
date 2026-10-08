@@ -201,5 +201,21 @@
     "unavailable": "取得不可",
     "moreResources": "リポジトリをさらに表示",
     "noResources": "参照可能な選択済みリポジトリがありません。"
+  },
+  "inbox": {
+    "title": "Signal Inbox",
+    "refresh": "更新",
+    "hint": "未関連付けの GitHub チェック。関連付けは証拠であり、承認や完了ではありません。",
+    "loading": "読み込み中…",
+    "error": "取得または関連付けに失敗しました。更新して再試行してください。",
+    "empty": "関連付け可能なチェックはありません。",
+    "conflict": "競合",
+    "passed": "成功",
+    "failed": "失敗",
+    "other": "その他の結果",
+    "more": "さらに表示",
+    "card": "カード",
+    "choose": "カードを選択",
+    "link": "証拠を関連付け"
   }
 }
