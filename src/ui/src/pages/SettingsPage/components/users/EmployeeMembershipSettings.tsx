@@ -82,7 +82,7 @@ export default function EmployeeMembershipSettings() {
                             </label>
                         ))}
                     </div>
-                    <Button disabled={busy || !settings.issuer || !settings.groups.length} onClick={save}>
+                    <Button disabled={busy || !settings.issuer} onClick={save}>
                         {t("common.Save")}
                     </Button>
                 </>
