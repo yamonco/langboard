@@ -423,6 +423,15 @@ class Env:
         return list(dict.fromkeys(value.strip() for value in raw.split(",") if value.strip()))
 
     @property
+    def CARD_INTERNAL_ACCESS_MODE(self) -> str:
+        """Explicit deployment policy: SCIM employees or current board members.
+
+        Unknown values deny access; missing configuration retains strict SCIM.
+        Board membership does not classify anyone as an employee.
+        """
+        return self.__get_from_cache("CARD_INTERNAL_ACCESS_MODE", "scim").strip()
+
+    @property
     def REFRESH_TOKEN_NAME(self) -> str:
         return f"refresh_token_{self.PROJECT_SHORT_NAME}"
 
