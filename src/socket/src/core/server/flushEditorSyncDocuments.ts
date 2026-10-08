@@ -2,7 +2,7 @@ import { Hocuspocus } from "@hocuspocus/server";
 
 /** Await native serialized persistence after the transport has stopped accepting edits. */
 export default async function flushEditorSyncDocuments(instance: Hocuspocus): Promise<void> {
-    await Promise.all(
+    const results = await Promise.allSettled(
         [...instance.documents.values()]
             .filter((document) => !document.isLoading)
             .map((document) =>
@@ -22,4 +22,11 @@ export default async function flushEditorSyncDocuments(instance: Hocuspocus): Pr
                 )
             )
     );
+    const failures = results.filter((result): result is PromiseRejectedResult => result.status === "rejected");
+    if (failures.length) {
+        throw new AggregateError(
+            failures.map((result) => result.reason),
+            "Editor persistence failed during shutdown"
+        );
+    }
 }

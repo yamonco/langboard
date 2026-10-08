@@ -71,17 +71,48 @@ try {
     assert.equal(await storage.load(loading.name), null, "failed/incomplete load not persisted");
     loading.destroy();
     instance.documents.delete(loading.name);
+    const other = new Document("card:other:description");
+    other.isLoading = false;
+    other.directConnectionsCount = 1;
+    other.getText("body").insert(0, "another pending document");
+    instance.documents.set(other.name, other);
+    let releaseOther;
+    const heldOther = new Promise((resolve) => {
+        releaseOther = resolve;
+    });
     instance.configuration.extensions.unshift({
-        onStoreDocument: async () => {
+        onStoreDocument: async ({ documentName }) => {
+            if (documentName === other.name) {
+                await heldOther;
+                return;
+            }
             throw new Error("storage unavailable");
         },
     });
     const stderr = console.error;
     console.error = () => {};
     try {
-        await assert.rejects(flush(instance), /storage unavailable/);
+        let settled = false;
+        const failedFlush = assert
+            .rejects(flush(instance), (error) => {
+                assert(error instanceof AggregateError);
+                assert.equal(error.errors[0].message, "storage unavailable");
+                return true;
+            })
+            .then(() => {
+                settled = true;
+            });
+        await new Promise((resolve) => setImmediate(resolve));
+        assert.equal(settled, false, "a failed document must not end shutdown while another save is pending");
+        releaseOther();
+        await failedFlush;
+        const restoredOther = new Y.Doc();
+        Y.applyUpdate(restoredOther, await storage.load(other.name));
+        assert.equal(restoredOther.getText("body").toString(), "another pending document");
+        restoredOther.destroy();
     } finally {
         console.error = stderr;
+        other.destroy();
     }
     console.log(
         "PASS native Hocuspocus flush: debounce, in-flight mutex, latest Yjs disk restore, incomplete load exclusion, storage failure propagation"
