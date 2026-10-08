@@ -68,11 +68,34 @@ provider list has explicit pagination. Stored selections must be loaded before
 checkboxes become editable. Revocation/failure clears stale resource views, and
 responses from a previous board/user/permission scope are ignored.
 
-Scheduled access health, common signal ingestion, Inbox projection and optional
-resolution-proof workflow transitions remain unfinished. Provider OAuth client
-onboarding and live SaaS/self-hosted acceptance also remain unverified. Tests
-exercise native authentication, SQLite/PostgreSQL storage and host Vault with
-mock official API transport; they are not live deployment evidence.
+## Explicit issue observations
+
+After selecting a project, explicitly enable board read access with current
+connection and binding revisions. This grants `resources.read` and
+`signals.read`; selection alone does not enable them.
+
+`POST /{connection_uid}/projects/{resource_uid}/issues/refresh` requires current
+connection and resource access revisions. It rechecks project identity and
+provider access, then reads at most 25 issues per page. An explicit validated
+cursor retrieves the next page. Current board authority, connection, both binding
+and resource revisions, secret state and the signal watermark are checked after
+external I/O before observations are committed. No background full scan is added.
+
+The signal is `issue.status_observed` with server UTC observation time. An observed
+unresolved or resolved status is not the provider's reopen, regression or
+resolution occurrence timestamp. Unresolved observations can supply blocker and
+Inbox context; resolved observations alone do not approve verification, close a
+card or move it to another workflow column. Signal consumption and native card
+creation retain current permission and private-card ownership boundaries.
+
+Scheduled access health, provider OAuth onboarding and optional resolution-proof
+workflow transitions remain unfinished. Live SaaS/self-hosted acceptance also
+remains unverified. Native authentication, SQLite/PostgreSQL storage, host Vault,
+observations, Inbox/card boundaries and browser fixtures are tested using mock
+official API transport. These checks are not live deployment evidence. A central
+installation must supply an authorized test project and an API-token SecretRef;
+then authenticated provider reads, binding, observations and target-environment
+readback must be verified independently of deployment health.
 
 Official contracts:
 
