@@ -569,7 +569,7 @@ function BoardTaskCardResult({
                                         className="h-full min-h-0 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
                                     >
                                         <Flex direction="col" gap="4" className="min-w-0 py-6 pr-1">
-                                            <BoardCardSignalSection />
+                                            {visibility !== "PRIVATE" && <BoardCardSignalSection />}
                                             {isCheckCardView ? (
                                                 <BoardCardCheckBody key={`board-card-check-body-${card.uid}`} scrollParentRef={contentViewportRef} />
                                             ) : (
@@ -671,19 +671,19 @@ function BoardTaskCardResult({
                                                     )}
                                                 </>
                                             )}
-                                            <BoardCardMobileComments scrollableRef={contentViewportRef} />
+                                            {visibility !== "PRIVATE" && <BoardCardMobileComments scrollableRef={contentViewportRef} />}
                                         </Flex>
                                     </Box>
                                 </Box>
-                                <BoardCardCommentPanel />
-                                {!!boardChat && <BoardCardExpandedChatScope isExpanded={isExpanded} />}
+                                {visibility !== "PRIVATE" && <BoardCardCommentPanel />}
+                                {visibility !== "PRIVATE" && !!boardChat && <BoardCardExpandedChatScope isExpanded={isExpanded} />}
                                 <Box w="full" maxW={{ sm: "40" }} className={cn("hidden shrink-0 sm:block", !isActionPanelOpen && "sm:hidden")}>
                                     <BoardCardSection title="card.Actions" titleClassName="mb-2">
                                         <BoardCardActionList key={`board-card-action-list-${card.uid}`} />
                                     </BoardCardSection>
                                 </Box>
                             </Flex>
-                            {commentLayoutMode === "mobile" && (
+                            {visibility !== "PRIVATE" && commentLayoutMode === "mobile" && (
                                 <Box className="pt-3">
                                     <BoardCommentForm variant="mobile" />
                                 </Box>
@@ -921,6 +921,7 @@ function BoardCardExpandedChatScope({ isExpanded }: { isExpanded: bool }): null 
 
 function BoardCardFloatingNav({ isExpanded }: { isExpanded: bool }): React.JSX.Element {
     const { projectUID, card, currentUser } = useBoardCard();
+    const visibility = card.useField("visibility");
     const { isCommentPanelOpen, toggleCommentPanel, isActionPanelOpen, toggleActionPanel } = useBoardCardPanel();
     const { canEditCard, isCardEditing, enterCardEditMode, leaveCardEditMode } = useBoardCard();
     const { cancelSections, saveSections } = useBoardCardSectionSaveActions();
@@ -1049,13 +1050,17 @@ function BoardCardFloatingNav({ isExpanded }: { isExpanded: bool }): React.JSX.E
                         active: isActionPanelOpen,
                         onClick: toggleActionPanel,
                     },
-                    {
-                        key: "comments",
-                        label: t("card.Comments"),
-                        icon: "message-square",
-                        active: isCommentPanelOpen,
-                        onClick: toggleCommentPanel,
-                    },
+                    ...(visibility === "PRIVATE"
+                        ? []
+                        : [
+                              {
+                                  key: "comments",
+                                  label: t("card.Comments"),
+                                  icon: "message-square",
+                                  active: isCommentPanelOpen,
+                                  onClick: toggleCommentPanel,
+                              },
+                          ]),
                 ]}
             />
         </>
