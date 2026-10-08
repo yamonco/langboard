@@ -245,6 +245,9 @@ class CardService(BaseDomainService):
         if Env.CARD_INTERNAL_ACCESS_MODE == "scim":
             return self._get_service(ScimProvisioningService).is_employee(user)
         if Env.CARD_INTERNAL_ACCESS_MODE == "oidc_issuers":
+            scim = self._get_service(ScimProvisioningService)
+            if scim._employee_policy() is not None:
+                return scim.is_employee(user)
             link = self.repo.user_identity_link.get_by_user_provider(user, IdentityProvider.Oidc, consistent=True)
             return bool(link and link.external_id and link.issuer.rstrip("/") in Env.CARD_INTERNAL_OIDC_ISSUERS)
         return False

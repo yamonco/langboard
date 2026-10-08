@@ -1,5 +1,6 @@
 from re import IGNORECASE, search
 from typing import Any
+from ....core.db import DbSession, SqlBuilder
 from ....core.domain import BaseDomainService
 from ....core.exceptions import ScimProvisioningException
 from ....core.types import SafeDateTime, SnowflakeID
@@ -7,7 +8,15 @@ from ....core.utils.String import generate_random_string
 from ....Env import Env
 from ....helpers import InfraHelper
 from ....security import Auth
-from ...models import IdentityProvider, Project, ScimGroup, ScimGroupMember, User
+from ...models import (
+    EmployeeMembershipPolicy,
+    IdentityProvider,
+    Project,
+    ScimGroup,
+    ScimGroupMember,
+    User,
+    UserIdentityLink,
+)
 from ...models.ProjectRole import ProjectRoleAction
 from .IdentityLinkService import IdentityLinkService
 from .UserService import UserService
@@ -34,19 +43,128 @@ class ScimProvisioningService(BaseDomainService):
     def SCIM_LIST_SCHEMA(self) -> str:
         return "urn:ietf:params:scim:api:messages:2.0:ListResponse"
 
+    def _employee_policy(self) -> EmployeeMembershipPolicy | None:
+        with DbSession.use(readonly=False) as db:
+            return db.exec(
+                SqlBuilder.select.table(EmployeeMembershipPolicy).where(EmployeeMembershipPolicy.key == "global")
+            ).first()
+
+    def classify_members(self, user_ids: list[SnowflakeID]) -> dict[str, str]:
+        """Bounded primary reads for avatar projection; never one query per avatar."""
+        if not user_ids:
+            return {}
+        policy = self._employee_policy()
+        issuer = (Env.SCIM_ISSUER or "").strip().rstrip("/")
+        with DbSession.use(readonly=False) as db:
+            users = db.exec(SqlBuilder.select.table(User).where(User.id.in_(user_ids))).all()
+            links = db.exec(
+                SqlBuilder.select.table(UserIdentityLink).where(UserIdentityLink.user_id.in_(user_ids))
+            ).all()
+            groups = db.exec(
+                SqlBuilder.select.tables(ScimGroupMember, ScimGroup)
+                .join(ScimGroup, ScimGroup.id == ScimGroupMember.group_id)
+                .where(ScimGroupMember.user_id.in_(user_ids))
+            ).all()
+        selected = {
+            (member.user_id)
+            for member, group in groups
+            if (group.get_uid() in policy.group_uids if policy else group.external_id in Env.MCP_EMPLOYEE_GROUP_IDS)
+        }
+        scim_configured = policy is not None or bool(Env.MCP_EMPLOYEE_GROUP_IDS)
+        scim_linked = {
+            link.user_id
+            for link in links
+            if link.provider == IdentityProvider.Scim and link.issuer.rstrip("/") == issuer
+        }
+        oidc_internal = {
+            link.user_id
+            for link in links
+            if link.provider == IdentityProvider.Oidc
+            and link.external_id
+            and link.issuer.rstrip("/") in Env.CARD_INTERNAL_OIDC_ISSUERS
+        }
+        result = {}
+        for user in users:
+            status = "unknown"
+            if user.activated_at and user.deleted_at is None:
+                if scim_configured:
+                    status = (
+                        "internal"
+                        if issuer
+                        and (policy is None or policy.issuer == issuer)
+                        and user.id in selected
+                        and user.id in scim_linked
+                        else "external"
+                    )
+                elif Env.CARD_INTERNAL_ACCESS_MODE == "oidc_issuers" and Env.CARD_INTERNAL_OIDC_ISSUERS:
+                    status = "internal" if user.id in oidc_internal else "external"
+            result[user.get_uid()] = status
+        return result
+
+    def get_employee_membership_settings(self) -> dict[str, Any]:
+        policy = self._employee_policy()
+        with DbSession.use(readonly=False) as db:
+            groups = db.exec(SqlBuilder.select.table(ScimGroup).order_by(ScimGroup.display_name, ScimGroup.id)).all()
+        selected = (
+            (policy.group_uids if policy.issuer == (Env.SCIM_ISSUER or "").strip().rstrip("/") else [])
+            if policy
+            else [g.get_uid() for g in groups if g.external_id in Env.MCP_EMPLOYEE_GROUP_IDS]
+        )
+        return {
+            "issuer": (Env.SCIM_ISSUER or "").strip().rstrip("/"),
+            "configured": policy is not None,
+            "group_uids": selected,
+            "groups": [
+                {"uid": g.get_uid(), "display_name": g.display_name, "external_id": g.external_id} for g in groups
+            ],
+        }
+
+    def save_employee_membership_settings(self, group_uids: list[str]) -> dict[str, Any]:
+        selected = list(dict.fromkeys(group_uids))
+        if selected and not (Env.SCIM_ISSUER or "").strip():
+            raise ValueError("Configure the SCIM identity authority before selecting groups")
+        with DbSession.atomic() as db:
+            groups = db.exec(SqlBuilder.select.table(ScimGroup)).all()
+            if not set(selected).issubset({g.get_uid() for g in groups}):
+                raise ValueError("Select existing synchronized SCIM groups")
+            policy = self._employee_policy()
+            if policy is None:
+                db.insert(
+                    EmployeeMembershipPolicy(
+                        key="global", issuer=(Env.SCIM_ISSUER or "").strip().rstrip("/"), group_uids=selected
+                    )
+                )
+            else:
+                policy.issuer = (Env.SCIM_ISSUER or "").strip().rstrip("/")
+                policy.group_uids = selected
+                db.update(policy)
+        return self.get_employee_membership_settings()
+
     def employee_policy_status(self) -> str:
         """Return configured only when an operator explicitly selected SCIM groups."""
-        return "configured" if Env.MCP_EMPLOYEE_GROUP_IDS and (Env.SCIM_ISSUER or "").strip() else "unknown"
+        policy = self._employee_policy()
+        issuer = (Env.SCIM_ISSUER or "").strip().rstrip("/")
+        if policy is not None and policy.issuer != issuer:
+            return "unknown"
+        return "configured" if (policy is not None or Env.MCP_EMPLOYEE_GROUP_IDS) and issuer else "unknown"
 
     def is_employee(self, user: User) -> bool | None:
         """Classify a user from explicit SCIM group membership; never infer from email/name."""
-        if self.employee_policy_status() != "configured" or user.deleted_at is not None or not user.activated_at:
-            return None if self.employee_policy_status() != "configured" else False
+        policy = self._employee_policy()
+        expected_issuer = (Env.SCIM_ISSUER or "").strip().rstrip("/")
+        if not expected_issuer or (policy is None and not Env.MCP_EMPLOYEE_GROUP_IDS):
+            return None
+        if user.deleted_at is not None or not user.activated_at:
+            return False
+        if policy is not None and policy.issuer != expected_issuer:
+            return False
         identity_link = self.repo.user_identity_link.get_by_user_provider(user, IdentityProvider.Scim, consistent=True)
         expected_issuer = (Env.SCIM_ISSUER or "").strip().rstrip("/")
         if not identity_link or (identity_link.issuer or "").strip().rstrip("/") != expected_issuer:
             return False
         groups = self.repo.scim_group_member.get_groups_by_user(user, consistent=True)
+        if policy is not None:
+            return any(group.get_uid() in policy.group_uids for _, group in groups)
         configured = set(Env.MCP_EMPLOYEE_GROUP_IDS)
         return any((group.external_id or "") in configured for _, group in groups)
 
@@ -56,11 +174,15 @@ class ScimProvisioningService(BaseDomainService):
             raise ValueError("page must be between 1 and 10000 and limit between 1 and 50")
         if self.employee_policy_status() != "configured":
             return {"policy_status": "unknown", "items": [], "page": page, "limit": limit, "has_more": False}
+        policy = self._employee_policy()
+        if policy is not None and policy.issuer != (Env.SCIM_ISSUER or "").strip().rstrip("/"):
+            return {"policy_status": "unknown", "items": [], "page": page, "limit": limit, "has_more": False}
         selected = self.repo.scim_group_member.get_employee_users(
             Env.MCP_EMPLOYEE_GROUP_IDS,
             (Env.SCIM_ISSUER or "").strip().rstrip("/"),
             offset=(page - 1) * limit,
             limit=limit + 1,
+            **({"group_ids": [InfraHelper.convert_id(uid) for uid in policy.group_uids]} if policy else {}),
         )
         return {
             "policy_status": "configured",

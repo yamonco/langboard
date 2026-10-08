@@ -285,5 +285,10 @@
   "Template bot role editor_copilot": "エディターコパイロット",
   "Use solution default": "ソリューションの既定値を使用",
   "Unavailable bot": "利用できないボット",
-  "This stage changed elsewhere. Your draft is preserved. Reload before saving.": "別の場所でこのステージが変更されました。入力内容は保持されています。保存する前に再読み込みしてください。"
+  "This stage changed elsewhere. Your draft is preserved. Reload before saving.": "別の場所でこのステージが変更されました。入力内容は保持されています。保存する前に再読み込みしてください。",
+  "Employee membership": "従業員メンバーシップ",
+  "Employee membership guidance": "従業員として扱う同期済みSCIMグループを選択します。いずれかの選択グループに所属するユーザーが対象です。グループ名やメールドメインでは判定しません。空の選択を保存すると全員の内部アクセスが無効になります。既存カードの公開範囲は変更されません。",
+  "No synchronized SCIM groups": "同期済みSCIMグループがありません。まずIdPでグループのプロビジョニングを設定してください。",
+  "Membership settings saved": "従業員メンバーシップを保存しました。",
+  "Membership settings failed": "従業員メンバーシップの読み込みまたは保存に失敗しました。"
 }

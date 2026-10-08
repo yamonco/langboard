@@ -20,5 +20,7 @@
   "Delete avatar": "删除头像",
   "Drop avatar here": "将头像拖放至此处",
   "industries": {},
-  "purposes": {}
+  "purposes": {},
+  "Internal member": "内部成员",
+  "External member": "外部成员"
 }

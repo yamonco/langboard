@@ -7,7 +7,14 @@ import pytest
 from langboard_shared.core.db import DbSession
 from langboard_shared.core.db.DbEngine import DbEngine
 from langboard_shared.core.types import SafeDateTime
-from langboard_shared.domain.models import Card, Project, ProjectAssignedUser, ProjectRole, User
+from langboard_shared.domain.models import (
+    Card,
+    EmployeeMembershipPolicy,
+    Project,
+    ProjectAssignedUser,
+    ProjectRole,
+    User,
+)
 from langboard_shared.domain.services.factory.CardService import CardService
 from langboard_shared.infrastructure.repositories.factory.ProjectAssignedUserRepository import (
     ProjectAssignedUserRepository,
@@ -38,7 +45,7 @@ def current_card(monkeypatch, request):
             for table in ("organization", "bot", "project_column"):
                 db.execute(text(f'CREATE TABLE "{table}" (id BIGINT PRIMARY KEY)'))
             db.execute(text('INSERT INTO project_column (id) VALUES (0)'))
-    for model in (User, Project, ProjectAssignedUser, ProjectRole, Card):
+    for model in (User, Project, ProjectAssignedUser, ProjectRole, Card, EmployeeMembershipPolicy):
         model.__table__.create(engine)
     monkeypatch.setattr(DbEngine, "get_main_engine", lambda: engine)
     monkeypatch.setattr(DbEngine, "get_readonly_engine", lambda: engine)
