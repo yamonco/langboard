@@ -1,12 +1,64 @@
 import { createRoot } from "react-dom/client";
 import { useTranslation } from "react-i18next";
-import { MetadataModel, ProjectCard } from "@/core/models";
+import { MetadataModel, Project, ProjectCard, User } from "@/core/models";
 import CardTypeBadges from "@/components/CardTypeBadges";
 import { applyMetadataUpdated, applyMetadataDeleted } from "@/controllers/socket/shared/MetadataSocketHelper";
 import CardPresentationBadge from "@/components/CardPresentationBadge";
 import { CARD_PRESENTATION_KEY, CARD_VISIBILITY_PRESENTATIONS } from "./CardPresentation";
 import "@/i18n";
 import "@/assets/styles/main.css";
+const visibilityProject = Project.Model.fromOne({ uid: "visibility-project", all_members: [], created_at: new Date(), updated_at: new Date() });
+const visibilityCard = ProjectCard.Model.fromOne({
+    uid: "visibility-card",
+    project_uid: visibilityProject.uid,
+    visibility: "INTERNAL",
+    created_at: new Date(),
+    updated_at: new Date(),
+});
+const privateCard = ProjectCard.Model.fromOne({
+    uid: "private-card",
+    project_uid: visibilityProject.uid,
+    visibility: "PRIVATE",
+    created_at: new Date(),
+    updated_at: new Date(),
+});
+const externalMember = User.Model.fromOne({
+    uid: "external-member",
+    firstname: "External",
+    lastname: "Member",
+    membership_classification: "external" as const,
+    type: "user",
+    created_at: new Date(),
+    updated_at: new Date(),
+});
+function VisibilityFixture() {
+    const visibility = visibilityCard.useField("visibility");
+    return (
+        <section className="mt-8" aria-label="Member transitions">
+            <div data-testid="internal-card">
+                <CardTypeBadges card={visibilityCard} />
+            </div>
+            <div data-testid="private-card">
+                <CardTypeBadges card={privateCard} />
+            </div>
+            <output data-testid="stored-visibility">{visibility}</output>
+            <button
+                onClick={() => {
+                    visibilityProject.all_members = [externalMember];
+                }}
+            >
+                Add external member
+            </button>
+            <button
+                onClick={() => {
+                    visibilityProject.all_members = [];
+                }}
+            >
+                Remove external member
+            </button>
+        </section>
+    );
+}
 const appCard = ProjectCard.Model.fromOne({ uid: "app-card", project_uid: "test-project", created_at: new Date(), updated_at: new Date() });
 MetadataModel.Model.fromOne({ uid: appCard.uid, type: "card", metadata: {}, created_at: new Date(), updated_at: new Date() });
 const appPresentation = {
@@ -47,6 +99,7 @@ function Fixture() {
                 </button>
                 <button onClick={() => applyMetadataDeleted("card", appCard.uid, { keys: [CARD_PRESENTATION_KEY] })}>Remove app type</button>
             </section>
+            <VisibilityFixture />
         </main>
     );
 }

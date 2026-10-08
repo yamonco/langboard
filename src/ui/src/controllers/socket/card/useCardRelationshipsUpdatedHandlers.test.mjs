@@ -9,8 +9,7 @@ const source = fs
 const code = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
 const reads = [];
 const synchronized = [];
-const hook = new Function("useRef", "useSocketHandler", "ESocketTopic", "SocketEvents", "Routing", "Utils", "api", "syncCardRelationships", code)(
-    (value) => ({ current: value }),
+const hook = new Function("useSocketHandler", "ESocketTopic", "SocketEvents", "Routing", "Utils", "api", "syncCardRelationships", code)(
     (options) => options.onProps.responseConverter,
     { Board: "board" },
     { SERVER: { BOARD: { CARD: { RELATIONSHIPS_UPDATED: "updated" } } } },
