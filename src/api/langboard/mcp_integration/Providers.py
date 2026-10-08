@@ -31,6 +31,7 @@ from .ProjectDiscovery import with_project_discovery
 from .ResourceOutputs import RESOURCE_OUTPUTS
 from .Tool import McpTool
 from .ToolGroupMiddleware import ToolGroupMiddleware
+from .WorkPlanOutputs import WORK_PLAN_OUTPUTS
 from .WorkOutputs import WORK_OUTPUTS
 
 
@@ -101,6 +102,7 @@ def create_native_tool(name, metadata, wrap_tool, *, modern_annotations: bool = 
             name,
             handler,
             (ProjectCardIndexResponse if name == "list_project_cards" else None)
+            or WORK_PLAN_OUTPUTS.get(name)
             or WORK_OUTPUTS.get(name)
             or CONTENT_OUTPUTS.get(name)
             or BOT_OUTPUTS.get(name)

@@ -1,18 +1,22 @@
 """One server-owned, revision-bound graph/cardification/checklist work plan."""
 
 from hashlib import sha256
-from json import dumps
-from typing import Annotated
+from json import dumps, loads
+from typing import Annotated, Any
 from langboard_shared.core.db import DbSession
+from langboard_shared.core.routing import SocketTopic
+from langboard_shared.domain.constants.CardPresentation import CARD_PRESENTATION_KEY, validate_card_presentation
 from langboard_shared.domain.models import (
     Card,
+    CardMetadata,
     Checkitem,
     Checklist,
     GlobalCardRelationshipType,
     Project,
     ProjectColumn,
 )
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from langboard_shared.publishers import MetadataPublisher
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, field_validator, model_serializer, model_validator
 from sqlalchemy import select
 
 
@@ -28,6 +32,28 @@ class PlanCard(PlanModel):
     client_ref: Ref
     title: Text
     description: Annotated[str, Field(max_length=16000)] | None = None
+    presentation: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "Optional card.presentation.v1 display metadata: version=1, key=app.<app>.<kind>, "
+            "axis=type or origin, English name/description, optional icon/translations. Never changes policy."
+        ),
+    )
+
+    @field_validator("presentation")
+    @classmethod
+    def validate_presentation(cls, value):
+        if value is not None:
+            validate_card_presentation(dumps(value, ensure_ascii=False, separators=(",", ":")))
+        return value
+
+    @model_serializer(mode="wrap")
+    def serialize_card(self, handler):
+        result = handler(self)
+        # Preserve revisions/receipt digests for pre-existing plans without traits.
+        if self.presentation is None:
+            result.pop("presentation", None)
+        return result
 
 
 class PlanEdge(PlanModel):
@@ -270,3 +296,107 @@ class WorkPlanService:
         with DbSession.atomic():
             return self._preview(plan)[0]
 
+    def apply(self, plan: WorkPlan, expected_revision: str, request_id: str):
+        if (
+            not request_id
+            or len(request_id) > 80
+            or any(not (c.isascii() and (c.isalnum() or c in "-_")) for c in request_id)
+        ):
+            raise ValueError("Invalid work plan request ID")
+        if len(expected_revision) != 64 or any(c not in "0123456789abcdef" for c in expected_revision):
+            raise ValueError("Invalid work plan revision")
+        actor_uid = self.actor.get_uid()
+        receipt_key = "internal.work_plan." + sha256((actor_uid + ":" + request_id).encode()).hexdigest()
+        payload_digest = sha256(dumps(plan.model_dump(mode="json"), sort_keys=True).encode()).hexdigest()
+        with DbSession.atomic() as db:
+            project = self.service.project.get_by_id_like(plan.project_uid)
+            if (
+                not project
+                or db.exec(
+                    select(Project.column("id")).where(Project.column("id") == project.id).with_for_update()
+                ).first()
+                is None
+            ):
+                raise ValueError("Project is unavailable")
+            anchor = self._card(plan.anchor_card_uid, project)
+            receipt = self.service.metadata.get_by_key_as_api(CardMetadata, anchor, receipt_key, internal=True)
+            if receipt:
+                stored = loads(receipt["value"])
+                if stored.get("payload_digest") != payload_digest or stored.get("revision") != expected_revision:
+                    raise ValueError("Work plan request ID reused with another plan")
+                return {**stored["result"], "replayed": True}
+            preview, cards, project = self._preview(plan)
+            if preview["revision"] != expected_revision:
+                raise ValueError("Work plan changed after review; preview again")
+            service = self.service
+            mapped = dict(cards)
+            result = {"graph": None, "cardifications": [], "checklists": []}
+            for proposed in plan.cardify_checkitems:
+                item = service.checkitem.get_by_id_like(proposed.checkitem_uid)
+                if not service.checkitem.cardify(
+                    self.actor, project, cards[proposed.source_card_uid], item, proposed.project_column_uid
+                ):
+                    raise ValueError("Cardification failed")
+                persisted = service.checkitem.get_by_id_like(proposed.checkitem_uid)
+                card = service.card.get_by_id_like(persisted.cardified_id)
+                if card is None:
+                    raise ValueError("Cardification readback failed")
+                mapped[proposed.client_ref] = card
+                result["cardifications"].append(
+                    {"card": card.api_response(), "source_checkitem_uid": proposed.checkitem_uid}
+                )
+            if plan.new_cards or plan.add_edges or plan.remove_relationship_uids:
+                graph = service.card_relationship.apply_graph_patch(self.actor, *self._graph_args(plan, mapped))
+                if graph is None:
+                    raise ValueError("Graph application failed")
+                result["graph"] = graph
+                for proposed, created in zip(plan.new_cards, graph["created_cards"], strict=True):
+                    mapped[proposed.client_ref] = self._card(created["uid"], project)
+                    if proposed.presentation is not None:
+                        card = mapped[proposed.client_ref]
+                        value = dumps(proposed.presentation, ensure_ascii=False, separators=(",", ":"))
+                        if service.metadata.save(CardMetadata, card, CARD_PRESENTATION_KEY, value) is None:
+                            raise ValueError("Card presentation persistence failed")
+                        db.after_commit(
+                            lambda uid=card.get_uid(), value=value: MetadataPublisher.updated_metadata(
+                                SocketTopic.BoardCard, uid, CARD_PRESENTATION_KEY, value
+                            )
+                        )
+            for proposed in plan.new_checklists:
+                card = mapped[proposed.target_card_ref]
+                checklist = service.checklist.create(self.actor, project, card, proposed.title, dispatch_effects=False)
+                if not checklist:
+                    raise ValueError("Checklist creation failed")
+                items = []
+                for title in proposed.items:
+                    item = service.checkitem.create(self.actor, project, card, checklist, title, dispatch_effects=False)
+                    if item is None:
+                        raise ValueError("Checkitem creation failed")
+                    items.append(item)
+                frozen_card, frozen_list = card.model_copy(deep=True), checklist.model_copy(deep=True)
+                frozen_items = [i.model_copy(deep=True) for i in items]
+
+                def publish(card=frozen_card, checklist=frozen_list, items=frozen_items):
+                    service.checklist.dispatch_created(self.actor, project, card, checklist)
+                    for item in items:
+                        service.checkitem.dispatch_created(self.actor, project, card, checklist, item)
+
+                db.after_commit(publish)
+                result["checklists"].append(
+                    {
+                        "target_card_uid": card.get_uid(),
+                        "checklist": checklist.api_response(),
+                        "checkitems": [i.api_response() for i in items],
+                    }
+                )
+            result["applied_revision"] = expected_revision
+            result["all_succeeded"] = True
+            result["replayed"] = False
+            result = TypeAdapter(dict).dump_python(result, mode="json")
+            value = dumps(
+                {"version": 1, "payload_digest": payload_digest, "revision": expected_revision, "result": result},
+                default=str,
+            )
+            if self.service.metadata.save(CardMetadata, anchor, receipt_key, value, internal=True) is None:
+                raise ValueError("Work plan receipt persistence failed")
+            return result

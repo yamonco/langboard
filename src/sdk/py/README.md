@@ -99,3 +99,40 @@ and reviewer evidence retain their existing authoritative models.
 Contract limits: version 1; name 80 characters; description 1000; icon 32;
 at most 16 BCP-47-style locale entries; encoded payload 8192 characters.
 Unknown/malformed metadata is hidden in the UI and cannot affect policy.
+
+
+### Atomic app card creation
+
+To create a card and its display trait together, include `presentation` in a
+`new_cards` entry of the existing native work plan. The reviewed revision binds
+the presentation too. The server stores it in the same transaction as the card,
+relationships, checklists, and durable receipt; a failed metadata write rolls
+back the plan. Public metadata events are emitted only after commit. Replaying
+the identical request returns the receipt without duplicating cards or events.
+
+```python
+plan = {
+    "project_uid": project_uid,
+    "anchor_card_uid": anchor_card_uid,
+    "new_cards": [{
+        "client_ref": "new:external-issue",
+        "title": "Investigate external issue",
+        "presentation": {
+            "version": 1,
+            "key": "app.glitchtip.issue",
+            "axis": "origin",
+            "name": "GlitchTip issue",
+            "description": "App-reported origin. Resolution is separate from approval.",
+            "icon": "🔗",
+        },
+    }],
+}
+preview = await board.preview_work_plan(plan)
+# Use the reviewed plan, returned revision, and stable request ID together.
+result = await board.apply_work_plan(plan, preview["revision"], stable_request_id)
+```
+
+This uses the selected anchor's board/column and native creation permissions.
+It does not connect to a provider, verify its identity, or enable automatic card
+creation. Existing cards can continue to use `set_card_presentation` separately.
+When `presentation` is absent, old work-plan serialized payloads stay unchanged.
