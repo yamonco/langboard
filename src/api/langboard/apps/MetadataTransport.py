@@ -1,6 +1,7 @@
 """Approved self-hosted metadata transport; bounded reads without redirects."""
 
 import json
+from time import monotonic
 from urllib.parse import urlsplit
 import httpx
 from langboard_shared.Env import Env
@@ -45,15 +46,19 @@ def approved_instance(value):
 
 def read_json(base, path, headers, params=None):
     """Caller owns endpoint selection; raw provider responses never reach clients."""
+    # Check elapsed budget between reads; one blocking read may use its 15s timeout.
+    deadline = monotonic() + 15
     with httpx.Client(timeout=15, follow_redirects=False, trust_env=False) as client:
         with client.stream("GET", base + path, headers=headers, params=params) as response:
-            if response.status_code != 200:
+            if response.status_code != 200 or monotonic() >= deadline:
                 raise MetadataUnavailable()
             body = bytearray()
             for chunk in response.iter_bytes():
-                if len(body) + len(chunk) > 262144:
+                if monotonic() >= deadline or len(body) + len(chunk) > 262144:
                     raise MetadataUnavailable()
                 body.extend(chunk)
+            if monotonic() >= deadline:
+                raise MetadataUnavailable()
             try:
                 return json.loads(body), response.links
             except (ValueError, UnicodeError):
