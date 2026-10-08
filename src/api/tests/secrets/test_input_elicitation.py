@@ -92,5 +92,14 @@ def test_bound_round_rejects_target_or_actor_change_and_preserves_expiry(flow, m
     with pytest.raises(ValueError):
         request_secret_input("personal", "me", "native/key", actor, service)
     ctx.request_state = first.request_state
+    # A retry must not mint a new input if protocol/capability metadata changes.
+    ctx.request_context.protocol_version = "2025-11-25"
+    ctx.request_context.meta = {}
+    assert request_secret_input("personal", "me", "native/key", actor, service) == {
+        "state": "pending",
+        "input_uid": first.request_state,
+    }
+    with pytest.raises(ValueError):
+        request_secret_rotation_input("secret://ref/forged", 0, actor, service)
     monkeypatch.setattr(SecretInput, "time", lambda: 10**12)
     assert request_secret_input("personal", "me", "native/key", actor, service) == {"state": "expired"}
