@@ -62,7 +62,8 @@ class MiddlewareHelper:
             pass
 
     @staticmethod
-    def validate_auth(scope: Scope) -> User | Bot | int:
+    def validate_auth(scope: Scope, *, allow_oidc: bool = False) -> User | Bot | int:
+        scope.pop("oidc_claims", None)
         # Reset untrusted/preexisting hints before validating any credential.
         scope["collaboration_channel"] = CollaborationChannel.Api
         headers = Headers(scope=scope)
@@ -87,6 +88,8 @@ class MiddlewareHelper:
                 scope["api_key"] = api_key
                 return user
 
+            return status.HTTP_401_UNAUTHORIZED
+
         validation_result = Auth.validate(headers)
         if isinstance(validation_result, User):
             # Native session requires both the verified bearer and refresh cookie.
@@ -94,6 +97,20 @@ class MiddlewareHelper:
             if not MiddlewareHelper._is_api_key_used(headers):
                 scope["collaboration_channel"] = CollaborationChannel.HumanUI
             scope["auth"] = validation_result
+            return validation_result
+
+        if allow_oidc:
+            authorization = headers.get("authorization", "").split(" ", maxsplit=1)
+            if len(authorization) == 2 and authorization[0].lower() == "bearer":
+                from ..security.OidcMcpIdentity import resolve_oidc_mcp_identity
+
+                try:
+                    user, claims = resolve_oidc_mcp_identity(authorization[1])
+                    scope["auth"] = user
+                    scope["oidc_claims"] = claims
+                    return user
+                except Exception:
+                    pass
             return validation_result
 
         oidc_user = MiddlewareHelper._validate_oidc_user(headers)

@@ -27,7 +27,9 @@ class ApiAuthMiddleware(AuthenticationMiddleware, FilterMiddleware):
         is_secure = Env.PUBLIC_UI_URL.startswith("https://")
 
         if should_filter:
-            validation_result = MiddlewareHelper.validate_auth(scope)
+            validation_result = MiddlewareHelper.validate_auth(
+                scope, allow_oidc=scope.get("path", "").startswith("/mcp/tools")
+            )
             if isinstance(validation_result, int):
                 response = JsonResponse(status_code=validation_result)
                 if validation_result != status.HTTP_422_UNPROCESSABLE_CONTENT:
