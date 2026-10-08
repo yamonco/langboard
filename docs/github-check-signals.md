@@ -162,3 +162,27 @@ once per nonempty committed resource page. SecretRef and ACL mutations do not ye
 publish this notice; reconnect, focus or explicit refresh reevaluates authority.
 Live provider acceptance and the full mounted card integration on deployed canary,
 other provider types and the remaining Signal contract remain unverified.
+
+### Board Signal Inbox foundation
+
+`GET /board/{project_uid}/signals/inbox` requires browser authentication and
+current board Read permission and membership. It returns up to 25 currently
+consumable GitHub check scopes with an explicit continuation cursor. It groups
+by repository/check/commit using provider occurrence time; older redeliveries
+cannot replace newer outcomes. Contradictory equal-time results return
+`conflict: true` and no selected outcome. The API exposes only normalized
+provenance, never provider output, payload digests or raw event bodies.
+
+Enabled links to currently readable cards remove that scope from this reader's
+Inbox. Hidden card links do not affect visible results or reveal card existence.
+Unlink restores discovery. This visibility rule is not a global duplicate-card
+creation policy. Current Connection owner, board grants, selected repository and
+SecretRef authorization use the existing primary-storage policy and batched
+SecretRef check. Revoked references can produce a short/empty page with a cursor.
+A cursor must identify a currently visible candidate; linked/removed candidates
+require restarting discovery instead of relying on an outdated continuation.
+
+This foundation performs no card creation, workflow transition or background
+scan. Existing explicit card attachment remains the mutation path. Board/personal
+Inbox UI, creation deduplication, workflow context after linking, PR/deployment
+and other provider adapters remain incomplete. Automatic creation remains absent.
