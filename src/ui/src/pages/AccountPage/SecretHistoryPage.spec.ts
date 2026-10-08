@@ -17,6 +17,8 @@ for (const width of [1440, 390]) {
                             created_at: "2026-10-08T00:00:00Z",
                             actor_uid: "actor-fixture",
                             source_kind: "api",
+                            reason_code: "user_input",
+                            request_id: "server-request-fixture",
                             revision_before: calls === 1 ? 0 : null,
                             revision_after: calls === 1 ? 1 : 0,
                         },
@@ -28,6 +30,7 @@ for (const width of [1440, 390]) {
         await page.goto("/src/pages/AccountPage/secret-history.fixture.html");
         await expect(page.locator("li")).toHaveCount(1);
         await expect(page.getByText("Value replaced", { exact: true })).toBeVisible();
+        await expect(page.getByText("Explicit browser input", { exact: true })).toHaveAttribute("title", "server-request-fixture");
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
         await page.screenshot({ path: `test-results/secret-history-${width}.png` });
         await page.getByRole("button", { name: "Older events" }).click();

@@ -145,7 +145,7 @@ def complete_input(service, actor, uid, value, challenge):
         raise SecretReferenceUnavailable()
     Cache.delete(_key(uid) + ":browser")
     try:
-        source = SecretAuditSource("api", "secret_input")
+        source = SecretAuditSource("api", "secret_input", request_id=uid, reason_code="user_input")
         if context["operation"] == "rotate":
             reference = service.secret_reference.rotate(
                 actor,

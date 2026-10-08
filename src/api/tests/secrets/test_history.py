@@ -137,3 +137,48 @@ async def test_fastmcp_history_schema_and_no_vault_reads(secrets, monkeypatch):
             assert "fixture-sensitive" not in json.dumps(result)
     finally:
         mcp_auth_context.reset(token)
+
+
+def test_request_correlation_and_fixed_reason_codes_never_include_material(secrets):
+    from langboard_shared.domain.services.factory.SecretReferenceService import SecretAuditSource
+
+    service, board, _ = secrets
+    actor = board[1]
+    source = SecretAuditSource("api", "secret_input", request_id="server-operation-123", reason_code="user_input")
+    meta = service.create(actor, "personal", "me", "history/correlation", SecretStr("must-not-log"), source=source)
+    service.resolve_for_runtime(actor, meta["uri"])
+    events = service.list_audit(actor, meta["uri"])["items"]
+    assert events[1]["request_id"] == "server-operation-123" and events[1]["reason_code"] == "user_input"
+    assert events[0]["reason_code"] == "runtime_use" and len(events[0]["request_id"]) == 32
+    assert "must-not-log" not in json.dumps(events)
+    with pytest.raises(ValueError):
+        SecretAuditSource(reason_code="free text secret value")
+    with pytest.raises(ValueError):
+        SecretAuditSource(request_id="invalid request with spaces")
+
+
+def test_audit_correlation_migration_preserves_legacy_rows_and_guards_downgrade(secrets, monkeypatch):
+    import importlib.util
+    from pathlib import Path
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+    from langboard_shared.core.db.DbEngine import DbEngine
+    from sqlalchemy import text
+
+    service, board, _ = secrets
+    meta = service.create(board[1], "personal", "me", "history/migration", SecretStr("fixture-sensitive"))
+    path = Path(__file__).resolve().parents[2] / "langboard/migrations/versions/20261008114000-e87412793ab3.py"
+    spec = importlib.util.spec_from_file_location("audit_correlation_migration", path)
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+    engine = DbEngine.get_main_engine()
+    with engine.begin() as connection:
+        monkeypatch.setattr(migration, "op", Operations(MigrationContext.configure(connection)))
+        with pytest.raises(RuntimeError, match="correlation evidence"):
+            migration.downgrade()
+        connection.execute(text("UPDATE secret_reference_audit SET request_id=NULL, reason_code=NULL"))
+        migration.downgrade()
+        migration.upgrade()
+    event = service.list_audit(board[1], meta["uri"])["items"][0]
+    assert event["action"] == "created"
+    assert event["request_id"] is None and event["reason_code"] is None

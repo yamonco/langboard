@@ -63,6 +63,15 @@
       "moved": "Moved",
       "revoked": "Revoked",
       "rotated": "Value replaced"
+    },
+    "reasons": {
+      "user_input": "Explicit browser input",
+      "runtime_use": "Authorized runtime use",
+      "reference_created": "Reference creation",
+      "reference_renamed": "Reference rename",
+      "reference_moved": "Reference scope change",
+      "reference_revoked": "Reference revocation",
+      "value_rotated": "Secret value rotation"
     }
   }
 }

@@ -63,6 +63,15 @@
       "moved": "이동",
       "revoked": "폐기",
       "rotated": "값 교체"
+    },
+    "reasons": {
+      "user_input": "사용자의 명시 웹 입력",
+      "runtime_use": "권한이 확인된 실행 사용",
+      "reference_created": "참조 생성",
+      "reference_renamed": "참조 이름 변경",
+      "reference_moved": "참조 범위 변경",
+      "reference_revoked": "참조 폐기",
+      "value_rotated": "시크릿 값 교체"
     }
   }
 }
