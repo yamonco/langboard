@@ -75,3 +75,20 @@ def request_secret_rotation_input(
         return begin_rotation(service, user, uri, expected_revision)
     except (SecretReferenceUnavailable, ValueError):
         raise ValueError("Secret input unavailable") from None
+
+
+@McpTool.add(
+    "user",
+    description="Read a bounded page of one authorized secret reference's audit facts. Never resolves secret material or vault paths. Current authority is checked on every page; reuse next_cursor only for the same reference.",
+)
+def list_secret_reference_history(
+    uri: Annotated[str, Field(min_length=1, max_length=320)],
+    user: User,
+    service: DomainService,
+    limit: Annotated[int, Field(strict=True, ge=1, le=50)] = 25,
+    cursor: Annotated[str | None, Field(max_length=11)] = None,
+) -> dict[str, Any]:
+    try:
+        return service.secret_reference.list_audit(user, uri, limit=limit, cursor=cursor)
+    except (SecretReferenceUnavailable, ValueError):
+        raise ValueError("Secret history unavailable") from None

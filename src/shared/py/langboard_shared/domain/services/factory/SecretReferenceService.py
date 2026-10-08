@@ -167,6 +167,49 @@ class SecretReferenceService(BaseDomainService):
         with DbSession.atomic():
             return self._find(actor, uri).metadata()
 
+    def list_audit(self, actor: User, uri: str, *, limit: int = 25, cursor: str | None = None) -> dict:
+        """Current authority plus bounded per-reference history, never vault reads."""
+        if type(limit) is not int or not 1 <= limit <= 50:
+            raise ValueError("Invalid secret history limit")
+        if cursor is not None and (not isinstance(cursor, str) or not re.fullmatch(r"[A-Za-z0-9]{1,11}", cursor)):
+            raise SecretReferenceUnavailable()
+        with DbSession.atomic() as db:
+            reference = self._find(actor, uri, lock=True)
+            statement = SqlBuilder.select.table(SecretReferenceAudit).where(
+                SecretReferenceAudit.reference_id == reference.id
+            )
+            if cursor is not None:
+                anchor = db.exec(
+                    SqlBuilder.select.table(SecretReferenceAudit).where(
+                        SecretReferenceAudit.reference_id == reference.id,
+                        SecretReferenceAudit.id == InfraHelper.convert_id(cursor),
+                    )
+                ).first()
+                if anchor is None:
+                    raise SecretReferenceUnavailable()
+                statement = statement.where(SecretReferenceAudit.id < anchor.id)
+            rows = db.exec(statement.order_by(SecretReferenceAudit.id.desc()).limit(limit + 1)).all()
+            return {
+                "secret_ref": reference.metadata()["uri"],
+                "items": [
+                    {
+                        "uid": row.get_uid(),
+                        "created_at": row.created_at.isoformat(),
+                        "actor_uid": InfraHelper.convert_uid(row.actor_id),
+                        "action": row.action,
+                        "revision_before": None
+                        if row.action == "created"
+                        else row.reference_revision
+                        - (1 if row.action in {"renamed", "moved", "revoked", "rotated"} else 0),
+                        "revision_after": row.reference_revision,
+                        # Cross-resource source links require their own current ACL.
+                        "source_kind": row.source_kind,
+                    }
+                    for row in rows[:limit]
+                ],
+                "next_cursor": rows[limit - 1].get_uid() if len(rows) > limit else None,
+            }
+
     def resolve_for_runtime(
         self, actor: User, uri: str, *, source: SecretAuditSource = SecretAuditSource()
     ) -> SecretStr:

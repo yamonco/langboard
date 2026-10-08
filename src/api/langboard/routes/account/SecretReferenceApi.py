@@ -23,3 +23,25 @@ def get_secret_reference_metadata(
     except (SecretReferenceUnavailable, ValueError):
         raise ApiException.NotFound_404() from None
     return JsonResponse(content={"reference": metadata})
+
+
+@AppRouter.api.get(
+    "/secret-references/{reference_uid}/history", tags=["Account"], responses=OpenApiSchema().auth().get()
+)
+@AuthFilter.add("user")
+def get_secret_reference_history(
+    reference_uid: str,
+    limit: int = 25,
+    cursor: str | None = None,
+    user: User = Auth.scope("user"),
+    service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    if not 1 <= len(reference_uid) <= 11 or not 1 <= limit <= 50:
+        raise ApiException.NotFound_404()
+    try:
+        payload = service.secret_reference.list_audit(user, f"secret://ref/{reference_uid}", limit=limit, cursor=cursor)
+    except (SecretReferenceUnavailable, ValueError):
+        raise ApiException.NotFound_404() from None
+    response = JsonResponse(content=payload)
+    response.headers["Cache-Control"] = "no-store"
+    return response
