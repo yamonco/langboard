@@ -128,6 +128,21 @@ def test_hundred_lists_preserve_point_projection_with_five_queries(monkeypatch, 
             item_service.get_api_list_by_checklist(card, lists[0], 5, open_only=open_only, include_work_tracking=False)
             == compact[0]["checkitems"]
         )
+        # A checklist page must not hydrate items/work tracking for off-page lists.
+        hydrated_lists = []
+        original_map = item_service.get_api_map_by_card
+
+        def capture_full_card(*args, **kwargs):
+            result = original_map(*args, **kwargs)
+            hydrated_lists.extend(result)
+            return result
+
+        with monkeypatch.context() as page_patch:
+            page_patch.setattr(item_service, "get_api_map_by_card", capture_full_card)
+            page = service.get_api_list_by_card(card, limit=1, open_only=open_only)
+        assert len(page) == 1
+        assert page[0]["checkitems"] == item_service.get_api_list_by_checklist(card, lists[0], open_only=open_only)
+        assert not hydrated_lists, "A limited page projected off-page checklist items and timers"
         # Valid sources retain all rows/timers and the unchanged projection.
         assert service.get_api_list_by_card(
             card, 101, 101, open_only=open_only, max_checklists=100, max_checkitems=100
