@@ -1,10 +1,13 @@
-import { ProjectCard } from "@/core/models";
-import { useBoard } from "@/core/providers/BoardProvider";
+import { Project, ProjectCard } from "@/core/models";
 import { useTranslation } from "react-i18next";
 
 export default function CardVisibilityBadge({ card }: { card: ProjectCard.TModel }) {
+    const project = Project.Model.useModel(card.project_uid);
+    return project ? <ResolvedCardVisibilityBadge card={card} project={project} /> : null;
+}
+
+function ResolvedCardVisibilityBadge({ card, project }: { card: ProjectCard.TModel; project: Project.TModel }) {
     const [t] = useTranslation();
-    const { project } = useBoard();
     const members = project.useForeignFieldArray("all_members");
     const visibility = card.useField("visibility");
     const hasExternal = members.some((member) => member.isValidUser() && member.membership_classification === "external");
