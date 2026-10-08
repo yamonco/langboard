@@ -1,6 +1,7 @@
 from typing import Any, Literal, Sequence, TypeVar, overload
 from ....core.db import BaseDbModel
 from ....core.domain import BaseDomainService
+from ...constants.CardPresentation import CARD_PRESENTATION_KEY, validate_card_presentation
 from ...models import Card
 from ...models.bases import BaseMetadataModel
 
@@ -86,6 +87,8 @@ class MetadataService(BaseDomainService):
     ) -> _TMetadata | None:
         if isinstance(foreign_model, Card) and foreign_model.is_linked_resource:
             return None
+        if isinstance(foreign_model, Card) and key == CARD_PRESENTATION_KEY:
+            validate_card_presentation(value)
         metadata = self.repo.metadata.save(model, foreign_model, key, value, old_key)
         return metadata
 

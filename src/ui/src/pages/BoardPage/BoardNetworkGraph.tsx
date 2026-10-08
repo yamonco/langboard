@@ -6,8 +6,8 @@ import Button from "@/components/base/Button";
 import { cn } from "@/core/utils/ComponentUtils";
 import { layoutBoardGraph, networkBoardGraph } from "@/pages/BoardPage/BoardGraphLayout";
 import { Project, ProjectCard } from "@/core/models";
-import CardVisibilityBadge from "@/pages/BoardPage/components/card/CardVisibilityBadge";
-import { cardVisibilityPresentation } from "@/pages/BoardPage/components/card/cardVisibilityPresentation";
+import CardTypeBadges from "@/components/CardTypeBadges";
+import { cardVisibilityPresentation } from "@/core/cards/CardPresentation";
 
 type TDot = ReturnType<typeof networkBoardGraph>["nodes"][number];
 type TDotNode = NodeObject<TDot>;
@@ -213,7 +213,7 @@ function BoardNetworkGraph({ layout, project, focusColumn, onOpen }: IBoardNetwo
                     )}
                 >
                     <div className="min-w-0 flex-1">
-                        {cards.get(selected.id) && <CardVisibilityBadge card={cards.get(selected.id)!} />}
+                        {cards.get(selected.id) && <CardTypeBadges card={cards.get(selected.id)!} />}
                         <p className="text-xs text-muted-foreground">{selected.column}</p>
                         <p className="line-clamp-2 text-sm font-medium">{selected.title}</p>
                     </div>
