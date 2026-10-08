@@ -2,12 +2,12 @@ FROM node:22@sha256:0e5f906573693feaa1e21057ebdcfdb5bd5021f050b2dc7c9deceb629c7d
 WORKDIR /work
 
 COPY src/shared/ts/package.json src/shared/ts/yarn.lock ./src/shared/ts/
-RUN --mount=type=cache,target=/usr/local/share/.cache/yarn cd src/shared/ts && yarn install --frozen-lockfile
+RUN --mount=type=cache,target=/usr/local/share/.cache/yarn cd src/shared/ts && yarn install --frozen-lockfile --network-concurrency 4 --network-timeout 120000
 COPY src/shared/ts ./src/shared/ts
 RUN cd src/shared/ts && yarn build
 
 COPY src/ui/package.json src/ui/yarn.lock ./src/ui/
-RUN --mount=type=cache,target=/usr/local/share/.cache/yarn cd src/ui && yarn install --frozen-lockfile
+RUN --mount=type=cache,target=/usr/local/share/.cache/yarn cd src/ui && yarn install --frozen-lockfile --network-concurrency 4 --network-timeout 120000
 COPY src/ui ./src/ui
 WORKDIR /work/src/ui
 ARG PROJECT_NAME=Langboard
