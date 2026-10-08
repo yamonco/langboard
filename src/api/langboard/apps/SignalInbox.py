@@ -155,7 +155,7 @@ def create_signal_card(
 ):
     """One explicit native card creation and evidence attachment, retained across retries."""
     from langboard_shared.domain.models import CardSignalCreation, ProjectColumn
-    from .CardSignal import authorized_signal_scope, bind_check
+    from .CardSignal import authorized_card, authorized_signal_scope, bind_check
 
     title = title.strip()
     if not title or len(title) > 200:
@@ -195,12 +195,12 @@ def create_signal_card(
             .with_for_update()
         ).first()
         if receipt:
-            readable = service.card.resolve_readable_card(
-                project_uid, InfraHelper.convert_uid(receipt.card_id), actor, channel
+            card = authorized_card(
+                service, actor, project_uid, InfraHelper.convert_uid(receipt.card_id), channel=channel
             )
-            if readable is None or readable[1].archived_at is not None:
+            if card.archived_at is not None:
                 raise GitHubManifestUnavailable()
-            return {"card_uid": readable[1].get_uid(), "created": False}
+            return {"card_uid": card.get_uid(), "created": False}
         linked = db.exec(
             SqlBuilder.select.table(Card)
             .join(CardAppSignalBinding, CardAppSignalBinding.card_id == Card.id)
