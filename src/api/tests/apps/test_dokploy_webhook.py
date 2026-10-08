@@ -402,3 +402,41 @@ def test_connected_without_selection_truthful_unconfigured(setup):
     result = webhook.health(service, board[1], board[2].get_uid(), conn["connection_uid"])
     assert result["state"] == "unconfigured" and result["last_received_at"] is None
     assert result["binding_revision"] is None and result["resources"] == []
+
+
+def test_receiver_binding_audit_rolls_back_failed_reconfiguration(configured, monkeypatch):
+    setup, conn, reference, config = configured
+    service, board, management, *_ = setup
+    receiver_events = service.secret_reference.list_audit(board[1], reference["uri"])["items"]
+    assert receiver_events[0]["action"] == "bound"
+    assert receiver_events[0]["reason_code"] == "reference_bound"
+    management_bound = sum(
+        x["action"] == "bound" for x in service.secret_reference.list_audit(board[1], management["uri"])["items"]
+    )
+    original = service.secret_reference.audit_binding
+
+    def fail(*args, **kwargs):
+        original(*args, **kwargs)
+        raise RuntimeError("Binding receipt failure")
+
+    monkeypatch.setattr(service.secret_reference, "audit_binding", fail)
+    with pytest.raises(RuntimeError):
+        webhook.configure(
+            service,
+            board[1],
+            board[2].get_uid(),
+            conn["connection_uid"],
+            conn["revision"],
+            config["binding_revision"],
+            config["config_revision"],
+            reference["uri"],
+            "notification-next",
+        )
+    with DbSession.use(readonly=False) as db:
+        row = db.exec(SqlBuilder.select.table(DokployWebhookBinding)).first()
+        assert row.config_revision == config["config_revision"] and row.notification_id is None
+    assert service.secret_reference.list_audit(board[1], reference["uri"])["items"] == receiver_events
+    assert (
+        sum(x["action"] == "bound" for x in service.secret_reference.list_audit(board[1], management["uri"])["items"])
+        == management_bound
+    )

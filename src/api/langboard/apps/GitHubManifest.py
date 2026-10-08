@@ -154,6 +154,12 @@ def complete_manifest(
                     state="pending",
                 )
                 db.insert(connection)
+                service.secret_reference.audit_binding(
+                    actor,
+                    reference["uri"],
+                    reference["revision"],
+                    source=SecretAuditSource("app_connection", connection.get_uid()),
+                )
         except Exception:
             service.secret_reference.revoke(
                 actor, reference["uri"], reference["revision"], source=SecretAuditSource("api", "github_manifest")
