@@ -54,7 +54,11 @@ class _Subscription {
         const card = data.card as { uid?: unknown } | undefined;
         if (card && typeof card.uid === "string") references.push(card.uid);
         const protectedEvent = references.length > 0 || /^(board:card:|dashboard:(card|checkitem):)/.test(event);
-        const allowed = protectedEvent ? await resolveCardAudience(arraySubscribers, references) : new Set<string>();
+        const removal = /^(board|dashboard):card:deleted:/.test(event);
+        const allowed = protectedEvent ? await resolveCardAudience(arraySubscribers, references, removal ? "remove" : "read") : new Set<string>();
+        const deliveredData = removal
+            ? Object.fromEntries(Object.entries(data).filter(([key]) => ["uid", "project_column_uid", "source_type"].includes(key)))
+            : data;
         for (let i = 0; i < arraySubscribers.length; ++i) {
             const subscriber = arraySubscribers[i];
             if (protectedEvent && !allowed.has(subscriber.user.uid)) continue;
@@ -63,7 +67,7 @@ class _Subscription {
                 event,
                 topic,
                 topic_id: topicId,
-                data,
+                data: deliveredData,
             });
         }
     }

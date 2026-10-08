@@ -72,6 +72,18 @@ def test_socket_dispatch_checks_current_recipient_and_internal_credential(curren
             db.delete(membership)
         assert client.post("/socket/card-dispatch-context", json=body, headers=headers).json() == {
             "allowed_recipient_uids": [owner.get_uid()]}
+        removal = {**body, "operation": "remove"}
+        assert client.post("/socket/card-dispatch-context", json=removal, headers=headers).json() == {
+            "allowed_recipient_uids": []}
+        with DbSession.use(readonly=False) as db:
+            card.visibility = "PRIVATE"
+            card.owner_user_id = owner.id
+            card.deleted_at = SafeDateTime.now()
+            db.update(card)
+        assert client.post("/socket/card-dispatch-context", json=body, headers=headers).json() == {
+            "allowed_recipient_uids": []}
+        assert client.post("/socket/card-dispatch-context", json=removal, headers=headers).json() == {
+            "allowed_recipient_uids": [owner.get_uid()]}
         with DbSession.use(readonly=False) as db:
             owner.activated_at = None
             db.update(owner)
