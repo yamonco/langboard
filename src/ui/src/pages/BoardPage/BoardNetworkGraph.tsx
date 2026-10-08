@@ -7,7 +7,7 @@ import { cn } from "@/core/utils/ComponentUtils";
 import { layoutBoardGraph, networkBoardGraph } from "@/pages/BoardPage/BoardGraphLayout";
 import { Project, ProjectCard } from "@/core/models";
 import CardTypeBadges from "@/components/CardTypeBadges";
-import { cardVisibilityPresentation } from "@/core/cards/CardPresentation";
+import { CARD_VISIBILITY_PRESENTATIONS, cardVisibilityPresentation } from "@/core/cards/CardPresentation";
 
 type TDot = ReturnType<typeof networkBoardGraph>["nodes"][number];
 type TDotNode = NodeObject<TDot>;
@@ -193,12 +193,20 @@ function BoardNetworkGraph({ layout, project, focusColumn, onOpen }: IBoardNetwo
                     }}
                 >
                     <option value="">{t("board.Find a card")}</option>
-                    {graph.nodes.map((node) => (
-                        <option key={node.id} value={node.id}>
-                            {privacy.current.get(node.id) === "private" ? "🔐 " : privacy.current.get(node.id) === "whisper" ? "🤫 " : ""}
-                            {node.title} · {node.column}
-                        </option>
-                    ))}
+                    {graph.nodes.map((node) => {
+                        const presentation = privacy.current.get(node.id);
+                        const definition = presentation ? CARD_VISIBILITY_PRESENTATIONS[presentation] : undefined;
+                        return (
+                            <option
+                                key={node.id}
+                                value={node.id}
+                                title={definition ? `${t(definition.nameKey)}: ${t(definition.descriptionKey)}` : undefined}
+                            >
+                                {definition ? `${definition.icon} ` : ""}
+                                {node.title} · {node.column}
+                            </option>
+                        );
+                    })}
                 </select>
                 <Button variant="outline" onClick={() => graphRef.current?.zoomToFit(reducedMotion ? 0 : 200, 70)}>
                     {t("board.Overview")}
