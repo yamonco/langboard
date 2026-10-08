@@ -224,9 +224,12 @@ def list_project_cards(
     *,
     include_closed: bool = False,
     workflow_stages: list[str] | None = None,
+    format: str = "normal",
 ) -> ProjectCardListResponse:
     """List a bounded, newest-updated-first project card page."""
 
+    if format not in {"tree", "normal"}:
+        raise ValueError("format must be tree or normal")
     if isinstance(limit, bool) or not 1 <= limit <= 25:
         raise ValueError("limit must be between 1 and 25")
     if workflow_stages is not None:
@@ -244,12 +247,22 @@ def list_project_cards(
         workflow_stages=workflow_stages,
     )
     next_cursor = ProjectCardCursor(*page.next_cursor_fields).encode() if page.next_cursor_fields else None
+    items = [public_card_summary(item, compact_workflow=True) for item in page.items]
+    presentation = {}
+    if format == "tree":
+        from ..card_tree import card_tree
+
+        relationships = port.get_project_card_relationships(project_uid, [item["uid"] for item in items])
+        items, edges = card_tree(items, relationships[:625])
+        presentation = {"format": "tree", "relationships": edges, "relationship_scope": "current_page",
+                        "relationships_truncated": len(relationships) > 625}
     return ProjectCardIndexResponse(
+        **presentation,
         project_uid=project_uid,
         workflow_stages=page.workflow_stages,
         columns=page.columns,
         cards=BoundedItemsDto(
-            items=[public_card_summary(item, compact_workflow=True) for item in page.items],
+            items=items,
             total_count=page.total_count,
             next_cursor=next_cursor,
             limit=limit,

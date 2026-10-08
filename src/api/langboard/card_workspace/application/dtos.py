@@ -145,3 +145,11 @@ class ProjectCardIndexResponse(ProjectCardListResponse):
     """Workflow-aware index for modern MCP and native query consumers."""
 
     columns: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    format: Literal["tree"] | None = None
+    relationships: list[dict[str, Any]] | None = None
+    relationship_scope: Literal["current_page"] | None = None
+    relationships_truncated: bool | None = None
+
+    @model_serializer(mode="wrap")
+    def serialize_format(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        return {key: value for key, value in handler(self).items() if value is not None}
