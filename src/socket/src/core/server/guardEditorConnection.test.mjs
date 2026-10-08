@@ -36,11 +36,14 @@ assert.equal(normal.sent.length, 0);
 assert.equal(requests.length, 1);
 requests[0].resolve();
 await tick();
-assert.deepEqual(normal.sent, ["first"]);
+assert.deepEqual(normal.sent, ["first", "second"]);
+assert.equal(requests.length, 1);
+normal.connection.send("third");
+await tick();
 assert.equal(requests.length, 2);
 requests[1].resolve();
 await tick();
-assert.deepEqual(normal.sent, ["first", "second"]);
+assert.deepEqual(normal.sent, ["first", "second", "third"]);
 normal.connection.close();
 normal.document.destroy();
 const revoked = fixture("card:revoked", async () => {
