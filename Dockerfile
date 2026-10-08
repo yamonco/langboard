@@ -9,6 +9,7 @@ ENV UV_HTTP_TIMEOUT=120
 COPY --from=uv /uv /uvx /bin/
 
 RUN apt-get update \
+    && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends \
         build-essential \
         ca-certificates \
