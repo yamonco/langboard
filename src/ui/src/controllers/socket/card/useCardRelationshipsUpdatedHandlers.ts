@@ -4,14 +4,14 @@ import { api } from "@/core/helpers/Api";
 import useSocketHandler, { IBaseUseSocketHandlersProps } from "@/core/helpers/SocketHandler";
 import { ESocketTopic } from "@langboard/core/enums";
 import syncCardRelationships, { ICardRelationshipsUpdatedRawResponse } from "@/controllers/socket/card/syncCardRelationships";
-import { useRef } from "react";
 
 export interface IUseCardRelationshipsUpdatedHandlersProps extends IBaseUseSocketHandlersProps<{}> {
     projectUID: string;
 }
 
 const useCardRelationshipsUpdatedHandlers = ({ callback, projectUID }: IUseCardRelationshipsUpdatedHandlersProps) => {
-    const readVersions = useRef(new Map<string, number>());
+    // Model constructors register this factory outside React render.
+    const readVersions = new Map<string, number>();
     return useSocketHandler<{}, ICardRelationshipsUpdatedRawResponse & { relationships_invalidated?: boolean }>({
         topic: ESocketTopic.Board,
         topicId: projectUID,
@@ -21,8 +21,8 @@ const useCardRelationshipsUpdatedHandlers = ({ callback, projectUID }: IUseCardR
             params: { uid: projectUID },
             callback,
             responseConverter: async (data) => {
-                const version = (readVersions.current.get(data.card_uid) ?? 0) + 1;
-                readVersions.current.set(data.card_uid, version);
+                const version = (readVersions.get(data.card_uid) ?? 0) + 1;
+                readVersions.set(data.card_uid, version);
                 if (data.relationships_invalidated) {
                     // Remove the previous audience snapshot before rechecking current access.
                     syncCardRelationships({ card_uid: data.card_uid, relationships: [] });
@@ -32,7 +32,7 @@ const useCardRelationshipsUpdatedHandlers = ({ callback, projectUID }: IUseCardR
                             card_uid: data.card_uid,
                         });
                         const response = await api.get(url);
-                        if (readVersions.current.get(data.card_uid) === version) {
+                        if (readVersions.get(data.card_uid) === version) {
                             syncCardRelationships({ card_uid: data.card_uid, relationships: response.data.relationships });
                         }
                     } catch {
