@@ -4,6 +4,7 @@ from typing import Annotated, Any
 from langboard_shared.domain.models import User
 from langboard_shared.domain.services import DomainService
 from langboard_shared.domain.services.factory.SecretReferenceService import SecretReferenceUnavailable
+from mcp.types import InputRequiredResult
 from pydantic import Field
 from ..mcp_integration import McpTool
 
@@ -33,11 +34,17 @@ def request_secret_input(
     name: Annotated[str, Field(min_length=1, max_length=256)],
     user: User,
     service: DomainService,
-) -> dict[str, Any]:
+) -> dict[str, Any] | InputRequiredResult:
+    from ..secrets.McpSecretInput import request_input
     from ..secrets.SecretInput import begin_input
 
     try:
-        return begin_input(service, user, scope, scope_uid, name)
+        return request_input(
+            service,
+            user,
+            {"operation": "create", "scope": scope, "scope_uid": scope_uid, "name": name},
+            lambda: begin_input(service, user, scope, scope_uid, name),
+        )
     except (SecretReferenceUnavailable, ValueError):
         raise ValueError("Secret input unavailable") from None
 
@@ -68,11 +75,17 @@ def request_secret_rotation_input(
     expected_revision: Annotated[int, Field(strict=True, ge=0)],
     user: User,
     service: DomainService,
-) -> dict[str, Any]:
+) -> dict[str, Any] | InputRequiredResult:
+    from ..secrets.McpSecretInput import request_input
     from ..secrets.SecretInput import begin_rotation
 
     try:
-        return begin_rotation(service, user, uri, expected_revision)
+        return request_input(
+            service,
+            user,
+            {"operation": "rotate", "secret_ref": uri, "expected_revision": expected_revision},
+            lambda: begin_rotation(service, user, uri, expected_revision),
+        )
     except (SecretReferenceUnavailable, ValueError):
         raise ValueError("Secret input unavailable") from None
 
