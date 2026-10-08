@@ -38,8 +38,8 @@ import BoardCommentList, { SkeletonBoardCommentList } from "@/pages/BoardPage/co
 import { forwardRef, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import BoardCardMemberList from "@/pages/BoardPage/components/card/BoardCardMemberList";
-import CardVisibilityBadge from "@/pages/BoardPage/components/card/CardVisibilityBadge";
-import { cardVisibilityPresentation } from "@/pages/BoardPage/components/card/cardVisibilityPresentation";
+import CardTypeBadges from "@/components/CardTypeBadges";
+import { cardVisibilityPresentation } from "@/core/cards/CardPresentation";
 import { SkeletonUserAvatarList } from "@/components/UserAvatarList";
 import { usePageHeader } from "@/core/providers/PageHeaderProvider";
 import { usePageNavigateRef } from "@/core/hooks/usePageNavigate";
@@ -502,7 +502,7 @@ function BoardTaskCardResult({
                                     <BoardCardTitle key={`board-card-title-${card.uid}`} className={isExpanded ? "mr-28 sm:mr-52" : "mr-28"} />
                                 </Flex>
                                 <Flex gap="3" wrap items="center" className="min-w-0">
-                                    <CardVisibilityBadge card={card} />
+                                    <CardTypeBadges card={card} />
                                     {isExpanded ? (
                                         <Box textSize="sm" className="text-muted">
                                             <BoardCardColumnName key={`board-card-column-name-${card.uid}`} />

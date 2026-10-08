@@ -18,8 +18,8 @@ import useUserSettingsStore, { getUserSettingsStore, useUserSettings } from "@/c
 import { boardGraphViewForUser, TBoardGraphView } from "@/pages/BoardPage/BoardGraphPreference";
 import { useTheme } from "next-themes";
 import { EHttpStatus } from "@langboard/core/enums";
-import CardVisibilityBadge from "@/pages/BoardPage/components/card/CardVisibilityBadge";
-import { cardVisibilityPresentation } from "@/pages/BoardPage/components/card/cardVisibilityPresentation";
+import CardTypeBadges from "@/components/CardTypeBadges";
+import { cardVisibilityPresentation } from "@/core/cards/CardPresentation";
 
 const BoardNetworkGraph = lazy(() => import("@/pages/BoardPage/BoardNetworkGraph"));
 
@@ -51,7 +51,7 @@ function GraphCard({ data }: NodeProps<TCardNode>) {
                 onBlur={data.onBlur}
             >
                 <span className="min-w-0">
-                    <CardVisibilityBadge card={data.card} />
+                    <CardTypeBadges card={data.card} />
                     <span className="line-clamp-3 break-words text-sm font-medium leading-5" title={data.title}>
                         {data.title}
                     </span>

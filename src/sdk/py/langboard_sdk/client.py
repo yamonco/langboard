@@ -1,5 +1,6 @@
 """Native command receipts without host-specific identity or business orchestration."""
 
+import json
 import re
 from typing import Any, Protocol
 
@@ -28,16 +29,19 @@ class LangboardClient:
             raise RuntimeError("Langboard returned an invalid work plan preview")
         return result
 
-    async def apply_work_plan(
-        self, plan: dict[str, Any], expected_revision: str, request_id: str
-    ) -> dict[str, Any]:
+    async def apply_work_plan(self, plan: dict[str, Any], expected_revision: str, request_id: str) -> dict[str, Any]:
         if not re.fullmatch(r"[0-9a-f]{64}", expected_revision):
             raise ValueError("A reviewed work plan revision is required")
         if not re.fullmatch(r"[A-Za-z0-9_-]{1,80}", request_id):
             raise ValueError("A stable work plan request ID is required")
         result = await self._transport.call(
             "apply_card_work_plan",
-            {"project_uid": plan["project_uid"], "plan": plan, "expected_revision": expected_revision, "request_id": request_id},
+            {
+                "project_uid": plan["project_uid"],
+                "plan": plan,
+                "expected_revision": expected_revision,
+                "request_id": request_id,
+            },
             mutation=True,
         )
         if (
@@ -46,5 +50,38 @@ class LangboardClient:
             or result.get("applied_revision") != expected_revision
             or type(result.get("replayed")) is not bool
         ):
-            raise MutationOutcomeUnknown("Langboard returned an invalid work plan receipt; inspect state before retrying")
+            raise MutationOutcomeUnknown(
+                "Langboard returned an invalid work plan receipt; inspect state before retrying"
+            )
+        return result
+
+    async def set_card_presentation(
+        self, project_uid: str, card_uid: str, presentation: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Attach an app display type/origin after native creation; never changes card authority.
+
+        The server validates the v1 contract. Name and description are English
+        fallbacks; translations are optional. App metadata is self-declared,
+        not proof of provider identity. Read back before retrying ambiguous writes.
+        """
+        value = json.dumps(presentation, ensure_ascii=False, separators=(",", ":"))
+        result = await self._transport.call(
+            "save_public_card_metadata",
+            {"project_uid": project_uid, "card_uid": card_uid, "key": "card.presentation.v1", "value": value},
+            mutation=True,
+        )
+        returned = result.get("value") if isinstance(result, dict) else None
+        valid = (
+            isinstance(result, dict)
+            and result.get("key") == "card.presentation.v1"
+            and result.get("total_chars") == len(value)
+            and isinstance(returned, str)
+            and bool(returned)
+            and (
+                (result.get("truncated") is False and returned == value)
+                or (result.get("truncated") is True and len(returned) < len(value) and value.startswith(returned))
+            )
+        )
+        if not valid:
+            raise MutationOutcomeUnknown("Card presentation receipt unavailable; read metadata before retrying")
         return result

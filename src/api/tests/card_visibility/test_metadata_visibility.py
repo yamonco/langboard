@@ -51,3 +51,31 @@ def test_batch_metadata_loads_only_the_card_service_visible_set():
     CardMetadataApi.get_project_cards_metadata("p", request, actor, service)
     assert reader.call_args.args[2] is visible
     service.card.get_visible_by_project.assert_called_once_with(project, actor, CollaborationChannel.HumanUI)
+
+
+def test_sdk_presentation_write_stops_before_hidden_metadata_or_events():
+    saver = Mock(side_effect=AssertionError("hidden write"))
+    service = SimpleNamespace(
+        card=SimpleNamespace(resolve_readable_card=Mock(return_value=None)), metadata=SimpleNamespace(save=saver)
+    )
+    with pytest.raises(ValueError, match="not found"):
+        CardMcp.save_public_card_metadata("p", "c", "card.presentation.v1", "{}", object(), service)
+    saver.assert_not_called()
+    assert service.card.resolve_readable_card.call_args.args[-1] == CollaborationChannel.Mcp
+
+
+def test_sdk_presentation_write_publishes_existing_metadata_update(monkeypatch):
+    card = SimpleNamespace(is_linked_resource=False, get_uid=lambda: "c")
+    service = SimpleNamespace(
+        card=SimpleNamespace(resolve_readable_card=lambda *args: (object(), card, object())),
+        metadata=SimpleNamespace(save=Mock(return_value=SimpleNamespace(value="value"))),
+    )
+    publisher = Mock()
+    monkeypatch.setattr(CardMcp.MetadataPublisher, "updated_metadata", publisher)
+    assert CardMcp.save_public_card_metadata("p", "c", "card.presentation.v1", "value", object(), service) == {
+        "key": "card.presentation.v1",
+        "value": "value",
+        "total_chars": 5,
+        "truncated": False,
+    }
+    publisher.assert_called_once()

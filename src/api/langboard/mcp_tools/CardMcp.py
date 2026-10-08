@@ -9,6 +9,7 @@ from fastmcp.exceptions import ValidationError
 from langboard_shared.core.db import DbSession, EditorContentModel
 from langboard_shared.core.exceptions.CardDeleteForbidden import CardDeleteForbidden
 from langboard_shared.core.exceptions.RelationshipCycle import RelationshipCycle
+from langboard_shared.core.routing import SocketTopic
 from langboard_shared.core.security.CollaborationChannel import CollaborationChannel
 from langboard_shared.core.storage import Storage, StorageName
 from langboard_shared.core.types import SafeDateTime
@@ -19,6 +20,7 @@ from langboard_shared.domain.services.CardVerification import VerificationEviden
 from langboard_shared.domain.services.DomainService import DomainService
 from langboard_shared.Env import Env
 from langboard_shared.helpers import InfraHelper
+from langboard_shared.publishers import MetadataPublisher
 from langboard_shared.security import RoleFinder
 from pydantic import BeforeValidator, Field
 from ..card_workspace.application import (
@@ -1593,10 +1595,16 @@ def save_public_card_metadata(
 
     normalized_key = require_public_metadata_key(key)
     normalized_old_key = require_public_metadata_key(old_key) if old_key is not None else None
-    _, card = _require_task_card(project_uid, card_uid)
+    params = service.card.resolve_readable_card(project_uid, card_uid, user_or_bot, CollaborationChannel.Mcp)
+    if not params:
+        raise ValueError("Project or card not found")
+    _, card, _ = params
+    if card.is_linked_resource:
+        raise ValueError("Linked resource cards are read-only")
     metadata = service.metadata.save(CardMetadata, card, normalized_key, value, normalized_old_key)
     if metadata is None:
         raise RuntimeError("Failed to save metadata")
+    MetadataPublisher.updated_metadata(SocketTopic.BoardCard, card.get_uid(), normalized_key, metadata.value, normalized_old_key)
     return public_metadata({normalized_key: metadata.value})[0]
 
 

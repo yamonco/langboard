@@ -64,3 +64,38 @@ A client/protocol exception or missing structured receipt for a mutation raises
 `MutationOutcomeUnknown`, preserving the original exception as its cause.
 Read failures propagate unchanged. Neither path retries the command. Cancellation
 and other Python `BaseException` signals remain under caller control.
+
+
+## Card display types and app origins
+
+After authorized native card creation, call `set_card_presentation(project_uid,
+card_uid, presentation)` to attach optional display metadata. The existing native
+`save_public_card_metadata` command owns permissions, storage and socket updates.
+This call is separate from creation: on failure the card still exists. Read its
+metadata before retrying an unknown outcome. No automatic write replay.
+
+```python
+await board.set_card_presentation(project_uid, card_uid, {
+    "version": 1,
+    "key": "app.github.issue",
+    "axis": "origin",  # "type" is also supported; no policy axes
+    "name": "GitHub issue",  # English fallback, plain text
+    "description": "App-reported origin. Workflow and reviewer approval remain separate.",
+    "icon": "🔗",  # optional plain text, never remote HTML or SVG
+    "translations": {
+        "ko-KR": {"name": "깃허브 이슈", "description": "앱에서 제공한 출처입니다. 완료·승인 상태와 별개입니다."},
+    },
+})
+```
+
+The common UI renderer uses exact locale, language, then English fallback.
+The server limits keys to `app.<app-key>.<kind-key>`, allows only `type`/`origin`,
+and rejects authorization/status fields. App-reported origins are self-declared,
+not verified provider identity. Native visibility always renders independently.
+`source_type`/`source_uid` remain linked-resource references; do not overwrite them
+for work cards originating from apps. Lifecycle, workflow, material kind, access
+and reviewer evidence retain their existing authoritative models.
+
+Contract limits: version 1; name 80 characters; description 1000; icon 32;
+at most 16 BCP-47-style locale entries; encoded payload 8192 characters.
+Unknown/malformed metadata is hidden in the UI and cannot affect policy.

@@ -1,6 +1,6 @@
 import Button from "@/components/base/Button";
-import CardVisibilityBadge from "@/pages/BoardPage/components/card/CardVisibilityBadge";
-import { cardVisibilityPresentation } from "@/pages/BoardPage/components/card/cardVisibilityPresentation";
+import CardTypeBadges from "@/components/CardTypeBadges";
+import { cardVisibilityPresentation } from "@/core/cards/CardPresentation";
 import Avatar from "@/components/base/Avatar";
 import Card from "@/components/base/Card";
 import Collapsible from "@/components/base/Collapsible";
@@ -361,7 +361,7 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
                                 className="float-right ml-1"
                             />
                         )}
-                        <CardVisibilityBadge card={card} />
+                        <CardTypeBadges card={card} />
                         <Card.Title
                             className={cn(
                                 "break-all leading-tight",

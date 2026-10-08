@@ -48,13 +48,17 @@ class ClientTests(IsolatedAsyncioTestCase):
             await transport.call("apply_card_work_plan", {}, mutation=True)
 
     async def test_server_error_receipt_preserves_original_payload_and_never_retries(self):
-        result = SimpleNamespace(is_error=True, structured_content={"code": "revision_conflict"}, content=["Original server error"])
+        result = SimpleNamespace(
+            is_error=True, structured_content={"code": "revision_conflict"}, content=["Original server error"]
+        )
         session = SimpleNamespace(call_tool=AsyncMock(return_value=result))
         with self.assertRaises(NativeCommandError) as captured:
             await McpTransport(session).call("apply_card_work_plan", {"request_id": "stable"}, mutation=True)
         self.assertIs(captured.exception.result, result)
         self.assertEqual(captured.exception.command, "apply_card_work_plan")
-        session.call_tool.assert_awaited_once_with("apply_card_work_plan", {"request_id": "stable"}, raise_on_error=False)
+        session.call_tool.assert_awaited_once_with(
+            "apply_card_work_plan", {"request_id": "stable"}, raise_on_error=False
+        )
         self.assertNotIn("revision_conflict", str(captured.exception))
 
     async def test_other_client_failures_preserve_cause_without_replaying_mutation(self):
@@ -73,6 +77,39 @@ class ClientTests(IsolatedAsyncioTestCase):
         with self.assertRaises(MutationOutcomeUnknown):
             await McpTransport(session).call("apply_card_work_plan", {}, mutation=True)
         session.call_tool.assert_awaited_once()
+
+    async def test_app_presentation_uses_native_metadata_and_checks_receipt(self):
+        import json
+
+        item = {
+            "version": 1,
+            "key": "app.glitchtip.issue",
+            "axis": "origin",
+            "name": "GlitchTip issue",
+            "description": "App origin.",
+        }
+        value = json.dumps(item, ensure_ascii=False, separators=(",", ":"))
+        transport = SimpleNamespace(
+            call=AsyncMock(
+                return_value={
+                    "key": "card.presentation.v1",
+                    "value": value,
+                    "total_chars": len(value),
+                    "truncated": False,
+                }
+            )
+        )
+        await LangboardClient(transport).set_card_presentation("p", "c", item)
+        transport.call.assert_awaited_once_with(
+            "save_public_card_metadata",
+            {"project_uid": "p", "card_uid": "c", "key": "card.presentation.v1", "value": value},
+            mutation=True,
+        )
+        transport.call.reset_mock()
+        transport.call.return_value = {"message": "unknown"}
+        with self.assertRaises(MutationOutcomeUnknown):
+            await LangboardClient(transport).set_card_presentation("p", "c", item)
+        transport.call.assert_awaited_once()
 
 
 if __name__ == "__main__":
