@@ -39,3 +39,41 @@ async def test_tree_survives_fastmcp_output_serialization(modern):
         assert result.structured_content["format"] == "tree"
         assert result.structured_content["relationship_scope"] == "current_page"
         assert result.structured_content["cards"]["items"][0]["children"][0]["uid"] == "b"
+
+
+@pytest.mark.parametrize("modern", [False, True])
+async def test_normal_retains_profile_shape_after_fastmcp_serialization(modern):
+    async def handler(project_uid: str, format: str = "tree") -> ProjectCardListResponse:
+        assert format == "normal"
+        return ProjectCardIndexResponse.model_validate(
+            {
+                "project_uid": project_uid,
+                "cards": {
+                    "items": [{"uid": "a", "project_column_uid": "column"}],
+                    "total_count": 40,
+                    "next_cursor": "opaque-cursor",
+                    "limit": 20,
+                },
+                "workflow_stages": {},
+                "columns": {"column": {"name": "Doing"}},
+            }
+        )
+
+    server = FastMCP("normal-transport-proof")
+    server.add_tool(
+        create_native_tool(
+            "list_project_cards",
+            {"handler": handler, "description": "List cards"},
+            lambda name, fn: fn,
+            modern_annotations=modern,
+        )
+    )
+    async with Client(server) as client:
+        result = await client.call_tool("list_project_cards", {"project_uid": "board", "format": "normal"})
+        payload = result.structured_content
+        assert set(payload) == {"project_uid", "cards", "workflow_stages", *(["columns"] if modern else [])}
+        assert payload["cards"]["total_count"] == 40
+        assert payload["cards"]["next_cursor"] == "opaque-cursor"
+        assert payload["cards"]["items"] == [
+            {"uid": "a", "project_column_uid": "column", **({} if modern else {"project_column_name": "Doing"})}
+        ]
