@@ -27,8 +27,14 @@ Authenticated routes under
   that organization's projects. `cursor` retrieves the next page, maximum 25.
   Only resource ID, slug and name are returned.
 - `POST /{connection_uid}/projects`: `{organization, project_slug,
-  expected_revision}` re-reads the selected project from GlitchTip and binds it
+  expected_revision, expected_resource_revision}` re-reads the selected project from GlitchTip and binds it
   to the current board. A listing is not authorization evidence for a write.
+  Existing resources require their current `access_revision`, including re-selection
+  after removal. A new resource uses a null resource revision.
+- `GET /{connection_uid}/projects`: returns stored project selections and their
+  revisions, including unselected history, 25 per page with `after`.
+- `POST /{connection_uid}/projects/{resource_uid}/remove`: `{expected_revision}`
+  unselects one currently authorized board resource without external API I/O.
 - `POST /{connection_uid}/disconnect`: `{expected_revision}` disconnects the
   reusable connection and invalidates external access for its bindings. Existing
   selections, cards and board workflow configuration remain intact. The shared
@@ -53,8 +59,16 @@ Raw errors, stack traces, events, performance and logs stay with that official
 MCP. This implementation introduces no diagnostic MCP wrapper or raw-event
 replica.
 
-Board Apps UI onboarding, selection removal with its own revision contract,
-scheduled access health, common signal ingestion, Inbox projection and optional
+Board Apps includes native connection selection, explicit secure token-input URL
+issuance, metadata discovery, project selection/removal and confirmed disconnection.
+Raw token values are entered only on the authenticated secret-input page; the Apps
+UI receives only completion state and the canonical reference. Input completion
+is checked on user request; no polling or background scanning is added. Every
+provider list has explicit pagination. Stored selections must be loaded before
+checkboxes become editable. Revocation/failure clears stale resource views, and
+responses from a previous board/user/permission scope are ignored.
+
+Scheduled access health, common signal ingestion, Inbox projection and optional
 resolution-proof workflow transitions remain unfinished. Provider OAuth client
 onboarding and live SaaS/self-hosted acceptance also remain unverified. Tests
 exercise native authentication, SQLite/PostgreSQL storage and host Vault with

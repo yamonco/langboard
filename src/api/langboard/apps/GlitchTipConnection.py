@@ -6,7 +6,7 @@ import re
 from urllib.parse import urlsplit
 import httpx
 from langboard_shared.core.db import DbSession, SqlBuilder
-from langboard_shared.domain.models import AppConnection, AppResourceBinding, BoardAppBinding, Project
+from langboard_shared.domain.models import AppConnection, AppResourceBinding, BoardAppBinding
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.domain.services.factory.SecretReferenceService import SecretAuditSource
 from langboard_shared.Env import Env
@@ -244,7 +244,16 @@ def discover_resources(service, actor, project_uid, connection_uid, organization
     return {"items": items, "next_cursor": next_cursor, "connection_revision": _revision(connection)}
 
 
-def bind_project(service, actor, project_uid, connection_uid, organization, project_slug, expected_revision):
+def bind_project(
+    service,
+    actor,
+    project_uid,
+    connection_uid,
+    organization,
+    project_slug,
+    expected_revision,
+    expected_resource_revision=None,
+):
     _slug(organization)
     _slug(project_slug)
     connection, base, token, secret_revision = _context(service, actor, project_uid, connection_uid)
@@ -263,11 +272,7 @@ def bind_project(service, actor, project_uid, connection_uid, organization, proj
     external_id = str(data["id"])
     with DbSession.atomic() as db:
         # Serialize first binding creation with the board's existing parent lock.
-        parent = db.exec(
-            SqlBuilder.select.table(Project).where(Project.id == InfraHelper.convert_id(project_uid)).with_for_update()
-        ).first()
-        if parent is None:
-            raise GlitchTipUnavailable()
+        parent = _board(service, actor, project_uid)
         _current(service, actor, project_uid, connection, secret_revision)
         _connection(db, actor, connection_uid, lock=True)
         binding = db.exec(
@@ -295,6 +300,10 @@ def bind_project(service, actor, project_uid, connection_uid, organization, proj
             {"type": "organization", "id": organization},
             {"type": "project", "id": external_id, "slug": project_slug},
         ]
+        if row is not None and row.access_revision != expected_resource_revision:
+            raise GlitchTipConflict()
+        if row is None and expected_resource_revision is not None:
+            raise GlitchTipConflict()
         if row is None:
             row = AppResourceBinding(
                 board_binding_id=binding.id,
@@ -314,6 +323,84 @@ def bind_project(service, actor, project_uid, connection_uid, organization, proj
             "access_state": row.access_state,
             "access_revision": row.access_revision,
         }
+
+
+def selected_projects(service, actor, project_uid, connection_uid, after=None):
+    board = _board(service, actor, project_uid)
+    if after is not None and not re.fullmatch(r"[A-Za-z0-9]{1,11}", after):
+        raise ValueError("Invalid resource cursor")
+    with DbSession.use(readonly=False) as db:
+        connection = _connection(db, actor, connection_uid)
+        binding = db.exec(
+            SqlBuilder.select.table(BoardAppBinding).where(
+                BoardAppBinding.project_id == board.id,
+                BoardAppBinding.app_key == "glitchtip",
+            )
+        ).first()
+        rows = (
+            []
+            if binding is None
+            else db.exec(
+                SqlBuilder.select.table(AppResourceBinding)
+                .where(
+                    AppResourceBinding.board_binding_id == binding.id,
+                    AppResourceBinding.connection_id == connection.id,
+                    AppResourceBinding.resource_type == "project",
+                    AppResourceBinding.id > (InfraHelper.convert_id(after) if after else 0),
+                )
+                .order_by(AppResourceBinding.id)
+                .limit(26)
+            ).all()
+        )
+        return {
+            "items": [
+                {
+                    "resource_uid": row.get_uid(),
+                    "project_id": row.external_resource_id,
+                    "path": row.resource_path,
+                    "access_revision": row.access_revision,
+                    "access_state": row.access_state,
+                    "health": row.health,
+                    "selected": row.is_selected,
+                }
+                for row in rows[:25]
+            ],
+            "next_cursor": rows[24].get_uid() if len(rows) > 25 else None,
+        }
+
+
+def remove_project(service, actor, project_uid, connection_uid, resource_uid, expected_revision):
+    with DbSession.atomic() as db:
+        board = _board(service, actor, project_uid)
+        connection = _connection(db, actor, connection_uid, lock=True)
+        binding = db.exec(
+            SqlBuilder.select.table(BoardAppBinding)
+            .where(
+                BoardAppBinding.project_id == board.id,
+                BoardAppBinding.app_key == "glitchtip",
+            )
+            .with_for_update()
+        ).first()
+        if binding is None:
+            raise GlitchTipUnavailable()
+        row = db.exec(
+            SqlBuilder.select.table(AppResourceBinding)
+            .where(
+                AppResourceBinding.id == InfraHelper.convert_id(resource_uid),
+                AppResourceBinding.board_binding_id == binding.id,
+                AppResourceBinding.connection_id == connection.id,
+                AppResourceBinding.resource_type == "project",
+            )
+            .with_for_update()
+        ).first()
+        if row is None:
+            raise GlitchTipUnavailable()
+        if row.access_revision != expected_revision:
+            raise GlitchTipConflict()
+        row.is_selected = False
+        row.access_revision += 1
+        db.update(row)
+        return {"resource_uid": row.get_uid(), "selected": False, "access_revision": row.access_revision}
 
 
 def disconnect(service, actor, project_uid, connection_uid, expected_revision):
