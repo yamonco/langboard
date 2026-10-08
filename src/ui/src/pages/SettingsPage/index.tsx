@@ -29,6 +29,7 @@ import useGetOllamaHealth from "@/controllers/api/settings/ollama/useGetOllamaHe
 import WorkflowStagesPage from "@/pages/SettingsPage/WorkflowStagesPage";
 import GlobalLabelsPage from "@/pages/SettingsPage/GlobalLabelsPage";
 import ProjectTemplatesPage from "@/pages/SettingsPage/ProjectTemplatesPage";
+import SettingsLoadState from "./SettingsLoadState";
 import { settingsRedirect } from "@/pages/SettingsPage/SettingsNavigation";
 
 function SettingsProxy(): React.JSX.Element {
@@ -37,7 +38,7 @@ function SettingsProxy(): React.JSX.Element {
     const socket = useSocket();
     const navigate = usePageNavigateRef();
     const pathname = useLocation().pathname.split("/").slice(0, 3).join("/");
-    const { data, error } = useGetSettingRoles();
+    const { data, error, isFetching, refetch } = useGetSettingRoles();
     const [isReady, setIsReady] = useState(false);
     const [isOllamaAvailable, setIsOllamaAvailable] = useState(false);
     const [isOllamaHealthChecked, setIsOllamaHealthChecked] = useState(!IS_OLLAMA_RUNNING);
@@ -116,63 +117,20 @@ function SettingsProxy(): React.JSX.Element {
         return <Navigate to={ROUTES.SETTINGS.API_KEYS} replace />;
     }
 
-    let skeletonContent;
-    switch (pathname) {
-        case ROUTES.SETTINGS.API_KEYS:
-            skeletonContent = <></>;
-            break;
-        case ROUTES.SETTINGS.PROJECT_TEMPLATES:
-            skeletonContent = <></>;
-            break;
-        case ROUTES.SETTINGS.USERS:
-            skeletonContent = <></>;
-            break;
-        case ROUTES.SETTINGS.BOTS:
-            skeletonContent = <></>;
-            break;
-        case ROUTES.SETTINGS.INTERNAL_BOTS:
-            skeletonContent = <></>;
-            break;
-        case ROUTES.SETTINGS.GLOBAL_RELATIONSHIPS:
-            skeletonContent = <></>;
-            break;
-        case ROUTES.SETTINGS.API_COMFORT_TOOLS:
-            skeletonContent = <></>;
-            break;
-        case ROUTES.SETTINGS.WEBHOOKS:
-            skeletonContent = <></>;
-            break;
-        case ROUTES.SETTINGS.NOTIFICATION_SCHEDULE:
-            skeletonContent = <></>;
-            break;
-        case ROUTES.SETTINGS.MCP_TOOL_GROUPS:
-            skeletonContent = <></>;
-            break;
-        case ROUTES.SETTINGS.OLLAMA:
-            skeletonContent = <></>;
-            break;
-    }
-
     return (
         <>
             {isReady && currentUser && (pathname !== ROUTES.SETTINGS.OLLAMA || isOllamaHealthChecked) ? (
                 <SettingsProxyDisplay currentUser={currentUser} isOllamaAvailable={isOllamaAvailable} />
             ) : (
-                <DashboardStyledLayout headerNavs={[]} headerTitle={t("board.Settings")} activityRailItems={[]} inert aria-busy>
-                    {skeletonContent}
+                <DashboardStyledLayout headerNavs={[]} headerTitle={t("board.Settings")} activityRailItems={[]} aria-busy={isFetching}>
+                    <SettingsLoadState error={Boolean(error)} isFetching={isFetching} retry={() => void refetch()} />
                 </DashboardStyledLayout>
             )}
         </>
     );
 }
 
-function SettingsProxyDisplay({
-    currentUser,
-    isOllamaAvailable,
-}: {
-    currentUser: AuthUser.TModel;
-    isOllamaAvailable: bool;
-}): React.JSX.Element {
+function SettingsProxyDisplay({ currentUser, isOllamaAvailable }: { currentUser: AuthUser.TModel; isOllamaAvailable: bool }): React.JSX.Element {
     const [t] = useTranslation();
     const navigate = usePageNavigateRef();
     const pathname = useLocation().pathname.split("/").slice(0, 3).join("/");

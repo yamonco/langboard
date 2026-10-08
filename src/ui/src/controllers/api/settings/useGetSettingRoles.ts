@@ -13,7 +13,8 @@ const useGetSettingRoles = (options?: TQueryOptions<unknown, IGetSettingRolesRes
     const { query } = useQueryMutation();
 
     const getSettingRoles = async () => {
-        const res = await api.post(Routing.API.SETTINGS.GET_SETTING_ROLES, {
+        const res = await api.post(Routing.API.SETTINGS.GET_SETTING_ROLES, undefined, {
+            timeout: 30000,
             env: {
                 interceptToast: options?.interceptToast,
             } as never,
