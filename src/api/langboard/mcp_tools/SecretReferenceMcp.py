@@ -21,3 +21,57 @@ def get_secret_reference_metadata(
         return {"reference": service.secret_reference.get_metadata(user, uri)}
     except (SecretReferenceUnavailable, ValueError):
         raise ValueError("Secret reference unavailable") from None
+
+
+@McpTool.add(
+    "user",
+    description="Only on explicit user instruction, issue an authenticated one-use browser URL to create a secret. Never request or accept secret values in chat, tool arguments or form elicitation. The URL grants no access without the same user's web login. Show the URL for user consent; do not open it automatically.",
+)
+def request_secret_input(
+    scope: Annotated[str, Field(pattern=r"^(personal|project|workspace)$")],
+    scope_uid: Annotated[str, Field(min_length=1, max_length=11)],
+    name: Annotated[str, Field(min_length=1, max_length=256)],
+    user: User,
+    service: DomainService,
+) -> dict[str, Any]:
+    from ..secrets.SecretInput import begin_input
+
+    try:
+        return begin_input(service, user, scope, scope_uid, name)
+    except (SecretReferenceUnavailable, ValueError):
+        raise ValueError("Secret input unavailable") from None
+
+
+@McpTool.add(
+    "user",
+    description="Read completion state and secret_ref for one previously requested secret input. Never returns secret material; expired or unauthorized sessions are unavailable.",
+)
+def get_secret_input_status(
+    input_uid: Annotated[str, Field(pattern=r"^[A-Za-z0-9_-]{43}$")],
+    user: User,
+    service: DomainService,
+) -> dict[str, Any]:
+    from ..secrets.SecretInput import input_status
+
+    try:
+        return input_status(service, user, input_uid)
+    except (SecretReferenceUnavailable, ValueError):
+        raise ValueError("Secret input unavailable") from None
+
+
+@McpTool.add(
+    "user",
+    description="Only on explicit user instruction, issue an authenticated one-use browser URL to replace an existing secret's value. Read its metadata revision first. Never accept secret values in chat or tool arguments. The target reference and revision are fixed; show the URL for user consent.",
+)
+def request_secret_rotation_input(
+    uri: Annotated[str, Field(min_length=1, max_length=320)],
+    expected_revision: Annotated[int, Field(strict=True, ge=0)],
+    user: User,
+    service: DomainService,
+) -> dict[str, Any]:
+    from ..secrets.SecretInput import begin_rotation
+
+    try:
+        return begin_rotation(service, user, uri, expected_revision)
+    except (SecretReferenceUnavailable, ValueError):
+        raise ValueError("Secret input unavailable") from None

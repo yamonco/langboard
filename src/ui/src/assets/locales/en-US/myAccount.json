@@ -36,5 +36,17 @@
     "Invalid language.": "Invalid language."
   },
   "Default language": "Default language",
-  "Default language description": "Choose the language used when you sign in. Changes are saved to your account."
+  "Default language description": "Choose the language used when you sign in. Changes are saved to your account.",
+  "secretInput": {
+    "title": "Secure secret input",
+    "help": "Enter the value here, outside the conversation. Only an opaque secret reference is returned to the assistant. This request expires after 10 minutes and can be used once.",
+    "value": "Secret value",
+    "save": "Store secret",
+    "completed": "Stored. You can close this page and return to the conversation.",
+    "failed": "This request expired, was used, or could not be completed. Request a new input link.",
+    "cancel": "Cancel request",
+    "cancelled": "Cancelled. No secret was stored.",
+    "create": "Create secret",
+    "rotate": "Replace existing secret value"
+  }
 }
