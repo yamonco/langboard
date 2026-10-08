@@ -7,10 +7,17 @@ import re
 from dataclasses import dataclass
 from uuid import UUID
 from langboard_shared.core.db import DbSession, SqlBuilder
-from langboard_shared.domain.models import AppConnection, AppResourceBinding, GitHubLifecycleReceipt, User
+from langboard_shared.domain.models import (
+    AppConnection,
+    AppResourceBinding,
+    BoardAppBinding,
+    GitHubLifecycleReceipt,
+    User,
+)
 from langboard_shared.domain.services.factory.SecretReferenceService import SecretAuditSource
 from langboard_shared.helpers import InfraHelper
-from sqlalchemy import update
+from langboard_shared.publishers import CardPublisher
+from sqlalchemy import select, update
 from .GitHubHealthWorker import schedule_receipt
 from .GitHubInstallation import connection_revision
 from .GitHubManifest import GitHubManifestUnavailable
@@ -70,11 +77,7 @@ def verify_signed_payload(service, actor, connection_uid, body: bytes, signature
                 AppConnection.owner_id == actor.id,
             )
         ).first()
-    if (
-        connection is None
-        or connection.state not in {"pending", "connected"}
-        or not connection.credential_reference
-    ):
+    if connection is None or connection.state not in {"pending", "connected"} or not connection.credential_reference:
         raise GitHubManifestUnavailable()
     revision = connection_revision(connection)
     credential = json.loads(
@@ -264,6 +267,12 @@ def _invalidate_resources(db, receipt):
     if receipt.event == "installation_repositories":
         ids = [str(value) for value in (*receipt.added_repository_ids, *receipt.removed_repository_ids)]
         conditions.append(AppResourceBinding.external_resource_id.in_(ids))
+    project_ids = db.exec(
+        select(BoardAppBinding.project_id)
+        .join(AppResourceBinding, AppResourceBinding.board_binding_id == BoardAppBinding.id)
+        .where(*conditions)
+        .distinct()
+    ).all()
     # One scoped DB update across selected boards; no per-resource API/token loop.
     db.exec(
         update(AppResourceBinding)
@@ -277,3 +286,6 @@ def _invalidate_resources(db, receipt):
     )
     receipt.invalidated = True
     db.update(receipt)
+    for (project_id,) in project_ids:
+        project_uid = InfraHelper.convert_uid(project_id)
+        db.after_commit(lambda uid=project_uid: CardPublisher.app_signal_changed(uid))
