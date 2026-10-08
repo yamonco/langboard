@@ -190,6 +190,8 @@ const BoardMemberList = memo(({ isSelectCardView }: IBoardMemberListProps) => {
                 } as Record<string, unknown>
             }
             userAvatarListProps={{
+                groupByMembership: true,
+                currentUserUID,
                 maxVisible: 6,
                 size: { initial: "sm", xs: "default" },
                 spacing: "3",

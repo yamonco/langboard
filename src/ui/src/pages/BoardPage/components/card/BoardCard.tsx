@@ -38,6 +38,7 @@ import BoardCommentList, { SkeletonBoardCommentList } from "@/pages/BoardPage/co
 import { forwardRef, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import BoardCardMemberList from "@/pages/BoardPage/components/card/BoardCardMemberList";
+import CardVisibilityBadge from "@/pages/BoardPage/components/card/CardVisibilityBadge";
 import { SkeletonUserAvatarList } from "@/components/UserAvatarList";
 import { usePageHeader } from "@/core/providers/PageHeaderProvider";
 import { usePageNavigateRef } from "@/core/hooks/usePageNavigate";
@@ -383,6 +384,7 @@ function BoardTaskCardResult({
     const attachments = ProjectCardAttachment.Model.useModels((model) => model.card_uid === card.uid);
     const checklists = ProjectChecklist.Model.useModels((model) => model.card_uid === card.uid);
     const description = card.useField("description");
+    const visibility = card.useField("visibility");
     const deadlineAt = card.useField("deadline_at");
     const isCheckCard = card.useField("is_check_card") ?? false;
     const completed = card.useField("completed") ?? false;
@@ -494,6 +496,7 @@ function BoardTaskCardResult({
                                     <BoardCardTitle key={`board-card-title-${card.uid}`} className={isExpanded ? "mr-28 sm:mr-52" : "mr-28"} />
                                 </Flex>
                                 <Flex gap="3" wrap items="center" className="min-w-0">
+                                    <CardVisibilityBadge card={card} />
                                     {isExpanded ? (
                                         <Box textSize="sm" className="text-muted">
                                             <BoardCardColumnName key={`board-card-column-name-${card.uid}`} />
@@ -572,9 +575,11 @@ function BoardTaskCardResult({
                                             ) : (
                                                 <>
                                                     <Flex direction={{ initial: "col", sm: "row" }} gap="4">
-                                                        <BoardCardSection title="card.Members" className="sm:w-1/2" contentClassName="flex gap-1">
-                                                            <BoardCardMemberList key={`board-card-member-list-${card.uid}`} />
-                                                        </BoardCardSection>
+                                                        {visibility !== "PRIVATE" && (
+                                                            <BoardCardSection title="card.Members" className="sm:w-1/2" contentClassName="flex gap-1">
+                                                                <BoardCardMemberList key={`board-card-member-list-${card.uid}`} />
+                                                            </BoardCardSection>
+                                                        )}
                                                         <BoardCardSection title="card.Deadline" className="sm:w-1/2">
                                                             <BoardCardDeadline key={`board-card-deadline-${card.uid}`} />
                                                         </BoardCardSection>

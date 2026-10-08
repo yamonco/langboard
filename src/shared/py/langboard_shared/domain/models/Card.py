@@ -37,8 +37,8 @@ class Card(BaseNotificationScheduleModel, table=True):
     project_column_id: SnowflakeID = SnowflakeIDField(
         foreign_key=ProjectColumn, nullable=False, index=True, api_field=ApiField(name="project_column_uid")
     )
-    # Visibility remains internal storage until every read and publish boundary
-    # is enforced. External membership never rewrites this persisted value.
+    # Authorized board/detail projections expose scope; generic payloads do not.
+    # External membership never rewrites this persisted value.
     visibility: str = Field(default="INTERNAL", nullable=False, sa_column_kwargs={"server_default": "INTERNAL"})
     owner_user_id: SnowflakeID | None = SnowflakeIDField(foreign_key="user.id", nullable=True)
     title: str = Field(nullable=False, api_field=ApiField())
@@ -87,6 +87,7 @@ class Card(BaseNotificationScheduleModel, table=True):
     ) -> dict[str, Any]:
         return {
             **self.api_response(),
+            "visibility": self.visibility,
             "count_comment": count_comment,
             "member_uids": member_uids,
             "relationships": relationships,

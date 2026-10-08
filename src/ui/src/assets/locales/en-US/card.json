@@ -217,5 +217,9 @@
     "card": "Card",
     "choose": "Choose a card",
     "link": "Link evidence"
-  }
+  },
+  "Private": "Private",
+  "Whisper": "Whisper",
+  "Private visibility guidance": "Visible only to you.",
+  "Whisper visibility guidance": "Internal collaboration. External members cannot access this card."
 }
