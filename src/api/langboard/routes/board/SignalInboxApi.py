@@ -15,13 +15,21 @@ from .CardSignalApi import response
 @AppRouter.api.get("/board/{project_uid}/signals/inbox", tags=["Board.Apps"])
 @AuthFilter.add("user")
 def get_signal_inbox(
+    request: Request,
     project_uid: str,
     after: str | None = None,
     user: User = Auth.scope("user"),
     service: DomainService = DomainService.scope(),
 ):
     try:
-        return response(list_board_signals, service, user, project_uid, after)
+        return response(
+            list_board_signals,
+            service,
+            user,
+            project_uid,
+            after,
+            channel=request.scope.get("collaboration_channel", CollaborationChannel.Api),
+        )
     except ValueError:
         raise ApiException.BadRequest_400() from None
 
