@@ -201,5 +201,21 @@
     "unavailable": "不可用",
     "moreResources": "更多仓库",
     "noResources": "暂无可访问的已选仓库。"
+  },
+  "inbox": {
+    "title": "Signal Inbox",
+    "refresh": "刷新",
+    "hint": "未关联的 GitHub 检查。关联提供证据，不代表批准或完成。",
+    "loading": "正在加载…",
+    "error": "无法加载或关联。请刷新后重试。",
+    "empty": "没有可关联的检查。",
+    "conflict": "冲突",
+    "passed": "通过",
+    "failed": "失败",
+    "other": "其他结果",
+    "more": "更多事件",
+    "card": "卡片",
+    "choose": "选择卡片",
+    "link": "关联证据"
   }
 }
