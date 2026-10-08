@@ -39,6 +39,32 @@ _SOURCE_QUERY_LIMIT = MAX_NATIVE_SECTION_SOURCE + 1
 class NativeCardWorkspaceAdapter(CardWorkspaceQueryPort, CardWorkspaceCommandPort):
     """Implement card workspace ports using native services and native validation."""
 
+    def get_project_card_relationships(self, project_uid: str, card_uids: list[str]) -> list[dict[str, Any]]:
+        from langboard_shared.core.db import DbSession
+        from langboard_shared.domain.models import Card, CardRelationship, GlobalCardRelationshipType
+        from langboard_shared.domain.services.CardVisibilityPolicy import card_visibility_scope
+        from langboard_shared.domain.services.factory.CardRelationshipService import CardRelationshipService
+        from langboard_shared.helpers import InfraHelper
+        from sqlalchemy import select
+
+        if not card_uids:
+            return []
+        resolved = self._service.card.resolve_visibility_context(project_uid, self._actor, self._channel)
+        if resolved is None:
+            raise ValueError("Project not found")
+        project, context = resolved
+        visible = select(Card.id).where(
+            Card.id.in_([InfraHelper.convert_id(uid) for uid in card_uids]),
+            Card.project_id == project.id, Card.deleted_at.is_(None), card_visibility_scope(context),
+        )
+        with DbSession.use(readonly=False) as db:
+            rows = db.exec(select(CardRelationship, GlobalCardRelationshipType).join(
+                GlobalCardRelationshipType, CardRelationship.relationship_type_id == GlobalCardRelationshipType.id,
+            ).where(
+                CardRelationship.card_id_parent.in_(visible), CardRelationship.card_id_child.in_(visible),
+            ).order_by(CardRelationship.id).limit(626)).all()
+        return [CardRelationshipService.public_relationship(edge, kind) for edge, kind in rows]
+
     def __init__(self, actor: User | Bot, service: DomainService, *, channel: CollaborationChannel = CollaborationChannel.Mcp) -> None:
         self._channel = channel
         self._actor = actor

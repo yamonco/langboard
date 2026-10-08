@@ -43,6 +43,9 @@ class ProjectCardPageSource:
 class CardWorkspaceQueryPort(Protocol):
     """Read capabilities required by card workspace queries."""
 
+    def get_project_card_relationships(self, project_uid: str, card_uids: list[str]) -> list[dict[str, Any]]:
+        """Batch relationships whose two currently readable endpoints are in this page."""
+
     def get_card_bundle_source(
         self,
         project_uid: str,

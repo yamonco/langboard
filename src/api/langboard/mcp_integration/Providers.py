@@ -240,6 +240,8 @@ def with_legacy_card_list(handler):
     async def legacy(**kwargs):
         result = await handler(**kwargs)
         payload = result.model_dump(mode="json") if hasattr(result, "model_dump") else dict(result)
+        if payload.get("format") == "tree":
+            return result
         columns = payload.pop("columns", {})
         for card in payload["cards"]["items"]:
             column = columns.get(card.get("project_column_uid"))

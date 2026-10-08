@@ -105,6 +105,7 @@ async def test_registered_profiles_partition_catalog_without_changing_schemas():
         assert "profile" in modern["get_card_bundle"]["properties"]
         assert "profile" not in catalogs["compatibility"]["get_card_bundle"]["properties"]
         modern["get_card_bundle"]["properties"].pop("profile")
+        assert modern["list_project_cards"]["properties"]["format"]["default"] == "tree"
         assert "query" not in catalogs["compatibility"]["get_projects"]["properties"]
         query = modern["get_projects"]["properties"].pop("query")
         assert query["default"] is None
@@ -186,7 +187,7 @@ def test_mounted_profiles_retain_http_authentication(monkeypatch, path):
     from langboard_shared.helpers import MiddlewareHelper
 
     monkeypatch.setattr(ModuleLoader, "load", lambda *args, **kwargs: {})
-    monkeypatch.setattr(MiddlewareHelper, "validate_auth", lambda scope: 401)
+    monkeypatch.setattr(MiddlewareHelper, "validate_auth", lambda scope, **kwargs: 401)
     app = App.__new__(App)
     app.config = SimpleNamespace(is_restarting=False)
     app.api = FastAPI()
