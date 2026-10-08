@@ -35,14 +35,17 @@ def test_refresh_removal_and_no_overlapping_job(tmp_path):
     pool.jobs[0][1].set_result(None)
     path.write_text("* * * * * /bin/bash echo replacement\n")
     runner.tick(pool, runner.started_at + timedelta(minutes=3))
-    assert [command for command, _ in pool.jobs] == ["echo first", "echo replacement"]
+    assert [command for command, _ in pool.jobs] == ["/bin/bash echo first", "/bin/bash echo replacement"]
     assert all("first" not in command for _, command in runner.last_run)
 
 
 def test_real_job_execution_and_reboot_only_once(tmp_path):
     output = tmp_path / "ran"
+    script = tmp_path / "job.sh"
+    script.write_text(f"printf success > {output}\n")
+    script.chmod(0o644)
     path = tmp_path / "cron.tab"
-    path.write_text(f"@reboot /bin/bash printf success > {output}\n")
+    path.write_text(f"@reboot /bin/bash {script}\n")
     runner = module.CronScheduler(path)
     pool = Pool()
     runner.tick(pool, datetime.now())

@@ -26,6 +26,10 @@ class CronScheduler:
         for job in tab:
             if not job.is_enabled():
                 continue
+            # Existing shared tabs use /bin/bash as the system-tab user field.
+            # OS user crontab interprets it as the command's interpreter.
+            if job.user == "/bin/bash":
+                job.command = f"/bin/bash {job.command}"
             key = (job.slices.special or str(job.slices), job.command)
             keys.add(key)
             previous = self.last_run.get(key, self.started_at)
