@@ -31,17 +31,18 @@ const BoardCardActionList = memo(() => {
     const { card, currentUser, hasRoleAction } = useBoardCard();
     const isAdmin = currentUser.useField("is_admin");
     const archivedAt = card.useField("archived_at");
+    const visibility = card.useField("visibility");
     const canDelete = card.useField("can_delete");
 
     return (
         <>
-            <BoardCardActionBotScope buttonClassName={sharedButtonClassName} />
+            {visibility !== "PRIVATE" && <BoardCardActionBotScope buttonClassName={sharedButtonClassName} />}
             <BoardCardActionRelationship buttonClassName={`${sharedButtonClassName} sm:hidden`} />
             <BoardCardActionAttachFile buttonClassName={sharedButtonClassName} />
             <BoardCardActionAddChecklist buttonClassName={sharedButtonClassName} />
             <BoardCardActionMetadata buttonClassName={sharedButtonClassName} />
             <BoardCardActionActivity buttonClassName={sharedButtonClassName} />
-            <BoardCardActionShare buttonClassName={sharedButtonClassName} />
+            {visibility !== "PRIVATE" && <BoardCardActionShare buttonClassName={sharedButtonClassName} />}
             {!archivedAt && (hasRoleAction(ProjectRole.EAction.CardUpdate) || isAdmin) ? (
                 <BoardCardActionArchive buttonClassName={sharedButtonClassName} />
             ) : null}
