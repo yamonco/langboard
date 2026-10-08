@@ -285,5 +285,10 @@
   "Template bot role editor_copilot": "편집기 코파일럿",
   "Use solution default": "솔루션 기본값 사용",
   "Unavailable bot": "사용할 수 없는 봇",
-  "This stage changed elsewhere. Your draft is preserved. Reload before saving.": "다른 곳에서 이 단계를 변경했습니다. 입력한 내용은 유지됩니다. 저장하기 전에 다시 불러오세요."
+  "This stage changed elsewhere. Your draft is preserved. Reload before saving.": "다른 곳에서 이 단계를 변경했습니다. 입력한 내용은 유지됩니다. 저장하기 전에 다시 불러오세요.",
+  "Employee membership": "직원 멤버십",
+  "Employee membership guidance": "직원으로 인정할 SCIM 동기화 그룹을 선택하세요. 선택한 그룹 중 하나에 소속되면 직원입니다. 그룹명이나 이메일 도메인으로 판정하지 않습니다. 선택을 모두 해제해 저장하면 누구도 내부 접근 권한을 얻지 않습니다. 기존 카드 공개 범위는 변경되지 않습니다.",
+  "No synchronized SCIM groups": "동기화된 SCIM 그룹이 없습니다. 먼저 IdP에서 그룹 프로비저닝을 설정하세요.",
+  "Membership settings saved": "직원 멤버십을 저장했습니다.",
+  "Membership settings failed": "직원 멤버십을 불러오거나 저장하지 못했습니다."
 }

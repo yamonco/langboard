@@ -30,6 +30,7 @@ from ...models.ProjectRole import ProjectRoleAction
 from .CheckitemService import CheckitemService
 from .ProjectColumnService import ProjectColumnService
 from .ProjectLabelService import ProjectLabelService
+from .ScimProvisioningService import ScimProvisioningService
 
 
 if TYPE_CHECKING:
@@ -249,6 +250,10 @@ class ProjectService(BaseDomainService):
             seen_member_uids.add(member_uid)
             all_members.append(member)
 
+        member_classification = self._get_service(ScimProvisioningService).classify_members(
+            [InfraHelper.convert_id(member["uid"]) for member in all_members])
+        for member in all_members:
+            member["membership_classification"] = member_classification.get(member["uid"], "unknown")
         response["all_members"] = all_members
         response["invited_member_uids"] = [invitation["uid"] for invitation in invited_members]
         if isinstance(user_or_bot, User):

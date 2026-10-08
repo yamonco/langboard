@@ -39,6 +39,7 @@ def test_selected_identity_authority_separates_customer_without_email_inference(
     if issuer is not None:
         with DbSession.use(readonly=False) as db:
             db.insert(UserIdentityLink(user_id=user.id, provider=IdentityProvider.Oidc, issuer=issuer, external_id=subject))
+    service._raw_get_service = lambda _: type("ScimFixture", (), {"_employee_policy": lambda _: None})()
     _, context = service.resolve_visibility_context(project, user, CollaborationChannel.HumanUI)
     assert context.can_read_card(CardVisibility.Internal) is allowed
     assert context.can_read_card(CardVisibility.Shared)

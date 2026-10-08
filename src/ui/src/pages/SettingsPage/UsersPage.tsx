@@ -10,6 +10,7 @@ import { SettingRole } from "@/core/models/roles";
 import { useAppSetting } from "@/core/providers/AppSettingProvider";
 import { usePageHeader } from "@/core/providers/PageHeaderProvider";
 import { ROUTES } from "@/core/routing/constants";
+import EmployeeMembershipSettings from "@/pages/SettingsPage/components/users/EmployeeMembershipSettings";
 import UserList from "@/pages/SettingsPage/components/users/UserList";
 import { EHttpStatus } from "@langboard/core/enums";
 import { useEffect, useState } from "react";
@@ -94,6 +95,7 @@ function UsersPage() {
                     )}
                 </Flex>
             </Flex>
+            <EmployeeMembershipSettings />
             <UserList selectedUsers={selectedUsers} setSelectedUsers={setSelectedUsers} />
         </>
     );

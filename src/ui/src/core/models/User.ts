@@ -23,6 +23,7 @@ export interface Interface extends IBaseModel {
 
     // In settings
     is_admin?: bool;
+    membership_classification?: "internal" | "external" | "unknown";
     industry: string;
     purpose: string;
     affiliation?: string;

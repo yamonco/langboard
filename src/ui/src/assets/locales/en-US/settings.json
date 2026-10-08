@@ -285,5 +285,10 @@
   "Template bot role editor_copilot": "Editor copilot",
   "Use solution default": "Use solution default",
   "Unavailable bot": "Unavailable bot",
-  "This stage changed elsewhere. Your draft is preserved. Reload before saving.": "This stage changed elsewhere. Your draft is preserved. Reload before saving."
+  "This stage changed elsewhere. Your draft is preserved. Reload before saving.": "This stage changed elsewhere. Your draft is preserved. Reload before saving.",
+  "Employee membership": "Employee membership",
+  "Employee membership guidance": "Select synchronized SCIM groups whose members are employees. Any selected group qualifies. Group names and email domains never grant access. Saving an empty selection removes internal access for everyone. This setting does not change existing card visibility.",
+  "No synchronized SCIM groups": "No synchronized SCIM groups. Configure group provisioning in your identity provider first.",
+  "Membership settings saved": "Employee membership saved.",
+  "Membership settings failed": "Could not load or save employee membership."
 }

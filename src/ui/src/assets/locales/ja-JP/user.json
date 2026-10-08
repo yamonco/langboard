@@ -20,5 +20,7 @@
   "Delete avatar": "アバターを削除",
   "Drop avatar here": "ここにアバターをドロップ",
   "industries": {},
-  "purposes": {}
+  "purposes": {},
+  "Internal member": "内部メンバー",
+  "External member": "外部メンバー"
 }

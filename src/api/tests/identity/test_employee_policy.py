@@ -29,6 +29,7 @@ def fixture(
         )
     )
     service = ScimProvisioningService(lambda cls: identities, lambda name: None, repository)
+    monkeypatch.setattr(service, "_employee_policy", lambda: None)
     user = SimpleNamespace(id=1, activated_at=True, deleted_at=None, is_admin=False)
     return service, user, repository
 

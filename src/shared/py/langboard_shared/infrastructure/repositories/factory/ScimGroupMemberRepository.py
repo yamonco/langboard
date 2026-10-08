@@ -15,7 +15,7 @@ class ScimGroupMemberRepository(BaseRepository[ScimGroupMember]):
     def name() -> str:
         return "scim_group_member"
 
-    def get_employee_users(self, group_external_ids: list[str], issuer: str, *, offset: int, limit: int) -> list[User]:
+    def get_employee_users(self, group_external_ids: list[str], issuer: str, *, offset: int, limit: int, group_ids: list[SnowflakeID] | None = None) -> list[User]:
         """Filter current linked users before bounded pagination on the primary database."""
         query = (
             SqlBuilder.select.table(User)
@@ -25,7 +25,7 @@ class ScimGroupMemberRepository(BaseRepository[ScimGroupMember]):
             .where(
                 UserIdentityLink.column("provider") == IdentityProvider.Scim,
                 UserIdentityLink.column("issuer") == issuer,
-                ScimGroup.column("external_id").in_(group_external_ids),
+                (ScimGroup.id.in_(group_ids) if group_ids is not None else ScimGroup.external_id.in_(group_external_ids)),
                 User.column("activated_at").is_not(None),
                 User.column("deleted_at").is_(None),
             )
