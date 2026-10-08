@@ -49,7 +49,25 @@ function ProjectTemplatesPage() {
     const [language, setLanguage] = useState("en");
     const [newLanguage, setNewLanguage] = useState("");
     const [error, setError] = useState(false);
+    const [templatesLoading, setTemplatesLoading] = useState(true);
+    const [templatesFailed, setTemplatesFailed] = useState(false);
     const selectedTemplate = templates.find((template) => template.name === selected);
+
+    const loadTemplates = async () => {
+        setTemplatesLoading(true);
+        setTemplatesFailed(false);
+        try {
+            const items = await getTemplates({});
+            setTemplates(items);
+            setSelected((previous) =>
+                items.some((item) => item.name === previous) ? previous : (items.find((item) => item.is_default)?.name ?? items[0]?.name)
+            );
+        } catch {
+            setTemplatesFailed(true);
+        } finally {
+            setTemplatesLoading(false);
+        }
+    };
 
     useEffect(() => {
         setPageAliasRef.current(t("settings.Project templates"));
@@ -62,12 +80,7 @@ function ProjectTemplatesPage() {
         getLabels({})
             .then(setLabels)
             .catch(() => setError(true));
-        getTemplates({})
-            .then((items) => {
-                setTemplates(items);
-                setSelected(items.find((item) => item.is_default)?.name ?? items[0]?.name);
-            })
-            .catch(() => Toast.Add.error(t("errors.Internal server error")));
+        void loadTemplates();
     }, []);
 
     const save = () => {
@@ -131,9 +144,18 @@ function ProjectTemplatesPage() {
                 {t("settings.Project templates")}
             </Box>
             <Box className="text-muted-foreground">{t("settings.New projects use this template when no template is specified.")}</Box>
+            {templatesLoading && <p role="status">{t("common.Loading...")}</p>}
+            {templatesFailed && (
+                <div role="alert" className="alert alert-soft alert-error max-w-xl">
+                    <span>{t("errors.Internal server error")}</span>
+                    <Button variant="outline" onClick={() => void loadTemplates()}>
+                        {t("common.Retry")}
+                    </Button>
+                </div>
+            )}
             <Flex gap="2" items="end" className="max-w-xl">
                 <Box className="grow">
-                    <Select.Root value={selected} onValueChange={setSelected}>
+                    <Select.Root disabled={templatesLoading || templatesFailed} value={selected} onValueChange={setSelected}>
                         <Select.Trigger>
                             <Select.Value placeholder={t("settings.Select a template")} />
                         </Select.Trigger>
@@ -156,15 +178,15 @@ function ProjectTemplatesPage() {
                         </Select.Content>
                     </Select.Root>
                 </Box>
-                <Button disabled={!selected || isPending} onClick={save}>
+                <Button disabled={!selected || isPending || templatesLoading || templatesFailed} onClick={save}>
                     {t("settings.Save default")}
                 </Button>
             </Flex>
             <div className="flex flex-wrap gap-2">
-                <Button variant="outline" onClick={() => edit()}>
+                <Button variant="outline" disabled={templatesLoading || templatesFailed} onClick={() => edit()}>
                     {t("settings.New template")}
                 </Button>
-                <Button variant="outline" disabled={!selectedTemplate} onClick={() => edit(selectedTemplate)}>
+                <Button variant="outline" disabled={!selectedTemplate || templatesLoading || templatesFailed} onClick={() => edit(selectedTemplate)}>
                     {t("common.Edit")}
                 </Button>
             </div>

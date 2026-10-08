@@ -135,3 +135,42 @@ for (const width of [1280, 390])
         await page.getByRole("button", { name: "Edit", exact: true }).click();
         await expect(page.getByLabel("Board template name", { exact: true })).toHaveValue(name);
     });
+
+for (const width of [1920, 390])
+    test(`template loading failure offers a bounded retry without writes at ${width}px`, async ({ page }) => {
+        await page.setViewportSize({ width, height: 850 });
+        await page.route("**/settings/global-labels", (route) => route.fulfill({ json: { labels: [] } }));
+        await page.route("**/settings/project-template-bots", (route) => route.fulfill({ json: { bots: [] } }));
+        await page.route("**/settings/workflow-stages", (route) => route.fulfill({ json: { stages: [] } }));
+        let reads = 0;
+        let writes = 0;
+        let release!: () => void;
+        const held = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        await page.route("**/settings/project-templates**", async (route) => {
+            if (route.request().method() !== "GET") {
+                writes++;
+                return route.fulfill({ status: 500, json: {} });
+            }
+            reads++;
+            if (reads === 1) return route.fulfill({ status: 500, json: {} });
+            await held;
+            await route.fulfill({ json: { templates: [{ uid: "one", name: "Recovered", columns: ["Queue"], is_default: true }] } });
+        });
+        await page.goto("/src/pages/SettingsPage/ProjectTemplates.fixture.html");
+        await expect(page.getByRole("alert")).toBeVisible();
+        await expect(page.getByRole("button", { name: "New board template", exact: true })).toBeDisabled();
+        await expect(page.getByRole("button", { name: "Save default", exact: true })).toBeDisabled();
+        await page.getByRole("button", { name: "Retry", exact: true }).click();
+        await expect(page.getByRole("status")).toBeVisible();
+        await expect(page.getByRole("button", { name: "Edit", exact: true })).toBeDisabled();
+        release();
+        await expect(page.getByRole("alert")).toHaveCount(0);
+        await expect(page.getByRole("status")).toHaveCount(0);
+        await expect(page.getByRole("button", { name: "Edit", exact: true })).toBeEnabled();
+        await expect(page.getByRole("combobox").first()).toContainText("Recovered");
+        expect(reads).toBe(2);
+        expect(writes).toBe(0);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    });
