@@ -7,7 +7,6 @@ from fastmcp.exceptions import AuthorizationError, ToolError, ValidationError
 from langboard_shared.core.filter import AuthFilter
 from langboard_shared.core.logger import Logger
 from langboard_shared.core.routing import ApiErrorCode, ApiException, ApiPermission, AppRouter, JsonResponse
-from langboard_shared.core.security import AuthSecurity
 from langboard_shared.core.security.CollaborationChannel import CollaborationChannel
 from langboard_shared.domain.models import McpRole, User
 from langboard_shared.domain.models.McpRole import McpRoleAction
@@ -17,7 +16,7 @@ from langboard_shared.security import RoleFinder
 from pydantic import BaseModel
 from ...card_workspace.domain import CardUnavailableError
 from ...mcp_integration import McpServer, McpTool
-from ...middlewares.McpAuthMiddleware import mcp_auth_context
+from ...middlewares.McpAuthMiddleware import _resolve_mcp_tool_group_uid, mcp_auth_context
 
 
 @AppRouter.schema(permission=ApiPermission.Read)
@@ -52,7 +51,7 @@ async def execute_mcp_tool(tool_name: str, request: Request):
         raise ApiException.Forbidden_403(ApiErrorCode.PE1001)
 
     # Extract and validate MCP tool group UID from header only
-    mcp_tool_group_uid = request.headers.get(AuthSecurity.MCP_TOOL_GROUP_UID_HEADER)
+    mcp_tool_group_uid = _resolve_mcp_tool_group_uid(request.headers, request.scope, user_or_bot)
 
     if not mcp_tool_group_uid:
         raise ApiException.BadRequest_400(ApiErrorCode.VA0000)
@@ -76,11 +75,14 @@ async def execute_mcp_tool(tool_name: str, request: Request):
         # Check if it's a personal tool group and validate ownership
         if tool_group.user_id is not None:
             api_key = request.scope.get("api_key")
-            if not api_key:
+            if request.scope.get("oidc_claims"):
+                if tool_group.user_id != user_or_bot.id:
+                    raise ApiException.Forbidden_403(ApiErrorCode.PE1001)
+            elif not api_key:
                 raise ApiException.Forbidden_403(ApiErrorCode.PE1001)
 
             # Validate that the API key belongs to the same user as the tool group
-            if api_key.user_id != tool_group.user_id:
+            if api_key and api_key.user_id != tool_group.user_id:
                 raise ApiException.Forbidden_403(ApiErrorCode.PE1001)
 
         try:
@@ -95,6 +97,7 @@ async def execute_mcp_tool(tool_name: str, request: Request):
                 "user_or_bot": user_or_bot,
                 "api_key": request.scope.get("api_key"),
                 "tool_group": tool_group,
+                "oidc_claims": request.scope.get("oidc_claims"),
                 "collaboration_channel": CollaborationChannel.Mcp,
             }
         )
