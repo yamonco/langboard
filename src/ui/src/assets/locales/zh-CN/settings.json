@@ -285,5 +285,10 @@
   "Template bot role editor_copilot": "编辑器副驾驶",
   "Use solution default": "使用系统默认值",
   "Unavailable bot": "不可用的机器人",
-  "This stage changed elsewhere. Your draft is preserved. Reload before saving.": "此阶段已在其他位置更改。您的输入已保留。请重新加载后再保存。"
+  "This stage changed elsewhere. Your draft is preserved. Reload before saving.": "此阶段已在其他位置更改。您的输入已保留。请重新加载后再保存。",
+  "Employee membership": "员工成员资格",
+  "Employee membership guidance": "选择用于认定员工的已同步SCIM组。属于任一选定组即可。组名称和邮箱域名不授予访问权限。保存空选择将取消所有人的内部访问权限。此设置不会更改现有卡片的可见性。",
+  "No synchronized SCIM groups": "没有已同步的SCIM组。请先在身份提供商中配置组预配。",
+  "Membership settings saved": "员工成员资格已保存。",
+  "Membership settings failed": "无法加载或保存员工成员资格。"
 }

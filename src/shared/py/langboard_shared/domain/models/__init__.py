@@ -37,6 +37,7 @@ from .Checkitem import Checkitem
 from .CheckitemTimerRecord import CheckitemTimerRecord
 from .Checklist import Checklist
 from .EditorGraphApprovalRequest import EditorGraphApprovalRequest
+from .EmployeeMembershipPolicy import EmployeeMembershipPolicy
 from .ExternalImportRecord import ExternalImportRecord
 from .GitHubHealthJob import GitHubHealthJob
 from .GitHubLifecycleReceipt import GitHubLifecycleReceipt
@@ -146,6 +147,7 @@ __all__ = [
     "BotTriggerGraphApprovalRequest",
     "ChatGraphApprovalRequest",
     "EditorGraphApprovalRequest",
+    "EmployeeMembershipPolicy",
     "ExternalImportRecord",
     "ManualScopeRunGraphApprovalRequest",
     "GraphApprovalRequest",

@@ -28,3 +28,24 @@ no internal access. Never select a public or mixed employee/customer issuer.
 This policy describes collaboration access, not employment. Customer-visible
 cards must be explicitly shared through the human UI; selecting an identity
 authority does not convert existing internal cards to shared cards.
+
+## Global SCIM employee selection
+
+Installation administrators can select employee groups in Settings → Users.
+The selection is persisted in the shared database and used by both card access
+and the native employee tools. Selecting any synchronized group qualifies its
+active members; group display names are informational. Matching uses Langboard's
+SCIM resource ID, so identity providers that omit `externalId` are supported.
+The configured SCIM issuer must match the user's current SCIM identity link.
+Changing the issuer does not reuse the previous employee selection. An explicit
+empty selection denies employee access; it never restores the OIDC fallback.
+Legacy `MCP_EMPLOYEE_GROUP_IDS` remains a fallback until the first UI save.
+
+The current native SCIM deployment has one configured provisioning authority.
+This works with any compliant SCIM 2.0 provider; simultaneous independent
+provisioning authorities are not implied by this setting.
+
+Existing card visibility is not changed when membership settings are saved.
+A human-requested, one-time deployment migration may share existing INTERNAL
+cards on mixed external-member boards. It must preserve PRIVATE cards and keep
+a private before-state receipt. No periodic reconciliation is required.
