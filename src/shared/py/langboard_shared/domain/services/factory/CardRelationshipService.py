@@ -207,9 +207,7 @@ class CardRelationshipService(BaseDomainService):
         relationships: list[dict[str, Any]] | None = None,
         include_bot: bool = True,
     ) -> None:
-        CardRelationshipPublisher.updated(
-            project, card, relationships if relationships is not None else self.get_api_list_by_card(card)
-        )
+        CardRelationshipPublisher.updated(project, card)
         CardRelationshipActivityTask.card_relationship_updated(
             user_or_bot, project, card, old_relationship_ids, new_related_card_ids, is_parent
         )
@@ -413,7 +411,7 @@ class CardRelationshipService(BaseDomainService):
                     CardBotTask.card_created(user_or_bot, project, card)
                 self._get_service(CardService).publish_work_states(project, [card.id for card, _ in affected_snapshots])
                 for card, relationships in affected_snapshots:
-                    CardRelationshipPublisher.updated(project, card, relationships)
+                    CardRelationshipPublisher.updated(project, card)
                     CardBotTask.card_relationship_updated(user_or_bot, project, card)
 
             with DbSession.use(readonly=False) as db:
