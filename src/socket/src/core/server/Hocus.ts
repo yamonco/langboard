@@ -297,6 +297,13 @@ const Hocus = new Hocuspocus({
 
         Y.applyUpdate(document, state);
     },
+    async beforeHandleMessage({ context, documentName }) {
+        const user = context.user as User | undefined;
+        if (!user) {
+            throw createPermissionDeniedError("unauthorized");
+        }
+        await validateDocumentAccess(documentName, user);
+    },
     async onStoreDocument({ documentName, document }) {
         await EditorSyncStorage.save(documentName, Y.encodeStateAsUpdate(document));
     },
