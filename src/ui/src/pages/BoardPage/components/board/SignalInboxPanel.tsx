@@ -27,12 +27,16 @@ export default function SignalInboxPanel({
     canEdit,
     socket,
     onLinked,
+    columns = [],
+    onCreated,
 }: {
     projectUID: string;
     cards: { uid: string; title: string }[];
     canEdit: boolean;
     socket: Pick<ISocketContext, "on" | "off">;
     onLinked?: (cardUID: string) => void;
+    columns?: { uid: string; name: string; is_archive?: boolean }[];
+    onCreated?: (cardUID: string) => void;
 }) {
     const [t, i18n] = useTranslation();
     const text = (key: string) => t(`card.inbox.${key}`);
@@ -40,6 +44,11 @@ export default function SignalInboxPanel({
     const [cursor, setCursor] = useState<string | null>(null);
     const [selected, setSelected] = useState<Signal | null>(null);
     const [cardUID, setCardUID] = useState("");
+    const [creating, setCreating] = useState(false);
+    const [columnUID, setColumnUID] = useState("");
+    const [title, setTitle] = useState("");
+    const [receipt, setReceipt] = useState<{ card_uid: string; created: boolean } | null>(null);
+    const availableColumns = columns.filter((column) => !column.is_archive);
     const [pending, setPending] = useState(false);
     const [error, setError] = useState(false);
     const [refresh, setRefresh] = useState(0);
@@ -61,6 +70,8 @@ export default function SignalInboxPanel({
                 setItems([]);
                 setCursor(null);
                 setSelected(null);
+                setCreating(false);
+                setReceipt(null);
                 setError(true);
             }
         } finally {
@@ -78,6 +89,10 @@ export default function SignalInboxPanel({
         setCursor(null);
         setSelected(null);
         setCardUID("");
+        setCreating(false);
+        setColumnUID("");
+        setTitle("");
+        setReceipt(null);
         completedRefresh.current = refresh;
         void run((signal) => load(signal));
         let timer: ReturnType<typeof setTimeout> | undefined;
@@ -112,7 +127,7 @@ export default function SignalInboxPanel({
             socket.off(reconnect);
             window.removeEventListener("focus", focused);
         };
-    }, [root, socket]);
+    }, [root, socket, canEdit]);
     useEffect(() => {
         if (pending || refresh === completedRefresh.current) return;
         completedRefresh.current = refresh;
@@ -153,6 +168,42 @@ export default function SignalInboxPanel({
             if (!signal.aborted) onLinked?.(cardUID);
         });
     };
+    const createCard = () => {
+        const trimmedTitle = title.trim();
+        if (
+            pending ||
+            !canEdit ||
+            !creating ||
+            !selected ||
+            !canBindCard(selected) ||
+            !availableColumns.some((column) => column.uid === columnUID) ||
+            !trimmedTitle ||
+            trimmedTitle.length > 200
+        )
+            return;
+        const chosen = selected;
+        void run(async (signal) => {
+            setReceipt(null);
+            const response = await api.post<{ card_uid: string; created: boolean }>(
+                `${root}/card`,
+                {
+                    connection_uid: chosen.connection_uid,
+                    resource_uid: chosen.resource_uid,
+                    signal_uid: chosen.signal_uid,
+                    project_column_uid: columnUID,
+                    title: trimmedTitle,
+                },
+                { signal }
+            );
+            if (signal.aborted) return;
+            setSelected(null);
+            setCreating(false);
+            await load(signal);
+            if (signal.aborted) return;
+            setReceipt(response.data);
+            onCreated?.(response.data.card_uid);
+        });
+    };
     return (
         <section className="h-full overflow-y-auto p-3" aria-label={text("title")}>
             <h2 className="mb-3 flex items-center justify-between gap-2 text-sm font-semibold">
@@ -173,6 +224,7 @@ export default function SignalInboxPanel({
             <p className="mb-3 text-xs text-muted-foreground">{text("hint")}</p>
             {pending && <p role="status">{text("loading")}</p>}
             {error && <p role="alert">{text("error")}</p>}
+            {receipt && <p role="status">{text(receipt.created ? "created" : "reused")}</p>}
             {!pending && !error && !items.length && <p className="text-sm text-muted-foreground">{text("empty")}</p>}
             <div className="space-y-2">
                 {items.map((item) => {
@@ -222,6 +274,31 @@ export default function SignalInboxPanel({
                             onClick={() => {
                                 setSelected(item);
                                 setCardUID("");
+                                setCreating(false);
+                                setColumnUID("");
+                                setReceipt(null);
+                                setTitle(
+                                    [
+                                        item.provider === "github" ? "GitHub" : "Dokploy",
+                                        item.resource_name,
+                                        item.provider === "github"
+                                            ? text("check")
+                                            : text(
+                                                  [
+                                                      "deployment.started",
+                                                      "deployment.queued",
+                                                      "deployment.succeeded",
+                                                      "deployment.failed",
+                                                      "deployment.cancelled",
+                                                  ].includes(item.event_type)
+                                                      ? `event ${item.event_type}`
+                                                      : "event deployment"
+                                              ),
+                                    ]
+                                        .filter(Boolean)
+                                        .join(" · ")
+                                        .slice(0, 200)
+                                );
                             }}
                             aria-pressed={selected?.signal_uid === item.signal_uid}
                         >
@@ -241,26 +318,79 @@ export default function SignalInboxPanel({
             )}
             {selected && canEdit && canBindCard(selected) && (
                 <div className="mt-4 space-y-2 rounded-lg border p-3">
-                    <label className="block text-sm" htmlFor={`inbox-card-${projectUID}`}>
-                        {text("card")}
-                    </label>
-                    <select
-                        id={`inbox-card-${projectUID}`}
-                        className="select select-bordered w-full min-w-0 bg-background text-sm"
-                        value={cardUID}
-                        disabled={pending}
-                        onChange={(event) => setCardUID(event.target.value)}
-                    >
-                        <option value="">{text("choose")}</option>
-                        {cards.map((card) => (
-                            <option key={card.uid} value={card.uid}>
-                                {card.title}
-                            </option>
-                        ))}
-                    </select>
-                    <Button type="button" disabled={pending || !cardUID} onClick={link}>
-                        {text("link")}
-                    </Button>
+                    {!creating ? (
+                        <>
+                            <label className="block text-sm" htmlFor={`inbox-card-${projectUID}`}>
+                                {text("card")}
+                            </label>
+                            <select
+                                id={`inbox-card-${projectUID}`}
+                                className="select select-bordered w-full min-w-0 bg-background text-sm"
+                                value={cardUID}
+                                disabled={pending}
+                                onChange={(event) => setCardUID(event.target.value)}
+                            >
+                                <option value="">{text("choose")}</option>
+                                {cards.map((card) => (
+                                    <option key={card.uid} value={card.uid}>
+                                        {card.title}
+                                    </option>
+                                ))}
+                            </select>
+                            <Button type="button" disabled={pending || !cardUID} onClick={link}>
+                                {text("link")}
+                            </Button>
+                            <Button type="button" variant="outline" disabled={pending || !availableColumns.length} onClick={() => setCreating(true)}>
+                                {text("new card")}
+                            </Button>
+                        </>
+                    ) : (
+                        <>
+                            <label className="block text-sm" htmlFor={`inbox-title-${projectUID}`}>
+                                {text("new title")}
+                            </label>
+                            <input
+                                id={`inbox-title-${projectUID}`}
+                                className="input w-full min-w-0 rounded-md border bg-background p-2"
+                                value={title}
+                                maxLength={200}
+                                disabled={pending}
+                                onChange={(event) => setTitle(event.target.value)}
+                            />
+                            <label className="block text-sm" htmlFor={`inbox-column-${projectUID}`}>
+                                {text("column")}
+                            </label>
+                            <select
+                                id={`inbox-column-${projectUID}`}
+                                className="select w-full min-w-0 rounded-md border bg-background p-2"
+                                value={columnUID}
+                                disabled={pending}
+                                onChange={(event) => setColumnUID(event.target.value)}
+                            >
+                                <option value="">{text("choose column")}</option>
+                                {availableColumns.map((column) => (
+                                    <option key={column.uid} value={column.uid}>
+                                        {column.name}
+                                    </option>
+                                ))}
+                            </select>
+                            <Button
+                                type="button"
+                                disabled={
+                                    pending ||
+                                    !title.trim() ||
+                                    title.trim().length > 200 ||
+                                    !availableColumns.some((column) => column.uid === columnUID)
+                                }
+                                onClick={createCard}
+                            >
+                                {text("create card")}
+                            </Button>
+                            <Button type="button" variant="ghost" disabled={pending} onClick={() => setCreating(false)}>
+                                {t("common.Cancel")}
+                            </Button>
+                        </>
+                    )}
                 </div>
             )}
         </section>

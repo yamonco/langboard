@@ -1,7 +1,8 @@
 """Bounded board Signal discovery; hidden card links never affect visible results."""
 
 import re
-from langboard_shared.core.db import DbSession
+from langboard_shared.core.db import DbSession, SqlBuilder
+from langboard_shared.core.security.CollaborationChannel import CollaborationChannel
 from langboard_shared.domain.models import (
     AppConnection,
     AppResourceBinding,
@@ -138,3 +139,113 @@ def list_board_signals(service, actor, project_uid, after=None):
             ],
             "next_cursor": rows[24][0].get_uid() if len(rows) > 25 else None,
         }
+
+
+def create_signal_card(
+    service,
+    actor,
+    project_uid,
+    connection_uid,
+    resource_uid,
+    signal_uid,
+    project_column_uid,
+    title,
+    *,
+    channel=CollaborationChannel.Api,
+):
+    """One explicit native card creation and evidence attachment, retained across retries."""
+    from langboard_shared.domain.models import CardSignalCreation, ProjectColumn
+    from .CardSignal import authorized_signal_scope, bind_check
+
+    title = title.strip()
+    if not title or len(title) > 200:
+        raise ValueError("Invalid card title")
+    with DbSession.atomic() as db:
+        project = service.workflow_stage._authorized_app_board(
+            actor, project_uid, ProjectRoleAction.CardUpdate, lock=True
+        )
+        resolved = service.card.resolve_visibility_context(project_uid, actor, channel)
+        if project is None or resolved is None or not resolved[1].project_member:
+            raise GitHubManifestUnavailable()
+        # Native provider scope locks its connection/resource before receipt lookup.
+        # Concurrent requests serialize on those rows; the unique receipt is a final DB fence.
+        signal, _, resource = authorized_signal_scope(
+            service, db, actor, project_uid, connection_uid, resource_uid, signal_uid
+        )
+        column = db.exec(
+            SqlBuilder.select.table(ProjectColumn)
+            .where(
+                ProjectColumn.id == InfraHelper.convert_id(project_column_uid),
+                ProjectColumn.project_id == project.id,
+                ProjectColumn.deleted_at.is_(None),
+                ProjectColumn.is_archive == False,  # noqa: E712
+            )
+            .with_for_update()
+        ).first()
+        if column is None:
+            raise GitHubManifestUnavailable()
+        receipt = db.exec(
+            SqlBuilder.select.table(CardSignalCreation)
+            .where(
+                CardSignalCreation.actor_id == actor.id,
+                CardSignalCreation.resource_id == resource.id,
+                CardSignalCreation.external_id == signal.external_id,
+                CardSignalCreation.commit_sha == signal.commit_sha,
+            )
+            .with_for_update()
+        ).first()
+        if receipt:
+            readable = service.card.resolve_readable_card(
+                project_uid, InfraHelper.convert_uid(receipt.card_id), actor, channel
+            )
+            if readable is None or readable[1].archived_at is not None:
+                raise GitHubManifestUnavailable()
+            return {"card_uid": readable[1].get_uid(), "created": False}
+        linked = db.exec(
+            SqlBuilder.select.table(Card)
+            .join(CardAppSignalBinding, CardAppSignalBinding.card_id == Card.id)
+            .where(
+                Card.project_id == project.id,
+                Card.deleted_at.is_(None),
+                Card.archived_at.is_(None),
+                card_visibility_scope(resolved[1]),
+                CardAppSignalBinding.resource_id == resource.id,
+                CardAppSignalBinding.external_id == signal.external_id,
+                CardAppSignalBinding.commit_sha == signal.commit_sha,
+                CardAppSignalBinding.is_enabled == True,  # noqa: E712
+            )
+            .order_by(Card.id)
+            .limit(1)
+            .with_for_update()
+        ).first()
+        created = linked is None
+        if created:
+            result = service.card.create(actor, project, column, title, dispatch_effects=False)
+            if result is None:
+                raise GitHubManifestUnavailable()
+            card, api_card = result
+            bind_check(
+                service,
+                actor,
+                project_uid,
+                card.get_uid(),
+                connection_uid,
+                resource_uid,
+                signal_uid,
+                card.last_change_seq,
+                None,
+                visibility_channel=channel,
+            )
+            db.after_commit(lambda: service.card.dispatch_created(actor, project, column, card, {"card": api_card}))
+        else:
+            card = linked
+        db.insert(
+            CardSignalCreation(
+                actor_id=actor.id,
+                resource_id=resource.id,
+                external_id=signal.external_id,
+                commit_sha=signal.commit_sha,
+                card_id=card.id,
+            )
+        )
+        return {"card_uid": card.get_uid(), "created": created}

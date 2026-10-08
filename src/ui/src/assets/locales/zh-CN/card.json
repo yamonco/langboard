@@ -232,7 +232,15 @@
     "outcome failure": "失败",
     "outcome running": "运行中",
     "outcome queued": "排队中",
-    "outcome cancelled": "已取消"
+    "outcome cancelled": "已取消",
+    "check": "检查",
+    "new card": "从信号创建新卡片",
+    "new title": "卡片标题",
+    "column": "列",
+    "choose column": "选择列",
+    "create card": "创建卡片",
+    "created": "已创建关联信号证据的卡片。",
+    "reused": "已返回关联信号证据的现有卡片。"
   },
   "Private": "私密",
   "Whisper": "内部协作",
