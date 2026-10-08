@@ -75,6 +75,22 @@
     vector-effect: non-scaling-stroke;
 }
 
+[data-card-privacy="whisper"] {
+    border-style: dashed;
+    outline: 1px dashed hsl(var(--primary) / 0.35);
+    outline-offset: -1px;
+    background-image: linear-gradient(hsl(var(--primary) / 0.035), hsl(var(--primary) / 0.035));
+}
+
+[data-card-privacy="private"] {
+    outline: 1px solid hsl(var(--muted-foreground) / 0.35);
+    outline-offset: -1px;
+}
+
+[data-card-privacy][data-checklist-completed="true"] {
+    outline-color: hsl(var(--muted-foreground) / 0.35);
+}
+
 .board-card-progress-track {
     stroke: hsl(var(--border));
     stroke-width: 1;

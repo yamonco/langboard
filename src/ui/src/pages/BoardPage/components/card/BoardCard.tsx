@@ -39,6 +39,7 @@ import { forwardRef, memo, useCallback, useEffect, useMemo, useRef, useState } f
 import { useTranslation } from "react-i18next";
 import BoardCardMemberList from "@/pages/BoardPage/components/card/BoardCardMemberList";
 import CardVisibilityBadge from "@/pages/BoardPage/components/card/CardVisibilityBadge";
+import { cardVisibilityPresentation } from "@/pages/BoardPage/components/card/cardVisibilityPresentation";
 import { SkeletonUserAvatarList } from "@/components/UserAvatarList";
 import { usePageHeader } from "@/core/providers/PageHeaderProvider";
 import { usePageNavigateRef } from "@/core/hooks/usePageNavigate";
@@ -385,6 +386,7 @@ function BoardTaskCardResult({
     const checklists = ProjectChecklist.Model.useModels((model) => model.card_uid === card.uid);
     const description = card.useField("description");
     const visibility = card.useField("visibility");
+    const visibilityMembers = card.useForeignFieldArray("project_members");
     const deadlineAt = card.useField("deadline_at");
     const isCheckCard = card.useField("is_check_card") ?? false;
     const completed = card.useField("completed") ?? false;
@@ -465,6 +467,10 @@ function BoardTaskCardResult({
                     <Box
                         ref={commentSurfaceRef}
                         data-card-surface=""
+                        data-card-privacy={cardVisibilityPresentation(
+                            visibility,
+                            visibilityMembers.some((member) => member.isValidUser() && member.membership_classification === "external")
+                        )}
                         className={cn(
                             "relative min-h-0 min-w-0 max-w-full flex-1 border bg-background px-4 py-4 sm:px-6 sm:py-6",
                             isExpanded ? "overflow-hidden border-0 shadow-none" : "overflow-visible rounded-2xl shadow-2xl"
