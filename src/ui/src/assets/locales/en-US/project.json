@@ -276,6 +276,25 @@
     "Select Dokploy environment": "Select environment",
     "Remove Dokploy environment selection": "Remove environment selection",
     "Dokploy resource application": "Application",
-    "Dokploy resource compose": "Compose"
+    "Dokploy resource compose": "Compose",
+    "Dokploy read scope help": "Read access applies to all selected Dokploy resources on this board, including resources selected later. Only resource metadata and deployment signals are read. Dokploy and workflow transitions are not changed.",
+    "Dokploy read confirm help": "Confirm board-wide read access for selected applications and compose services.",
+    "Enable Dokploy read access": "Enable read access",
+    "Confirm Dokploy read access": "Confirm read access",
+    "Dokploy read enabled": "Board read access enabled.",
+    "Refresh Dokploy deployments": "Refresh deployments",
+    "Dokploy deployment results help": "Latest deployment events, outcomes and times. Up to 25 results per refresh.",
+    "Dokploy no deployments": "No deployment events.",
+    "Dokploy deployments truncated": "Results truncated to the latest 25 events.",
+    "Dokploy event deployment.started": "Deployment started",
+    "Dokploy event deployment.queued": "Deployment queued",
+    "Dokploy event deployment.succeeded": "Deployment succeeded",
+    "Dokploy event deployment.failed": "Deployment failed",
+    "Dokploy event deployment.cancelled": "Deployment cancelled",
+    "Dokploy outcome running": "Running",
+    "Dokploy outcome queued": "Queued",
+    "Dokploy outcome success": "Success",
+    "Dokploy outcome failure": "Failure",
+    "Dokploy outcome cancelled": "Cancelled"
   }
 }

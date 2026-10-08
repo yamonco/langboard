@@ -276,6 +276,25 @@
     "Select Dokploy environment": "환경 포함",
     "Remove Dokploy environment selection": "환경 선택 해제",
     "Dokploy resource application": "애플리케이션",
-    "Dokploy resource compose": "Compose"
+    "Dokploy resource compose": "Compose",
+    "Dokploy read scope help": "읽기 권한은 이 보드에서 선택한 모든 Dokploy 리소스와 이후 선택하는 리소스에 적용됩니다. 리소스 메타데이터와 배포 신호만 읽으며 Dokploy 및 워크플로 단계는 변경하지 않습니다.",
+    "Dokploy read confirm help": "선택한 애플리케이션과 Compose 서비스에 대한 보드 전체 읽기 권한을 확인하세요.",
+    "Enable Dokploy read access": "읽기 권한 활성화",
+    "Confirm Dokploy read access": "읽기 권한 확인",
+    "Dokploy read enabled": "보드 읽기 권한이 활성화되었습니다.",
+    "Refresh Dokploy deployments": "배포 새로고침",
+    "Dokploy deployment results help": "최근 배포 이벤트, 결과 및 시간입니다. 한 번에 최대 25개를 표시합니다.",
+    "Dokploy no deployments": "배포 이벤트가 없습니다.",
+    "Dokploy deployments truncated": "최근 25개 이벤트만 표시합니다.",
+    "Dokploy event deployment.started": "배포 시작",
+    "Dokploy event deployment.queued": "배포 대기",
+    "Dokploy event deployment.succeeded": "배포 성공",
+    "Dokploy event deployment.failed": "배포 실패",
+    "Dokploy event deployment.cancelled": "배포 취소",
+    "Dokploy outcome running": "실행 중",
+    "Dokploy outcome queued": "대기 중",
+    "Dokploy outcome success": "성공",
+    "Dokploy outcome failure": "실패",
+    "Dokploy outcome cancelled": "취소"
   }
 }

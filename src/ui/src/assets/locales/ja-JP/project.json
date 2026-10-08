@@ -276,6 +276,25 @@
     "Select Dokploy environment": "環境を追加",
     "Remove Dokploy environment selection": "環境の選択を解除",
     "Dokploy resource application": "アプリケーション",
-    "Dokploy resource compose": "Compose"
+    "Dokploy resource compose": "Compose",
+    "Dokploy read scope help": "読み取り権限は、このボードで選択したすべてのDokployリソースと今後選択するリソースに適用されます。リソースのメタデータとデプロイ信号のみを読み取り、Dokployやワークフローの段階は変更しません。",
+    "Dokploy read confirm help": "選択したアプリケーションとComposeサービスに対するボード全体の読み取り権限を確認してください。",
+    "Enable Dokploy read access": "読み取り権限を有効化",
+    "Confirm Dokploy read access": "読み取り権限を確認",
+    "Dokploy read enabled": "ボードの読み取り権限が有効です。",
+    "Refresh Dokploy deployments": "デプロイを更新",
+    "Dokploy deployment results help": "最新のデプロイイベント、結果、時刻です。更新ごとに最大25件表示します。",
+    "Dokploy no deployments": "デプロイイベントはありません。",
+    "Dokploy deployments truncated": "最新の25件のみ表示しています。",
+    "Dokploy event deployment.started": "デプロイ開始",
+    "Dokploy event deployment.queued": "デプロイ待機",
+    "Dokploy event deployment.succeeded": "デプロイ成功",
+    "Dokploy event deployment.failed": "デプロイ失敗",
+    "Dokploy event deployment.cancelled": "デプロイキャンセル",
+    "Dokploy outcome running": "実行中",
+    "Dokploy outcome queued": "待機中",
+    "Dokploy outcome success": "成功",
+    "Dokploy outcome failure": "失敗",
+    "Dokploy outcome cancelled": "キャンセル"
   }
 }
