@@ -124,7 +124,16 @@ function Trigger({
     }
 
     const avatar = (
-        <Avatar.Root size={avatarSize} className={cn(avatarRootClassName, "relative overflow-visible")} onClick={avatarRootOnClick}>
+        <Avatar.Root
+            size={avatarSize}
+            className={cn(avatarRootClassName, "relative overflow-visible")}
+            title={
+                membership && membership !== "unknown"
+                    ? `${names} · ${t(`user.${membership === "internal" ? "Internal member" : "External member"}`)}`
+                    : undefined
+            }
+            onClick={avatarRootOnClick}
+        >
             <Avatar.Image src={avatarUrl} className="rounded-full" />
             <Avatar.Fallback className="bg-[--avatar-bg] font-semibold text-[--avatar-text-color]" style={styles}>
                 {avatarFallback}
@@ -135,7 +144,7 @@ function Trigger({
                     aria-label={t(`user.${membership === "internal" ? "Internal member" : "External member"}`)}
                     data-member-classification={membership}
                     className={cn(
-                        "pointer-events-none absolute -bottom-0.5 -right-0.5 z-20 flex size-3.5 items-center justify-center rounded-full border border-background bg-background",
+                        "pointer-events-none absolute -right-0.5 -top-0.5 z-20 flex size-3.5 items-center justify-center rounded-full border border-background bg-background",
                         membership === "internal" ? "text-primary" : "text-amber-500"
                     )}
                 >
