@@ -17,6 +17,10 @@ from test_github_signal import board, installation, lifecycle, secrets, send, si
 def scoped(signal_storage):
     state = signal_storage
     engine = state[7]
+    from langboard_shared.domain.models import EmployeeMembershipPolicy, ScimGroup, ScimGroupMember, UserIdentityLink
+
+    for model in (EmployeeMembershipPolicy, ScimGroup, ScimGroupMember, UserIdentityLink):
+        model.__table__.create(engine, checkfirst=True)
     Card.__table__.create(engine)
     path = Path(__file__).resolve().parents[2] / "langboard/migrations/versions/20261008125000-1ba745ac6de6.py"
     spec = importlib.util.spec_from_file_location("card_signal_migration", path)

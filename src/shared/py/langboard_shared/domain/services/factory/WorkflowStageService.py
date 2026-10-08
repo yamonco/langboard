@@ -1,6 +1,8 @@
+import base64
 import re
+import struct
 from collections.abc import Mapping
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from ....core.db import DbSession, SqlBuilder
 from ....core.domain import BaseDomainService
 from ....helpers import InfraHelper
@@ -89,6 +91,70 @@ class WorkflowStageService(BaseDomainService):
                     },
                 })
             return items
+
+    def get_connection_context(self, user: User, project_uid: str, after: str | None = None) -> dict | None:
+        """Current approved resource facts only; no credentials, provider I/O or cached authority."""
+        from ..AppSignalProjection import authorized_signal_rows, signal_resource_conditions
+
+        after_id = None
+        if after is not None:
+            try:
+                if len(after) != 23 or not re.fullmatch(r"[A-Za-z0-9_-]+", after):
+                    raise ValueError()
+                version, board_id, after_id = struct.unpack(">BQQ", base64.urlsafe_b64decode(after + "="))
+                if version != 1 or board_id != InfraHelper.convert_id(project_uid):
+                    raise ValueError()
+            except (ValueError, TypeError, struct.error) as exc:
+                raise ValueError("Invalid connection context cursor") from exc
+        with DbSession.use(readonly=False) as db:
+            board = self._authorized_app_board(user, project_uid, ProjectRoleAction.Read)
+            if board is None:
+                return None
+            scopes = [
+                and_(*signal_resource_conditions(app_key=key, resource_type=kind, capability="resources.read"))
+                for key, manifest in APP_MANIFESTS.items()
+                for kind in manifest.resource_types
+            ]
+            statement = (
+                select(AppResourceBinding, AppConnection, BoardAppBinding)
+                .join(BoardAppBinding, BoardAppBinding.id == AppResourceBinding.board_binding_id)
+                .join(Project, Project.id == BoardAppBinding.project_id)
+                .join(AppConnection, AppConnection.id == AppResourceBinding.connection_id)
+                .join(User, User.id == AppConnection.owner_id)
+                .where(Project.id == board.id, or_(*scopes))
+            )
+            if after_id is not None:
+                statement = statement.where(AppResourceBinding.id > after_id)
+            rows = db.exec(statement.order_by(AppResourceBinding.id).limit(26)).all()
+            allowed = {row.id for row in authorized_signal_rows(db, rows[:25])}
+            return {
+                "items": [
+                    {
+                        "resource_uid": resource.get_uid(),
+                        "connection_uid": connection.get_uid(),
+                        "binding_uid": binding.get_uid(),
+                        "app_key": binding.app_key,
+                        "resource_type": resource.resource_type,
+                        "external_resource_id": resource.external_resource_id[:200],
+                        "external_resource_id_truncated": len(resource.external_resource_id) > 200,
+                        "name": str(
+                            resource.resource_path[-1].get("name", resource.external_resource_id)
+                            if resource.resource_path
+                            else resource.external_resource_id
+                        )[:200],
+                        "access_revision": resource.access_revision,
+                        "binding_revision": binding.edit_revision(),
+                        "health": resource.health,
+                    }
+                    for resource, connection, binding in rows[:25]
+                    if resource.id in allowed
+                ],
+                "next_cursor": (
+                    base64.urlsafe_b64encode(struct.pack(">BQQ", 1, int(board.id), int(rows[24][0].id)))
+                    .decode().rstrip("=") if len(rows) > 25 else None
+                ),
+                "limit": 25,
+            }
 
     def disable_app_binding(
         self, user: User, project_uid: str, app_key: str, binding_uid: str, expected_revision: str,

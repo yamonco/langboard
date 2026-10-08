@@ -43,6 +43,7 @@ AGENT_CORE_TOOLS = frozenset(
         "diagnose_connection",
         "get_projects",
         "get_project_identity",
+        "get_connection_context",
         "create_project",
         "list_project_cards",
         "search_project_cards",

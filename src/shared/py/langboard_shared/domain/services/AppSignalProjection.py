@@ -20,7 +20,7 @@ from ..models import (
 )
 
 
-def signal_resource_conditions():
+def signal_resource_conditions(*, app_key="github", resource_type="repository", capability="signals.read"):
     """Current owner consumption authority, shared by evidence and resource discovery."""
     membership = (
         select(ProjectAssignedUser.id)
@@ -42,15 +42,15 @@ def signal_resource_conditions():
     )
     return (
         Project.deleted_at.is_(None),
-        BoardAppBinding.app_key == "github",
+        BoardAppBinding.app_key == app_key,
         BoardAppBinding.state.in_(["enabled", "needs_attention"]),
-        cast(BoardAppBinding.granted_capabilities, Text).contains('"signals.read"'),
-        AppConnection.app_key == "github",
+        cast(BoardAppBinding.granted_capabilities, Text).contains(f'"{capability}"'),
+        AppConnection.app_key == BoardAppBinding.app_key,
         AppConnection.state == "connected",
         User.deleted_at.is_(None),
         User.activated_at.is_not(None),
         or_(User.is_admin == True, Project.owner_id == User.id, and_(membership, update_grant)),  # noqa: E712
-        AppResourceBinding.resource_type == "repository",
+        AppResourceBinding.resource_type == resource_type,
         AppResourceBinding.is_selected == True,  # noqa: E712
         AppResourceBinding.access_state == "granted",
     )
