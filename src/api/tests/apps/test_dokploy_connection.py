@@ -190,6 +190,7 @@ def test_native_http_requires_current_board_authority(setup, monkeypatch):
         api.disconnect_dokploy_connection,
         api.request_dokploy_secret_input,
         api.get_dokploy_secret_input,
+        api.refresh_dokploy_deployments,
     }
     for route in app.routes:
         if getattr(route, "endpoint", None) in endpoints:
@@ -235,6 +236,19 @@ def test_native_http_requires_current_board_authority(setup, monkeypatch):
         }
         chosen = client.post(selected_url, headers=headers, json=selection)
         assert chosen.status_code == 200
+        signal_url = selected_url + "/" + chosen.json()["resource_uid"] + "/refresh"
+        signal_form = {
+            "expected_revision": response.json()["revision"],
+            "expected_access_revision": chosen.json()["access_revision"],
+        }
+        assert client.post(signal_url, json=signal_form).status_code == 401
+        assert (
+            client.post(signal_url, headers=headers, json={**signal_form, "expected_access_revision": True}).status_code
+            == 400
+        )
+        count = len(calls)
+        assert client.post(signal_url, headers=headers, json=signal_form).status_code == 404
+        assert len(calls) == count  # Resource selection never grants signal capabilities.
         assert client.post(selected_url, headers=headers, json=selection).status_code == 409
         assert (
             client.get(selected_url, headers=headers).json()["items"][0]["resource_uid"]

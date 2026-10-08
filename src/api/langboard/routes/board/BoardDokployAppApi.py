@@ -190,3 +190,34 @@ def get_dokploy_secret_input(
         return input_status(service, user, input_uid)
 
     return _response(status)
+
+
+class SignalRefreshForm(RevisionForm):
+    expected_access_revision: StrictInt = Field(ge=0)
+
+
+@AppRouter.api.post(
+    "/board/{project_uid}/settings/apps/dokploy/connections/{connection_uid}/selected/{resource_uid}/refresh",
+    tags=["Board.Settings"],
+)
+@AuthFilter.add("user")
+def refresh_dokploy_deployments(
+    project_uid: str,
+    connection_uid: str,
+    resource_uid: str,
+    form: SignalRefreshForm,
+    user: User = Auth.scope("user"),
+    service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    from ...apps.DokploySignal import refresh_deployments
+
+    return _response(
+        refresh_deployments,
+        service,
+        user,
+        project_uid,
+        connection_uid,
+        resource_uid,
+        form.expected_revision,
+        form.expected_access_revision,
+    )
