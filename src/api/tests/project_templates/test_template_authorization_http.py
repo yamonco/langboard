@@ -19,7 +19,7 @@ def template_http(monkeypatch):
     actor = User.model_construct(id=1, is_admin=False)
     identity = {"value": actor}
 
-    def validate(scope):
+    def validate(scope, *, allow_oidc=False):
         scope["auth"] = identity["value"]
         return identity["value"]
 
