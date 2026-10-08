@@ -13,13 +13,6 @@ def request_input(service, actor, target, begin):
         return begin()
     if ctx.input_responses is not None and ctx.request_state is None:
         raise SecretReferenceUnavailable()
-    rc = ctx.request_context
-    capabilities = (rc.meta or {}).get("io.modelcontextprotocol/clientCapabilities", {}) if rc else {}
-    elicitation = capabilities.get("elicitation", {}) if isinstance(capabilities, dict) else {}
-    supports_url = isinstance(elicitation, dict) and isinstance(elicitation.get("url"), dict)
-    if rc is None or rc.protocol_version != "2026-07-28" or (not supports_url and ctx.request_state is None):
-        return begin()
-
     if ctx.request_state is not None:
         uid = ctx.request_state
         context = _context(service, actor, uid)
@@ -34,6 +27,13 @@ def request_input(service, actor, target, begin):
         if status["state"] == "pending":
             status["input_uid"] = uid
         return status
+
+    rc = ctx.request_context
+    capabilities = (rc.meta or {}).get("io.modelcontextprotocol/clientCapabilities", {}) if rc else {}
+    elicitation = capabilities.get("elicitation", {}) if isinstance(capabilities, dict) else {}
+    supports_url = isinstance(elicitation, dict) and isinstance(elicitation.get("url"), dict)
+    if rc is None or rc.protocol_version != "2026-07-28" or not supports_url:
+        return begin()
 
     pending = begin()
     return InputRequiredResult(
