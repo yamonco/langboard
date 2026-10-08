@@ -671,11 +671,11 @@ function BoardTaskCardResult({
                                                     )}
                                                 </>
                                             )}
-                                            {visibility !== "PRIVATE" && <BoardCardMobileComments scrollableRef={contentViewportRef} />}
+                                            <BoardCardMobileComments scrollableRef={contentViewportRef} />
                                         </Flex>
                                     </Box>
                                 </Box>
-                                {visibility !== "PRIVATE" && <BoardCardCommentPanel />}
+                                <BoardCardCommentPanel />
                                 {visibility !== "PRIVATE" && !!boardChat && <BoardCardExpandedChatScope isExpanded={isExpanded} />}
                                 <Box w="full" maxW={{ sm: "40" }} className={cn("hidden shrink-0 sm:block", !isActionPanelOpen && "sm:hidden")}>
                                     <BoardCardSection title="card.Actions" titleClassName="mb-2">
@@ -683,7 +683,7 @@ function BoardTaskCardResult({
                                     </BoardCardSection>
                                 </Box>
                             </Flex>
-                            {visibility !== "PRIVATE" && commentLayoutMode === "mobile" && (
+                            {commentLayoutMode === "mobile" && (
                                 <Box className="pt-3">
                                     <BoardCommentForm variant="mobile" />
                                 </Box>
@@ -921,7 +921,6 @@ function BoardCardExpandedChatScope({ isExpanded }: { isExpanded: bool }): null 
 
 function BoardCardFloatingNav({ isExpanded }: { isExpanded: bool }): React.JSX.Element {
     const { projectUID, card, currentUser } = useBoardCard();
-    const visibility = card.useField("visibility");
     const { isCommentPanelOpen, toggleCommentPanel, isActionPanelOpen, toggleActionPanel } = useBoardCardPanel();
     const { canEditCard, isCardEditing, enterCardEditMode, leaveCardEditMode } = useBoardCard();
     const { cancelSections, saveSections } = useBoardCardSectionSaveActions();
@@ -1050,17 +1049,13 @@ function BoardCardFloatingNav({ isExpanded }: { isExpanded: bool }): React.JSX.E
                         active: isActionPanelOpen,
                         onClick: toggleActionPanel,
                     },
-                    ...(visibility === "PRIVATE"
-                        ? []
-                        : [
-                              {
-                                  key: "comments",
-                                  label: t("card.Comments"),
-                                  icon: "message-square",
-                                  active: isCommentPanelOpen,
-                                  onClick: toggleCommentPanel,
-                              },
-                          ]),
+                    {
+                        key: "comments",
+                        label: t("card.Comments"),
+                        icon: "message-square",
+                        active: isCommentPanelOpen,
+                        onClick: toggleCommentPanel,
+                    },
                 ]}
             />
         </>

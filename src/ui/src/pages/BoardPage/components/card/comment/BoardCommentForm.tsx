@@ -54,8 +54,9 @@ const BoardCommentForm = memo(({ variant = "mobile" }: IBoardCommentFormProps): 
     const isPanelLayout = commentLayoutMode === "panel";
     const isVisible = isCommentPanelOpen && (variant === "mobile" ? !isPanelLayout : isPanelLayout);
     const projectMembers = card.useForeignFieldArray("project_members");
+    const visibility = card.useField("visibility");
     const bots = BotModel.Model.useModels(() => true);
-    const mentionables = useMemo(() => [...projectMembers, ...bots], [projectMembers, bots]);
+    const mentionables = useMemo(() => (visibility === "PRIVATE" ? [] : [...projectMembers, ...bots]), [visibility, projectMembers, bots]);
     const cards = ProjectCard.Model.useModels((model) => model.uid !== card.uid && model.project_uid === projectUID, [projectUID, card]);
     const valueRef = useRef<IEditorContent>({ content: "" });
     const setValue = useCallback((value: IEditorContent) => {
