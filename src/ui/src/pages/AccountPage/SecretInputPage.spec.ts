@@ -29,6 +29,7 @@ for (const width of [1440, 390]) {
         await expect(input).toHaveCount(0);
         await expect(page.getByRole("status")).toBeVisible();
         expect(posts).toBe(1);
+        await expect(page.getByRole("link", { name: "Secret history" })).toHaveAttribute("href", "/secret-references/fixture/history");
         expect(await page.locator("body").textContent()).not.toContain("fixture-sensitive");
         await page.reload();
         await input.fill("unsaved-fixture");

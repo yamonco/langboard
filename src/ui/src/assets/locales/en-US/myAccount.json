@@ -48,5 +48,21 @@
     "cancelled": "Cancelled. No secret was stored.",
     "create": "Create secret",
     "rotate": "Replace existing secret value"
+  },
+  "secretHistory": {
+    "title": "Secret history",
+    "help": "Audit facts for this reference. Secret values and vault paths are never displayed.",
+    "failed": "History unavailable or access changed.",
+    "empty": "No history yet.",
+    "older": "Older events",
+    "actor": "Actor",
+    "actions": {
+      "created": "Created",
+      "resolved": "Used",
+      "renamed": "Renamed",
+      "moved": "Moved",
+      "revoked": "Revoked",
+      "rotated": "Value replaced"
+    }
   }
 }

@@ -48,5 +48,21 @@
     "cancelled": "취소했습니다. 시크릿은 저장하지 않았습니다.",
     "create": "시크릿 생성",
     "rotate": "기존 시크릿 값 교체"
+  },
+  "secretHistory": {
+    "title": "시크릿 변경 이력",
+    "help": "이 참조의 감사 기록입니다. 비밀값과 Vault 위치는 표시하지 않습니다.",
+    "failed": "이력을 조회할 수 없거나 접근 권한이 변경되었습니다.",
+    "empty": "아직 이력이 없습니다.",
+    "older": "이전 기록",
+    "actor": "사용자",
+    "actions": {
+      "created": "생성",
+      "resolved": "사용",
+      "renamed": "이름 변경",
+      "moved": "이동",
+      "revoked": "폐기",
+      "rotated": "값 교체"
+    }
   }
 }

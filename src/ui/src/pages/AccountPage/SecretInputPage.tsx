@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useParams } from "react-router";
+import { Link, useParams } from "react-router";
 import { useTranslation } from "react-i18next";
 import { api, submitSecretInput } from "@/core/helpers/Api";
 import Button from "@/components/base/Button";
@@ -9,6 +9,7 @@ export default function SecretInputPage() {
     const [t] = useTranslation();
     const [target, setTarget] = useState<{ name: string; scope: string; operation: "create" | "rotate" }>();
     const [state, setState] = useState<"loading" | "ready" | "saving" | "completed" | "failed" | "cancelled">("loading");
+    const [historyUID, setHistoryUID] = useState<string>();
     const input = useRef<HTMLInputElement>(null);
     const url = `/secret-input/${inputUID}`;
     useEffect(() => {
@@ -44,7 +45,14 @@ export default function SecretInputPage() {
                     {state === "cancelled" ? (
                         <p role="status">{t("myAccount.secretInput.cancelled")}</p>
                     ) : state === "completed" ? (
-                        <p role="status">{t("myAccount.secretInput.completed")}</p>
+                        <div className="flex flex-col gap-3">
+                            <p role="status">{t("myAccount.secretInput.completed")}</p>
+                            {historyUID && (
+                                <Link className="text-sm text-primary underline underline-offset-4" to={`/secret-references/${historyUID}/history`}>
+                                    {t("myAccount.secretHistory.title")}
+                                </Link>
+                            )}
+                        </div>
                     ) : state === "failed" ? (
                         <p role="alert">{t("myAccount.secretInput.failed")}</p>
                     ) : state === "loading" ? (
@@ -59,7 +67,9 @@ export default function SecretInputPage() {
                                 input.current.value = "";
                                 setState("saving");
                                 try {
-                                    await submitSecretInput(url, value);
+                                    const { data } = await submitSecretInput(url, value);
+                                    const referenceUID = /^secret:\/\/ref\/([A-Za-z0-9]{1,11})$/.exec(data.secret_ref)?.[1];
+                                    setHistoryUID(referenceUID);
                                     setState("completed");
                                 } catch {
                                     setState("failed");

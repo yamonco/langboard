@@ -48,5 +48,21 @@
     "cancelled": "已取消。未保存密钥。",
     "create": "创建密钥",
     "rotate": "替换现有密钥值"
+  },
+  "secretHistory": {
+    "title": "密钥历史",
+    "help": "此引用的审计记录。不会显示秘密值或Vault路径。",
+    "failed": "无法读取历史或访问权限已更改。",
+    "empty": "暂无历史。",
+    "older": "以前的记录",
+    "actor": "用户",
+    "actions": {
+      "created": "创建",
+      "resolved": "使用",
+      "renamed": "重命名",
+      "moved": "移动",
+      "revoked": "撤销",
+      "rotated": "替换值"
+    }
   }
 }
