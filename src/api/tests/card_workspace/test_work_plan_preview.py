@@ -93,7 +93,10 @@ def test_preview_plan_never_persists(monkeypatch, promote):
     service = SimpleNamespace(
         metadata=SimpleNamespace(get_by_key_as_api=read_receipt, save=save_receipt),
         project=SimpleNamespace(get_by_id_like=lambda _: project),
-        card=SimpleNamespace(get_by_id_like=lambda uid: anchor if uid == anchor.get_uid() else child),
+        card=SimpleNamespace(
+            get_by_id_like=lambda uid: anchor if uid == anchor.get_uid() else child,
+            resolve_readable_card=lambda _, uid, *__: (project, anchor if uid == anchor.get_uid() else child, object()),
+        ),
         project_column=SimpleNamespace(get_by_id_like=lambda _: column),
         checklist=SimpleNamespace(
             get_api_list_by_card=lambda _: [],

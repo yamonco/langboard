@@ -118,7 +118,10 @@ def test_composed_plan_transaction(monkeypatch, mode, promote, presentation):
     service = SimpleNamespace(
         metadata=SimpleNamespace(get_by_key_as_api=read_receipt, save=save_receipt),
         project=SimpleNamespace(get_by_id_like=lambda _: project),
-        card=SimpleNamespace(get_by_id_like=lambda uid: anchor if uid == anchor.get_uid() else child),
+        card=SimpleNamespace(
+            get_by_id_like=lambda uid: anchor if uid == anchor.get_uid() else child,
+            resolve_readable_card=lambda _, uid, *__: (project, anchor if uid == anchor.get_uid() else child, object()),
+        ),
         project_column=SimpleNamespace(get_by_id_like=lambda _: column),
         checklist=SimpleNamespace(
             get_api_list_by_card=lambda _: [],
@@ -211,6 +214,11 @@ def test_composed_plan_transaction(monkeypatch, mode, promote, presentation):
             with pytest.raises(ValueError, match="changed after review"):
                 plans.apply(WorkPlan.model_validate(changed), reviewed["revision"], "changed-presentation")
         initial = apply()
+        authorized_resolver = service.card.resolve_readable_card
+        service.card.resolve_readable_card = Mock(return_value=None)
+        with pytest.raises(ValueError, match="unavailable"):
+            plans.apply(plan, reviewed["revision"], "request-one")
+        service.card.resolve_readable_card = authorized_resolver
         replay = plans.apply(plan, reviewed["revision"], "request-one")
         assert replay == {**initial, "replayed": True}
         with pytest.raises(ValueError, match="reused"):
@@ -280,3 +288,24 @@ def test_app_presentation_is_reviewed_and_absent_trait_preserves_old_plan_shape(
     ):
         with pytest.raises(ValueError):
             PlanCard.model_validate({**original, "presentation": invalid})
+
+
+@pytest.mark.parametrize("available", [False, True])
+def test_work_plan_card_scope_uses_current_mcp_visibility(available):
+    from langboard_shared.core.security.CollaborationChannel import CollaborationChannel
+
+    project = SimpleNamespace(id=1)
+    actor = object()
+    card = SimpleNamespace(project_id=1, archived_at=None, deleted_at=None, is_linked_resource=False)
+    resolver = Mock(return_value=(project, card, object()) if available else None)
+    legacy = Mock(side_effect=AssertionError("unscoped lookup"))
+    owner = WorkPlanService(
+        actor, SimpleNamespace(card=SimpleNamespace(resolve_readable_card=resolver, get_by_id_like=legacy))
+    )
+    if available:
+        assert owner._card("card", project) is card
+    else:
+        with pytest.raises(ValueError, match="unavailable"):
+            owner._card("card", project)
+    resolver.assert_called_once_with(project, "card", actor, CollaborationChannel.Mcp)
+    legacy.assert_not_called()
