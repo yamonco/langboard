@@ -119,7 +119,7 @@ export default function SignalInboxPanel({
         setSelected(null);
         void run((signal) => load(signal));
     }, [pending, refresh]);
-    const canBindCard = (item: Signal) => item.provider === "github" && item.can_bind_card === true;
+    const canBindCard = (item: Signal) => ["github", "dokploy"].includes(item.provider) && item.can_bind_card === true;
     const link = () => {
         if (!canEdit || !selected || !canBindCard(selected) || !cardUID || !cards.some((card) => card.uid === cardUID)) return;
         const chosen = selected;

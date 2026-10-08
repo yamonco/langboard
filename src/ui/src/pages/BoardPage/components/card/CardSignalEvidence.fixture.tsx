@@ -23,12 +23,15 @@ const emit = (event: string, data: unknown) =>
 let outcome = "passed";
 let linked = !params.has("empty");
 let revision = 0;
+const unlinkedDeployments = new Set<string>();
 api.defaults.adapter = async (config) => {
     const data = config.data ? JSON.parse(config.data) : null;
     calls.push({ url: config.url, method: config.method, data });
+    if (params.has("delayed") && config.url === "/board/project/card/card/signals") await new Promise((resolve) => setTimeout(resolve, 400));
     if (params.has("error") && config.method === "post") throw new Error("fixture failure");
     if (config.url?.endsWith("/unlink")) {
-        linked = false;
+        if (config.url.includes("/deployment-")) unlinkedDeployments.add(config.url.split("/").at(-2)!);
+        else linked = false;
         revision++;
     } else if (config.method === "post") {
         linked = true;
@@ -50,6 +53,8 @@ api.defaults.adapter = async (config) => {
                     ? [
                           {
                               binding_uid: "binding",
+                              provider: "github",
+                              event_type: "check.completed",
                               revision,
                               state: outcome,
                               resource_uid: "resource",
@@ -60,6 +65,34 @@ api.defaults.adapter = async (config) => {
                       ]
                     : [],
         };
+    if (params.has("mixed") && config.method === "get" && !config.url?.includes("/settings/") && !config.url?.endsWith("/resources")) {
+        const snapshot = result as { items: unknown[]; bindings: unknown[] };
+        if (config.url?.includes("/card/other/")) {
+            snapshot.items = [];
+            snapshot.bindings = [];
+        } else
+            for (const [type, state] of [
+                ["application", params.get("state") ?? "passed"],
+                ["compose", "running"],
+            ]) {
+                const uid = `deployment-${type}`;
+                if (unlinkedDeployments.has(uid)) continue;
+                snapshot.bindings.push({ binding_uid: uid, revision: 3 });
+                snapshot.items.push({
+                    binding_uid: uid,
+                    revision: 3,
+                    state,
+                    provider: "dokploy",
+                    event_type: type === "compose" ? "deployment.started" : "deployment.succeeded",
+                    resource_name: type === "compose" ? "Customer stack" : "Customer API",
+                    resource_type: type,
+                    resource_uid: type,
+                    external_id: `actual-${type}-deployment`,
+                    commit_sha: "",
+                    occurred_at: "2026-10-08T00:00:00Z",
+                });
+            }
+    }
     return { config, status: 200, statusText: "OK", headers: {}, data: result };
 };
 function Fixture() {

@@ -86,7 +86,8 @@ export interface IWorkState {
     } | null;
     pending_approval_count?: number;
     execution_generation?: number | null;
-    execution_state: "idle" | "human_active" | "agent_active" | "paused" | "failed" | null;
+    execution_state: "idle" | "human_active" | "agent_active" | "external_active" | "queued" | "paused" | "failed" | null;
+    external_execution_state?: "failed" | "conflict" | "running" | "queued" | "cancelled" | null;
     blocker_state: "clear" | "blocked" | "needs_input" | "needs_approval" | null;
     dependency_state?: {
         state: "clear" | "blocked" | null;

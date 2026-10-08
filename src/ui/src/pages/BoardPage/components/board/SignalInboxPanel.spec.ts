@@ -47,7 +47,7 @@ for (const width of [1920, 390])
     test(`mixed provider inbox without false card actions ${width}`, async ({ page }) => {
         await page.clock.install({ time: new Date("2026-10-08T00:30:00Z") });
         await page.setViewportSize({ width, height: 1000 });
-        await page.goto(path + "?mixed");
+        await page.goto(path + "?mixed&nonlink");
         await expect(page.getByText("Dokploy · Deployment succeeded", { exact: true })).toBeVisible();
         await expect(page.getByText("Dokploy · Deployment failed", { exact: true })).toBeVisible();
         await expect(page.getByText("Customer API", { exact: true })).toBeVisible();
@@ -81,7 +81,7 @@ for (const width of [1920, 390])
 test("Korean mixed deployments are localized and remain read-only", async ({ page }) => {
     await page.clock.install({ time: new Date("2026-10-08T00:30:00Z") });
     await page.setViewportSize({ width: 390, height: 1000 });
-    await page.goto(path + "?mixed&readonly&lang=ko-KR&false-capability");
+    await page.goto(path + "?mixed&readonly&lang=ko-KR&nonlink");
     await expect(page.getByText("Dokploy · 배포 성공", { exact: true })).toBeVisible();
     await expect(page.getByText("Dokploy · 배포 실패", { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: /Dokploy ·/ })).toHaveCount(0);
@@ -103,10 +103,41 @@ test("mixed inbox discards delayed old-board response", async ({ page }) => {
     await expect(page.getByRole("button", { name: /GitHub · #55/ })).toHaveCount(0);
 });
 test("signal socket burst batches one mixed inbox refresh", async ({ page }) => {
-    await page.goto(path + "?mixed");
+    await page.goto(path + "?mixed&nonlink");
     await expect(page.getByText("Dokploy · Deployment succeeded", { exact: true })).toBeVisible();
     const before = await page.evaluate(() => (window as unknown as { inboxCalls: unknown[] }).inboxCalls.length);
     await page.getByRole("button", { name: "Signal burst" }).click();
     await page.waitForTimeout(250);
     expect(await page.evaluate(() => (window as unknown as { inboxCalls: unknown[] }).inboxCalls.length)).toBe(before + 1);
 });
+
+for (const width of [1920, 390])
+    test(`explicit Dokploy inbox card evidence ${width}`, async ({ page }) => {
+        await page.setViewportSize({ width, height: 1000 });
+        await page.goto(path + "?mixed");
+        await page.getByRole("button", { name: /Dokploy · Deployment succeeded/ }).click();
+        await page.getByRole("combobox", { name: "Card", exact: true }).selectOption("card");
+        await page.getByRole("button", { name: "Link evidence", exact: true }).click();
+        await expect(page.getByRole("button", { name: /Dokploy · Deployment succeeded/ })).toHaveCount(0);
+        await page.getByRole("button", { name: /Dokploy · Deployment failed/ }).click();
+        await page.getByRole("combobox", { name: "Card", exact: true }).selectOption("card");
+        await page.getByRole("button", { name: "Link evidence", exact: true }).click();
+        await expect(page.getByRole("button", { name: /Dokploy · Deployment failed/ })).toHaveCount(0);
+        const posts = await page.evaluate(() =>
+            (window as unknown as { inboxCalls: { method: string; data: unknown }[] }).inboxCalls.filter((row) => row.method === "post")
+        );
+        expect(posts.map((row) => row.data)).toEqual(
+            ["application", "compose"].map((type) => ({
+                connection_uid: "dokploy-connection",
+                resource_uid: type,
+                signal_uid: `dokploy-${type}`,
+                source_change_seq: 7,
+                expected_revision: null,
+            }))
+        );
+        await expect(page.getByRole("button", { name: /GitHub · #55/ })).toBeVisible();
+        await page.screenshot({ path: `test-results/signal-inbox-dokploy-link-${width}.png`, fullPage: true });
+        await page.goto(path + "?mixed&readonly");
+        await expect(page.getByRole("button", { name: /Dokploy · Deployment succeeded/ })).toBeDisabled();
+        await expect(page.getByRole("button", { name: "Link evidence", exact: true })).toHaveCount(0);
+    });

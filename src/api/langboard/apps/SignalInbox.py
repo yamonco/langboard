@@ -13,19 +13,19 @@ from langboard_shared.domain.models import (
     User,
 )
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
-from langboard_shared.domain.services.AppManifest import APP_MANIFESTS
-from langboard_shared.domain.services.AppSignalProjection import authorized_signal_rows, signal_resource_conditions
+from langboard_shared.domain.services.AppSignalProjection import (
+    authorized_signal_rows,
+    provider_resource_condition,
+    signal_resource_name,
+    supported_signal_condition,
+)
 from langboard_shared.domain.services.CardVisibilityPolicy import card_visibility_scope
 from langboard_shared.helpers import InfraHelper
-from sqlalchemy import Text, and_, cast, func, or_, select
+from sqlalchemy import and_, func, select
 from .GitHubManifest import GitHubManifestUnavailable
 
 
-def _resource_name(resource):
-    path = resource.resource_path
-    leaf = path[-1] if isinstance(path, list) and path else None
-    name = leaf.get("name") if isinstance(leaf, dict) else None
-    return (name if isinstance(name, str) and name.strip() else resource.external_resource_id)[:200]
+_resource_name = signal_resource_name
 
 
 def list_board_signals(service, actor, project_uid, after=None):
@@ -37,41 +37,8 @@ def list_board_signals(service, actor, project_uid, after=None):
     if after is not None and not re.fullmatch(r"[A-Za-z0-9]{1,11}", after):
         raise ValueError("Invalid inbox cursor")
     project, context = resolved
-    supported_occurrence = or_(
-        and_(AppSignal.provider == "github", AppSignal.event_type == "check.completed"),
-        and_(
-            AppSignal.provider == "dokploy",
-            AppSignal.event_type.in_(
-                (
-                    "deployment.queued",
-                    "deployment.started",
-                    "deployment.succeeded",
-                    "deployment.failed",
-                    "deployment.cancelled",
-                )
-            ),
-            AppSignal.commit_sha == "",
-        ),
-    )
-    eligibility = or_(
-        and_(
-            AppSignal.provider == "github",
-            *signal_resource_conditions(resource_type=APP_MANIFESTS["github"].resource_types[0]),
-        ),
-        and_(
-            AppSignal.provider == "dokploy",
-            or_(
-                *(
-                    and_(
-                        *signal_resource_conditions(app_key="dokploy", resource_type=kind),
-                        cast(BoardAppBinding.granted_capabilities, Text).contains('"deployments.read"'),
-                    )
-                    for kind in APP_MANIFESTS["dokploy"].resource_types
-                    if kind in {"application", "compose"}
-                )
-            ),
-        ),
-    )
+    supported_occurrence = supported_signal_condition()
+    eligibility = provider_resource_condition()
     # GitHub checks are per commit; Dokploy deployments have their own external identity.
     identity = (AppSignal.provider, AppSignal.resource_id, AppSignal.external_id, AppSignal.commit_sha)
     latest = (
@@ -115,7 +82,6 @@ def list_board_signals(service, actor, project_uid, after=None):
         select(CardAppSignalBinding.id)
         .join(Card, Card.id == CardAppSignalBinding.card_id)
         .where(
-            AppSignal.provider == "github",
             Card.project_id == project.id,
             Card.deleted_at.is_(None),
             card_visibility_scope(context),
@@ -135,7 +101,7 @@ def list_board_signals(service, actor, project_uid, after=None):
         .join(Project, Project.id == BoardAppBinding.project_id)
         .join(AppConnection, AppConnection.id == AppResourceBinding.connection_id)
         .join(User, User.id == AppConnection.owner_id)
-        .where(Project.id == project.id, eligibility, ~linked)
+        .where(Project.id == project.id, eligibility, AppSignal.provider == AppConnection.app_key, ~linked)
     )
     with DbSession.use(readonly=False) as db:
         if after is not None:
@@ -165,7 +131,7 @@ def list_board_signals(service, actor, project_uid, after=None):
                     "occurred_at": signal.occurred_at,
                     "outcome": minimum if minimum == maximum else None,
                     "conflict": minimum != maximum,
-                    "can_bind_card": signal.provider == "github",
+                    "can_bind_card": signal.provider in {"github", "dokploy"},
                 }
                 for signal, resource, connection, minimum, maximum in rows[:25]
                 if resource.id in allowed

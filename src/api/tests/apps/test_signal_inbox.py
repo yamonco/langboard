@@ -172,7 +172,7 @@ def test_dokploy_lifecycle_conflict_and_safe_contract(dokploy_inbox):
     refresh(dokploy_inbox)
     entry = deployment_inbox(dokploy_inbox)["items"][0]
     assert entry["event_type"] == "deployment.queued" and entry["outcome"] == "queued"
-    assert not entry["can_bind_card"] and entry["commit_sha"] == ""
+    assert entry["can_bind_card"] and entry["commit_sha"] == ""
     assert entry["resource_type"] in {"application", "compose"}
     assert entry["resource_name"] == ("API" if entry["resource_type"] == "application" else "Stack")
     assert "private" not in str(entry)
@@ -334,7 +334,7 @@ def test_github_commit_identity_remains_bindable(scoped):
     assert all(entry["can_bind_card"] for entry in entries)
 
 
-def test_dokploy_deployment_identity_is_resource_scoped_and_never_card_bound(dokploy_inbox):
+def test_dokploy_deployment_identity_is_resource_scoped_and_visible_links_consumed(dokploy_inbox):
     from langboard_shared.core.db import SqlBuilder
     from langboard_shared.domain.models import (
         AppResourceBinding,
@@ -375,15 +375,15 @@ def test_dokploy_deployment_identity_is_resource_scoped_and_never_card_bound(dok
             project_id=board[2].id, project_column_id=board[5][0].id, title="No deployment binding", visibility="SHARED"
         )
         db.insert(card)
-        # Even an out-of-contract legacy row cannot consume a Dokploy inbox occurrence.
+        # Enabled links consume their exact resource/deployment identity.
         db.insert(
             CardAppSignalBinding(
                 card_id=card.id, resource_id=original.id, external_id="dep-1", commit_sha="", source_change_seq=0
             )
         )
     entries = deployment_inbox(dokploy_inbox)["items"]
-    assert len(entries) == 2 and {entry["outcome"] for entry in entries} == {"success", "failure"}
-    assert all(not entry["conflict"] and not entry["can_bind_card"] for entry in entries)
+    assert len(entries) == 1 and entries[0]["outcome"] == "failure"
+    assert all(not entry["conflict"] and entry["can_bind_card"] for entry in entries)
     with DbSession.use(readonly=False) as db:
         current = db.exec(SqlBuilder.select.table(BoardAppBinding)).first()
         assert not current.stage_transitions_enabled and current.workflow_mapping == {}

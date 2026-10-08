@@ -56,6 +56,47 @@ def signal_resource_conditions(*, app_key="github", resource_type="repository", 
     )
 
 
+DOKPLOY_EVENTS = (
+    "deployment.queued",
+    "deployment.started",
+    "deployment.succeeded",
+    "deployment.failed",
+    "deployment.cancelled",
+)
+
+
+def supported_signal_condition():
+    return or_(
+        and_(AppSignal.provider == "github", AppSignal.event_type == "check.completed"),
+        and_(AppSignal.provider == "dokploy", AppSignal.event_type.in_(DOKPLOY_EVENTS), AppSignal.commit_sha == ""),
+    )
+
+
+def provider_resource_condition():
+    from .AppManifest import APP_MANIFESTS
+
+    return or_(
+        and_(*signal_resource_conditions()),
+        or_(
+            *(
+                and_(
+                    *signal_resource_conditions(app_key="dokploy", resource_type=kind),
+                    cast(BoardAppBinding.granted_capabilities, Text).contains('"deployments.read"'),
+                )
+                for kind in APP_MANIFESTS["dokploy"].resource_types
+                if kind in {"application", "compose"}
+            )
+        ),
+    )
+
+
+def signal_resource_name(resource):
+    path = resource.resource_path
+    leaf = path[-1] if isinstance(path, list) and path else None
+    name = leaf.get("name") if isinstance(leaf, dict) else None
+    return (name if isinstance(name, str) and name.strip() else resource.external_resource_id)[:200]
+
+
 def authorized_signal_rows(db, rows):
     """Rows contain a scope/resource, connection and opaque third field. No secret values."""
     actions = "," + cast(ProjectRole.actions, Text) + ","
@@ -149,7 +190,7 @@ def card_signal_projections(cards):
     card_ids = [card.id for card in cards]
     with DbSession.use(readonly=False) as db:
         rows = db.exec(
-            select(CardAppSignalBinding, AppConnection, Card.last_change_seq)
+            select(CardAppSignalBinding, AppConnection, Card.last_change_seq, AppResourceBinding)
             .join(
                 AppResourceBinding,
                 AppResourceBinding.id == CardAppSignalBinding.resource_id,
@@ -168,25 +209,29 @@ def card_signal_projections(cards):
             .where(
                 Card.id.in_(card_ids),
                 Card.deleted_at.is_(None),
-                *signal_resource_conditions(),
+                provider_resource_condition(),
                 BoardAppBinding.project_id == Card.project_id,
                 CardAppSignalBinding.is_enabled == True,  # noqa: E712
             )
         ).all()
         if not rows:
             return {}
-        eligible = authorized_signal_rows(db, rows)
+        eligible = authorized_signal_rows(
+            db, [(binding, connection, revision) for binding, connection, revision, _ in rows]
+        )
         if not eligible:
             return {}
         matching = and_(
             AppSignal.resource_id == CardAppSignalBinding.resource_id,
-            AppSignal.event_type == "check.completed",
-            AppSignal.provider == "github",
+            supported_signal_condition(),
+            AppSignal.provider == AppConnection.app_key,
             AppSignal.external_id == CardAppSignalBinding.external_id,
             AppSignal.commit_sha == CardAppSignalBinding.commit_sha,
         )
         latest = (
             select(CardAppSignalBinding.id.label("binding_id"), func.max(AppSignal.occurred_at).label("occurred_at"))
+            .join(AppResourceBinding, AppResourceBinding.id == CardAppSignalBinding.resource_id)
+            .join(AppConnection, AppConnection.id == AppResourceBinding.connection_id)
             .join(
                 AppSignal,
                 matching,
@@ -202,7 +247,10 @@ def card_signal_projections(cards):
                 func.max(AppSignal.outcome),
                 func.max(AppSignal.id),
                 latest.c.occurred_at,
+                func.max(AppSignal.event_type),
             )
+            .join(AppResourceBinding, AppResourceBinding.id == CardAppSignalBinding.resource_id)
+            .join(AppConnection, AppConnection.id == AppResourceBinding.connection_id)
             .join(latest, latest.c.binding_id == CardAppSignalBinding.id)
             .join(
                 AppSignal,
@@ -211,9 +259,11 @@ def card_signal_projections(cards):
             .group_by(CardAppSignalBinding.id, latest.c.occurred_at)
         ).all()
     by_binding = {row[0]: row for row in evidence}
-    current_revisions = {binding.card_id: revision for binding, _, revision in rows}
+    current_revisions = {binding.card_id: revision for binding, _, revision, _ in rows}
+    resources = {binding.id: (connection.app_key, resource) for binding, connection, _, resource in rows}
     result = {}
     for binding in eligible:
+        provider, resource = resources[binding.id]
         proof = by_binding.get(binding.id)
         state = "stale" if binding.source_change_seq != current_revisions[binding.card_id] else "unavailable"
         outcome = None
@@ -226,12 +276,17 @@ def card_signal_projections(cards):
                 if outcome == "success"
                 else "failed"
                 if outcome in {"failure", "timed_out"}
+                else outcome
+                if provider == "dokploy" and outcome in {"queued", "running", "cancelled"}
                 else "unknown"
             )
         result.setdefault(binding.card_id, []).append(
             {
                 "binding_uid": binding.get_uid(),
-                "provider": "github",
+                "provider": provider,
+                "event_type": proof[5] if proof and proof[1] == proof[2] else None,
+                "resource_type": resource.resource_type,
+                "resource_name": signal_resource_name(resource),
                 "resource_uid": InfraHelper.convert_uid(binding.resource_id),
                 "external_id": binding.external_id,
                 "commit_sha": binding.commit_sha,

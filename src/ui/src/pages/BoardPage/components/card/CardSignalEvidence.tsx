@@ -3,9 +3,14 @@ import { useTranslation } from "react-i18next";
 import Button from "@/components/base/Button";
 import type { ISocketContext } from "@/core/providers/SocketProvider";
 import { ESocketTopic } from "@langboard/core/enums";
+import { formatDateDistance, formatDateTime } from "@/core/utils/LocaleFormat";
 import { api } from "@/core/helpers/Api";
 
 interface Evidence {
+    provider?: string;
+    event_type?: string;
+    resource_name?: string;
+    resource_type?: string;
     binding_uid: string;
     revision: number;
     state: string;
@@ -48,7 +53,7 @@ export default function CardSignalEvidence({
 }) {
     const [refreshVersion, setRefreshVersion] = useState(0);
     const lastRefresh = useRef(0);
-    const [t] = useTranslation();
+    const [t, i18n] = useTranslation();
     const text = (key: string) => t(`card.signals.${key}`);
     const root = `/board/${projectUID}/card/${cardUID}/signals`;
     const [open, setOpen] = useState(false);
@@ -186,7 +191,7 @@ export default function CardSignalEvidence({
     };
     const bind = (item: Signal) =>
         void run(async (signal) => {
-            if (!resource || !snapshot) return;
+            if (!canEdit || !resource || !snapshot) return;
             const previous = snapshot.items.find(
                 (row) => row.resource_uid === resource.uid && row.external_id === item.external_id && row.commit_sha === item.commit_sha
             );
@@ -226,7 +231,51 @@ export default function CardSignalEvidence({
                         return (
                             <div key={binding.binding_uid} className="flex min-w-0 flex-wrap items-center gap-2 rounded-md bg-muted/40 p-2">
                                 <span className="min-w-0 flex-1 break-all">
-                                    {proof ? `${text(proof.state)} · #${proof.external_id} · ${proof.commit_sha.slice(0, 12)}` : text("unavailable")}
+                                    {proof ? (
+                                        proof.provider === "dokploy" ? (
+                                            <span className="flex min-w-0 flex-col gap-1">
+                                                <span>
+                                                    Dokploy ·{" "}
+                                                    {text(
+                                                        [
+                                                            "queued",
+                                                            "running",
+                                                            "passed",
+                                                            "failed",
+                                                            "cancelled",
+                                                            "conflict",
+                                                            "stale",
+                                                            "unavailable",
+                                                        ].includes(proof.state)
+                                                            ? proof.state
+                                                            : "unknown"
+                                                    )}
+                                                </span>
+                                                <span>
+                                                    {proof.resource_name || proof.resource_uid} ·{" "}
+                                                    {text(proof.resource_type === "compose" ? "compose" : "application")}
+                                                </span>
+                                                <span>
+                                                    {t(
+                                                        `card.inbox.${["deployment.started", "deployment.queued", "deployment.succeeded", "deployment.failed", "deployment.cancelled"].includes(proof.event_type ?? "") ? `event ${proof.event_type}` : "event deployment"}`
+                                                    )}{" "}
+                                                    · {proof.external_id}
+                                                </span>
+                                                {proof.occurred_at && (
+                                                    <time
+                                                        dateTime={proof.occurred_at}
+                                                        title={formatDateTime(new Date(proof.occurred_at), i18n.language, { timeStyle: "medium" })}
+                                                    >
+                                                        {formatDateDistance(new Date(proof.occurred_at), i18n.language)}
+                                                    </time>
+                                                )}
+                                            </span>
+                                        ) : (
+                                            `${text(proof.state)} · #${proof.external_id} · ${proof.commit_sha.slice(0, 12)}`
+                                        )
+                                    ) : (
+                                        text("unavailable")
+                                    )}
                                 </span>
                                 {canEdit && (
                                     <Button
