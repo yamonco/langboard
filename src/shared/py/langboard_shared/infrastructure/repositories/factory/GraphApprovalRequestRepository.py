@@ -115,6 +115,7 @@ class GraphApprovalRequestRepository(BaseRepository[GraphApprovalRequest]):
 
     def count_pending_by_project(self, project_id: int, *, board_scope_only: bool = False) -> int:
         count = 0
+        now = SafeDateTime.now()
         for detail_class in self.__get_model_classes():
             if board_scope_only and detail_class.get_request_type() not in (
                 GraphApprovalOriginType.Trigger,
@@ -129,6 +130,12 @@ class GraphApprovalRequestRepository(BaseRepository[GraphApprovalRequest]):
                     detail_class.column("approval_request_id") == GraphApprovalRequest.column("id"),
                 )
                 .where(GraphApprovalRequest.column("status") == GraphApprovalStatus.Pending.value)
+                .where(
+                    or_(
+                        GraphApprovalRequest.column("expires_at").is_(None),
+                        GraphApprovalRequest.column("expires_at") > now,
+                    )
+                )
                 .where(
                     and_(
                         detail_class.column("scope_table") == Project.__tablename__,
