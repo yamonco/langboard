@@ -126,7 +126,8 @@ def test_create_and_update_share_conversion_and_preserve_local_assignments(title
     assigned = service.card.repo.project_label.get_all_by_card(card)
     assert len(assigned) == 3
     assert {label.global_label_id for label in assigned} == {None, bug.id, question.id}
-    service.card.update(actor, project, card, {"title": "[Question][Bug] Updated"})
+    repeated = service.card.update(actor, project, card, {"title": "[Question][Bug] Updated"})
+    assert repeated == {"title": "Updated"}
     assert len(service.card.repo.project_label.get_all_by_card(card)) == 3
     assert effects.count("snapshot") == 2
 
@@ -228,3 +229,15 @@ def test_registry_cache_invalidation_follows_outer_commit(title_board, monkeypat
         service.global_label.save("Commit", "#123456", "Permanent")
         assert cache
     assert cache == {}
+
+
+def test_deferred_card_update_effects_capture_each_committed_title(title_board, monkeypatch):
+    service, actor, project, *rest = title_board
+    card, _ = create(title_board, "Original")
+    published = []
+    monkeypatch.setattr(CardPublisher, "updated", lambda project, card, item, model: published.append(card.title))
+    with DbSession.atomic():
+        service.card.update(actor, project, card, {"title": "[Bug] First"})
+        service.card.update(actor, project, card, {"title": "[Question] Second"})
+        assert published == []
+    assert published == ["First", "Second"]

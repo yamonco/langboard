@@ -1782,8 +1782,11 @@ class CardService(BaseDomainService):
         if card.is_linked_resource:
             return None
 
+        title_normalized = False
         if isinstance(form.get("title"), str):
-            form = {**form, "title": self._apply_title_labels(user_or_bot, project, card, form["title"])}
+            converted_title = self._apply_title_labels(user_or_bot, project, card, form["title"])
+            title_normalized = converted_title != form["title"]
+            form = {**form, "title": converted_title}
 
         validators: TMutableValidatorMap = {
             "title": "not_empty",
@@ -1792,6 +1795,9 @@ class CardService(BaseDomainService):
         }
         old_record = self.apply_mutates(card, form, validators)
         if not old_record:
+            # Return persisted normalization so API/MCP do not echo stripped tokens.
+            if title_normalized:
+                return {"title": card.title}
             return True
 
         checkitem_cardified_from = None
@@ -1825,13 +1831,16 @@ class CardService(BaseDomainService):
                 continue
             model[key] = convert_python_data(getattr(card, key))
 
+        changed_card = card.model_copy(deep=True)
+        changed_item = checkitem_cardified_from.model_copy(deep=True) if checkitem_cardified_from else None
+
         def dispatch_updated() -> None:
-            CardPublisher.updated(project, card, checkitem_cardified_from, model)
-            if "description" in model and card.description:
+            CardPublisher.updated(project, changed_card, changed_item, model)
+            if "description" in model and changed_card.description:
                 notification_service = self._get_service(NotificationService)
-                notification_service.notify_mentioned_in_card(user_or_bot, project, card)
-            CardActivityTask.card_updated(user_or_bot, project, old_record, card)
-            CardBotTask.card_updated(user_or_bot, project, card)
+                notification_service.notify_mentioned_in_card(user_or_bot, project, changed_card)
+            CardActivityTask.card_updated(user_or_bot, project, old_record, changed_card)
+            CardBotTask.card_updated(user_or_bot, project, changed_card)
 
         with DbSession.atomic() as db:
             db.after_commit(dispatch_updated)
