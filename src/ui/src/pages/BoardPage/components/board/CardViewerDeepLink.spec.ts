@@ -467,3 +467,8 @@ test("sidebar collapse and expansion preserve the open card", async ({ page }) =
     await expect(sidebar).toHaveAttribute("data-collapsed", "true");
     await expect(viewer).toBeVisible();
 });
+
+test("dashboard deletion removes flipped cards without a loaded model", async ({ page }) => {
+    await page.goto("/src/pages/BoardPage/components/board/CardFlipDeletion.fixture.html");
+    await expect(page.getByRole("status")).toContainText("PASS unloaded card removed");
+});
