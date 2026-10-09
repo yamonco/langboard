@@ -183,6 +183,24 @@ class DbSession:
             raise RuntimeError("Cannot register after-commit callback on a readonly session")
         self.__after_commit.append(callback)
 
+    @contextmanager
+    def savepoint(self):
+        """Rollback optional writes and their deferred effects without poisoning the host unit."""
+        if self.__readonly or DbSession._atomic_session.get() is not self:
+            raise RuntimeError("Savepoint requires the active write transaction")
+        callback_count = len(self.__after_commit)
+        try:
+            connection = self.__session.connection()
+            if connection.dialect.name == "sqlite" and not connection.connection.driver_connection.in_transaction:
+                # sqlite3 legacy mode does not BEGIN for SELECT or SAVEPOINT.
+                # Start the real outer transaction before releasing a savepoint.
+                connection.exec_driver_sql("BEGIN")
+            with self.__session.begin_nested():
+                yield self
+        except Exception:
+            del self.__after_commit[callback_count:]
+            raise
+
     def insert(self, obj: BaseDbModel):
         """Inserts a new object into the database if it is new.
 

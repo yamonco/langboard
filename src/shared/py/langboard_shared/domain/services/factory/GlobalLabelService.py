@@ -1,10 +1,30 @@
+import logging
 import re
+from ....core.caching import Cache
+from ....core.db import DbSession
 from ....core.domain import BaseDomainService
 from ....helpers import InfraHelper
+from ...contracts.title_labels import global_label_names
 from ...models import GlobalLabel
 
 
 class GlobalLabelService(BaseDomainService):
+    TITLE_NAMES_CACHE = "global-label-title-names-v1"
+
+    @staticmethod
+    def invalidate_title_names() -> None:
+        try:
+            Cache.delete(GlobalLabelService.TITLE_NAMES_CACHE)
+        except Exception as error:
+            logging.getLogger(__name__).warning("Global label cache invalidation failed: %s", type(error).__name__)
+
+    def title_names(self) -> dict[str, str | None]:
+        names = Cache.get(self.TITLE_NAMES_CACHE)
+        if names is None:
+            names = global_label_names(self.get_api_list())
+            Cache.set(self.TITLE_NAMES_CACHE, names, ttl=30)
+        return names
+
     @staticmethod
     def name() -> str:
         return "global_label"
@@ -90,4 +110,9 @@ class GlobalLabelService(BaseDomainService):
                 name=name, color=color.upper(), description=description, translations=translations, emoji=emoji or ""
             )
             self.repo.global_label.insert(label)
+        if DbSession.has_active_transaction():
+            with DbSession.atomic() as db:
+                db.after_commit(self.invalidate_title_names)
+        else:
+            self.invalidate_title_names()
         return label

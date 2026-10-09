@@ -1,5 +1,6 @@
 import base64
 import json
+import logging
 from binascii import Error as Base64Error
 from datetime import datetime, timedelta
 from typing import Any, Literal, Sequence, cast, overload
@@ -30,6 +31,7 @@ from ....publishers import CardPublisher
 from ....tasks.activities import CardActivityTask
 from ....tasks.bots import CardBotTask
 from ....tasks.webhooks.ExecutionReadinessUow import execution_readiness_uow
+from ...contracts.title_labels import global_label_names, parse_title_labels
 from ...models import (
     Bot,
     Card,
@@ -62,6 +64,7 @@ from ..ExecutionGeneration import execution_generations
 from .CardContentBlockService import CardContentBlockService
 from .CardRelationshipService import CardRelationshipService
 from .CheckitemService import CheckitemService
+from .GlobalLabelService import GlobalLabelService
 from .GraphApprovalRequestService import GraphApprovalRequestService
 from .NotificationService import NotificationService
 from .ProjectLabelService import ProjectLabelService
@@ -1347,6 +1350,42 @@ class CardService(BaseDomainService):
             self.repo.checklist.update(checklist)
         return True
 
+    def _apply_title_labels(self, user_or_bot: TUserOrBot, project: Project, card: Card, title: str) -> str:
+        if not title.startswith("["):
+            return title
+        try:
+            plan = parse_title_labels(title, self._get_service(GlobalLabelService).title_names())
+            if not plan.global_label_uids:
+                return title
+            with DbSession.atomic() as db, db.savepoint():
+                # Cached names are hints only; recheck current definitions before stripping.
+                if db.exec(select(Project.id).where(Project.id == project.id).with_for_update()).first() is None:
+                    return title
+                current_names = global_label_names(self._get_service(GlobalLabelService).get_api_list())
+                if parse_title_labels(title, current_names) != plan:
+                    return title
+                existing = self.repo.project_label.get_all_by_card(card)
+                selected_ids = {label.id for label in existing}
+                changed = False
+                for uid in plan.global_label_uids:
+                    result = self._get_service(ProjectLabelService).use_global(
+                        user_or_bot, project, uid, reuse_local=False
+                    )
+                    if result is None:
+                        raise ValueError("Global label unavailable")
+                    label_id = InfraHelper.convert_id(result["label"]["uid"])
+                    if label_id not in selected_ids:
+                        db.insert(CardAssignedProjectLabel(card_id=card.id, project_label_id=label_id))
+                        selected_ids.add(label_id)
+                        changed = True
+                if changed:
+                    labels = self.repo.project_label.get_all_by_card(card)
+                    db.after_commit(lambda: CardPublisher.labels_updated(project, card, labels))
+            return plan.title
+        except Exception as error:
+            logging.getLogger(__name__).warning("Title label conversion skipped: %s", type(error).__name__)
+            return title
+
     def default_creation_visibility(self, project: Project, actor: TUserOrBot) -> CardVisibility:
         """Only an active owner's current single-person board defaults to private."""
         if not isinstance(actor, User) or project.owner_id != actor.id:
@@ -1401,6 +1440,10 @@ class CardService(BaseDomainService):
             card.last_change_at = SafeDateTime.now()
             self.repo.card.insert(card)
             execution.watch_new(card.id)
+            converted_title = self._apply_title_labels(user_or_bot, project, card, title)
+            if converted_title != title:
+                card.title = converted_title
+                self.repo.card.update(card)
 
             users: list[User] = []
             if assign_user_uids:
@@ -1422,7 +1465,9 @@ class CardService(BaseDomainService):
                 0,
                 [user.get_uid() for user in users],
                 [],
-                [],
+                [label.api_response() for label in self.repo.project_label.get_all_by_card(card)]
+                if converted_title != title
+                else [],
                 creator=self._card_creator_projection(card, user_or_bot)
                 if isinstance(user_or_bot, (User, Bot))
                 else None,
@@ -1714,6 +1759,18 @@ class CardService(BaseDomainService):
         *,
         expected_description: str | None = None,
     ) -> dict[str, Any] | Literal[True] | None:
+        with DbSession.atomic():
+            return self._update(user_or_bot, project, card, form, expected_description=expected_description)
+
+    def _update(
+        self,
+        user_or_bot: TUserOrBot,
+        project: TProjectParam | None,
+        card: TCardParam | None,
+        form: dict[str, Any],
+        *,
+        expected_description: str | None = None,
+    ) -> dict[str, Any] | Literal[True] | None:
         """Update a card, optionally guarding a description-only edit against concurrent writes."""
 
         if expected_description is not None and set(form) != {"description"}:
@@ -1724,6 +1781,9 @@ class CardService(BaseDomainService):
         project, card = params
         if card.is_linked_resource:
             return None
+
+        if isinstance(form.get("title"), str):
+            form = {**form, "title": self._apply_title_labels(user_or_bot, project, card, form["title"])}
 
         validators: TMutableValidatorMap = {
             "title": "not_empty",
@@ -1765,14 +1825,16 @@ class CardService(BaseDomainService):
                 continue
             model[key] = convert_python_data(getattr(card, key))
 
-        CardPublisher.updated(project, card, checkitem_cardified_from, model)
+        def dispatch_updated() -> None:
+            CardPublisher.updated(project, card, checkitem_cardified_from, model)
+            if "description" in model and card.description:
+                notification_service = self._get_service(NotificationService)
+                notification_service.notify_mentioned_in_card(user_or_bot, project, card)
+            CardActivityTask.card_updated(user_or_bot, project, old_record, card)
+            CardBotTask.card_updated(user_or_bot, project, card)
 
-        if "description" in model and card.description:
-            notification_service = self._get_service(NotificationService)
-            notification_service.notify_mentioned_in_card(user_or_bot, project, card)
-
-        CardActivityTask.card_updated(user_or_bot, project, old_record, card)
-        CardBotTask.card_updated(user_or_bot, project, card)
+        with DbSession.atomic() as db:
+            db.after_commit(dispatch_updated)
 
         return model
 

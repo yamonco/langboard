@@ -72,7 +72,7 @@ class ProjectLabelService(BaseDomainService):
         return label, label.api_response()
 
     def use_global(
-        self, user_or_bot: TUserOrBot, project: TProjectParam, global_label_uid: str
+        self, user_or_bot: TUserOrBot, project: TProjectParam, global_label_uid: str, *, reuse_local: bool = True
     ) -> dict[str, Any] | None:
         """Reuse a local name first, otherwise retain a frozen global display definition."""
         project = InfraHelper.get_by_id_like(Project, project)
@@ -89,12 +89,21 @@ class ProjectLabelService(BaseDomainService):
                 return None
             labels = self.repo.project_label.get_all_by_project(project)
             name = global_label.name.strip().casefold()
-            existing = next(
-                (label for label in labels if label.global_label_id is None and label.name.strip().casefold() == name),
-                None,
+            existing = (
+                next(
+                    (
+                        label
+                        for label in labels
+                        if label.global_label_id is None and label.name.strip().casefold() == name
+                    ),
+                    None,
+                )
+                if reuse_local
+                else None
             )
             existing = existing or next((label for label in labels if label.global_label_id == global_label.id), None)
-            existing = existing or next((label for label in labels if label.name.strip().casefold() == name), None)
+            if reuse_local:
+                existing = existing or next((label for label in labels if label.name.strip().casefold() == name), None)
             if existing:
                 return {"label": existing.api_response(), "created": False, "global_label_uid": global_label.get_uid()}
             label = ProjectLabel(
