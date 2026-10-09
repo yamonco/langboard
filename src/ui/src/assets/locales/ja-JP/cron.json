@@ -14,6 +14,7 @@
   "hour": "時間",
   "minute": "分",
   "reboot": "再起動時",
+  "Every interval": "毎{{count}}",
   "Every": "毎",
   "in": "内の",
   "on": "の",

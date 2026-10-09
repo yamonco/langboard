@@ -1,3 +1,5 @@
+import CustomSelect from "@/components/Cron/CustomSelect";
+import { UNITS } from "@/components/Cron/constants";
 import OllamaModelTracker from "@/pages/SettingsPage/components/ollama/OllamaModelTracker";
 import { getOllamaModelStore } from "@/core/stores/OllamaModelStore";
 import { DescriptionOverviewRail } from "@/pages/BoardPage/components/card/description/DescriptionOverviewRail";
@@ -38,6 +40,7 @@ const fixtureRelationships = ["contains", "blocks", "references"].map((machine_s
     parent_name: `User ${machine_semantic}`,
     child_name: `User ${machine_semantic}`,
 })) as GlobalRelationshipType.TModel[];
+const cronEveryFive = Array.from({ length: 12 }, (_, index) => index * 5);
 const date = new Date(Date.now() - 300000);
 const railChunks = Array.from({ length: 1234 }, (_, index) => ({
     id: `rail-${index}`,
@@ -156,6 +159,9 @@ function Fixture() {
             <output data-testid="stale-many">{t("card.Unchanged for {{days}} days", { days: 1234, count: 1234 })}</output>
             <output data-testid="overdue-one">{t("card.Overdue by {{count}} day", { count: 1 })}</output>
             <output data-testid="overdue-other">{t("card.Overdue by {{count}} day", { count: 2 })}</output>
+            <div data-testid="cron-interval">
+                <CustomSelect value={cronEveryFive} unit={UNITS[0]} setValue={() => {}} disabled period="minute" mode="multiple" />
+            </div>
             <div data-testid="ollama-progress">
                 <OllamaModelTracker name="locale-progress" />
             </div>

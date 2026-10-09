@@ -14,6 +14,7 @@
   "hour": "小时",
   "minute": "分钟",
   "reboot": "重启时",
+  "Every interval": "每{{count}}",
   "Every": "每",
   "in": "在",
   "on": "于",

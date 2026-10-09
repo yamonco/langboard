@@ -214,3 +214,18 @@ test("Ollama download progress uses account locale percent formatting", async ({
         await expect(page.getByTestId("ollama-progress")).toContainText(expected);
     }
 });
+
+test("unchanged Cron interval follows language changes without rewriting schedule", async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem("lang", "en-US"));
+    await page.goto("/src/core/utils/LocaleFormat.fixture.html");
+    for (const [locale, text] of [
+        ["en-US", "Every 5"],
+        ["ko-KR", "매 5"],
+        ["ja-JP", "毎5"],
+        ["zh-CN", "每5"],
+        ["en-US", "Every 5"],
+    ]) {
+        await page.getByRole("button", { name: locale, exact: true }).click();
+        await expect(page.getByTestId("cron-interval")).toHaveText(text);
+    }
+});
