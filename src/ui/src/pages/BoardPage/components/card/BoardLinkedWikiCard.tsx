@@ -16,13 +16,14 @@ import { useBoardCard } from "@/core/providers/BoardCardProvider";
 import { ROUTES } from "@/core/routing/constants";
 import { cn } from "@/core/utils/ComponentUtils";
 import { useState } from "react";
+import { ProjectCard } from "@/core/models";
 import { useTranslation } from "react-i18next";
 
 interface IBoardLinkedWikiCardProps {
     isExpanded: boolean;
     setIsExpanded?: React.Dispatch<React.SetStateAction<boolean>>;
     onClose?: () => void;
-    onFlip?: () => void;
+    onFlip?: (card: ProjectCard.TModel) => void;
 }
 
 export default function BoardLinkedWikiCard({ isExpanded, setIsExpanded, onClose, onFlip }: IBoardLinkedWikiCardProps) {
@@ -100,7 +101,7 @@ export default function BoardLinkedWikiCard({ isExpanded, setIsExpanded, onClose
                                     className="size-8"
                                     title={t("card.Flip card")}
                                     aria-label={t("card.Flip card")}
-                                    onClick={onFlip}
+                                    onClick={() => onFlip(card)}
                                 >
                                     <IconComponent icon="layers" size="4" />
                                 </Button>

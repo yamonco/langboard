@@ -6,7 +6,6 @@ import { useAuth } from "@/core/providers/AuthProvider";
 import { ROUTES } from "@/core/routing/constants";
 import { getEditorStore } from "@/core/stores/EditorStore";
 import { cn } from "@/core/utils/ComponentUtils";
-import { ProjectCard } from "@/core/models";
 import { useCardFlipStore } from "@/pages/BoardPage/components/card/CardFlipStore";
 import BoardCard from "@/pages/BoardPage/components/card/BoardCard";
 import { flipDraftKey, useCardFlipDraftStore } from "./components/card/CardFlipDraftStore";
@@ -418,7 +417,7 @@ const BoardCardPageComponent = ({
                                 isExpanded={isExpanded}
                                 setIsExpanded={setIsExpanded}
                                 onClose={handleCloseRequest}
-                                onFlip={async () => {
+                                onFlip={async (card) => {
                                     if (isComposing || !currentUser || closingRef.current) return;
                                     if (isCardEditingRef.current) {
                                         const patch = await saveSections();
@@ -428,8 +427,6 @@ const BoardCardPageComponent = ({
                                             deadline_at: patch.deadline_at instanceof Date ? patch.deadline_at.toISOString() : patch.deadline_at,
                                         });
                                     }
-                                    const card = ProjectCard.Model.getModel(cardUID);
-                                    if (!card) return;
                                     useCardFlipStore
                                         .getState()
                                         .flip(currentUser.uid, projectUID, { uid: cardUID, title: card.linked_resource?.title ?? card.title });

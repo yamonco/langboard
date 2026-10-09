@@ -210,17 +210,25 @@ function BoardRouteFixture(): React.JSX.Element {
 
 function Harness(): React.JSX.Element {
     const tree = (
-        <MemoryRouter initialEntries={[query.has("fullGraph") ? `/board/${PROJECT_UID}/graph` : `/board/${PROJECT_UID}/${CARD_UID}`]}>
+        <MemoryRouter
+            initialEntries={[
+                query.has("fullGraph")
+                    ? `/board/${PROJECT_UID}/graph`
+                    : query.has("fullBoard")
+                      ? `/board/${PROJECT_UID}`
+                      : `/board/${PROJECT_UID}/${CARD_UID}`,
+            ]}
+        >
             <QueryClientProvider client={queryClient}>
                 <PageHeaderProvider>
                     <AuthProvider>
                         <SocketProvider>
                             <BoardController>
                                 <Routes>
-                                    <Route path="/board/:projectUID" element={<BoardRouteFixture />} />
+                                    <Route path="/board/:projectUID" element={query.has("fullBoard") ? <BoardProxy /> : <BoardRouteFixture />} />
                                     <Route
                                         path="/board/:projectUID/:cardUID"
-                                        element={query.has("fullGraph") ? <BoardProxy /> : <BoardRouteFixture />}
+                                        element={query.has("fullGraph") || query.has("fullBoard") ? <BoardProxy /> : <BoardRouteFixture />}
                                     />
                                     <Route path="*" element={<div data-fixture-not-found="" />} />
                                 </Routes>
