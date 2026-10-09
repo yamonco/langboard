@@ -16,7 +16,7 @@ from langboard_shared.domain.services.factory.CardService import CardService
 from pydantic import TypeAdapter
 
 
-def native_card(empty=False):
+def native_card(empty=False, visibility="INTERNAL"):
     card = Card(
         id=123,
         project_id=456,
@@ -24,6 +24,7 @@ def native_card(empty=False):
         title="한글",
         description=EditorContentModel(content="" if empty else "Body"),
         last_change_seq=7,
+        visibility=visibility,
     )
     creator = CardService._card_creator_projection(
         object(),
@@ -34,13 +35,15 @@ def native_card(empty=False):
 
 
 @pytest.mark.parametrize("empty", [False, True])
-def test_real_card_result_keeps_creator_body_and_completion_flags(empty):
-    _, expected = native_card(empty)
+@pytest.mark.parametrize("visibility", ["INTERNAL", "SHARED", "PRIVATE"])
+def test_real_card_result_keeps_creator_body_and_completion_flags(empty, visibility):
+    _, expected = native_card(empty, visibility)
     actual = CREATION_OUTPUTS["create_card"].model_validate(expected).model_dump(mode="json")
     assert actual == TypeAdapter(dict).dump_python(expected, mode="json")
     assert actual["creator"]["type"] == "user"
     assert actual["is_check_card"] is empty
     assert actual["last_change_seq"] == 7
+    assert actual["visibility"] == visibility
 
 
 def test_actual_cardification_handler_keeps_public_summary_and_source(monkeypatch):

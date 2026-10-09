@@ -1,6 +1,7 @@
 """Native card creation and public cardification keep distinct result shapes."""
 
 from datetime import datetime
+from typing import Literal
 from pydantic import Field
 from .BoardOutputs import BoardCreationOutput
 from .Outputs import CommandOutput
@@ -45,6 +46,7 @@ class NativeCardCreationOutput(CommandOutput):
     has_description: bool
     completed: bool
     is_check_card: bool
+    visibility: Literal["INTERNAL", "SHARED", "PRIVATE"]
 
 
 class CreatedColumnOutput(CommandOutput):
