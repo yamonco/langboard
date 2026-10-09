@@ -300,3 +300,20 @@ for (const width of [1440, 390])
             await expect(card.getByText("User card title", { exact: true })).toBeVisible();
         }
     });
+
+test("actual media placeholders render translated picker prompts without runtime errors", async ({ page }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    await page.goto("/src/core/utils/LocaleFormat.fixture.html");
+    const prompts = {
+        "en-US": ["Add an audio file", "Add a file", "Add an image", "Add a video"],
+        "ko-KR": ["오디오 파일 추가", "파일 추가", "이미지 추가", "동영상 추가"],
+        "ja-JP": ["音声ファイルを追加", "ファイルを追加", "画像を追加", "動画を追加"],
+        "zh-CN": ["添加音频文件", "添加文件", "添加图片", "添加视频"],
+    };
+    for (const [locale, texts] of Object.entries(prompts)) {
+        await page.getByRole("button", { name: locale, exact: true }).click();
+        for (const text of texts) await expect(page.getByTestId("media-placeholders")).toContainText(text);
+    }
+    expect(errors).toEqual([]);
+});
