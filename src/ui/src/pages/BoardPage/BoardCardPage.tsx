@@ -14,6 +14,7 @@ import { BoardCardSectionSaveProvider, useBoardCardSectionSaveActions } from "@/
 import { EHttpStatus } from "@langboard/core/enums";
 import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Navigate, useParams } from "react-router";
+import { animate } from "framer-motion";
 import { useBoardController } from "@/core/providers/BoardController";
 import {
     CARD_ANIMATION_DURATION_MS,
@@ -52,6 +53,7 @@ const BoardCardPageComponent = ({
     const contentRef = useRef<HTMLDivElement | null>(null);
     const originRef = useRef<CardRect | null | undefined>(undefined);
     const closeTimerRef = useRef<number | null>(null);
+    const motionRef = useRef<{ stop: () => void } | null>(null);
     const closingRef = useRef(false);
     const finishedCloseRef = useRef(false);
     const [isClosing, setIsClosing] = useState(false);
@@ -82,17 +84,29 @@ const BoardCardPageComponent = ({
         // viewer session, so remounts (Suspense fallback swaps, provider
         // re-keys) cannot replay the entry animation. Never downgrade an
         // element that already started its animation.
-        if (content.dataset.cardViewerReady !== "true") {
+        if (content.dataset.cardViewerReady !== "true" && content.dataset.cardViewerOpened !== "true") {
             const animateOpen = shouldPlayCardOpenAnimation(projectUID, cardUID, !!sourceRect);
             if (animateOpen) {
                 markCardOpenAnimationPlayed(projectUID, cardUID);
             }
             content.dataset.cardViewerReady = animateOpen ? "true" : "false";
+            if (animateOpen && sourceRect && !prefersReducedMotion()) {
+                // A captured origin includes the Flip tray. Keep CSS entry for
+                // cold deep links, but use the shared Motion runtime for restores.
+                content.dataset.cardViewerReady = "false";
+                content.dataset.cardViewerOpened = "true";
+                motionRef.current = animate(
+                    content,
+                    { transform: [closedTransform(sourceRect, targetRect), "translate(0px, 0px) scale(1, 1)"], opacity: [0, 1] },
+                    { duration: CARD_ANIMATION_DURATION_MS / 1000, ease: [0.2, 0.8, 0.2, 1] }
+                );
+            }
         }
     }, [projectUID, cardUID, currentUser]);
 
     useEffect(
         () => () => {
+            motionRef.current?.stop();
             if (closeTimerRef.current !== null) {
                 window.clearTimeout(closeTimerRef.current);
             }
@@ -159,7 +173,19 @@ const BoardCardPageComponent = ({
         } else {
             content?.style.removeProperty("--card-origin-transform");
         }
-        setIsClosing(true);
+        if (toTray && content) {
+            motionRef.current?.stop();
+            motionRef.current = animate(
+                content,
+                {
+                    transform: ["translate(0px, 0px) scale(1, 1)", content.style.getPropertyValue("--card-origin-transform") || "scale(0.9)"],
+                    opacity: [1, 0],
+                },
+                { duration: CARD_ANIMATION_DURATION_MS / 1000, ease: [0.2, 0.8, 0.2, 1], onComplete: finishClose }
+            );
+        } else {
+            setIsClosing(true);
+        }
         closeTimerRef.current = window.setTimeout(finishClose, CARD_ANIMATION_DURATION_MS + 50);
     };
 
