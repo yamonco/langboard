@@ -175,7 +175,7 @@
   "Document indexed": "文档可搜索",
   "Document processing failed": "文档处理失败",
   "Document processing disabled": "仅保存附件",
-  "Document page progress": "{{completed}} / {{total}}页",
+  "Document page progress": "{{completed, number}} / {{total, number}}页",
   "Index document embeddings": "重新索引文档嵌入",
   "Embed only this transcription": "仅使用当前嵌入设置处理此附件。保留现有转录和原始文件。",
   "Embedding requested": "已请求嵌入",

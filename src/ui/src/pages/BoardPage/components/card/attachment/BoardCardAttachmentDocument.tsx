@@ -1,3 +1,4 @@
+import { formatNumber } from "@/core/utils/LocaleFormat";
 import MoreMenu from "@/components/MoreMenu";
 import Toast from "@/components/base/Toast";
 import { api } from "@/core/helpers/Api";
@@ -69,7 +70,7 @@ function DocumentProgress({
     attachmentUID?: string;
     currentUser: NonNullable<ReturnType<typeof useAuth>["currentUser"]>;
 }): React.JSX.Element | null {
-    const [t] = useTranslation();
+    const [t, i18n] = useTranslation();
     const preferredLanguage = currentUser.useField("preferred_lang");
     const metadata = record.useField("metadata");
     const document = parseDoclingMetadata(metadata).find((entry) =>
@@ -99,7 +100,9 @@ function DocumentProgress({
             <span>
                 {label}
                 {pages ? ` · ${pages}` : ""}
-                {running && percent !== undefined ? ` · ${percent}%` : ""}
+                {running && percent !== undefined
+                    ? ` · ${formatNumber(percent / 100, i18n.language, { style: "percent", maximumFractionDigits: 2 })}`
+                    : ""}
             </span>
             {attachmentUID && document.embedding && (
                 <span className="mt-0.5 block">

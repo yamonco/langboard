@@ -175,7 +175,7 @@
   "Document indexed": "문서 검색 가능",
   "Document processing failed": "문서 처리 실패",
   "Document processing disabled": "첨부만 보관",
-  "Document page progress": "{{completed}} / {{total}}페이지",
+  "Document page progress": "{{completed, number}} / {{total, number}}페이지",
   "Index document embeddings": "문서 임베딩 재색인",
   "Embed only this transcription": "현재 임베딩 설정으로 이 첨부만 처리합니다. 기존 전사와 원본 파일은 유지됩니다.",
   "Embedding requested": "임베딩 요청됨",
