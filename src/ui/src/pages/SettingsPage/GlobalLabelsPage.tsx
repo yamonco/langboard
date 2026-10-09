@@ -29,6 +29,7 @@ export default function GlobalLabelsPage({ currentUser }: { currentUser: AuthUse
     const { hasRoleAction } = useRoleActionFilter(actions);
     const { setPageAliasRef } = usePageHeader();
     const [labels, setLabels] = useState<IGlobalLabel[]>([]);
+    const [labelsFailed, setLabelsFailed] = useState(false);
     const [draft, setDraft] = useState<TGlobalLabelInput>(blank);
     const [language, setLanguage] = useState("en");
     const [newLanguage, setNewLanguage] = useState("");
@@ -43,11 +44,23 @@ export default function GlobalLabelsPage({ currentUser }: { currentUser: AuthUse
             .then((items) => {
                 if (active) setLabels(items);
             })
-            .catch(() => Toast.Add.error(t("errors.Internal server error")));
+            .catch(() => {
+                if (active) setLabelsFailed(true);
+                Toast.Add.error(t("errors.Internal server error"));
+            });
         return () => {
             active = false;
         };
     }, []);
+    const retryLabels = async () => {
+        setLabelsFailed(false);
+        try {
+            setLabels(await load({}));
+        } catch {
+            setLabelsFailed(true);
+            Toast.Add.error(t("errors.Internal server error"));
+        }
+    };
     const select = (label?: IGlobalLabel) => {
         if (dirty && !window.confirm(t("settings.Discard unsaved changes?"))) return;
         setDraft(
@@ -102,6 +115,13 @@ export default function GlobalLabelsPage({ currentUser }: { currentUser: AuthUse
                 <nav aria-label={t("settings.Global labels")} className="max-h-[65vh] space-y-1 overflow-y-auto rounded-xl border bg-card p-2">
                     {loading ? (
                         <p className="p-3 text-sm text-muted-foreground">{t("common.Loading...")}</p>
+                    ) : labelsFailed ? (
+                        <div role="alert" className="space-y-2 p-3 text-sm">
+                            <p>{t("errors.Internal server error")}</p>
+                            <Button type="button" variant="outline" size="sm" onClick={() => void retryLabels()}>
+                                {t("common.Retry")}
+                            </Button>
+                        </div>
                     ) : !labels.length ? (
                         <p className="p-3 text-sm text-muted-foreground">{t("settings.No global labels yet")}</p>
                     ) : (
