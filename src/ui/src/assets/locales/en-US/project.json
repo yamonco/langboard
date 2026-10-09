@@ -345,6 +345,13 @@
     "Dokploy notification confirm help": "Enable the local receiver with the selected separate webhook credential. Configure Dokploy separately.",
     "Dokploy notification disable help": "Disable the local receiver. Existing receipt history is preserved.",
     "Confirm Dokploy notification configuration": "Confirm notification configuration",
-    "Confirm disable Dokploy notifications": "Confirm disable notifications"
-  }
+    "Confirm disable Dokploy notifications": "Confirm disable notifications",
+    "Review App panel": "Review App panel",
+    "Confirm App panel": "Confirm App panel",
+    "Disable App panel": "Disable App panel",
+    "App panel consent help": "Allow {{name}} to open an isolated panel on this board. The external app receives the board identifier and language, and may keep a small draft for this session. This permission does not authorize workflow transitions or card changes."
+  },
+  "App panel": "App panel",
+  "Close App panel": "Close App panel",
+  "App panel unavailable": "App panel unavailable. Close and reopen to try again."
 }

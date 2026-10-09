@@ -3,6 +3,7 @@
 from langboard_sdk.definition import validate_app_definition
 from langboard_sdk.workflow import WorkflowRequirements
 from ...core.db import DbSession, SqlBuilder
+from ...publishers import AppSettingPublisher
 from ..models import AppDefinition, BoardAppBinding, User
 from .AppManifest import APP_MANIFESTS, AppManifest
 
@@ -51,6 +52,7 @@ def save_definition(actor, declaration, expected_revision=None):
             row.generation += 1
             row.approved_by = actor.id
             db.update(row)
+        db.after_commit(AppSettingPublisher.apps_changed)
         return row.registry_response()
 
 
@@ -67,6 +69,7 @@ def disable_definition(actor, key, expected_revision):
         row.generation += 1
         row.approved_by = actor.id
         db.update(row)
+        db.after_commit(AppSettingPublisher.apps_changed)
         return row.registry_response()
 
 

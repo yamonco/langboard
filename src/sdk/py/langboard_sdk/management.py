@@ -67,10 +67,32 @@ class AppManager:
 
     def __init__(self, transport: ApiTransport, project_uid: str):
         self.transport = transport
+        self.project_uid = _segment(project_uid)
         self.path = f"/board/{_segment(project_uid)}/settings/apps"
 
     async def catalog(self) -> dict:
         return await self.transport.request("GET", self.path)
+
+    async def set_panel_consent(
+        self, app_key: str, app_revision: str, *, enabled: bool,
+        binding_uid: str | None = None, expected_revision: str | None = None,
+    ) -> dict:
+        """Reviewed board consent for panel rendering only; no automation authority."""
+        if type(enabled) is not bool:
+            raise ValueError("Panel consent must be explicit")
+        _revision(app_revision)
+        if expected_revision is not None:
+            _revision(expected_revision)
+        if (binding_uid is None) != (expected_revision is None):
+            raise ValueError("A binding UID and revision must be supplied together")
+        return await self.transport.request("PUT", f"{self.path}/{_segment(app_key)}/panel", json={
+            "app_revision": app_revision, "enabled": enabled,
+            "binding_uid": None if binding_uid is None else _segment(binding_uid),
+            "expected_revision": expected_revision,
+        })
+
+    async def panel(self, app_key: str) -> dict:
+        return await self.transport.request("GET", f"/board/{self.project_uid}/apps/{_segment(app_key)}/panel")
 
     async def workflow(self, app_key: str) -> dict:
         return await self.transport.request("GET", f"{self.path}/{_segment(app_key)}/workflow")

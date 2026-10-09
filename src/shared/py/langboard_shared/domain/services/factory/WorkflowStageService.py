@@ -10,6 +10,7 @@ from ....publishers import AppSettingPublisher
 from ....tasks.webhooks.ExecutionReadinessUow import execution_readiness_uow
 from ...models import (
     AppConnection,
+    AppDefinition,
     AppResourceBinding,
     BoardAppBinding,
     Project,
@@ -76,11 +77,13 @@ class WorkflowStageService(BaseDomainService):
                 for field, state in (("access_counts", access), ("health_counts", health), ("connection_counts", connection)):
                     summary[field][state] = summary[field].get(state, 0) + count
 
+            definitions = {row.key: row for row in db.exec(SqlBuilder.select.table(AppDefinition).where(AppDefinition.is_enabled == True)).all()}  # noqa: E712
             items = []
             for key, manifest in approved_manifests().items():
                 binding = by_app.get(key)
                 items.append({
                     **manifest.catalog_fields(),
+                    "app_revision": definitions[key].edit_revision() if key in definitions else None,
                     "resources": summaries.get(binding.id if binding else None, {
                         "selected_count": 0, "access_counts": {}, "health_counts": {}, "connection_counts": {},
                     }),
@@ -182,6 +185,7 @@ class WorkflowStageService(BaseDomainService):
             binding.stage_transitions_enabled = False
             binding.granted_capabilities = []
             db.update(binding)
+            db.after_commit(AppSettingPublisher.apps_changed)
             return binding
 
     def get_app_mapping(self, user: User, project_uid: str, app_key: str) -> dict | None:

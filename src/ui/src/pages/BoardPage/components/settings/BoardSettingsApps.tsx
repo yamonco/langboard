@@ -2,7 +2,9 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "@/core/helpers/Api";
 import { formatNumber } from "@/core/utils/LocaleFormat";
-import { useQueryMutation } from "@/core/helpers/QueryMutation";
+import useBoardAppCatalog, { type CatalogApp } from "@/controllers/api/board/useBoardAppCatalog";
+import { useAuth } from "@/core/providers/AuthProvider";
+import { deletePanelState } from "@/core/apps/PanelSession";
 import { useBoardSettings } from "@/core/providers/BoardSettingsProvider";
 import Button from "@/components/base/Button";
 import BoardSettingsGitHub from "./BoardSettingsGitHub";
@@ -10,28 +12,13 @@ import BoardSettingsGlitchTip from "./BoardSettingsGlitchTip";
 import BoardSettingsDokploy from "./BoardSettingsDokploy";
 import BoardSettingsAppWorkflow from "./BoardSettingsAppWorkflow";
 
-interface CatalogApp {
-    key: string;
-    name: string;
-    workflow_requirements: { required: string[]; optional: string[] } | null;
-    resources: {
-        selected_count: number;
-        access_counts: Record<string, number>;
-        health_counts: Record<string, number>;
-        connection_counts: Record<string, number>;
-    };
-    binding: { uid: string; revision: string; state: string; granted_capabilities: string[]; stage_transitions_enabled: boolean } | null;
-}
 const names = { github: "GitHub", glitchtip: "GlitchTip", dokploy: "Dokploy" };
 export default function BoardSettingsApps() {
     const [t, i18n] = useTranslation();
     const { project, canEditBasicInfo } = useBoardSettings();
-    const { query } = useQueryMutation();
-    const { data, isLoading, isError, refetch } = query(
-        ["board-app-catalog", project.uid],
-        async () => (await api.get<{ apps: CatalogApp[] }>(`/board/${project.uid}/settings/apps`)).data.apps,
-        { retry: 0 }
-    );
+    const { currentUser } = useAuth();
+    const { data, isLoading, isError, refetch } = useBoardAppCatalog(project.uid, currentUser?.uid);
+    const [panelTarget, setPanelTarget] = useState<string | null>(null);
     const [pending, setPending] = useState(false);
     const [disableTarget, setDisableTarget] = useState<string | null>(null);
     const [error, setError] = useState(false);
@@ -46,7 +33,28 @@ export default function BoardSettingsApps() {
                 binding_uid: app.binding.uid,
                 expected_revision: app.binding.revision,
             });
+            if (currentUser) deletePanelState(JSON.stringify([currentUser.uid, project.uid, app.key, app.version]));
             setDisableTarget(null);
+            await refetch();
+        } catch {
+            setError(true);
+        } finally {
+            setPending(false);
+        }
+    };
+    const setPanel = async (app: CatalogApp, enabled: boolean) => {
+        if (pending || !canEditBasicInfo || !app.app_revision) return;
+        setPending(true);
+        setError(false);
+        try {
+            await api.put(`/board/${project.uid}/settings/apps/${encodeURIComponent(app.key)}/panel`, {
+                binding_uid: app.binding?.uid ?? null,
+                expected_revision: app.binding?.revision ?? null,
+                app_revision: app.app_revision,
+                enabled,
+            });
+            if (!enabled && currentUser) deletePanelState(JSON.stringify([currentUser.uid, project.uid, app.key, app.version]));
+            setPanelTarget(null);
             await refetch();
         } catch {
             setError(true);
@@ -91,77 +99,112 @@ export default function BoardSettingsApps() {
                         </div>
                     )}
                     <div className="grid gap-3 sm:grid-cols-3">
-                        {(data ?? []).map(({ key, name, binding, workflow_requirements, resources }) => (
-                            <article key={key} className="flex min-w-0 flex-col gap-3 rounded-lg border p-4">
-                                <h4 className="font-semibold">{name}</h4>
-                                <span className="self-start rounded-md bg-muted px-2 py-1 text-xs">
-                                    {t(`project.settings.App state ${binding?.state ?? "unconfigured"}`)}
-                                </span>
-                                {resources && (
-                                    <details className="rounded-md border p-2 text-xs">
-                                        <summary className="cursor-pointer">
-                                            {t("project.settings.Selected App resources", { count: resources.selected_count })}
-                                        </summary>
-                                        <p className="mt-2 text-muted-foreground">{t("project.settings.App stored resource status help")}</p>
-                                        {resources.selected_count === 0 ? (
-                                            <p className="mt-2">{t("project.settings.No selected App resources")}</p>
+                        {(data ?? []).map((app) => {
+                            const { key, name, binding, workflow_requirements, resources } = app;
+                            const panelEnabled = binding?.granted_capabilities.includes("panels.render");
+                            return (
+                                <article key={key} className="flex min-w-0 flex-col gap-3 rounded-lg border p-4">
+                                    <h4 className="font-semibold">{name}</h4>
+                                    <span className="self-start rounded-md bg-muted px-2 py-1 text-xs">
+                                        {t(`project.settings.App state ${binding?.state ?? "unconfigured"}`)}
+                                    </span>
+                                    {resources && (
+                                        <details className="rounded-md border p-2 text-xs">
+                                            <summary className="cursor-pointer">
+                                                {t("project.settings.Selected App resources", { count: resources.selected_count })}
+                                            </summary>
+                                            <p className="mt-2 text-muted-foreground">{t("project.settings.App stored resource status help")}</p>
+                                            {resources.selected_count === 0 ? (
+                                                <p className="mt-2">{t("project.settings.No selected App resources")}</p>
+                                            ) : (
+                                                Object.entries({
+                                                    access: resources.access_counts,
+                                                    health: resources.health_counts,
+                                                    connection: resources.connection_counts,
+                                                }).map(([category, counts]) => (
+                                                    <div key={category} className="mt-2 flex flex-wrap gap-1">
+                                                        <span>{t(`project.settings.App resource ${category}`)}:</span>
+                                                        {Object.entries(counts).map(([state, count]) => (
+                                                            <span key={state} className="rounded bg-muted px-1.5">
+                                                                {t(`project.settings.App resource state ${state}`)} ·{" "}
+                                                                {formatNumber(count, i18n.language)}
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                ))
+                                            )}
+                                        </details>
+                                    )}
+                                    <p className="flex-1 text-sm text-muted-foreground">{t(`project.settings.App ${key} summary`)}</p>
+                                    <p className="text-xs text-muted-foreground">{t("project.settings.App connection setup pending")}</p>
+                                    <Button
+                                        size="sm"
+                                        variant="outline"
+                                        disabled={pending || !workflow_requirements || (key !== "github" && key !== "glitchtip")}
+                                        onClick={() => (key === "github" || key === "glitchtip") && setSelected(key)}
+                                    >
+                                        {t(`project.settings.${key === "dokploy" ? "App workflow contract pending" : "Configure workflow"}`)}
+                                    </Button>
+                                    {app.panel &&
+                                        app.capabilities.includes("panels.render") &&
+                                        (panelTarget === key ? (
+                                            <div className="flex flex-col gap-2 rounded-md border p-2">
+                                                <p className="text-sm">{t("project.settings.App panel consent help", { name: app.panel.name })}</p>
+                                                <Button
+                                                    size="sm"
+                                                    disabled={pending || !canEditBasicInfo || !app.app_revision}
+                                                    onClick={() => void setPanel(app, true)}
+                                                >
+                                                    {t("project.settings.Confirm App panel")}
+                                                </Button>
+                                                <Button size="sm" variant="ghost" disabled={pending} onClick={() => setPanelTarget(null)}>
+                                                    {t("common.Cancel")}
+                                                </Button>
+                                            </div>
                                         ) : (
-                                            Object.entries({
-                                                access: resources.access_counts,
-                                                health: resources.health_counts,
-                                                connection: resources.connection_counts,
-                                            }).map(([category, counts]) => (
-                                                <div key={category} className="mt-2 flex flex-wrap gap-1">
-                                                    <span>{t(`project.settings.App resource ${category}`)}:</span>
-                                                    {Object.entries(counts).map(([state, count]) => (
-                                                        <span key={state} className="rounded bg-muted px-1.5">
-                                                            {t(`project.settings.App resource state ${state}`)} · {formatNumber(count, i18n.language)}
-                                                        </span>
-                                                    ))}
-                                                </div>
-                                            ))
-                                        )}
-                                    </details>
-                                )}
-                                <p className="flex-1 text-sm text-muted-foreground">{t(`project.settings.App ${key} summary`)}</p>
-                                <p className="text-xs text-muted-foreground">{t("project.settings.App connection setup pending")}</p>
-                                <Button
-                                    size="sm"
-                                    variant="outline"
-                                    disabled={pending || !workflow_requirements || (key !== "github" && key !== "glitchtip")}
-                                    onClick={() => (key === "github" || key === "glitchtip") && setSelected(key)}
-                                >
-                                    {t(`project.settings.${key === "dokploy" ? "App workflow contract pending" : "Configure workflow"}`)}
-                                </Button>
-                                {binding &&
-                                    binding.state !== "disabled" &&
-                                    (disableTarget === key ? (
-                                        <div className="flex flex-col gap-2">
-                                            <p className="text-xs">{t("project.settings.Disable App help")}</p>
                                             <Button
                                                 size="sm"
                                                 variant="outline"
-                                                disabled={!canEditBasicInfo || pending}
-                                                onClick={() => void disable({ key, name, binding, workflow_requirements, resources })}
+                                                disabled={pending || !canEditBasicInfo || !app.app_revision}
+                                                onClick={() =>
+                                                    binding?.granted_capabilities.includes("panels.render")
+                                                        ? void setPanel(app, false)
+                                                        : setPanelTarget(key)
+                                                }
                                             >
-                                                {t("project.settings.Confirm disable App")}
+                                                {t(`project.settings.${panelEnabled ? "Disable App panel" : "Review App panel"}`)}
                                             </Button>
-                                            <Button size="sm" variant="ghost" disabled={pending} onClick={() => setDisableTarget(null)}>
-                                                {t("common.Cancel")}
+                                        ))}
+                                    {binding &&
+                                        binding.state !== "disabled" &&
+                                        (disableTarget === key ? (
+                                            <div className="flex flex-col gap-2">
+                                                <p className="text-xs">{t("project.settings.Disable App help")}</p>
+                                                <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    disabled={!canEditBasicInfo || pending}
+                                                    onClick={() => void disable(app)}
+                                                >
+                                                    {t("project.settings.Confirm disable App")}
+                                                </Button>
+                                                <Button size="sm" variant="ghost" disabled={pending} onClick={() => setDisableTarget(null)}>
+                                                    {t("common.Cancel")}
+                                                </Button>
+                                            </div>
+                                        ) : (
+                                            <Button
+                                                size="sm"
+                                                variant="ghost"
+                                                disabled={!canEditBasicInfo || pending}
+                                                onClick={() => setDisableTarget(key)}
+                                            >
+                                                {t("project.settings.Disable App")}
                                             </Button>
-                                        </div>
-                                    ) : (
-                                        <Button
-                                            size="sm"
-                                            variant="ghost"
-                                            disabled={!canEditBasicInfo || pending}
-                                            onClick={() => setDisableTarget(key)}
-                                        >
-                                            {t("project.settings.Disable App")}
-                                        </Button>
-                                    ))}
-                            </article>
-                        ))}
+                                        ))}
+                                </article>
+                            );
+                        })}
                     </div>
                 </>
             )}
