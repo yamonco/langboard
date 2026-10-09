@@ -288,3 +288,15 @@ test("upload failure counts and limits use locale grouping", async ({ page }) =>
         expect((await errors.textContent())?.match(/1,234/g)).toHaveLength(2);
     }
 });
+
+for (const width of [1440, 390])
+    test(`actual board card comment count follows account language ${width}`, async ({ page }) => {
+        await page.setViewportSize({ width, height: 900 });
+        await page.goto("/src/core/utils/LocaleFormat.fixture.html");
+        for (const locale of ["en-US", "ko-KR", "ja-JP", "zh-CN"]) {
+            await page.getByRole("button", { name: locale, exact: true }).click();
+            const card = page.getByTestId("board-comment-count");
+            await expect(card.getByText("1,234", { exact: true })).toBeVisible();
+            await expect(card.getByText("User card title", { exact: true })).toBeVisible();
+        }
+    });

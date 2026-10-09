@@ -1,3 +1,6 @@
+import { BoardProvider } from "@/core/providers/BoardProvider";
+import { ModelRegistry } from "@/core/models/ModelRegistry";
+import BoardColumnCardCollapsible from "@/pages/BoardPage/components/board/BoardColumnCardCollapsible";
 import ApiKeyIpWhitelist from "@/pages/SettingsPage/components/apiKeys/ApiKeyIpWhitelist";
 import { ApiKeySettingModel } from "@/core/models";
 import { AuthProvider } from "@/core/providers/AuthProvider";
@@ -40,7 +43,15 @@ import { SUPPORTED_LOCALES } from "./LocalePolicy";
 
 api.defaults.adapter = async (config) => ({ status: 200, statusText: "OK", headers: {}, config, data: { active_work: [] } });
 getOllamaModelStore().replacePullingModels([{ name: "locale-progress", progress: 12.34, isTracking: true }]);
-const fixtureProject = { uid: "locale-fixture" } as Project.TModel;
+const fixtureProject = Project.Model.fromOne({
+    uid: "locale-fixture",
+    created_at: new Date(),
+    updated_at: new Date(),
+    title: "Locale board",
+    all_members: [],
+    labels: [],
+    current_auth_role_actions: ["*"],
+});
 const fixtureRelationships = ["contains", "blocks", "references"].map((machine_semantic) => ({
     uid: machine_semantic,
     machine_semantic,
@@ -215,6 +226,13 @@ function Fixture() {
                 {t("card.Show all checklists ({checklists} hidden)", { checklists: 1234 })}
             </output>
             <output data-testid="file-size">{formatFileSize(1536, language.language, 1)}</output>
+            <div data-testid="board-comment-count" className="max-w-80">
+                <BoardProvider project={fixtureProject} currentUser={documentUser}>
+                    <ModelRegistry.ProjectCard.Provider model={ProjectCard.Model.getModel("locale-outline")!} params={{ setFilters: () => {} }}>
+                        <BoardColumnCardCollapsible isDragging={false} />
+                    </ModelRegistry.ProjectCard.Provider>
+                </BoardProvider>
+            </div>
             <div data-testid="document-progress">
                 <BoardCardAttachmentDocumentProgress cardUID="locale-document" attachmentUID="locale-attachment" />
             </div>
