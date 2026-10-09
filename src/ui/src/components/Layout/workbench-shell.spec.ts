@@ -105,6 +105,16 @@ test("Escape from page-owned portaled controls dismisses the physical mobile pan
     await panel.press("Tab");
     await expect(panel.getByRole("button", { name: "Close", exact: true })).toBeFocused();
     await page.keyboard.press("Tab");
+    const label = panel.getByRole("button", { name: "🧩 Contract", exact: true });
+    await expect(label).toBeFocused();
+    await label.press("Enter");
+    await expect(label).toHaveAttribute("aria-expanded", "true");
+    await label.press("Escape");
+    await expect(label).toHaveAttribute("aria-expanded", "false");
+    await expect(page.locator("[data-compact-label-preview]")).toHaveCount(0);
+    await expect(panel).toBeVisible();
+    await expect(label).toBeFocused();
+    await page.keyboard.press("Tab");
     await expect(panel.getByRole("textbox", { name: "Sidebar search", exact: true })).toBeFocused();
     await page.keyboard.press("Tab");
     await expect(panel.getByRole("button", { name: "Nested menu", exact: true })).toBeFocused();
