@@ -5,19 +5,21 @@ import { api } from "@/core/helpers/Api";
 import { useQueryMutation } from "@/core/helpers/QueryMutation";
 import { ProjectColumn } from "@/core/models";
 import { useBoardSettings } from "@/core/providers/BoardSettingsProvider";
+import type { IWorkflowStage } from "@/controllers/api/settings/workflowStages/useWorkflowStages";
+import { metadataDisplay } from "@/core/utils/MetadataDisplay";
 
 interface Snapshot {
+    workflow_stages: Record<string, IWorkflowStage>;
     column_names: Record<string, string>;
     available_columns: { uid: string; name: string; workflow_stage: string | null }[];
     binding: { uid: string; revision: string; workflow_mapping: Record<string, string> } | null;
     choices: { stage: string; required: boolean; status: string; column_uid: string | null; candidates: string[] }[];
 }
-const labels: Record<string, string> = { active: "In progress", review: "Review", closed: "Completed", ready: "Ready" };
 export default function BoardSettingsAppWorkflow({
     appKey,
     onDirtyChange,
 }: { appKey?: "github" | "glitchtip"; onDirtyChange?: (dirty: boolean) => void } = {}) {
-    const [t] = useTranslation();
+    const [t, i18n] = useTranslation();
     const { project, canEditBasicInfo } = useBoardSettings();
     const columns = ProjectColumn.Model.useModels((column) => column.project_uid === project.uid);
     const [selectedApp, setApp] = useState("github");
@@ -38,6 +40,10 @@ export default function BoardSettingsAppWorkflow({
     const { data, isLoading, isError, refetch } = query(["app-workflow", project.uid, app], async () => (await api.get(url)).data as Snapshot, {
         retry: 0,
     });
+    const stageName = (key: string) => {
+        const stage = data?.workflow_stages?.[key];
+        return stage ? metadataDisplay(stage, stage.translations, i18n.resolvedLanguage ?? i18n.language).name : key;
+    };
     useEffect(() => {
         if (!dirty) {
             setDraft(data?.binding?.workflow_mapping ?? {});
@@ -127,8 +133,7 @@ export default function BoardSettingsAppWorkflow({
                         {data.choices.map((choice) => (
                             <div key={choice.stage} className="flex min-w-0 flex-col gap-2 rounded-lg border p-3 text-sm">
                                 <span>
-                                    {t(`project.settings.${labels[choice.stage] ?? choice.stage}`)} ·{" "}
-                                    {t(`project.settings.${choice.required ? "Required" : "Optional"}`)}
+                                    {stageName(choice.stage)} · {t(`project.settings.${choice.required ? "Required" : "Optional"}`)}
                                 </span>
                                 <select
                                     className="min-w-0 rounded-md border border-input bg-background p-2"
@@ -174,9 +179,7 @@ export default function BoardSettingsAppWorkflow({
                                             {(data.available_columns ?? []).map((column) => (
                                                 <option key={column.uid} value={column.uid}>
                                                     {column.name}
-                                                    {column.workflow_stage
-                                                        ? ` · ${t(`project.settings.${labels[column.workflow_stage] ?? column.workflow_stage}`)}`
-                                                        : ""}
+                                                    {column.workflow_stage ? ` · ${stageName(column.workflow_stage)}` : ""}
                                                 </option>
                                             ))}
                                         </select>

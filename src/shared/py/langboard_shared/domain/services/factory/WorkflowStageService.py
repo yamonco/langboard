@@ -210,9 +210,15 @@ class WorkflowStageService(BaseDomainService):
                     ProjectColumn.is_archive == False,  # noqa: E712
                 )
             ).all()
+            stage_keys = set(requirements.required + requirements.optional)
+            stage_keys.update(column.workflow_stage for column in columns if column.workflow_stage)
+            stages = db.exec(
+                SqlBuilder.select.table(WorkflowStageDefinition).where(WorkflowStageDefinition.key.in_(stage_keys))
+            ).all()
             return {
                 "binding": binding,
                 "mapping": result,
+                "workflow_stages": {stage.key: stage.api_response() for stage in stages},
                 "column_names": {column.get_uid(): column.name for column in columns},
                 "available_columns": [
                     {"uid": column.get_uid(), "name": column.name, "workflow_stage": column.workflow_stage}
