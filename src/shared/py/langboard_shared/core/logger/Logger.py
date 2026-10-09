@@ -69,6 +69,8 @@ class Logger:
                 dsn=Env.SENTRY_DSN,
                 environment=Env.SENTRY_ENVIRONMENT,
                 release=Env.SENTRY_RELEASE,
+                send_default_pii=False,
+                include_local_variables=False,
             )
 
     def get_config(self) -> dict[str, Any]:
