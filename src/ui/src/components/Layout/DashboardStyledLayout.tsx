@@ -187,7 +187,7 @@ export const DashboardStyledLayoutFrame = forwardRef<HTMLDivElement, TDashboardS
                             )}
                             <div className="min-w-0 flex-1">
                                 <ResizableSidebar
-                                    main={<div className="min-w-0 flex-1">{sidebar}</div>}
+                                    main={<div className="h-full min-h-0 min-w-0 flex-1">{sidebar}</div>}
                                     initialWidth={280}
                                     collapsableWidth={220}
                                     minWidth={220}
