@@ -178,10 +178,12 @@ for (const width of [1920, 390])
 for (const width of [1920, 390])
     test(`English remains the canonical template language at ${width}px`, async ({ page }) => {
         await page.setViewportSize({ width, height: 850 });
-        await page.route("**/settings/global-labels", route => route.fulfill({ json: { labels: [] } }));
-        await page.route("**/settings/project-template-bots", route => route.fulfill({ json: { bots: [] } }));
-        await page.route("**/settings/workflow-stages", route => route.fulfill({ json: { stages: [] } }));
-        await page.route("**/settings/project-templates**", route => route.fulfill({ json: { templates: [{ uid: "one", name: "Custom", columns: ["Queue"], is_default: true }] } }));
+        await page.route("**/settings/global-labels", (route) => route.fulfill({ json: { labels: [] } }));
+        await page.route("**/settings/project-template-bots", (route) => route.fulfill({ json: { bots: [] } }));
+        await page.route("**/settings/workflow-stages", (route) => route.fulfill({ json: { stages: [] } }));
+        await page.route("**/settings/project-templates**", (route) =>
+            route.fulfill({ json: { templates: [{ uid: "one", name: "Custom", columns: ["Queue"], is_default: true }] } })
+        );
         await page.goto("/src/pages/SettingsPage/ProjectTemplates.fixture.html");
         await page.getByRole("button", { name: "Edit", exact: true }).click();
         await page.getByLabel("Language code", { exact: true }).fill("en");
