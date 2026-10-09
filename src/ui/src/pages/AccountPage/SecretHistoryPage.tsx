@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
 import { useTranslation } from "react-i18next";
 import { api } from "@/core/helpers/Api";
+import { formatDateTime } from "@/core/utils/LocaleFormat";
 import Button from "@/components/base/Button";
 
 interface HistoryItem {
@@ -18,7 +19,7 @@ interface HistoryItem {
 }
 export default function SecretHistoryPage() {
     const { referenceUID } = useParams();
-    const [t] = useTranslation();
+    const [t, i18n] = useTranslation();
     const [items, setItems] = useState<HistoryItem[]>([]);
     const [cursor, setCursor] = useState<string | null>(null);
     const [busy, setBusy] = useState(true);
@@ -68,7 +69,7 @@ export default function SecretHistoryPage() {
                                         <div className="flex flex-wrap items-center justify-between gap-2">
                                             <strong>{t(`myAccount.secretHistory.actions.${item.action}`, { defaultValue: item.action })}</strong>
                                             <time className="text-xs text-muted-foreground" dateTime={item.created_at}>
-                                                {new Date(item.created_at).toLocaleString()}
+                                                {formatDateTime(new Date(item.created_at), i18n.language)}
                                             </time>
                                         </div>
                                         <p className="break-all text-xs text-muted-foreground">
