@@ -17,6 +17,17 @@ the connection stores only the canonical `secret://ref/{uid}` reference. Request
 schemas never accept raw tokens or DSNs. A URL-shaped DSN is rejected before
 external I/O. API scopes should be restricted to the required metadata reads.
 
+GlitchTip 6.2.6 API token scopes and project visibility are separate boundaries.
+Connection registration and project discovery require `org:read` and
+`project:read`; issue reads also require the provider's event-read permission.
+The token has no project selector. Native project lookup uses organization
+membership, so team membership alone does not guarantee that another project
+in the same organization is inaccessible. Treat such a credential as an
+organization-wide read credential. Langboard's selected resource and current
+board authority restrict consumption inside Langboard; they do not narrow the
+credential's upstream authority. Never reuse a central administrator token or
+describe a selected Board Binding as a project-scoped provider token.
+
 Authenticated routes under
 `/board/{board_uid}/settings/apps/glitchtip/connections`:
 
