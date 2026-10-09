@@ -780,3 +780,42 @@ def prepare_app_workflow_mapping(
     if snapshot is None:
         raise ApiException.NotFound_404(ApiErrorCode.NF2001)
     return JsonResponse(content=_app_workflow_response(snapshot))
+
+
+@form_model
+class AppPanelConsentForm(BaseFormModel):
+    model_config = {"extra": "forbid"}
+    binding_uid: str | None = Field(default=None, min_length=1, max_length=64)
+    expected_revision: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    app_revision: str = Field(..., pattern=r"^[0-9a-f]{64}$")
+    enabled: bool = Field(..., strict=True)
+
+
+@AppRouter.schema(permission=ApiPermission.Read)
+@AppRouter.api.get("/board/{project_uid}/apps/{app_key}/panel", tags=["Board.Apps"])
+@RoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
+@AuthFilter.add("user")
+def get_board_app_panel(project_uid: str, app_key: str, user: User = Auth.scope("user"), service: DomainService = DomainService.scope()) -> JsonResponse:
+    from langboard_shared.domain.services.AppPanel import get_panel
+    result = get_panel(service.workflow_stage, user, project_uid, app_key)
+    if result is None:
+        raise ApiException.NotFound_404(ApiErrorCode.NF2001)
+    return JsonResponse(content=result)
+
+
+@AppRouter.schema(form=AppPanelConsentForm, permission=ApiPermission.Edit)
+@AppRouter.api.put("/board/{project_uid}/settings/apps/{app_key}/panel", tags=["Board.Settings"])
+@RoleFilter.add(ProjectRole, [ProjectRoleAction.Update], RoleFinder.project)
+@AuthFilter.add("user")
+def set_board_app_panel(project_uid: str, app_key: str, form: AppPanelConsentForm, user: User = Auth.scope("user"), service: DomainService = DomainService.scope()) -> JsonResponse:
+    from langboard_shared.domain.services.AppPanel import set_panel
+    from langboard_shared.domain.services.AppRegistry import AppRegistryConflict
+    try:
+        result = set_panel(service.workflow_stage, user, project_uid, app_key, form.binding_uid, form.expected_revision, form.app_revision, form.enabled)
+    except AppRegistryConflict as exc:
+        raise ApiException.Conflict_409(ApiErrorCode.EX3004) from exc
+    except ValueError as exc:
+        raise ApiException.BadRequest_400(ApiErrorCode.VA0000) from exc
+    if result is None:
+        raise ApiException.NotFound_404(ApiErrorCode.NF2001)
+    return JsonResponse(content={"binding": result})

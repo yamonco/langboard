@@ -345,6 +345,13 @@
     "Dokploy notification confirm help": "選択した別のWebhook認証情報でローカル受信を有効化します。Dokployは別途設定してください。",
     "Dokploy notification disable help": "ローカル受信を無効化します。既存の受信履歴は保持されます。",
     "Confirm Dokploy notification configuration": "通知設定を確認",
-    "Confirm disable Dokploy notifications": "通知の無効化を確認"
-  }
+    "Confirm disable Dokploy notifications": "通知の無効化を確認",
+    "Review App panel": "アプリパネルを確認",
+    "Confirm App panel": "アプリパネルの許可を確定",
+    "Disable App panel": "アプリパネルを無効化",
+    "App panel consent help": "このボードで {{name}} の隔離されたパネルを開くことを許可します。外部アプリにはボード識別子と言語が渡され、このセッション中に小さな下書きを保持できます。この権限はワークフローの遷移やカードの変更を許可しません。"
+  },
+  "App panel": "アプリパネル",
+  "Close App panel": "アプリパネルを閉じる",
+  "App panel unavailable": "アプリパネルを利用できません。閉じてから再度開いてください。"
 }

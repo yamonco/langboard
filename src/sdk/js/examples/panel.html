@@ -1,0 +1,7 @@
+<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Notes panel</title><style>body{font:16px system-ui;background:#19263b;color:#e6edf7;padding:16px}textarea{box-sizing:border-box;width:100%;height:120px;background:#101827;color:inherit;border:1px solid #526076;padding:10px}button{padding:8px;margin-top:12px}</style><h2>Notes</h2><label>Draft<textarea id="draft"></textarea></label><button id="save">Save draft</button><output id="status">Connecting</output><script type="module">
+import {connectPanel} from '../index.mjs';
+// Local example only. Production apps must configure their approved host origin.
+const panel=await connectPanel({expectedHostOrigin:new URL(location.href).origin});
+const draft=document.querySelector('#draft'),status=document.querySelector('#status');draft.value=panel.state?.draft??'';status.textContent=panel.state?'Restored':'Connected';
+document.querySelector('#save').onclick=()=>{panel.saveState({draft:draft.value});status.textContent='Saved'};
+</script>

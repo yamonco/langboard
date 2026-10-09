@@ -1,5 +1,5 @@
-import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useState } from "react";
-import { keepPreviousData } from "@tanstack/react-query";
+import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { keepPreviousData, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { Navigate, useLocation } from "react-router";
 import { DashboardStyledLayout } from "@/components/Layout";
@@ -38,6 +38,11 @@ import useGetProject from "@/controllers/api/board/useGetProject";
 import useGetCards from "@/controllers/api/board/useGetCards";
 import useGetGraphApprovalCount from "@/controllers/api/board/graphApprovals/useGetGraphApprovalCount";
 import ActivityList from "@/components/ActivityList";
+import { SocketEvents } from "@langboard/core/constants";
+import useSocketHandler from "@/core/helpers/SocketHandler";
+import useBoardAppCatalog from "@/controllers/api/board/useBoardAppCatalog";
+import { deletePanelState, invalidatePanelSessions } from "@/core/apps/PanelSession";
+import AppPanel from "@/pages/BoardPage/components/apps/AppPanel";
 
 import { cn } from "@/core/utils/ComponentUtils";
 import useCardRelationshipsUpdatedHandlers from "@/controllers/socket/card/useCardRelationshipsUpdatedHandlers";
@@ -94,7 +99,7 @@ const getCurrentPage = (pageRoute?: string): TBoardViewType => {
 };
 
 type TBoardSidePanel = "botScope" | "switchProject";
-type TWorkbenchContext = "explorer" | "my-work" | "changes" | "inbox" | "activity" | "relations" | "outline" | "wiki" | "chat";
+type TWorkbenchContext = "explorer" | "my-work" | "changes" | "inbox" | "activity" | "relations" | "outline" | "wiki" | "chat" | "app";
 
 const BoardProxy = memo((): React.JSX.Element => {
     const { setPageAliasRef } = usePageHeader();
@@ -193,6 +198,21 @@ function BoardProxyDisplay({ pageRoute, isFetching, isProjectLoading, project }:
     const [isCardExpanded, setIsCardExpanded] = useState(false);
     const [activeSidePanel, setActiveSidePanel] = useState<TBoardSidePanel>();
     const [chatPanelOpened, setChatPanelOpened] = useState(false);
+    const { data: appCatalog, isError: appCatalogError } = useBoardAppCatalog(project.uid, currentUser?.uid);
+    const [selectedAppKey, setSelectedAppKey] = useState<string>();
+    const panelApps = (appCatalogError ? [] : (appCatalog ?? [])).filter(
+        (app) => app.panel && app.binding?.state === "enabled" && app.binding.granted_capabilities.includes("panels.render")
+    );
+    const selectedApp = panelApps.find((app) => app.key === selectedAppKey);
+    const previousPanelKeys = useRef<{ scope: string; keys: string[] }>({ scope: "", keys: [] });
+    useEffect(() => {
+        const scope = JSON.stringify([currentUser?.uid, project.uid]);
+        const currentKeys = panelApps.map((app) => JSON.stringify([currentUser?.uid, project.uid, app.key, app.version]));
+        for (const key of previousPanelKeys.current.scope === scope ? previousPanelKeys.current.keys : []) {
+            if (!currentKeys.includes(key)) deletePanelState(key);
+        }
+        previousPanelKeys.current = { scope, keys: currentKeys };
+    }, [appCatalog, appCatalogError, currentUser?.uid, project.uid]);
     const [workbenchContextMode, setWorkbenchContextMode] = useState<TWorkbenchContext>("explorer");
     const workbenchContextTitle = {
         explorer: t("common.Explorer"),
@@ -204,6 +224,7 @@ function BoardProxyDisplay({ pageRoute, isFetching, isProjectLoading, project }:
         outline: t("dashboard.Outline"),
         wiki: t("board.Wiki"),
         chat: t("project.Chat with AI"),
+        app: selectedApp?.panel?.name ?? t("project.App panel"),
     }[workbenchContextMode];
     const [isContextOpen, setIsContextOpen] = useWorkbenchContextOpen(currentUser?.uid);
     const [isMobile, setIsMobile] = useState(window.innerWidth < ScreenMap.size.md);
@@ -417,6 +438,23 @@ function BoardProxyDisplay({ pageRoute, isFetching, isProjectLoading, project }:
             }),
         [project]
     );
+    const appQueryClient = useQueryClient();
+    const appRegistryChangedHandlers = useMemo(
+        () =>
+            useSocketHandler({
+                topic: ESocketTopic.Global,
+                eventKey: "app-registry-changed",
+                onProps: {
+                    name: SocketEvents.SERVER.GLOBALS.APP_REGISTRY_CHANGED,
+                    callback: () => {
+                        invalidatePanelSessions();
+                        setSelectedAppKey(undefined);
+                        void appQueryClient.invalidateQueries({ queryKey: ["board-app-catalog"] });
+                    },
+                },
+            }),
+        [appQueryClient]
+    );
     const handlers = useMemo(
         () => [
             isBoardChatAvailableHandlers,
@@ -424,6 +462,7 @@ function BoardProxyDisplay({ pageRoute, isFetching, isProjectLoading, project }:
             projectDeletedHandlers,
             boardAssignedInternalBotChangedHandlers,
             internalBotUpdatedHandlers,
+            appRegistryChangedHandlers,
             cardRelationshipsUpdatedHandlers,
             boardBotScopeCreatedHandlers,
             boardBotScopeTriggerConditionsUpdatedHandlers,
@@ -442,6 +481,7 @@ function BoardProxyDisplay({ pageRoute, isFetching, isProjectLoading, project }:
             projectDeletedHandlers,
             boardAssignedInternalBotChangedHandlers,
             internalBotUpdatedHandlers,
+            appRegistryChangedHandlers,
             cardRelationshipsUpdatedHandlers,
             boardBotScopeCreatedHandlers,
             boardBotScopeTriggerConditionsUpdatedHandlers,
@@ -643,6 +683,16 @@ function BoardProxyDisplay({ pageRoute, isFetching, isProjectLoading, project }:
                         active: workbenchContextMode === "chat" && isWorkbenchContextVisible,
                         hidden: !!selectCardViewType,
                     },
+                    ...panelApps.map((app) => ({
+                        icon: "puzzle",
+                        label: app.panel?.name ?? app.name,
+                        onClick: () => {
+                            setSelectedAppKey(app.key);
+                            showWorkbenchContext("app");
+                        },
+                        active: isWorkbenchContextVisible && workbenchContextMode === "app" && selectedAppKey === app.key,
+                        hidden: !!selectCardViewType,
+                    })),
                     ...headerNavs.map((nav, index) => ({
                         icon: ["columns-3", "notebook-pen", "network", "history", "settings", "bot"][index],
                         label: String(nav.name),
@@ -671,7 +721,23 @@ function BoardProxyDisplay({ pageRoute, isFetching, isProjectLoading, project }:
                                 </Suspense>
                             </div>
                         )}
-                        {isBotScopeOpened ? (
+                        {workbenchContextMode === "app" &&
+                        isWorkbenchContextVisible &&
+                        !selectCardViewType &&
+                        !isProjectLoading &&
+                        currentUser &&
+                        selectedApp ? (
+                            <AppPanel
+                                key={`${currentUser.uid}:${project.uid}:${selectedApp.key}`}
+                                app={selectedApp}
+                                projectUID={project.uid}
+                                userUID={currentUser.uid}
+                                onClose={() => {
+                                    setIsContextOpen(false);
+                                    setActiveSidePanel(undefined);
+                                }}
+                            />
+                        ) : isBotScopeOpened ? (
                             <BoardBotScopeSidebar project={project} />
                         ) : workbenchContextMode === "explorer" ? (
                             <ProjectExplorerSidebar currentProject={project} onNavigate={() => setActiveSidePanel(undefined)} />
@@ -685,7 +751,11 @@ function BoardProxyDisplay({ pageRoute, isFetching, isProjectLoading, project }:
                                 className="h-full outline-none"
                             >
                                 <Suspense fallback={<Skeleton className="m-3 h-24" />}>
-                                    {workbenchContextMode === "chat" ? (
+                                    {workbenchContextMode === "app" ? (
+                                        <p className="p-3 text-sm" role="status">
+                                            {t("project.App panel unavailable")}
+                                        </p>
+                                    ) : workbenchContextMode === "chat" ? (
                                         !boardChat && (
                                             <div role="status" className="space-y-3 p-4 text-sm text-muted-foreground">
                                                 <p>{t("errors.Server has been temporarily disabled. Please try again later.")}</p>
@@ -748,6 +818,7 @@ function BoardProxyDisplay({ pageRoute, isFetching, isProjectLoading, project }:
                                         outline: "list-tree",
                                         wiki: "notebook-pen",
                                         chat: "message-circle",
+                                        app: "puzzle",
                                     }[workbenchContextMode],
                               onClose: () => setActiveSidePanel(undefined),
                           }

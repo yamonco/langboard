@@ -365,7 +365,7 @@ registry = AppRegistry(rest_transport)
 approved = await registry.approve({
     "schema_version": 1, "key": "example-erp", "version": "1.0.0",
     "name": "Example ERP", "description": "Issues from an external ERP.",
-    "capabilities": ["cards.create", "cards.presentation"],
+    "capabilities": ["cards.create", "cards.presentation", "panels.render"],
     "resource_types": ["issue"],
     "workflow_requirements": {"required": ["backlog"], "optional": ["active"]},
     "panel": {"url": "https://erp.example.org/panel", "name": "ERP outbox", "icon": "📋"},
@@ -384,8 +384,26 @@ board catalogs. Board administrators can prepare a disabled workflow draft using
 existing board grants and automatic transitions. Current primary admin authority
 is rechecked even when an authentication cache has an older role.
 
-The optional panel declaration is catalog data only at this stage: rail rendering,
-isolated host messaging, outbox delivery and app automation principals are not
-provided by this registration API. Resource declarations do not create provider
+Optional panels require the separate `panels.render` capability and explicit board
+consent. The UI reviews this consent in board app settings. An SDK management
+client can perform the same operation after review:
+
+```python
+from langboard_sdk import AppManager
+manager = AppManager(rest_transport, "board-uid")
+entry = next(app for app in (await manager.catalog())["apps"] if app["key"] == "example-erp")
+binding = entry["binding"]
+consent = await manager.set_panel_consent(
+    "example-erp", entry["app_revision"], enabled=True,
+    binding_uid=binding["uid"] if binding else None,
+    expected_revision=binding["revision"] if binding else None,
+)
+```
+
+Fresh reads of `manager.panel(app_key)` recheck current board access and consent.
+Rendering grants do not authorize automation or card writes. The rail uses the
+[JavaScript panel SDK](../js/README.md) for isolated host messaging and bounded
+session drafts. Outbox delivery and app automation principals remain separate
+contracts; they are not provided by the panel registration API. Resource declarations do not create provider
 connection routes or signal adapters. Ambiguous writes require registry readback;
 no automatic retry occurs.

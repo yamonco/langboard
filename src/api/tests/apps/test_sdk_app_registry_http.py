@@ -17,6 +17,14 @@ from langboard_shared.domain.services.factory.WorkflowStageService_app_test impo
 from langboard_shared.Env import Env
 
 
+@pytest.fixture(autouse=True)
+def app_notifications(monkeypatch):
+    from langboard_shared.publishers import AppSettingPublisher
+    events = []
+    monkeypatch.setattr(AppSettingPublisher, "apps_changed", lambda: events.append("apps:changed"))
+    return events
+
+
 DECLARATION = {
     "schema_version": 1, "key": "example-erp", "version": "1.0.0", "name": "Example ERP",
     "description": "A separately hosted ERP issue integration.",
@@ -123,3 +131,79 @@ def test_registry_migration_preserves_approved_definitions():
         module.downgrade()
         assert "app_definition" not in inspect(connection).get_table_names()
     engine.dispose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("board", ["sqlite-http"], indirect=True)
+async def test_panel_consent_scope_revisions_and_revocation(board, monkeypatch, app_notifications):
+    from langboard_shared.domain.models import BoardAppBinding
+
+    monkeypatch.setattr(DbEngine, "get_readonly_engine", DbEngine.get_main_engine)
+    actor = board[1]
+    with DbSession.use(readonly=False) as db:
+        actor.is_admin = True
+        db.update(actor)
+    app = FastAPI()
+    app.include_router(AppRouter.api)
+    app.add_middleware(ApiAuthMiddleware, routes=AppRouter.api.routes)
+    access, refresh = AuthSecurity.authenticate(actor.id)
+    with TestClient(app) as session:
+        session.cookies.set(Env.REFRESH_TOKEN_NAME, refresh)
+
+        async def request(method, path, **kwargs):
+            return session.request(method, path, headers={"Authorization": f"Bearer {access}"}, **kwargs)
+
+        transport = HttpTransport(SimpleNamespace(request=request))
+        registry = AppRegistry(transport)
+        manager = AppManager(transport, board[2].get_uid())
+        declaration = {**DECLARATION, "capabilities": ["panels.render"], "workflow_requirements": None}
+        approved = await registry.approve(declaration)
+        with pytest.raises(NativeApiError) as no_consent:
+            await manager.panel("example-erp")
+        assert no_consent.value.status_code == 404
+        saved = (await manager.set_panel_consent("example-erp", approved["revision"], enabled=True))["binding"]
+        assert saved["granted_capabilities"] == ["panels.render"]
+        snapshot = await manager.panel("example-erp")
+        assert snapshot["panel"] == declaration["panel"]
+        assert snapshot["app_revision"] == approved["revision"]
+        with DbSession.use(readonly=False) as db:
+            binding = db.exec(SqlBuilder.select.table(BoardAppBinding).where(BoardAppBinding.app_key == "example-erp")).first()
+            assert binding.workflow_mapping == {} and not binding.stage_transitions_enabled
+            actor.is_admin = False
+            db.update(actor)
+        # A read-only board member can read the consented panel, but cannot grant it.
+        assert (await manager.panel("example-erp"))["key"] == "example-erp"
+        with pytest.raises(NativeApiError) as denied:
+            await manager.set_panel_consent("example-erp", approved["revision"], enabled=False,
+                                            binding_uid=saved["uid"], expected_revision=saved["revision"])
+        assert denied.value.status_code in (403, 404)
+        with DbSession.use(readonly=False) as db:
+            board[4].actions = ["read", "update"]
+            db.update(board[4])
+        notification_count = len(app_notifications)
+        with pytest.raises(NativeApiError) as stale:
+            await manager.set_panel_consent("example-erp", "0" * 64, enabled=False,
+                                            binding_uid=saved["uid"], expected_revision=saved["revision"])
+        assert stale.value.status_code == 409
+        assert len(app_notifications) == notification_count
+        disabled = (await manager.set_panel_consent("example-erp", approved["revision"], enabled=False,
+                                                   binding_uid=saved["uid"], expected_revision=saved["revision"]))["binding"]
+        assert disabled["granted_capabilities"] == []
+        with pytest.raises(NativeApiError):
+            await manager.panel("example-erp")
+        restored = (await manager.set_panel_consent("example-erp", approved["revision"], enabled=True,
+                                                   binding_uid=disabled["uid"], expected_revision=disabled["revision"]))["binding"]
+        assert restored["granted_capabilities"] == ["panels.render"]
+        with DbSession.use(readonly=False) as db:
+            actor.is_admin = True
+            db.update(actor)
+        newer = await registry.approve({**declaration, "version": "1.1.0"}, expected_revision=approved["revision"])
+        with pytest.raises(NativeApiError):
+            await manager.panel("example-erp")
+        entry = next(a for a in (await manager.catalog())["apps"] if a["key"] == "example-erp")
+        assert entry["app_revision"] == newer["revision"]
+        restored = (await manager.set_panel_consent("example-erp", newer["revision"], enabled=True,
+            binding_uid=entry["binding"]["uid"], expected_revision=entry["binding"]["revision"]))["binding"]
+        await registry.disable("example-erp", newer["revision"])
+        with pytest.raises(NativeApiError):
+            await manager.panel("example-erp")

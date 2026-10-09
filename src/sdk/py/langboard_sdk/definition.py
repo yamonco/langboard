@@ -6,7 +6,7 @@ from urllib.parse import urlsplit
 from .workflow import WorkflowRequirements
 
 
-APP_CAPABILITIES = frozenset({"cards.create", "cards.presentation", "resources.read", "events.receive"})
+APP_CAPABILITIES = frozenset({"cards.create", "cards.presentation", "resources.read", "events.receive", "panels.render"})
 
 
 def validate_app_definition(item: dict) -> dict:

@@ -345,6 +345,13 @@
     "Dokploy notification confirm help": "선택한 별도의 웹훅 자격 증명으로 로컬 수신기를 활성화합니다. Dokploy는 별도로 설정하세요.",
     "Dokploy notification disable help": "로컬 수신기를 비활성화합니다. 기존 수신 기록은 보존됩니다.",
     "Confirm Dokploy notification configuration": "알림 설정 확인",
-    "Confirm disable Dokploy notifications": "알림 비활성화 확인"
-  }
+    "Confirm disable Dokploy notifications": "알림 비활성화 확인",
+    "Review App panel": "앱 패널 검토",
+    "Confirm App panel": "앱 패널 허용 확인",
+    "Disable App panel": "앱 패널 비활성화",
+    "App panel consent help": "이 보드에서 {{name}}의 격리된 패널을 열도록 허용합니다. 외부 앱에는 보드 식별자와 언어가 전달되며, 이번 세션 동안 작은 임시 초안을 보관할 수 있습니다. 이 권한은 워크플로 단계 전환이나 카드 변경을 허용하지 않습니다."
+  },
+  "App panel": "앱 패널",
+  "Close App panel": "앱 패널 닫기",
+  "App panel unavailable": "앱 패널을 사용할 수 없습니다. 닫았다가 다시 열어 주세요."
 }

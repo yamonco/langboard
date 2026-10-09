@@ -1,0 +1,28 @@
+name: Check App Panel SDK
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - .github/workflows/check-panel-sdk.yaml
+      - src/sdk/js/**
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  protocol:
+    if: vars.CI_RUNNER != '' && (github.event_name == 'workflow_dispatch' || (github.event.pull_request.draft == false && github.event.pull_request.head.repo.full_name == github.repository))
+    timeout-minutes: 10
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"unconfigured"') }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: node --test src/sdk/js/index.test.mjs
+      - run: node src/sdk/js/example.mjs
+      - name: Check package contents
+        working-directory: src/sdk/js
+        run: npm pack --dry-run

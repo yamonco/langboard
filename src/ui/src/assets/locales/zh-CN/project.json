@@ -345,6 +345,13 @@
     "Dokploy notification confirm help": "使用选定的独立Webhook凭据启用本地接收器。请单独配置Dokploy。",
     "Dokploy notification disable help": "禁用本地接收器。现有接收历史将保留。",
     "Confirm Dokploy notification configuration": "确认通知配置",
-    "Confirm disable Dokploy notifications": "确认禁用通知"
-  }
+    "Confirm disable Dokploy notifications": "确认禁用通知",
+    "Review App panel": "查看应用面板权限",
+    "Confirm App panel": "确认允许应用面板",
+    "Disable App panel": "禁用应用面板",
+    "App panel consent help": "允许 {{name}} 在此看板打开隔离的面板。外部应用会收到看板标识和语言，并可在本次会话中保留少量草稿。此权限不允许工作流转换或卡片更改。"
+  },
+  "App panel": "应用面板",
+  "Close App panel": "关闭应用面板",
+  "App panel unavailable": "应用面板暂不可用。请关闭后重新打开。"
 }
