@@ -5,7 +5,8 @@ import IconComponent from "@/components/base/IconComponent";
 import Progress from "@/components/base/Progress";
 import useUploadCardAttachment from "@/controllers/api/card/attachment/useUploadCardAttachment";
 import { useBoardCard } from "@/core/providers/BoardCardProvider";
-import { Utils } from "@langboard/core/utils";
+import { formatFileSize } from "@/core/utils/LocaleFormat";
+import { useTranslation } from "react-i18next";
 import { IAttachedFile } from "@/pages/BoardPage/components/card/action/types";
 import { memo, useState } from "react";
 
@@ -16,6 +17,7 @@ interface IBoardCardActionAttachedFileProps {
 
 const BoardCardActionAttachedFile = memo(({ attachedFile, deleteFile }: IBoardCardActionAttachedFileProps) => {
     const { projectUID, card } = useBoardCard();
+    const [, i18n] = useTranslation();
     const [isUploading, setIsUploading] = useState(false);
     const [progress, setProgress] = useState(0);
     const [isError, setIsError] = useState(false);
@@ -50,7 +52,7 @@ const BoardCardActionAttachedFile = memo(({ attachedFile, deleteFile }: IBoardCa
                 <Box className="truncate">{attachedFile.file.name}</Box>
                 <Box textSize="xs" className="truncate text-muted-foreground/70">
                     {!isUploading ? (
-                        Utils.String.formatBytes(attachedFile.file.size, { decimals: 1 })
+                        formatFileSize(attachedFile.file.size, i18n.language, 1)
                     ) : (
                         <Progress value={progress} height="2" indicatorClassName={isError ? "bg-destructive" : ""} />
                     )}

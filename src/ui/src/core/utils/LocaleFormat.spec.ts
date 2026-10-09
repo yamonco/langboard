@@ -1,5 +1,27 @@
 import { expect, test } from "@playwright/test";
 
+test("file size and image upload progress follow account language", async ({ page }) => {
+    await page.goto("/src/core/utils/LocaleFormat.fixture.html");
+    for (const locale of ["en-US", "ko-KR", "ja-JP", "zh-CN"]) {
+        await page.getByRole("button", { name: locale, exact: true }).click();
+        const expected = await page.evaluate(
+            (locale) => ({
+                size: new Intl.NumberFormat(locale, {
+                    style: "unit",
+                    unit: "kilobyte",
+                    unitDisplay: "short",
+                    minimumFractionDigits: 1,
+                    maximumFractionDigits: 1,
+                }).format(1.5),
+                progress: new Intl.NumberFormat(locale, { style: "percent", maximumFractionDigits: 0 }).format(0.124),
+            }),
+            locale
+        );
+        await expect(page.getByTestId("file-size")).toHaveText(expected.size);
+        await expect(page.getByTestId("image-progress")).toContainText(expected.progress);
+    }
+});
+
 test("existing relative-time hook updates immediately when account language changes", async ({ page }) => {
     await page.addInitScript(() => localStorage.setItem("lang", "en-US"));
     await page.goto("/src/core/utils/LocaleFormat.fixture.html");

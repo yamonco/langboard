@@ -20,6 +20,19 @@ export function formatNumber(value: number, locale: unknown, options: Intl.Numbe
     return new Intl.NumberFormat(normalizeLocale(locale), options).format(value);
 }
 
+/** Keep the existing 1024-byte scale while localizing file size presentation. */
+export function formatFileSize(bytes: number, locale: unknown, decimals = 0) {
+    const units = ["byte", "kilobyte", "megabyte", "gigabyte", "terabyte"];
+    const index = bytes > 0 ? Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024))) : 0;
+    return formatNumber(bytes / 1024 ** index, locale, {
+        style: "unit",
+        unit: units[index],
+        unitDisplay: "short",
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: decimals,
+    });
+}
+
 /** Preserve the timer's existing approximate year/month conversion and 100-hour compactness limit. */
 export function formatTimerDuration(
     duration: { years?: number; months?: number; days?: number; hours?: number; minutes?: number; seconds?: number },

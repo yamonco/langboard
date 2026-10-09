@@ -1,4 +1,5 @@
 import CustomSelect from "@/components/Cron/CustomSelect";
+import { ImageProgress } from "@/components/plate-ui/media-placeholder-node";
 import { UNITS } from "@/components/Cron/constants";
 import OllamaModelTracker from "@/pages/SettingsPage/components/ollama/OllamaModelTracker";
 import { getOllamaModelStore } from "@/core/stores/OllamaModelStore";
@@ -27,7 +28,7 @@ import { useTranslation } from "react-i18next";
 import i18n from "@/i18n";
 import "@/core/injection/StringExtensions";
 import useUpdateDateDistance from "@/core/hooks/useUpdateDateDistance";
-import { formatDateTime, formatTimerDuration, formatNumber } from "./LocaleFormat";
+import { formatDateTime, formatTimerDuration, formatNumber, formatFileSize } from "./LocaleFormat";
 import { SUPPORTED_LOCALES } from "./LocalePolicy";
 
 api.defaults.adapter = async (config) => ({ status: 200, statusText: "OK", headers: {}, config, data: { active_work: [] } });
@@ -42,6 +43,7 @@ const fixtureRelationships = ["contains", "blocks", "references"].map((machine_s
 })) as GlobalRelationshipType.TModel[];
 const cronEveryFive = Array.from({ length: 12 }, (_, index) => index * 5);
 const date = new Date(Date.now() - 300000);
+const uploadingImage = new File([new Uint8Array([0])], "locale-upload.png", { type: "image/png" });
 const railChunks = Array.from({ length: 1234 }, (_, index) => ({
     id: `rail-${index}`,
     content: `User block ${index}`,
@@ -167,6 +169,10 @@ function Fixture() {
             </div>
             <output data-testid="duration">{formatTimerDuration({ hours: 1, minutes: 2, seconds: 3 }, language.language)}</output>
             <output data-testid="count">{formatNumber(12345, language.language)}</output>
+            <output data-testid="file-size">{formatFileSize(1536, language.language, 1)}</output>
+            <div data-testid="image-progress">
+                <ImageProgress file={uploadingImage} progress={12.4} />
+            </div>
             <div data-testid="calendar">
                 <Calendar value={new Date(2026, 9, 3, 13)} onChange={() => {}} hideTime />
             </div>
