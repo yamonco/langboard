@@ -74,6 +74,14 @@ for (const width of [1280, 390])
         await page.getByRole("button", { name: "한국어", exact: true }).click();
         await page.getByLabel("Stage name", { exact: true }).fill("출시");
         await page.getByLabel("Stage description", { exact: true }).fill("인수 완료");
+        for (const [language, name, description] of [
+            ["日本語", "リリース", "受入完了"],
+            ["中文", "已发布", "验收完成"],
+        ]) {
+            await page.getByRole("button", { name: language, exact: true }).click();
+            await page.getByLabel("Stage name", { exact: true }).fill(name);
+            await page.getByLabel("Stage description", { exact: true }).fill(description);
+        }
         await page.getByLabel("Language code", { exact: true }).fill("fr");
         await page.getByRole("button", { name: "Add language", exact: true }).click();
         await page.getByLabel("Stage name", { exact: true }).fill("Livré");
@@ -93,6 +101,17 @@ for (const width of [1280, 390])
         await expect(page.getByLabel("Active queue", { exact: true })).toHaveValue("exclude");
         await page.getByRole("button", { name: "한국어", exact: true }).click();
         await expect(page.getByLabel("Stage name", { exact: true })).toHaveValue("출시");
+        for (const [language, name, description] of [
+            ["日本語", "リリース", "受入完了"],
+            ["中文", "已发布", "验收完成"],
+        ]) {
+            await page.getByRole("button", { name: language, exact: true }).click();
+            await expect(page.getByLabel("Stage name", { exact: true })).toHaveValue(name);
+            await expect(page.getByLabel("Stage description", { exact: true })).toHaveValue(description);
+        }
+        await page.getByRole("button", { name: "English", exact: true }).click();
+        await expect(page.getByLabel("Stage name", { exact: true })).toHaveValue("Released");
+        await expect(page.getByLabel("Stage description", { exact: true })).toHaveValue("Accepted delivery");
         await page.getByRole("button", { name: "fr", exact: true }).click();
         await expect(page.getByLabel("Stage name", { exact: true })).toHaveValue("Livré");
         expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
