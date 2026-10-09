@@ -16,7 +16,7 @@ const currentUser = AuthUser.Model.fromOne({
     is_admin: true,
     user_groups: [],
     subemails: [],
-    setting_role_actions: ["*"],
+    setting_role_actions: new URLSearchParams(location.search).has("readonly") ? ["global_label_read"] : ["*"],
     api_key_role_actions: [],
     mcp_role_actions: [],
 });

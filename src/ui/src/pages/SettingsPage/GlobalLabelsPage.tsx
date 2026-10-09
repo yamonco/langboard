@@ -85,6 +85,7 @@ export default function GlobalLabelsPage({ currentUser }: { currentUser: AuthUse
         setDirty(true);
     };
     const submit = async () => {
+        if (!canSave || saving) return;
         try {
             const updated = await save({ ...draft, aliases: [...new Set((draft.aliases ?? []).map((alias) => alias.trim()).filter(Boolean))] });
             setLabels((items) => [...items.filter((item) => item.uid !== updated.uid), updated].sort((a, b) => a.name.localeCompare(b.name)));
