@@ -7,8 +7,8 @@
   "Please report this issue to the developers that how you got this error.": "请向开发者报告此问题及发生错误的步骤。",
   "Server has been temporarily disabled. Please try again later.": "服务器暂时停用，请稍后重试。",
   "Download failed.": "下载失败。",
-  "Failed to upload attachment. File size may be too large (Max size is {size}MB).": "附件上传失败。文件可能过大（最大 {{size}}MB）。",
-  "{num} files could not be uploaded. File size may be too large (Max size is {size}MB).": "{{num}} 个文件无法上传。文件可能过大（最大 {{size}}MB）。",
+  "Failed to upload attachment. File size may be too large (Max size is {size}MB).": "附件上传失败。文件可能过大（最大 {{size, number}}MB）。",
+  "{num} files could not be uploaded. File size may be too large (Max size is {size}MB).": "{{num, number}} 个文件无法上传。文件可能过大（最大 {{size, number}}MB）。",
   "requests": {
     "AU1001": "您无权访问此功能。",
     "AU1002": "您的邮箱尚未验证，请查看收件箱。",

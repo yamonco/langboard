@@ -14,7 +14,7 @@
   "hour": "hour",
   "minute": "minute",
   "reboot": "reboot",
-  "Every interval": "Every {{count}}",
+  "Every interval": "Every {{count, number}}",
   "Every": "Every",
   "in": "in",
   "on": "on",

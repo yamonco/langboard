@@ -205,6 +205,10 @@ function Fixture() {
             <div data-testid="ip-whitelist">
                 <ApiKeyIpWhitelist apiKey={localeApiKey} />
             </div>
+            <output data-testid="upload-errors">
+                {t("errors.Failed to upload attachment. File size may be too large (Max size is {size}MB).", { size: 1234 })}
+                {t("errors.{num} files could not be uploaded. File size may be too large (Max size is {size}MB).", { num: 2345, size: 1234 })}
+            </output>
             <output data-testid="hidden-counts">
                 {t("card.Flipped cards", { count: 1234 })}
                 {t("card.Show all attachments ({attachments} hidden)", { attachments: 1234 })}

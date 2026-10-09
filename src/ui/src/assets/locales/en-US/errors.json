@@ -7,8 +7,8 @@
   "Please report this issue to the developers that how you got this error.": "Please report this issue to the developers that how you got this error.",
   "Server has been temporarily disabled. Please try again later.": "Server has been temporarily disabled. Please try again later.",
   "Download failed.": "Download failed.",
-  "Failed to upload attachment. File size may be too large (Max size is {size}MB).": "Failed to upload attachment. File size may be too large (Max size is {{size}}MB).",
-  "{num} files could not be uploaded. File size may be too large (Max size is {size}MB).": "{{num}} files could not be uploaded. File size may be too large (Max size is {{size}}MB).",
+  "Failed to upload attachment. File size may be too large (Max size is {size}MB).": "Failed to upload attachment. File size may be too large (Max size is {{size, number}}MB).",
+  "{num} files could not be uploaded. File size may be too large (Max size is {size}MB).": "{{num, number}} files could not be uploaded. File size may be too large (Max size is {{size, number}}MB).",
   "requests": {
     "AU1001": "You are not authorized to access this feature.",
     "AU1002": "Your email is not verified yet. Please check your inbox.",
