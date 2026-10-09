@@ -138,7 +138,7 @@ export const PlaceholderElement = withHOC(PlaceholderProvider, function Placehol
                         <div>
                             {loading
                                 ? uploadingFile?.name
-                                : Utils.Type.isString(currentContent.content)
+                                : typeof currentContent.content === "string"
                                   ? t(currentContent.content)
                                   : currentContent.content}
                         </div>

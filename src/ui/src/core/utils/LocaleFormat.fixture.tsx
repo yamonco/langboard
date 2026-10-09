@@ -9,7 +9,9 @@ import { AuthUser, MetadataModel } from "@/core/models";
 import { DOCLING_DOCUMENTS_METADATA_KEY } from "@/core/constants/DoclingMetadata";
 import { BoardCardAttachmentDocumentProgress } from "@/pages/BoardPage/components/card/attachment/BoardCardAttachmentDocument";
 import CustomSelect from "@/components/Cron/CustomSelect";
-import { ImageProgress } from "@/components/plate-ui/media-placeholder-node";
+import { PlaceholderPlugin } from "@platejs/media/react";
+import { EditorDataProvider } from "@/core/providers/EditorDataProvider";
+import { ImageProgress, PlaceholderElement } from "@/components/plate-ui/media-placeholder-node";
 import { UNITS } from "@/components/Cron/constants";
 import OllamaModelTracker from "@/pages/SettingsPage/components/ollama/OllamaModelTracker";
 import { getOllamaModelStore } from "@/core/stores/OllamaModelStore";
@@ -107,6 +109,27 @@ const localeApiKey = ApiKeySettingModel.Model.fromOne({
     updated_at: new Date(),
     ip_whitelist: Array.from({ length: 1235 }, () => "192.0.2.1"),
 });
+function PlaceholderFixture() {
+    const [editor] = useState(() =>
+        createPlateEditor({
+            plugins: [PlaceholderPlugin.configure({ render: { node: PlaceholderElement } })],
+            value: ["audio", "file", "img", "video"].map((mediaType) => ({
+                type: PlaceholderPlugin.key,
+                mediaType,
+                id: `fixture-${mediaType}`,
+                children: [{ text: "" }],
+            })),
+        })
+    );
+    return (
+        <EditorDataProvider currentUser={documentUser} mentionables={[]} editorType="view">
+            <Plate editor={editor}>
+                <Editor />
+            </Plate>
+        </EditorDataProvider>
+    );
+}
+
 function Fixture() {
     const [t, language] = useTranslation();
     const [dragging, setDragging] = useState(false);
@@ -119,6 +142,9 @@ function Fixture() {
     const distance = useUpdateDateDistance(date);
     return (
         <>
+            <div data-testid="media-placeholders">
+                <PlaceholderFixture />
+            </div>
             <div data-testid="code-editor">
                 <Plate editor={editor}>
                     <Editor aria-label="fixture code editor" />
@@ -206,7 +232,16 @@ function Fixture() {
             <output data-testid="overdue-one">{t("card.Overdue by {{count}} day", { count: 1 })}</output>
             <output data-testid="overdue-other">{t("card.Overdue by {{count}} day", { count: 2 })}</output>
             <div data-testid="cron-interval">
-                <CustomSelect value={cronEveryFive} unit={UNITS[0]} setValue={() => {}} disabled period="minute" mode="multiple" />
+                <CustomSelect
+                    value={cronEveryFive}
+                    unit={UNITS[0]}
+                    setValue={() => {}}
+                    disabled
+                    readOnly={false}
+                    periodicityOnDoubleClick={false}
+                    period="minute"
+                    mode="multiple"
+                />
             </div>
             <div data-testid="ollama-progress">
                 <OllamaModelTracker name="locale-progress" />
