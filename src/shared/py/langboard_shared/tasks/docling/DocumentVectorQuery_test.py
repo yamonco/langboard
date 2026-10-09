@@ -146,3 +146,22 @@ def test_structural_pages_survive_official_sqlite_persistence_and_query(tmp_path
     assert hits and all(hit["pages"] == [3] for hit in hits)
     assert all(hit["source"]["content_hash"] == "hash" for hit in hits)
     assert any("한국어" in hit["content"] and "日本語" in hit["content"] for hit in hits)
+
+
+@pytest.mark.parametrize("character", ["語", "😀", "한", "中"])
+def test_token_budget_preserves_unicode_source_prefix(character):
+    source = dict(
+        board_uid="board", card_uid="card", attachment_uid="attachment",
+        content_hash="hash", embedding_fingerprint="a" * 64, generation="active",
+    )
+    pointer = {**source, "chunk_ids": ["chunk"], "storage": {"type": "sqlite"}}
+    original = "x" + character * 200
+    store = Mock()
+    store.similarity_search_with_score.return_value = [
+        (Document(id="chunk", page_content=original, metadata=source), 1.0)
+    ]
+    hits = search_vector_generation(store, pointer, "query", DocumentRetrievalSettings(dimensions=3), max_tokens=128)
+    assert hits and original.startswith(hits[0]["content"])
+    assert "\ufffd" not in hits[0]["content"]
+    assert len(tiktoken.get_encoding("cl100k_base").encode(hits[0]["content"])) <= 128
+    assert original == "x" + character * 200
