@@ -511,3 +511,24 @@ for (const reduced of [false, true]) {
         await expect(page.locator("[data-card-viewer]")).toHaveCSS("opacity", "1");
     });
 }
+
+test("actual desktop Graph route retains access to flipped cards", async ({ page }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (e) => errors.push(e.message));
+    await page.setViewportSize({ width: 1440, height: 1080 });
+    await mockBoardApi(page);
+    await page.route(
+        (url) => url.port === "5381" && !url.pathname.startsWith("/board/fixture-project") && !url.pathname.startsWith("/auth"),
+        (route) => fulfillWithCors(route, { metadata: {}, projects: [], labels: [], approvals: [], count: 0 })
+    );
+    await page.route("**/board/fixture-project/cards", (route) =>
+        fulfillWithCors(route, { cards: [], columns: [], checklists: [], global_relationships: [], column_bot_scopes: [], column_bot_schedules: [] })
+    );
+    await seedTray(page, 3);
+    await page.goto(FIXTURE + "?fullGraph");
+    await expect(page.locator("[data-card-flip-tray]")).toBeVisible();
+    const restore = page.getByRole("button", { name: "Restore Card other-0", exact: true });
+    if (!(await restore.isVisible())) await page.getByRole("button", { name: "Flipped cards · 3", exact: true }).click();
+    await expect(restore).toBeVisible();
+    expect(errors).toEqual([]);
+});

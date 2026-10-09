@@ -9,6 +9,7 @@ import { AuthProvider } from "@/core/providers/AuthProvider";
 import { SocketProvider } from "@/core/providers/SocketProvider";
 import { PageHeaderProvider } from "@/core/providers/PageHeaderProvider";
 import { BoardController } from "@/core/providers/BoardController";
+import BoardProxy from "@/pages/BoardPage";
 import BoardCardPage from "@/pages/BoardPage/BoardCardPage";
 import useAuthStore from "@/core/stores/AuthStore";
 import { AuthUser } from "@/core/models";
@@ -209,7 +210,7 @@ function BoardRouteFixture(): React.JSX.Element {
 
 function Harness(): React.JSX.Element {
     const tree = (
-        <MemoryRouter initialEntries={[`/board/${PROJECT_UID}/${CARD_UID}`]}>
+        <MemoryRouter initialEntries={[query.has("fullGraph") ? `/board/${PROJECT_UID}/graph` : `/board/${PROJECT_UID}/${CARD_UID}`]}>
             <QueryClientProvider client={queryClient}>
                 <PageHeaderProvider>
                     <AuthProvider>
@@ -217,7 +218,10 @@ function Harness(): React.JSX.Element {
                             <BoardController>
                                 <Routes>
                                     <Route path="/board/:projectUID" element={<BoardRouteFixture />} />
-                                    <Route path="/board/:projectUID/:cardUID" element={<BoardRouteFixture />} />
+                                    <Route
+                                        path="/board/:projectUID/:cardUID"
+                                        element={query.has("fullGraph") ? <BoardProxy /> : <BoardRouteFixture />}
+                                    />
                                     <Route path="*" element={<div data-fixture-not-found="" />} />
                                 </Routes>
                                 {LATE_SUSPENSE && <LateSuspenseSibling />}
