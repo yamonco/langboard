@@ -74,6 +74,7 @@
       "reference_revoked": "Reference revocation",
       "value_rotated": "Secret value rotation",
       "reference_bound": "Authorized application connection binding"
-    }
+    },
+    "openSource": "Open source card"
   }
 }

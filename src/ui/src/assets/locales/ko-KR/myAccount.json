@@ -74,6 +74,7 @@
       "reference_revoked": "참조 폐기",
       "value_rotated": "시크릿 값 교체",
       "reference_bound": "권한이 확인된 앱 연결 바인딩"
-    }
+    },
+    "openSource": "원본 카드 열기"
   }
 }

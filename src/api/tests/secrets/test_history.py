@@ -253,3 +253,84 @@ def test_binding_migration_preserves_history_and_refuses_evidence_loss(secrets, 
         with pytest.raises(RuntimeError, match="Cannot discard"):
             migration.downgrade()
     assert [x["action"] for x in service.list_audit(actor, meta["uri"])["items"]] == ["bound", "created"]
+
+
+def test_card_source_links_recheck_current_acl_and_channel_without_material(secrets, monkeypatch):
+    from langboard_shared.core.db.DbEngine import DbEngine
+    from langboard_shared.core.security.CollaborationChannel import CollaborationChannel
+    from langboard_shared.core.types import SafeDateTime
+    from langboard_shared.domain import models
+    from langboard_shared.domain.services import DomainService
+    from langboard_shared.domain.services.factory.CardService import CardService
+    from langboard_shared.domain.services.factory.SecretReferenceService import SecretAuditSource
+    from langboard_shared.domain.services.factory.WorkflowStageService import WorkflowStageService
+
+    service, board, _ = secrets
+    actor, project, member, role, columns = board[1:6]
+    engine = DbEngine.get_main_engine()
+    required = {models.Card.__table__}
+    pending = list(required)
+    while pending:
+        for fk in pending.pop().foreign_keys:
+            if fk.column.table not in required:
+                required.add(fk.column.table)
+                pending.append(fk.column.table)
+    models.Card.metadata.create_all(engine, tables=list(required), checkfirst=True)
+    domain = DomainService()
+    monkeypatch.setattr(domain.card, "_resolve_internal_access", lambda *args: False)
+    monkeypatch.setattr(
+        service,
+        "_get_service",
+        lambda cls: domain.card if cls is CardService else board[0] if cls is WorkflowStageService else None,
+    )
+    with DbSession.atomic() as db:
+        card = models.Card(
+            project_id=project.id,
+            project_column_id=columns[0].id,
+            title="Private source title",
+            created_by_user_id=actor.id,
+            visibility="SHARED",
+        )
+        db.insert(card)
+    meta = service.create(
+        actor,
+        "personal",
+        "me",
+        "history/card-source",
+        SecretStr("fixture-sensitive"),
+        source=SecretAuditSource("card", card.get_uid()),
+    )
+    monkeypatch.setattr(KeyVault, "get_key", lambda *_: pytest.fail("Source history read material"))
+    expected = {"kind": "card", "href": f"/board/{project.get_uid()}/{card.get_uid()}"}
+
+    def event(channel=CollaborationChannel.Api):
+        return service.list_audit(actor, meta["uri"], channel=channel)["items"][0]
+
+    assert event()["source_link"] == expected
+    assert "Private source title" not in json.dumps(event())
+    with DbSession.atomic() as db:
+        card.visibility = "PRIVATE"
+        card.owner_user_id = actor.id
+        db.update(card)
+    assert "source_link" not in event()
+    assert event(CollaborationChannel.HumanUI)["source_link"] == expected
+    with DbSession.atomic() as db:
+        card.visibility = "SHARED"
+        card.owner_user_id = None
+        role.actions = []
+        db.update(card)
+        db.update(role)
+    assert "source_link" not in event()
+    with DbSession.atomic() as db:
+        role.actions = ["read"]
+        db.update(role)
+    assert event()["source_link"] == expected
+    with DbSession.atomic() as db:
+        db.delete(member)
+    assert "source_link" not in event()
+    with DbSession.atomic() as db:
+        db.insert(models.ProjectAssignedUser(project_id=project.id, user_id=actor.id))
+        card.deleted_at = SafeDateTime.now()
+        db.update(card)
+    assert "source_link" not in event()
+    assert event()["action"] == "created"

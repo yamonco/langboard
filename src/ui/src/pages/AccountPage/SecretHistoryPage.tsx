@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useParams } from "react-router";
+import { Link, useParams } from "react-router";
 import { useTranslation } from "react-i18next";
 import { api } from "@/core/helpers/Api";
 import Button from "@/components/base/Button";
@@ -12,6 +12,7 @@ interface HistoryItem {
     revision_before: number | null;
     revision_after: number;
     source_kind: string;
+    source_link?: { kind: "card"; href: string };
     request_id?: string | null;
     reason_code?: string | null;
 }
@@ -77,6 +78,12 @@ export default function SecretHistoryPage() {
                                                 ? `v${item.revision_after}`
                                                 : `v${item.revision_before} → v${item.revision_after}`}
                                         </p>
+                                        {item.source_link?.kind === "card" &&
+                                            /^\/board\/[A-Za-z0-9]{1,11}\/[A-Za-z0-9]{1,11}$/.test(item.source_link.href) && (
+                                                <Link className="link text-xs text-primary" to={item.source_link.href}>
+                                                    {t("myAccount.secretHistory.openSource")}
+                                                </Link>
+                                            )}
                                         {item.reason_code && (
                                             <p className="text-xs text-muted-foreground" title={item.request_id ?? undefined}>
                                                 {t(`myAccount.secretHistory.reasons.${item.reason_code}`, { defaultValue: item.reason_code })}
