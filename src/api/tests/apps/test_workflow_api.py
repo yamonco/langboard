@@ -81,6 +81,22 @@ def test_repair_columns_exclude_foreign_deleted_and_archive(board):
     assert {"uid": unclassified.get_uid(), "name": "Unclassified", "workflow_stage": None} in data["available_columns"]
 
 
+def test_mapping_display_uses_current_scoped_registry_translations(board):
+    from langboard_shared.domain.models import WorkflowStageDefinition
+
+    with DbSession.use(readonly=False) as db:
+        stage = board[6][0]
+        stage.name = "Executing"
+        stage.translations = {"ko": {"name": "진행 중", "description": "실행 중인 업무"}}
+        db.update(stage)
+        db.insert(WorkflowStageDefinition(key="unrelated", name="Unrelated"))
+    data = json.loads(get_app_workflow_mapping(board[2].get_uid(), "github", board[1], service(board)).body)
+    assert set(data["workflow_stages"]) == {"active", "review", "closed"}
+    assert data["workflow_stages"]["active"]["name"] == "Executing"
+    assert data["workflow_stages"]["active"]["translations"]["ko"]["name"] == "진행 중"
+    assert data["choices"][0]["stage"] == "active"
+
+
 def test_create_column_forwards_stage_and_rejects_inactive_stage():
     from unittest.mock import Mock
     from langboard.routes.board.BoardColumnApi import create_project_column

@@ -55,6 +55,14 @@ api.defaults.adapter = async (config) => {
         statusText: "OK",
         headers: {},
         data: {
+            workflow_stages: {
+                active: {
+                    name: "In progress",
+                    description: "Work underway",
+                    translations: { ko: { name: "진행 중", description: "실행 중인 업무" } },
+                },
+                review: { name: "Review", description: "", translations: {} },
+            },
             binding: { uid: "binding", revision: "a".repeat(64), workflow_mapping: { active: "one" } },
             column_names: { one: "Doing", two: "Implementation" },
             available_columns: [
