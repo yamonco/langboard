@@ -10,7 +10,7 @@ import { usePageNavigateRef } from "@/core/hooks/usePageNavigate";
 import { EHttpStatus } from "@langboard/core/enums";
 
 const BoardSettingsPage = memo(({ project, currentUser }: IBoardRelatedPageProps) => {
-    const { data, error } = useGetProjectDetails({ uid: project.uid });
+    const { data, error } = useGetProjectDetails({ uid: project.uid, includeCards: false });
     const navigate = usePageNavigateRef();
 
     useEffect(() => {

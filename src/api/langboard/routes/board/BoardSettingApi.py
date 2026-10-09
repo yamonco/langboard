@@ -323,7 +323,8 @@ def copy_project_as_template(
 @AuthFilter.add()
 def get_project_details(
     project_uid: str, request: Request,
-    user_or_bot: User | Bot = Auth.scope("all"), service: DomainService = DomainService.scope()
+    user_or_bot: User | Bot = Auth.scope("all"), service: DomainService = DomainService.scope(),
+    include_cards: bool = True,
 ) -> JsonResponse:
     channel = request.scope.get("collaboration_channel", CollaborationChannel.Api)
     resolved = service.card.resolve_visibility_context(project_uid, user_or_bot, channel)
@@ -343,7 +344,7 @@ def get_project_details(
 
     internal_bots = service.internal_bot.get_api_list(is_setting=False)
     columns = service.project_column.get_api_list_by_project(project, context=context)
-    cards = service.card.get_api_list_by_project(project, user_or_bot, channel=channel)
+    cards = service.card.get_api_list_by_project(project, user_or_bot, channel=channel) if include_cards else []
     templates = service.chat.get_api_template_list(Project.__tablename__, project_uid)
 
     return JsonResponse(
