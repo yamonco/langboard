@@ -302,6 +302,7 @@ function ProjectTemplatesPage() {
                             type="button"
                             variant="outline"
                             disabled={
+                                newLanguage === "en" ||
                                 !/^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/.test(newLanguage) ||
                                 draft.columns.some((column) => !!column.translations?.[newLanguage]) ||
                                 Object.keys(draft.columns[0].translations ?? {}).length >= 30
