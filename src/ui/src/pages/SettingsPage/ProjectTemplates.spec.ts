@@ -196,3 +196,102 @@ for (const width of [1920, 390])
         await page.getByRole("button", { name: "fr", exact: true }).click();
         await expect(page.getByLabel("Column name", { exact: true })).toHaveValue("Accueil");
     });
+
+for (const width of [1920, 390])
+    test(`translations follow their columns through save and reread at ${width}px`, async ({ page }) => {
+        await page.setViewportSize({ width, height: 900 });
+        type Column = {
+            name: string;
+            description: string;
+            workflow_stage: string | null;
+            translations: Record<string, { name: string; description: string }>;
+        };
+        let columns: Column[] = [
+            { name: "Intake", description: "English guidance", workflow_stage: null, translations: {} },
+            { name: "Review", description: "Review guidance", workflow_stage: null, translations: {} },
+        ];
+        const template = () => ({ uid: "one", name: "Delivery", columns: columns.map((c) => c.name), column_definitions: columns, is_default: true });
+        await page.route("**/settings/global-labels", (route) => route.fulfill({ json: { labels: [] } }));
+        await page.route("**/settings/project-template-bots", (route) => route.fulfill({ json: { bots: [] } }));
+        await page.route("**/settings/workflow-stages", (route) => route.fulfill({ json: { stages: [] } }));
+        let writes = 0;
+        await page.route("**/settings/project-templates**", (route) => {
+            if (route.request().method() === "GET") return route.fulfill({ json: { templates: [template()] } });
+            writes++;
+            columns = route.request().postDataJSON().columns;
+            expect(columns.map((c) => c.name)).toEqual(["Review", "Intake"]);
+            expect(columns[1]).toMatchObject({
+                description: "English guidance",
+                translations: {
+                    ko: { name: "접수", description: "한국어 안내" },
+                    ja: { name: "受付", description: "日本語案内" },
+                    zh: { name: "接收", description: "中文说明" },
+                },
+            });
+            return route.fulfill({ json: { template: template() } });
+        });
+        await page.goto("/src/pages/SettingsPage/ProjectTemplates.fixture.html");
+        await page.getByRole("button", { name: "Edit", exact: true }).click();
+        for (const [code, name, description] of [
+            ["ko", "접수", "한국어 안내"],
+            ["ja", "受付", "日本語案内"],
+            ["zh", "接收", "中文说明"],
+        ]) {
+            await page.getByRole("button", { name: code, exact: true }).click();
+            await page.getByLabel("Column name", { exact: true }).nth(0).fill(name);
+            await page.getByLabel("Column description", { exact: true }).nth(0).fill(description);
+        }
+        await page.getByRole("button", { name: "Move up", exact: true }).nth(1).click();
+        await page.getByRole("button", { name: "Save", exact: true }).click();
+        await expect(page.locator("form")).toHaveCount(0);
+        await page.reload();
+        await page.getByRole("button", { name: "Edit", exact: true }).click();
+        await expect(page.getByLabel("Column name", { exact: true }).nth(1)).toHaveValue("Intake");
+        for (const [code, name, description] of [
+            ["ko", "접수", "한국어 안내"],
+            ["ja", "受付", "日本語案内"],
+            ["zh", "接收", "中文说明"],
+        ]) {
+            await page.getByRole("button", { name: code, exact: true }).click();
+            await expect(page.getByLabel("Column name", { exact: true }).nth(1)).toHaveValue(name);
+            await expect(page.getByLabel("Column description", { exact: true }).nth(1)).toHaveValue(description);
+        }
+        expect(writes).toBe(1);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    });
+
+test("language limit considers every column and canonical English", async ({ page }) => {
+    const translations = Object.fromEntries(
+        Array.from({ length: 29 }, (_, index) => [
+            "x" + String.fromCharCode(97 + Math.floor(index / 26)) + String.fromCharCode(97 + (index % 26)),
+            { name: "Translated", description: "" },
+        ])
+    );
+    await page.route("**/settings/global-labels", (route) => route.fulfill({ json: { labels: [] } }));
+    await page.route("**/settings/project-template-bots", (route) => route.fulfill({ json: { bots: [] } }));
+    await page.route("**/settings/workflow-stages", (route) => route.fulfill({ json: { stages: [] } }));
+    await page.route("**/settings/project-templates**", (route) =>
+        route.fulfill({
+            json: {
+                templates: [
+                    {
+                        uid: "one",
+                        name: "Languages",
+                        columns: ["Queue", "Review"],
+                        is_default: true,
+                        column_definitions: [
+                            { name: "Queue", description: "", translations: {} },
+                            { name: "Review", description: "", translations },
+                        ],
+                    },
+                ],
+            },
+        })
+    );
+    await page.goto("/src/pages/SettingsPage/ProjectTemplates.fixture.html");
+    await page.getByRole("button", { name: "Edit", exact: true }).click();
+    await page.getByLabel("Language code", { exact: true }).fill("fr");
+    await expect(page.getByRole("button", { name: "Add language", exact: true })).toBeDisabled();
+    await page.getByRole("button", { name: "Move up", exact: true }).nth(1).click();
+    await expect(page.getByRole("button", { name: "Add language", exact: true })).toBeDisabled();
+});
