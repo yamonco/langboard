@@ -1,7 +1,7 @@
 [project]
 name = "langboard-sdk"
 version = "0.1.0"
-description = "Transport-independent client contracts for native Langboard commands"
+description = "Native Langboard MCP work commands and REST App management"
 requires-python = ">=3.12"
 readme = "README.md"
 license = { file = "LICENSE" }
