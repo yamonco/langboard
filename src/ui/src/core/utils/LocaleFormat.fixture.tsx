@@ -1,3 +1,5 @@
+import ApiKeyIpWhitelist from "@/pages/SettingsPage/components/apiKeys/ApiKeyIpWhitelist";
+import { ApiKeySettingModel } from "@/core/models";
 import { AuthProvider } from "@/core/providers/AuthProvider";
 import useAuthStore from "@/core/stores/AuthStore";
 import { AuthUser, MetadataModel } from "@/core/models";
@@ -87,6 +89,12 @@ MetadataModel.Model.fromOne({
             },
         ]),
     },
+});
+const localeApiKey = ApiKeySettingModel.Model.fromOne({
+    uid: "locale-api-key",
+    created_at: new Date(),
+    updated_at: new Date(),
+    ip_whitelist: Array.from({ length: 1235 }, () => "192.0.2.1"),
 });
 function Fixture() {
     const [t, language] = useTranslation();
@@ -194,6 +202,14 @@ function Fixture() {
             </div>
             <output data-testid="duration">{formatTimerDuration({ hours: 1, minutes: 2, seconds: 3 }, language.language)}</output>
             <output data-testid="count">{formatNumber(12345, language.language)}</output>
+            <div data-testid="ip-whitelist">
+                <ApiKeyIpWhitelist apiKey={localeApiKey} />
+            </div>
+            <output data-testid="hidden-counts">
+                {t("card.Flipped cards", { count: 1234 })}
+                {t("card.Show all attachments ({attachments} hidden)", { attachments: 1234 })}
+                {t("card.Show all checklists ({checklists} hidden)", { checklists: 1234 })}
+            </output>
             <output data-testid="file-size">{formatFileSize(1536, language.language, 1)}</output>
             <div data-testid="document-progress">
                 <BoardCardAttachmentDocumentProgress cardUID="locale-document" attachmentUID="locale-attachment" />

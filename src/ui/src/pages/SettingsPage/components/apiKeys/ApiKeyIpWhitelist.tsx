@@ -1,3 +1,4 @@
+import { formatNumber } from "@/core/utils/LocaleFormat";
 import { ApiKeySettingModel } from "@/core/models";
 import { memo } from "react";
 import { useTranslation } from "react-i18next";
@@ -7,7 +8,7 @@ export interface IApiKeyIpWhitelistProps {
 }
 
 const ApiKeyIpWhitelist = memo(({ apiKey }: IApiKeyIpWhitelistProps) => {
-    const [t] = useTranslation();
+    const [t, i18n] = useTranslation();
     const ipWhitelist = apiKey.useField("ip_whitelist");
 
     const getIpWhitelistText = (ips: string[]) => {
@@ -17,7 +18,7 @@ const ApiKeyIpWhitelist = memo(({ apiKey }: IApiKeyIpWhitelistProps) => {
         if (ips.length === 1) {
             return ips[0];
         }
-        return `${ips[0]} +${ips.length - 1}`;
+        return `${ips[0]} +${formatNumber(ips.length - 1, i18n.language)}`;
     };
 
     return <span className="truncate text-center">{getIpWhitelistText(ipWhitelist)}</span>;
