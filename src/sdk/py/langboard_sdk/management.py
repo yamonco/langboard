@@ -2,25 +2,46 @@
 
 import re
 from dataclasses import asdict, dataclass
-from typing import Literal
+from typing import ClassVar, Literal, Protocol
 from .rest import ApiTransport
 from .workflow import WorkflowStage
 
 
+class ResourceSelection(Protocol):
+    """Adapter-owned selection fields; the native server owns their validation.
+
+    Implement this in an external app without adding its name to the SDK.
+    The collection must match the connection manager's native API contract.
+    """
+
+    selection_collection: str
+
+    def selection_fields(self) -> dict:
+        ...
+
+
 @dataclass(frozen=True)
 class GlitchTipProject:
+    selection_collection: ClassVar[str] = "projects"
     organization: str
     project_slug: str
     expected_resource_revision: int | None = None
 
+    def selection_fields(self) -> dict:
+        return {key: value for key, value in asdict(self).items() if value is not None}
+
 
 @dataclass(frozen=True)
 class DokployResource:
+    selection_collection: ClassVar[str] = "selected"
     resource_type: Literal["project", "environment", "application", "compose"]
     external_id: str
     external_project_id: str | None = None
     environment_id: str | None = None
     expected_resource_revision: int | None = None
+
+    def selection_fields(self) -> dict:
+        return {key: value for key, value in asdict(self).items() if value is not None}
 
 
 def _segment(value: str) -> str:
@@ -93,7 +114,7 @@ class AppManager:
         )
 
     def connections(
-        self, app_key: str, *, selection_collection: Literal["projects", "selected"]
+        self, app_key: str, *, selection_collection: str
     ) -> "ConnectionManager":
         return ConnectionManager(self.transport, f"{self.path}/{_segment(app_key)}", selection_collection)
 
@@ -106,10 +127,8 @@ class ConnectionManager:
     Selection fields follow the adapter's server schema, not a new SDK policy.
     """
 
-    def __init__(self, transport: ApiTransport, path: str, selection_collection: Literal["projects", "selected"]):
-        if selection_collection not in {"projects", "selected"}:
-            raise ValueError("A native selection collection is required")
-        self.transport, self.path, self.collection = transport, path, selection_collection
+    def __init__(self, transport: ApiTransport, path: str, selection_collection: str):
+        self.transport, self.path, self.collection = transport, path, _segment(selection_collection)
 
     async def list(self, *, after: str | None = None) -> dict:
         return await self.transport.request(
@@ -145,12 +164,15 @@ class ConnectionManager:
         )
 
     async def select(
-        self, connection_uid: str, expected_revision: str, selection: GlitchTipProject | DokployResource
+        self, connection_uid: str, expected_revision: str, selection: ResourceSelection
     ) -> dict:
-        expected_type = GlitchTipProject if self.collection == "projects" else DokployResource
-        if not isinstance(selection, expected_type):
+        if getattr(selection, "selection_collection", None) != self.collection:
             raise ValueError("Selection must match the native adapter contract")
-        fields = {key: value for key, value in asdict(selection).items() if value is not None}
+        fields = selection.selection_fields()
+        if not isinstance(fields, dict) or any(not isinstance(key, str) for key in fields):
+            raise ValueError("Selection fields must be a native JSON object")
+        if "expected_revision" in fields:
+            raise ValueError("Selection fields must not override the connection revision")
         return await self.transport.request(
             "POST",
             f"{self.path}/connections/{_segment(connection_uid)}/{self.collection}",
