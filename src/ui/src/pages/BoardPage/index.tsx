@@ -8,6 +8,7 @@ import Button from "@/components/base/Button";
 import Skeleton from "@/components/base/Skeleton";
 import Flex from "@/components/base/Flex";
 import BoardFloatingNavigation from "@/pages/BoardPage/components/board/BoardFloatingNavigation";
+import { useFlippedCards } from "@/pages/BoardPage/components/card/CardFlipStore";
 import IconComponent from "@/components/base/IconComponent";
 import Toast from "@/components/base/Toast";
 import { ROUTES } from "@/core/routing/constants";
@@ -187,6 +188,7 @@ function BoardProxyDisplay({ pageRoute, isFetching, isProjectLoading, project }:
     const [t] = useTranslation();
     const socket = useSocket();
     const { currentUser } = useAuth();
+    const flippedCards = useFlippedCards(currentUser?.uid ?? "", project.uid);
     const navigate = usePageNavigateRef();
     const [isCardExpanded, setIsCardExpanded] = useState(false);
     const [activeSidePanel, setActiveSidePanel] = useState<TBoardSidePanel>();
@@ -789,15 +791,17 @@ function BoardProxyDisplay({ pageRoute, isFetching, isProjectLoading, project }:
                                     />
                                 </SuspenseComponent>
                             )}
-                            {!isCardPage && !selectCardViewType && (isMobile || boardChat || renderedViewType === "board") && (
-                                <BoardFloatingNavigation
-                                    key={project.uid}
-                                    project={project}
-                                    currentUser={currentUser}
-                                    dockEnabled={renderedViewType === "board"}
-                                    items={[]}
-                                />
-                            )}
+                            {!isCardPage &&
+                                !selectCardViewType &&
+                                (isMobile || boardChat || renderedViewType === "board" || flippedCards.length > 0) && (
+                                    <BoardFloatingNavigation
+                                        key={project.uid}
+                                        project={project}
+                                        currentUser={currentUser}
+                                        dockEnabled={renderedViewType === "board"}
+                                        items={[]}
+                                    />
+                                )}
                         </Box>
                     </Flex>
                 ) : (
