@@ -112,3 +112,27 @@ for (const width of [1920, 390])
         expect(writes).toBe(0);
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     });
+
+test("read-only global label editor rejects form submission", async ({ page }) => {
+    let writes = 0;
+    await page.route("**/settings/global-labels**", (route) => {
+        if (route.request().method() === "OPTIONS") return route.fulfill({ status: 204 });
+        if (route.request().method() !== "GET") {
+            writes++;
+            return route.fulfill({ status: 403, json: {} });
+        }
+        return route.fulfill({
+            json: { labels: [{ uid: "one", name: "Contract", description: "Interface agreement", color: "#8B5CF6", translations: {} }] },
+        });
+    });
+    await page.goto("/src/pages/SettingsPage/GlobalLabels.fixture.html?readonly");
+    await page.getByRole("navigation").getByRole("button", { name: "Contract", exact: true }).click();
+    await expect(page.getByLabel("Label name", { exact: true })).toBeDisabled();
+    await expect(page.getByLabel("Label description", { exact: true })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "New label", exact: true })).toHaveCount(0);
+    await expect(page.locator("form").getByRole("button", { name: "Save", exact: true })).toBeDisabled();
+    // Native submit events can originate independently of a visible Save button.
+    await page.locator("form").evaluate((form: HTMLFormElement) => form.requestSubmit());
+    await page.waitForTimeout(100);
+    expect(writes).toBe(0);
+});
