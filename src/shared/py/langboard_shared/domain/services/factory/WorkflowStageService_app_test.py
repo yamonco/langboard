@@ -92,7 +92,7 @@ def board(monkeypatch, request):
             for i, key in enumerate(("active", "review", "closed"))
         ]
         stages = [
-            WorkflowStageDefinition(id=50 + i, key=key, name="Localized")
+            WorkflowStageDefinition(id=50 + i, key=key, name="Localized", is_builtin=True)
             for i, key in enumerate(("active", "review", "closed"))
         ]
         for row in (member, role, *columns, *stages):

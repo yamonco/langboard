@@ -15,7 +15,7 @@ def facts():
         ProjectColumn(id=i + 1, project_id=10, name="Arbitrary display", workflow_stage=key)
         for i, key in enumerate(("active", "review", "closed"))
     ]
-    stages = [WorkflowStageDefinition(key=key, name="Translated") for key in ("active", "review", "closed", "ready")]
+    stages = [WorkflowStageDefinition(key=key, name="Translated", is_builtin=True) for key in ("active", "review", "closed", "ready")]
     return columns, stages
 
 
@@ -95,3 +95,16 @@ def test_optional_explicit_invalid_blocks_transition_and_unknown_keys_rejected()
 def test_optional_registry_stage_absence_does_not_require_board_changes():
     columns, stages = facts()
     assert evaluate(columns, stages[:3]).transitions_enabled
+
+
+def test_app_cannot_use_a_non_builtin_stage_definition():
+    columns, stages = facts()
+    stages[0].is_builtin = False
+    result = evaluate(columns, stages)
+    assert not result.transitions_enabled
+    assert result.choices[0].status == "invalid"
+
+
+def test_app_requirements_reject_a_provider_specific_stage():
+    with pytest.raises(ValueError):
+        WorkflowRequirements(("triage",))

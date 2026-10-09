@@ -150,6 +150,27 @@ registers provider code, or automatically executes a workflow transition.
 Workflow mapping uses stable stage keys and current authorized column identities,
 not translated names. Several columns may share a stage: the user must choose an
 explicit destination. Missing, inactive or ambiguous stages disable transitions;
-metadata reads remain independent. New adapters declare requirements in their
-host-installed manifest. The current SDK exposes resource discovery, not a full
+metadata reads remain independent. New adapters select built-in workflow types in their
+host-installed manifest; app-specific stage definitions are not supported. The current SDK exposes resource discovery, not a full
 provider onboarding/registration API.
+
+
+## Built-in workflow types
+
+Apps use `WorkflowStage` and `WorkflowRequirements` from `langboard_sdk`:
+
+```python
+from langboard_sdk import WorkflowRequirements, WorkflowStage
+
+requirements = WorkflowRequirements(
+    (WorkflowStage.ACTIVE, WorkflowStage.REVIEW, WorkflowStage.CLOSED),
+    (WorkflowStage.READY,),
+)
+descriptor = requirements.to_dict()
+```
+
+These are Langboard's built-in global types, not app-owned stages. The wizard
+maps these types to the board's existing columns; it never inserts app-specific
+workflow definitions. SDK validation rejects unknown and duplicate types. The
+host checks the current built-in registry, activation and column access before
+accepting a mapping. Display names and translations remain host-owned.

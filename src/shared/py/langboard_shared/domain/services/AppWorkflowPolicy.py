@@ -14,8 +14,9 @@ class WorkflowRequirements:
 
     def __post_init__(self):
         keys = self.required + self.optional
-        if not self.required or any(not isinstance(key, str) or not key for key in keys) or len(set(keys)) != len(keys):
-            raise ValueError("Workflow requirements need distinct nonempty stage keys")
+        builtin_keys = {"backlog", "ready", "active", "review", "closed", "reference"}
+        if not self.required or any(key not in builtin_keys for key in keys) or len(set(keys)) != len(keys):
+            raise ValueError("App workflow requirements need distinct built-in stage types")
 
 
 GITHUB_WORKFLOW_REQUIREMENTS = WorkflowRequirements(("active", "review", "closed"), ("ready",))
@@ -70,7 +71,7 @@ def resolve_app_workflow(
     keys = requirements.required + requirements.optional
     if set(explicit) - set(keys):
         raise ValueError("Explicit mapping contains an undeclared workflow stage")
-    active = {stage.key for stage in stages if stage.is_active}
+    active = {stage.key for stage in stages if stage.is_active and stage.is_builtin}
     eligible = {
         column.get_uid(): column
         for column in columns
