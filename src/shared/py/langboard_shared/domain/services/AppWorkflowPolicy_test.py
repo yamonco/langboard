@@ -15,7 +15,10 @@ def facts():
         ProjectColumn(id=i + 1, project_id=10, name="Arbitrary display", workflow_stage=key)
         for i, key in enumerate(("active", "review", "closed"))
     ]
-    stages = [WorkflowStageDefinition(key=key, name="Translated", is_builtin=True) for key in ("active", "review", "closed", "ready")]
+    stages = [
+        WorkflowStageDefinition(key=key, name="Translated", is_builtin=True)
+        for key in ("active", "review", "closed", "ready")
+    ]
     return columns, stages
 
 
@@ -108,3 +111,9 @@ def test_app_cannot_use_a_non_builtin_stage_definition():
 def test_app_requirements_reject_a_provider_specific_stage():
     with pytest.raises(ValueError):
         WorkflowRequirements(("triage",))
+
+
+def test_host_uses_the_sdk_workflow_contract_without_a_duplicate_definition():
+    from langboard_sdk import WorkflowRequirements as SdkRequirements
+
+    assert WorkflowRequirements is SdkRequirements

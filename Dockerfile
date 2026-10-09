@@ -22,6 +22,7 @@ RUN apt-get update \
 RUN uv --version
 
 COPY ./src/shared/py ./src/shared/py
+COPY ./src/sdk/py ./src/sdk/py
 COPY pyproject.toml uv.lock README.md alembic.ini ./
 
 RUN cd /app/src/shared/py && uv venv && uv sync --locked --no-dev

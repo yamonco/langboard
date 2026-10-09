@@ -11,9 +11,6 @@ on:
 permissions:
   contents: read
 
-permissions:
-  contents: read
-
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
@@ -30,7 +27,7 @@ jobs:
           python-version: "3.12"
       - uses: astral-sh/setup-uv@v6
       - name: Check protocol without host dependencies
-        run: PYTHONPATH=src/sdk/py python -m unittest langboard_sdk.client_test -v
+        run: PYTHONPATH=src/sdk/py python -m unittest langboard_sdk.client_test langboard_sdk.workflow_test -v
       - name: Build standalone distribution
         run: uv build --out-dir sdk-dist ./src/sdk/py
       - name: Verify installed wheel has no runtime dependencies
@@ -40,7 +37,8 @@ jobs:
           sdk-env/bin/python - <<'PY'
           import sys
           from importlib.metadata import metadata
-          from langboard_sdk import LangboardClient, McpTransport
+          from langboard_sdk import LangboardClient, McpTransport, WorkflowRequirements, WorkflowStage
+          assert WorkflowRequirements((WorkflowStage.ACTIVE,)).to_dict() == {"required": ["active"], "optional": []}
           assert metadata("langboard-sdk").get_all("Requires-Dist") is None
           assert not any(name.startswith(("langboard_chatgpt_plugin", "langboard_shared", "fastmcp", "httpx")) for name in sys.modules)
           PY
@@ -92,13 +90,14 @@ jobs:
           consumer-env/bin/python - <<'PYTHON'
           import asyncio, sys
           from importlib.metadata import metadata
-          from langboard_sdk import LangboardClient
+          from langboard_sdk import LangboardClient, WorkflowRequirements, WorkflowStage
           class Transport:
               async def call(self, name, arguments, *, mutation=False):
                   assert name == "preview_card_work_plan" and not mutation
                   assert arguments["project_uid"] == "fixture"
                   return {"revision": "a" * 64}
           assert asyncio.run(LangboardClient(Transport()).preview_work_plan({"project_uid": "fixture"}))["revision"] == "a" * 64
+          assert WorkflowRequirements((WorkflowStage.ACTIVE,)).to_dict() == {"required": ["active"], "optional": []}
           assert metadata("langboard-sdk").get_all("Requires-Dist") is None
           assert not any(name.startswith(("langboard_chatgpt_plugin", "langboard_shared", "fastmcp", "httpx")) for name in sys.modules)
           PYTHON

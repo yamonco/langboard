@@ -63,6 +63,7 @@ link-mode = "copy"
 
 [tool.uv.sources]
 langboard-shared = { path = "./src/shared/py", editable = true }
+langboard-sdk = { path = "./src/sdk/py", editable = true }
 langboard = { workspace = true }
 
 
