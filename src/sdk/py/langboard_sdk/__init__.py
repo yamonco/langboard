@@ -2,6 +2,7 @@
 
 from .client import CommandTransport, LangboardClient, MutationOutcomeUnknown
 from .mcp import McpTransport, NativeCommandError
+from .workflow import WorkflowRequirements, WorkflowStage
 
 
-__all__ = ["CommandTransport", "LangboardClient", "McpTransport", "MutationOutcomeUnknown", "NativeCommandError"]
+__all__ = ["CommandTransport", "LangboardClient", "McpTransport", "MutationOutcomeUnknown", "NativeCommandError", "WorkflowRequirements", "WorkflowStage"]

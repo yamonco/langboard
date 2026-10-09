@@ -8,7 +8,7 @@ from langboard_shared.domain.services.AppWorkflowPolicy import WorkflowRequireme
 from langboard_shared.domain.services.factory.WorkflowStageService_app_test import board  # noqa: F401
 
 
-def test_independent_adapter_custom_stage_and_many_resources(board, monkeypatch):
+def test_independent_adapter_builtin_stage_and_many_resources(board, monkeypatch):
     from langboard_shared.domain.models import AppConnection, AppResourceBinding
     from langboard_shared.domain.services.AppSignalProjection import (
         provider_resource_condition,
@@ -16,12 +16,12 @@ def test_independent_adapter_custom_stage_and_many_resources(board, monkeypatch)
     )
     from sqlalchemy import select
 
-    stage_service, actor, project, _, role, columns, stages = board
+    stage_service, actor, project, _, role, columns, _ = board
     manifests = importlib.import_module("langboard_shared.domain.services.AppManifest")
     service_module = importlib.import_module("langboard_shared.domain.services.factory.WorkflowStageService")
     adapter = AppManifest(
         "example-monitor", "Example Monitor", ("service",), ("signals.read",),
-        WorkflowRequirements(("triage",)),
+        WorkflowRequirements(("active",)),
         signal_policy=AppSignalPolicy(("incident.observed",), ("service",)),
     )
     registry = {**manifests.APP_MANIFESTS, adapter.key: adapter}
@@ -29,12 +29,9 @@ def test_independent_adapter_custom_stage_and_many_resources(board, monkeypatch)
     monkeypatch.setattr(service_module, "APP_MANIFESTS", registry)
     with DbSession.use(readonly=False) as db:
         role.actions = ["read", "update"]
-        columns[0].workflow_stage = "triage"
-        stages[0].key = "triage"
-        for row in (role, columns[0], stages[0]):
-            db.update(row)
+        db.update(role)
     draft = stage_service.prepare_app_mapping(actor, project.get_uid(), adapter.key)
-    assert draft.workflow_mapping == {"triage": columns[0].get_uid()}
+    assert draft.workflow_mapping == {"active": columns[0].get_uid()}
     snapshot = stage_service.get_app_mapping(actor, project.get_uid(), adapter.key)
     assert snapshot["mapping"].transitions_enabled
     # One board binding accepts several independent resource identities.
