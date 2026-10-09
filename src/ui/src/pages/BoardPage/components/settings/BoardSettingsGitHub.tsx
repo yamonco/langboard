@@ -1,3 +1,4 @@
+import { formatNumber } from "@/core/utils/LocaleFormat";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "@/core/helpers/Api";
@@ -48,7 +49,7 @@ interface Snapshot {
 }
 
 export default function BoardSettingsGitHub({ onStatusChange }: { onStatusChange?: () => void }) {
-    const [t] = useTranslation();
+    const [t, i18n] = useTranslation();
     const { project, currentUser, canEditBasicInfo } = useBoardSettings();
     const root = `/board/${project.uid}/settings/apps/github`;
     const key = `github-onboarding:${currentUser.uid}:${project.uid}`;
@@ -352,9 +353,11 @@ export default function BoardSettingsGitHub({ onStatusChange }: { onStatusChange
                                             {text("Installation")}: {item.installation_id} · {text("Account")}: {item.account_id}
                                         </span>
                                         <span className="text-muted-foreground">
-                                            {text("Selected")}: {item.selected_count} · {text("Healthy")}: {item.healthy_count} · {text("Degraded")}:{" "}
-                                            {item.degraded_count} · {text("Unavailable")}: {item.unavailable_count} · {text("Unverified")}:{" "}
-                                            {item.unverified_count}
+                                            {text("Selected")}: {formatNumber(item.selected_count, i18n.language)} · {text("Healthy")}:{" "}
+                                            {formatNumber(item.healthy_count, i18n.language)} · {text("Degraded")}:{" "}
+                                            {formatNumber(item.degraded_count, i18n.language)} · {text("Unavailable")}:{" "}
+                                            {formatNumber(item.unavailable_count, i18n.language)} · {text("Unverified")}:{" "}
+                                            {formatNumber(item.unverified_count, i18n.language)}
                                         </span>
                                     </li>
                                 ))}

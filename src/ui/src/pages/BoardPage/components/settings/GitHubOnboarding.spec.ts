@@ -132,3 +132,21 @@ for (const width of [1440, 390])
         await page.getByRole("combobox", { name: "Existing GitHub connection" }).selectOption("");
         await expect(health).toHaveCount(0);
     });
+
+for (const width of [1440, 390])
+    test(`large connection health counts follow account language ${width}`, async ({ page }) => {
+        await page.setViewportSize({ width, height: 900 });
+        await page.goto("/src/pages/BoardPage/components/settings/GitHubOnboarding.fixture.html?largecounts");
+        await page.getByRole("button", { name: "Show GitHub connection health" }).click();
+        for (const locale of ["en-US", "ko-KR", "ja-JP", "zh-CN"]) {
+            await page.getByRole("button", { name: locale, exact: true }).click();
+            const counts = page.getByRole("listitem").locator("span").last();
+            for (const count of ["12,345", "2,345", "3,456", "4,567", "1,677"]) await expect(counts).toContainText(count);
+            await expect(page.getByRole("listitem").locator("span").first()).toContainText("17");
+            await expect(page.getByRole("listitem").locator("span").first()).toContainText("7");
+            expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+        }
+        const calls = await page.evaluate(() => (window as unknown as { githubCalls: { url: string; method: string }[] }).githubCalls);
+        expect(calls.filter((call) => call.url.endsWith("/health"))).toHaveLength(1);
+        expect(calls.filter((call) => call.method !== "get")).toHaveLength(0);
+    });
