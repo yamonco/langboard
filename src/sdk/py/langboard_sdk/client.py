@@ -3,6 +3,7 @@
 import json
 import re
 from typing import Any, Protocol
+from .presentation import CARD_PRESENTATION_KEY, validate_card_presentation
 
 
 class CommandTransport(Protocol):
@@ -90,15 +91,16 @@ class LangboardClient:
         not proof of provider identity. Read back before retrying ambiguous writes.
         """
         value = json.dumps(presentation, ensure_ascii=False, separators=(",", ":"))
+        validate_card_presentation(value)
         result = await self._transport.call(
             "save_public_card_metadata",
-            {"project_uid": project_uid, "card_uid": card_uid, "key": "card.presentation.v1", "value": value},
+            {"project_uid": project_uid, "card_uid": card_uid, "key": CARD_PRESENTATION_KEY, "value": value},
             mutation=True,
         )
         returned = result.get("value") if isinstance(result, dict) else None
         valid = (
             isinstance(result, dict)
-            and result.get("key") == "card.presentation.v1"
+            and result.get("key") == CARD_PRESENTATION_KEY
             and result.get("total_chars") == len(value)
             and isinstance(returned, str)
             and bool(returned)
