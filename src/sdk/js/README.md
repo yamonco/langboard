@@ -116,3 +116,55 @@ public assets with `Access-Control-Allow-Origin: *`; do not use it as a producti
 API or send credentials through it. Production apps must configure their approved
 Langboard host origin for `connectPanel`. Panel services must permit approved
 hosts in their CSP `frame-ancestors` and avoid incompatible `X-Frame-Options`.
+
+## Automatic Langboard design and widgets
+
+The native rail host supplies its current semantic theme and approved shared
+resources during connection. `connectPanel` applies tokens, light/dark class and
+`color-scheme`, loads the existing host stylesheet and exposes actual wrapped
+Langboard widgets through `session.widgets`. Plugin authors do not install another
+theme, copy widget CSS or provide a theme picker. Use exports from one supplied
+widget module together; it owns a single React runtime for those widgets.
+
+```js
+const session = await connectPanel({ expectedHostOrigin: configuredHostOrigin });
+const widgets = await session.widgets;
+if (!widgets) throw new Error('This host does not supply panel widgets');
+const unmount = widgets.mountNote(document.querySelector('#app'), {
+    label: 'Draft', saveLabel: 'Save draft', value: session.state?.draft ?? '',
+    onSave(draft) { session.saveState({ draft }); },
+});
+session.signal.addEventListener('abort', unmount, { once: true });
+```
+
+See [`examples/widget-panel.mjs`](examples/widget-panel.mjs) for an app-side
+mount using the host resources without CSS or React setup.
+
+The module also exports the host's `Button`, `Textarea`, `Badge`, `React`,
+`createRoot` and `mount`. These are wrappers/exports of existing components, not
+separate styling implementations. Advanced apps can compose their own content
+using the supplied React and widgets. Additional shared widgets should be added
+at this common entry after assessing their dependencies and bundle cost.
+
+Theme changes travel over the private MessagePort without remounting the panel.
+Only allowlisted existing HSL semantic colors and radius are accepted; arbitrary
+CSS text, URLs in tokens, scripts and permissions are excluded. Bootstrap module
+and CSS URLs must share the exact configured host origin, use HTTPS (HTTP only
+for localhost development), and contain no embedded credentials or fragment.
+Live design updates cannot change resource URLs. Resource load failures reject
+`session.widgets`; apps should display an unavailable state and respect the abort
+signal. The SDK removes the stylesheet and restores prior appearance on disposal.
+
+Host resources use content-hashed URLs from `/panel-sdk-resources.json` and public
+immutable caching. The manifest is refreshed when opening a panel. The shared
+stylesheet is the existing generated UI CSS, not a plugin-specific copied theme.
+A separate iframe still owns its own DOM/React instance; this is resource and
+visual reuse, not shared execution across security boundaries. Neither the design
+channel nor the widget module receives credentials or business write authority.
+
+For native UI development, build the UI once before opening an app panel. Vite's
+resource endpoint serves compiled widgets from its configured output directory;
+source transforms with React Refresh are not executed in opaque panel frames.
+If no prior compiled manifest exists, the endpoint returns 503 with the build
+requirement. Rebuild after widget changes. Production uses hashed resources from
+its current build and retains previous release assets for already-open sessions.

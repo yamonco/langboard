@@ -340,7 +340,9 @@ under the caller's control.
 | Native instance connections | List/create/discover/select/remove/disconnect, secret-input request/status |
 | Work commands | Work-plan preview/apply, card presentation, bounded resource context |
 | Common types | Built-in workflow types and typed provider resource selections |
-| Provider registration | Host-installed manifests; no client-side plugin upload/install API |
+| External app registration | AppRegistry list/approve/update/disable; no executable server plugin upload |
+| Panel consent | Separate panels.render review, native readback and isolated JavaScript SDK |
+| Webhook authentication | verify_webhook verifies exact signed native v1 bytes; dedup is consumer-owned |
 | GitHub installation OAuth | Existing native UI/API; not covered by `ConnectionManager` |
 | Provider read consent and refresh | GlitchTip issue observations; Dokploy application/compose deployment observations |
 | Dokploy webhook management | Secret-input request, health, native configure/verify/disable; no remote provider configuration writes |

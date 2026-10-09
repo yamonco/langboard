@@ -180,3 +180,99 @@ test("rapid saves restore latest snapshot and disposal cancels pending sends", a
         assert.deepEqual(cache.get("identity"), { draft: "edit-29" });
     } finally { dispose(); delete globalThis.window; }
 });
+
+function designWindow() {
+    const listeners = new Map();
+    const values = new Map([["--background", ["original", "important"]]]);
+    const classes = new Set();
+    const links = [];
+    const root = {
+        style: {
+            colorScheme: "normal",
+            getPropertyValue(key) { return values.get(key)?.[0] ?? ""; },
+            getPropertyPriority(key) { return values.get(key)?.[1] ?? ""; },
+            setProperty(key, value, priority = "") { values.set(key, [value, priority]); },
+            removeProperty(key) { values.delete(key); },
+        },
+        classList: { contains(key) { return classes.has(key); }, toggle(key, active) { if (active) classes.add(key); else classes.delete(key); } },
+    };
+    const target = { parent: {},
+        addEventListener(type, listener) { listeners.set(type, listener); },
+        removeEventListener(type, listener) { if (listeners.get(type) === listener) listeners.delete(type); },
+        document: { documentElement: root, createElement() { return { remove() { this.removed = true; } }; }, head: { appendChild(link) { links.push(link); } } },
+    };
+    return { target, root, links, listeners, values };
+}
+
+test("design tokens apply automatically, update without reload and restore on disposal", async () => {
+    const fixture = designWindow();
+    globalThis.window = fixture.target;
+    const connected = connectPanel({ expectedHostOrigin: "https://host.example" });
+    let loads = 0;
+    const frame = { contentWindow: { postMessage(data, origin, ports) {
+        loads++;
+        const transfer = structuredClone({ data, port: ports[0] }, { transfer: ports });
+        fixture.listeners.get("message")({ source: fixture.target.parent, origin: "https://host.example", data: transfer.data, ports: [transfer.port] });
+    } }, setAttribute() {}, remove() {} };
+    const dispose = createPanelHost({ frame, context, design: { mode: "light", tokens: { "--background": "0 0% 100%", "--radius": "0.5rem" } } });
+    try {
+        const session = await connected;
+        assert.equal(await session.widgets, null);
+        assert.equal(fixture.values.get("--background")[0], "0 0% 100%");
+        assert.equal(fixture.root.style.colorScheme, "light");
+        dispose.updateDesign({ mode: "dark", tokens: { "--background": "224 71.4% 4.1%" } });
+        await flush();
+        assert.equal(loads, 1);
+        assert.equal(session.design.mode, "dark");
+        assert.equal(fixture.root.classList.contains("dark"), true);
+        assert.equal(fixture.values.has("--radius"), false);
+        assert.throws(() => dispose.updateDesign({ mode: "light", tokens: {}, resources: { module_url: "https://host.example/other.mjs", css_url: "https://host.example/other.css" } }), /resources/);
+        assert.throws(() => dispose.updateDesign({ mode: "light", tokens: { "--background": "url(https://evil.example)" } }), /color/);
+        assert.throws(() => dispose.updateDesign({ mode: "light", tokens: { "--unknown": "0 0% 0%" } }), /token/);
+        dispose();
+        await flush();
+        assert.equal(session.signal.aborted, true);
+        assert.deepEqual(fixture.values.get("--background"), ["original", "important"]);
+        assert.equal(fixture.root.style.colorScheme, "normal");
+        assert.equal(fixture.root.classList.contains("dark"), false);
+    } finally { dispose(); delete globalThis.window; }
+});
+
+test("bootstrap resources reject foreign origins and unsafe protocols; owned CSS cleans up", async () => {
+    const fixture = designWindow();
+    globalThis.window = fixture.target;
+    const connected = connectPanel({ expectedHostOrigin: "https://host.example" });
+    const bootstrap = fixture.listeners.get("message");
+    const makeEvent = (resources, origin = "https://host.example") => {
+        const channel = new MessageChannel();
+        return { channel, event: { source: fixture.target.parent, origin,
+            data: { type: "langboard.panel.init", version: 1, context, state: null, design: { mode: "dark", tokens: { "--primary": "262.1 83.3% 57.8%" }, resources } }, ports: [channel.port2] } };
+    };
+    for (const module_url of ["https://evil.example/widgets.mjs", "javascript:alert(1)", "http://host.example/widgets.mjs", "https://user:pass@host.example/widgets.mjs", "https://host.example/widgets.mjs#fragment"]) {
+        const { channel, event } = makeEvent({ module_url, css_url: "https://host.example/styles.css" });
+        bootstrap(event);
+        assert.equal(fixture.links.length, 0);
+        channel.port1.close(); channel.port2.close();
+    }
+    const invalidSource = makeEvent({ module_url: "https://host.example/widgets.mjs", css_url: "https://host.example/styles.css" }, "https://evil.example");
+    bootstrap(invalidSource.event);
+    assert.equal(fixture.links.length, 0);
+    invalidSource.channel.port1.close(); invalidSource.channel.port2.close();
+    const { channel, event } = makeEvent({ module_url: "https://host.example/widgets.mjs", css_url: "https://host.example/styles.css" });
+    try {
+        bootstrap(event);
+        const session = await connected;
+        assert.equal(fixture.links.length, 1);
+        assert.equal(fixture.links[0].href, "https://host.example/styles.css");
+        assert.equal(fixture.links[0].crossOrigin, "anonymous");
+        channel.port1.postMessage({ type: "design", version: 1, design: { mode: "light", tokens: {}, resources: { module_url: "https://evil.example/x", css_url: "https://evil.example/y" } } });
+        await flush();
+        assert.equal(session.design.mode, "dark");
+        assert.equal(fixture.links.length, 1);
+        session.dispose();
+        await assert.rejects(session.widgets, /disposed/);
+        assert.equal(fixture.links[0].removed, true);
+        assert.equal(fixture.links[0].onload, null);
+        assert.equal(fixture.links[0].onerror, null);
+    } finally { channel.port1.close(); channel.port2.close(); delete globalThis.window; }
+});

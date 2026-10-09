@@ -3,6 +3,7 @@ import hmac
 import importlib
 import json
 import os
+from contextlib import contextmanager
 from types import SimpleNamespace
 import pytest
 from pydantic import ValidationError
@@ -370,12 +371,20 @@ def test_update_webhook_distinguishes_omitted_events_from_explicit_null(
     """An omitted field preserves the allowlist while null restores all events."""
 
     setting = SimpleNamespace(
+        id=1,
         name="Hook",
         url="https://example.invalid/hook",
         events=["card_created"],
         has_changes=lambda: True,
         get_uid=lambda: "webhook-1",
     )
+    # This unit exercises field omission semantics; native readiness transaction
+    # integration is covered by the execution binding/outbox test suite.
+    watched: list[int] = []
+    @contextmanager
+    def execution_uow():
+        yield SimpleNamespace(watch_webhook=watched.append)
+    monkeypatch.setattr(app_setting_module, "execution_readiness_uow", execution_uow)
     updates: list[object] = []
     publications: list[dict[str, object]] = []
     service = SimpleNamespace(repo=SimpleNamespace(webhook_setting=SimpleNamespace(update=updates.append)))
@@ -398,6 +407,7 @@ def test_update_webhook_distinguishes_omitted_events_from_explicit_null(
     assert setting.events is None
     assert publications[-1] == {"events": None}
     assert updates == [setting, setting]
+    assert watched == [1]
 
 
 @pytest.mark.asyncio
@@ -531,3 +541,17 @@ async def test_endpoint_delivery_failure_is_bounded_and_retryable(monkeypatch: p
         "retry_kwargs": {"max_retries": 3},
     }
     assert WebhookTask.WebhookDeliveryError not in WebhookTask.WEBHOOK_FANOUT_RETRY_OPTIONS["autoretry_for"]
+
+
+def test_portable_sdk_authenticates_native_signed_wire_bytes():
+    from langboard_sdk import InvalidWebhook, verify_webhook
+    model = WebhookModel(event="card_moved", data={"card_title": "한글 업무", "card_uid": "example"})
+    body, headers = WebhookTask.signed_request(model, "external-app-secret", timestamp=1700000000)
+    verify_webhook(body, headers, "external-app-secret", now=1700000000)
+    with pytest.raises(InvalidWebhook):
+        verify_webhook(body + b" ", headers, "external-app-secret", now=1700000000)
+    # A retry is freshly signed but preserves native event identity; consumers
+    # still need durable business-level duplicate detection.
+    retry_body, retry_headers = WebhookTask.signed_request(model, "external-app-secret", timestamp=1700000200)
+    verify_webhook(retry_body, retry_headers, "external-app-secret", now=1700000200)
+    assert retry_body == body and retry_headers["X-Langboard-Webhook-Id"] == headers["X-Langboard-Webhook-Id"]

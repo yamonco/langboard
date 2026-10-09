@@ -1,7 +1,8 @@
 # Langboard Python SDK
 
 Start with the [installation, authentication and management guide](GUIDE.md).
-`AppManager` manages board App catalogs, workflow drafts and binding disablement.
+`AppRegistry` manages instance-approved external app definitions and revisions.
+`AppManager` manages board App catalogs, workflow drafts, panel consent and binding disablement.
 `ConnectionManager` handles native instance onboarding and resource selection.
 `GlitchTipManager` and `DokployManager` add provider read consent, signal refresh,
 and Dokploy webhook management through the native API.
@@ -32,7 +33,9 @@ Keep the exact reviewed plan, returned revision, and request ID together. A lost
 response requires reading current state; only the same request may be replayed.
 A changed plan requires a new preview. Work-plan handling supports the existing
 native server contract; this initial package does not claim to cover every API.
-Server extension registration and optional integration loading are separate work.
+External app registration is available through `AppRegistry`; it does not install
+server code. [Support boundaries](../../../docs/external-app-sdk.md) distinguish
+registry, panel, automation and outbox acceptance.
 
 Build independently: `uv build --out-dir dist ./src/sdk/py` from the server repository.
 

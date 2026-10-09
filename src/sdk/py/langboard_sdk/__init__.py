@@ -8,10 +8,13 @@ from .presentation import CARD_PRESENTATION_KEY, validate_card_presentation
 from .providers import DokployManager, GlitchTipManager
 from .registry import AppRegistry
 from .rest import ApiTransport, HttpTransport, NativeApiError
+from .webhooks import InvalidWebhook, verify_webhook
 from .workflow import WorkflowRequirements, WorkflowStage
 
 
 __all__ = [
+    "InvalidWebhook",
+    "verify_webhook",
     "CommandTransport",
     "LangboardClient",
     "McpTransport",
