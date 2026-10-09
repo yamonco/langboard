@@ -48,7 +48,9 @@ def search_vector_generation(store, pointer: dict, query: str, settings, *, max_
         tokens = encoding.encode(document.page_content, disallowed_special=())
         if not remaining:
             break
-        content = encoding.decode(tokens[:remaining])
+        # Token boundaries can split a UTF-8 character. Drop only the incomplete
+        # trailing bytes rather than fabricating a replacement character.
+        content = encoding.decode(tokens[:remaining], errors="ignore")
         remaining -= min(len(tokens), remaining)
         pages = metadata.get("pages")
         pages = sorted({page for page in pages if type(page) is int and page > 0}) if isinstance(pages, list) else []
