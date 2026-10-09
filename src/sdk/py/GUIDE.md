@@ -351,3 +351,41 @@ the real authentication middleware and database, with external provider traffic
 mocked. Deployment acceptance, real provider calls and production OAuth remain
 separate gates. The SDK's API responses are native dictionaries so unknown
 additive server fields are retained; identifiers/revisions are not invented.
+
+### Instance approval for separately hosted apps
+
+An instance administrator uses `AppRegistry` over the native authenticated REST
+transport. The declaration requests capabilities; it does not grant them or
+install server code. Only built-in workflow types are accepted. Existing built-in
+app keys cannot be replaced.
+
+```python
+from langboard_sdk import AppRegistry
+registry = AppRegistry(rest_transport)
+approved = await registry.approve({
+    "schema_version": 1, "key": "example-erp", "version": "1.0.0",
+    "name": "Example ERP", "description": "Issues from an external ERP.",
+    "capabilities": ["cards.create", "cards.presentation"],
+    "resource_types": ["issue"],
+    "workflow_requirements": {"required": ["backlog"], "optional": ["active"]},
+    "panel": {"url": "https://erp.example.org/panel", "name": "ERP outbox", "icon": "📋"},
+})
+# Updates require a strictly newer version and the current approved revision.
+updated = await registry.approve(
+    {**approved["declaration"], "version": "1.1.0"},
+    expected_revision=approved["revision"],
+)
+disabled = await registry.disable("example-erp", updated["revision"])
+```
+
+Registration is persisted in the instance database and appears in authorized
+board catalogs. Board administrators can prepare a disabled workflow draft using
+`AppManager.prepare_workflow`. App updates and disable operations atomically clear
+existing board grants and automatic transitions. Current primary admin authority
+is rechecked even when an authentication cache has an older role.
+
+The optional panel declaration is catalog data only at this stage: rail rendering,
+isolated host messaging, outbox delivery and app automation principals are not
+provided by this registration API. Resource declarations do not create provider
+connection routes or signal adapters. Ambiguous writes require registry readback;
+no automatic retry occurs.

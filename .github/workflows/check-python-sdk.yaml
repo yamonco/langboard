@@ -27,7 +27,7 @@ jobs:
           python-version: "3.12"
       - uses: astral-sh/setup-uv@v6
       - name: Check protocol without host dependencies
-        run: PYTHONPATH=src/sdk/py python -m unittest langboard_sdk.client_test langboard_sdk.workflow_test langboard_sdk.management_test langboard_sdk.providers_test -v
+        run: PYTHONPATH=src/sdk/py python -m unittest langboard_sdk.client_test langboard_sdk.workflow_test langboard_sdk.management_test langboard_sdk.providers_test langboard_sdk.registry_test -v
       - name: Build standalone distribution
         run: uv build --out-dir sdk-dist ./src/sdk/py
       - name: Verify installed wheel has no runtime dependencies
