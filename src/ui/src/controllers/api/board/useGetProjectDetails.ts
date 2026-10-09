@@ -4,6 +4,7 @@ import { TQueryOptions, useQueryMutation } from "@/core/helpers/QueryMutation";
 import { ChatTemplateModel, InternalBotModel, Project, ProjectCard, ProjectColumn } from "@/core/models";
 import { Utils } from "@langboard/core/utils";
 import refreshProjectColumnDock from "@/controllers/api/board/refreshProjectColumnDock";
+import setupApiErrorHandler from "@/core/helpers/setupApiErrorHandler";
 
 export interface IGetProjectDetailsForm {
     uid: string;
@@ -36,7 +37,8 @@ const useGetProjectDetails = (form: IGetProjectDetailsForm, options?: TQueryOpti
             cards: ProjectCard.Model.fromArray(res.data.cards),
             chat_templates: ChatTemplateModel.Model.fromArray(res.data.chat_templates),
         };
-        await refreshProjectColumnDock(form.uid);
+        // Dock enrichment must not delay settings or discard an authorized settings response.
+        void refreshProjectColumnDock(form.uid).catch((error) => setupApiErrorHandler({}).handle(error));
         return result;
     };
 

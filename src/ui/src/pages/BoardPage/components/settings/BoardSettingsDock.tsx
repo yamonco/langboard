@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import Button from "@/components/base/Button";
 import IconComponent from "@/components/base/IconComponent";
 import useGetProjectDetails from "@/controllers/api/board/useGetProjectDetails";
+import refreshProjectColumnDock from "@/controllers/api/board/refreshProjectColumnDock";
 import useReplaceProjectColumnDock from "@/controllers/api/board/useReplaceProjectColumnDock";
 import setupApiErrorHandler from "@/core/helpers/setupApiErrorHandler";
 import { ProjectColumn } from "@/core/models";
@@ -36,6 +37,7 @@ export default function BoardSettingsDock() {
         try {
             const result = await refetch();
             if (result.isError) throw result.error;
+            await refreshProjectColumnDock(project.uid);
             start();
         } catch (caught) {
             const message = { message: "" };
