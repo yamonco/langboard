@@ -3,6 +3,7 @@ from .ApiKeyRole import ApiKeyRole
 from .ApiKeySetting import ApiKeySetting
 from .ApiKeyUsage import ApiKeyUsage
 from .AppConnection import AppConnection
+from .AppDefinition import AppDefinition
 from .AppResourceBinding import AppResourceBinding
 from .AppSignal import AppSignal
 from .BoardAppBinding import BoardAppBinding
@@ -105,6 +106,7 @@ __all__ = [
     "GitHubLifecycleReceipt",
     "GitHubSignalDelivery",
     "GitHubHealthJob",
+    "AppDefinition",
     "AppConnection",
     "BoardAppBinding",
     "DokployWebhookBinding",

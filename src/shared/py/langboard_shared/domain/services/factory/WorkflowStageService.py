@@ -21,6 +21,7 @@ from ...models import (
 )
 from ...models.ProjectRole import ProjectRoleAction
 from ..AppManifest import APP_MANIFESTS
+from ..AppRegistry import approved_manifests
 from ..AppWorkflowPolicy import (
     WorkflowMappingResult,
     WorkflowRequirements,
@@ -76,7 +77,7 @@ class WorkflowStageService(BaseDomainService):
                     summary[field][state] = summary[field].get(state, 0) + count
 
             items = []
-            for key, manifest in APP_MANIFESTS.items():
+            for key, manifest in approved_manifests().items():
                 binding = by_app.get(key)
                 items.append({
                     **manifest.catalog_fields(),
@@ -159,7 +160,7 @@ class WorkflowStageService(BaseDomainService):
         self, user: User, project_uid: str, app_key: str, binding_uid: str, expected_revision: str,
     ) -> BoardAppBinding | None:
         """Disable this board configuration without deleting shared connections or resources."""
-        if app_key not in APP_MANIFESTS:
+        if app_key not in approved_manifests():
             return None
         with DbSession.atomic() as db:
             board = db.exec(SqlBuilder.select.table(Project).where(
@@ -184,7 +185,7 @@ class WorkflowStageService(BaseDomainService):
             return binding
 
     def get_app_mapping(self, user: User, project_uid: str, app_key: str) -> dict | None:
-        manifest = APP_MANIFESTS.get(app_key)
+        manifest = approved_manifests().get(app_key)
         requirements = manifest.workflow_requirements if manifest else None
         if requirements is None:
             return None
@@ -228,7 +229,7 @@ class WorkflowStageService(BaseDomainService):
 
     def prepare_app_mapping(self, user: User, project_uid: str, app_key: str) -> BoardAppBinding | None:
         """Create only a disabled workflow draft; this is not App installation."""
-        manifest = APP_MANIFESTS.get(app_key)
+        manifest = approved_manifests().get(app_key)
         requirements = manifest.workflow_requirements if manifest else None
         if requirements is None:
             return None
@@ -281,7 +282,7 @@ class WorkflowStageService(BaseDomainService):
             ).with_for_update()).first()
             if binding is None:
                 return None
-            manifest = APP_MANIFESTS.get(binding.app_key)
+            manifest = approved_manifests().get(binding.app_key)
             requirements = manifest.workflow_requirements if manifest else None
             if requirements is None:
                 return None

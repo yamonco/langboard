@@ -30,12 +30,18 @@ class AppManifest:
     configure_permission: ProjectRoleAction = ProjectRoleAction.Update
     signal_schema_version: int = 1
     signal_policy: AppSignalPolicy | None = None
+    version: str | None = None
+    description: str = ""
+    panel: dict | None = None
 
     def catalog_fields(self) -> dict:
         requirements = self.workflow_requirements
         return {
             "key": self.key,
             "name": self.name,
+            "version": self.version,
+            "description": self.description,
+            "panel": self.panel,
             "resource_types": list(self.resource_types),
             "capabilities": list(self.capabilities),
             "permissions": {"read": self.read_permission.value, "configure": self.configure_permission.value},

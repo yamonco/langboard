@@ -10,6 +10,7 @@ from ....core.db.DbEngine import DbEngine
 from ....core.types import SafeDateTime
 from ...models import (
     AppConnection,
+    AppDefinition,
     AppResourceBinding,
     BoardAppBinding,
     Project,
@@ -47,6 +48,7 @@ def board(monkeypatch, request):
             db.execute(text("CREATE TABLE organization (id BIGINT PRIMARY KEY)"))
     for model in (
         User,
+        AppDefinition,
         Project,
         ProjectAssignedUser,
         ProjectRole,
