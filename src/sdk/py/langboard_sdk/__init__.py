@@ -1,7 +1,7 @@
 """Portable native client; authentication and business authority remain server-owned."""
 
 from .client import CommandTransport, LangboardClient, MutationOutcomeUnknown
-from .management import AppManager, ConnectionManager, DokployResource, GlitchTipProject
+from .management import AppManager, ConnectionManager, DokployResource, GlitchTipProject, ResourceSelection
 from .mcp import McpTransport, NativeCommandError
 from .providers import DokployManager, GlitchTipManager
 from .rest import ApiTransport, HttpTransport, NativeApiError
@@ -25,4 +25,5 @@ __all__ = [
     "DokployResource",
     "GlitchTipManager",
     "DokployManager",
+    "ResourceSelection",
 ]

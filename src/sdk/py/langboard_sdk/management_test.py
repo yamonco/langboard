@@ -15,6 +15,31 @@ from . import (
 
 
 class ManagementTests(IsolatedAsyncioTestCase):
+    async def test_external_adapter_selection_needs_no_provider_branch(self):
+        class MonitorSelection:
+            selection_collection = "services"
+
+            def selection_fields(self):
+                return {"service_id": "service-1", "expected_resource_revision": 3}
+
+        transport = SimpleNamespace(request=AsyncMock(return_value={"resource": {"uid": "resource"}}))
+        connections = AppManager(transport, "example-monitor").connections(
+            "independent-monitor", selection_collection="services"
+        )
+        await connections.select("connection", "a" * 64, MonitorSelection())
+        transport.request.assert_awaited_once_with(
+            "POST", "/board/example-monitor/settings/apps/independent-monitor/connections/connection/services",
+            json={"service_id": "service-1", "expected_resource_revision": 3, "expected_revision": "a" * 64},
+        )
+        transport.request.reset_mock()
+        for collection in ("../services", "services?override=true"):
+            with self.assertRaises(ValueError):
+                AppManager(transport, "board").connections("monitor", selection_collection=collection)
+        bad = SimpleNamespace(selection_collection="services", selection_fields=lambda: {"expected_revision": "b" * 64})
+        with self.assertRaises(ValueError):
+            await connections.select("connection", "a" * 64, bad)
+        transport.request.assert_not_awaited()
+
     async def test_workflow_uses_builtins_and_exact_revision_without_enabling_by_default(self):
         transport = SimpleNamespace(request=AsyncMock(return_value={"binding": {"uid": "binding"}}))
         apps = AppManager(transport, "board")

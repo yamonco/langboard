@@ -247,6 +247,38 @@ plan examples are in [README.md](README.md).
 
 ## Error handling and recovery
 
+### External resource selection adapters
+
+`ResourceSelection` is an adapter-owned protocol. Implement it in the external
+app, rather than adding the provider name to the shared SDK. Its
+`selection_collection` must name the native endpoint's collection, and
+`selection_fields()` returns that endpoint's selection payload. The SDK adds
+the exact connection revision; the adapter cannot override it.
+
+```python
+from dataclasses import dataclass
+from typing import ClassVar
+
+@dataclass(frozen=True)
+class ServiceSelection:
+    selection_collection: ClassVar[str] = "services"
+    service_id: str
+
+    def selection_fields(self) -> dict:
+        return {"service_id": self.service_id}
+
+connections = apps.connections("example-monitor", selection_collection="services")
+# Only after the host has registered and approved this app and its native route:
+selected = await connections.select(connection_uid, current_revision, ServiceSelection("service-1"))
+```
+
+This removes a provider-name branch from client-side serialization. It does
+not register an app, create a server route, grant access, or prove the full
+external-app lifecycle. An unregistered route remains unavailable. Existing
+`GlitchTipProject` and `DokployResource` implement the same protocol and keep
+their existing wire format. OAuth/app-principal registration and the real
+third-app lifecycle remain separate server work.
+
 | Result | Action |
 |---|---|
 | `NativeApiError` 401 | Restore the caller's authenticated session. |
