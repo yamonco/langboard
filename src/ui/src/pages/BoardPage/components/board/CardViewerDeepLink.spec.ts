@@ -532,3 +532,38 @@ test("actual desktop Graph route retains access to flipped cards", async ({ page
     await expect(restore).toBeVisible();
     expect(errors).toEqual([]);
 });
+
+test("an authorized detail omitted from the board projection can return to the Flip tray", async ({ page }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    await mockBoardApi(page);
+    await page.route(
+        (url) => url.port === "5381" && !url.pathname.startsWith("/board/fixture-project") && !url.pathname.startsWith("/auth"),
+        (route) => fulfillWithCors(route, { metadata: {}, projects: [], labels: [], approvals: [], count: 0, active_work: [] })
+    );
+    const columns = [
+        { uid: "fixture-column", project_uid: "fixture-project", name: "Ready", order: 0, is_archive: false },
+        { uid: "fixture-archive", project_uid: "fixture-project", name: "Archive", order: 1, is_archive: true },
+    ];
+    // The availability endpoint authorizes other-0, but the current board
+    // projection intentionally excludes it (for example an archived detail).
+    await page.route("**/board/fixture-project/cards", (route) =>
+        fulfillWithCors(route, {
+            cards: [FIXTURE_CARD],
+            columns,
+            checklists: [],
+            global_relationships: [],
+            column_bot_scopes: [],
+            column_bot_schedules: [],
+        })
+    );
+    await page.route("**/board/fixture-project/columns", (route) => fulfillWithCors(route, { columns }));
+    await seedTray(page, 1);
+    await page.goto(`${FIXTURE}?fullBoard`);
+    await page.getByRole("button", { name: "Restore Card other-0", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Card other-0", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Flip card", exact: true }).click();
+    await expect(page.locator("[data-card-viewer]")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Restore Card other-0", exact: true })).toBeVisible();
+    expect(errors).toEqual([]);
+});

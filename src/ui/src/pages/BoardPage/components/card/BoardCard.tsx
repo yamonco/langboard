@@ -45,7 +45,7 @@ import { usePageHeader } from "@/core/providers/PageHeaderProvider";
 import { usePageNavigateRef } from "@/core/hooks/usePageNavigate";
 import { useSocket } from "@/core/providers/SocketProvider";
 import BoardCardLabelList from "@/pages/BoardPage/components/card/label/BoardCardLabelList";
-import { AuthUser, ProjectCardAttachment, ProjectChecklist } from "@/core/models";
+import { AuthUser, ProjectCard, ProjectCardAttachment, ProjectChecklist } from "@/core/models";
 import useCardDeletedHandlers from "@/controllers/socket/card/useCardDeletedHandlers";
 import { SocketEvents } from "@langboard/core/constants";
 import { EHttpStatus, ESocketTopic } from "@langboard/core/enums";
@@ -97,7 +97,7 @@ export interface IBoardCardProps {
     isExpanded?: bool;
     setIsExpanded?: React.Dispatch<React.SetStateAction<bool>>;
     onClose?: () => void;
-    onFlip?: () => void;
+    onFlip?: (card: ProjectCard.TModel) => void;
     onEditModeStateChange?: (isEditing: bool, cancelEdit: (() => void) | null) => void;
 }
 
@@ -354,7 +354,7 @@ interface IBoardCardResultProps {
     isExpanded: bool;
     setIsExpanded?: React.Dispatch<React.SetStateAction<bool>>;
     onClose?: () => void;
-    onFlip?: () => void;
+    onFlip?: (card: ProjectCard.TModel) => void;
     onEditModeStateChange?: (isEditing: bool, cancelEdit: (() => void) | null) => void;
 }
 
@@ -545,7 +545,7 @@ function BoardTaskCardResult({
                                             className="size-8"
                                             title={t("card.Flip card")}
                                             aria-label={t("card.Flip card")}
-                                            onClick={onFlip}
+                                            onClick={() => onFlip(card)}
                                         >
                                             <IconComponent icon="layers" size="4" />
                                         </Button>
