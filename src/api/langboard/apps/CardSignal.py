@@ -2,20 +2,24 @@
 
 from langboard_shared.core.db import DbSession, SqlBuilder
 from langboard_shared.core.security.CollaborationChannel import CollaborationChannel
-from langboard_shared.domain.models import AppConnection, AppSignal, Card, CardAppSignalBinding, User
+from langboard_shared.domain.models import (
+    AppConnection,
+    AppResourceBinding,
+    AppSignal,
+    BoardAppBinding,
+    Card,
+    CardAppSignalBinding,
+    User,
+)
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
+from langboard_shared.domain.services.AppManifest import APP_MANIFESTS
 from langboard_shared.domain.services.AppSignalProjection import card_signal_projections, supported_signal_condition
 from langboard_shared.domain.services.CardVisibilityPolicy import CardVisibility
 from langboard_shared.domain.services.factory.SecretReferenceService import SecretReferenceUnavailable
 from langboard_shared.helpers import InfraHelper
 from langboard_shared.publishers import CardPublisher
 from sqlalchemy import func, select
-from .DokployConnection import DokployUnavailable
-from .DokploySignal import _scope as deployment_scope
 from .GitHubManifest import GitHubManifestUnavailable
-from .GitHubSignal import _scope
-from .GlitchTipConnection import GlitchTipUnavailable
-from .GlitchTipSignal import _scope as issue_scope
 
 
 class CardSignalConflict(Exception):
@@ -48,26 +52,50 @@ def authorized_signal_scope(service, db, actor, project_uid, connection_uid, res
             supported_signal_condition(),
         )
     ).first()
-    if signal is None or not signal.external_id or signal.provider == "github" and not signal.commit_sha:
+    if signal is None or not signal.external_id:
         raise GitHubManifestUnavailable()
-    if signal.provider in {"dokploy", "glitchtip"}:
-        stored = db.exec(
-            SqlBuilder.select.table(AppConnection)
-            .where(AppConnection.id == InfraHelper.convert_id(connection_uid))
-            .with_for_update()
-        ).first()
-        owner = db.exec(SqlBuilder.select.table(User).where(User.id == stored.owner_id)).first() if stored else None
-        if owner is None:
-            raise GitHubManifestUnavailable()
-        try:
-            provider_scope = deployment_scope if signal.provider == "dokploy" else issue_scope
-            connection, _, resource = provider_scope(
-                service, owner, project_uid, connection_uid, resource_uid, lock=True
-            )
-        except (DokployUnavailable, GlitchTipUnavailable, ValueError):
-            raise GitHubManifestUnavailable() from None
-    else:
-        owner, connection, resource = _scope(service, db, project_uid, connection_uid, resource_uid, actor, lock=True)
+    manifest = APP_MANIFESTS.get(signal.provider)
+    policy = manifest.signal_policy if manifest else None
+    if policy is None or policy.requires_commit and not signal.commit_sha:
+        raise GitHubManifestUnavailable()
+    connection = db.exec(
+        SqlBuilder.select.table(AppConnection).where(
+            AppConnection.id == InfraHelper.convert_id(connection_uid),
+            AppConnection.app_key == signal.provider,
+            AppConnection.state == "connected",
+        ).with_for_update()
+    ).first()
+    owner = db.exec(SqlBuilder.select.table(User).where(User.id == connection.owner_id)).first() if connection else None
+    if owner is None:
+        raise GitHubManifestUnavailable()
+    board = service.workflow_stage._authorized_app_board(owner, project_uid, ProjectRoleAction.Update, lock=True)
+    if board is None or service.workflow_stage._authorized_app_board(
+        actor, project_uid, ProjectRoleAction.Read, lock=True
+    ) is None:
+        raise GitHubManifestUnavailable()
+    binding = db.exec(
+        SqlBuilder.select.table(BoardAppBinding).where(
+            BoardAppBinding.project_id == board.id,
+            BoardAppBinding.app_key == manifest.key,
+        ).with_for_update()
+    ).first()
+    if (
+        binding is None or binding.state not in {"enabled", "needs_attention"}
+        or not {"signals.read", *policy.required_capabilities}.issubset(binding.granted_capabilities)
+    ):
+        raise GitHubManifestUnavailable()
+    resource = db.exec(
+        SqlBuilder.select.table(AppResourceBinding).where(
+            AppResourceBinding.id == signal.resource_id,
+            AppResourceBinding.board_binding_id == binding.id,
+            AppResourceBinding.connection_id == connection.id,
+            AppResourceBinding.resource_type.in_(policy.resource_types),
+            AppResourceBinding.is_selected == True,  # noqa: E712
+            AppResourceBinding.access_state == "granted",
+        ).with_for_update()
+    ).first()
+    if resource is None:
+        raise GitHubManifestUnavailable()
     try:
         meta = service.secret_reference._find(owner, connection.credential_reference, lock=True).metadata()
     except SecretReferenceUnavailable:

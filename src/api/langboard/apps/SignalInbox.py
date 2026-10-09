@@ -133,7 +133,7 @@ def list_board_signals(service, actor, project_uid, after=None, *, channel=Colla
                     "occurred_at": signal.occurred_at,
                     "outcome": minimum if minimum == maximum else None,
                     "conflict": minimum != maximum,
-                    "can_bind_card": signal.provider in {"github", "dokploy", "glitchtip"},
+                    "can_bind_card": APP_MANIFESTS[signal.provider].signal_policy is not None,
                     "time_basis": APP_MANIFESTS[signal.provider].signal_policy.time_basis,
                 }
                 for signal, resource, connection, minimum, maximum in rows[:25]

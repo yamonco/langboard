@@ -14,6 +14,7 @@ class AppSignalPolicy:
     resource_types: tuple[str, ...]
     required_capabilities: tuple[str, ...] = ("signals.read",)
     requires_empty_commit: bool = False
+    requires_commit: bool = False
     time_basis: str = "provider_occurrence"
 
 
@@ -61,7 +62,7 @@ APP_MANIFESTS = MappingProxyType(
             ("repository",),
             ("resources.read", "signals.read", "workflow.transition"),
             APP_WORKFLOW_REQUIREMENTS["github"],
-            signal_policy=AppSignalPolicy(("check.completed",), ("repository",)),
+            signal_policy=AppSignalPolicy(("check.completed",), ("repository",), requires_commit=True),
         ),
         "glitchtip": AppManifest(
             "glitchtip",
