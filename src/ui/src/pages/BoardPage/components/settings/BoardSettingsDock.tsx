@@ -17,7 +17,7 @@ export default function BoardSettingsDock() {
     const [error, setError] = useState("");
     const pending = useRef(false);
     const { mutateAsync, isPending } = useReplaceProjectColumnDock({ interceptToast: true });
-    const { refetch, isFetching } = useGetProjectDetails({ uid: project.uid }, { interceptToast: true });
+    const { refetch, isFetching } = useGetProjectDetails({ uid: project.uid, includeCards: false }, { interceptToast: true });
     const [t] = useTranslation();
     const current = pinnedProjectDockColumns(columns).map((column) => column.uid);
     const selected = draft?.column_uids ?? current;

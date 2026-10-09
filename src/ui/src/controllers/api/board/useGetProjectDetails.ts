@@ -7,6 +7,7 @@ import refreshProjectColumnDock from "@/controllers/api/board/refreshProjectColu
 
 export interface IGetProjectDetailsForm {
     uid: string;
+    includeCards?: boolean;
 }
 
 export interface IGetProjectDetailsResponse {
@@ -22,6 +23,7 @@ const useGetProjectDetails = (form: IGetProjectDetailsForm, options?: TQueryOpti
     const getProjectDetails = async () => {
         const url = Utils.String.format(Routing.API.BOARD.DETAILS, { uid: form.uid });
         const res = await api.get(url, {
+            params: { include_cards: form.includeCards ?? true },
             env: {
                 interceptToast: options?.interceptToast,
             } as never,
@@ -38,7 +40,7 @@ const useGetProjectDetails = (form: IGetProjectDetailsForm, options?: TQueryOpti
         return result;
     };
 
-    const result = query([`get-project-details-${form.uid}`], getProjectDetails, {
+    const result = query([`get-project-details-${form.uid}`, form.includeCards ?? true], getProjectDetails, {
         ...options,
         retry: 0,
         refetchInterval: Infinity,

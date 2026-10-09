@@ -41,3 +41,35 @@ def test_settings_and_column_routes_forward_trusted_scope(channel):
             callback("p", request, actor, service)
         columns.assert_not_called()
         service.project.get_details.assert_not_called()
+
+
+@pytest.mark.parametrize("channel", [CollaborationChannel.HumanUI, CollaborationChannel.Mcp])
+def test_settings_lean_read_skips_card_serialization_and_preserves_authority(channel):
+    import json
+
+    project, context, actor = object(), object(), object()
+    request = SimpleNamespace(scope={"collaboration_channel": channel})
+    resolver = Mock(return_value=(project, context))
+    inventory = Mock(side_effect=AssertionError("Lean settings must not serialize board cards"))
+    columns = Mock(return_value=[])
+    details = Mock(return_value=(project, {}))
+    service = SimpleNamespace(
+        card=SimpleNamespace(resolve_visibility_context=resolver, get_api_list_by_project=inventory),
+        project_column=SimpleNamespace(get_api_list_by_project=columns),
+        project=SimpleNamespace(
+            get_details=details,
+            get_api_assigned_internal_bot_list_with_setting_map=Mock(return_value=([], {})),
+        ),
+        internal_bot=SimpleNamespace(get_api_list=Mock(return_value=[])),
+        chat=SimpleNamespace(get_api_template_list=Mock(return_value=[])),
+    )
+    response = BoardSettingApi.get_project_details("p", request, actor, service, include_cards=False)
+    assert json.loads(response.body)["cards"] == []
+    resolver.assert_called_once_with("p", actor, channel)
+    columns.assert_called_once_with(project, context=context)
+    inventory.assert_not_called()
+    resolver.return_value = None
+    details.reset_mock()
+    with pytest.raises(ApiException.NotFound_404):
+        BoardSettingApi.get_project_details("p", request, actor, service, include_cards=False)
+    details.assert_not_called()
