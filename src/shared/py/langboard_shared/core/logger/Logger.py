@@ -67,7 +67,8 @@ class Logger:
         if Env.SENTRY_DSN:
             sentry_init(
                 dsn=Env.SENTRY_DSN,
-                environment=Env.ENVIRONMENT if Env.ENVIRONMENT == "production" else "development",
+                environment=Env.SENTRY_ENVIRONMENT,
+                release=Env.SENTRY_RELEASE,
             )
 
     def get_config(self) -> dict[str, Any]:
