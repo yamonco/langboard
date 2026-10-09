@@ -16,6 +16,7 @@ from langboard_shared.publishers import CardPublisher
 from langboard_shared.tasks.activities import CardActivityTask
 from langboard_shared.tasks.bots import CardBotTask
 from sqlalchemy import create_engine, text
+from sqlalchemy.pool import StaticPool
 
 
 @pytest.fixture(params=["sqlite", "postgresql"])
@@ -32,7 +33,7 @@ def title_board(request, monkeypatch):
             connection.execute(text(f"CREATE SCHEMA {schema}"))
         engine = create_engine(url, connect_args={"options": f"-csearch_path={schema}"})
     else:
-        engine = create_engine("sqlite://")
+        engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
     required = {
         model.__table__
         for model in [
@@ -44,6 +45,10 @@ def title_board(request, monkeypatch):
             models.ProjectLabel,
             models.CardAssignedProjectLabel,
             models.Checkitem,
+            models.ProjectRole,
+            models.ProjectAssignedUser,
+            models.Bot,
+            models.ProjectBotScope,
         ]
     }
     pending = list(required)
@@ -241,3 +246,149 @@ def test_deferred_card_update_effects_capture_each_committed_title(title_board, 
         service.card.update(actor, project, card, {"title": "[Question] Second"})
         assert published == []
     assert published == ["First", "Second"]
+
+
+def test_authenticated_rest_title_labels_and_role_revocation(title_board, monkeypatch):
+    import importlib
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from langboard.middlewares.ApiAuthMiddleware import ApiAuthMiddleware
+    from langboard.middlewares.RoleMiddleware import RoleMiddleware
+    from langboard.routes.board.BoardCardApi import change_card_details, create_card
+    from langboard_shared.core.caching import Cache
+    from langboard_shared.core.routing import AppRouter
+    from langboard_shared.core.security import AuthSecurity
+    from langboard_shared.core.types import SafeDateTime
+    from langboard_shared.Env import Env
+
+    service, actor, project, column, _, bug, question, _, _ = title_board
+    monkeypatch.setattr(service, "close", lambda: None)
+    monkeypatch.setattr(Cache, "get", lambda *args, **kwargs: None)
+    monkeypatch.setattr(Cache, "set", lambda *args, **kwargs: None)
+    monkeypatch.setattr(service.card, "default_creation_visibility", lambda *args: CardVisibility.Shared)
+    monkeypatch.setattr(service.card, "_resolve_internal_access", lambda *args: False)
+    monkeypatch.setattr(service.card, "dispatch_created", lambda *args, **kwargs: None)
+    with DbSession.atomic() as db:
+        actor.activated_at = SafeDateTime.now()
+        db.update(actor)
+        role = models.ProjectRole(project_id=project.id, user_id=actor.id, actions=["read", "card_update"])
+        db.insert(role)
+    monkeypatch.setattr(
+        importlib.import_module("langboard.middlewares.ApiAuthMiddleware"), "DomainService", lambda: service
+    )
+    app = FastAPI()
+    app.include_router(AppRouter.api)
+    for route in AppRouter.api.routes:
+        if getattr(route, "endpoint", None) in (create_card, change_card_details):
+            for dependency in route.dependant.dependencies:
+                if dependency.name == "service":
+                    app.dependency_overrides[dependency.call] = lambda: service
+    app.add_middleware(RoleMiddleware, routes=AppRouter.api.routes)
+    app.add_middleware(ApiAuthMiddleware, routes=AppRouter.api.routes)
+    access, refresh = AuthSecurity.authenticate(actor.id)
+    url = f"/board/{project.get_uid()}/card"
+    payload = {"title": "[버그] HTTP", "project_column_uid": column.get_uid(), "description": {"content": "Keep"}}
+    with TestClient(app) as client:
+        assert client.post(url, json=payload).status_code == 401
+        client.cookies.set(Env.REFRESH_TOKEN_NAME, refresh)
+        headers = {"Authorization": f"Bearer {access}"}
+        response = client.post(url, headers=headers, json=payload)
+        assert response.status_code == 201, response.text
+        card = response.json()["card"]
+        assert card["title"] == "HTTP"
+        assert card["labels"][0]["global_label_uid"] == bug.get_uid()
+        details = f"{url}/{card['uid']}/details"
+        title = {"title": "[Question][Bug] HTTP updated"}
+        first = client.put(details, headers=headers, json=title)
+        assert first.status_code == 200, first.text
+        assert first.json()["title"] == "HTTP updated"
+        repeated = client.put(details, headers=headers, json=title)
+        assert repeated.status_code == 200 and repeated.json()["title"] == "HTTP updated"
+        assigned = service.card.repo.project_label.get_all_by_card(InfraHelper.get_by_id_like(models.Card, card["uid"]))
+        assert {label.global_label_id for label in assigned} == {bug.id, question.id}
+        with DbSession.atomic() as db:
+            role.actions = ["read"]
+            db.update(role)
+        assert client.put(details, headers=headers, json={"title": "[Bug] Denied"}).status_code == 403
+        assert client.post(url, headers=headers, json=payload).status_code == 403
+        assert InfraHelper.get_by_id_like(models.Card, card["uid"]).title == "HTTP updated"
+
+
+@pytest.mark.parametrize("principal", ["user", "bot"])
+async def test_native_mcp_wrappers_title_labels_and_current_scope(title_board, monkeypatch, principal):
+    from fastmcp import Client, FastMCP
+    from langboard.mcp_integration.Server import McpServer
+    from langboard.mcp_tools import CardMcp
+    from langboard.middlewares.McpAuthMiddleware import mcp_auth_context
+    from langboard_shared.core.caching import Cache
+    from langboard_shared.domain.models.BaseBotModel import BotPlatform, BotPlatformRunningType
+
+    service, actor, project, column, _, bug, question, _, _ = title_board
+    monkeypatch.setattr(service, "close", lambda: None)
+    monkeypatch.setattr(Cache, "get", lambda *args, **kwargs: None)
+    monkeypatch.setattr(Cache, "set", lambda *args, **kwargs: None)
+    monkeypatch.setattr(service.card, "dispatch_created", lambda *args, **kwargs: None)
+    # Unrelated aggregate/workflow projection is outside this mutation proof.
+    monkeypatch.setattr(service.project_column, "get_api_list_by_project", lambda *args: [column.api_response()])
+    inject = McpServer._inject_kwargs
+
+    def fixture_factory(param_name, param, principal, kwargs):
+        if param_name == "service":
+            return {**kwargs, "service": service}, None
+        return inject(param_name, param, principal, kwargs)
+
+    monkeypatch.setattr(McpServer, "_inject_kwargs", fixture_factory)
+    with DbSession.atomic() as db:
+        if principal == "bot":
+            actor = models.Bot(
+                name="Fixture AI",
+                bot_uname="fixture-ai",
+                app_api_token="fixture-only",
+                platform=BotPlatform.Default,
+                platform_running_type=BotPlatformRunningType.Default,
+            )
+            db.insert(actor)
+            authority = models.ProjectBotScope(bot_id=actor.id, project_id=project.id, conditions=[])
+        else:
+            authority = models.ProjectRole(project_id=project.id, user_id=actor.id, actions=["read", "card_update"])
+        db.insert(authority)
+    server = FastMCP("Native title label boundary")
+    server.tool(name="create_card")(McpServer._wrap_tool("create_card", CardMcp.create_card))
+    server.tool(name="change_card_details")(McpServer._wrap_tool("change_card_details", CardMcp.change_card_details))
+    token = mcp_auth_context.set({"transport": "oauth", "user_or_bot": actor})
+    try:
+        async with Client(server) as client:
+            created = await client.call_tool(
+                "create_card",
+                {
+                    "project_uid": project.get_uid(),
+                    "column_uid": "leftmost",
+                    "title": "[버그] MCP",
+                    "description": "Keep",
+                    "assign_user_uids": None,
+                },
+            )
+            card = created.structured_content
+            assert card["title"] == "MCP"
+            assert card["labels"][0]["global_label_uid"] == bug.get_uid()
+            args = {"project_uid": project.get_uid(), "card_uid": card["uid"], "title": "[Question][Bug] MCP updated"}
+            for _ in range(2):
+                response = await client.call_tool("change_card_details", args)
+                assert response.structured_content["title"] == "MCP updated"
+            assigned = service.card.repo.project_label.get_all_by_card(
+                InfraHelper.get_by_id_like(models.Card, card["uid"])
+            )
+            assert {label.global_label_id for label in assigned} == {bug.id, question.id}
+            with DbSession.atomic() as db:
+                if principal == "bot":
+                    db.delete(authority)
+                else:
+                    authority.actions = ["read"]
+                    db.update(authority)
+            denied = await client.call_tool(
+                "change_card_details", {**args, "title": "[Bug] Denied"}, raise_on_error=False
+            )
+            assert denied.is_error
+            assert InfraHelper.get_by_id_like(models.Card, card["uid"]).title == "MCP updated"
+    finally:
+        mcp_auth_context.reset(token)
