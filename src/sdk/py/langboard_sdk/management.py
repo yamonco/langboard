@@ -35,6 +35,12 @@ def _revision(value: str) -> str:
     return value
 
 
+def _secret_reference(value: str) -> str:
+    if not isinstance(value, str) or not re.fullmatch(r"secret://ref/[A-Za-z0-9]{1,11}", value):
+        raise ValueError("Use a native secret reference, never a credential value")
+    return value
+
+
 class AppManager:
     """Inspect Apps and manage reviewed board bindings; never registers provider code."""
 
@@ -117,14 +123,12 @@ class ConnectionManager:
         return await self.transport.request("GET", f"{self.path}/secret-input/{_segment(input_uid)}")
 
     async def create(self, instance_url: str, credential_reference: str) -> dict:
-        if not re.fullmatch(r"secret://ref/[A-Za-z0-9]{1,11}", credential_reference):
-            raise ValueError("Use a native secret reference, never a credential value")
         return await self.transport.request(
             "POST",
             f"{self.path}/connections",
             json={
                 "instance_url": instance_url,
-                "credential_reference": credential_reference,
+                "credential_reference": _secret_reference(credential_reference),
             },
         )
 
