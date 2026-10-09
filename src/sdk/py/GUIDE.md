@@ -247,6 +247,36 @@ plan examples are in [README.md](README.md).
 
 ## Error handling and recovery
 
+### ERP issue cards and shared display types
+
+An approved app can use the native card creation command, then attach the
+existing common presentation metadata. Read the current approved board workflow
+mapping and use its `backlog` column UID; a leftmost column or a column named
+"Backlog" is not proof of that workflow stage.
+
+```python
+workflow = await apps.workflow("example-erp")
+column_uid = workflow["binding"]["workflow_mapping"]["backlog"]
+card = await board.create_card(project_uid, column_uid, "ERP issue", description="Issue details")
+await board.set_card_presentation(project_uid, card["uid"], {
+    "version": 1, "key": "app.example-erp.issue", "axis": "type",
+    "name": "ERP issue", "description": "Issue reported by an external ERP.",
+    "icon": "📋", "translations": {
+        "ko-KR": {"name": "ERP 이슈", "description": "외부 ERP에서 생성한 업무 이슈입니다."},
+    },
+})
+```
+
+`board` is a `LangboardClient` using the caller's authorized native command
+transport; `apps` is the REST manager for the same board. The host checks
+current card and board permissions on each write. Presentation uses the common
+type/origin badge and localized hover explanation. It does not change native
+visibility, including the internal "Whisper" presentation, or create labels.
+Creation and metadata are separate writes: if metadata fails, the card remains.
+`create_card` is not idempotent. Persist the source event/card association and
+inspect native state after an unknown outcome; do not blindly replay events.
+Durable server-side ERP event ingestion/deduplication remains separate work.
+
 ### External resource selection adapters
 
 `ResourceSelection` is an adapter-owned protocol. Implement it in the external
