@@ -1,5 +1,22 @@
 import { expect, test } from "@playwright/test";
 
+test("document transcription pages and progress follow account language", async ({ page }) => {
+    await page.goto("/src/core/utils/LocaleFormat.fixture.html");
+    for (const locale of ["en-US", "ko-KR", "ja-JP", "zh-CN"]) {
+        await page.getByRole("button", { name: locale, exact: true }).click();
+        const progress = page.getByTestId("document-progress");
+        await expect(progress).toContainText("1,234");
+        await expect(progress).toContainText("2,345");
+        const percent = await page.evaluate(
+            (locale) => new Intl.NumberFormat(locale, { style: "percent", maximumFractionDigits: 2 }).format(0.124),
+            locale
+        );
+        await expect(progress).toContainText(percent);
+        await expect(progress.getByRole("progressbar")).toHaveAttribute("value", "12.4");
+        await expect(progress.getByRole("progressbar")).toHaveAttribute("max", "100");
+    }
+});
+
 test("file size and image upload progress follow account language", async ({ page }) => {
     await page.goto("/src/core/utils/LocaleFormat.fixture.html");
     for (const locale of ["en-US", "ko-KR", "ja-JP", "zh-CN"]) {

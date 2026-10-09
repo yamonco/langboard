@@ -175,7 +175,7 @@
   "Document indexed": "文書を検索可能",
   "Document processing failed": "文書処理に失敗",
   "Document processing disabled": "添付のみ保存",
-  "Document page progress": "{{completed}} / {{total}}ページ",
+  "Document page progress": "{{completed, number}} / {{total, number}}ページ",
   "Index document embeddings": "文書の埋め込みを再索引",
   "Embed only this transcription": "現在の埋め込み設定でこの添付のみ処理します。既存の文字起こしと元のファイルは保持されます。",
   "Embedding requested": "埋め込みを要求しました",

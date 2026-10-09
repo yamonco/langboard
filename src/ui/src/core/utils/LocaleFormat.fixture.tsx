@@ -1,3 +1,8 @@
+import { AuthProvider } from "@/core/providers/AuthProvider";
+import useAuthStore from "@/core/stores/AuthStore";
+import { AuthUser, MetadataModel } from "@/core/models";
+import { DOCLING_DOCUMENTS_METADATA_KEY } from "@/core/constants/DoclingMetadata";
+import { BoardCardAttachmentDocumentProgress } from "@/pages/BoardPage/components/card/attachment/BoardCardAttachmentDocument";
 import CustomSelect from "@/components/Cron/CustomSelect";
 import { ImageProgress } from "@/components/plate-ui/media-placeholder-node";
 import { UNITS } from "@/components/Cron/constants";
@@ -62,6 +67,26 @@ ProjectCard.Model.fromOne({
     checklist_completed_count: 1234,
     count_comment: 1234,
     relationships: [],
+});
+const documentUser = AuthUser.Model.fromOne({ uid: "locale-document-user", created_at: new Date(), updated_at: new Date() });
+useAuthStore.setState({ currentUser: documentUser, state: "loaded", pageLoaded: true });
+MetadataModel.Model.fromOne({
+    uid: "locale-document",
+    type: "card",
+    created_at: new Date(),
+    updated_at: new Date(),
+    metadata: {
+        [DOCLING_DOCUMENTS_METADATA_KEY]: JSON.stringify([
+            {
+                attachment_uid: "locale-attachment",
+                status: "processing",
+                completed_pages: 1234,
+                total_pages: 2345,
+                progress_percent: 12.4,
+                content: {},
+            },
+        ]),
+    },
 });
 function Fixture() {
     const [t, language] = useTranslation();
@@ -170,6 +195,9 @@ function Fixture() {
             <output data-testid="duration">{formatTimerDuration({ hours: 1, minutes: 2, seconds: 3 }, language.language)}</output>
             <output data-testid="count">{formatNumber(12345, language.language)}</output>
             <output data-testid="file-size">{formatFileSize(1536, language.language, 1)}</output>
+            <div data-testid="document-progress">
+                <BoardCardAttachmentDocumentProgress cardUID="locale-document" attachmentUID="locale-attachment" />
+            </div>
             <div data-testid="image-progress">
                 <ImageProgress file={uploadingImage} progress={12.4} />
             </div>
@@ -189,7 +217,9 @@ function render() {
     createRoot(document.getElementById("root")!).render(
         <QueryClientProvider client={new QueryClient()}>
             <MemoryRouter>
-                <Fixture />
+                <AuthProvider>
+                    <Fixture />
+                </AuthProvider>
             </MemoryRouter>
         </QueryClientProvider>
     );
