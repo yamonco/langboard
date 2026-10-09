@@ -3,6 +3,8 @@
 Start with the [installation, authentication and management guide](GUIDE.md).
 `AppManager` manages board App catalogs, workflow drafts and binding disablement.
 `ConnectionManager` handles native instance onboarding and resource selection.
+`GlitchTipManager` and `DokployManager` add provider read consent, signal refresh,
+and Dokploy webhook management through the native API.
 `LangboardClient` handles native MCP work commands. See the guide's support table
 for routes that are not yet covered; this is not a full administrative API SDK.
 

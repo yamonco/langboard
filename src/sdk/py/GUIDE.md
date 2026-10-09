@@ -159,6 +159,69 @@ history and does not delete the provider's data or native SecretRef. Disconnecte
 connections are excluded from the active connection list; the receipt reports
 `state=disconnected`.
 
+## Provider read consent, signals and webhook management
+
+Use the provider adapters for routes whose contracts differ. They share the same
+`HttpTransport`, `ConnectionManager`, native SecretRef and board role checks.
+They do not grant external deploy authority or create workflow stages.
+
+```python
+from langboard_sdk import GlitchTipManager, DokployManager
+
+glitchtip = GlitchTipManager(transport, project_uid)
+selection = await glitchtip.selected(connection_uid)
+await glitchtip.enable_read(
+    connection_uid, connection_revision, selection["binding"]["revision"]
+)
+receipt = await glitchtip.refresh_issues(
+    connection_uid, resource_uid, connection_revision, access_revision
+)
+# receipt["accepted_count"] counts new status observations. A next_cursor
+# requires an explicit next refresh_issues(..., cursor=next_cursor) decision.
+
+dokploy = DokployManager(transport, project_uid)
+selection = await dokploy.selected(connection_uid)
+await dokploy.enable_read(
+    connection_uid, connection_revision, selection["binding"]["revision"]
+)
+receipt = await dokploy.refresh_deployments(
+    connection_uid, resource_uid, connection_revision, access_revision
+)
+# receipt["inserted"] is the native count. Responses are not renamed.
+```
+
+Read consent is an explicit mutation. Both connection and board binding revisions
+must be current. It enables only the adapter's declared read capabilities;
+workflow transitions remain disabled. Refresh persists bounded observations and
+checks current resource access again. It is not a live log or arbitrary HTTP proxy.
+
+Dokploy webhook lifecycle is separate from observation refresh:
+
+```python
+health = await dokploy.webhook_health(connection_uid)
+request = await dokploy.request_webhook_secret_input()
+# Complete the native secret input, then read its status for secret_ref.
+config = await dokploy.configure_webhook(
+    connection_uid, connection_revision, health["binding_revision"],
+    health["config_revision"], secret_ref, notification_id=notification_id,
+)
+verified = await dokploy.verify_webhook(
+    connection_uid, connection_revision, config["binding_revision"],
+    config["config_revision"], expected_callback_url,
+)
+current = await dokploy.webhook_health(connection_uid)
+disabled = await dokploy.disable_webhook(
+    connection_uid, connection_revision, current["binding_revision"],
+    current["config_revision"],
+)
+```
+
+Use the callback URL assigned by this deployment. Verification reads the provider's
+notification configuration; it does not configure Dokploy remotely. A mismatch is
+not acceptance. Zero config revision is valid only when creating a configuration;
+verification requires an existing revision. Any 409 requires a fresh health read
+and review. Configuration secrets stay in Langboard's native secret store.
+
 ## Native MCP work commands
 
 ```python
@@ -210,7 +273,8 @@ under the caller's control.
 | Common types | Built-in workflow types and typed provider resource selections |
 | Provider registration | Host-installed manifests; no client-side plugin upload/install API |
 | GitHub installation OAuth | Existing native UI/API; not covered by `ConnectionManager` |
-| Signal refresh/webhook setup | Existing native UI/API; not covered by this client yet |
+| Provider read consent and refresh | GlitchTip issue observations; Dokploy application/compose deployment observations |
+| Dokploy webhook management | Secret-input request, health, native configure/verify/disable; no remote provider configuration writes |
 | Global settings/admin, complete board/card CRUD | Not claimed by this SDK version |
 
 Standalone SDK tests require only Python. Native HTTP integration tests exercise

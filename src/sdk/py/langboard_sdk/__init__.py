@@ -3,6 +3,7 @@
 from .client import CommandTransport, LangboardClient, MutationOutcomeUnknown
 from .management import AppManager, ConnectionManager, DokployResource, GlitchTipProject
 from .mcp import McpTransport, NativeCommandError
+from .providers import DokployManager, GlitchTipManager
 from .rest import ApiTransport, HttpTransport, NativeApiError
 from .workflow import WorkflowRequirements, WorkflowStage
 
@@ -22,4 +23,6 @@ __all__ = [
     "NativeApiError",
     "GlitchTipProject",
     "DokployResource",
+    "GlitchTipManager",
+    "DokployManager",
 ]

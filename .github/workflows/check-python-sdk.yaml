@@ -27,7 +27,7 @@ jobs:
           python-version: "3.12"
       - uses: astral-sh/setup-uv@v6
       - name: Check protocol without host dependencies
-        run: PYTHONPATH=src/sdk/py python -m unittest langboard_sdk.client_test langboard_sdk.workflow_test langboard_sdk.management_test -v
+        run: PYTHONPATH=src/sdk/py python -m unittest langboard_sdk.client_test langboard_sdk.workflow_test langboard_sdk.management_test langboard_sdk.providers_test -v
       - name: Build standalone distribution
         run: uv build --out-dir sdk-dist ./src/sdk/py
       - name: Verify installed wheel has no runtime dependencies
@@ -37,7 +37,7 @@ jobs:
           sdk-env/bin/python - <<'PY'
           import sys
           from importlib.metadata import metadata
-          from langboard_sdk import AppManager, HttpTransport, GlitchTipProject, DokployResource, LangboardClient, McpTransport, WorkflowRequirements, WorkflowStage
+          from langboard_sdk import AppManager, HttpTransport, GlitchTipManager, DokployManager, GlitchTipProject, DokployResource, LangboardClient, McpTransport, WorkflowRequirements, WorkflowStage
           assert WorkflowRequirements((WorkflowStage.ACTIVE,)).to_dict() == {"required": ["active"], "optional": []}
           assert metadata("langboard-sdk").get_all("Requires-Dist") is None
           assert not any(name.startswith(("langboard_chatgpt_plugin", "langboard_shared", "fastmcp", "httpx")) for name in sys.modules)
