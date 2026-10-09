@@ -56,47 +56,36 @@ def signal_resource_conditions(*, app_key="github", resource_type="repository", 
     )
 
 
-DOKPLOY_EVENTS = (
-    "deployment.queued",
-    "deployment.started",
-    "deployment.succeeded",
-    "deployment.failed",
-    "deployment.cancelled",
-)
-
-
 def supported_signal_condition():
-    return or_(
-        and_(AppSignal.provider == "github", AppSignal.event_type == "check.completed"),
-        and_(AppSignal.provider == "dokploy", AppSignal.event_type.in_(DOKPLOY_EVENTS), AppSignal.commit_sha == ""),
-        and_(
-            AppSignal.provider == "glitchtip",
-            AppSignal.event_type == "issue.status_observed",
-            AppSignal.commit_sha == "",
-        ),
-    )
+    from .AppManifest import APP_MANIFESTS
+
+    predicates = []
+    for manifest in APP_MANIFESTS.values():
+        policy = manifest.signal_policy
+        if policy is None:
+            continue
+        conditions = [AppSignal.provider == manifest.key, AppSignal.event_type.in_(policy.event_types)]
+        if policy.requires_empty_commit:
+            conditions.append(AppSignal.commit_sha == "")
+        predicates.append(and_(*conditions))
+    return or_(False, *predicates)
 
 
 def provider_resource_condition():
     from .AppManifest import APP_MANIFESTS
 
-    return or_(
-        and_(*signal_resource_conditions()),
-        and_(
-            *signal_resource_conditions(app_key="glitchtip", resource_type="project"),
-            cast(BoardAppBinding.granted_capabilities, Text).contains('"resources.read"'),
-        ),
-        or_(
-            *(
-                and_(
-                    *signal_resource_conditions(app_key="dokploy", resource_type=kind),
-                    cast(BoardAppBinding.granted_capabilities, Text).contains('"deployments.read"'),
-                )
-                for kind in APP_MANIFESTS["dokploy"].resource_types
-                if kind in {"application", "compose"}
-            )
-        ),
-    )
+    predicates = []
+    for manifest in APP_MANIFESTS.values():
+        policy = manifest.signal_policy
+        if policy is None:
+            continue
+        for kind in policy.resource_types:
+            predicates.append(and_(
+                *signal_resource_conditions(app_key=manifest.key, resource_type=kind),
+                *(cast(BoardAppBinding.granted_capabilities, Text).contains(f'"{capability}"')
+                  for capability in policy.required_capabilities),
+            ))
+    return or_(False, *predicates)
 
 
 def signal_resource_name(resource):

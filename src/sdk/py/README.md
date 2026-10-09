@@ -136,3 +136,20 @@ This uses the selected anchor's board/column and native creation permissions.
 It does not connect to a provider, verify its identity, or enable automatic card
 creation. Existing cards can continue to use `set_card_presentation` separately.
 When `presentation` is absent, old work-plan serialized payloads stay unchanged.
+
+## Authorized resource context
+
+`await board.get_connection_context(project_uid, card_uid=None, cursor=None)`
+reads one bounded native resource page. One board App binding can select several
+resources from several connections; one external resource can be selected by
+several boards through separate board-owned bindings. Keep both connection and
+resource identities, plus each returned revision. Follow `resources.next_cursor`
+explicitly when needed. The SDK never retrieves credentials, grants access,
+registers provider code, or automatically executes a workflow transition.
+
+Workflow mapping uses stable stage keys and current authorized column identities,
+not translated names. Several columns may share a stage: the user must choose an
+explicit destination. Missing, inactive or ambiguous stages disable transitions;
+metadata reads remain independent. New adapters declare requirements in their
+host-installed manifest. The current SDK exposes resource discovery, not a full
+provider onboarding/registration API.

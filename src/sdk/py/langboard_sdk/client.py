@@ -85,3 +85,30 @@ class LangboardClient:
         if not valid:
             raise MutationOutcomeUnknown("Card presentation receipt unavailable; read metadata before retrying")
         return result
+
+    async def get_connection_context(
+        self, project_uid: str, *, card_uid: str | None = None, cursor: str | None = None
+    ) -> dict[str, Any]:
+        """Read one authorized page of 1:N resources; never infer grants from metadata.
+
+        Resource identity includes connection_uid and resource_uid. The caller
+        chooses whether to request the next page; no provider names or credentials
+        are required by this client.
+        """
+        arguments = {"project_uid": project_uid}
+        if card_uid is not None:
+            arguments["card_uid"] = card_uid
+        if cursor is not None:
+            arguments["cursor"] = cursor
+        result = await self._transport.call("get_connection_context", arguments)
+        resources = result.get("resources") if isinstance(result, dict) else None
+        if (
+            not isinstance(result, dict)
+            or result.get("project_uid") != project_uid
+            or not isinstance(resources, dict)
+            or not isinstance(resources.get("items"), list)
+            or "next_cursor" not in resources
+            or resources["next_cursor"] is not None and not isinstance(resources["next_cursor"], str)
+        ):
+            raise RuntimeError("Langboard returned an invalid connection context")
+        return result
