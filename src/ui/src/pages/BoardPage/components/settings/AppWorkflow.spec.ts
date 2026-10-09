@@ -105,3 +105,13 @@ test("board App disable confirms and refreshes the stored state", async ({ page 
     const writes = await page.evaluate(() => (window as unknown as { workflowWrites: unknown[] }).workflowWrites);
     expect(writes).toEqual([{ binding_uid: "binding", expected_revision: "a".repeat(64), url: "/board/fixture/settings/apps/github/disable" }]);
 });
+
+for (const locale of ["en-US", "ko-KR", "ja-JP", "zh-CN"]) {
+    test(`App resource counts use account locale ${locale}`, async ({ page }) => {
+        await page.goto(`${path}?store&large&lang=${locale}`);
+        const app = page.locator("article").filter({ has: page.getByRole("heading", { name: "GitHub", exact: true }) });
+        await expect(app.locator("summary")).toContainText("2,468");
+        await app.locator("summary").click();
+        await expect(app).toContainText("1,234");
+    });
+}

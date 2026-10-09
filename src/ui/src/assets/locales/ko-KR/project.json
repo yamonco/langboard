@@ -157,7 +157,7 @@
     "App state enabled": "활성",
     "App state needs_attention": "확인 필요",
     "App state disconnected": "연결 해제",
-    "Selected App resources": "선택된 리소스: {{count}}",
+    "Selected App resources": "선택된 리소스: {{count, number}}",
     "App stored resource status help": "저장된 상태입니다. 이 화면에서 외부 접근을 검증한 결과는 아닙니다.",
     "No selected App resources": "선택된 리소스 없음",
     "App resource access": "접근권한",

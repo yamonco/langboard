@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "@/core/helpers/Api";
+import { formatNumber } from "@/core/utils/LocaleFormat";
 import { useQueryMutation } from "@/core/helpers/QueryMutation";
 import { useBoardSettings } from "@/core/providers/BoardSettingsProvider";
 import Button from "@/components/base/Button";
@@ -23,7 +24,7 @@ interface CatalogApp {
 }
 const names = { github: "GitHub", glitchtip: "GlitchTip", dokploy: "Dokploy" };
 export default function BoardSettingsApps() {
-    const [t] = useTranslation();
+    const [t, i18n] = useTranslation();
     const { project, canEditBasicInfo } = useBoardSettings();
     const { query } = useQueryMutation();
     const { data, isLoading, isError, refetch } = query(
@@ -114,7 +115,7 @@ export default function BoardSettingsApps() {
                                                     <span>{t(`project.settings.App resource ${category}`)}:</span>
                                                     {Object.entries(counts).map(([state, count]) => (
                                                         <span key={state} className="rounded bg-muted px-1.5">
-                                                            {t(`project.settings.App resource state ${state}`)} · {count}
+                                                            {t(`project.settings.App resource state ${state}`)} · {formatNumber(count, i18n.language)}
                                                         </span>
                                                     ))}
                                                 </div>
