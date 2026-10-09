@@ -157,7 +157,7 @@
     "App state enabled": "已启用",
     "App state needs_attention": "需要关注",
     "App state disconnected": "已断开",
-    "Selected App resources": "已选资源：{{count}}",
+    "Selected App resources": "已选资源：{{count, number}}",
     "App stored resource status help": "这是已保存的状态，此视图尚未验证外部访问。",
     "No selected App resources": "未选择资源",
     "App resource access": "访问权限",

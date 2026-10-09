@@ -157,7 +157,7 @@
     "App state enabled": "Enabled",
     "App state needs_attention": "Needs attention",
     "App state disconnected": "Disconnected",
-    "Selected App resources": "Selected resources: {{count}}",
+    "Selected App resources": "Selected resources: {{count, number}}",
     "App stored resource status help": "Stored status; external access has not been checked by this view.",
     "No selected App resources": "No resources selected",
     "App resource access": "Access",

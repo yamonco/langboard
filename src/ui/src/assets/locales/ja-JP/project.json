@@ -157,7 +157,7 @@
     "App state enabled": "有効",
     "App state needs_attention": "確認が必要",
     "App state disconnected": "接続解除",
-    "Selected App resources": "選択中のリソース: {{count}}",
+    "Selected App resources": "選択中のリソース: {{count, number}}",
     "App stored resource status help": "保存された状態です。この画面で外部アクセスを検証した結果ではありません。",
     "No selected App resources": "リソース未選択",
     "App resource access": "アクセス",

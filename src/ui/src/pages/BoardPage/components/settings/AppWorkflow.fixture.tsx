@@ -40,8 +40,8 @@ api.defaults.adapter = async (config) => {
                               }
                             : null,
                     resources: {
-                        selected_count: key === "github" ? 2 : 0,
-                        access_counts: key === "github" ? { granted: 1, denied: 1 } : {},
+                        selected_count: key === "github" ? (new URLSearchParams(location.search).has("large") ? 2468 : 2) : 0,
+                        access_counts: key === "github" ? { granted: new URLSearchParams(location.search).has("large") ? 1234 : 1, denied: 1 } : {},
                         health_counts: key === "github" ? { healthy: 1, degraded: 1 } : {},
                         connection_counts: key === "github" ? { connected: 2 } : {},
                     },
@@ -84,7 +84,7 @@ const project = Project.Model.fromOne({
     labels: [],
     invited_member_uids: [],
 });
-await i18n.changeLanguage("en-US");
+await i18n.changeLanguage(new URLSearchParams(location.search).get("lang") ?? "en-US");
 createRoot(document.getElementById("root")!).render(
     <QueryClientProvider client={new QueryClient()}>
         <BoardSettingsProvider project={project} currentUser={user}>
