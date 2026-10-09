@@ -66,7 +66,7 @@ the database transaction and removes the newly written KV/local value. KMS may
 retain ciphertext semantics as documented above. The migration refuses populated
 downgrade. No production migration has been applied.
 
-Audit source linkage, provider migration/rotation tooling, richer dangling status,
+Dedicated wiki secretization and copy UX, richer dangling status,
 model-facing API/MCP/CLI/wiki metadata integration and GitHub onboarding consumers
 remain pending. The earlier remaining-contract section describes those end-state
 requirements; scope/URI/rename/move primitives are now implemented as above.
@@ -120,7 +120,31 @@ retains the previously documented limitations.
 
 Create and rotate must own their database transaction. They reject calls within
 an outer host atomic transaction before any vault effect, so a later outer rollback
-cannot orphan an untracked successful storage write. This unit does not implement
-cross-provider migration, rotation scheduling, cleanup retry jobs or an HTTP/MCP
-credential write interface. Provider installation adapters must call these trusted
-units with the returned reference URI rather than embedding values in a board.
+cannot orphan an untracked successful storage write. Rotation scheduling, cleanup
+retry jobs and an HTTP/MCP credential write interface remain outside this contract.
+Provider installation adapters must call these trusted units with the returned
+reference URI rather than embedding values in a board.
+
+## Trusted provider migration
+
+`migrate_provider(actor, uri, expected_revision, source_provider)` is a host-only
+operation. The operator supplies an already authenticated old `VaultProvider`
+instance; the destination is the configured `KeyVault.provider`. It does not take
+provider addresses, credentials, arbitrary locators or plaintext from clients and
+is not registered as an HTTP/MCP command.
+
+The service owns its transaction, locks the reference, rechecks current scope
+permission and rejects revoked, stale or mismatched source-provider references
+before reading storage. It writes a new opaque locator and verifies destination
+readback before changing the private provider/locator. The reference URI,
+name and scope remain stable; the revision advances once and a `migrated` event
+records the actor, request ID, before/after revision and `provider_migrated` reason.
+History contains no value, locator or provider configuration.
+
+Write/readback/audit failure rolls back the reference and removes the new
+uncommitted destination. Old material is retired only after database commit.
+Retirement failure leaves a valid destination and an explicit old-storage cleanup
+obligation; KMS cannot promise physical deletion of historical ciphertext.
+The caller must arrange cleanup retry; no background migration or automatic
+provider change is introduced. New audit facts prevent a destructive schema
+downgrade. Actual production provider migration has not been performed.

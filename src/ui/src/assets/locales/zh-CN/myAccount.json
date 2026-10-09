@@ -63,7 +63,8 @@
       "moved": "移动",
       "revoked": "撤销",
       "rotated": "替换值",
-      "bound": "已绑定"
+      "bound": "已绑定",
+      "migrated": "存储迁移"
     },
     "reasons": {
       "user_input": "用户明确提交网页输入",
@@ -73,7 +74,8 @@
       "reference_moved": "更改引用范围",
       "reference_revoked": "撤销引用",
       "value_rotated": "替换秘密值",
-      "reference_bound": "已授权的应用连接绑定"
+      "reference_bound": "已授权的应用连接绑定",
+      "provider_migrated": "密钥存储提供方已更改"
     },
     "openSource": "打开来源卡片",
     "openSourceWiki": "打开来源 Wiki"
