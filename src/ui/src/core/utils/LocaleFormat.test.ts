@@ -1,9 +1,31 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { formatDateDistance, formatDateTime, formatNumber, formatTimerDuration } from "./LocaleFormat.ts";
+import { formatDateDistance, formatDateTime, formatFileSize, formatNumber, formatTimerDuration } from "./LocaleFormat.ts";
 import { SUPPORTED_LOCALES } from "./LocalePolicy.ts";
 
 const now = Date.parse("2026-10-03T12:00:00Z");
+test("file sizes preserve 1024 scale and precision while localizing zero and units", () => {
+    for (const locale of SUPPORTED_LOCALES) {
+        for (const [bytes, amount, unit] of [
+            [0, 0, "byte"],
+            [1023, 1023, "byte"],
+            [1024, 1, "kilobyte"],
+            [1536, 1.5, "kilobyte"],
+            [1024 ** 2, 1, "megabyte"],
+        ] as const) {
+            assert.equal(
+                formatFileSize(bytes, locale, 1),
+                new Intl.NumberFormat(locale, {
+                    style: "unit",
+                    unit,
+                    unitDisplay: "short",
+                    minimumFractionDigits: 1,
+                    maximumFractionDigits: 1,
+                }).format(amount)
+            );
+        }
+    }
+});
 test("account locale controls dates and past/future relative time in all four languages", () => {
     for (const locale of SUPPORTED_LOCALES) {
         const date = new Date(now);

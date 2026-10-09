@@ -12,7 +12,7 @@ import { useFilePicker } from "use-file-picker";
 import { cn } from "@/core/utils/ComponentUtils";
 import { useUploadFile } from "@/components/plate-ui/uploadthing";
 import { useTranslation } from "react-i18next";
-import { Utils } from "@langboard/core/utils";
+import { formatFileSize, formatNumber } from "@/core/utils/LocaleFormat";
 
 const CONTENT: Record<
     string,
@@ -45,7 +45,7 @@ const CONTENT: Record<
 };
 
 export const PlaceholderElement = withHOC(PlaceholderProvider, function PlaceholderElement(props: PlateElementProps<TPlaceholderElement>) {
-    const [t] = useTranslation();
+    const [t, i18n] = useTranslation();
     const { editor, element } = props;
     const { api } = useEditorPlugin(PlaceholderPlugin);
     const { isUploading, progress, uploadedFile, uploadFile, uploadingFile } = useUploadFile();
@@ -145,11 +145,11 @@ export const PlaceholderElement = withHOC(PlaceholderProvider, function Placehol
 
                         {loading && !isImage && (
                             <div className="mt-1 flex items-center gap-1.5">
-                                <div>{Utils.String.formatBytes(uploadingFile?.size ?? 0)}</div>
+                                <div>{formatFileSize(uploadingFile?.size ?? 0, i18n.language)}</div>
                                 <div>–</div>
                                 <div className="flex items-center">
                                     <Loader2Icon className="mr-1 size-3.5 animate-spin text-muted-foreground" />
-                                    {progress ?? 0}%
+                                    {formatNumber((progress ?? 0) / 100, i18n.language, { style: "percent", maximumFractionDigits: 0 })}
                                 </div>
                             </div>
                         )}
@@ -175,6 +175,7 @@ export function ImageProgress({
     imageRef?: React.RefObject<HTMLImageElement | null>;
     progress?: number;
 }) {
+    const [, i18n] = useTranslation();
     const [objectUrl, setObjectUrl] = React.useState<string | null>(null);
 
     React.useEffect(() => {
@@ -196,7 +197,9 @@ export function ImageProgress({
             {progress < 100 && (
                 <div className="absolute bottom-1 right-1 flex items-center space-x-2 rounded-full bg-black/50 px-1 py-0.5">
                     <Loader2Icon className="size-3.5 animate-spin text-muted-foreground" />
-                    <span className="text-xs font-medium text-white">{Math.round(progress)}%</span>
+                    <span className="text-xs font-medium text-white">
+                        {formatNumber(progress / 100, i18n.language, { style: "percent", maximumFractionDigits: 0 })}
+                    </span>
                 </div>
             )}
         </div>
