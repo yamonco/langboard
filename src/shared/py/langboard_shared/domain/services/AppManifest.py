@@ -7,6 +7,17 @@ from .AppWorkflowPolicy import APP_WORKFLOW_REQUIREMENTS, WorkflowRequirements
 
 
 @dataclass(frozen=True)
+class AppSignalPolicy:
+    """Host-installed adapter declaration; never a caller-supplied access grant."""
+
+    event_types: tuple[str, ...]
+    resource_types: tuple[str, ...]
+    required_capabilities: tuple[str, ...] = ("signals.read",)
+    requires_empty_commit: bool = False
+    time_basis: str = "provider_occurrence"
+
+
+@dataclass(frozen=True)
 class AppManifest:
     key: str
     name: str
@@ -17,6 +28,7 @@ class AppManifest:
     read_permission: ProjectRoleAction = ProjectRoleAction.Read
     configure_permission: ProjectRoleAction = ProjectRoleAction.Update
     signal_schema_version: int = 1
+    signal_policy: AppSignalPolicy | None = None
 
     def catalog_fields(self) -> dict:
         requirements = self.workflow_requirements
@@ -49,6 +61,7 @@ APP_MANIFESTS = MappingProxyType(
             ("repository",),
             ("resources.read", "signals.read", "workflow.transition"),
             APP_WORKFLOW_REQUIREMENTS["github"],
+            signal_policy=AppSignalPolicy(("check.completed",), ("repository",)),
         ),
         "glitchtip": AppManifest(
             "glitchtip",
@@ -56,12 +69,20 @@ APP_MANIFESTS = MappingProxyType(
             ("organization", "project"),
             ("resources.read", "signals.read", "workflow.transition"),
             APP_WORKFLOW_REQUIREMENTS["glitchtip"],
+            signal_policy=AppSignalPolicy(
+                ("issue.status_observed",), ("project",), ("signals.read", "resources.read"),
+                requires_empty_commit=True, time_basis="observation",
+            ),
         ),
         "dokploy": AppManifest(
             "dokploy",
             "Dokploy",
             ("project", "environment", "application", "compose"),
             ("resources.read", "signals.read", "deployments.read"),
+            signal_policy=AppSignalPolicy(
+                ("deployment.queued", "deployment.started", "deployment.succeeded", "deployment.failed", "deployment.cancelled"),
+                ("application", "compose"), ("signals.read", "deployments.read"), requires_empty_commit=True,
+            ),
         ),
     }
 )

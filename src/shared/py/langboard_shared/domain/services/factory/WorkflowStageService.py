@@ -22,7 +22,6 @@ from ...models import (
 from ...models.ProjectRole import ProjectRoleAction
 from ..AppManifest import APP_MANIFESTS
 from ..AppWorkflowPolicy import (
-    APP_WORKFLOW_REQUIREMENTS,
     WorkflowMappingResult,
     WorkflowRequirements,
     resolve_app_workflow,
@@ -185,7 +184,8 @@ class WorkflowStageService(BaseDomainService):
             return binding
 
     def get_app_mapping(self, user: User, project_uid: str, app_key: str) -> dict | None:
-        requirements = APP_WORKFLOW_REQUIREMENTS.get(app_key)
+        manifest = APP_MANIFESTS.get(app_key)
+        requirements = manifest.workflow_requirements if manifest else None
         if requirements is None:
             return None
         with DbSession.atomic() as db:
@@ -222,7 +222,8 @@ class WorkflowStageService(BaseDomainService):
 
     def prepare_app_mapping(self, user: User, project_uid: str, app_key: str) -> BoardAppBinding | None:
         """Create only a disabled workflow draft; this is not App installation."""
-        requirements = APP_WORKFLOW_REQUIREMENTS.get(app_key)
+        manifest = APP_MANIFESTS.get(app_key)
+        requirements = manifest.workflow_requirements if manifest else None
         if requirements is None:
             return None
         with DbSession.atomic() as db:
@@ -274,7 +275,8 @@ class WorkflowStageService(BaseDomainService):
             ).with_for_update()).first()
             if binding is None:
                 return None
-            requirements = APP_WORKFLOW_REQUIREMENTS.get(binding.app_key)
+            manifest = APP_MANIFESTS.get(binding.app_key)
+            requirements = manifest.workflow_requirements if manifest else None
             if requirements is None:
                 return None
             mapping = dict(binding.workflow_mapping if explicit is None else explicit)

@@ -14,6 +14,7 @@ from langboard_shared.domain.models import (
     User,
 )
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
+from langboard_shared.domain.services.AppManifest import APP_MANIFESTS
 from langboard_shared.domain.services.AppSignalProjection import (
     authorized_signal_rows,
     provider_resource_condition,
@@ -133,7 +134,7 @@ def list_board_signals(service, actor, project_uid, after=None, *, channel=Colla
                     "outcome": minimum if minimum == maximum else None,
                     "conflict": minimum != maximum,
                     "can_bind_card": signal.provider in {"github", "dokploy", "glitchtip"},
-                    "time_basis": "observation" if signal.provider == "glitchtip" else "provider_occurrence",
+                    "time_basis": APP_MANIFESTS[signal.provider].signal_policy.time_basis,
                 }
                 for signal, resource, connection, minimum, maximum in rows[:25]
                 if resource.id in allowed

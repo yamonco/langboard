@@ -114,3 +114,24 @@ class ClientTests(IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     main()
+
+
+class ConnectionContextTests(IsolatedAsyncioTestCase):
+    async def test_multiple_resources_and_explicit_pagination_without_provider_names(self):
+        receipt = {"project_uid": "board", "resources": {
+            "items": [{"connection_uid": "one", "resource_uid": "a"},
+                      {"connection_uid": "one", "resource_uid": "b"}],
+            "next_cursor": "next-page",
+        }, "card": None}
+        transport = SimpleNamespace(call=AsyncMock(return_value=receipt))
+        client = LangboardClient(transport)
+        self.assertEqual(await client.get_connection_context("board"), receipt)
+        transport.call.assert_awaited_once_with("get_connection_context", {"project_uid": "board"})
+        await client.get_connection_context("board", card_uid="card", cursor="next-page")
+        self.assertEqual(transport.call.await_count, 2)
+        self.assertEqual(transport.call.await_args.args[1], {
+            "project_uid": "board", "card_uid": "card", "cursor": "next-page",
+        })
+        transport.call.return_value = {**receipt, "project_uid": "other-board"}
+        with self.assertRaises(RuntimeError):
+            await client.get_connection_context("board")
