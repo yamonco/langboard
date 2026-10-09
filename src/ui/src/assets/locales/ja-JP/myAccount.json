@@ -74,6 +74,7 @@
       "reference_revoked": "参照失効",
       "value_rotated": "秘密値の更新",
       "reference_bound": "認可済みのアプリ接続への紐付け"
-    }
+    },
+    "openSource": "元のカードを開く"
   }
 }

@@ -110,3 +110,52 @@ for (const width of [1440, 390])
             await expect(page.getByText(/stale-actor/)).toHaveCount(0);
             await expect(page.getByRole("button", { name: "Older events" })).toBeEnabled();
         });
+
+for (const width of [1920, 390]) {
+    test(`source links use authorized local card routes at ${width}`, async ({ page }) => {
+        await page.setViewportSize({ width, height: 900 });
+        await page.route("**/secret-references/fixture/history*", (route) =>
+            route.fulfill({
+                json: {
+                    items: [
+                        {
+                            uid: "one",
+                            created_at: "2026-10-09T00:00:00Z",
+                            actor_uid: "actor",
+                            action: "created",
+                            source_kind: "card",
+                            revision_before: null,
+                            revision_after: 0,
+                            source_link: { kind: "card", href: "/board/board/card" },
+                        },
+                        {
+                            uid: "two",
+                            created_at: "2026-10-09T00:00:00Z",
+                            actor_uid: "actor",
+                            action: "created",
+                            source_kind: "card",
+                            revision_before: null,
+                            revision_after: 0,
+                            source_link: { kind: "card", href: "https://untrusted.invalid" },
+                        },
+                        {
+                            uid: "three",
+                            created_at: "2026-10-09T00:00:00Z",
+                            actor_uid: "actor",
+                            action: "created",
+                            source_kind: "card",
+                            revision_before: null,
+                            revision_after: 0,
+                        },
+                    ],
+                    next_cursor: null,
+                },
+            })
+        );
+        await page.goto("/src/pages/AccountPage/secret-history.fixture.html");
+        const links = page.getByRole("link", { name: "Open source card" });
+        await expect(links).toHaveCount(1);
+        await expect(links).toHaveAttribute("href", "/board/board/card");
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    });
+}

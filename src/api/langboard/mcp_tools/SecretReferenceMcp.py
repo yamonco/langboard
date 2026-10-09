@@ -1,6 +1,7 @@
 """Read logical reference metadata without resolving or creating credentials."""
 
 from typing import Annotated, Any
+from langboard_shared.core.security.CollaborationChannel import CollaborationChannel
 from langboard_shared.domain.models import User
 from langboard_shared.domain.services import DomainService
 from langboard_shared.domain.services.factory.SecretReferenceService import SecretReferenceUnavailable
@@ -102,6 +103,8 @@ def list_secret_reference_history(
     cursor: Annotated[str | None, Field(max_length=11)] = None,
 ) -> dict[str, Any]:
     try:
-        return service.secret_reference.list_audit(user, uri, limit=limit, cursor=cursor)
+        return service.secret_reference.list_audit(
+            user, uri, limit=limit, cursor=cursor, channel=CollaborationChannel.Mcp
+        )
     except (SecretReferenceUnavailable, ValueError):
         raise ValueError("Secret history unavailable") from None
