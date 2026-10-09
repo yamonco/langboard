@@ -182,3 +182,37 @@ for (const width of [1920, 390]) {
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     });
 }
+
+for (const locale of ["en-US", "ko-KR", "ja-JP", "zh-CN"]) {
+    test(`history dates follow account language ${locale} instead of browser language`, async ({ browser }) => {
+        const context = await browser.newContext({ locale: "en-US", timezoneId: "Asia/Seoul" });
+        const page = await context.newPage();
+        await page.addInitScript((value) => localStorage.setItem("lang", value), locale);
+        await page.route("**/secret-references/fixture/history*", (route) =>
+            route.fulfill({
+                json: {
+                    items: [
+                        {
+                            uid: "locale-event",
+                            action: "created",
+                            created_at: "2026-10-08T00:00:00Z",
+                            actor_uid: "fixture",
+                            source_kind: "api",
+                            revision_before: null,
+                            revision_after: 0,
+                        },
+                    ],
+                    next_cursor: null,
+                },
+            })
+        );
+        await page.goto("/src/pages/AccountPage/secret-history.fixture.html");
+        const expected = await page.evaluate(
+            (language) => new Intl.DateTimeFormat(language, { dateStyle: "medium", timeStyle: "short" }).format(new Date("2026-10-08T00:00:00Z")),
+            locale
+        );
+        await expect(page.locator("time")).toHaveText(expected);
+        await expect(page.locator("time")).toHaveAttribute("datetime", "2026-10-08T00:00:00Z");
+        await context.close();
+    });
+}

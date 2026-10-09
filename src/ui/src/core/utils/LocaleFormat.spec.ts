@@ -202,3 +202,15 @@ test("remaining permission, event, work, reader and tool counts use locale group
         for (const message of await messages.all()) await expect(message).toContainText("1,234");
     }
 });
+
+test("Ollama download progress uses account locale percent formatting", async ({ page }) => {
+    await page.goto("/src/core/utils/LocaleFormat.fixture.html");
+    for (const locale of ["en-US", "ko-KR", "ja-JP", "zh-CN"]) {
+        await page.getByRole("button", { name: locale, exact: true }).click();
+        const expected = await page.evaluate(
+            (language) => new Intl.NumberFormat(language, { style: "percent", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(0.1234),
+            locale
+        );
+        await expect(page.getByTestId("ollama-progress")).toContainText(expected);
+    }
+});

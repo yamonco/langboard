@@ -1,3 +1,5 @@
+import OllamaModelTracker from "@/pages/SettingsPage/components/ollama/OllamaModelTracker";
+import { getOllamaModelStore } from "@/core/stores/OllamaModelStore";
 import { DescriptionOverviewRail } from "@/pages/BoardPage/components/card/description/DescriptionOverviewRail";
 import DataTablePagination from "@/components/base/DataTable/Pagination";
 import { DataTableProvider } from "@/components/base/DataTable/Provider";
@@ -27,6 +29,7 @@ import { formatDateTime, formatTimerDuration, formatNumber } from "./LocaleForma
 import { SUPPORTED_LOCALES } from "./LocalePolicy";
 
 api.defaults.adapter = async (config) => ({ status: 200, statusText: "OK", headers: {}, config, data: { active_work: [] } });
+getOllamaModelStore().replacePullingModels([{ name: "locale-progress", progress: 12.34, isTracking: true }]);
 const fixtureProject = { uid: "locale-fixture" } as Project.TModel;
 const fixtureRelationships = ["contains", "blocks", "references"].map((machine_semantic) => ({
     uid: machine_semantic,
@@ -153,6 +156,9 @@ function Fixture() {
             <output data-testid="stale-many">{t("card.Unchanged for {{days}} days", { days: 1234, count: 1234 })}</output>
             <output data-testid="overdue-one">{t("card.Overdue by {{count}} day", { count: 1 })}</output>
             <output data-testid="overdue-other">{t("card.Overdue by {{count}} day", { count: 2 })}</output>
+            <div data-testid="ollama-progress">
+                <OllamaModelTracker name="locale-progress" />
+            </div>
             <output data-testid="duration">{formatTimerDuration({ hours: 1, minutes: 2, seconds: 3 }, language.language)}</output>
             <output data-testid="count">{formatNumber(12345, language.language)}</output>
             <div data-testid="calendar">

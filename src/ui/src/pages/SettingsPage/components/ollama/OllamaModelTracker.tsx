@@ -1,3 +1,5 @@
+import { formatNumber } from "@/core/utils/LocaleFormat";
+import { useTranslation } from "react-i18next";
 import Box from "@/components/base/Box";
 import Flex from "@/components/base/Flex";
 import Progress from "@/components/base/Progress";
@@ -16,6 +18,7 @@ export interface IOllamaModelTrackerProps {
 }
 
 function OllamaModelTracker({ name }: IOllamaModelTrackerProps) {
+    const [, i18n] = useTranslation();
     const socket = useSocket();
     const progress = useOllamaPullingModelProgress(name);
     const model = useOllamaPullingModel(name);
@@ -61,7 +64,7 @@ function OllamaModelTracker({ name }: IOllamaModelTrackerProps) {
             <Box w="full" position="relative">
                 <Progress value={progress} className="w-full" />
                 <Box position="absolute" textSize="sm" className="left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
-                    {progress.toFixed?.(2) ?? "0.00"}%
+                    {formatNumber(progress / 100, i18n.language, { style: "percent", minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </Box>
             </Box>
         </Flex>
