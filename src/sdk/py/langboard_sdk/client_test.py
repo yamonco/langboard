@@ -8,6 +8,24 @@ from .mcp import McpTransport, NativeCommandError
 
 
 class ClientTests(IsolatedAsyncioTestCase):
+    async def test_native_creation_preserves_destination_and_never_replays_missing_receipt(self):
+        transport = SimpleNamespace(call=AsyncMock(return_value={"uid": "created-card", "title": "ERP issue"}))
+        client = LangboardClient(transport)
+        self.assertEqual((await client.create_card("board", "mapped-backlog", "ERP issue"))["uid"], "created-card")
+        transport.call.assert_awaited_once_with("create_card", {
+            "project_uid": "board", "column_uid": "mapped-backlog", "title": "ERP issue",
+            "description": None, "assign_user_uids": None,
+        }, mutation=True)
+        transport.call.reset_mock()
+        for column, title in [("../column", "Issue"), ("column", " ")]:
+            with self.assertRaises(ValueError):
+                await client.create_card("board", column, title)
+        transport.call.assert_not_awaited()
+        transport.call.return_value = {}
+        with self.assertRaises(MutationOutcomeUnknown):
+            await client.create_card("board", "column", "Issue")
+        transport.call.assert_awaited_once()
+
     async def test_review_receipt_and_same_request_replay(self):
         transport = SimpleNamespace(call=AsyncMock())
         board = LangboardClient(transport)

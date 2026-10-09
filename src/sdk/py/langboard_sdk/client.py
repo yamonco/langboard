@@ -21,6 +21,31 @@ class LangboardClient:
     def __init__(self, transport: CommandTransport) -> None:
         self._transport = transport
 
+    async def create_card(
+        self, project_uid: str, column_uid: str, title: str, *,
+        description: str | None = None, assign_user_uids: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Create through native authority in an explicitly selected active column.
+
+        Use the host's approved workflow mapping, not a localized column name.
+        Creation is not idempotent: never automatically replay a lost response.
+        Presentation is a separate native write after the returned card UID.
+        """
+        for value in (project_uid, column_uid):
+            if not isinstance(value, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", value):
+                raise ValueError("A native board and destination column are required")
+        if not isinstance(title, str) or not title.strip():
+            raise ValueError("A card title is required")
+        result = await self._transport.call(
+            "create_card", {
+                "project_uid": project_uid, "column_uid": column_uid, "title": title,
+                "description": description, "assign_user_uids": assign_user_uids,
+            }, mutation=True,
+        )
+        if not isinstance(result, dict) or not isinstance(result.get("uid"), str) or not result["uid"]:
+            raise MutationOutcomeUnknown("Card creation receipt unavailable; inspect state before retrying")
+        return result
+
     async def preview_work_plan(self, plan: dict[str, Any]) -> dict[str, Any]:
         result = await self._transport.call(
             "preview_card_work_plan", {"project_uid": plan["project_uid"], "plan": plan}
