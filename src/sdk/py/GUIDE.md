@@ -249,6 +249,13 @@ plan examples are in [README.md](README.md).
 
 ### ERP issue cards and shared display types
 
+The SDK and native metadata persistence use the same `validate_card_presentation`
+contract. Invalid display fields fail before an SDK write and are independently
+rechecked by the server. `CARD_PRESENTATION_KEY` and the validator are exported
+for app authors; no host package is required. Built-in visibility presentations
+remain host-owned. App-defined types reuse the badge/tooltip UI, not access rules.
+
+
 An approved app can use the native card creation command, then attach the
 existing common presentation metadata. Read the current approved board workflow
 mapping and use its `backlog` column UID; a leftmost column or a column named

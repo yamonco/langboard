@@ -96,6 +96,17 @@ class ClientTests(IsolatedAsyncioTestCase):
             await McpTransport(session).call("apply_card_work_plan", {}, mutation=True)
         session.call_tool.assert_awaited_once()
 
+    async def test_invalid_presentation_never_reaches_native_mutation(self):
+        transport = SimpleNamespace(call=AsyncMock())
+        base = {"version": 1, "key": "app.example-erp.issue", "axis": "type",
+                "name": "ERP issue", "description": "External ERP issue."}
+        for change in [{"visibility": "SHARED"}, {"axis": "visibility"},
+                       {"key": "visibility.whisper"}, {"version": True},
+                       {"translations": {"ko": {"name": "이슈"}}}]:
+            with self.assertRaises(ValueError):
+                await LangboardClient(transport).set_card_presentation("p", "c", {**base, **change})
+        transport.call.assert_not_awaited()
+
     async def test_app_presentation_uses_native_metadata_and_checks_receipt(self):
         import json
 
