@@ -75,6 +75,7 @@
       "value_rotated": "Secret value rotation",
       "reference_bound": "Authorized application connection binding"
     },
-    "openSource": "Open source card"
+    "openSource": "Open source card",
+    "openSourceWiki": "Open source wiki"
   }
 }

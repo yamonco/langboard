@@ -61,14 +61,7 @@ class ProjectWikiService(BaseDomainService):
         assigned_users = self.repo.project_wiki_assigned_user.get_all_by_wiki(wiki)
         assigned_user_ids = [assigned_user.id for assigned_user, _ in assigned_users]
 
-        is_showable = (
-            wiki.is_public
-            or (
-                isinstance(user_or_bot, User)
-                and (user_or_bot.is_admin or project.owner_id == user_or_bot.id or user_or_bot.id in assigned_user_ids)
-            )
-            or isinstance(user_or_bot, Bot)
-        )
+        is_showable = self.can_view(user_or_bot, project, wiki, assigned_user_ids)
 
         if is_showable:
             api_wiki["assigned_members"] = [assigned_user.api_response() for assigned_user, _ in assigned_users]
@@ -76,6 +69,18 @@ class ProjectWikiService(BaseDomainService):
             api_wiki = wiki.convert_to_private_api_response()
 
         return api_wiki
+
+    @staticmethod
+    def can_view(user_or_bot: TUserOrBot, project: Project, wiki: ProjectWiki, assigned_user_ids: list[int]) -> bool:
+        """Native wiki visibility shared by full content and bounded source projections."""
+        return bool(
+            wiki.is_public
+            or (
+                isinstance(user_or_bot, User)
+                and (user_or_bot.is_admin or project.owner_id == user_or_bot.id or user_or_bot.id in assigned_user_ids)
+            )
+            or isinstance(user_or_bot, Bot)
+        )
 
     def get_api_assigned_user_list(self, wiki: TWikiParam | None) -> list[dict[str, Any]]:
         wiki = InfraHelper.get_by_id_like(ProjectWiki, wiki)

@@ -334,3 +334,89 @@ def test_card_source_links_recheck_current_acl_and_channel_without_material(secr
         db.update(card)
     assert "source_link" not in event()
     assert event()["action"] == "created"
+
+
+def test_wiki_source_links_recheck_native_visibility_and_current_membership(secrets, monkeypatch):
+    from langboard_shared.core.db.DbEngine import DbEngine
+    from langboard_shared.core.types import SafeDateTime
+    from langboard_shared.domain import models
+    from langboard_shared.domain.services import DomainService
+    from langboard_shared.domain.services.factory.ProjectWikiService import ProjectWikiService
+    from langboard_shared.domain.services.factory.SecretReferenceService import SecretAuditSource
+    from langboard_shared.domain.services.factory.WorkflowStageService import WorkflowStageService
+
+    service, board, _ = secrets
+    actor, project, member, role = board[1:5]
+    original_owner_id = project.owner_id
+    engine = DbEngine.get_main_engine()
+    for model in (models.ProjectWiki, models.ProjectWikiAssignedUser):
+        model.__table__.create(engine, checkfirst=True)
+    domain = DomainService()
+    monkeypatch.setattr(
+        service,
+        "_get_service",
+        lambda cls: domain.project_wiki
+        if cls is ProjectWikiService
+        else board[0]
+        if cls is WorkflowStageService
+        else None,
+    )
+    with DbSession.atomic() as db:
+        wiki = models.ProjectWiki(project_id=project.id, title="Sensitive source wiki", is_public=True)
+        db.insert(wiki)
+    meta = service.create(
+        actor,
+        "personal",
+        "me",
+        "history/wiki-source",
+        SecretStr("fixture-sensitive"),
+        source=SecretAuditSource("wiki", wiki.get_uid()),
+    )
+    monkeypatch.setattr(KeyVault, "get_key", lambda *_: pytest.fail("Wiki source history read material"))
+    expected = {"kind": "wiki", "href": f"/board/{project.get_uid()}/wiki/{wiki.get_uid()}"}
+
+    def event():
+        return service.list_audit(actor, meta["uri"])["items"][0]
+
+    assert event()["source_link"] == expected
+    assert "Sensitive source wiki" not in json.dumps(event())
+    with DbSession.atomic() as db:
+        wiki.is_public = False
+        db.update(wiki)
+    assert "source_link" not in event()
+    with DbSession.atomic() as db:
+        assignment = models.ProjectWikiAssignedUser(
+            project_assigned_id=member.id,
+            project_wiki_id=wiki.id,
+            user_id=actor.id,
+        )
+        db.insert(assignment)
+    assert event()["source_link"] == expected
+    with DbSession.atomic() as db:
+        db.delete(assignment)
+    assert "source_link" not in event()
+    with DbSession.atomic() as db:
+        project.owner_id = actor.id
+        db.update(project)
+    assert event()["source_link"] == expected
+    with DbSession.atomic() as db:
+        project.owner_id = original_owner_id
+        wiki.is_public = True
+        role.actions = []
+        db.update(project)
+        db.update(wiki)
+        db.update(role)
+    assert "source_link" not in event()
+    with DbSession.atomic() as db:
+        role.actions = ["read"]
+        db.update(role)
+    assert event()["source_link"] == expected
+    with DbSession.atomic() as db:
+        db.delete(member)
+    assert "source_link" not in event()
+    with DbSession.atomic() as db:
+        db.insert(models.ProjectAssignedUser(project_id=project.id, user_id=actor.id))
+        wiki.deleted_at = SafeDateTime.now()
+        db.update(wiki)
+    assert "source_link" not in event()
+    assert event()["action"] == "created"

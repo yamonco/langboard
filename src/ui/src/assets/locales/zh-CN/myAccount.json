@@ -75,6 +75,7 @@
       "value_rotated": "替换秘密值",
       "reference_bound": "已授权的应用连接绑定"
     },
-    "openSource": "打开来源卡片"
+    "openSource": "打开来源卡片",
+    "openSourceWiki": "打开来源 Wiki"
   }
 }
