@@ -62,3 +62,26 @@ test("settings role request timeout leaves a retry instead of an empty gate", as
     await expect(page.getByText("Settings ready")).toBeVisible();
     expect(requests).toBe(2);
 });
+
+for (const width of [1920, 390]) {
+    test(`production settings route classification retains the shell at ${width}px`, async ({ page }) => {
+        await page.setViewportSize({ width, height: 844 });
+        await page.goto("/src/pages/SettingsPage/SettingsRoutes.fixture.html");
+        await expect(page.getByRole("heading", { name: "/dashboard", exact: true })).toBeVisible();
+        const header = await page.locator("header").elementHandle();
+        await page.getByRole("link", { name: "Open settings", exact: true }).click();
+        await expect(page.getByRole("heading", { name: "/settings/api-keys", exact: true })).toBeVisible();
+        expect(await header!.evaluate((element) => element.isConnected)).toBe(true);
+        await expect(page.locator("[inert]")).toHaveCount(0);
+        await page.getByRole("link", { name: "Open unavailable Ollama", exact: true }).click();
+        await expect(page.getByRole("heading", { name: "/settings/api-keys", exact: true })).toBeVisible();
+        expect(await header!.evaluate((element) => element.isConnected)).toBe(true);
+        await expect(page.locator("[inert]")).toHaveCount(0);
+    });
+}
+test("unavailable Ollama direct entry registers the destination shell", async ({ page }) => {
+    await page.goto("/src/pages/SettingsPage/SettingsRoutes.fixture.html?initial=/settings/ollama");
+    await expect(page.getByRole("heading", { name: "/settings/api-keys", exact: true })).toBeVisible();
+    await expect(page.locator("[inert]")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "API keys", exact: true })).toHaveAttribute("aria-current", "page");
+});
