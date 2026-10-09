@@ -1,3 +1,4 @@
+import { formatNumber } from "@/core/utils/LocaleFormat";
 import Button from "@/components/base/Button";
 import CardTypeBadges from "@/components/CardTypeBadges";
 import { cardVisibilityPresentation } from "@/core/cards/CardPresentation";
@@ -459,7 +460,7 @@ function BoardColumnTaskCard({ isDragging, compact = false }: IBoardColumnCardCo
                                 {widgetVisibility.showCommentCount && (
                                     <span className="ml-2 flex items-center gap-1">
                                         <IconComponent icon="message-square" size="4" className="text-secondary" strokeWidth="4" />
-                                        <span>{commentCount}</span>
+                                        <span>{formatNumber(commentCount, i18n.language)}</span>
                                     </span>
                                 )}
                             </Flex>

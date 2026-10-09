@@ -7,8 +7,8 @@
   "Please report this issue to the developers that how you got this error.": "このエラーが発生した手順を開発者に報告してください。",
   "Server has been temporarily disabled. Please try again later.": "サーバーが一時的に無効になっています。後でもう一度お試しください。",
   "Download failed.": "ダウンロードに失敗しました。",
-  "Failed to upload attachment. File size may be too large (Max size is {size}MB).": "添付ファイルのアップロードに失敗しました。ファイルが大きすぎる可能性があります（最大 {{size}}MB）。",
-  "{num} files could not be uploaded. File size may be too large (Max size is {size}MB).": "{{num}} 個のファイルをアップロードできませんでした。ファイルが大きすぎる可能性があります（最大 {{size}}MB）。",
+  "Failed to upload attachment. File size may be too large (Max size is {size}MB).": "添付ファイルのアップロードに失敗しました。ファイルが大きすぎる可能性があります（最大 {{size, number}}MB）。",
+  "{num} files could not be uploaded. File size may be too large (Max size is {size}MB).": "{{num, number}} 個のファイルをアップロードできませんでした。ファイルが大きすぎる可能性があります（最大 {{size, number}}MB）。",
   "requests": {
     "AU1001": "この機能にアクセスする権限がありません。",
     "AU1002": "メールがまだ認証されていません。受信トレイを確認してください。",

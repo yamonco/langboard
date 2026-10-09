@@ -14,7 +14,7 @@
   "hour": "시간",
   "minute": "분",
   "reboot": "재부팅 시",
-  "Every interval": "매 {{count}}",
+  "Every interval": "매 {{count, number}}",
   "Every": "매",
   "in": "에",
   "on": "에",

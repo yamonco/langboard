@@ -7,8 +7,8 @@
   "Please report this issue to the developers that how you got this error.": "이 오류가 발생한 과정을 개발자에게 알려주세요.",
   "Server has been temporarily disabled. Please try again later.": "서버가 일시적으로 비활성화되었습니다. 나중에 다시 시도하세요.",
   "Download failed.": "다운로드에 실패했습니다.",
-  "Failed to upload attachment. File size may be too large (Max size is {size}MB).": "첨부 파일 업로드에 실패했습니다. 파일이 너무 클 수 있습니다(최대 {{size}}MB).",
-  "{num} files could not be uploaded. File size may be too large (Max size is {size}MB).": "파일 {{num}}개를 업로드하지 못했습니다. 파일이 너무 클 수 있습니다(최대 {{size}}MB).",
+  "Failed to upload attachment. File size may be too large (Max size is {size}MB).": "첨부 파일 업로드에 실패했습니다. 파일이 너무 클 수 있습니다(최대 {{size, number}}MB).",
+  "{num} files could not be uploaded. File size may be too large (Max size is {size}MB).": "파일 {{num, number}}개를 업로드하지 못했습니다. 파일이 너무 클 수 있습니다(최대 {{size, number}}MB).",
   "requests": {
     "AU1001": "이 기능에 접근할 권한이 없습니다.",
     "AU1002": "이메일이 아직 인증되지 않았습니다. 받은편지함을 확인하세요.",

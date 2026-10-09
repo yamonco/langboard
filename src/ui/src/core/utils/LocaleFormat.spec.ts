@@ -278,3 +278,13 @@ test("hidden card quantities and IP overflow use locale grouping", async ({ page
         expect(quantities?.match(/1,234/g)).toHaveLength(3);
     }
 });
+
+test("upload failure counts and limits use locale grouping", async ({ page }) => {
+    await page.goto("/src/core/utils/LocaleFormat.fixture.html");
+    for (const locale of ["en-US", "ko-KR", "ja-JP", "zh-CN"]) {
+        await page.getByRole("button", { name: locale, exact: true }).click();
+        const errors = page.getByTestId("upload-errors");
+        await expect(errors).toContainText("2,345");
+        expect((await errors.textContent())?.match(/1,234/g)).toHaveLength(2);
+    }
+});
