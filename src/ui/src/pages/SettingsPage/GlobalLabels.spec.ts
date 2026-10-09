@@ -83,3 +83,32 @@ test("global label list prefers exact locale then language while preserving cano
     await expect(page.locator("input[value=Contract]")).toBeVisible();
     await expect(page.getByLabel("레이블 설명", { exact: true })).toHaveValue("English contract");
 });
+
+for (const width of [1920, 390])
+    test(`failed global label list is recoverable without writes at ${width}px`, async ({ page }) => {
+        await page.setViewportSize({ width, height: 844 });
+        let reads = 0;
+        let writes = 0;
+        await page.route("**/settings/global-labels**", (route) => {
+            if (route.request().method() === "OPTIONS") return route.fulfill({ status: 204 });
+            if (route.request().method() !== "GET") {
+                writes++;
+                return route.fulfill({ status: 500, json: {} });
+            }
+            reads++;
+            return reads === 1
+                ? route.fulfill({ status: 503, json: {} })
+                : route.fulfill({
+                      json: { labels: [{ uid: "existing", name: "Question", description: "Ask", color: "#8B5CF6", translations: {} }] },
+                  });
+        });
+        await page.goto("/src/pages/SettingsPage/GlobalLabels.fixture.html");
+        await expect(page.getByRole("alert")).toBeVisible();
+        await expect(page.getByText("No global labels yet", { exact: true })).toHaveCount(0);
+        await page.getByRole("button", { name: "Retry", exact: true }).click();
+        await expect(page.getByRole("navigation").getByRole("button", { name: "Question", exact: true })).toBeVisible();
+        await expect(page.getByRole("alert")).toHaveCount(0);
+        expect(reads).toBe(2);
+        expect(writes).toBe(0);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    });
