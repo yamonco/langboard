@@ -46,6 +46,8 @@ def setup(secrets, monkeypatch):
         assert request.method == "GET"
         if state["after"]:
             state["after"]()
+        if state.get("network_error"):
+            raise httpx.ConnectError("private provider failure", request=request)
         if state["oversize"]:
             return httpx.Response(200, content=b" " * 262145)
         if state["status"] != 200:
@@ -246,7 +248,7 @@ def test_authenticated_native_http_metadata_only(setup, monkeypatch):
     from langboard_shared.core.routing import AppRouter
     from langboard_shared.core.security import AuthSecurity
 
-    service, board, reference, calls, _ = setup
+    service, board, reference, calls, state = setup
     monkeypatch.setattr(DbEngine, "get_readonly_engine", DbEngine.get_main_engine)
     monkeypatch.setattr(
         importlib.import_module("langboard.middlewares.ApiAuthMiddleware"), "DomainService", lambda: service
@@ -311,6 +313,17 @@ def test_authenticated_native_http_metadata_only(setup, monkeypatch):
         status = client.get(input_url + "/" + uid, headers=headers)
         assert status.json() == {"state": "completed", "secret_ref": completed["secret_ref"]}
         assert "second-fixture-api-token" not in status.text
+        with DbSession.use(readonly=False) as db:
+            connection_count = len(db.exec(SqlBuilder.select.table(AppConnection)).all())
+        state["network_error"] = True
+        try:
+            failed = client.post(url, headers=headers, json=form)
+            assert failed.status_code == 503
+            assert "private provider failure" not in failed.text and "fixture-admin-token" not in failed.text
+        finally:
+            state["network_error"] = False
+        with DbSession.use(readonly=False) as db:
+            assert len(db.exec(SqlBuilder.select.table(AppConnection)).all()) == connection_count
         with DbSession.use(readonly=False) as db:
             board[4].actions = ["read"]
             db.update(board[4])
