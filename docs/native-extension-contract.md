@@ -36,8 +36,8 @@ untrusted code requires a separate process and deployment boundary.
 
 ## Board Apps declarations
 
-Board Settings Apps discovery uses the immutable host-owned `APP_MANIFESTS`
-registry in `langboard_shared.domain.services.AppManifest`. GitHub, GlitchTip
+Board Settings Apps discovery combines enabled instance-approved `AppDefinition`
+records with the immutable host-owned `APP_MANIFESTS` registry in `langboard_shared.domain.services.AppManifest`. GitHub, GlitchTip
 and Dokploy declare resource types, supported capability names, native read and
 configuration permission actions, workflow requirements and the v1 signal
 provenance fields. The compact signal declaration describes required envelope
@@ -47,11 +47,14 @@ Declarations are catalog metadata. They do not register Python handlers, grant
 capabilities, enable transitions, create connections or resolve credentials.
 The catalog combines these declarations with current board-owned bindings after
 its existing primary database authority check. Declared capabilities and saved
-`granted_capabilities` remain separate. Unknown App keys cannot mutate bindings.
+`granted_capabilities` remain separate. Unapproved App keys cannot mutate bindings. External definitions are approved and
+versioned through the native admin registry, not by modifying APP_MANIFESTS.
 Returned lists are copies; clients cannot edit the registry through responses.
 
 Connection onboarding remains unavailable until each provider's authenticated
 installation and resource access verification are implemented. Dokploy currently
 declares read capabilities only; deployment/redeployment writes require a later
-explicit host permission contract. SDK transport and native command composition
-remain the existing extension boundary.
+explicit host permission contract. The [external service app contract](external-app-sdk.md) documents registry, panel
+consent and current support boundaries. SDK transport and native command
+composition preserve native authority; registration alone does not install
+a signal adapter, generic connection route or automation principal.

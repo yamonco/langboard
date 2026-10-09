@@ -5,6 +5,7 @@ RUN apt-get update && apt-get install -y
 
 COPY ./ui /app
 COPY ./shared/ts /shared/ts
+COPY ./sdk/js /sdk/js
 
 RUN cd /shared/ts && yarn install && yarn run build && yarn link
 

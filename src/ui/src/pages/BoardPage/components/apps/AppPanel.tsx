@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import Button from "@/components/base/Button";
 import { api } from "@/core/helpers/Api";
 import type { CatalogApp } from "@/controllers/api/board/useBoardAppCatalog";
+import { loadPanelResources, readPanelDesign } from "@/core/apps/PanelDesign";
 import { activePanelDisposals, panelStateCache } from "@/core/apps/PanelSession";
 import { createPanelHost } from "../../../../../../sdk/js/index.mjs";
 
@@ -47,11 +48,13 @@ export function useAppPanel({ app, projectUID, userUID, onClose }: Props) {
         const controller = new AbortController();
         let frame: HTMLIFrameElement | undefined;
         let loadTimer: ReturnType<typeof setTimeout> | undefined;
-        let disposeHost: (() => void) | undefined;
+        let disposeHost: ReturnType<typeof createPanelHost> | undefined;
+        let themeObserver: MutationObserver | undefined;
         let stateKey = JSON.stringify([userUID, projectUID, app.key, app.version]);
         const teardown = () => {
             controller.abort();
             clearTimeout(loadTimer);
+            themeObserver?.disconnect();
             disposeHost?.();
             frame?.remove();
         };
@@ -71,7 +74,8 @@ export function useAppPanel({ app, projectUID, userUID, onClose }: Props) {
                 signal: controller.signal,
                 env: { interceptToast: true } as never,
             })
-            .then(({ data }) => {
+            .then(async ({ data }) => {
+                const resources = await loadPanelResources(controller.signal);
                 if (controller.signal.aborted || document.hidden || !container.current) return;
                 activePanelDisposals.delete(stateKey);
                 stateKey = JSON.stringify([userUID, projectUID, app.key, data.version]);
@@ -90,6 +94,7 @@ export function useAppPanel({ app, projectUID, userUID, onClose }: Props) {
                                 frame,
                                 context: { project_uid: projectUID, app_key: app.key, app_version: data.version, language },
                                 state: panelStateCache.get(stateKey),
+                                design: { ...readPanelDesign(), resources },
                                 onState: (state) => panelStateCache.set(stateKey, state),
                                 onReady: () => {
                                     clearTimeout(loadTimer);
@@ -101,6 +106,10 @@ export function useAppPanel({ app, projectUID, userUID, onClose }: Props) {
                                 },
                                 onError: fail,
                             });
+                            themeObserver = new MutationObserver(() => {
+                                if (!controller.signal.aborted) disposeHost?.updateDesign(readPanelDesign());
+                            });
+                            themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "style"] });
                         } catch {
                             fail();
                         }

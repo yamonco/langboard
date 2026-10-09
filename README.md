@@ -87,6 +87,8 @@ The [standalone Python SDK guide](src/sdk/py/GUIDE.md) covers installation,
 authenticated REST App management, instance connections and resource selections,
 native MCP work commands, built-in workflow types, and revision-conflict recovery.
 The SDK preserves native server authority and supports caller-owned transports.
+See the [external app SDK contract and support boundaries](docs/external-app-sdk.md)
+and [isolated JavaScript panel SDK](src/sdk/js/README.md).
 
 ## 🔐 API Keys and Key Vault
 

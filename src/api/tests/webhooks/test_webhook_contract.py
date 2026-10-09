@@ -545,3 +545,17 @@ async def test_endpoint_delivery_failure_is_bounded_and_retryable(monkeypatch: p
         "retry_kwargs": {"max_retries": 3},
     }
     assert WebhookTask.WebhookDeliveryError not in WebhookTask.WEBHOOK_FANOUT_RETRY_OPTIONS["autoretry_for"]
+
+
+def test_portable_sdk_authenticates_native_signed_wire_bytes():
+    from langboard_sdk import InvalidWebhook, verify_webhook
+    model = WebhookModel(event="card_moved", data={"card_title": "한글 업무", "card_uid": "example"})
+    body, headers = WebhookTask.signed_request(model, "external-app-secret", timestamp=1700000000)
+    verify_webhook(body, headers, "external-app-secret", now=1700000000)
+    with pytest.raises(InvalidWebhook):
+        verify_webhook(body + b" ", headers, "external-app-secret", now=1700000000)
+    # A retry is freshly signed but preserves native event identity; consumers
+    # still need durable business-level duplicate detection.
+    retry_body, retry_headers = WebhookTask.signed_request(model, "external-app-secret", timestamp=1700000200)
+    verify_webhook(retry_body, retry_headers, "external-app-secret", now=1700000200)
+    assert retry_body == body and retry_headers["X-Langboard-Webhook-Id"] == headers["X-Langboard-Webhook-Id"]
