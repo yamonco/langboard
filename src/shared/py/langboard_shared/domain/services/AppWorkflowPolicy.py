@@ -4,23 +4,16 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Literal
+from langboard_sdk import WorkflowRequirements, WorkflowStage
 from ..models import ProjectColumn, WorkflowStageDefinition
 
 
-@dataclass(frozen=True)
-class WorkflowRequirements:
-    required: tuple[str, ...]
-    optional: tuple[str, ...] = ()
-
-    def __post_init__(self):
-        keys = self.required + self.optional
-        builtin_keys = {"backlog", "ready", "active", "review", "closed", "reference"}
-        if not self.required or any(key not in builtin_keys for key in keys) or len(set(keys)) != len(keys):
-            raise ValueError("App workflow requirements need distinct built-in stage types")
-
-
-GITHUB_WORKFLOW_REQUIREMENTS = WorkflowRequirements(("active", "review", "closed"), ("ready",))
-GLITCHTIP_WORKFLOW_REQUIREMENTS = WorkflowRequirements(("active", "review", "closed"))
+GITHUB_WORKFLOW_REQUIREMENTS = WorkflowRequirements(
+    (WorkflowStage.ACTIVE, WorkflowStage.REVIEW, WorkflowStage.CLOSED), (WorkflowStage.READY,)
+)
+GLITCHTIP_WORKFLOW_REQUIREMENTS = WorkflowRequirements(
+    (WorkflowStage.ACTIVE, WorkflowStage.REVIEW, WorkflowStage.CLOSED)
+)
 
 # Host-owned presets. Unknown providers cannot grant transitions by supplying a
 # smaller requirements object. Other providers join after their contract exists.
