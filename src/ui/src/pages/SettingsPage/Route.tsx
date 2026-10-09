@@ -124,4 +124,5 @@ const routes: RouteObject[] = [
 
 export default {
     routes,
+    workbench: true,
 };
