@@ -268,3 +268,13 @@ test("unchanged Cron interval follows language changes without rewriting schedul
         await expect(page.getByTestId("cron-interval")).toHaveText(text);
     }
 });
+
+test("hidden card quantities and IP overflow use locale grouping", async ({ page }) => {
+    await page.goto("/src/core/utils/LocaleFormat.fixture.html");
+    for (const locale of ["en-US", "ko-KR", "ja-JP", "zh-CN"]) {
+        await page.getByRole("button", { name: locale, exact: true }).click();
+        await expect(page.getByTestId("ip-whitelist")).toHaveText("192.0.2.1 +1,234");
+        const quantities = await page.getByTestId("hidden-counts").textContent();
+        expect(quantities?.match(/1,234/g)).toHaveLength(3);
+    }
+});
