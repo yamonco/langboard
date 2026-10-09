@@ -81,7 +81,15 @@ Langboard's mission is to enable enterprises to harness AI efficiency without sa
 
 ---
 
+### Python SDK
+
+The [standalone Python SDK guide](src/sdk/py/GUIDE.md) covers installation,
+authenticated REST App management, instance connections and resource selections,
+native MCP work commands, built-in workflow types, and revision-conflict recovery.
+The SDK preserves native server authority and supports caller-owned transports.
+
 ## 🔐 API Keys and Key Vault
+
 
 - API key lifecycle operations include create, update, activate/deactivate, expiration, and delete.
 - IP whitelist validation and API key usage logging are built in.

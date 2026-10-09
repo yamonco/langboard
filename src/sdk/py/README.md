@@ -1,5 +1,11 @@
 # Langboard Python SDK
 
+Start with the [installation, authentication and management guide](GUIDE.md).
+`AppManager` manages board App catalogs, workflow drafts and binding disablement.
+`ConnectionManager` handles native instance onboarding and resource selection.
+`LangboardClient` handles native MCP work commands. See the guide's support table
+for routes that are not yet covered; this is not a full administrative API SDK.
+
 A standalone package with no runtime dependencies on Langboard server internals,
 ChatGPT, a company identity provider, or a database. Native Langboard remains the
 owner of validation, current authorization, transactions, and durable receipts.
