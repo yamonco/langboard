@@ -12,7 +12,7 @@ interface HistoryItem {
     revision_before: number | null;
     revision_after: number;
     source_kind: string;
-    source_link?: { kind: "card"; href: string };
+    source_link?: { kind: "card" | "wiki"; href: string };
     request_id?: string | null;
     reason_code?: string | null;
 }
@@ -78,12 +78,18 @@ export default function SecretHistoryPage() {
                                                 ? `v${item.revision_after}`
                                                 : `v${item.revision_before} → v${item.revision_after}`}
                                         </p>
-                                        {item.source_link?.kind === "card" &&
-                                            /^\/board\/[A-Za-z0-9]{1,11}\/[A-Za-z0-9]{1,11}$/.test(item.source_link.href) && (
-                                                <Link className="link text-xs text-primary" to={item.source_link.href}>
-                                                    {t("myAccount.secretHistory.openSource")}
-                                                </Link>
-                                            )}
+                                        {(item.source_link?.kind === "card"
+                                            ? /^\/board\/[A-Za-z0-9]{1,11}\/[A-Za-z0-9]{1,11}$/.test(item.source_link.href)
+                                            : item.source_link?.kind === "wiki" &&
+                                              /^\/board\/[A-Za-z0-9]{1,11}\/wiki\/[A-Za-z0-9]{1,11}$/.test(item.source_link.href)) && (
+                                            <Link className="link text-xs text-primary" to={item.source_link!.href}>
+                                                {t(
+                                                    item.source_link!.kind === "wiki"
+                                                        ? "myAccount.secretHistory.openSourceWiki"
+                                                        : "myAccount.secretHistory.openSource"
+                                                )}
+                                            </Link>
+                                        )}
                                         {item.reason_code && (
                                             <p className="text-xs text-muted-foreground" title={item.request_id ?? undefined}>
                                                 {t(`myAccount.secretHistory.reasons.${item.reason_code}`, { defaultValue: item.reason_code })}

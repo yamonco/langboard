@@ -11,10 +11,19 @@ from ....core.domain import BaseDomainService
 from ....core.security import KeyVault
 from ....core.security.CollaborationChannel import CollaborationChannel
 from ....helpers import InfraHelper
-from ...models import Card, Organization, SecretReference, SecretReferenceAudit, User
+from ...models import (
+    Card,
+    Organization,
+    ProjectWiki,
+    ProjectWikiAssignedUser,
+    SecretReference,
+    SecretReferenceAudit,
+    User,
+)
 from ...models.ProjectRole import ProjectRoleAction
 from ..CardVisibilityPolicy import CardVisibility
 from .CardService import CardService
+from .ProjectWikiService import ProjectWikiService
 from .WorkflowStageService import WorkflowStageService
 
 
@@ -36,7 +45,7 @@ def validate_secret_name(name: str) -> str:
 class SecretAuditSource:
     """Constructed by a trusted host adapter, never from a caller's arbitrary text."""
 
-    kind: Literal["runtime", "card", "app_connection", "api", "cli", "workflow"] = "runtime"
+    kind: Literal["runtime", "card", "wiki", "app_connection", "api", "cli", "workflow"] = "runtime"
     uid: str | None = None
     request_id: str | None = None
     reason_code: (
@@ -54,7 +63,7 @@ class SecretAuditSource:
     ) = None
 
     def __post_init__(self):
-        if self.kind not in {"runtime", "card", "app_connection", "api", "cli", "workflow"}:
+        if self.kind not in {"runtime", "card", "wiki", "app_connection", "api", "cli", "workflow"}:
             raise ValueError("Unknown secret audit source")
         if self.uid is not None and (
             not isinstance(self.uid, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", self.uid)
@@ -250,6 +259,53 @@ class SecretReferenceService(BaseDomainService):
                 links[card.get_uid()] = f"/board/{project.get_uid()}/{card.get_uid()}"
         return links
 
+    def _visible_wiki_sources(self, actor: User, rows: Sequence[SecretReferenceAudit]) -> dict[str, str]:
+        """Current board and native wiki authority; secret ownership grants neither."""
+        uids = {
+            row.source_uid
+            for row in rows
+            if row.source_kind == "wiki"
+            and isinstance(row.source_uid, str)
+            and re.fullmatch(r"[A-Za-z0-9]{1,11}", row.source_uid)
+        }
+        if not uids:
+            return {}
+        with DbSession.use(readonly=False) as db:
+            wikis = db.exec(
+                SqlBuilder.select.table(ProjectWiki).where(
+                    ProjectWiki.id.in_([InfraHelper.convert_id(uid) for uid in uids]), ProjectWiki.deleted_at.is_(None)
+                )
+            ).all()
+        with DbSession.use(readonly=False) as db:
+            current = db.exec(SqlBuilder.select.table(User).where(User.id == actor.id)).first()
+            assignments = (
+                db.exec(
+                    SqlBuilder.select.columns(ProjectWikiAssignedUser.project_wiki_id).where(
+                        ProjectWikiAssignedUser.project_wiki_id.in_([wiki.id for wiki in wikis]),
+                        ProjectWikiAssignedUser.user_id == actor.id,
+                    )
+                ).all()
+                if wikis
+                else []
+            )
+        assigned_wiki_ids = {row[0] for row in assignments}
+        if current is None or current.deleted_at or not current.activated_at:
+            return {}
+        boards = {}
+        links = {}
+        wiki_service = self._get_service(ProjectWikiService)
+        for wiki in wikis:
+            if wiki.project_id not in boards:
+                boards[wiki.project_id] = self._get_service(WorkflowStageService)._authorized_app_board(
+                    actor, wiki.project_id, ProjectRoleAction.Read
+                )
+            project = boards[wiki.project_id]
+            if project is not None and wiki_service.can_view(
+                current, project, wiki, [current.id] if wiki.id in assigned_wiki_ids else []
+            ):
+                links[wiki.get_uid()] = f"/board/{project.get_uid()}/wiki/{wiki.get_uid()}"
+        return links
+
     def list_audit(
         self,
         actor: User,
@@ -280,7 +336,10 @@ class SecretReferenceService(BaseDomainService):
                     raise SecretReferenceUnavailable()
                 statement = statement.where(SecretReferenceAudit.id < anchor.id)
             rows = db.exec(statement.order_by(SecretReferenceAudit.id.desc()).limit(limit + 1)).all()
-            source_links = self._visible_card_sources(actor, rows[:limit], channel)
+            source_links = {
+                "card": self._visible_card_sources(actor, rows[:limit], channel),
+                "wiki": self._visible_wiki_sources(actor, rows[:limit]),
+            }
             return {
                 "secret_ref": reference.metadata()["uri"],
                 "items": [
@@ -297,8 +356,13 @@ class SecretReferenceService(BaseDomainService):
                         # Cross-resource source links require their own current ACL.
                         "source_kind": row.source_kind,
                         **(
-                            {"source_link": {"kind": "card", "href": source_links[row.source_uid]}}
-                            if row.source_kind == "card" and row.source_uid in source_links
+                            {
+                                "source_link": {
+                                    "kind": row.source_kind,
+                                    "href": source_links[row.source_kind][row.source_uid],
+                                }
+                            }
+                            if row.source_uid in source_links.get(row.source_kind, {})
                             else {}
                         ),
                         "request_id": row.request_id,

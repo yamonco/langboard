@@ -112,7 +112,7 @@ for (const width of [1440, 390])
         });
 
 for (const width of [1920, 390]) {
-    test(`source links use authorized local card routes at ${width}`, async ({ page }) => {
+    test(`source links use authorized local card and wiki routes at ${width}`, async ({ page }) => {
         await page.setViewportSize({ width, height: 900 });
         await page.route("**/secret-references/fixture/history*", (route) =>
             route.fulfill({
@@ -147,6 +147,26 @@ for (const width of [1920, 390]) {
                             revision_before: null,
                             revision_after: 0,
                         },
+                        {
+                            uid: "four",
+                            created_at: "2026-10-09T00:00:00Z",
+                            actor_uid: "actor",
+                            action: "created",
+                            source_kind: "wiki",
+                            revision_before: null,
+                            revision_after: 0,
+                            source_link: { kind: "wiki", href: "/board/board/wiki/wiki" },
+                        },
+                        {
+                            uid: "five",
+                            created_at: "2026-10-09T00:00:00Z",
+                            actor_uid: "actor",
+                            action: "created",
+                            source_kind: "wiki",
+                            revision_before: null,
+                            revision_after: 0,
+                            source_link: { kind: "wiki", href: "/board/board/card" },
+                        },
                     ],
                     next_cursor: null,
                 },
@@ -156,6 +176,9 @@ for (const width of [1920, 390]) {
         const links = page.getByRole("link", { name: "Open source card" });
         await expect(links).toHaveCount(1);
         await expect(links).toHaveAttribute("href", "/board/board/card");
+        const wikiLinks = page.getByRole("link", { name: "Open source wiki" });
+        await expect(wikiLinks).toHaveCount(1);
+        await expect(wikiLinks).toHaveAttribute("href", "/board/board/wiki/wiki");
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     });
 }

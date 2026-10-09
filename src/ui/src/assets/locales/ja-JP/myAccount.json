@@ -75,6 +75,7 @@
       "value_rotated": "秘密値の更新",
       "reference_bound": "認可済みのアプリ接続への紐付け"
     },
-    "openSource": "元のカードを開く"
+    "openSource": "元のカードを開く",
+    "openSourceWiki": "元のWikiを開く"
   }
 }
