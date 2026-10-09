@@ -46,11 +46,11 @@ api.defaults.adapter = async (config) => {
                     {
                         installation_id: config.params?.after ? "18" : "17",
                         account_id: "7",
-                        selected_count: 4,
-                        healthy_count: 1,
-                        degraded_count: 1,
-                        unavailable_count: 1,
-                        unverified_count: 1,
+                        selected_count: params.has("largecounts") ? 12345 : 4,
+                        healthy_count: params.has("largecounts") ? 2345 : 1,
+                        degraded_count: params.has("largecounts") ? 3456 : 1,
+                        unavailable_count: params.has("largecounts") ? 4567 : 1,
+                        unverified_count: params.has("largecounts") ? 1677 : 1,
                     },
                 ],
             },
@@ -156,6 +156,12 @@ await i18n.changeLanguage("en-US");
 createRoot(document.getElementById("root")!).render(
     <BoardSettingsProvider project={project} currentUser={user}>
         <main className="mx-auto max-w-xl p-4">
+            {params.has("largecounts") &&
+                ["en-US", "ko-KR", "ja-JP", "zh-CN"].map((locale) => (
+                    <button key={locale} onClick={() => void i18n.changeLanguage(locale)}>
+                        {locale}
+                    </button>
+                ))}
             <BoardSettingsGitHub />
         </main>
     </BoardSettingsProvider>
