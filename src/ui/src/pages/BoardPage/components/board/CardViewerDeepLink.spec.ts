@@ -472,3 +472,42 @@ test("dashboard deletion removes flipped cards without a loaded model", async ({
     await page.goto("/src/pages/BoardPage/components/board/CardFlipDeletion.fixture.html");
     await expect(page.getByRole("status")).toContainText("PASS unloaded card removed");
 });
+
+for (const reduced of [false, true]) {
+    test(`Flip and restore use bounded Motion transitions reduced=${reduced}`, async ({ page }) => {
+        await page.emulateMedia({ reducedMotion: reduced ? "reduce" : "no-preference" });
+        await page.addInitScript(() => {
+            const original = Element.prototype.animate;
+            const records: unknown[] = [];
+            (window as unknown as { __flipMotion: unknown[] }).__flipMotion = records;
+            Element.prototype.animate = function (frames, options) {
+                if (this.hasAttribute("data-card-viewer")) records.push({ frames, options });
+                return original.call(this, frames, options);
+            };
+        });
+        await mockBoardApi(page);
+        await seedTray(page, 1);
+        await page.goto(FIXTURE);
+        await expect(page.getByRole("heading", { name: "Fixture card", exact: true })).toBeVisible();
+        await expect
+            .poll(() => page.locator("[data-card-viewer]").evaluate((el) => el.getAnimations().filter((a) => a.playState === "running").length))
+            .toBe(0);
+        await page.getByRole("button", { name: "Flip card", exact: true }).click();
+        await expect(page.locator("[data-card-viewer]")).toHaveCount(0);
+        await page.getByRole("button", { name: "Restore Fixture card", exact: true }).click();
+        await expect(page.getByRole("heading", { name: "Fixture card", exact: true })).toBeVisible();
+        await expect
+            .poll(() => page.locator("[data-card-viewer]").evaluate((el) => el.getAnimations().filter((a) => a.playState === "running").length))
+            .toBe(0);
+        const records = await page.evaluate(
+            () => (window as unknown as { __flipMotion: Array<{ options: { duration: number }; frames: unknown }> }).__flipMotion
+        );
+        if (reduced) expect(records).toHaveLength(0);
+        else {
+            expect(records.length).toBeGreaterThanOrEqual(2);
+            records.forEach((record) => expect(record.options.duration).toBe(180));
+        }
+        await expect(page.locator("[data-card-viewer]")).toHaveCount(1);
+        await expect(page.locator("[data-card-viewer]")).toHaveCSS("opacity", "1");
+    });
+}
