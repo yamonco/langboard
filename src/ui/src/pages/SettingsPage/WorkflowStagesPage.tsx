@@ -249,6 +249,7 @@ export default function WorkflowStagesPage({ currentUser }: { currentUser: AuthU
                         <label className="block space-y-1 text-sm">
                             {t("settings.Stage description")}
                             <Textarea
+                                aria-label={t("settings.Stage description")}
                                 value={text?.description ?? ""}
                                 maxLength={4000}
                                 rows={3}
