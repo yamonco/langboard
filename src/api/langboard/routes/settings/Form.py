@@ -355,6 +355,7 @@ class DeleteSelectedNotificationScheduleRulesForm(BaseFormModel):
 
 @form_model
 class SaveGlobalLabelForm(BaseFormModel):
+    aliases: list[str] | None = Field(default=None, max_length=30)
     emoji: str | None = Field(default=None, max_length=32)
     translations: dict[str, dict[str, str]] = Field(default_factory=dict)
     name: str = Field(min_length=1, max_length=100)

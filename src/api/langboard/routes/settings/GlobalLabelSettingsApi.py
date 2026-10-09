@@ -18,7 +18,9 @@ def get_global_labels(service: DomainService = DomainService.scope()) -> JsonRes
 
 def _save(form: SaveGlobalLabelForm, service: DomainService, uid: str | None = None) -> JsonResponse:
     try:
-        label = service.global_label.save(form.name, form.color, form.description, uid, form.translations, form.emoji)
+        label = service.global_label.save(
+            form.name, form.color, form.description, uid, form.translations, form.emoji, form.aliases
+        )
     except (ValueError, IntegrityError) as exc:
         raise ApiException.BadRequest_400(ApiErrorCode.VA0000) from exc
     if not label:

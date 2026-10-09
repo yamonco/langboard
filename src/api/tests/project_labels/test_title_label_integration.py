@@ -392,3 +392,56 @@ async def test_native_mcp_wrappers_title_labels_and_current_scope(title_board, m
             assert InfraHelper.get_by_id_like(models.Card, card["uid"]).title == "MCP updated"
     finally:
         mcp_auth_context.reset(token)
+
+
+def test_registered_aliases_persist_match_and_preserve_when_omitted(title_board):
+    service, actor, project, column, _, bug, _, _, _ = title_board
+    updated = service.global_label.save(
+        bug.name, bug.color, bug.description, bug.get_uid(), bug.translations, aliases=[" Defect ", "障害", "Defect"]
+    )
+    assert updated.aliases == ["Defect", "障害"]
+    service.global_label.save(bug.name, bug.color, bug.description, bug.get_uid(), bug.translations)
+    assert InfraHelper.get_by_id_like(models.GlobalLabel, bug.id).aliases == ["Defect", "障害"]
+    card, response = create(title_board, "[Defect][障害] Alias title")
+    assert card.title == "Alias title"
+    assert len(response["labels"]) == 1 and response["labels"][0]["global_label_uid"] == bug.get_uid()
+    service.global_label.save(bug.name, bug.color, bug.description, bug.get_uid(), bug.translations, aliases=[])
+    card, response = create(title_board, "[Defect] Literal")
+    assert card.title == "[Defect] Literal" and response["labels"] == []
+
+
+@pytest.mark.parametrize("aliases", [[""], ["x\ny"], ["[Bug]"], ["x" * 101], ["x"] * 31, [123]])
+def test_invalid_aliases_do_not_change_registry(title_board, aliases):
+    service, _, _, _, _, bug, _, _, _ = title_board
+    with pytest.raises(ValueError):
+        service.global_label.save(bug.name, bug.color, bug.description, bug.get_uid(), aliases=aliases)
+    assert InfraHelper.get_by_id_like(models.GlobalLabel, bug.id).aliases == []
+
+
+def test_alias_migration_preserves_existing_labels_and_guards_downgrade(title_board):
+    import importlib.util
+    import json
+    from pathlib import Path
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+
+    *_, engine = title_board
+    path = Path(__file__).resolve().parents[4] / "src/api/langboard/migrations/versions/20261009093000-862af3c591d7.py"
+    spec = importlib.util.spec_from_file_location("global_alias_migration", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    with engine.begin() as connection:
+        module.op = Operations(MigrationContext.configure(connection))
+        original = connection.execute(text("SELECT id, name FROM global_label ORDER BY id")).all()
+        module.downgrade()
+        module.upgrade()
+        assert connection.execute(text("SELECT id, name FROM global_label ORDER BY id")).all() == original
+        assert all(
+            value in ([], "[]") for value in connection.execute(text("SELECT aliases FROM global_label")).scalars()
+        )
+        connection.execute(text("UPDATE global_label SET aliases=:aliases"), {"aliases": json.dumps(["Defect"])})
+        with pytest.raises(RuntimeError, match="Cannot discard"):
+            module.downgrade()
+        connection.execute(text("UPDATE global_label SET aliases='[]'"))
+        module.downgrade()
+        assert connection.execute(text("SELECT id, name FROM global_label ORDER BY id")).all() == original

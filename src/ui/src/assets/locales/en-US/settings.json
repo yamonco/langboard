@@ -291,5 +291,7 @@
   "Employee membership guidance": "Select synchronized SCIM groups whose members are employees. Any selected group qualifies. Group names and email domains never grant access. Saving an empty selection removes internal access for everyone. This setting does not change existing card visibility.",
   "No synchronized SCIM groups": "No synchronized SCIM groups. Configure group provisioning in your identity provider first.",
   "Membership settings saved": "Employee membership saved.",
-  "Membership settings failed": "Could not load or save employee membership."
+  "Membership settings failed": "Could not load or save employee membership.",
+  "Title aliases": "Title aliases",
+  "One exact alias per line, up to 30. Used for leading title label tokens.": "One exact alias per line, up to 30. Used for leading title label tokens."
 }

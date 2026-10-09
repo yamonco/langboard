@@ -19,6 +19,7 @@ const blank = (): TGlobalLabelInput => ({
     color: "#4A90E2",
     description: "",
     emoji: "",
+    aliases: [],
     translations: Object.fromEntries(Object.keys(LANGUAGES).map((key) => [key, { name: "", description: "" }])),
 });
 
@@ -53,6 +54,7 @@ export default function GlobalLabelsPage({ currentUser }: { currentUser: AuthUse
             label
                 ? {
                       ...label,
+                      aliases: label.aliases ?? [],
                       translations: { ...blank().translations, ...label.translations, en: { name: label.name, description: label.description } },
                   }
                 : blank()
@@ -71,7 +73,7 @@ export default function GlobalLabelsPage({ currentUser }: { currentUser: AuthUse
     };
     const submit = async () => {
         try {
-            const updated = await save(draft);
+            const updated = await save({ ...draft, aliases: [...new Set((draft.aliases ?? []).map((alias) => alias.trim()).filter(Boolean))] });
             setLabels((items) => [...items.filter((item) => item.uid !== updated.uid), updated].sort((a, b) => a.name.localeCompare(b.name)));
             setDraft(updated);
             setDirty(false);
@@ -169,6 +171,24 @@ export default function GlobalLabelsPage({ currentUser }: { currentUser: AuthUse
                             disabled={!canSave}
                             onChange={(e) => edit("description", e.target.value)}
                         />
+                    </label>
+                    <label className="block space-y-1 text-sm">
+                        <span>{t("settings.Title aliases")}</span>
+                        <Textarea
+                            className="textarea w-full"
+                            aria-label={t("settings.Title aliases")}
+                            value={(draft.aliases ?? []).join("\n")}
+                            rows={3}
+                            maxLength={3030}
+                            disabled={!canSave}
+                            onChange={(event) => {
+                                setDraft((item) => ({ ...item, aliases: event.target.value.split("\n") }));
+                                setDirty(true);
+                            }}
+                        />
+                        <span className="text-xs text-muted-foreground">
+                            {t("settings.One exact alias per line, up to 30. Used for leading title label tokens.")}
+                        </span>
                     </label>
                     <label className="block space-y-1.5 text-sm">
                         <span>{t("settings.Emoji (optional)")}</span>

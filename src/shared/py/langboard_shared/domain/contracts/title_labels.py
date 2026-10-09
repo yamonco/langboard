@@ -38,7 +38,11 @@ def global_label_names(labels: list[dict]) -> dict[str, str | None]:
     """One exact-name index; collisions cannot pick a label by iteration order."""
     names: dict[str, str | None] = {}
     for label in labels:
-        candidates = [label["name"], *(text.get("name") for text in label.get("translations", {}).values())]
+        candidates = [
+            label["name"],
+            *label.get("aliases", []),
+            *(text.get("name") for text in label.get("translations", {}).values()),
+        ]
         for name in candidates:
             if not name:
                 continue
