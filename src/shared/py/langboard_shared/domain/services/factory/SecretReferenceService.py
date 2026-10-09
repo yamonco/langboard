@@ -10,6 +10,7 @@ from ....core.db import DbSession, SqlBuilder
 from ....core.domain import BaseDomainService
 from ....core.security import KeyVault
 from ....core.security.CollaborationChannel import CollaborationChannel
+from ....core.security.vault.VaultProvider import VaultProvider
 from ....helpers import InfraHelper
 from ...models import (
     Card,
@@ -58,6 +59,7 @@ class SecretAuditSource:
             "reference_revoked",
             "value_rotated",
             "reference_bound",
+            "provider_migrated",
         ]
         | None
     ) = None
@@ -83,6 +85,7 @@ class SecretAuditSource:
             "reference_revoked",
             "value_rotated",
             "reference_bound",
+            "provider_migrated",
         }:
             raise ValueError("Invalid secret audit reason code")
 
@@ -113,6 +116,7 @@ class SecretReferenceService(BaseDomainService):
                     "revoked": "reference_revoked",
                     "rotated": "value_rotated",
                     "bound": "reference_bound",
+                    "migrated": "provider_migrated",
                 }[action],
             )
         )
@@ -351,7 +355,7 @@ class SecretReferenceService(BaseDomainService):
                         "revision_before": None
                         if row.action == "created"
                         else row.reference_revision
-                        - (1 if row.action in {"renamed", "moved", "revoked", "rotated"} else 0),
+                        - (1 if row.action in {"renamed", "moved", "revoked", "rotated", "migrated"} else 0),
                         "revision_after": row.reference_revision,
                         # Cross-resource source links require their own current ACL.
                         "source_kind": row.source_kind,
@@ -484,6 +488,60 @@ class SecretReferenceService(BaseDomainService):
         except Exception:
             if new_locator is not None:
                 provider.delete_key(new_locator)
+            raise
+
+    def migrate_provider(
+        self,
+        actor: User,
+        uri: str,
+        expected_revision: int,
+        source_provider: VaultProvider,
+        *,
+        source: SecretAuditSource = SecretAuditSource(),
+    ) -> dict:
+        """Trusted host migration to its configured provider; never a model tool.
+
+        The operator supplies an already authenticated old provider instance.
+        No endpoint, credential, locator or plaintext is accepted or returned.
+        """
+        if DbSession.has_active_transaction():
+            raise RuntimeError("Credential storage must own its transaction")
+        if type(expected_revision) is not int or expected_revision < 0:
+            raise ValueError("Invalid secret migration revision")
+        target = KeyVault.provider
+        if not isinstance(source_provider, VaultProvider) or not isinstance(target, VaultProvider):
+            raise ValueError("Migration requires trusted vault provider instances")
+        if source_provider.name() == target.name() or source.reason_code not in {None, "provider_migrated"}:
+            raise ValueError("Invalid secret provider migration")
+        new_locator = None
+        try:
+            with DbSession.atomic() as db:
+                reference = self._find(actor, uri, lock=True)
+                if reference.revision != expected_revision:
+                    raise SecretReferenceConflict()
+                if reference.state != "active" or reference.provider != source_provider.name():
+                    raise SecretReferenceUnavailable()
+                old_locator = reference.locator
+                try:
+                    material = source_provider.get_key(old_locator)
+                except KeyError:
+                    raise SecretReferenceUnavailable() from None
+                if not isinstance(material, str) or not material:
+                    raise SecretReferenceUnavailable()
+                new_locator = target.store_secret(uuid4().hex, material)
+                # Verify the destination before committing or retiring source material.
+                if target.get_key(new_locator) != material:
+                    raise SecretReferenceUnavailable()
+                reference.provider = target.name()
+                reference.locator = new_locator
+                reference.revision += 1
+                db.update(reference)
+                self._audit(db, actor, reference, "migrated", source)
+                db.after_commit(lambda: source_provider.delete_key(old_locator))
+                return reference.metadata()
+        except Exception:
+            if new_locator is not None:
+                target.delete_key(new_locator)
             raise
 
     def revoke(

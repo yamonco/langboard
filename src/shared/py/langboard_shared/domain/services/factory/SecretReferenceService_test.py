@@ -33,6 +33,7 @@ def secrets(board, monkeypatch, tmp_path):
         "20261008072000-a430de35fc79.py",
         "20261008114000-e87412793ab3.py",
         "20261009040000-7c98451eab03.py",
+        "20261009100000-b51832cfe4a7.py",
     ):
         migration_path = Path(__file__).resolve().parents[7] / "src/api/langboard/migrations/versions" / filename
         spec = importlib.util.spec_from_file_location("secret_reference_migration", migration_path)
@@ -312,3 +313,111 @@ def test_storage_writes_reject_outer_transaction_before_vault_effect(secrets):
         with pytest.raises(RuntimeError, match="own its transaction"):
             service.rotate(board[1], meta["uri"], SecretStr("new"), 0)
     assert set(path.iterdir()) == original_paths
+
+
+@pytest.fixture
+def provider_migration(secrets, monkeypatch, tmp_path):
+    from ....core.security.vault.LocalDevVaultProvider import LocalDevVaultProvider
+
+    class DestinationProvider(LocalDevVaultProvider):
+        def name(self):
+            return "fixture-destination"
+
+    service, board, path = secrets
+    actor = board[1]
+    old = KeyVault.provider
+    meta = service.create(actor, "personal", "me", "migration/key", SecretStr("fixture-migration-material"))
+    target = DestinationProvider(tmp_path / "destination")
+    monkeypatch.setattr(KeyVault, "provider", target)
+    return service, board, path, old, target, meta
+
+
+def test_provider_migration_keeps_identity_revision_audit_and_verified_material(provider_migration):
+    service, board, path, old, target, meta = provider_migration
+    migrated = service.migrate_provider(board[1], meta["uri"], 0, old)
+    assert migrated == {**meta, "revision": 1}
+    assert not [item for item in path.iterdir() if item.is_file()] and len(list(target.base_dir.iterdir())) == 1
+    assert service.resolve_for_runtime(board[1], migrated["uri"]).get_secret_value() == "fixture-migration-material"
+    history = service.list_audit(board[1], migrated["uri"])
+    event = next(row for row in history["items"] if row["action"] == "migrated")
+    assert (event["revision_before"], event["revision_after"], event["reason_code"]) == (0, 1, "provider_migrated")
+    assert not any(
+        word in str(history) + str(migrated)
+        for word in ["fixture-migration-material", "fixture-destination", "locator"]
+    )
+
+
+@pytest.mark.parametrize(
+    "failure", ["denied", "stale", "wrong-provider", "revoked", "outer-transaction", "readback", "audit"]
+)
+def test_provider_migration_failure_preserves_source_and_discards_uncommitted_destination(
+    provider_migration, monkeypatch, failure
+):
+    service, board, path, old, target, meta = provider_migration
+    actor, revision, expected = board[1], 0, Exception
+    original_paths = {item for item in path.iterdir() if item.is_file()}
+    if failure == "denied":
+        actor, expected = board[3], SecretReferenceUnavailable
+    elif failure == "stale":
+        revision, expected = 5, SecretReferenceConflict
+    elif failure == "wrong-provider":
+        monkeypatch.setattr(old, "name", lambda: "wrong-source")
+        expected = SecretReferenceUnavailable
+    elif failure == "revoked":
+        service.revoke(actor, meta["uri"], 0)
+        revision, expected = 1, SecretReferenceUnavailable
+    elif failure == "readback":
+        monkeypatch.setattr(target, "get_key", lambda *_: "different-material")
+        expected = SecretReferenceUnavailable
+    elif failure == "audit":
+        monkeypatch.setattr(service, "_audit", lambda *_: (_ for _ in ()).throw(RuntimeError("audit failed")))
+        expected = RuntimeError
+    if failure == "outer-transaction":
+        with DbSession.atomic(), pytest.raises(RuntimeError, match="own its transaction"):
+            service.migrate_provider(actor, meta["uri"], revision, old)
+    else:
+        with pytest.raises(expected):
+            service.migrate_provider(actor, meta["uri"], revision, old)
+    assert {item for item in path.iterdir() if item.is_file()} == original_paths
+    assert not list(target.base_dir.iterdir())
+    with DbSession.use(readonly=False) as db:
+        reference = db.exec(select(SecretReference)).first()[0]
+    assert reference.provider == "local-dev"
+    assert reference.revision == (1 if failure == "revoked" else 0)
+
+
+def test_provider_migration_retirement_failure_keeps_committed_destination(provider_migration, monkeypatch):
+    service, board, path, old, target, meta = provider_migration
+    monkeypatch.setattr(old, "delete_key", lambda *_: (_ for _ in ()).throw(RuntimeError("retirement failed")))
+    migrated = service.migrate_provider(board[1], meta["uri"], 0, old)
+    assert migrated["revision"] == 1
+    assert [item for item in path.iterdir() if item.is_file()] and list(target.base_dir.iterdir())
+    assert service.resolve_for_runtime(board[1], meta["uri"]).get_secret_value() == "fixture-migration-material"
+
+
+def test_provider_migration_schema_roundtrip_preserves_old_facts_and_guards_new_facts(provider_migration, monkeypatch):
+    import importlib.util
+    from pathlib import Path
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+    from ....core.db.DbEngine import DbEngine
+
+    service, board, path, old, target, meta = provider_migration
+    filename = (
+        Path(__file__).resolve().parents[7] / "src/api/langboard/migrations/versions/20261009100000-b51832cfe4a7.py"
+    )
+    spec = importlib.util.spec_from_file_location("provider_migration_audit", filename)
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+    before = service.list_audit(board[1], meta["uri"])
+    with DbEngine.get_main_engine().begin() as connection:
+        monkeypatch.setattr(migration, "op", Operations(MigrationContext.configure(connection)))
+        migration.downgrade()
+        migration.upgrade()
+    assert service.list_audit(board[1], meta["uri"]) == before
+    service.migrate_provider(board[1], meta["uri"], 0, old)
+    with DbEngine.get_main_engine().begin() as connection:
+        monkeypatch.setattr(migration, "op", Operations(MigrationContext.configure(connection)))
+        with pytest.raises(RuntimeError, match="Cannot discard"):
+            migration.downgrade()
+    assert service.list_audit(board[1], meta["uri"])["items"][0]["action"] == "migrated"

@@ -63,7 +63,8 @@
       "moved": "Moved",
       "revoked": "Revoked",
       "rotated": "Value replaced",
-      "bound": "Bound"
+      "bound": "Bound",
+      "migrated": "Storage migrated"
     },
     "reasons": {
       "user_input": "Explicit browser input",
@@ -73,7 +74,8 @@
       "reference_moved": "Reference scope change",
       "reference_revoked": "Reference revocation",
       "value_rotated": "Secret value rotation",
-      "reference_bound": "Authorized application connection binding"
+      "reference_bound": "Authorized application connection binding",
+      "provider_migrated": "Secret storage provider changed"
     },
     "openSource": "Open source card",
     "openSourceWiki": "Open source wiki"
