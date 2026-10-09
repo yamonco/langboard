@@ -40,3 +40,15 @@ def test_ambiguous_translated_name_never_selects_by_iteration_order():
         result = parse_title_labels("[동일] [One] Fix", index)
         assert result.title == "[동일] Fix"
         assert result.global_label_uids == ("first",)
+
+
+def test_aliases_match_exactly_and_collisions_stay_literal():
+    labels = [
+        {"uid": "bug", "name": "Bug", "aliases": ["Defect", "同じ"]},
+        {"uid": "question", "name": "Question", "aliases": ["同じ"]},
+    ]
+    for ordered in [labels, list(reversed(labels))]:
+        index = global_label_names(ordered)
+        assert parse_title_labels("[Defect] Fixed", index).global_label_uids == ("bug",)
+        assert parse_title_labels("[defect] Fixed", index).title == "[defect] Fixed"
+        assert parse_title_labels("[同じ] Fixed", index).title == "[同じ] Fixed"

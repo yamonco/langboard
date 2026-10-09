@@ -43,10 +43,26 @@ class GlobalLabelService(BaseDomainService):
         uid: str | None = None,
         translations: dict[str, dict[str, str]] | None = None,
         emoji: str | None = None,
+        aliases: list[str] | None = None,
     ) -> GlobalLabel | None:
         name = name.strip()
         if not name or len(name) > 100 or not re.fullmatch(r"#[0-9a-fA-F]{6}", color) or len(description) > 4000:
             raise ValueError("Invalid label fields")
+        if aliases is not None:
+            if not isinstance(aliases, list) or len(aliases) > 30:
+                raise ValueError("Invalid label aliases")
+            cleaned = []
+            for alias in aliases:
+                if (
+                    not isinstance(alias, str)
+                    or not alias.strip()
+                    or len(alias.strip()) > 100
+                    or any(char in alias for char in "[]\r\n")
+                ):
+                    raise ValueError("Invalid label alias")
+                if alias.strip() not in cleaned:
+                    cleaned.append(alias.strip())
+            aliases = cleaned
         if emoji is not None:
             emoji = emoji.strip()
 
@@ -104,10 +120,17 @@ class GlobalLabelService(BaseDomainService):
             label.translations = translations
             if emoji is not None:
                 label.emoji = emoji
+            if aliases is not None:
+                label.aliases = aliases
             self.repo.global_label.update(label)
         else:
             label = GlobalLabel(
-                name=name, color=color.upper(), description=description, translations=translations, emoji=emoji or ""
+                name=name,
+                color=color.upper(),
+                description=description,
+                translations=translations,
+                emoji=emoji or "",
+                aliases=aliases or [],
             )
             self.repo.global_label.insert(label)
         if DbSession.has_active_transaction():

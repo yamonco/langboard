@@ -21,6 +21,7 @@ for (const width of [1280, 390])
         await page.getByLabel("Label name", { exact: true }).fill("Request");
         await page.getByLabel("Label description", { exact: true }).fill("English guidance");
         await page.getByLabel("Emoji (optional)", { exact: true }).fill("🐛");
+        await page.getByLabel("Title aliases", { exact: true }).fill("Defect\n障害");
         await page.getByRole("button", { name: "Color", exact: true }).click();
         const picker = page.locator("[data-radix-popper-content-wrapper]").last();
         await expect(picker.locator(".react-colorful")).toBeVisible();
@@ -37,11 +38,12 @@ for (const width of [1280, 390])
         await page.getByLabel("Language code", { exact: true }).fill("fr");
         await page.getByRole("button", { name: "Add language", exact: true }).click();
         await page.getByLabel("Label name", { exact: true }).fill("Demande");
-        await page.getByRole("button", { name: "Save", exact: true }).click();
+        await page.locator("form").getByRole("button", { name: "Save", exact: true }).click();
         await expect(page.getByRole("navigation").getByRole("button", { name: "🐛 Request", exact: true })).toBeVisible();
         await page.reload();
         await page.getByRole("navigation").getByRole("button", { name: "🐛 Request", exact: true }).click();
         await expect(page.getByLabel("Emoji (optional)", { exact: true })).toHaveValue("🐛");
+        await expect(page.getByLabel("Title aliases", { exact: true })).toHaveValue("Defect\n障害");
         await expect(page.getByLabel("Color hex code", { exact: true })).toHaveValue("#8B5CF6");
         await expect(page.getByLabel("Label name", { exact: true })).toHaveValue("Request");
         await page.getByRole("button", { name: "한국어", exact: true }).click();
@@ -50,7 +52,7 @@ for (const width of [1280, 390])
         await page.getByRole("button", { name: "fr", exact: true }).click();
         await expect(page.getByLabel("Label name", { exact: true })).toHaveValue("Demande");
         await page.getByLabel("Emoji (optional)", { exact: true }).fill("");
-        await page.getByRole("button", { name: "Save", exact: true }).click();
+        await page.locator("form").getByRole("button", { name: "Save", exact: true }).click();
         await expect(page.getByRole("navigation").getByRole("button", { name: "Request", exact: true })).toBeVisible();
         await page.reload();
         await page.getByRole("navigation").getByRole("button", { name: "Request", exact: true }).click();
@@ -79,5 +81,5 @@ test("global label list prefers exact locale then language while preserving cano
     await page.goto("/src/pages/SettingsPage/GlobalLabels.fixture.html");
     await page.getByRole("navigation").getByRole("button", { name: "📜 지역 계약", exact: true }).click();
     await expect(page.locator("input[value=Contract]")).toBeVisible();
-    await expect(page.locator("textarea")).toHaveValue("English contract");
+    await expect(page.getByLabel("레이블 설명", { exact: true })).toHaveValue("English contract");
 });

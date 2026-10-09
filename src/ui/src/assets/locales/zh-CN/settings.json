@@ -291,5 +291,7 @@
   "Employee membership guidance": "选择用于认定员工的已同步SCIM组。属于任一选定组即可。组名称和邮箱域名不授予访问权限。保存空选择将取消所有人的内部访问权限。此设置不会更改现有卡片的可见性。",
   "No synchronized SCIM groups": "没有已同步的SCIM组。请先在身份提供商中配置组预配。",
   "Membership settings saved": "员工成员资格已保存。",
-  "Membership settings failed": "无法加载或保存员工成员资格。"
+  "Membership settings failed": "无法加载或保存员工成员资格。",
+  "Title aliases": "标题别名",
+  "One exact alias per line, up to 30. Used for leading title label tokens.": "每行一个精确别名，最多30个。用于标题开头的标签标记。"
 }

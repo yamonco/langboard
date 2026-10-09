@@ -7,6 +7,7 @@ export interface IGlobalLabel {
     color: string;
     description: string;
     emoji?: string;
+    aliases?: string[];
     translations: Record<string, { name: string; description: string }>;
 }
 export type TGlobalLabelInput = Omit<IGlobalLabel, "uid"> & { uid?: string };

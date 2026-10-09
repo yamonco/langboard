@@ -291,5 +291,7 @@
   "Employee membership guidance": "従業員として扱う同期済みSCIMグループを選択します。いずれかの選択グループに所属するユーザーが対象です。グループ名やメールドメインでは判定しません。空の選択を保存すると全員の内部アクセスが無効になります。既存カードの公開範囲は変更されません。",
   "No synchronized SCIM groups": "同期済みSCIMグループがありません。まずIdPでグループのプロビジョニングを設定してください。",
   "Membership settings saved": "従業員メンバーシップを保存しました。",
-  "Membership settings failed": "従業員メンバーシップの読み込みまたは保存に失敗しました。"
+  "Membership settings failed": "従業員メンバーシップの読み込みまたは保存に失敗しました。",
+  "Title aliases": "タイトルの別名",
+  "One exact alias per line, up to 30. Used for leading title label tokens.": "1行に完全一致の別名を1つ、最大30個。タイトル先頭のラベルトークンに使用します。"
 }
