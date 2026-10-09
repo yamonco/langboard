@@ -277,6 +277,14 @@ class Env:
         return self.__get_from_cache("SENTRY_DSN")
 
     @property
+    def SENTRY_ENVIRONMENT(self) -> str:
+        return self.__get_from_cache("SENTRY_ENVIRONMENT", "") or self.ENVIRONMENT
+
+    @property
+    def SENTRY_RELEASE(self) -> str | None:
+        return self.__get_from_cache("SENTRY_RELEASE", "") or None
+
+    @property
     def BROADCAST_TYPE(self) -> Literal["in-memory", "kafka"]:
         broadcast_type = cast(Any, self.__get_from_cache("BROADCAST_TYPE", "in-memory"))
         _available_broadcast_types = {"in-memory", "kafka"}
