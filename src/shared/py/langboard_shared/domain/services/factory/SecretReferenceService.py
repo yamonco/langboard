@@ -1,6 +1,7 @@
 """Trusted host secret resolution; intentionally absent from MCP/value-read routes."""
 
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Literal
 from uuid import uuid4
@@ -8,9 +9,12 @@ from pydantic import SecretStr
 from ....core.db import DbSession, SqlBuilder
 from ....core.domain import BaseDomainService
 from ....core.security import KeyVault
+from ....core.security.CollaborationChannel import CollaborationChannel
 from ....helpers import InfraHelper
-from ...models import Organization, SecretReference, SecretReferenceAudit, User
+from ...models import Card, Organization, SecretReference, SecretReferenceAudit, User
 from ...models.ProjectRole import ProjectRoleAction
+from ..CardVisibilityPolicy import CardVisibility
+from .CardService import CardService
 from .WorkflowStageService import WorkflowStageService
 
 
@@ -208,7 +212,53 @@ class SecretReferenceService(BaseDomainService):
         with DbSession.atomic():
             return self._find(actor, uri).metadata()
 
-    def list_audit(self, actor: User, uri: str, *, limit: int = 25, cursor: str | None = None) -> dict:
+    def _visible_card_sources(
+        self, actor: User, rows: Sequence[SecretReferenceAudit], channel: CollaborationChannel
+    ) -> dict[str, str]:
+        """Bounded source projection; audit ownership never grants card access."""
+        uids = {
+            row.source_uid
+            for row in rows
+            if row.source_kind == "card"
+            and isinstance(row.source_uid, str)
+            and re.fullmatch(r"[A-Za-z0-9]{1,11}", row.source_uid)
+        }
+        if not uids:
+            return {}
+        with DbSession.use(readonly=False) as db:
+            cards = db.exec(
+                SqlBuilder.select.table(Card).where(
+                    Card.id.in_([InfraHelper.convert_id(uid) for uid in uids]), Card.deleted_at.is_(None)
+                )
+            ).all()
+        contexts = {}
+        links = {}
+        card_service = self._get_service(CardService)
+        for card in cards:
+            if card.project_id not in contexts:
+                board = self._get_service(WorkflowStageService)._authorized_app_board(
+                    actor, card.project_id, ProjectRoleAction.Read
+                )
+                contexts[card.project_id] = (
+                    card_service.resolve_visibility_context(card.project_id, actor, channel) if board else None
+                )
+            resolved = contexts[card.project_id]
+            if resolved is None:
+                continue
+            project, context = resolved
+            if context.can_read_card(CardVisibility(card.visibility), owner_user_id=card.owner_user_id):
+                links[card.get_uid()] = f"/board/{project.get_uid()}/{card.get_uid()}"
+        return links
+
+    def list_audit(
+        self,
+        actor: User,
+        uri: str,
+        *,
+        limit: int = 25,
+        cursor: str | None = None,
+        channel: CollaborationChannel = CollaborationChannel.Api,
+    ) -> dict:
         """Current authority plus bounded per-reference history, never vault reads."""
         if type(limit) is not int or not 1 <= limit <= 50:
             raise ValueError("Invalid secret history limit")
@@ -230,6 +280,7 @@ class SecretReferenceService(BaseDomainService):
                     raise SecretReferenceUnavailable()
                 statement = statement.where(SecretReferenceAudit.id < anchor.id)
             rows = db.exec(statement.order_by(SecretReferenceAudit.id.desc()).limit(limit + 1)).all()
+            source_links = self._visible_card_sources(actor, rows[:limit], channel)
             return {
                 "secret_ref": reference.metadata()["uri"],
                 "items": [
@@ -245,6 +296,11 @@ class SecretReferenceService(BaseDomainService):
                         "revision_after": row.reference_revision,
                         # Cross-resource source links require their own current ACL.
                         "source_kind": row.source_kind,
+                        **(
+                            {"source_link": {"kind": "card", "href": source_links[row.source_uid]}}
+                            if row.source_kind == "card" and row.source_uid in source_links
+                            else {}
+                        ),
                         "request_id": row.request_id,
                         "reason_code": row.reason_code,
                     }
