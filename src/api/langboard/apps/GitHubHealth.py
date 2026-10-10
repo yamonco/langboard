@@ -53,4 +53,5 @@ def refresh_receipt_resources(service, receipt_uid, project_uid, after=None):
         else None,
         expected_connection_revision=receipt.connection_revision,
         receipt_page=True,
+        unattended=True,
     )

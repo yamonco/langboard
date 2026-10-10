@@ -6,6 +6,7 @@ import re
 from langboard_shared.core.db import DbSession, SqlBuilder
 from langboard_shared.domain.models import AppConnection, AppResourceBinding, BoardAppBinding, Project, User
 from langboard_shared.domain.services import DomainService
+from langboard_shared.domain.services.AppGovernance import AppGovernanceDenied, require_connection_access
 from langboard_shared.helpers import InfraHelper
 from langboard_shared.publishers import CardPublisher
 from sqlalchemy import and_, or_
@@ -243,6 +244,7 @@ def refresh_resources(
     repository_scope=None,
     expected_connection_revision=None,
     receipt_page=False,
+    unattended=False,
 ):
     """Explicit bounded health refresh; unavailable evidence never means uninstall."""
     _board(service, actor, project_uid)
@@ -260,6 +262,11 @@ def refresh_resources(
         if expected_connection_revision is not None and revision != expected_connection_revision:
             raise GitHubResourceConflict()
         board = _board(service, actor, project_uid)
+        if unattended:
+            try:
+                require_connection_access(db, actor, board, connection, unattended=True)
+            except AppGovernanceDenied:
+                raise GitHubManifestUnavailable() from None
         binding = db.exec(
             SqlBuilder.select.table(BoardAppBinding).where(
                 BoardAppBinding.project_id == board.id,
@@ -323,6 +330,11 @@ def refresh_resources(
         ).first()
         if current is None or connection_revision(current) != revision:
             raise GitHubResourceConflict()
+        if unattended:
+            try:
+                require_connection_access(db, actor, board, current, unattended=True)
+            except AppGovernanceDenied:
+                raise GitHubManifestUnavailable() from None
         binding = db.exec(
             SqlBuilder.select.table(BoardAppBinding).where(BoardAppBinding.id == binding.id).with_for_update()
         ).first()
