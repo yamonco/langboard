@@ -1,7 +1,9 @@
+from contextlib import nullcontext
 from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import quote
 from httpx import HTTPError, delete, post
+from ....core.db import DbSession
 from ....core.domain import BaseDomainService
 from ....core.logger import Logger
 from ....core.types import SafeDateTime, SnowflakeID
@@ -25,6 +27,7 @@ from ....domain.models.GraphApprovalRequest import GraphApprovalOriginType, Grap
 from ....Env import Env
 from ....helpers import InfraHelper
 from ....publishers import GraphApprovalPublisher, ProjectBotPublisher
+from ..CardAppMutation import require_card_app_mutation
 
 
 class GraphApprovalResumeError(Exception):
@@ -106,43 +109,50 @@ class GraphApprovalRequestService(BaseDomainService):
 
         scope_uid = self.__string_or_none(interrupt.get("scope_uid"))
         scope_id = self.__parse_scope_id(project, scope_table, scope_uid)
-        approval = GraphApprovalRequest(
-            requested_by_user_id=user.id if user else None,
-            thread_id=str(interrupt.get("thread_id") or ""),
-            run_id=str(interrupt.get("run_id") or ""),
-            request_type=origin_type,
-            action_type=str(interrupt.get("action_type") or "api_call"),
-            permission=str(interrupt.get("permission") or ""),
-            tool_name=self.__string_or_none(interrupt.get("tool_name")),
-            api_name=self.__string_or_none(interrupt.get("api_name")),
-            request_payload=self.__dict_or_empty(interrupt.get("request_payload")),
-            preview_payload=self.__dict_or_empty(interrupt.get("preview")),
-            status=GraphApprovalStatus.Pending,
-            expires_at=self.__parse_expires_at(interrupt.get("expires_at")),
-        )
-        if not self.__scope_exists(project, scope_table, scope_id):
-            self.__cancel_unpersisted(approval, project, "scope deleted", bot_log=bot_log)
-            return None
+        card_scope = scope_table == Card.__tablename__ and scope_id is not None
+        # Hold the current project/card ownership lock through request persistence.
+        # A requesting user does not turn a supplied bot into human execution.
+        with DbSession.atomic() if card_scope else nullcontext() as db:
+            if card_scope:
+                actor = bot if bot is not None else internal_bot if internal_bot is not None else user
+                require_card_app_mutation(db, actor, scope_id, project)
+            approval = GraphApprovalRequest(
+                requested_by_user_id=user.id if user else None,
+                thread_id=str(interrupt.get("thread_id") or ""),
+                run_id=str(interrupt.get("run_id") or ""),
+                request_type=origin_type,
+                action_type=str(interrupt.get("action_type") or "api_call"),
+                permission=str(interrupt.get("permission") or ""),
+                tool_name=self.__string_or_none(interrupt.get("tool_name")),
+                api_name=self.__string_or_none(interrupt.get("api_name")),
+                request_payload=self.__dict_or_empty(interrupt.get("request_payload")),
+                preview_payload=self.__dict_or_empty(interrupt.get("preview")),
+                status=GraphApprovalStatus.Pending,
+                expires_at=self.__parse_expires_at(interrupt.get("expires_at")),
+            )
+            if not self.__scope_exists(project, scope_table, scope_id):
+                self.__cancel_unpersisted(approval, project, "scope deleted", bot_log=bot_log)
+                return None
 
-        document_name = self.__string_or_none(interrupt.get("document_name"))
-        if not self.__is_valid_detail_origin(origin_type, chat_session, chat_history, document_name):
-            self.__cancel_unpersisted(approval, project, "invalid approval origin detail", bot_log=bot_log)
-            return None
+            document_name = self.__string_or_none(interrupt.get("document_name"))
+            if not self.__is_valid_detail_origin(origin_type, chat_session, chat_history, document_name):
+                self.__cancel_unpersisted(approval, project, "invalid approval origin detail", bot_log=bot_log)
+                return None
 
-        detail = self.__create_detail(
-            approval,
-            origin_type,
-            scope_table,
-            scope_id,
-            bot=bot,
-            internal_bot=internal_bot,
-            bot_log=bot_log,
-            chat_session=chat_session,
-            chat_history=chat_history,
-            document_name=document_name,
-        )
-        self.repo.graph_approval_request.insert_with_detail(approval, detail)
-        return approval
+            detail = self.__create_detail(
+                approval,
+                origin_type,
+                scope_table,
+                scope_id,
+                bot=bot,
+                internal_bot=internal_bot,
+                bot_log=bot_log,
+                chat_session=chat_session,
+                chat_history=chat_history,
+                document_name=document_name,
+            )
+            self.repo.graph_approval_request.insert_with_detail(approval, detail)
+            return approval
 
     def approve(
         self, approval_uid: str, user: User, project: TProjectParam | None = None
