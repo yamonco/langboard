@@ -772,6 +772,35 @@ a trusted signal adapter.
 
 ### Explicit board capability consent
 
+#### Inbound service connection onboarding
+
+For an approved external app, a user explicitly registers a host-side inbound
+principal with `POST /settings/apps/registry/{app_key}/inbound-connections`, sending
+the current `app_revision` and optional `organization_uid`. Personal connections
+belong only to that caller. Organization connections require the current
+organization owner or instance administrator. No upstream URL, secret reference,
+external account identity or capabilities are accepted. This does not verify an
+upstream login or replace a provider's OAuth flow. Built-in provider keys retain
+their native verified connection routes.
+
+After preparing a board workflow draft, select each external resource with
+`PUT /board/{project_uid}/settings/apps/{app_key}/inbound-connections/{connection_uid}/resources`.
+Send the current app revision, binding UID/revision, declared `resource_type` and
+`external_resource_id`. The current board manager must also manage that connection.
+This explicitly grants Langboard scope for the selected identity; it makes no
+claim about access permissions inside the external service. It does not grant
+board capabilities, enable transitions or issue a credential. Multiple resources
+share a connection without replacing existing selections.
+
+The returned `resource_uid` is stable. Existing selections require the returned
+`expected_access_revision` on subsequent PUTs; stale writes return 409. Send
+`selected: false` to revoke and increment that generation. Cleanup is allowed
+after policy or app disablement using current revisions. Disconnect via
+`POST /settings/apps/inbound-connections/{connection_uid}/disconnect` with the
+connection's returned `expected_revision`; current credentials then fail and new
+credential issuance is denied. No automatic upstream request or token storage is
+performed by these onboarding endpoints.
+
 `PUT /board/{project_uid}/settings/apps/{app_key}/consent` replaces grants on an
 existing board binding. The authenticated board manager supplies the current
 `app_revision`, `binding_uid`, `expected_revision` and an explicit unique
@@ -830,8 +859,11 @@ native file broadcasts and native in-memory broker execution: administrator
 registration, workflow mapping, explicit capability consent, native credential
 issuance, public SDK issue creation/replay, and consent revocation all passed.
 Creation and presentation broadcasts plus native activity recording were observed.
-The disposable account, board, connection and selected resource were seeded with
-native model IDs; generic connection onboarding was not exercised. This local
+Only the disposable account, board and built-in Backlog column/stage were seeded
+with native model IDs. Connection registration, workflow draft creation, resource
+selection, consent and credential issuance ran through native HTTP, with no app
+state injected into the database. Resource replay/cleanup revision fences and
+disconnect credential denial also have PostgreSQL coverage. This local
 configured instance is not public canary, external broker or browser rendering
 acceptance.
 
