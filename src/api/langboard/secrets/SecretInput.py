@@ -103,6 +103,16 @@ def _pending(service, actor, uid):
     return context
 
 
+def _claim(uid, context):
+    if not Cache.set_if_absent(_key(uid) + ":claimed", True, TTL):
+        raise SecretReferenceUnavailable()
+    # Authority/cache access can wait long enough to cross the deadline.
+    # Consume the nonce but never submit material after its input expiry.
+    if time() >= context["expires_at"]:
+        raise SecretReferenceUnavailable()
+    Cache.delete(_key(uid) + ":browser")
+
+
 def _save(uid, context):
     Cache.set(_key(uid), context, max(1, int(context["expires_at"] + TTL - time())))
 
@@ -141,9 +151,7 @@ def complete_input(service, actor, uid, value, challenge):
         or not 1 <= len(value.get_secret_value()) <= 65536
     ):
         raise SecretReferenceUnavailable()
-    if not Cache.set_if_absent(_key(uid) + ":claimed", True, TTL):
-        raise SecretReferenceUnavailable()
-    Cache.delete(_key(uid) + ":browser")
+    _claim(uid, context)
     try:
         source = SecretAuditSource("api", "secret_input", request_id=uid, reason_code="user_input")
         if context["operation"] == "rotate":
@@ -173,8 +181,6 @@ def complete_input(service, actor, uid, value, challenge):
 
 def cancel_input(service, actor, uid):
     context = _pending(service, actor, uid)
-    if context["state"] != "pending" or not Cache.set_if_absent(_key(uid) + ":claimed", True, TTL):
-        raise SecretReferenceUnavailable()
-    Cache.delete(_key(uid) + ":browser")
+    _claim(uid, context)
     _save(uid, {**context, "state": "cancelled"})
     return {"state": "cancelled"}
