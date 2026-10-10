@@ -155,16 +155,8 @@ async def post_signed_webhook(model: WebhookModel, webhook_uid: str, setting: We
             raise ValueError("Webhook signing secret is unavailable")
         body, headers = signed_request(model, secret)
         target = await ensure_public_webhook_url(setting.url)
-        headers["Host"] = target.host_header
         timeout = EXECUTION_WEBHOOK_TIMEOUT if model.event in WORK_EXECUTION_EVENTS else WEBHOOK_TIMEOUT
-        async with AsyncClient(timeout=timeout, follow_redirects=False) as client:
-            response = await client.post(
-                target.url,
-                content=body,
-                headers=headers,
-                extensions={"sni_hostname": target.sni_hostname},
-            )
-            response.raise_for_status()
+        await post_resolved_webhook_bytes(target, body, headers, timeout=timeout)
     except Exception as error:
         Broker.logger.error(
             "Webhook delivery failed: endpoint=%s error=%s",
@@ -184,6 +176,19 @@ async def post_signed_webhook(model: WebhookModel, webhook_uid: str, setting: We
             "total_used_count": updated_setting.total_used_count,
         },
     )
+
+
+async def post_resolved_webhook_bytes(target, body, headers, *, timeout=WEBHOOK_TIMEOUT):
+    """Send exact signed bytes to a DNS-pinned public target without redirects."""
+    headers = {**headers, "Host": target.host_header}
+    async with AsyncClient(timeout=timeout, follow_redirects=False) as client:
+        response = await client.post(
+            target.url,
+            content=body,
+            headers=headers,
+            extensions={"sni_hostname": target.sni_hostname},
+        )
+        response.raise_for_status()
 
 
 def signed_request(

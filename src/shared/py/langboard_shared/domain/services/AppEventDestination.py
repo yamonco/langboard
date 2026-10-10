@@ -104,7 +104,7 @@ def bind_app_event_destination(actor, connection_id, webhook_id, expected_revisi
         return {"revision": row.revision}
 
 
-def prepare_app_event_signature(event_id, expected_destination_revision, *, timestamp=None):
+def prepare_app_event_signature(event_id, expected_destination_revision, *, timestamp=None, claim_token=None):
     """Prepare exact signed bytes without sending or claiming execution authority."""
     from ...core.security import KeyVault
     from ...tasks.webhooks.WebhookTask import sign_webhook_bytes
@@ -114,7 +114,12 @@ def prepare_app_event_signature(event_id, expected_destination_revision, *, time
         raise ValueError("Invalid destination revision")
     with DbSession.atomic() as db:
         event = _current(db, AppExecutionOutbox, event_id)
-        if event is None or event.state != "pending" or event.event_type != APP_EXECUTION_EVENT:
+        if (
+            event is None
+            or event.event_type != APP_EXECUTION_EVENT
+            or (claim_token is None and event.state != "pending")
+            or (claim_token is not None and (event.state != "delivering" or event.claim_token != claim_token))
+        ):
             raise AppGovernanceDenied()
         connection = _current(db, AppConnection, event.connection_id)
         if connection is None or connection.app_key != event.app_key:
