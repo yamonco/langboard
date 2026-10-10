@@ -416,6 +416,15 @@ resource models. It does not establish card-to-resource execution bindings or
 authorize card mutation. PostgreSQL, deployed use and external-app acceptance
 remain pending.
 
+SDK 0.2.3 exports `AppResources`, `AppResource` and `AppResourcePage` from
+`langboard_sdk.resources`. `AppResources(app_transport).list(board_uid, limit=25,
+after_uid=None)` consumes the native resource route through the separate app
+Bearer transport. It fetches one page only; callers explicitly pass `next_cursor`
+as `after_uid`. The current host rechecks authority on every page. Independent
+wheel/native HTTP tests verify paging, native response fields and capability
+revocation without retries or automatic crawling. Resource reads confer no card
+execution grant; card resource bindings and execution/HITL wires remain pending.
+
 ### App-owned card governance storage (internal implementation)
 
 `CardAppOwnership` stores a nullable app key and revision independently of
