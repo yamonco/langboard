@@ -3,6 +3,7 @@ from .ApiKeyRole import ApiKeyRole
 from .ApiKeySetting import ApiKeySetting
 from .ApiKeyUsage import ApiKeyUsage
 from .AppConnection import AppConnection
+from .AppConnectionCredential import AppConnectionCredential
 from .AppDefinition import AppDefinition
 from .AppGovernancePolicy import AppGovernancePolicy
 from .AppResourceBinding import AppResourceBinding
@@ -104,6 +105,7 @@ from .WorkflowStageDefinition import WorkflowStageDefinition
 
 
 __all__ = [
+    "AppConnectionCredential",
     "GitHubLifecycleReceipt",
     "GitHubSignalDelivery",
     "GitHubHealthJob",
