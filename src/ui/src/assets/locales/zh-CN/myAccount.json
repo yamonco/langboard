@@ -65,7 +65,8 @@
       "revoked": "撤销",
       "rotated": "替换值",
       "bound": "已绑定",
-      "migrated": "存储迁移"
+      "migrated": "存储迁移",
+      "copied": "已复制"
     },
     "reasons": {
       "user_input": "用户明确提交网页输入",
@@ -80,7 +81,8 @@
       "integration_setup": "集成配置",
       "routine_rotation": "定期轮换凭据",
       "credential_expired": "替换已过期凭据",
-      "security_response": "安全响应"
+      "security_response": "安全响应",
+      "reference_copied": "在相同权限范围内显式复制密钥"
     },
     "openSource": "打开来源卡片",
     "openSourceWiki": "打开来源 Wiki"

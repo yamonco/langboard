@@ -59,6 +59,7 @@ class SecretAuditSource:
             "security_response",
             "runtime_use",
             "reference_created",
+            "reference_copied",
             "reference_renamed",
             "reference_moved",
             "reference_revoked",
@@ -89,6 +90,7 @@ class SecretAuditSource:
             "security_response",
             "runtime_use",
             "reference_created",
+            "reference_copied",
             "reference_renamed",
             "reference_moved",
             "reference_revoked",
@@ -200,6 +202,47 @@ class SecretReferenceService(BaseDomainService):
         except Exception:
             if locator is not None:
                 KeyVault.delete_key(locator)
+            raise
+
+    def copy(self, actor: User, uri: str, name: str, expected_revision: int) -> dict:
+        """Explicit native copy within the current scope; material never leaves the vault boundary."""
+        if DbSession.has_active_transaction():
+            raise RuntimeError("Credential storage must own its transaction")
+        name = validate_secret_name(name)
+        if type(expected_revision) is not int or expected_revision < 0:
+            raise ValueError("Invalid secret copy revision")
+        provider = KeyVault.provider
+        new_locator = None
+        try:
+            with DbSession.atomic() as db:
+                original = self._find(actor, uri, lock=True)
+                if original.revision != expected_revision:
+                    raise SecretReferenceConflict()
+                if original.state != "active" or original.provider != provider.name():
+                    raise SecretReferenceUnavailable()
+                try:
+                    material = provider.get_key(original.locator)
+                except KeyError:
+                    raise SecretReferenceUnavailable() from None
+                if not isinstance(material, str) or not material:
+                    raise SecretReferenceUnavailable()
+                new_locator = provider.store_secret(uuid4().hex, material)
+                reference = SecretReference(
+                    scope=original.scope,
+                    scope_id=original.scope_id,
+                    name=name,
+                    creator_id=actor.id,
+                    provider=provider.name(),
+                    locator=new_locator,
+                )
+                db.insert(reference)
+                source = SecretAuditSource("api", "secret_copy", request_id=uuid4().hex, reason_code="reference_copied")
+                self._audit(db, actor, original, "copied", source)
+                self._audit(db, actor, reference, "created", source)
+                return reference.metadata()
+        except Exception:
+            if new_locator is not None:
+                provider.delete_key(new_locator)
             raise
 
     def _find(self, actor: User, uri: str, *, lock=False) -> SecretReference:

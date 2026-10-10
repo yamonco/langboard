@@ -12,7 +12,7 @@ from .User import User
 class SecretReferenceAudit(BaseDbModel, table=True):
     __table_args__ = (
         CheckConstraint(
-            "action IN ('created','resolved','renamed','moved','revoked','rotated','bound','migrated')",
+            "action IN ('created','resolved','renamed','moved','revoked','rotated','bound','migrated','copied')",
             name=conv("ck_secret_reference_audit_action"),
         ),
     )
