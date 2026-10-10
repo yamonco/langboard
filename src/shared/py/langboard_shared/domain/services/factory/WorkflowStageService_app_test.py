@@ -11,6 +11,7 @@ from ....core.types import SafeDateTime
 from ...models import (
     AppConnection,
     AppDefinition,
+    AppGovernancePolicy,
     AppResourceBinding,
     BoardAppBinding,
     Project,
@@ -49,6 +50,7 @@ def board(monkeypatch, request):
     for model in (
         User,
         AppDefinition,
+        AppGovernancePolicy,
         Project,
         ProjectAssignedUser,
         ProjectRole,

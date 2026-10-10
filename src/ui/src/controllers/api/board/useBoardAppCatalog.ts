@@ -4,6 +4,7 @@ import { api } from "@/core/helpers/Api";
 export interface CatalogApp {
     key: string;
     name: string;
+    description?: string;
     version: string;
     app_revision: string | null;
     panel: { url: string; name: string; icon?: string | null } | null;

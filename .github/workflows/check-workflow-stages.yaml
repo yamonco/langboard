@@ -8,7 +8,7 @@ on:
       - src/api/tests/workflow_stages/**
       - src/api/tests/apps/**
       - src/api/tests/webhooks/test_webhook_contract.py
-      - src/sdk/py/langboard_sdk/webhooks.py
+      - src/sdk/vendor/**
       - src/api/langboard/routes/board/BoardSettingApi.py
       - src/shared/py/langboard_shared/domain/services/AppPanel.py
       - src/shared/py/langboard_shared/domain/services/AppRegistry.py
@@ -73,7 +73,7 @@ jobs:
         run: uv run --no-sync pytest -q src/api/tests/workflow_stages
       - name: Native app registry, panel consent and management
         env:
-          PYTHONPATH: src/sdk/py:src/shared/py:src/api
+          PYTHONPATH: src/shared/py:src/api
         run: uv run --no-sync pytest -q src/api/tests/apps/test_sdk_app_registry_http.py src/api/tests/apps/test_sdk_management_http.py src/api/tests/webhooks/test_webhook_contract.py
       - name: Distinct column context for card list and search
         run: uv run --no-sync pytest -q src/api/tests/card_workspace/test_queries.py src/api/tests/card_workspace/test_native_adapter.py src/api/tests/mcp_integration/test_user_mcp.py src/shared/py/langboard_shared/domain/services/factory/ProjectColumnService_test.py

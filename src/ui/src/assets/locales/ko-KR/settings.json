@@ -293,5 +293,22 @@
   "Membership settings saved": "직원 멤버십을 저장했습니다.",
   "Membership settings failed": "직원 멤버십을 불러오거나 저장하지 못했습니다.",
   "Title aliases": "제목 별칭",
-  "One exact alias per line, up to 30. Used for leading title label tokens.": "한 줄에 정확히 일치할 별칭 하나씩, 최대 30개. 제목 선두의 라벨 토큰에 사용됩니다."
+  "One exact alias per line, up to 30. Used for leading title label tokens.": "한 줄에 정확히 일치할 별칭 하나씩, 최대 30개. 제목 선두의 라벨 토큰에 사용됩니다.",
+  "Apps": "앱",
+  "App governance ceiling": "이 전역 설정은 허용되는 앱 접근의 상한입니다. 조직은 더 엄격한 제한을 적용할 수 있습니다.",
+  "App personal token privacy": "개인 연결 토큰은 소유자만 사용할 수 있으며 다른 구성원에게 공유되지 않습니다.",
+  "App organization automation": "조직 자동화에는 조직 공유 연결이 필요합니다. 개인 연결은 조직 자동화에 사용할 수 없습니다.",
+  "App access mode": "앱 접근 모드",
+  "App mode disabled": "사용 안 함",
+  "App mode disabled description": "모든 조직에서 앱 접근을 비활성화합니다.",
+  "App mode approved_only": "승인된 앱만 허용",
+  "App mode approved_only description": "승인된 앱과 조직 공유 연결만 허용합니다. 개인 연결은 비활성화됩니다.",
+  "App mode personal_allowed": "개인 연결 허용",
+  "App mode personal_allowed description": "조직의 제한 범위에서 승인된 앱과 개인 연결을 허용합니다.",
+  "App effective mode": "현재 적용되는 전역 모드",
+  "App conflict failed": "다른 곳에서 설정이 변경되었습니다. 작성 중인 내용은 유지됩니다. 저장 전에 최신 설정을 새로고침하세요. 새로고침하면 작성 중인 내용이 삭제됩니다.",
+  "App save failed": "앱 접근 정책을 저장하지 못했습니다. 작성 중인 내용은 유지됩니다. 다시 저장하세요.",
+  "App refresh failed": "앱 접근 정책을 새로고침하지 못했습니다. 작성 중인 내용은 유지됩니다. 다시 새로고침하세요.",
+  "App discard and refresh": "작성 중인 내용 삭제 후 새로고침",
+  "App governance saved": "앱 접근 정책이 저장되었습니다. 리비전: {{revision}}"
 }

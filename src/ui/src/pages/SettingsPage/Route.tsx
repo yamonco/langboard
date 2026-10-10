@@ -34,6 +34,7 @@ const routes: RouteObject[] = [
                 element: <></>,
             },
             { path: ROUTES.SETTINGS.WORKFLOW_STAGES, element: <></> },
+            { path: ROUTES.SETTINGS.APPS, element: <></> },
             {
                 path: ROUTES.SETTINGS.GLOBAL_LABELS,
                 element: <></>,

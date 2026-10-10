@@ -5,7 +5,7 @@ import { api } from "@/core/helpers/Api";
 import type { CatalogApp } from "@/controllers/api/board/useBoardAppCatalog";
 import { loadPanelResources, readPanelDesign } from "@/core/apps/PanelDesign";
 import { activePanelDisposals, panelStateCache } from "@/core/apps/PanelSession";
-import { createPanelHost } from "../../../../../../sdk/js/index.mjs";
+import { createPanelHost, type JsonValue } from "@langboard/app-panel";
 
 interface Props {
     app: CatalogApp;
@@ -95,6 +95,25 @@ export function useAppPanel({ app, projectUID, userUID, onClose }: Props) {
                                 context: { project_uid: projectUID, app_key: app.key, app_version: data.version, language },
                                 state: panelStateCache.get(stateKey),
                                 design: { ...readPanelDesign(), resources },
+                                onRequest: async (operation: string, params: JsonValue, signal: AbortSignal) => {
+                                    if (operation !== "signals.list") throw new Error("Unsupported panel operation");
+                                    if (
+                                        !params ||
+                                        typeof params !== "object" ||
+                                        Array.isArray(params) ||
+                                        Object.keys(params).some((key) => key !== "provider" && key !== "after") ||
+                                        typeof params.provider !== "string" ||
+                                        !["github", "glitchtip", "dokploy"].includes(params.provider) ||
+                                        (params.after !== undefined && typeof params.after !== "string")
+                                    )
+                                        throw new Error("Invalid signal request parameters");
+                                    const response = await api.post<JsonValue>(
+                                        `/board/${projectUID}/apps/${encodeURIComponent(app.key)}/panel/signals`,
+                                        { ...params, app_revision: data.app_revision, binding_revision: data.binding_revision },
+                                        { signal: AbortSignal.any([signal, controller.signal]), env: { interceptToast: true } as never }
+                                    );
+                                    return response.data;
+                                },
                                 onState: (state) => panelStateCache.set(stateKey, state),
                                 onReady: () => {
                                     clearTimeout(loadTimer);

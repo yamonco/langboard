@@ -789,6 +789,7 @@ class AppPanelConsentForm(BaseFormModel):
     expected_revision: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     app_revision: str = Field(..., pattern=r"^[0-9a-f]{64}$")
     enabled: bool = Field(..., strict=True)
+    read_signals: bool = Field(default=False, strict=True)
 
 
 @AppRouter.schema(permission=ApiPermission.Read)
@@ -811,7 +812,7 @@ def set_board_app_panel(project_uid: str, app_key: str, form: AppPanelConsentFor
     from langboard_shared.domain.services.AppPanel import set_panel
     from langboard_shared.domain.services.AppRegistry import AppRegistryConflict
     try:
-        result = set_panel(service.workflow_stage, user, project_uid, app_key, form.binding_uid, form.expected_revision, form.app_revision, form.enabled)
+        result = set_panel(service.workflow_stage, user, project_uid, app_key, form.binding_uid, form.expected_revision, form.app_revision, form.enabled, form.read_signals)
     except AppRegistryConflict as exc:
         raise ApiException.Conflict_409(ApiErrorCode.EX3004) from exc
     except ValueError as exc:

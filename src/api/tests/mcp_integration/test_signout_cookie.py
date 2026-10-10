@@ -7,8 +7,8 @@ import pytest
 from starlette.responses import Response
 
 
-@pytest.mark.parametrize("domain", ["yamon.io", ""])
-@pytest.mark.parametrize("public_url", ["https://langboard.yamon.io", "http://localhost:5173"])
+@pytest.mark.parametrize("domain", ["example.org", ""])
+@pytest.mark.parametrize("public_url", ["https://langboard.example.org", "http://localhost:5173"])
 def test_signout_expires_the_same_cookie_scope_as_signin(domain: str, public_url: str) -> None:
     source = Path(__file__).parents[2] / "langboard/routes/auth/AuthApi.py"
     tree = ast.parse(source.read_text())

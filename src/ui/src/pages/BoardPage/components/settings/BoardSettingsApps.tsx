@@ -7,6 +7,7 @@ import { useAuth } from "@/core/providers/AuthProvider";
 import { deletePanelState } from "@/core/apps/PanelSession";
 import { useBoardSettings } from "@/core/providers/BoardSettingsProvider";
 import Button from "@/components/base/Button";
+import Checkbox from "@/components/base/Checkbox";
 import BoardSettingsGitHub from "./BoardSettingsGitHub";
 import BoardSettingsGlitchTip from "./BoardSettingsGlitchTip";
 import BoardSettingsDokploy from "./BoardSettingsDokploy";
@@ -19,6 +20,7 @@ export default function BoardSettingsApps() {
     const { currentUser } = useAuth();
     const { data, isLoading, isError, refetch } = useBoardAppCatalog(project.uid, currentUser?.uid);
     const [panelTarget, setPanelTarget] = useState<string | null>(null);
+    const [readSignals, setReadSignals] = useState(false);
     const [pending, setPending] = useState(false);
     const [disableTarget, setDisableTarget] = useState<string | null>(null);
     const [error, setError] = useState(false);
@@ -52,6 +54,7 @@ export default function BoardSettingsApps() {
                 expected_revision: app.binding?.revision ?? null,
                 app_revision: app.app_revision,
                 enabled,
+                read_signals: enabled && app.capabilities.includes("signals.read") && readSignals,
             });
             if (!enabled && currentUser) deletePanelState(JSON.stringify([currentUser.uid, project.uid, app.key, app.version]));
             setPanelTarget(null);
@@ -135,21 +138,36 @@ export default function BoardSettingsApps() {
                                             )}
                                         </details>
                                     )}
-                                    <p className="flex-1 text-sm text-muted-foreground">{t(`project.settings.App ${key} summary`)}</p>
-                                    <p className="text-xs text-muted-foreground">{t("project.settings.App connection setup pending")}</p>
-                                    <Button
-                                        size="sm"
-                                        variant="outline"
-                                        disabled={pending || !workflow_requirements || (key !== "github" && key !== "glitchtip")}
-                                        onClick={() => (key === "github" || key === "glitchtip") && setSelected(key)}
-                                    >
-                                        {t(`project.settings.${key === "dokploy" ? "App workflow contract pending" : "Configure workflow"}`)}
-                                    </Button>
+                                    <p className="flex-1 text-sm text-muted-foreground">
+                                        {app.panel ? app.description : t(`project.settings.App ${key} summary`)}
+                                    </p>
+                                    {!app.panel && (
+                                        <>
+                                            <p className="text-xs text-muted-foreground">{t("project.settings.App connection setup pending")}</p>
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                disabled={pending || !workflow_requirements || (key !== "github" && key !== "glitchtip")}
+                                                onClick={() => (key === "github" || key === "glitchtip") && setSelected(key)}
+                                            >
+                                                {t(`project.settings.${key === "dokploy" ? "App workflow contract pending" : "Configure workflow"}`)}
+                                            </Button>
+                                        </>
+                                    )}
                                     {app.panel &&
                                         app.capabilities.includes("panels.render") &&
                                         (panelTarget === key ? (
                                             <div className="flex flex-col gap-2 rounded-md border p-2">
                                                 <p className="text-sm">{t("project.settings.App panel consent help", { name: app.panel.name })}</p>
+                                                {app.capabilities.includes("signals.read") && (
+                                                    <Checkbox
+                                                        checked={readSignals}
+                                                        onCheckedChange={(checked) => setReadSignals(checked === true)}
+                                                        disabled={pending || !canEditBasicInfo}
+                                                        label={t("project.settings.Allow App signal reads")}
+                                                        description={t("project.settings.App signal read consent help")}
+                                                    />
+                                                )}
                                                 <Button
                                                     size="sm"
                                                     disabled={pending || !canEditBasicInfo || !app.app_revision}
@@ -166,11 +184,13 @@ export default function BoardSettingsApps() {
                                                 size="sm"
                                                 variant="outline"
                                                 disabled={pending || !canEditBasicInfo || !app.app_revision}
-                                                onClick={() =>
-                                                    binding?.granted_capabilities.includes("panels.render")
-                                                        ? void setPanel(app, false)
-                                                        : setPanelTarget(key)
-                                                }
+                                                onClick={() => {
+                                                    if (panelEnabled) void setPanel(app, false);
+                                                    else {
+                                                        setReadSignals(false);
+                                                        setPanelTarget(key);
+                                                    }
+                                                }}
                                             >
                                                 {t(`project.settings.${panelEnabled ? "Disable App panel" : "Review App panel"}`)}
                                             </Button>

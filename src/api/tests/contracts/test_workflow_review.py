@@ -17,7 +17,7 @@ from langboard_shared.domain.contracts.workflow_review import (  # noqa: E402
 def request(**overrides) -> ReviewRequest:
     defaults = dict(
         pr_uid="pr-1",
-        repository="yamonco/langboard",
+        repository="example-org/example-board",
         branch="feature/x",
         author="dev-1",
         title="Add pipeline",
@@ -72,7 +72,7 @@ class TestReviewReport:
 class TestBuildReviewPrompt:
     def test_contains_request_and_files(self):
         prompt = build_review_prompt(request(), board_context="card: fix login")
-        assert "pr-1" in prompt and "yamonco/langboard" in prompt
+        assert "pr-1" in prompt and "example-org/example-board" in prompt
         assert "- src/a.py" in prompt
         assert "card: fix login" in prompt
 

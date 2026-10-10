@@ -406,3 +406,20 @@ def test_inbox_resource_name_fallback_and_bound():
         _resource_name(SimpleNamespace(resource_path=[{"name": {"env": "private"}}], external_resource_id="fallback"))
         == "fallback"
     )
+
+
+def test_provider_filter_is_applied_before_cursor_and_page_limit(scoped):
+    state, _, binding, _ = scoped
+    with DbSession.use(readonly=False) as db:
+        binding.is_enabled = False
+        db.update(binding)
+    send(state)
+    state[0].card = DomainService().card
+    uid = state[1][2].get_uid()
+    github = list_board_signals(state[0], state[1][1], uid, provider="github")
+    assert len(github["items"]) == 1
+    assert list_board_signals(state[0], state[1][1], uid, provider="dokploy")["items"] == []
+    with pytest.raises(ValueError):
+        list_board_signals(state[0], state[1][1], uid, github["items"][0]["signal_uid"], provider="dokploy")
+    with pytest.raises(ValueError):
+        list_board_signals(state[0], state[1][1], uid, provider="unknown")

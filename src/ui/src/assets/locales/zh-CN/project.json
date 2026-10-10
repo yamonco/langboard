@@ -349,6 +349,8 @@
     "Review App panel": "查看应用面板权限",
     "Confirm App panel": "确认允许应用面板",
     "Disable App panel": "禁用应用面板",
+    "Allow App signal reads": "允许读取应用信号",
+    "App signal read consent help": "允许此面板读取此看板中所选资源的信号。此权限独立于打开面板的权限，不允许修改。",
     "App panel consent help": "允许 {{name}} 在此看板打开隔离的面板。外部应用会收到看板标识和语言，并可在本次会话中保留少量草稿。此权限不允许工作流转换或卡片更改。"
   },
   "App panel": "应用面板",
