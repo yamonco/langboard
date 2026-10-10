@@ -46,6 +46,7 @@ interface IssueResult {
     items: { event_type: string; external_id: string; outcome: string; occurred_at: string }[];
 }
 interface WebhookHealth {
+    can_configure: boolean;
     config_revision: number;
     state: "unconfigured" | "enabled" | "disabled";
     receiver_path: string | null;
@@ -255,6 +256,7 @@ export default function BoardSettingsMetadataConnection({
     const connectionRoot = `${root}/connections/${connection?.connection_uid}`;
     const acceptWebhook = (result: WebhookHealth) => {
         if (
+            typeof result.can_configure !== "boolean" ||
             !/^[a-f0-9]{64}$/.test(result.connection_revision) ||
             !Array.isArray(result.resources) ||
             (result.binding_revision === null
@@ -275,7 +277,6 @@ export default function BoardSettingsMetadataConnection({
                     !Number.isFinite(Date.parse(result.last_received_at))))
         )
             throw new Error("Invalid webhook health");
-        if (result.connection_state === "revoked" || result.connection_state === "disconnected") throw new Error("Connection unavailable");
         if (result.notification_id !== null && (typeof result.notification_id !== "string" || !/^[A-Za-z0-9_-]{1,200}$/.test(result.notification_id)))
             throw new Error("Invalid notification identity");
         clearVerification();
@@ -470,6 +471,7 @@ export default function BoardSettingsMetadataConnection({
             readAccess.granted_capabilities.includes(capability)
         );
     const webhookCanConfigure =
+        webhook?.can_configure === true &&
         !!webhook?.binding_revision &&
         readEnabled &&
         !!selectedServices.length &&
@@ -774,6 +776,7 @@ export default function BoardSettingsMetadataConnection({
                                     <label className="flex flex-col gap-1 text-sm">
                                         {text("Dokploy webhook credential reference")}
                                         <input
+                                            disabled={!webhook.can_configure}
                                             className="input min-h-10 w-full min-w-0 rounded-md border bg-background px-3 py-2"
                                             value={webhookReference}
                                             placeholder="secret://ref/"
@@ -784,7 +787,7 @@ export default function BoardSettingsMetadataConnection({
                                             }}
                                         />
                                     </label>
-                                    <Button size="sm" variant="outline" onClick={() => void webhookSecretInput()}>
+                                    <Button size="sm" variant="outline" disabled={!webhook.can_configure} onClick={() => void webhookSecretInput()}>
                                         {text("Store Dokploy webhook token securely")}
                                     </Button>
                                     {webhookInput && (
