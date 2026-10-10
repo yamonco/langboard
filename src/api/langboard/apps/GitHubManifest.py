@@ -27,8 +27,11 @@ def _digest(value: str) -> str:
     return hashlib.sha256(value.encode()).hexdigest()
 
 
-def _board(service: DomainService, actor: User, project_uid: str):
-    board = service.workflow_stage._authorized_app_board(actor, project_uid, ProjectRoleAction.Update)
+def _board(service: DomainService, actor: User, project_uid: str, *, revocation=False):
+    board = service.workflow_stage._authorized_app_board(
+        actor, project_uid, ProjectRoleAction.Update,
+        lock=DbSession.has_active_transaction(), revocation=revocation,
+    )
     if board is None:
         raise GitHubManifestUnavailable()
     return board
