@@ -56,6 +56,8 @@ def _scope(service, db, project_uid, connection_uid, resource_uid, actor=None, *
         raise GitHubManifestUnavailable()
     try:
         require_connection_access(db, owner, board, connection, unattended=unattended)
+        if actor is not None:
+            require_connection_access(db, actor, board, connection)
     except AppGovernanceDenied:
         raise GitHubManifestUnavailable() from None
     resource = db.exec(query(AppResourceBinding).where(
