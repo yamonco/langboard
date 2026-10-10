@@ -385,8 +385,11 @@ def test_linked_resource_cannot_be_used_as_orchestration_task(monkeypatch: pytes
     monkeypatch.setattr(module.InfraHelper, "get_records_with_foreign_by_params", lambda *args: (project, card))
     service = SimpleNamespace(repo=Mock())
 
-    assert OrchestrationTaskService.record_run(service, project, card, {"status": "done"}) is None
-    assert OrchestrationTaskService.record_suggestions(service, project, card, []) is None
+    from langboard_shared.domain.models import User
+
+    user = User.model_construct(id=1)
+    assert OrchestrationTaskService.record_run(service, project, card, {"status": "done"}, user_or_bot=user) is None
+    assert OrchestrationTaskService.record_suggestions(service, project, card, [], user_or_bot=user) is None
     assert not service.repo.mock_calls
 
 

@@ -281,12 +281,14 @@ def record_orchestration_run(
     project_uid: str,
     card_uid: str,
     form: RecordOrchestrationRunForm,
+    user_or_bot: User | Bot = Auth.scope("all"),
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
     result = service.orchestration_task.record_run(
         project_uid,
         card_uid,
         form.model_dump(exclude_none=True),
+        user_or_bot=user_or_bot,
     )
     if result is None:
         raise ApiException.NotFound_404(ApiErrorCode.NF2003)
@@ -312,12 +314,14 @@ def record_orchestration_suggestions(
     project_uid: str,
     card_uid: str,
     form: RecordOrchestrationSuggestionsForm,
+    user_or_bot: User | Bot = Auth.scope("all"),
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
     result = service.orchestration_task.record_suggestions(
         project_uid,
         card_uid,
         [suggestion.model_dump(exclude_none=True) for suggestion in form.suggestions],
+        user_or_bot=user_or_bot,
     )
     if result is None:
         raise ApiException.NotFound_404(ApiErrorCode.NF2003)
