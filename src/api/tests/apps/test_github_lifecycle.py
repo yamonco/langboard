@@ -939,6 +939,64 @@ def health_job(private_receipt_storage, monkeypatch):
     return worker, service, board, connection, job, dispatched, receive, migration, engine
 
 
+@pytest.mark.parametrize("suspension", [None, "before_query", "during_query"])
+def test_organization_health_worker_rechecks_live_scope(private_receipt_storage, monkeypatch, suspension):
+    from langboard.apps import GitHubHealthWorker as worker
+    from langboard.apps import GitHubResources as resources
+    from langboard.apps.GitHubLifecycle import receive_lifecycle
+    from langboard_shared.core.db import SqlBuilder
+    from langboard_shared.core.types import SafeDateTime
+    from langboard_shared.domain.models import AppResourceBinding, BoardAppBinding, GitHubHealthJob, Organization
+
+    lifecycle, _, engine = private_receipt_storage
+    if engine.dialect.name != "sqlite":
+        pytest.skip("Organization fixture schema is SQLite; production PostgreSQL acceptance remains separate")
+    Organization.__table__.create(engine, checkfirst=True)
+    service, board, connection, payload = lifecycle
+    with DbSession.atomic() as db:
+        organization = Organization(name="Worker organization", slug="worker-organization", owner_user_id=board[1].id)
+        db.insert(organization)
+        board[2].organization_id = organization.id
+        connection.ownership = "organization"
+        connection.organization_id = organization.id
+        db.update(board[2])
+        db.update(connection)
+        binding = BoardAppBinding(project_id=board[2].id, app_key="github")
+        db.insert(binding)
+        resource = AppResourceBinding(board_binding_id=binding.id, connection_id=connection.id,
+            resource_type="repository", external_resource_id="99", access_state="granted", health="healthy",
+            resource_path=[{"type": "installation", "id": "17"}, {"type": "account", "id": "7"}])
+        db.insert(resource)
+    body, signature = signed({"action": "unsuspend", "installation": payload["installation"]})
+    receive_lifecycle(service, board[1], connection.get_uid(), body, signature, "installation", str(uuid4()))
+    with DbSession.atomic() as db:
+        job = db.exec(SqlBuilder.select.table(GitHubHealthJob)).first()
+        if suspension == "before_query":
+            organization.suspended_at = SafeDateTime.now()
+            db.update(organization)
+    calls = []
+    def inspect(*args, **kwargs):
+        calls.append(kwargs["repository_ids"])
+        if suspension == "during_query":
+            with DbSession.atomic() as db:
+                organization.suspended_at = SafeDateTime.now()
+                db.update(organization)
+        return {"repositories": [{"id": 99, "archived": False}]}
+    monkeypatch.setattr(resources, "inspect_installation", inspect)
+    assert worker.drain_one(service, job.get_uid())
+    assert len(calls) == (0 if suspension == "before_query" else 1)
+    with DbSession.use(readonly=False) as db:
+        current = db.exec(SqlBuilder.select.table(AppResourceBinding).where(AppResourceBinding.id == resource.id)).first()
+        assert current.health == ("healthy" if suspension is None else "unavailable")
+        assert current.access_state == ("granted" if suspension is None else "unknown")
+        current_job = db.exec(SqlBuilder.select.table(GitHubHealthJob)).first()
+        assert current_job.blocked_boards == (0 if suspension is None else 1)
+        assert current_job.last_error == (None if suspension is None else "authority_unavailable")
+    assert worker.drain_one(service, job.get_uid())
+    with DbSession.use(readonly=False) as db:
+        assert db.exec(SqlBuilder.select.table(GitHubHealthJob)).first().state == ("completed" if suspension is None else "blocked")
+
+
 def test_health_job_atomic_dispatch_replay_and_paged_board_cursor(health_job, monkeypatch):
     from langboard.apps import GitHubResources as resources
     from langboard_shared.core.db import SqlBuilder
