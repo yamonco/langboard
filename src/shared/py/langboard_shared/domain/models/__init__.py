@@ -4,6 +4,7 @@ from .ApiKeySetting import ApiKeySetting
 from .ApiKeyUsage import ApiKeyUsage
 from .AppEventDestination import AppEventDestination
 from .AppExecutionOutbox import AppExecutionOutbox
+from .AppExecutionAcknowledgment import AppExecutionAcknowledgment
 from .AppExecutionRequest import AppExecutionRequest
 from .AppConnection import AppConnection
 from .AppConnectionCredential import AppConnectionCredential

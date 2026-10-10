@@ -42,3 +42,9 @@ response additionally has `state: eligible` and `started: false`, so compare the
 snapshot fields rather than GET-only status fields. SDK 0.2.5 generation-only
 requests fail input validation. This package update is not a deployment or an
 execution start; callers need an explicit upgrade.
+
+Python SDK 0.2.7 adds app-authenticated request readback and reception
+acknowledgment. `read_request` returns the fixed accepted authority snapshot;
+`acknowledge` records `received/started:false` with the matching event UID and
+runtime reference. These operations do not start execution or approve work.
+The independently built wheel and both lockfiles remain digest pinned.
