@@ -15,7 +15,10 @@ from langboard_shared.domain.models import (
 )
 from langboard_shared.domain.services.AppGovernance import AppGovernanceDenied, require_connection_access
 from langboard_shared.domain.services.AppRegistry import signal_app_allowed
-from langboard_shared.domain.services.factory.SecretReferenceService import SecretAuditSource
+from langboard_shared.domain.services.factory.SecretReferenceService import (
+    SecretAuditSource,
+    SecretReferenceUnavailable,
+)
 from langboard_shared.helpers import InfraHelper
 from . import DokployConnection as connection
 
@@ -23,16 +26,17 @@ from . import DokployConnection as connection
 MAX_BODY = 65536
 
 
-def _scope(service, actor, project_uid, connection_uid, *, allow_unconfigured=False, unattended=False):
-    board = connection._board(service, actor, project_uid)
+def _scope(service, actor, project_uid, connection_uid, *, allow_unconfigured=False, unattended=False, revocation=False):
+    board = connection._board(service, actor, project_uid, revocation=revocation)
     with DbSession.use(readonly=False) as db:
-        if not signal_app_allowed(db, "dokploy", lock=True):
+        if not revocation and not signal_app_allowed(db, "dokploy", lock=True):
             raise connection.DokployUnavailable()
-        conn = connection._connection(db, actor, connection_uid, lock=True)
-        try:
-            require_connection_access(db, actor, board, conn, unattended=unattended)
-        except AppGovernanceDenied:
-            raise connection.DokployUnavailable() from None
+        conn = connection._connection(db, actor, connection_uid, lock=True, revocation=revocation)
+        if not revocation:
+            try:
+                require_connection_access(db, actor, board, conn, unattended=unattended)
+            except AppGovernanceDenied:
+                raise connection.DokployUnavailable() from None
         binding = db.exec(
             SqlBuilder.select.table(BoardAppBinding)
             .where(
@@ -68,9 +72,10 @@ def _scope(service, actor, project_uid, connection_uid, *, allow_unconfigured=Fa
             )
             .with_for_update()
         ).first()
-        secret = service.secret_reference._find(actor, conn.credential_reference, lock=True)
-        if secret.state != "active":
-            raise connection.DokployUnavailable()
+        if not revocation:
+            secret = service.secret_reference._find(actor, conn.credential_reference, lock=True)
+            if secret.state != "active":
+                raise connection.DokployUnavailable()
     return conn, binding, resources, config
 
 
@@ -135,11 +140,16 @@ def _health(db, conn, binding, resources, config):
 
 def health(service, actor, project_uid, connection_uid):
     with DbSession.atomic() as db:
-        conn, binding, resources, config = _scope(service, actor, project_uid, connection_uid, allow_unconfigured=True)
-        if config:
-            reference = service.secret_reference._find(actor, config.credential_reference, lock=True)
-            if reference.state != "active":
-                raise connection.DokployUnavailable()
+        try:
+            conn, binding, resources, config = _scope(service, actor, project_uid, connection_uid, allow_unconfigured=True)
+            if config:
+                reference = service.secret_reference._find(actor, config.credential_reference, lock=True)
+                if reference.state != "active":
+                    raise connection.DokployUnavailable()
+        except connection.DokployUnavailable:
+            # Retain only removal revisions after app/connection policy revocation.
+            conn, binding, _, config = _scope(service, actor, project_uid, connection_uid, revocation=True)
+            return _health(db, conn, binding, [], config)
         return _health(db, conn, binding, resources, config)
 
 
@@ -162,8 +172,11 @@ def configure(
         _expected(conn, binding, config, expected_revision, expected_binding_revision, expected_config_revision)
         if credential_reference == conn.credential_reference:
             raise ValueError("Receiver credential must be separate")
-        token, revision = connection._credential(service, actor, credential_reference)
-        management, _ = connection._credential(service, actor, conn.credential_reference)
+        try:
+            token, revision = connection._credential(service, actor, credential_reference)
+            management, _ = connection._credential(service, actor, conn.credential_reference)
+        except SecretReferenceUnavailable:
+            raise connection.DokployUnavailable() from None
         if hmac.compare_digest(token, management):
             raise ValueError("Receiver credential must be separate")
         config = config or DokployWebhookBinding(
@@ -195,14 +208,14 @@ def disable(
     service, actor, project_uid, connection_uid, expected_revision, expected_binding_revision, expected_config_revision
 ):
     with DbSession.atomic() as db:
-        conn, binding, resources, config = _scope(service, actor, project_uid, connection_uid)
+        conn, binding, resources, config = _scope(service, actor, project_uid, connection_uid, revocation=True)
         _expected(conn, binding, config, expected_revision, expected_binding_revision, expected_config_revision)
         if config is None:
             raise connection.DokployUnavailable()
         config.state = "disabled"
         config.config_revision += 1
         db.update(config)
-        return _health(db, conn, binding, resources, config)
+        return _health(db, conn, binding, [], config)
 
 
 def _authenticate(service, config_uid, authorization):
