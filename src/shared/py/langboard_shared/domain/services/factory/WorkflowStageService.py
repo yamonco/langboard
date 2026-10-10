@@ -53,7 +53,8 @@ class WorkflowStageService(BaseDomainService):
     def get_app_catalog(self, user: User, project_uid: str) -> list[dict] | None:
         """Host catalog and board-owned status, never installation authority."""
         with DbSession.atomic() as db:
-            if self._authorized_app_board(user, project_uid, ProjectRoleAction.Read) is None:
+            board = self._authorized_app_board(user, project_uid, ProjectRoleAction.Read)
+            if board is None:
                 return None
             bindings = db.exec(SqlBuilder.select.table(BoardAppBinding).where(
                 BoardAppBinding.project_id == InfraHelper.convert_id(project_uid),
@@ -65,7 +66,12 @@ class WorkflowStageService(BaseDomainService):
             ).join(AppConnection, AppConnection.id == AppResourceBinding.connection_id)
               .join(BoardAppBinding, BoardAppBinding.id == AppResourceBinding.board_binding_id)
               .where(BoardAppBinding.project_id == InfraHelper.convert_id(project_uid),
-                     AppResourceBinding.is_selected == True)  # noqa: E712
+                     AppResourceBinding.is_selected == True,  # noqa: E712
+                     or_(
+                         and_(AppConnection.ownership == "personal", AppConnection.owner_id == user.id),
+                         and_(AppConnection.ownership == "organization", board.organization_id is not None,
+                              AppConnection.organization_id == board.organization_id),
+                     ))
               .group_by(AppResourceBinding.board_binding_id, AppResourceBinding.access_state,
                         AppResourceBinding.health, AppConnection.state)).all()
             summaries = {}

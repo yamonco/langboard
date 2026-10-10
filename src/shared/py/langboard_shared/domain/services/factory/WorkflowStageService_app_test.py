@@ -353,3 +353,24 @@ def test_postgresql_concurrent_prepare_returns_one_draft(board):
     with ThreadPoolExecutor(max_workers=2) as workers:
         futures = [workers.submit(prepare) for _ in range(2)]
         assert len({future.result(timeout=15) for future in futures}) == 1
+
+
+def test_catalog_does_not_aggregate_other_persons_private_connections(board, binding):
+    with DbSession.use(readonly=False) as db:
+        for owner_id, identifier in ((board[1].id, 100), (board[2].owner_id, 101)):
+            connection = AppConnection(owner_id=owner_id, app_key="github", state="connected")
+            db.insert(connection)
+            db.insert(AppResourceBinding(
+                board_binding_id=binding.id, connection_id=connection.id, resource_type="repository",
+                external_resource_id=str(identifier), access_state="granted", health="healthy",
+            ))
+    catalog = board[0].get_app_catalog(board[1], board[2].get_uid())
+    github = next(item for item in catalog if item["key"] == "github")
+    assert github["resources"]["selected_count"] == 1
+    assert github["resources"]["connection_counts"] == {"connected": 1}
+    # Instance administration does not expose other people's private accounts.
+    with DbSession.use(readonly=False) as db:
+        board[1].is_admin = True
+        db.update(board[1])
+    catalog = board[0].get_app_catalog(board[1], board[2].get_uid())
+    assert next(item for item in catalog if item["key"] == "github")["resources"]["selected_count"] == 1
