@@ -28,6 +28,7 @@ def test_inbox_hides_visible_links_but_not_private_link_existence(scoped):
         card.created_by_user_id = state[1][1].id
         db.update(card)
     assert len(inbox(scoped)["items"]) == 1
+
     with DbSession.use(readonly=False) as db:
         card.visibility = "SHARED"
         card.owner_user_id = None
@@ -35,6 +36,28 @@ def test_inbox_hides_visible_links_but_not_private_link_existence(scoped):
         binding.is_enabled = False
         db.update(binding)
     assert len(inbox(scoped)["items"]) == 1
+
+
+@pytest.mark.parametrize("admin", [False, True])
+def test_inbox_personal_connection_is_private_even_to_board_owner(scoped, admin):
+    from langboard_shared.core.db import SqlBuilder
+    from langboard_shared.domain.models import User
+
+    state, _, binding, _ = scoped
+    with DbSession.use(readonly=False) as db:
+        binding.is_enabled = False
+        db.update(binding)
+        owner = db.exec(SqlBuilder.select.table(User).where(User.id == state[1][2].owner_id)).first()
+        owner.is_admin = admin
+        db.update(owner)
+    send(state)
+    visible = inbox(scoped)
+    assert len(visible["items"]) == 1
+    assert owner.id != state[1][1].id
+    hidden = list_board_signals(state[0], owner, state[1][2].get_uid())
+    assert hidden == {"items": [], "next_cursor": None}
+    with pytest.raises(ValueError):
+        list_board_signals(state[0], owner, state[1][2].get_uid(), visible["items"][0]["signal_uid"])
 
 
 def test_inbox_latest_occurrence_conflict_and_bounded_pages(scoped):

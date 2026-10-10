@@ -23,7 +23,7 @@ from langboard_shared.domain.services.AppSignalProjection import (
 )
 from langboard_shared.domain.services.CardVisibilityPolicy import card_visibility_scope
 from langboard_shared.helpers import InfraHelper
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, func, or_, select
 from .GitHubManifest import GitHubManifestUnavailable
 
 
@@ -107,7 +107,20 @@ def list_board_signals(service, actor, project_uid, after=None, *, channel=Colla
         .join(Project, Project.id == BoardAppBinding.project_id)
         .join(AppConnection, AppConnection.id == AppResourceBinding.connection_id)
         .join(User, User.id == AppConnection.owner_id)
-        .where(Project.id == project.id, eligibility, AppSignal.provider == AppConnection.app_key, ~linked)
+        .where(
+            Project.id == project.id,
+            eligibility,
+            AppSignal.provider == AppConnection.app_key,
+            or_(
+                and_(
+                    AppConnection.ownership == "personal",
+                    AppConnection.organization_id.is_(None),
+                    AppConnection.owner_id == actor.id,
+                ),
+                and_(AppConnection.ownership == "organization", AppConnection.organization_id == Project.organization_id),
+            ),
+            ~linked,
+        )
     )
     if provider is not None:
         query = query.where(AppSignal.provider == provider)
