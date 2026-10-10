@@ -372,3 +372,33 @@ for (const width of [1440, 390]) {
         await expect(editor.getByRole("link", { name: "Secret history" })).toHaveCount(2);
     });
 }
+
+test("native Yjs peers normalize initial links and persist caption-free remote updates", async ({ page }) => {
+    await page.goto("/src/components/plate-ui/secret-masked-node.fixture.html");
+    await page.getByRole("button", { name: "Verify Yjs peers" }).click();
+    const result = page.locator("[data-sync-result]");
+    await expect(result).toContainText("updated ");
+    const state = JSON.parse(await result.innerText());
+    expect(state.peers).toHaveLength(2);
+    // Plate assigns editor-local node IDs; Yjs intentionally excludes those metadata props.
+    const content = (value: unknown) => JSON.parse(JSON.stringify(value, (key, node) => (key === "id" ? undefined : node)));
+    expect(content(state.peers[0])).toEqual(content(state.peers[1]));
+    // Y.XmlText omits Slate's structural empty text siblings. Compare the reference subtree.
+    expect(content(state.peers[0][0].children[1])).toEqual(state.shared[0][0].children[1]);
+    for (const peer of state.initial) {
+        expect(peer[0].children[1]).toMatchObject({
+            type: "secretReference",
+            uri: "secret://ref/fixture",
+            children: [{ text: "" }],
+        });
+    }
+    expect(state.peers[0][0].children[1]).toMatchObject({
+        type: "secretReference",
+        uri: "secret://ref/other",
+        children: [{ text: "" }],
+    });
+    expect(state.shared[0]).toEqual(state.shared[1]);
+    for (const caption of ["remote-caption", "remote-tainted"]) {
+        await expect(result).not.toContainText(caption);
+    }
+});
