@@ -1,6 +1,5 @@
 """Generic read bridge for independently registered app panels; no provider credentials."""
 
-from typing import Literal
 from fastapi import Request
 from langboard_shared.core.db import DbSession
 from langboard_shared.core.filter import AuthFilter
@@ -19,7 +18,8 @@ class PanelSignalsForm(BaseModel):
     model_config = ConfigDict(extra="forbid")
     app_revision: str = Field(pattern=r"^[0-9a-f]{64}$")
     binding_revision: str = Field(pattern=r"^[0-9a-f]{64}$")
-    provider: Literal["github", "glitchtip", "dokploy"]
+    # Installed adapter support is validated by the authorized native read.
+    provider: str = Field(pattern=r"^[a-z][a-z0-9_-]{0,31}$")
     after: str | None = Field(default=None, pattern=r"^[A-Za-z0-9]{1,11}$")
 
 

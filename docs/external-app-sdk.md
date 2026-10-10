@@ -172,6 +172,11 @@ The standalone source repositories are `langboard-sdk`, `langboard-app-github`,
 `langboard-app-glitchtip`, and `langboard-app-dokploy`. The host consumes reviewed
 package artifacts, and the three panels use host design resources and the same
 SDK read bridge. No provider credentials are passed into an iframe.
+The `signals.list` bridge accepts a bounded adapter key rather than duplicating
+the built-in provider list in the browser and request schema. The native read
+still rejects adapters that are not installed in the host and rechecks current
+board, connection and capability authority. Registering an external panel does
+not install a signal adapter or grant access to another connection.
 
 ### Native signal revocation
 

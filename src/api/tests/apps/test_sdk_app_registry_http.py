@@ -244,6 +244,13 @@ async def test_panel_consent_scope_revisions_and_revocation(board, monkeypatch, 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("board", ["sqlite-http"], indirect=True)
 async def test_external_panel_read_needs_independent_consent_and_current_revision(board, monkeypatch):
+    from langboard.routes.board import AppPanelDataApi
+    native_read = AppPanelDataApi.list_board_signals
+    requested_providers = []
+    def tracked_read(*args, **kwargs):
+        requested_providers.append(kwargs["provider"])
+        return native_read(*args, **kwargs)
+    monkeypatch.setattr(AppPanelDataApi, "list_board_signals", tracked_read)
     from langboard_shared.core.db import BaseDbModel
     BaseDbModel.metadata.create_all(DbEngine.get_main_engine())
     monkeypatch.setattr(DbEngine, "get_readonly_engine", DbEngine.get_main_engine)
@@ -271,6 +278,7 @@ async def test_external_panel_read_needs_independent_consent_and_current_revisio
         form = {"app_revision": approved["revision"], "binding_revision": saved["revision"], "provider": "github"}
         denied = await request("POST", path, json=form)
         assert denied.status_code == 404
+        assert requested_providers == []
         saved = (await manager.set_panel_consent("example-erp", approved["revision"], enabled=True, read_signals=True,
             binding_uid=saved["uid"], expected_revision=saved["revision"]))["binding"]
         assert saved["granted_capabilities"] == ["panels.render", "signals.read"]
@@ -279,6 +287,11 @@ async def test_external_panel_read_needs_independent_consent_and_current_revisio
             result = await request("POST", path, json={**form, "provider": provider})
             assert result.status_code == 200 and result.json() == {"items": [], "next_cursor": None}
         assert (await request("POST", path, json={**form, "provider": "unsupported"})).status_code == 400
+        # Well-formed future adapter keys reach native support validation.
+        assert (await request("POST", path, json={**form, "provider": "example-adapter"})).status_code == 400
+        assert requested_providers[-1] == "example-adapter"
+        assert (await request("POST", path, json={**form, "provider": "../github"})).status_code == 400
+        assert requested_providers[-1] == "example-adapter"
         assert (await request("POST", path, json={**form, "binding_revision": "0" * 64})).status_code == 409
         disabled = (await manager.set_panel_consent("example-erp", approved["revision"], enabled=False,
             binding_uid=saved["uid"], expected_revision=saved["revision"]))["binding"]
