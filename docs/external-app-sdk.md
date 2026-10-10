@@ -135,7 +135,10 @@ An explicit registry override can disable an adapter or reduce its capabilities;
 it cannot add an unsupported built-in capability. Discovery excludes disabled
 adapters. GitHub signal reads and leased signal delivery tasks, GlitchTip issue
 refreshes, Dokploy deployment refreshes and Dokploy notification receivers check
-current registry state again before committing new evidence. A revoked queued
+current registry state again before committing new evidence. Card evidence,
+board signal inboxes and linked-resource discovery also apply the current app
+capability ceiling inside their existing SQL queries. Revoked evidence is hidden
+without deleting it, and cursors into revoked resources become invalid. A revoked queued
 GitHub delivery retains its normalized evidence and blocked delivery history.
 This does not retroactively undo external changes or prove that every automation
 route is integrated with connection ownership and governance policy.

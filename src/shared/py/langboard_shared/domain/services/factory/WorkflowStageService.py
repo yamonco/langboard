@@ -333,9 +333,9 @@ class WorkflowStageService(BaseDomainService):
                 )).first()
                 if member is None or role is None or not role.is_granted(action):
                     return None
-            from ..AppGovernance import AppGovernanceDenied, require_app_allowed
+            from ..AppGovernance import AppGovernanceDenied, require_current_project_policy
             try:
-                require_app_allowed(db, board)
+                require_current_project_policy(db, board)
             except AppGovernanceDenied:
                 return None
             return board

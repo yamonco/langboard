@@ -423,3 +423,49 @@ def test_provider_filter_is_applied_before_cursor_and_page_limit(scoped):
         list_board_signals(state[0], state[1][1], uid, github["items"][0]["signal_uid"], provider="dokploy")
     with pytest.raises(ValueError):
         list_board_signals(state[0], state[1][1], uid, provider="unknown")
+
+
+@pytest.mark.parametrize("change", ["disabled", "capability"])
+def test_registry_revocation_hides_inbox_and_invalidates_its_cursor(scoped, change):
+    from langboard_shared.core.db import SqlBuilder
+    from langboard_shared.domain.models import AppDefinition, AppSignal
+
+    state, _, binding, _ = scoped
+    with DbSession.atomic() as db:
+        binding.is_enabled = False
+        db.update(binding)
+    send(state)
+    rows = inbox(scoped)["items"]
+    assert len(rows) == 1
+    with DbSession.atomic() as db:
+        definition = db.exec(SqlBuilder.select.table(AppDefinition).where(AppDefinition.key == "github")).first()
+        if change == "disabled":
+            definition.is_enabled = False
+        else:
+            definition.declaration = {"capabilities": ["resources.read"]}
+        db.update(definition)
+    assert inbox(scoped) == {"items": [], "next_cursor": None}
+    with pytest.raises(ValueError, match="Invalid inbox cursor"):
+        inbox(scoped, rows[0]["signal_uid"])
+    with DbSession.use(readonly=False) as db:
+        assert len(db.exec(SqlBuilder.select.table(AppSignal)).all()) == 1
+
+
+@pytest.mark.parametrize("change", ["disabled", "signals", "deployments"])
+def test_dokploy_registry_override_hides_stored_deployments(dokploy_inbox, change):
+    from langboard_shared.core.db import SqlBuilder
+    from langboard_shared.domain.models import AppDefinition, AppSignal
+    from test_dokploy_signal import refresh
+
+    board = dokploy_inbox[0][1]
+    refresh(dokploy_inbox)
+    assert deployment_inbox(dokploy_inbox)["items"]
+    capabilities = ["resources.read", "signals.read", "deployments.read"]
+    if change != "disabled":
+        capabilities.remove("signals.read" if change == "signals" else "deployments.read")
+    with DbSession.atomic() as db:
+        db.insert(AppDefinition(key="dokploy", approved_by=board[1].id, is_enabled=change != "disabled",
+                                declaration={"capabilities": capabilities}))
+    assert deployment_inbox(dokploy_inbox) == {"items": [], "next_cursor": None}
+    with DbSession.use(readonly=False) as db:
+        assert len(db.exec(SqlBuilder.select.table(AppSignal)).all()) == 1

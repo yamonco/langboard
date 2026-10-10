@@ -32,7 +32,9 @@ from sqlalchemy.pool import StaticPool
 
 
 @pytest.fixture
-def governance(monkeypatch):
+def governance(monkeypatch, tmp_path):
+    from langboard_shared.Env import Env
+    monkeypatch.setattr(type(Env), "CACHE_DIR", property(lambda _: tmp_path / "cache"))
     from langboard_shared.publishers import AppSettingPublisher
     monkeypatch.setattr(AppSettingPublisher, "apps_changed", lambda: None)
     engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)

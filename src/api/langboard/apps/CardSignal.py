@@ -13,7 +13,11 @@ from langboard_shared.domain.models import (
 )
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.domain.services.AppManifest import APP_MANIFESTS
-from langboard_shared.domain.services.AppSignalProjection import card_signal_projections, supported_signal_condition
+from langboard_shared.domain.services.AppSignalProjection import (
+    card_signal_projections,
+    registered_capability_condition,
+    supported_signal_condition,
+)
 from langboard_shared.domain.services.CardVisibilityPolicy import CardVisibility
 from langboard_shared.domain.services.factory.SecretReferenceService import SecretReferenceUnavailable
 from langboard_shared.helpers import InfraHelper
@@ -77,6 +81,8 @@ def authorized_signal_scope(service, db, actor, project_uid, connection_uid, res
         SqlBuilder.select.table(BoardAppBinding).where(
             BoardAppBinding.project_id == board.id,
             BoardAppBinding.app_key == manifest.key,
+            *(registered_capability_condition(manifest.key, capability)
+              for capability in {"signals.read", *policy.required_capabilities}),
         ).with_for_update()
     ).first()
     if (
