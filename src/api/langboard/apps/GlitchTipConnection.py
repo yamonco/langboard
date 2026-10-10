@@ -140,7 +140,7 @@ def _connection(db, actor, uid, *, lock=False, revocation=False):
 
 
 def list_connections(service, actor, project_uid, after=None):
-    _board(service, actor, project_uid)
+    _board(service, actor, project_uid, revocation=True)
     if after is not None and not re.fullmatch(r"[A-Za-z0-9]{1,11}", after):
         raise ValueError("Invalid connection cursor")
     with DbSession.use(readonly=False) as db:
@@ -149,7 +149,7 @@ def list_connections(service, actor, project_uid, after=None):
             .where(
                 AppConnection.owner_id == actor.id,
                 AppConnection.app_key == "glitchtip",
-                AppConnection.state == "connected",
+                AppConnection.state.in_(["pending", "connected", "revoked", "disconnected"]),
                 AppConnection.id > (InfraHelper.convert_id(after) if after else 0),
             )
             .order_by(AppConnection.id)
@@ -292,11 +292,11 @@ def bind_project(
 
 
 def selected_projects(service, actor, project_uid, connection_uid, after=None):
-    board = _board(service, actor, project_uid)
+    board = _board(service, actor, project_uid, revocation=True)
     if after is not None and not re.fullmatch(r"[A-Za-z0-9]{1,11}", after):
         raise ValueError("Invalid resource cursor")
     with DbSession.use(readonly=False) as db:
-        connection = _connection(db, actor, connection_uid)
+        connection = _connection(db, actor, connection_uid, revocation=True)
         binding = db.exec(
             SqlBuilder.select.table(BoardAppBinding).where(
                 BoardAppBinding.project_id == board.id,
