@@ -130,8 +130,8 @@ async def test_fastmcp_history_schema_and_no_vault_reads(secrets, monkeypatch):
     try:
         async with Client(server) as client:
             tool = (await client.list_tools())[0]
-            assert tool.annotations.readOnlyHint
-            assert set(tool.inputSchema["properties"]) == {"uri", "limit", "cursor"}
+            assert tool.annotations.read_only_hint
+            assert set(tool.input_schema["properties"]) == {"uri", "limit", "cursor"}
             result = (await client.call_tool(tool.name, {"uri": meta["uri"], "limit": 1})).structured_content
             assert result["items"][0]["action"] == "created"
             assert "fixture-sensitive" not in json.dumps(result)
