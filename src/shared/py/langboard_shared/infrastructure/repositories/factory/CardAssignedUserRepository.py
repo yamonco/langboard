@@ -1,9 +1,9 @@
 from typing import Any, Literal, cast, overload
 from ....core.db import DbSession, SqlBuilder
 from ....core.domain import BaseRepository
-from ....core.types import SnowflakeID
+from ....core.types import SafeDateTime, SnowflakeID
 from ....core.types.ParamTypes import TCardParam, TProjectParam
-from ....domain.models import Card, CardAssignedUser, User
+from ....domain.models import Card, CardAssignedUser, ProjectAssignedUser, User
 from ....helpers import InfraHelper
 
 
@@ -15,6 +15,25 @@ class CardAssignedUserRepository(BaseRepository[CardAssignedUser]):
     @staticmethod
     def name() -> str:
         return "card_assigned_user"
+
+    def add_member(self, card: Card, member: ProjectAssignedUser) -> bool:
+        """Add one member under the card lock without replacing other assignments."""
+        with DbSession.use(readonly=False) as db:
+            locked = db.exec(
+                SqlBuilder.select.table(Card).where(Card.column("id") == card.id).with_for_update()
+            ).first()
+            if locked is None or locked.project_id != member.project_id:
+                raise ValueError("Card and membership must belong to the same project")
+            existing = db.exec(
+                SqlBuilder.select.table(CardAssignedUser).where(
+                    (CardAssignedUser.column("card_id") == card.id)
+                    & (CardAssignedUser.column("user_id") == member.user_id)
+                )
+            ).first()
+            if existing is not None:
+                return False
+            db.insert(CardAssignedUser(card_id=card.id, user_id=member.user_id, project_assigned_id=member.id))
+        return True
 
     @overload
     def get_all_by_card(
@@ -51,12 +70,14 @@ class CardAssignedUserRepository(BaseRepository[CardAssignedUser]):
             raw_users = result.all()
         return cast(Any, raw_users)
 
-    def get_all_by_project(self, project: TProjectParam) -> list[tuple[User, CardAssignedUser]]:
+    def get_all_by_project(
+        self, project: TProjectParam, archive_visible_since: SafeDateTime | None = None
+    ) -> list[tuple[User, CardAssignedUser]]:
         project_id = InfraHelper.convert_id(project)
 
         raw_users = []
         with DbSession.use(readonly=True) as db:
-            result = db.exec(
+            query = (
                 SqlBuilder.select.tables(User, CardAssignedUser)
                 .join(
                     CardAssignedUser,
@@ -65,6 +86,12 @@ class CardAssignedUserRepository(BaseRepository[CardAssignedUser]):
                 .join(Card, CardAssignedUser.column("card_id") == Card.column("id"))
                 .where(Card.column("project_id") == project_id)
             )
+            if archive_visible_since is not None:
+                query = query.where(
+                    (Card.column("archived_at") == None)  # noqa: E711
+                    | (Card.column("archived_at") >= archive_visible_since)
+                )
+            result = db.exec(query)
             raw_users = result.all()
         return raw_users
 

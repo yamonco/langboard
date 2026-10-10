@@ -18,19 +18,7 @@ export interface IUpdateBotForm {
     delete_avatar?: bool;
 }
 
-export interface IUpdateBotResponse {
-    name?: string;
-    bot_uname?: string;
-    avatar?: string;
-    deleted_avatar?: bool;
-    platform?: string;
-    platform_running_type?: string;
-    api_url?: string;
-    api_key?: string;
-    value?: string;
-}
-
-const useUpdateBot = (bot: BotModel.TModel, options?: TMutationOptions<IUpdateBotForm, IUpdateBotResponse>) => {
+const useUpdateBot = (bot: BotModel.TModel, options?: TMutationOptions<IUpdateBotForm>) => {
     const { mutate } = useQueryMutation();
 
     const updateBot = async (params: IUpdateBotForm) => {
@@ -54,37 +42,27 @@ const useUpdateBot = (bot: BotModel.TModel, options?: TMutationOptions<IUpdateBo
             }
         });
 
-        const res = await api.put<IUpdateBotResponse>(url, formData, {
+        const res = await api.put(url, formData, {
             env: {
                 interceptToast: options?.interceptToast,
             } as never,
         });
 
-        const data = res.data;
-        Object.entries(data).forEach(([key, value]) => {
-            if (key === "deleted_avatar") {
-                if (value) {
-                    bot.avatar = undefined;
+        if (Utils.Type.isObject(res.data)) {
+            Object.entries(res.data).forEach(([key, value]) => {
+                if (key === "platform" && Utils.Type.isString(value)) {
+                    value = EBotPlatform[new Utils.String.Case(value).toPascal() as keyof typeof EBotPlatform];
                 }
-                return;
-            }
 
-            if (key === "avatar" && Utils.Type.isString(value)) {
-                value = Utils.String.convertServerFileURL(value);
-            }
+                if (key === "platform_running_type" && Utils.Type.isString(value)) {
+                    value = EBotPlatformRunningType[new Utils.String.Case(value).toPascal() as keyof typeof EBotPlatformRunningType];
+                }
 
-            if (key === "platform" && Utils.Type.isString(value)) {
-                value = Utils.String.convertSafeEnum(EBotPlatform, value);
-            }
+                bot[key] = value as never;
+            });
+        }
 
-            if (key === "platform_running_type" && Utils.Type.isString(value)) {
-                value = Utils.String.convertSafeEnum(EBotPlatformRunningType, value);
-            }
-
-            bot[key] = value as never;
-        });
-
-        return data;
+        return res.data;
     };
 
     const result = mutate(["update-bot"], updateBot, {

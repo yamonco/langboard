@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Box from "@/components/base/Box";
 import Button from "@/components/base/Button";
@@ -9,7 +9,7 @@ import Toast from "@/components/base/Toast";
 import CopyInput from "@/components/CopyInput";
 import FormErrorMessage from "@/components/FormErrorMessage";
 import useCreateWebhook from "@/controllers/api/settings/webhooks/useCreateWebhook";
-import useGetWebhookEvents from "@/controllers/api/settings/webhooks/useGetWebhookEvents";
+import useGetWebhookEvents, { IWebhookEventOption } from "@/controllers/api/settings/webhooks/useGetWebhookEvents";
 import setupApiErrorHandler from "@/core/helpers/setupApiErrorHandler";
 import { usePageNavigateRef } from "@/core/hooks/usePageNavigate";
 import { ROUTES } from "@/core/routing/constants";
@@ -26,11 +26,25 @@ function WebhookCreateFormDialog({ opened, setOpened }: ISharedSettingsModalProp
     const nameInputRef = useRef<HTMLInputElement>(null);
     const urlInputRef = useRef<HTMLInputElement>(null);
     const { mutate } = useCreateWebhook();
-    const { data: eventOptions = [] } = useGetWebhookEvents({ enabled: opened, interceptToast: true });
+    const { mutate: getWebhookEvents } = useGetWebhookEvents({ interceptToast: true });
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [allEvents, setAllEvents] = useState(true);
     const [selectedEvents, setSelectedEvents] = useState<string[]>([]);
+    const [eventOptions, setEventOptions] = useState<IWebhookEventOption[]>([]);
     const [revealedSecret, setRevealedSecret] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (!opened || eventOptions.length) {
+            return;
+        }
+
+        getWebhookEvents(
+            {},
+            {
+                onSuccess: setEventOptions,
+            }
+        );
+    }, [opened, eventOptions.length, getWebhookEvents]);
 
     const reset = () => {
         if (nameInputRef.current) {
@@ -133,9 +147,9 @@ function WebhookCreateFormDialog({ opened, setOpened }: ISharedSettingsModalProp
                 </Dialog.Header>
                 {revealedSecret ? (
                     <>
-                        <p className="mt-4 text-sm text-muted-foreground">
+                        <Box mt="4" as="p" textSize="sm" className="text-muted-foreground">
                             {t("settings.Copy this signing secret now. It will not be shown again.")}
-                        </p>
+                        </Box>
                         <Box mt="3">
                             <CopyInput value={revealedSecret} />
                         </Box>

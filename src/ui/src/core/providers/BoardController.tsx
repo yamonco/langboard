@@ -7,7 +7,7 @@ import { EEditorCollaborationType } from "@langboard/core/constants";
 import { Utils } from "@langboard/core/utils";
 import { createContext, memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 
-export type TBoardViewType = "board" | "card" | "wiki" | "settings";
+export type TBoardViewType = "board" | "card" | "graph" | "wiki" | "settings";
 
 interface IStartCardSelectionProps {
     type: ProjectCardRelationship.TRelationship;

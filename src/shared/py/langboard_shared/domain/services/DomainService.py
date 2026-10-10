@@ -31,6 +31,10 @@ class DomainService(Factory):
         return self._create_or_get_product(factory.UserService)
 
     @property
+    def organization(self):
+        return self._create_or_get_product(factory.OrganizationService)
+
+    @property
     def project(self):
         return self._create_or_get_product(factory.ProjectService)
 
@@ -141,6 +145,10 @@ class DomainService(Factory):
     @property
     def card_comment(self):
         return self._create_or_get_product(factory.CardCommentService)
+
+    @property
+    def card_content_block(self):
+        return self._create_or_get_product(factory.CardContentBlockService)
 
     @property
     def docling_metadata(self):

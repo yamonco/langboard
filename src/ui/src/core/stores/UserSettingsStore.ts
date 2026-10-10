@@ -5,6 +5,7 @@ import { immer } from "zustand/middleware/immer";
 export const NOTIFICATIONS_TIME_RANGE_OPTIONS = ["3d", "7d", "1m", "all"] as const;
 export interface IUserSettings {
     notifications_time_range?: (typeof NOTIFICATIONS_TIME_RANGE_OPTIONS)[number];
+    graph_view_modes?: Record<string, "columns" | "network">;
 }
 
 interface IUserSettingsStore {

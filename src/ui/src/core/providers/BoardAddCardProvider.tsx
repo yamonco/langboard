@@ -47,6 +47,17 @@ export const BoardAddCardProvider = ({ column, viewportRef, toLastPage, children
     const canWrite = hasRoleAction(ProjectRole.EAction.CardWrite) && !column.is_archive;
     const { mutateAsync: createCardMutateAsync } = useCreateCard({ interceptToast: true });
     const editorName = `${column.uid}-add-card`;
+
+    const scrollToCreatedCard = (cardUID: string, attemptsLeft = 40) => {
+        if (document.getElementById(`board-card-${cardUID}`)) {
+            scrollToBottom();
+            return;
+        }
+        if (attemptsLeft > 0) {
+            window.setTimeout(() => scrollToCreatedCard(cardUID, attemptsLeft - 1), 50);
+        }
+    };
+
     const { valueRef, isEditing, setIsEditing, changeMode } = useChangeEditMode({
         canEdit: () => hasRoleAction(ProjectRole.EAction.CardWrite) && !column.is_archive,
         valueType: "textarea",
@@ -92,18 +103,11 @@ export const BoardAddCardProvider = ({ column, viewportRef, toLastPage, children
                     handle(error);
                     return messageRef.message;
                 },
-                success: (data) => {
-                    const openCard = () => {
-                        const card = document.getElementById(`board-card-${data.uid}`);
-                        if (!card) {
-                            return setTimeout(openCard, 50);
-                        }
-
-                        toLastPage();
-                        scrollToBottom();
-                        card.click();
-                    };
-                    openCard();
+                success: ({ uid }) => {
+                    // Card creation stays lightweight: insert into the board without opening the viewer.
+                    // The user opens the viewer only through an explicit card or widget interaction.
+                    toLastPage();
+                    scrollToCreatedCard(uid);
                     return t("successes.Card added successfully.");
                 },
                 finally: () => {

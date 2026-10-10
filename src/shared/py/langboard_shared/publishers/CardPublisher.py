@@ -8,6 +8,30 @@ from ..domain.models import Card, Checkitem, Project, ProjectColumn, ProjectLabe
 @staticclass
 class CardPublisher(BaseSocketPublisher):
     @staticmethod
+    def linked_resource_changed(project: Project, card: Card):
+        """Invalidate a linked card without publishing protected source data."""
+
+        model = {"uid": card.get_uid()}
+        event = f"board:card:linked-resource:changed:{card.get_uid()}"
+        CardPublisher.put_dispather(
+            model,
+            [
+                SocketPublishModel(
+                    topic=SocketTopic.Board,
+                    topic_id=project.get_uid(),
+                    event=event,
+                    data_keys="uid",
+                ),
+                SocketPublishModel(
+                    topic=SocketTopic.BoardCard,
+                    topic_id=card.get_uid(),
+                    event=event,
+                    data_keys="uid",
+                ),
+            ],
+        )
+
+    @staticmethod
     def created(project: Project, column: ProjectColumn, model: dict[str, Any]):
         topic_id = project.get_uid()
         publish_models = [

@@ -19,7 +19,6 @@ export interface IBotActionSuggestion {
 
 export interface IBotActionSuggestionForm {
     prompt: string;
-    value: Record<string, unknown>;
     selected_api_names: string[];
     selected_comfort_tool_names: string[];
     include_mcp?: bool;
@@ -30,13 +29,13 @@ const useSuggestBotActions = (options?: TMutationOptions<IBotActionSuggestionFor
     const { mutate } = useQueryMutation();
 
     const suggestBotActions = async (form: IBotActionSuggestionForm) => {
-        const res = await api.post<{ suggestions: IBotActionSuggestion[] }>(Routing.API.SETTINGS.BOTS.ACTION_SUGGESTIONS, form, {
+        const res = await api.post(Routing.API.SETTINGS.BOTS.ACTION_SUGGESTIONS, form, {
             env: {
                 interceptToast: options?.interceptToast,
             } as never,
         });
 
-        return res.data.suggestions ?? [];
+        return (res.data.suggestions ?? []) as IBotActionSuggestion[];
     };
 
     const result = mutate(["suggest-bot-actions"], suggestBotActions, {

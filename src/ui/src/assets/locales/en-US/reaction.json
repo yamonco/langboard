@@ -1,5 +1,8 @@
 {
   "React": "React",
+  "Reacted by": "Reacted by",
+  "and more": "+{{count}} more",
+  "Bot": "Bot",
   "check-mark": "Check",
   "thumbs-up": "Thumbs Up",
   "thumbs-down": "Thumbs Down",

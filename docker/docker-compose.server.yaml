@@ -72,6 +72,7 @@ services:
       - ../local:/app/local
       - ../scripts/run_bot_cron.sh:/app/scripts/run_bot_cron.sh:x
       - ../scripts/run_notification_cron.sh:/app/scripts/run_notification_cron.sh:x
+      - ../scripts/run_execution_outbox_cron.sh:/app/scripts/run_execution_outbox_cron.sh:x
       - ./volumes/.vault-credentials:/app/.vault-credentials:ro
     depends_on:
       db-bouncer:

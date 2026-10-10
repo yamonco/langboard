@@ -43,5 +43,5 @@ export type TGetActivitiesForm =
     | IGetProjectWikiActivitiesForm;
 
 export type TGetListForm<TModelName extends TCreatedAtModelName> = TModelName extends "ActivityModel"
-    ? TGetActivitiesForm
+    ? IBaseGetActivitiesForm<TActivityType>
     : IBaseGetListForm<TModelName>;

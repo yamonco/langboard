@@ -3,11 +3,13 @@ import * as User from "@/core/models/User";
 import { BaseModel, IBaseModel, IEditorContent } from "@/core/models/Base";
 import { registerModel } from "@/core/models/ModelRegistry";
 import { TReactionEmoji } from "@/components/ReactionCounter";
+import type { ICardCommentAnchor } from "@/core/models/types/card-comment-anchor.type";
 
 export interface Interface extends IBaseModel {
     card_uid: string;
     content: IEditorContent;
     is_edited: bool;
+    anchor?: ICardCommentAnchor | null;
 }
 
 export interface IStore extends Interface {
@@ -46,6 +48,13 @@ class ProjectCardComment extends BaseModel<IStore> {
 
     public get is_edited() {
         return this.getValue("is_edited");
+    }
+
+    public get anchor() {
+        return this.getValue("anchor");
+    }
+    public set anchor(value) {
+        this.update({ anchor: value });
     }
     public set is_edited(value) {
         this.update({ is_edited: value });

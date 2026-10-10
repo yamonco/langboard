@@ -65,20 +65,37 @@ class OidcClient:
 
     @staticmethod
     def validate_id_token(id_token: str, nonce: str | None = None) -> dict[str, Any]:
+        return OidcClient._validate_jwt(id_token, Env.OIDC_CLIENT_ID, nonce)
+
+    @staticmethod
+    def validate_access_token(access_token: str) -> dict[str, Any]:
+        """Validate an OIDC access token intended only for the Langboard resource."""
+
+        if not Env.OIDC_BEARER_ENABLED:
+            raise RuntimeError("OIDC bearer authentication is disabled")
+        audience = Env.OIDC_RESOURCE_AUDIENCE.strip()
+        if not audience:
+            raise RuntimeError("OIDC resource audience is missing")
+        return OidcClient._validate_jwt(access_token, audience)
+
+    @staticmethod
+    def _validate_jwt(token: str, audience: str, nonce: str | None = None) -> dict[str, Any]:
+        """Validate one supported OIDC JWT against discovery metadata."""
+
         discovery = OidcClient.get_discovery()
-        unverified_header = get_unverified_header(id_token)
+        unverified_header = get_unverified_header(token)
 
         algorithm = str(unverified_header.get("alg", "RS256"))
         if algorithm.lower() == "none":
-            raise RuntimeError("OIDC ID token algorithm 'none' is not allowed")
+            raise RuntimeError("OIDC token algorithm 'none' is not allowed")
         if algorithm.startswith("HS"):
             signing_key: Any = Env.OIDC_CLIENT_SECRET
             if not signing_key:
-                raise RuntimeError("OIDC client secret is required for HMAC-signed ID tokens")
+                raise RuntimeError("OIDC client secret is required for HMAC-signed tokens")
         else:
             jwk = OidcClient._find_jwk(unverified_header)
             if not jwk:
-                raise RuntimeError("OIDC JWK for ID token is not found")
+                raise RuntimeError("OIDC JWK for token is not found")
             signing_key = RSAAlgorithm.from_jwk(json_dumps(jwk))
 
         issuer = str(discovery.get("issuer", Env.OIDC_ISSUER)).strip()
@@ -86,10 +103,10 @@ class OidcClient:
             raise RuntimeError("OIDC issuer is missing")
 
         payload = jwt_decode(
-            id_token,
+            token,
             key=signing_key,
             algorithms=[algorithm],
-            audience=Env.OIDC_CLIENT_ID,
+            audience=audience,
             issuer=issuer,
             leeway=Env.OIDC_CLOCK_SKEW_SEC,
             options={"require": ["sub", "iss", "aud", "exp", "iat"]},

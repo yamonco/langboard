@@ -12,8 +12,8 @@ export interface ISocketEvent<TResponse> {
 
 export type TSocketTopicId = string;
 export type TSocketEventKey = string;
-export type TSocketEventCallbacks = unknown[];
-export type TSocketEventKeyMap = Record<TSocketEventKey, TSocketEventCallbacks>;
+export type TSocketEventCallbacks<TResponse = unknown> = ISocketEvent<TResponse>[];
+export type TSocketEventKeyMap<TResponse = unknown> = Record<TSocketEventKey, TSocketEventCallbacks<TResponse>>;
 export type TEventMap = Partial<Record<TEventName, TSocketEventKeyMap>>;
 export type TSocketSubscriptionMap = Record<TSocketTopicId, TEventMap>;
 export type TSocketSubscriptionTopicMap = Partial<Record<ESocketTopic, TSocketSubscriptionMap>>;
@@ -53,38 +53,35 @@ interface IDefaultSocketAddEventProps<TResponse> extends IBaseSocketAddEventProp
     event: TDefaultEvents;
 }
 
-export type TSocketSubscriptionAddEventProps<TResponse> = INoneOrGlobalTopicSocketAddEventProps<TResponse> | ITopicSocketAddEventProps<TResponse>;
+export type TSocketAddEventProps<TResponse> =
+    | INoneOrGlobalTopicSocketAddEventProps<TResponse>
+    | ITopicSocketAddEventProps<TResponse>
+    | IDefaultSocketAddEventProps<TResponse>;
 
-export type TSocketAddEventProps<TResponse> = TSocketSubscriptionAddEventProps<TResponse> | IDefaultSocketAddEventProps<TResponse>;
-
-interface IBaseSocketRemoveEventProps<TResponse> {
+interface IBaseSocketRemoveEventProps {
     eventKey: string;
-    callback: ISocketEvent<TResponse>;
+    callback: ISocketEvent<unknown>;
 }
 
-interface INoneOrGlobalTopicSocketRemoveEventProps<TResponse> extends IBaseSocketRemoveEventProps<TResponse> {
+interface INoneOrGlobalTopicSocketRemoveEventProps extends IBaseSocketRemoveEventProps {
     topic: TSocketImplicitTopic;
     topicId?: never;
     event: TSocketNonDefaultEventName;
 }
 
-interface ITopicSocketRemoveEventProps<TResponse> extends IBaseSocketRemoveEventProps<TResponse> {
+interface ITopicSocketRemoveEventProps extends IBaseSocketRemoveEventProps {
     topic: TSocketScopedTopic;
     topicId: string;
     event: TSocketNonDefaultEventName;
 }
 
-interface IDefaultSocketRemoveEventProps<TResponse> extends IBaseSocketRemoveEventProps<TResponse> {
+interface IDefaultSocketRemoveEventProps extends IBaseSocketRemoveEventProps {
     topic?: never;
     topicId?: never;
     event: TDefaultEvents;
 }
 
-export type TSocketSubscriptionRemoveEventProps<TResponse> =
-    | INoneOrGlobalTopicSocketRemoveEventProps<TResponse>
-    | ITopicSocketRemoveEventProps<TResponse>;
-
-export type TSocketRemoveEventProps<TResponse = unknown> = TSocketSubscriptionRemoveEventProps<TResponse> | IDefaultSocketRemoveEventProps<TResponse>;
+export type TSocketRemoveEventProps = INoneOrGlobalTopicSocketRemoveEventProps | ITopicSocketRemoveEventProps | IDefaultSocketRemoveEventProps;
 
 interface IBaseSocketTopicNotifierProps {
     topic: ESocketTopic;
@@ -143,8 +140,8 @@ export interface ISocketStore {
     getSocket: () => WebSocket | null;
     createSocket: <TResponse>(props: ISocketCreateSocketProps<TResponse>) => WebSocket;
     getStore: () => ISocketMap;
-    addEvent: <TResponse>(props: TSocketAddEventProps<TResponse>) => void;
-    removeEvent: <TResponse>(props: TSocketRemoveEventProps<TResponse>) => void;
+    addEvent: (props: TSocketAddEventProps<unknown>) => void;
+    removeEvent: (props: TSocketRemoveEventProps) => void;
     send: (json: string) => bool;
     close: () => void;
     subscribe: (topic: TSocketScopedTopic, topicIds: string[], callback?: () => void) => void;

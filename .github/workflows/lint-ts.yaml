@@ -1,20 +1,6 @@
 name: Lint TS
 
-on:
-  push:
-    paths: &ts_paths
-      - "**/*.ts"
-      - "**/*.tsx"
-      - "**/*.js"
-      - "**/*.cjs"
-      - "**/package.json"
-      - "**/tsconfig.json"
-      - "**/tsconfig.*.json"
-      - "**/yarn.lock"
-      - ".github/workflows/lint-ts.yaml"
-  pull_request:
-    paths: *ts_paths
-  workflow_dispatch:
+on: workflow_dispatch
 
 env:
   NODE_VERSION: "22"
@@ -23,6 +9,8 @@ jobs:
   run-linters:
     name: Run Linters
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v4

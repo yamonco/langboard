@@ -19,10 +19,10 @@ from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.domain.services import DomainService
 from langboard_shared.filter import RoleFilter
 from langboard_shared.security import Auth, RoleFinder
-from .forms import ToggleCardCommentReactionForm
+from .forms import CreateCardCommentForm, ToggleCardCommentReactionForm
 
 
-@AppRouter.schema(form=EditorContentModel, permission=ApiPermission.Create)
+@AppRouter.schema(form=CreateCardCommentForm, permission=ApiPermission.Create)
 @AppRouter.api.post(
     "/board/{project_uid}/card/{card_uid}/comment",
     tags=["Board.Card.Comment"],
@@ -34,11 +34,17 @@ from .forms import ToggleCardCommentReactionForm
 def add_card_comment(
     project_uid: str,
     card_uid: str,
-    comment: EditorContentModel,
+    comment: CreateCardCommentForm,
     user_or_bot: User | Bot = Auth.scope("all"),
     service: DomainService = DomainService.scope(),
 ) -> JsonResponse:
-    result = service.card_comment.create(user_or_bot, project_uid, card_uid, comment)
+    result = service.card_comment.create(
+        user_or_bot,
+        project_uid,
+        card_uid,
+        EditorContentModel(content=comment.content),
+        comment.anchor,
+    )
     if not result:
         raise ApiException.NotFound_404(ApiErrorCode.NF2003)
 

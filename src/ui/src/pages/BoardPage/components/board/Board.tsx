@@ -20,8 +20,9 @@ import { columnRowDndHelpers } from "@/core/helpers/dnd";
 import setupApiErrorHandler from "@/core/helpers/setupApiErrorHandler";
 import useColumnReordered from "@/core/hooks/useColumnReordered";
 import { useBoardController } from "@/core/providers/BoardController";
-import { cn } from "@/core/utils/ComponentUtils";
 import useBoardTouchCardDnd from "@/pages/BoardPage/components/board/useBoardTouchCardDnd";
+import BoardCardRelationshipOverlay from "@/pages/BoardPage/components/board/BoardCardRelationshipOverlay";
+import BoardMinimap from "@/pages/BoardPage/components/board/BoardMinimap";
 
 export function SkeletonBoard() {
     const [cardCounts, setCardCounts] = useState([1, 3, 2]);
@@ -54,22 +55,15 @@ export function SkeletonBoard() {
     }, []);
 
     return (
-        <>
-            <Flex justify="between" px="4" pt="4" wrap>
+        <Flex direction="col" h="full" minH="0">
+            <Flex justify="between" px="4" pt="4" wrap className="shrink-0">
                 <SkeletonUserAvatarList count={6} size={{ initial: "sm", xs: "default" }} spacing="none" />
                 <Flex items="center" gap="1">
                     <SkeletonBoardFilter />
                 </Flex>
             </Flex>
 
-            <Box
-                position="relative"
-                h="full"
-                className={cn(
-                    "max-h-[calc(100dvh_-_theme(spacing.28)_-_theme(spacing.2)_-_theme(spacing.16))]",
-                    "overflow-hidden md:max-h-[calc(100dvh_-_theme(spacing.28)_-_theme(spacing.2))]"
-                )}
-            >
+            <Box position="relative" className="min-h-0 flex-1 overflow-hidden">
                 <Box size="full" className="rounded-[inherit]">
                     <Flex direction="row" items="start" gap="10" p="4">
                         {cardCounts.map((count) => (
@@ -78,33 +72,40 @@ export function SkeletonBoard() {
                     </Flex>
                 </Box>
             </Box>
-        </>
+        </Flex>
     );
 }
 
 export function Board() {
     const scrollableRef = useRef<HTMLDivElement | null>(null);
+    const [scrollable, setScrollable] = useState<HTMLDivElement | null>(null);
+    const setScrollableRef = useCallback((node: HTMLDivElement | null) => {
+        scrollableRef.current = node;
+        setScrollable(node);
+    }, []);
+    const scrollportId = "board-scrollport";
 
     return (
-        <ScrollArea.Root
-            className={cn(
-                "h-[calc(100dvh_-_theme(spacing.28)_-_theme(spacing.2)_-_theme(spacing.16))]",
-                "min-h-0 md:h-[calc(100dvh_-_theme(spacing.28)_-_theme(spacing.2))]"
-            )}
-            viewportClassName="!overflow-x-auto"
-            viewportRef={scrollableRef}
-        >
-            <Flex direction="row" items="start" gap={{ initial: "6", sm: "8" }} p="4" h="full" className="min-h-0">
-                <BoardDisplay scrollableRef={scrollableRef} />
-            </Flex>
-            <ScrollArea.Bar orientation="horizontal" />
-        </ScrollArea.Root>
+        <>
+            <ScrollArea.Root
+                viewportId={scrollportId}
+                className="min-h-0 flex-1"
+                viewportClassName="!overflow-x-auto !overflow-y-hidden"
+                viewportRef={setScrollableRef}
+            >
+                <Flex direction="row" items="start" gap="4" p="4" h="full" className="min-h-0">
+                    <BoardDisplay scrollable={scrollable} scrollableRef={scrollableRef} />
+                </Flex>
+                <ScrollArea.Bar orientation="horizontal" />
+            </ScrollArea.Root>
+            <BoardMinimap scrollable={scrollable} scrollportId={scrollportId} />
+        </>
     );
 }
 
-function BoardDisplay({ scrollableRef }: { scrollableRef: React.RefObject<HTMLDivElement | null> }) {
+function BoardDisplay({ scrollable, scrollableRef }: { scrollable: HTMLDivElement | null; scrollableRef: React.RefObject<HTMLDivElement | null> }) {
     const { chatResizableSidebar } = useBoardController();
-    const { project, columns: flatColumns, cardsMap, socket, canDragAndDrop } = useBoard();
+    const { project, columns: flatColumns, cardsMap, socket, canDragAndDrop, canDragCards } = useBoard();
     const updater = useReducer((x) => x + 1, 0);
     const [_, forceUpdate] = updater;
     const { columns } = useColumnReordered({
@@ -158,7 +159,7 @@ function BoardDisplay({ scrollableRef }: { scrollableRef: React.RefObject<HTMLDi
     );
 
     useBoardTouchCardDnd({
-        enabled: canDragAndDrop,
+        enabled: canDragCards,
         scrollableRef,
         columns,
         rowsMap: cardsMap,
@@ -179,7 +180,7 @@ function BoardDisplay({ scrollableRef }: { scrollableRef: React.RefObject<HTMLDi
             changeColumnOrder,
             changeRowOrder,
         });
-    }, [cardsMap, changeColumnOrder, changeRowOrder, chatResizableSidebar, columns]);
+    }, [cardsMap, changeColumnOrder, changeRowOrder, chatResizableSidebar, columns, scrollableRef]);
 
     // Panning the board
     useEffect(() => {
@@ -241,6 +242,7 @@ function BoardDisplay({ scrollableRef }: { scrollableRef: React.RefObject<HTMLDi
 
     return (
         <>
+            <BoardCardRelationshipOverlay scrollable={scrollable} />
             {columns.map((column) => (
                 <BoardColumn key={`board-columnr-${column.uid}`} column={column} updateBoard={forceUpdate} />
             ))}

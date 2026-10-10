@@ -46,6 +46,18 @@ class ProjectWikiAssignedUserRepository(BaseRepository[ProjectWikiAssignedUser])
             record = result.first()
         return record
 
+    def get_assigned_wiki_ids(self, user: TUserParam, wiki_ids: set[int]) -> set[int]:
+        if not wiki_ids:
+            return set()
+        user_id = InfraHelper.convert_id(user)
+        with DbSession.use(readonly=True) as db:
+            records = db.exec(
+                SqlBuilder.select.column(ProjectWikiAssignedUser.column("project_wiki_id"))
+                .where(ProjectWikiAssignedUser.column("user_id") == user_id)
+                .where(ProjectWikiAssignedUser.column("project_wiki_id").in_(wiki_ids))
+            ).all()
+        return {int(record) for record in records}
+
     def delete_all_by_wiki(self, wiki: TWikiParam) -> None:
         wiki_id = InfraHelper.convert_id(wiki)
         with DbSession.use(readonly=False) as db:

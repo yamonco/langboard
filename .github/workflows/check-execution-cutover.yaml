@@ -1,0 +1,47 @@
+name: Check Execution Cutover
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/check-execution-cutover.yaml
+      - src/api/langboard/routes/board/BoardCardApi.py
+      - src/api/langboard/routes/board/ExecutionReceiptApi.py
+      - src/api/langboard/routes/schemas/WebhookSchemaApi.py
+      - src/api/langboard/migrations/versions/**
+      - src/api/tests/webhooks/test_card_context_execution.py
+      - src/api/tests/webhooks/test_execution*.py
+      - src/api/tests/webhooks/test_native_execution_receipt_postgres.py
+      - src/shared/py/langboard_shared/tasks/webhooks/**
+  workflow_dispatch:
+
+jobs:
+  postgres-contract:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: langboard_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d langboard_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      PROJECT_NAME: langboard
+      LANGBOARD_OUTBOX_TEST_DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/langboard_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: uv sync --frozen
+      - run: uv run --no-sync ruff check src/api/tests/webhooks/test_card_context_execution.py src/api/tests/webhooks/test_execution_readiness_uow_postgres.py src/api/tests/webhooks/test_execution_outbox_postgres.py src/api/tests/webhooks/test_native_execution_receipt_postgres.py src/api/tests/webhooks/test_execution_outbox.py src/api/tests/webhooks/test_execution_binding.py src/api/tests/webhooks/test_execution_event_contract.py src/shared/py/langboard_shared/tasks/webhooks/ExecutionReadinessUow.py src/shared/py/langboard_shared/tasks/webhooks/ExecutionOutboxWorker.py src/api/langboard/routes/board/BoardCardApi.py src/api/langboard/routes/board/ExecutionReceiptApi.py
+      - run: uv run --no-sync pytest -q src/api/tests/webhooks/test_card_context_execution.py src/api/tests/webhooks/test_execution_readiness_uow_postgres.py src/api/tests/webhooks/test_execution_outbox_postgres.py src/api/tests/webhooks/test_native_execution_receipt_postgres.py src/api/tests/webhooks/test_execution_outbox.py src/api/tests/webhooks/test_execution_binding.py src/api/tests/webhooks/test_execution_event_contract.py

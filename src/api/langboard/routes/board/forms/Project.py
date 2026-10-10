@@ -10,7 +10,8 @@ from pydantic import BaseModel, EmailStr, Field
 
 @form_model
 class InviteProjectMemberForm(BaseFormModel):
-    emails: list[str]
+    emails: list[str] = Field(default_factory=list, max_length=50)
+    member_uids: list[str] = Field(default_factory=list, max_length=50)
 
 
 @form_model
@@ -52,10 +53,21 @@ class UpdateRolesForm(BaseFormModel):
 class UpdateProjectEmailNotificationPolicyForm(BaseFormModel):
     is_enabled: bool
     notify_all_members: bool = False
-    categories: list[ProjectEmailNotificationCategory] = Field(max_length=len(ProjectEmailNotificationCategory))
-    recipient_user_uids: list[str] = Field(max_length=50)
+    categories: list[ProjectEmailNotificationCategory]
+    recipient_user_uids: list[str]
     external_recipient_emails: list[EmailStr] = Field(default_factory=list, max_length=50)
     card_move_target_columns: list[str] = Field(default_factory=list, max_length=20)
+
+
+@form_model
+class UpdateProjectExecutionBindingForm(BaseFormModel):
+    is_enabled: bool = False
+    column_semantics: dict[str, Literal["ready", "active", "review", "terminal", "ignored"]] = Field(
+        default_factory=dict, max_length=50
+    )
+    prerequisite_relationship_type_uid: str | None = None
+    webhook_uid: str | None = None
+    events: list[Literal["io.langboard.work.ready.v1"]] = Field(default_factory=list, max_length=1)
 
 
 @form_model

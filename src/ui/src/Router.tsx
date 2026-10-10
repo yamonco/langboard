@@ -6,6 +6,7 @@ import { memo, useEffect, useMemo, useState } from "react";
 import useAuthStore from "@/core/stores/AuthStore";
 import SwallowErrorBoundary from "@/components/SwallowErrorBoundary";
 import { EHttpStatus } from "@langboard/core/enums";
+import { IS_OLLAMA_RUNNING } from "@/constants";
 
 interface IRouteConfig {
     routes: RouteObject[];
@@ -58,6 +59,14 @@ const Router = memo(({ children }: IRouterProps) => {
         }
 
         const routeList: RouteObject[] = [
+            ...(!IS_OLLAMA_RUNNING
+                ? [
+                      {
+                          path: ROUTES.SETTINGS.OLLAMA,
+                          element: <Navigate to={ROUTES.SETTINGS.API_KEYS} replace />,
+                      },
+                  ]
+                : []),
             ...routes,
             {
                 path: "*",

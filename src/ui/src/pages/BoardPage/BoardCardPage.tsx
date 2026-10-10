@@ -1,4 +1,6 @@
 import Dialog from "@/components/base/Dialog";
+import { isNotificationInteraction } from "@/components/Header/useNotificationNavigation";
+import { CARD_WINDOW_EMBEDDED_OVERLAY_CLASS, CARD_WINDOW_HEIGHT_CLASS, CARD_WINDOW_OVERLAY_CLASS } from "./cardWindowLayout";
 import { usePageNavigateRef } from "@/core/hooks/usePageNavigate";
 import { useAuth } from "@/core/providers/AuthProvider";
 import { ROUTES } from "@/core/routing/constants";
@@ -7,9 +9,20 @@ import { cn } from "@/core/utils/ComponentUtils";
 import BoardCard from "@/pages/BoardPage/components/card/BoardCard";
 import { BoardCardSectionSaveProvider } from "@/pages/BoardPage/components/card/BoardCardSectionSaveProvider";
 import { EHttpStatus } from "@langboard/core/enums";
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Navigate, useParams } from "react-router";
 import { useBoardController } from "@/core/providers/BoardController";
+import {
+    CARD_ANIMATION_DURATION_MS,
+    clearCardOpenAnimationSession,
+    closedTransform,
+    isRectCenterInside,
+    markCardOpenAnimationPlayed,
+    prefersReducedMotion,
+    shouldPlayCardOpenAnimation,
+    takeCardOrigin,
+    type CardRect,
+} from "@/pages/BoardPage/components/board/CardAnimation";
 
 interface IBoardCardPageProps {
     projectUID?: string;
@@ -32,6 +45,12 @@ const BoardCardPageComponent = ({
     const projectUID = projectUIDProp ?? params.projectUID;
     const cardUID = cardUIDProp ?? params.cardUID;
     const viewportRef = useRef<HTMLDivElement | null>(null);
+    const contentRef = useRef<HTMLDivElement | null>(null);
+    const originRef = useRef<CardRect | null | undefined>(undefined);
+    const closeTimerRef = useRef<number | null>(null);
+    const closingRef = useRef(false);
+    const finishedCloseRef = useRef(false);
+    const [isClosing, setIsClosing] = useState(false);
     const isCardEditingRef = useRef(false);
     const cancelCardEditRef = useRef<(() => void) | null>(null);
     const [isComposing, setIsComposing] = useState(false);
@@ -41,15 +60,90 @@ const BoardCardPageComponent = ({
     const { selectCardViewType } = useBoardController();
     const shouldHideForCardSelection = !!selectCardViewType;
 
-    if (!projectUID || !cardUID) {
-        return <Navigate to={ROUTES.ERROR(EHttpStatus.HTTP_404_NOT_FOUND)} replace />;
-    }
+    useLayoutEffect(() => {
+        const content = contentRef.current;
+        if (!content || !projectUID || !cardUID) {
+            return;
+        }
 
-    const close = () => {
+        if (originRef.current === undefined) {
+            originRef.current = takeCardOrigin(projectUID, cardUID);
+        }
+        const sourceRect = originRef.current;
+        const targetRect = content.getBoundingClientRect();
+        if (sourceRect && targetRect.width > 0 && targetRect.height > 0) {
+            content.style.setProperty("--card-origin-transform", closedTransform(sourceRect, targetRect));
+        }
+        // Mount-once gate: deep-link entry animates only the first mount of a
+        // viewer session, so remounts (Suspense fallback swaps, provider
+        // re-keys) cannot replay the entry animation. Never downgrade an
+        // element that already started its animation.
+        if (content.dataset.cardViewerReady !== "true") {
+            const animateOpen = shouldPlayCardOpenAnimation(projectUID, cardUID, !!sourceRect);
+            if (animateOpen) {
+                markCardOpenAnimationPlayed(projectUID, cardUID);
+            }
+            content.dataset.cardViewerReady = animateOpen ? "true" : "false";
+        }
+    }, [projectUID, cardUID, currentUser]);
+
+    useEffect(
+        () => () => {
+            if (closeTimerRef.current !== null) {
+                window.clearTimeout(closeTimerRef.current);
+            }
+        },
+        []
+    );
+
+    const finishClose = () => {
+        if (!projectUID || !cardUID || finishedCloseRef.current) {
+            return;
+        }
+        finishedCloseRef.current = true;
+        // The next open of this card is a fresh viewer session and animates again.
+        clearCardOpenAnimationSession(projectUID, cardUID);
+        if (closeTimerRef.current !== null) {
+            window.clearTimeout(closeTimerRef.current);
+            closeTimerRef.current = null;
+        }
         navigate({
             pathname: ROUTES.BOARD.MAIN(projectUID),
             search: window.location.search,
         });
+    };
+
+    const close = () => {
+        if (closingRef.current) {
+            return;
+        }
+        closingRef.current = true;
+
+        if (prefersReducedMotion()) {
+            finishClose();
+            return;
+        }
+
+        const source = document.getElementById(`board-card-${cardUID}`);
+        const content = contentRef.current;
+        const sourceRect = source?.getBoundingClientRect();
+        const targetRect = content?.getBoundingClientRect();
+        const windowRect = { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
+        const boardRect = document.getElementById("board-scrollport")?.getBoundingClientRect();
+        if (
+            sourceRect &&
+            targetRect &&
+            isRectCenterInside(sourceRect, windowRect) &&
+            (!boardRect || isRectCenterInside(sourceRect, boardRect)) &&
+            targetRect.width > 0 &&
+            targetRect.height > 0
+        ) {
+            content?.style.setProperty("--card-origin-transform", closedTransform(sourceRect, targetRect));
+        } else {
+            content?.style.removeProperty("--card-origin-transform");
+        }
+        setIsClosing(true);
+        closeTimerRef.current = window.setTimeout(finishClose, CARD_ANIMATION_DURATION_MS + 50);
     };
 
     const handleCloseRequest = () => {
@@ -91,6 +185,10 @@ const BoardCardPageComponent = ({
         };
     }, []);
 
+    if (!projectUID || !cardUID) {
+        return <Navigate to={ROUTES.ERROR(EHttpStatus.HTTP_404_NOT_FOUND)} replace />;
+    }
+
     return (
         <>
             {currentUser && cardUID && (
@@ -105,6 +203,23 @@ const BoardCardPageComponent = ({
                         }}
                     >
                         <Dialog.Content
+                            ref={contentRef}
+                            data-card-viewer=""
+                            data-card-viewer-closing={isClosing ? "true" : undefined}
+                            disableMotionAnimation
+                            onAnimationStart={(event) => {
+                                if (event.target === event.currentTarget && event.animationName === "card-viewer-open") {
+                                    // Freeze the entry animation to this element: an app-root
+                                    // Suspense fallback swap hides the subtree and CSS restarts
+                                    // animations when visibility is restored.
+                                    event.currentTarget.dataset.cardViewerOpened = "true";
+                                }
+                            }}
+                            onAnimationEnd={(event) => {
+                                if (isClosing && event.target === event.currentTarget && event.animationName === "card-viewer-close") {
+                                    finishClose();
+                                }
+                            }}
                             className={cn(
                                 "border-0 p-0 shadow-none",
                                 isExpanded &&
@@ -130,6 +245,7 @@ const BoardCardPageComponent = ({
                                         "2xl:w-[min(calc(100vw-theme(spacing.16)),theme(screens.2xl))]",
                                         "2xl:max-w-[min(calc(100vw-theme(spacing.16)),theme(screens.2xl))]"
                                     ),
+                                !isExpanded && CARD_WINDOW_HEIGHT_CLASS,
                                 shouldHideForCardSelection && "pointer-events-none -z-[9998] opacity-0"
                             )}
                             overlayClassName={
@@ -137,7 +253,9 @@ const BoardCardPageComponent = ({
                                     ? "!pointer-events-none bg-transparent opacity-0 backdrop-blur-none"
                                     : isExpanded
                                       ? "!pointer-events-none !absolute !inset-0 !z-[1] bg-transparent backdrop-blur-none"
-                                      : undefined
+                                      : embedded
+                                        ? CARD_WINDOW_EMBEDDED_OVERLAY_CLASS
+                                        : CARD_WINDOW_OVERLAY_CLASS
                             }
                             overlayContentClassName={shouldHideForCardSelection || isExpanded ? "pointer-events-none" : undefined}
                             contentWrapperClassName={
@@ -156,6 +274,10 @@ const BoardCardPageComponent = ({
                             disablePortal={embedded}
                             viewportRef={viewportRef}
                             onInteractOutside={(event) => {
+                                if (isNotificationInteraction(event.detail.originalEvent.target)) {
+                                    event.preventDefault();
+                                    return;
+                                }
                                 if (isCardEditingRef.current) {
                                     event.preventDefault();
                                     handleCloseRequest();
@@ -167,6 +289,10 @@ const BoardCardPageComponent = ({
                                 }
                             }}
                             onOverlayInteract={(event) => {
+                                if (isNotificationInteraction(event.target)) {
+                                    event.preventDefault();
+                                    return;
+                                }
                                 if (isCardEditingRef.current) {
                                     event.preventDefault();
                                     event.stopPropagation();

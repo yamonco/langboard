@@ -6,6 +6,7 @@ from .BotLogService import BotLogService
 from .BotService import BotService
 from .CardAttachmentService import CardAttachmentService
 from .CardCommentService import CardCommentService
+from .CardContentBlockService import CardContentBlockService
 from .CardRelationshipService import CardRelationshipService
 from .CardService import CardService
 from .ChatService import ChatService
@@ -20,6 +21,7 @@ from .McpToolGroupService import McpToolGroupService
 from .MetadataService import MetadataService
 from .NotificationService import NotificationService
 from .OrchestrationTaskService import OrchestrationTaskService
+from .OrganizationService import OrganizationService
 from .ProjectColumnService import ProjectColumnService
 from .ProjectEmailNotificationService import ProjectEmailNotificationService
 from .ProjectInvitationService import ProjectInvitationService
@@ -43,6 +45,7 @@ __all__ = [
     "BotService",
     "CardAttachmentService",
     "CardCommentService",
+    "CardContentBlockService",
     "CardRelationshipService",
     "CardService",
     "ChatService",
@@ -57,6 +60,7 @@ __all__ = [
     "MetadataService",
     "NotificationService",
     "OrchestrationTaskService",
+    "OrganizationService",
     "ProjectColumnService",
     "ProjectEmailNotificationService",
     "ProjectInvitationService",

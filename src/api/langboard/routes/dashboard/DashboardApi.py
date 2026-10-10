@@ -13,7 +13,25 @@ from .DashboardForm import DashboardPagination, DashboardProjectCreateForm
     tags=["Dashboard"],
     responses=(
         OpenApiSchema()
-        .suc({"projects": [(Project, {"schema": {"starred": "bool", "last_viewed_at": "string"}})]})
+        .suc(
+            {
+                "projects": [
+                    (
+                        Project,
+                        {
+                            "schema": {
+                                "starred": "bool",
+                                "last_viewed_at": "string",
+                                "view_count": "integer",
+                                "last_activity_at": "string?",
+                                "related_to_current_user": "bool",
+                                "related_activity_at": "string?",
+                            }
+                        },
+                    )
+                ]
+            }
+        )
         .auth()
         .forbidden()
         .get()
@@ -42,6 +60,10 @@ def get_starred_projects(
                             "schema": {
                                 "starred": "bool",
                                 "last_viewed_at": "string",
+                                "view_count": "integer",
+                                "last_activity_at": "string?",
+                                "related_to_current_user": "bool",
+                                "related_activity_at": "string?",
                             }
                         },
                     ),
@@ -106,7 +128,22 @@ def toggle_star_project(
         OpenApiSchema()
         .suc(
             {
-                "cards": [(Card, {"schema": {"project_column_name": "string"}})],
+                "cards": [
+                    (
+                        Card,
+                        {
+                            "schema": {
+                                "project_column_name": "string",
+                                "linked_resource?": {
+                                    "type": "string",
+                                    "uid": "string",
+                                    "status": "string",
+                                    "title?": "string",
+                                },
+                            }
+                        },
+                    )
+                ],
                 "projects": [Project],
             }
         )
@@ -124,6 +161,41 @@ def get_card_list(
     cards, projects = service.card.get_dashboard_list(user, pagination)
 
     return JsonResponse(content={"cards": cards, "projects": projects})
+
+
+@AppRouter.api.get(
+    "/dashboard/work/active",
+    tags=["Dashboard"],
+    responses=OpenApiSchema()
+    .suc(
+        {
+            "active_work": [
+                {
+                    "checkitem": (
+                        Checkitem,
+                        {
+                            "schema": {
+                                "card_uid": "string",
+                                "timer_started_at": "string",
+                            }
+                        },
+                    ),
+                    "card": Card,
+                    "project": Project,
+                }
+            ]
+        }
+    )
+    .auth()
+    .forbidden()
+    .get(),
+)
+@AuthFilter.add("user")
+def get_active_work(
+    user: User = Auth.scope("user"),
+    service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    return JsonResponse(content={"active_work": service.checkitem.get_active_work(user)})
 
 
 @AppRouter.api.get(

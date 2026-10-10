@@ -1,4 +1,4 @@
-from typing import Any, Literal, Sequence
+from typing import Any, Literal
 from ....core.domain import BaseDomainService
 from ....core.domain.BaseDomainService import TMutableValidatorMap
 from ....core.types.ParamTypes import TCardParam, TProjectLabelParam, TProjectParam, TUserOrBot
@@ -19,10 +19,10 @@ class ProjectLabelService(BaseDomainService):
     def get_api_list_by_project(
         self,
         project: TProjectParam | None,
-        where_in: Sequence[TProjectLabelParam] | None = None,
+        where_in: list[TProjectLabelParam] | None = None,
         limit: int | None = None,
     ) -> list[dict[str, Any]]:
-        """Return project labels, optionally restricted to requested identities."""
+        """Return project labels, optionally restricted and row-limited."""
 
         project = InfraHelper.get_by_id_like(Project, project)
         if not project:
@@ -40,7 +40,15 @@ class ProjectLabelService(BaseDomainService):
         return [label.api_response() for label in labels]
 
     def create(
-        self, user_or_bot: TUserOrBot, project: TProjectParam | None, name: str, color: str, description: str
+        self,
+        user_or_bot: TUserOrBot,
+        project: TProjectParam | None,
+        name: str,
+        color: str,
+        description: str,
+        *,
+        dispatch_effects: bool = True,
+        order_override: int | None = None,
     ) -> tuple[ProjectLabel, dict[str, Any]] | None:
         project = InfraHelper.get_by_id_like(Project, project)
         if not project:
@@ -51,15 +59,22 @@ class ProjectLabelService(BaseDomainService):
             name=name,
             color=color,
             description=description,
-            order=self.repo.project_label.get_next_order(project),
+            order=order_override if order_override is not None else self.repo.project_label.get_next_order(project),
         )
         self.repo.project_label.insert(label)
 
-        ProjectLabelPublisher.created(project, label)
-        ProjectLabelActivityTask.project_label_created(user_or_bot, project, label)
-        ProjectLabelBotTask.project_label_created(user_or_bot, project, label)
+        if dispatch_effects:
+            self.dispatch_created(user_or_bot, project, label)
 
         return label, label.api_response()
+
+    def dispatch_created(
+        self, user_or_bot: TUserOrBot, project: Project, label: ProjectLabel, *, include_bot: bool = True
+    ) -> None:
+        ProjectLabelPublisher.created(project, label)
+        ProjectLabelActivityTask.project_label_created(user_or_bot, project, label)
+        if include_bot:
+            ProjectLabelBotTask.project_label_created(user_or_bot, project, label)
 
     def update(
         self, user_or_bot: TUserOrBot, project: TProjectParam | None, label: TProjectLabelParam | None, form: dict

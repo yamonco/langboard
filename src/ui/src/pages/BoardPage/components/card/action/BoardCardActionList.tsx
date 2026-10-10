@@ -32,6 +32,7 @@ const BoardCardActionList = memo(() => {
     const { card, currentUser, hasRoleAction } = useBoardCard();
     const isAdmin = currentUser.useField("is_admin");
     const archivedAt = card.useField("archived_at");
+    const canDelete = card.useField("can_delete");
 
     return (
         <>
@@ -46,7 +47,7 @@ const BoardCardActionList = memo(() => {
             {!archivedAt && (hasRoleAction(ProjectRole.EAction.CardUpdate) || isAdmin) ? (
                 <BoardCardActionArchive buttonClassName={sharedButtonClassName} />
             ) : null}
-            {!!archivedAt && (hasRoleAction(ProjectRole.EAction.CardDelete) || isAdmin) ? (
+            {!!archivedAt && canDelete && (hasRoleAction(ProjectRole.EAction.CardDelete) || isAdmin) ? (
                 <BoardCardActionDelete buttonClassName={sharedButtonClassName} />
             ) : null}
         </>

@@ -21,6 +21,7 @@ export interface ICreateDndColumnEventsProps<TColumnModel extends TOrderableMode
     scrollable: HTMLElement;
     settings: TColumnRowSettings;
     isIndicator?: bool;
+    canDrag?: boolean;
     setState: React.Dispatch<React.SetStateAction<TColumnState>>;
     renderPreview: Parameters<typeof setCustomNativeDragPreview>[0]["render"];
 }
@@ -57,6 +58,7 @@ const createDndColumnEvents = <TColumnModel extends TOrderableModel<TOrderableMo
     return combine(
         draggableFn({
             element: draggable,
+            canDrag: () => props.canDrag ?? true,
             getInitialData: ({ element }) => getColumnData({ column, rect: element.getBoundingClientRect() }),
             onGenerateDragPreview({ source, location, nativeSetDragImage }) {
                 const data = source.data;

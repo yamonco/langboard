@@ -17,6 +17,7 @@ export interface Interface extends IBaseModel {
     order: number;
     is_public: bool;
     forbidden: bool;
+    linked_card_uid?: string;
 }
 
 export interface IStore extends Interface {
@@ -133,6 +134,13 @@ class ProjectWiki extends BaseModel<IStore> {
 
     public get forbidden() {
         return this.getValue("forbidden");
+    }
+
+    public get linked_card_uid() {
+        return this.getValue("linked_card_uid");
+    }
+    public set linked_card_uid(value) {
+        this.update({ linked_card_uid: value });
     }
     public set forbidden(value) {
         this.update({ forbidden: value });

@@ -7,8 +7,10 @@ env:
 
 jobs:
   run-ts-formatters:
-    name: Check Formatting
+    name: Run Formatters
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -45,12 +47,12 @@ jobs:
       - name: Install deps (UI)
         working-directory: src/ui
         run: yarn install --immutable
-      - name: Check Core Formatting
+      - name: Run Core Formatter
         working-directory: src/shared/ts
-        run: yarn run check-format
-      - name: Check Socket Formatting
+        run: yarn run format
+      - name: Run Socket Formatter
         working-directory: src/socket
-        run: yarn run check-format
-      - name: Check UI Formatting
+        run: yarn run format
+      - name: Run UI Formatter
         working-directory: src/ui
-        run: yarn run check-format
+        run: yarn run format
