@@ -7,6 +7,7 @@ The trusted host operation requires an active destination transaction, an `app_c
 Browser input create and rotation facts correlate through the SHA-256 digest of
 their one-use input nonce. The bearer URL nonce and browser proof are never recorded
 as audit identifiers. This changes new facts only; existing history is not rewritten.
+History projections also digest legacy 43-character browser-input request IDs.
 
 The migration expands the existing audit constraint and preserves historical records. Downgrade refuses while binding facts exist. It neither synthesizes old binding events nor backfills prior connections.
 
