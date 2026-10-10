@@ -68,6 +68,12 @@ Authority of the connection owner alone cannot authorize another actor to publis
 that person's unshared personal Signal. Instance administration does not override
 this connection ownership check.
 
+Card resource discovery uses the same connection discovery scope as Signal Inbox.
+Personal resources are visible only to their owner; resources from a matching
+organization connection remain visible to authorized card readers. Cursor lookup
+uses the same current scope before advancing the page. All credential eligibility
+checks remain batched, without per-resource provider calls.
+
 Policy-disabled apps cannot create or rebind card Signal scopes. A currently
 authorized card reader can still read the existing binding IDs and revisions for
 cleanup while provider evidence stays hidden by the app policy. Unlink requires

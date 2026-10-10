@@ -2,7 +2,7 @@
 
 import hashlib
 import json
-from sqlalchemy import update
+from sqlalchemy import and_, or_, update
 from sqlalchemy.exc import IntegrityError
 from ...core.db import DbSession, SqlBuilder
 from ...core.types import SafeDateTime
@@ -11,6 +11,18 @@ from ..models import AppConnection, AppGovernancePolicy, Organization, Project, 
 
 
 MODES = ("disabled", "approved_only", "personal_allowed")
+
+
+def connection_discovery_scope(actor_id):
+    """Scope joined connection discovery before paging; admin grants do not share personal accounts."""
+    return or_(
+        and_(
+            AppConnection.ownership == "personal",
+            AppConnection.organization_id.is_(None),
+            AppConnection.owner_id == actor_id,
+        ),
+        and_(AppConnection.ownership == "organization", AppConnection.organization_id == Project.organization_id),
+    )
 
 
 class AppGovernanceDenied(Exception):

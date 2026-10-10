@@ -14,6 +14,7 @@ from langboard_shared.domain.models import (
     User,
 )
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
+from langboard_shared.domain.services.AppGovernance import connection_discovery_scope
 from langboard_shared.domain.services.AppManifest import APP_MANIFESTS
 from langboard_shared.domain.services.AppSignalProjection import (
     authorized_signal_rows,
@@ -23,7 +24,7 @@ from langboard_shared.domain.services.AppSignalProjection import (
 )
 from langboard_shared.domain.services.CardVisibilityPolicy import card_visibility_scope
 from langboard_shared.helpers import InfraHelper
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, func, select
 from .GitHubManifest import GitHubManifestUnavailable
 
 
@@ -111,14 +112,7 @@ def list_board_signals(service, actor, project_uid, after=None, *, channel=Colla
             Project.id == project.id,
             eligibility,
             AppSignal.provider == AppConnection.app_key,
-            or_(
-                and_(
-                    AppConnection.ownership == "personal",
-                    AppConnection.organization_id.is_(None),
-                    AppConnection.owner_id == actor.id,
-                ),
-                and_(AppConnection.ownership == "organization", AppConnection.organization_id == Project.organization_id),
-            ),
+            connection_discovery_scope(actor.id),
             ~linked,
         )
     )
