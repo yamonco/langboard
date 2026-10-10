@@ -33,3 +33,12 @@ wheel for an authenticated issue → identity → denied user impersonation → 
 → 401 roundtrip. No editable SDK installation or host-private SDK import is used.
 Identity grants no execution or card mutation capability. The local package and
 lockfiles are pinned by digest; deployed compatibility remains pending.
+
+Python SDK 0.2.6 makes `expected_authority_version` mandatory for execution
+requests. Pass the version from the preceding authority lookup; the host compares
+the current snapshot before persisting either request or outbox event. A stale
+version returns 409. The receipt returns its fixed `authority` snapshot; the GET
+response additionally has `state: eligible` and `started: false`, so compare the
+snapshot fields rather than GET-only status fields. SDK 0.2.5 generation-only
+requests fail input validation. This package update is not a deployment or an
+execution start; callers need an explicit upgrade.
