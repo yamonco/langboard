@@ -25,3 +25,11 @@ directly and exercise authenticated native read, revocation, denied refresh and
 explicit re-consent with persistent observations. No SDK source-directory import
 or editable installation is used. The panel package remains 0.2.0/protocol v1.
 This local package update is not a registry publication or deployed host claim.
+
+Python SDK 0.2.2 adds `ConnectionCredentials` for explicit owner-managed inbound
+credential issue/revoke and `AppIdentity` for the server-derived connection
+identity. Use separate owner and app HTTP sessions. The host imports the reviewed
+wheel for an authenticated issue → identity → denied user impersonation → revoke
+→ 401 roundtrip. No editable SDK installation or host-private SDK import is used.
+Identity grants no execution or card mutation capability. The local package and
+lockfiles are pinned by digest; deployed compatibility remains pending.

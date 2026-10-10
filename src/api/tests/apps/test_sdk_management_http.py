@@ -139,7 +139,11 @@ async def test_sdk_instance_resource_lifecycle_uses_native_http(setup, monkeypat
         current = (await connections.list())["items"][0]
         disconnected = await connections.disconnect(uid, current["revision"])
         assert disconnected["state"] == "disconnected"
-        assert (await connections.list())["items"] == []
+        retained = (await connections.list())["items"]
+        assert len(retained) == 1
+        assert retained[0]["connection_uid"] == uid
+        assert retained[0]["state"] == "disconnected"
+        assert retained[0]["revision"] == disconnected["revision"]
         from langboard_shared.core.db import SqlBuilder
         from langboard_shared.domain.models import AppConnection, SecretReference
 
