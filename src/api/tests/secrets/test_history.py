@@ -381,6 +381,10 @@ def test_wiki_source_links_recheck_native_visibility_and_current_membership(secr
     assert event()["source_link"] == expected
     assert "Sensitive source wiki" not in json.dumps(event())
     with DbSession.atomic() as db:
+        db.insert(models.AppGovernancePolicy(scope_key="global", mode="disabled"))
+    # App-use policy cannot revoke native wiki access or hide audit sources.
+    assert event()["source_link"] == expected
+    with DbSession.atomic() as db:
         wiki.is_public = False
         db.update(wiki)
     assert "source_link" not in event()

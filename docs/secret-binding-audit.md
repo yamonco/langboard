@@ -6,4 +6,6 @@ The trusted host operation requires an active destination transaction, an `app_c
 
 The migration expands the existing audit constraint and preserves historical records. Downgrade refuses while binding facts exist. It neither synthesizes old binding events nor backfills prior connections.
 
+Audit source links require current native board and card/wiki visibility. App-use policy is independent: disabling apps does not hide a source that the user can still read. Secret ownership alone never grants source access, and deleted sources or revoked membership remain hidden.
+
 This implementation covers native Dokploy and GlitchTip registration and resource selection, GitHub manifest registration, and Dokploy receiver credential binding. A failed GitHub connection transaction rolls back its binding fact and revokes the independently stored reference; a failed receiver transaction preserves the previous configuration and history. Wiki secretization/copy producers, authorized source links, and live canary acceptance require their own integration and verification. A binding fact is not evidence of deployment success or workflow approval.
