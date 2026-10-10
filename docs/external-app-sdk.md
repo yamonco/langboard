@@ -766,6 +766,47 @@ grant reviewer approval or move workflow stages. Unknown providers cannot claim
 execution by returning a `running` state. App registration alone does not install
 a trusted signal adapter.
 
+### External issue card creation
+
+`POST /apps/v1/boards/{project_uid}/cards` accepts a connection Bearer credential,
+`resource_uid`, stable `external_id`, `title`, optional `description`, and optional
+`presentation`. The approved definition and enabled board binding both need
+`cards.create` and `resources.read`; presentation requires `cards.presentation`
+and a key in the authenticated app's `app.<app-key>.*` namespace. The selected
+resource must belong to that connection and board with current granted access.
+The destination comes only from the current binding's built-in `backlog` mapping;
+an archived, deleted or differently staged column is rejected. Creating a card
+does not require or grant an execution transition.
+
+Unattended shared-board creation uses an organization connection for the board's
+organization. Personal credentials are limited to their owner's unshared personal
+board. The connection owner needs current card-update and native internal access.
+Automation creates INTERNAL cards; it never creates human-only PRIVATE cards or
+uses display traits to grant SHARED visibility. Display metadata does not assign
+owner-app execution authority. App identity and source lineage remain explicit in
+the persisted receipt rather than inferred from a card icon.
+
+The existing `ExternalImportRecord` unique source identity is reused, scoped to
+board, app connection, resource and external issue ID. Native card creation,
+presentation metadata and source fingerprint commit atomically. An identical
+explicit replay returns 200 with the same `card_uid` and `receipt_uid`; new creation
+returns 201. Changed content under that identity returns 409 and never overwrites
+the original card. Current app, resource, policy, membership and destination gates
+are rechecked before receipt replay. Soft-deleted or unreadable cards are denied.
+Use a separate authorized editing operation for later issue updates.
+
+Native creation and metadata broadcasts run after commit. The receipt reports
+`effects_state` as pending, dispatched or failed. Failure preserves the committed
+card and a sanitized error; replay never automatically resends possibly delivered
+side effects. Pending effects after a process crash require delivery inspection;
+no scheduler or exactly-once external side-effect guarantee is claimed. The public
+SDK repository's `examples/python/external_issue.py` uses `HttpTransport` directly
+without new provider branches or a package version change. Native PostgreSQL tests
+exercise four concurrent identical requests, current revocation, changed-payload
+conflicts, metadata rollback, organization scope and HTTP status boundaries.
+They replace outbound creation dispatch in the test harness; live broker and
+browser rendering acceptance remain separate.
+
 ### Standalone management example
 
 The separately versioned SDK repository now contains
