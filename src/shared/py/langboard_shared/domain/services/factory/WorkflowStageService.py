@@ -163,15 +163,13 @@ class WorkflowStageService(BaseDomainService):
         self, user: User, project_uid: str, app_key: str, binding_uid: str, expected_revision: str,
     ) -> BoardAppBinding | None:
         """Disable this board configuration without deleting shared connections or resources."""
-        if app_key not in approved_manifests():
-            return None
         with DbSession.atomic() as db:
             board = db.exec(SqlBuilder.select.table(Project).where(
                 Project.id == InfraHelper.convert_id(project_uid),
             ).with_for_update()).first()
             if board is None:
                 return None
-            if self._authorized_app_board(user, board.id, ProjectRoleAction.Update, lock=True) is None:
+            if self._authorized_app_board(user, board.id, ProjectRoleAction.Update, lock=True, revocation=True) is None:
                 return None
             binding = db.exec(SqlBuilder.select.table(BoardAppBinding).where(
                 BoardAppBinding.id == InfraHelper.convert_id(binding_uid),
@@ -311,7 +309,7 @@ class WorkflowStageService(BaseDomainService):
             return binding
 
     def _authorized_app_board(self, user: User, project: Project | int | str,
-                              action: ProjectRoleAction, *, lock: bool = False) -> Project | None:
+                              action: ProjectRoleAction, *, lock: bool = False, revocation: bool = False) -> Project | None:
         def query(model):
             statement = SqlBuilder.select.table(model)
             return statement.with_for_update() if lock else statement
@@ -333,11 +331,13 @@ class WorkflowStageService(BaseDomainService):
                 )).first()
                 if member is None or role is None or not role.is_granted(action):
                     return None
-            from ..AppGovernance import AppGovernanceDenied, require_current_project_policy
-            try:
-                require_current_project_policy(db, board)
-            except AppGovernanceDenied:
-                return None
+            # Removing authority must remain available after policy or registry revocation.
+            if not revocation:
+                from ..AppGovernance import AppGovernanceDenied, require_current_project_policy
+                try:
+                    require_current_project_policy(db, board)
+                except AppGovernanceDenied:
+                    return None
             return board
 
     def _resolve_app_mapping(
