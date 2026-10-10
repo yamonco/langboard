@@ -94,6 +94,9 @@ remain pending. No public audit or secret-value endpoint is added.
 
 ## Native metadata transports
 
+Authenticated metadata and history responses use `Cache-Control: no-store` so
+clients and intermediaries do not retain a projection after authority changes.
+
 Authenticated native clients can read one canonical reference with
 `GET /secret-references/<uid>`. The endpoint returns `{reference: metadata}` and
 rechecks current host scope authority. Missing and unauthorized references are

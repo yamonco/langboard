@@ -24,7 +24,9 @@ def get_secret_reference_metadata(
         metadata = service.secret_reference.get_metadata(user, f"secret://ref/{reference_uid}")
     except (SecretReferenceUnavailable, ValueError):
         raise ApiException.NotFound_404() from None
-    return JsonResponse(content={"reference": metadata})
+    response = JsonResponse(content={"reference": metadata})
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 @AppRouter.api.get(
