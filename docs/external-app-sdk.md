@@ -46,6 +46,27 @@ This document distinguishes implemented contracts from remaining acceptance.
 | Signed event verification | Portable exact-byte v1 HMAC verifier | Consumer durable duplicate detection and app outbox delivery |
 | App outbox | Existing webhook signing, URL policy and execution lease contracts inspected | Board/app scoped enqueue, attachment access, delivery history and retry UI not implemented |
 
+## External execution authority boundaries
+
+The existing execution webhook is a board-owned readiness notification, not an
+app-scoped automation grant. Its current fence checks the mapped ready column,
+prerequisites, execution generation, signed destination and binding revision.
+An external app must not treat `execution.is_ready` alone as proof of current app
+consent, organization connection authority, selected external resources or human
+approval. Those checks are not yet composed into one external-app execution fence.
+
+General external-resource bindings, app-scoped delivery and native human questions,
+instructions and approvals remain required integration work. Their host contracts
+must use app/connection/resource identities and stable workflow stages; vendor
+project or repository semantics belong to the external service. Registration must
+not implicitly grant unattended execution. Permission checks are required again
+when queuing, claiming work and accepting a result. Revocation must preserve
+delivery and result history without representing an external change as undone.
+
+The native generation-based execution receipt endpoint and webhook delivery lease
+are existing building blocks. They do not prove that an arbitrary registered app
+can complete this lifecycle or safely stop and resume an external worker.
+
 ## Panel state and design resources
 
 Panel state is disposable UI draft data, never credentials, an execution queue or
