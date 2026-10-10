@@ -116,3 +116,61 @@ test("organization owner edits inheritance without reading global policy and kee
     expect(writes.at(-1)).toEqual({ mode: null, expected_revision: "b".repeat(64) });
     expect(globalReads).toBe(0);
 });
+
+test("paginated organization switching uses each scope's own revision", async ({ page }) => {
+    const headers = {
+        "Access-Control-Allow-Origin": "http://127.0.0.1:4216",
+        "Access-Control-Allow-Credentials": "true",
+        "Access-Control-Allow-Methods": "GET,PUT,OPTIONS",
+        "Access-Control-Allow-Headers": "content-type,authorization,content-encoding",
+    };
+    const writes: { path: string; input: unknown }[] = [];
+    const pages: (string | null)[] = [];
+    await page.route("**/settings/apps/governance**", async (route) => {
+        const url = new URL(route.request().url());
+        if (route.request().method() === "OPTIONS") return route.fulfill({ status: 204, headers });
+        if (url.pathname.endsWith("/organizations")) {
+            const cursor = url.searchParams.get("cursor");
+            pages.push(cursor);
+            return route.fulfill({
+                headers,
+                json: {
+                    items: [{ uid: cursor ? "org-two" : "org-one", name: cursor ? "Organization Two" : "Organization One" }],
+                    next_cursor: cursor ? null : "org-one",
+                },
+            });
+        }
+        const second = url.pathname.endsWith("org-two");
+        const revision = (second ? "b" : "a").repeat(64);
+        if (route.request().method() === "PUT") writes.push({ path: url.pathname, input: route.request().postDataJSON() });
+        return route.fulfill({
+            headers,
+            json: {
+                mode: route.request().method() === "PUT" ? "disabled" : null,
+                effective_mode: "approved_only",
+                revision,
+            },
+        });
+    });
+    await page.goto("/src/pages/SettingsPage/AppGovernance.fixture.html?owner");
+    await page.getByLabel("Policy scope").selectOption("org-one");
+    await page.locator("input[value=disabled]").check();
+    await expect(page.getByRole("button", { name: "More organizations" })).toBeDisabled();
+    await page.getByRole("button", { name: "Cancel", exact: true }).click();
+    await page.getByRole("button", { name: "More organizations" }).click();
+    await expect(page.getByRole("option", { name: "Organization Two" })).toHaveCount(1);
+    await page.getByLabel("Policy scope").selectOption("org-two");
+    await expect(page.locator("input[value=inherit]")).toBeChecked();
+    await page.locator("input[value=disabled]").check();
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(page.getByRole("status")).toBeVisible();
+    expect(writes).toEqual([
+        { path: "/settings/apps/governance/organizations/org-two", input: { mode: "disabled", expected_revision: "b".repeat(64) } },
+    ]);
+    await page.getByRole("button", { name: "First page" }).click();
+    await expect(page.getByRole("option", { name: "Organization One" })).toHaveCount(1);
+    await page.getByLabel("Policy scope").selectOption("org-one");
+    await expect(page.locator("input[value=inherit]")).toBeChecked();
+    await expect(page.getByRole("status")).toHaveCount(0);
+    expect(pages).toEqual([null, "org-one", null]);
+});

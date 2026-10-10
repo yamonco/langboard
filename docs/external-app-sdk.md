@@ -260,6 +260,11 @@ explicit Cancel releases that guard; switching scopes mounts a separate editor
 so its baseline revision cannot migrate to another organization. Four supported
 languages include scope, inheritance and ceiling explanations. The Chrome HTTP
 fixture covers desktop/mobile global saves and an owner-only organization flow
-with cancellation, conflict preservation and a null inheritance write. Real
+with cancellation, conflict preservation and a null inheritance write. A separate
+pagination regression switches between two organizations with distinct revisions,
+asserts the exact organization-specific write, and verifies that returning to the
+first scope restores inheritance without another scope's draft or save receipt.
+Dirty drafts block pagination until Cancel; visiting first, next and first pages
+makes exactly three discovery requests without background polling. Real
 organization consent, administrator sessions and deployed acceptance remain
 separate checks.
