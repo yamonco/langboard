@@ -438,6 +438,9 @@ def test_card_resource_discovery_is_read_scoped_and_batched(scoped):
     service.card = domain.card
     # Read-only caller discovers an explicitly shared organization connection only.
     with DbSession.use(readonly=False) as db:
+        state[2].ownership = "personal"
+        state[2].organization_id = None
+        db.update(state[2])
         from langboard_shared.core.types import SafeDateTime
         from langboard_shared.domain.models import ProjectAssignedUser, ProjectRole, User
 

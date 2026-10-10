@@ -104,7 +104,7 @@ def receive_check(service, project_uid, connection_uid, resource_uid, body, sign
         if event != "check_run":
             raise GitHubManifestUnavailable()
         with DbSession.use(readonly=False) as db:
-            owner, connection, resource = _scope(service, db, project_uid, connection_uid, resource_uid)
+            owner, connection, resource = _scope(service, db, project_uid, connection_uid, resource_uid, unattended=True)
             resource_revision = resource.access_revision
             resource_path = [dict(part) for part in resource.resource_path]
         secret_meta = service.secret_reference.get_metadata(owner, connection.credential_reference)
@@ -126,7 +126,7 @@ def receive_check(service, project_uid, connection_uid, resource_uid, body, sign
     except Exception:
         raise GitHubManifestUnavailable() from None
     with DbSession.atomic() as db:
-        _, current, resource = _scope(service, db, project_uid, connection_uid, resource_uid, lock=True)
+        _, current, resource = _scope(service, db, project_uid, connection_uid, resource_uid, lock=True, unattended=True)
         if (
             connection_revision(current) != revision or resource.access_revision != resource_revision
             or resource.resource_path != resource_path

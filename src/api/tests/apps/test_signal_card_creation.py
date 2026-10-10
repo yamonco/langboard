@@ -15,6 +15,7 @@ from langboard_shared.core.db.DbEngine import DbEngine
 from langboard_shared.core.security.CollaborationChannel import CollaborationChannel
 from langboard_shared.core.types import SafeDateTime
 from langboard_shared.domain.models import (
+    AppConnection,
     Card,
     CardAppSignalBinding,
     CardSignalCreation,
@@ -190,6 +191,10 @@ def test_foreign_personal_signal_cannot_create_card_even_for_board_owner(creatio
 
     state = creation_scope
     with DbSession.use(readonly=False) as db:
+        connection = db.exec(SqlBuilder.select.table(AppConnection).where(AppConnection.id == InfraHelper.convert_id(state[2]))).first()
+        connection.ownership = "personal"
+        connection.organization_id = None
+        db.update(connection)
         owner = db.exec(SqlBuilder.select.table(User).where(User.id == state[1][2].owner_id)).first()
         owner.is_admin = admin
         db.update(owner)
