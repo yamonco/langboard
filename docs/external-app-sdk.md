@@ -382,6 +382,31 @@ app-owned card fence, app execution grants, HITL delivery contract and independe
 app end-to-end acceptance remain subsequent work. These endpoints have local
 implementation evidence; deployment and PostgreSQL acceptance are pending.
 
+### Credential-scoped resource reads (local implementation)
+
+`GET /apps/v1/boards/{project_uid}/resources` accepts the inbound connection
+credential. `limit` defaults to 25 and is bounded to 1–50; `after` is the returned
+resource UID cursor. Invalid credentials return 401; authenticated callers without
+current board authority return 403. Validation follows native API conventions
+(400). Responses are not cached and include `schema_version: 1`, `connection_uid`,
+`binding_revision`, `items` and `next_cursor`.
+
+The existing app declaration and enabled board binding must both permit
+`resources.read`. The connection owner must retain current board membership and
+read permission. Autonomous shared-board requests require a matching active
+organization-owned connection; personal connections can serve only the owner's
+unshared personal board. Instance and organization policy remain authoritative.
+Results contain only this connection's selected resources with granted access,
+within the current declaration's resource types. Items expose `resource_uid`,
+`resource_type`, `external_resource_id`, `resource_path`, `access_revision` and
+`health`; they never expose provider secrets. Health is an observation, not an
+execution grant. Cursor pages recheck current authority independently.
+
+This route reuses `AppResourceBinding` rather than creating provider-specific
+resource models. It does not establish card-to-resource execution bindings or
+authorize card mutation. PostgreSQL, deployed use and external-app acceptance
+remain pending.
+
 The native GitHub health worker now has an organization-owned connection
 acceptance regression using actual SQLite lifecycle receipts and leased jobs.
 An active matching organization completes the job and restores resource health.
