@@ -19,10 +19,12 @@ import {
     useSetDefaultProjectTemplate,
 } from "@/controllers/api/settings/projectTemplates/useProjectTemplates";
 import { usePageHeader } from "@/core/providers/PageHeaderProvider";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 function ProjectTemplatesPage() {
+    const savingRef = useRef(false);
+    const defaultSavingRef = useRef(false);
     const [t, i18n] = useTranslation();
     const { setPageAliasRef } = usePageHeader();
     const [templates, setTemplates] = useState<IProjectTemplate[]>([]);
@@ -84,8 +86,11 @@ function ProjectTemplatesPage() {
     }, []);
 
     const save = () => {
-        if (!selected) return;
-        const promise = setDefault({ template_name: selected });
+        if (!selected || defaultSavingRef.current) return;
+        defaultSavingRef.current = true;
+        const promise = setDefault({ template_name: selected }).finally(() => {
+            defaultSavingRef.current = false;
+        });
         Toast.Add.promise(promise, {
             loading: t("common.Saving..."),
             error: () => t("errors.Internal server error"),
@@ -127,7 +132,8 @@ function ProjectTemplatesPage() {
             (current) => current && { ...current, columns: current.columns.map((column, i) => (i === index ? { ...column, ...fields } : column)) }
         );
     const persist = async () => {
-        if (!draft) return;
+        if (!draft || savingRef.current) return;
+        savingRef.current = true;
         try {
             const result = await saveTemplate({ ...draft, internal_bot_uids: botsChanged ? draft.internal_bot_uids : undefined });
             setTemplates((items) => [...items.filter((item) => item.uid !== result.uid), result]);
@@ -136,6 +142,8 @@ function ProjectTemplatesPage() {
             setError(false);
         } catch {
             setError(true);
+        } finally {
+            savingRef.current = false;
         }
     };
     return (

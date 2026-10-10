@@ -295,3 +295,93 @@ test("language limit considers every column and canonical English", async ({ pag
     await page.getByRole("button", { name: "Move up", exact: true }).nth(1).click();
     await expect(page.getByRole("button", { name: "Add language", exact: true })).toBeDisabled();
 });
+
+test("template save owns one request while duplicate submit events are pending", async ({ page }) => {
+    await page.route("**/settings/global-labels", (route) => route.fulfill({ json: { labels: [] } }));
+    await page.route("**/settings/project-template-bots", (route) => route.fulfill({ json: { bots: [] } }));
+    await page.route("**/settings/workflow-stages", (route) => route.fulfill({ json: { stages: [] } }));
+    let writes = 0;
+    let release!: () => void;
+    const pending = new Promise<void>((resolve) => {
+        release = resolve;
+    });
+    await page.route("**/settings/project-templates**", async (route) => {
+        if (route.request().method() === "GET")
+            return route.fulfill({
+                json: {
+                    templates: [
+                        {
+                            uid: "one",
+                            name: "Custom",
+                            columns: ["Queue"],
+                            is_default: true,
+                        },
+                    ],
+                },
+            });
+        writes++;
+        await pending;
+        await route.fulfill({ status: 500, json: {} });
+    });
+    await page.goto("/src/pages/SettingsPage/ProjectTemplates.fixture.html");
+    await page.getByRole("button", { name: "Edit", exact: true }).click();
+    await page.locator("form").evaluate((form) => {
+        form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+        form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+    try {
+        await expect.poll(() => writes).toBe(1);
+        await expect(page.getByRole("button", { name: "Save", exact: true })).toBeDisabled();
+    } finally {
+        release();
+    }
+    await expect(page.getByRole("alert")).toBeVisible();
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await expect.poll(() => writes).toBe(2);
+});
+
+test("default template selection rejects simultaneous duplicate clicks and allows retry", async ({ page }) => {
+    await page.route("**/settings/global-labels", (route) => route.fulfill({ json: { labels: [] } }));
+    await page.route("**/settings/project-template-bots", (route) => route.fulfill({ json: { bots: [] } }));
+    await page.route("**/settings/workflow-stages", (route) => route.fulfill({ json: { stages: [] } }));
+    let writes = 0;
+    let release!: () => void;
+    const pending = new Promise<void>((resolve) => {
+        release = resolve;
+    });
+    await page.route("**/settings/project-templates**", async (route) => {
+        if (route.request().method() === "GET")
+            return route.fulfill({
+                json: {
+                    templates: [
+                        {
+                            uid: "one",
+                            name: "Custom",
+                            columns: ["Queue"],
+                            is_default: true,
+                        },
+                    ],
+                },
+            });
+        writes++;
+        expect(route.request().url()).toContain("/project-templates/default");
+        await pending;
+        await route.fulfill({ status: 500, json: {} });
+    });
+    await page.goto("/src/pages/SettingsPage/ProjectTemplates.fixture.html");
+    const save = page.getByRole("button", { name: "Save default", exact: true });
+    await expect(save).toBeEnabled();
+    await save.evaluate((button) => {
+        button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    try {
+        await expect.poll(() => writes).toBe(1);
+        await expect(save).toBeDisabled();
+    } finally {
+        release();
+    }
+    await expect(save).toBeEnabled();
+    await save.click();
+    await expect.poll(() => writes).toBe(2);
+});
