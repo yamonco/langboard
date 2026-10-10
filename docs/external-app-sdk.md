@@ -230,3 +230,11 @@ personal-account reads remain interactive operations; they do not acquire
 organization automation permission from a board mapping.
 This does not retroactively undo external changes or prove that every automation
 route is integrated with connection ownership and governance policy.
+
+The global governance editor serializes submissions immediately, including
+multiple submit events before React renders its pending state. Failed saves
+retain the selected mode and pinned revision; the guard releases for an explicit
+retry. The saved revision receipt wraps on mobile rather than widening the page.
+The browser regression exercises the actual page and query hook at 1280px and
+390px using intercepted HTTP responses. It does not establish live administrator
+authorization, organization policy UI or deployed policy enforcement.
