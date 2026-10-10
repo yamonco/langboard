@@ -194,3 +194,28 @@ test("disabled app consent can be revoked while new grants remain blocked", asyn
     await expect.poll(() => page.evaluate(() => (window as unknown as { workflowWrites: unknown[] }).workflowWrites.length)).toBe(1);
     expect(await page.evaluate(() => (window as unknown as { workflowWrites: { capabilities: string[] }[] }).workflowWrites[0].capabilities)).toEqual([]);
 });
+
+test("consent failure requires explicit catalog refresh before another save", async ({ page }) => {
+    await page.goto(`${path}?store&external&consent&consentfail`);
+    const app = page.getByRole("article").filter({ has: page.getByRole("heading", { name: "Example ERP", exact: true }) });
+    await app.getByRole("button", { name: "Review permissions", exact: true }).click();
+    await app.getByRole("checkbox", { name: "panels.render", exact: true }).click();
+    await app.getByRole("button", { name: "Save reviewed permissions", exact: true }).click();
+    await expect(app.getByRole("alert")).toBeVisible();
+    await expect(app.getByRole("button", { name: "Save reviewed permissions", exact: true })).toBeDisabled();
+    await app.getByRole("button", { name: "Back and refresh", exact: true }).click();
+    await app.getByRole("button", { name: "Review permissions", exact: true }).click();
+    await expect(app.getByRole("alert")).toHaveCount(0);
+    await expect(app.getByRole("checkbox", { name: "panels.render", exact: true })).not.toBeChecked();
+    expect(await page.evaluate(() => (window as unknown as { workflowWrites: unknown[] }).workflowWrites.length)).toBe(1);
+});
+
+test("read-only board member can review but cannot consent", async ({ page }) => {
+    await page.goto(`${path}?store&external&consent&readonly`);
+    const app = page.getByRole("article").filter({ has: page.getByRole("heading", { name: "Example ERP", exact: true }) });
+    await app.getByRole("button", { name: "Review permissions", exact: true }).click();
+    await expect(app.getByRole("checkbox", { name: "panels.render", exact: true })).toBeDisabled();
+    await expect(app.getByRole("button", { name: "Save reviewed permissions", exact: true })).toBeDisabled();
+    await expect(app.getByRole("button", { name: "Clear selection", exact: true })).toBeDisabled();
+    expect(await page.evaluate(() => (window as unknown as { workflowWrites: unknown[] }).workflowWrites.length)).toBe(0);
+});

@@ -23,12 +23,23 @@ export default function BoardSettingsAppConsent({ app, onRefresh }: { app: Catal
                 setOpened(false);
                 setGrants(app.binding?.granted_capabilities ?? []);
             } else setFailed(true);
+        } catch {
+            setFailed(true);
         } finally {
             setPending(false);
         }
     };
     const save = async () => {
-        if (!app.binding || !app.app_revision || !canEditBasicInfo || pending || failed || writing.current) return;
+        if (
+            !app.binding ||
+            !app.app_revision ||
+            !canEditBasicInfo ||
+            pending ||
+            failed ||
+            writing.current ||
+            (app.is_available === false && grants.length > 0)
+        )
+            return;
         writing.current = true;
         setPending(true);
         try {

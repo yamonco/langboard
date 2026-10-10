@@ -10,6 +10,7 @@ import { api } from "@/core/helpers/Api";
 const writes: unknown[] = [];
 let inbound = [{ connection_uid: "connection1", ownership: "personal", state: "connected", revision: "a".repeat(64) }];
 let inboundFailed = false;
+let consentFailed = false;
 const inboundReads: string[] = [];
 Object.assign(window, { inboundReads });
 const missing = new URLSearchParams(location.search).has("missing");
@@ -36,6 +37,11 @@ api.defaults.adapter = async (config) => {
     if (config.url?.endsWith("/governance/organizations"))
         return { config, status: 200, statusText: "OK", headers: {}, data: { items: [], next_cursor: null } };
     if (config.url?.endsWith("/connections")) return { config, status: 200, statusText: "OK", headers: {}, data: { items: [], next_cursor: null } };
+    if (config.url?.endsWith("/consent") && new URLSearchParams(location.search).has("consentfail") && !consentFailed) {
+        consentFailed = true;
+        writes.push({ ...JSON.parse(config.data ?? "{}"), url: config.url });
+        throw new Error("outcome unknown");
+    }
     if (config.method === "put" || config.method === "post") {
         writes.push({ ...JSON.parse(config.data ?? "{}"), url: config.url });
         if (!config.url?.endsWith("/workflow")) repaired = true;
