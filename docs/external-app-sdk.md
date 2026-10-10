@@ -734,3 +734,17 @@ that lease or report its start. Revocation is serialized with permit issuance,
 heartbeat and start-report acceptance. The scoped runtime token still records
 a safe stop after credential revocation. Legacy permits without trustworthy
 credential lineage migrate to `stop_requested` with a retained history entry.
+
+### Non-renewing runtime report
+
+SDK 0.2.11 `runtime_report(lease_uid, runtime_token)` inspects the current
+permit and start attestation through the native `runtime-permits/{uid}/report`
+endpoint. It uses the same primary-database authority, credential and expiry
+fence as heartbeat, but never renews the lease. Invalid current authority may
+persist `stop_requested`, and old start evidence remains available with
+`active_report:false`. `active_report:true` means that an app start attestation
+exists under current valid authorization; it is not independent process health
+or proof of progress. No start attestation yields `start_report:null` and
+`evidence_kind:none`. Runtime report reads do not move cards, start processes,
+or implicitly resume stopped generations. Explicit heartbeat renewal remains
+`check_runtime`; keep private tokens out of URLs and logs.

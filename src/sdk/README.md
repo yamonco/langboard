@@ -75,3 +75,9 @@ only under a current live permit. `start_reported/app_attestation` describes
 the evidence source explicitly; it is not host process observation, dispatch,
 workflow transition, or completion. Duplicate reports are idempotent only for
 the same execution reference. Permit receipts still return `started:false`.
+
+Python SDK 0.2.11 adds `runtime_report` and `RuntimeReport`. The read revalidates
+current authority without extending the permit. It retains historical start
+attestation separately from `active_report`; stopped, expired or revoked
+permits cannot appear active. This is an app-attestation projection, not
+independent process health. Use explicit heartbeat calls for renewal.

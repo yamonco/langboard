@@ -118,6 +118,14 @@ async def test_packaged_sdk_start_report_uses_native_http(board, monkeypatch):
         first = await execution.report_start(board[2].get_uid(), card.get_uid(), **args)
         replay = await execution.report_start(board[2].get_uid(), card.get_uid(), **args)
         assert first["start_uid"] == replay["start_uid"] and replay["changed"] is False
+        report = await execution.runtime_report(lease_id.to_short_code(), runtime_token)
+        assert report["active_report"] is True and report["start_report"]["start_uid"] == first["start_uid"]
+        with DbSession.atomic() as db:
+            lease = db.exec(SqlBuilder.select.table(AppExecutionLease)).first()
+            original_expiry = lease.expires_at
+        await execution.runtime_report(lease_id.to_short_code(), runtime_token)
+        with DbSession.atomic() as db:
+            assert db.exec(SqlBuilder.select.table(AppExecutionLease)).first().expires_at == original_expiry
         path = f"/apps/v1/boards/{board[2].get_uid()}/cards/{card.get_uid()}/execution-requests/{request.get_uid()}/start-reports"
         assert client.post(path, json={k: v for k, v in args.items() if k != "request_uid"}).status_code == 401
 
@@ -160,3 +168,44 @@ def test_new_credential_cannot_take_over_existing_runtime_start(board, monkeypat
         report_app_execution_start(new_token, board[2].id, card.id, request.id, lease_id, runtime_token, "process-1")
     with DbSession.atomic() as db:
         assert not db.exec(SqlBuilder.select.table(AppExecutionStart)).all()
+
+
+@pytest.mark.parametrize("board", ["sqlite://", "postgresql-test"], indirect=True)
+@pytest.mark.parametrize("gate", ["revoked", "expired", "stopped"])
+def test_runtime_report_does_not_renew_or_infer_started_and_keeps_revoked_evidence(board, monkeypatch, gate):
+    from langboard_shared.domain.models import AppConnectionCredential
+    from langboard_shared.domain.services.AppExecutionStarts import read_app_runtime_report
+
+    _, card, token, request, lease_id, runtime_token = start_scope(board, monkeypatch)
+    no_start = read_app_runtime_report(lease_id, runtime_token)
+    assert no_start["active_report"] is False and no_start["start_report"] is None
+    assert no_start["evidence_kind"] == "none" and no_start["started"] is False
+    with DbSession.atomic() as db:
+        lease = db.exec(SqlBuilder.select.table(AppExecutionLease)).first()
+        original_expiry = lease.expires_at
+    report_app_execution_start(token, board[2].id, card.id, request.id, lease_id, runtime_token, "process-1")
+    report = read_app_runtime_report(lease_id, runtime_token)
+    assert report["active_report"] is True and report["evidence_kind"] == "app_attestation"
+    assert report["started"] is False and report["start_report"]["execution_reference"] == "process-1"
+    with DbSession.atomic() as db:
+        lease = db.exec(SqlBuilder.select.table(AppExecutionLease)).first()
+        assert lease.expires_at == original_expiry
+        credential = db.exec(
+            SqlBuilder.select.table(AppConnectionCredential).where(AppConnectionCredential.id == lease.credential_id)
+        ).first()
+        if gate == "revoked":
+            credential.revoked_at = SafeDateTime.now()
+            db.update(credential)
+        elif gate == "expired":
+            lease.expires_at = SafeDateTime.now() - timedelta(seconds=1)
+            db.update(lease)
+        else:
+            lease.state = "stopped"
+            db.update(lease)
+    revoked = read_app_runtime_report(lease_id, runtime_token)
+    assert revoked["active_report"] is False and revoked["state"] == (
+        "stopped" if gate == "stopped" else "stop_requested"
+    )
+    assert revoked["start_report"] == report["start_report"]
+    with pytest.raises(AppGovernanceDenied):
+        read_app_runtime_report(lease_id, token_hex(32))

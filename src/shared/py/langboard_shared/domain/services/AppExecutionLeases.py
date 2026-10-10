@@ -107,6 +107,10 @@ def authorize_app_runtime(token, project_id, card_id, request_id, acknowledgment
 
 def check_app_runtime(lease_id, runtime_token, *, stopped=False):
     """Opaque token may check/stop only this runtime after its app credential is revoked."""
+    return _check_app_runtime(lease_id, runtime_token, stopped=stopped, renew=True)
+
+
+def _check_app_runtime(lease_id, runtime_token, *, stopped=False, renew=False):
     if type(stopped) is not bool:
         raise ValueError("Stopped must be a boolean")
     digest = _hash(runtime_token)
@@ -157,7 +161,7 @@ def check_app_runtime(lease_id, runtime_token, *, stopped=False):
             row.state = new_state
             row.history = [*row.history, {"state": new_state, "at": now.isoformat()}]
             db.update(row)
-        elif not stopped and row.state == "authorized" and allowed and not _expired(row.expires_at, now):
+        elif renew and not stopped and row.state == "authorized" and allowed and not _expired(row.expires_at, now):
             row.expires_at = now + timedelta(seconds=LEASE_SECONDS)
             db.update(row)
         # Only a still-valid current-authority heartbeat renews. Expired/stopped
