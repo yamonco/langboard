@@ -505,6 +505,8 @@ def disconnect(service, actor, project_uid, connection_uid, expected_revision):
         connection = _connection(db, actor, connection_uid, lock=True, revocation=True)
         if _revision(connection) != expected_revision:
             raise DokployConflict()
+        if connection.state == "disconnected":
+            return _metadata(connection)
         connection.state = "disconnected"
         db.update(connection)
         db.exec(
@@ -519,4 +521,5 @@ def disconnect(service, actor, project_uid, connection_uid, expected_revision):
         # Connection is shared across boards. Preserve selections and each board's
         # configuration; invalidate this connection's resources everywhere.
         # Its SecretReference may serve another connection and remains untouched.
+        db.after_commit(AppSettingPublisher.apps_changed)
         return _metadata(connection)

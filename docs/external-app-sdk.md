@@ -304,3 +304,11 @@ back transactions emit nothing. The existing board socket receiver disposes
 active panel sessions, clears the selected app and invalidates the catalog when
 that event arrives. SQLite tests prove commit/rollback notification behavior;
 actual deployed socket delivery and multi-browser acceptance remain required.
+
+GlitchTip and Dokploy connection disconnection uses the same post-commit panel
+invalidation event. An already-disconnected connection returns its current receipt
+without incrementing resource revisions or sending another event. A stale revision
+or transaction rollback emits nothing. Selected resources, observations, board
+workflow configuration and shared secret references remain preserved; disconnected
+resource access stays revoked. Local SQLite tests exercise those transaction and
+idempotency boundaries; deployed event delivery is still an acceptance gate.
