@@ -6,6 +6,7 @@ import re
 from langboard_shared.core.db import DbSession, SqlBuilder
 from langboard_shared.domain.models import AppConnection, AppResourceBinding, BoardAppBinding
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
+from langboard_shared.domain.services.AppGovernance import AppGovernanceDenied, require_connection_access
 from langboard_shared.domain.services.factory.SecretReferenceService import SecretAuditSource
 from langboard_shared.helpers import InfraHelper
 from .MetadataTransport import MetadataUnavailable, approved_instance, read_json
@@ -84,10 +85,11 @@ def _get(base, token, endpoint, params=None):
 
 
 def _fence(service, actor, project_uid, uri, revision):
-    _board(service, actor, project_uid)
+    board = _board(service, actor, project_uid)
     current = service.secret_reference._find(actor, uri, lock=DbSession.has_active_transaction()).metadata()
     if current["revision"] != revision or current["state"] != "active":
         raise DokployConflict()
+    return board
 
 
 def _connection(db, actor, uid, *, lock=False, revocation=False):
@@ -105,21 +107,30 @@ def _connection(db, actor, uid, *, lock=False, revocation=False):
 
 
 def _context(service, actor, project_uid, uid):
-    _board(service, actor, project_uid)
+    board = _board(service, actor, project_uid)
     with DbSession.use(readonly=False) as db:
         connection = _connection(db, actor, uid)
+        _access(db, actor, board, connection)
     base = approved_instance(connection.instance_url)
     token, revision = _credential(service, actor, connection.credential_reference)
     return connection, base, token, revision
 
 
 def _current(service, actor, project_uid, connection, revision):
-    _fence(service, actor, project_uid, connection.credential_reference, revision)
+    board = _fence(service, actor, project_uid, connection.credential_reference, revision)
     with DbSession.use(readonly=False) as db:
         current = _connection(db, actor, connection.get_uid(), lock=DbSession.has_active_transaction())
+        _access(db, actor, board, current)
         if _revision(current) != _revision(connection):
             raise DokployConflict()
     approved_instance(current.instance_url)
+
+
+def _access(db, actor, board, connection):
+    try:
+        require_connection_access(db, actor, board, connection)
+    except AppGovernanceDenied:
+        raise DokployUnavailable() from None
 
 
 def _item(row, kind):
