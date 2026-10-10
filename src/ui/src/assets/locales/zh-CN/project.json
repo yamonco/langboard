@@ -381,7 +381,14 @@
     "Service resource type": "资源类型",
     "Service resource ID": "外部资源 ID",
     "Remove service resource": "取消选择",
-    "Select service resource": "选择资源"
+    "Select service resource": "选择资源",
+    "Manage service credentials": "管理凭据",
+    "Service credential help": "为此连接签发一小时有效的凭据。认证不会授予看板权限。如响应丢失，请刷新记录并撤销未知签发后再试。",
+    "Service credential once": "仅显示一次。请复制到服务。关闭或刷新会清除此值。",
+    "Service credential value": "服务凭据",
+    "Hide service credential": "隐藏值",
+    "Revoke service credential": "撤销凭据",
+    "Issue service credential": "签发凭据"
   },
   "App panel": "应用面板",
   "Close App panel": "关闭应用面板",

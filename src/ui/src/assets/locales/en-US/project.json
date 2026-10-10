@@ -381,7 +381,14 @@
     "Service resource type": "Resource type",
     "Service resource ID": "External resource ID",
     "Remove service resource": "Remove selection",
-    "Select service resource": "Select resource"
+    "Select service resource": "Select resource",
+    "Manage service credentials": "Manage credentials",
+    "Service credential help": "Creates a one-hour credential for this service connection. Authentication does not grant board permissions. If the response is lost, refresh receipts and revoke the unknown issuance before trying again.",
+    "Service credential once": "Shown once. Copy into your service now. Closing or refreshing clears this value.",
+    "Service credential value": "Service credential",
+    "Hide service credential": "Hide value",
+    "Revoke service credential": "Revoke credential",
+    "Issue service credential": "Issue credential"
   },
   "App panel": "App panel",
   "Close App panel": "Close App panel",

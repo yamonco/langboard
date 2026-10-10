@@ -6,12 +6,14 @@ import BoardSettingsAppWorkflow from "./BoardSettingsAppWorkflow";
 import BoardSettingsApps from "./BoardSettingsApps";
 import i18n from "@/i18n";
 import "@/assets/styles/main.css";
+import { AxiosError } from "axios";
 import { api } from "@/core/helpers/Api";
 const writes: unknown[] = [];
 let inbound = [{ connection_uid: "connection1", ownership: "personal", state: "connected", revision: "a".repeat(64) }];
 let inboundFailed = false;
 let consentFailed = false;
 let resourceRows: { resource_uid: string; resource_type: string; external_resource_id: string; selected: boolean; access_revision: number }[] = [];
+let credentialRows: { credential_uid: string; expires_at: string; revoked_at: string | null }[] = [];
 const inboundReads: string[] = [];
 Object.assign(window, { inboundReads });
 const missing = new URLSearchParams(location.search).has("missing");
@@ -19,6 +21,18 @@ let repaired = false;
 let disabled = false;
 Object.assign(window, { workflowWrites: writes });
 api.defaults.adapter = async (config) => {
+    if (config.url?.includes("/credentials")) {
+        if (config.method === "post") {
+            writes.push({ ...JSON.parse(config.data ?? "{}"), url: config.url });
+            if (config.url.endsWith("/revoke")) credentialRows = credentialRows.map(row => ({ ...row, revoked_at: "2026-10-11T06:00:00Z" }));
+            else {
+                credentialRows = [{ credential_uid: "credential1", expires_at: "2026-10-11T07:00:00Z", revoked_at: null }];
+                if (new URLSearchParams(location.search).has("credentialfail")) throw new AxiosError("Issuance response lost", "ERR_BAD_REQUEST", config, undefined, { config, status: 422, statusText: "Error", headers: {}, data: {} });
+                return { config, status: 200, statusText: "OK", headers: {}, data: { token: "synthetic-once-value" } };
+            }
+        }
+        return { config, status: 200, statusText: "OK", headers: {}, data: { items: credentialRows, next_cursor: null } };
+    }
     if (config.url?.includes("/inbound-connections/") && config.url.endsWith("/resources")) {
         if (config.method === "put") {
             const body = JSON.parse(config.data ?? "{}");

@@ -171,6 +171,15 @@ async def acceptance(base, auth):
         credential = await transport.request(
             "POST", f"/settings/apps/connections/{auth['connection']}/credentials", json={"expires_in_seconds": 3600}
         )
+        credential_path = f"/settings/apps/connections/{auth['connection']}/credentials"
+        receipts = await transport.request("GET", credential_path)
+        assert receipts["items"][0]["credential_uid"] == credential["credential_uid"]
+        assert "token" not in receipts["items"][0] and "token_hash" not in receipts["items"][0]
+        temporary = await transport.request("POST", credential_path, json={"expires_in_seconds": 60})
+        revoked = await transport.request("POST", f"{credential_path}/{temporary['credential_uid']}/revoke", json={})
+        assert revoked["revoked"]
+        recovered_receipts = await transport.request("GET", credential_path)
+        assert next(item for item in recovered_receipts["items"] if item["credential_uid"] == temporary["credential_uid"])["revoked_at"]
         async with httpx.AsyncClient(
             base_url=base, timeout=30, trust_env=False, headers={"Authorization": "Bearer " + credential["token"]}
         ) as app_client:

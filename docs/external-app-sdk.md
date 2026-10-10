@@ -805,7 +805,18 @@ It displays declared capabilities and current grants, saves only explicit checke
 scopes with pinned app/binding revisions, and can revoke all grants by clearing
 the selection and saving. Disabled apps cannot receive new grants but can still
 be cleared. Failed mutations require a manual catalog refresh before another save.
-The connection manager includes a board-scoped resource editor. It opens only on explicit action and reads at most 50 records per cursor page. Selection and removal require explicit confirmation and current app/binding/access revisions. Failed mutations block further writes until successful explicit refresh. Disabled apps retain selection removal; credential issuance UI remains incomplete.
+The connection manager includes a board-scoped resource editor. It opens only on
+explicit action and reads at most 50 records per cursor page. Selection and
+removal require confirmation and current app/binding/access revisions. Failed
+mutations block further writes until successful explicit refresh. Disabled apps
+retain selection removal.
+
+The same manager provides credential receipt listing, explicit one-hour issuance
+and revocation. Issued values appear once in component memory and clear on hide,
+refresh, paging or leaving the manager. Issuance uses the existing one-shot
+transport to prevent automatic authentication replay. Lost responses require
+receipt recovery; the list never returns token material. The UI does not persist
+or automatically copy credentials.
 
 After preparing a board workflow draft, select each external resource with
 `PUT /board/{project_uid}/settings/apps/{app_key}/inbound-connections/{connection_uid}/resources`.

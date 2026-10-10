@@ -7,6 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import BoardSettingsInboundCredentials from "./BoardSettingsInboundCredentials";
 import BoardSettingsInboundResources from "./BoardSettingsInboundResources";
 
 interface Connection {
@@ -19,6 +20,7 @@ interface Connection {
 export default function BoardSettingsInboundConnections({ app, onBusy }: { app: CatalogApp; onBusy: (busy: boolean) => void }) {
     const [t] = useTranslation();
     const { currentUser, canEditBasicInfo } = useBoardSettings();
+    const [credentialConnection, setCredentialConnection] = useState<Connection | null>(null);
     const [resourceConnection, setResourceConnection] = useState<string | null>(null);
     const [resourceBusy, setResourceBusy] = useState(false);
     const [scope, setScope] = useState("");
@@ -84,6 +86,20 @@ export default function BoardSettingsInboundConnections({ app, onBusy }: { app: 
             setPending(false);
         }
     };
+    if (credentialConnection)
+        return (
+            <>
+                <Button size="sm" variant="outline" disabled={resourceBusy} onClick={() => setCredentialConnection(null)}>
+                    {t("common.Close")}
+                </Button>
+                <BoardSettingsInboundCredentials
+                    key={`${currentUser?.uid}:${credentialConnection.connection_uid}`}
+                    connectionUID={credentialConnection.connection_uid}
+                    canIssue={app.is_available !== false && credentialConnection.state === "connected"}
+                    onBusy={setResourceBusy}
+                />
+            </>
+        );
     if (resourceConnection)
         return (
             <>
@@ -159,6 +175,14 @@ export default function BoardSettingsInboundConnections({ app, onBusy }: { app: 
                             onClick={() => setResourceConnection(connection.connection_uid)}
                         >
                             {t("project.settings.Manage service resources")}
+                        </Button>
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={busy || failed || list.isError || !!confirm}
+                            onClick={() => setCredentialConnection(connection)}
+                        >
+                            {t("project.settings.Manage service credentials")}
                         </Button>
                         <Button
                             variant="outline"

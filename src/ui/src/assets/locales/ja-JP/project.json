@@ -381,7 +381,14 @@
     "Service resource type": "リソース種別",
     "Service resource ID": "外部リソースID",
     "Remove service resource": "選択解除",
-    "Select service resource": "リソース選択"
+    "Select service resource": "リソース選択",
+    "Manage service credentials": "認証情報の管理",
+    "Service credential help": "この接続に1時間有効な認証情報を発行します。認証だけでボード権限は付与されません。応答を失った場合は履歴を再取得し、不明な発行を取り消してから再試行してください。",
+    "Service credential once": "一度だけ表示します。サービスにコピーしてください。閉じるか再取得すると値が消えます。",
+    "Service credential value": "サービス認証情報",
+    "Hide service credential": "値を隠す",
+    "Revoke service credential": "認証情報を取り消す",
+    "Issue service credential": "認証情報を発行"
   },
   "App panel": "アプリパネル",
   "Close App panel": "アプリパネルを閉じる",

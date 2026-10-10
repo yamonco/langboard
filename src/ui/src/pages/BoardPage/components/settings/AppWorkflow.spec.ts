@@ -261,3 +261,49 @@ test("service resource failure requires refresh", async ({ page }) => {
     await expect(page.getByRole("alert")).toHaveCount(0);
     expect(await page.evaluate(() => (window as unknown as { workflowWrites: unknown[] }).workflowWrites.length)).toBe(1);
 });
+
+
+for (const width of [1440, 390]) {
+    test(`service credential is displayed once and revoked at ${width}px`, async ({ page }) => {
+        await page.setViewportSize({ width, height: 850 });
+        await page.goto(`${path}?store&external`);
+        await page.getByRole("button", { name: "Manage service connections" }).click();
+        await page.getByRole("button", { name: "Manage credentials" }).click();
+        await page.getByRole("button", { name: "Issue credential", exact: true }).click();
+        expect(await page.evaluate(() => (window as unknown as { workflowWrites: unknown[] }).workflowWrites.length)).toBe(0);
+        await page.getByRole("button", { name: "Confirm", exact: true }).click();
+        await expect(page.getByRole("textbox", { name: "Service credential", exact: true })).toHaveValue("synthetic-once-value");
+        await page.getByRole("button", { name: "Hide value", exact: true }).click();
+        await expect(page.getByRole("textbox", { name: "Service credential", exact: true })).toHaveCount(0);
+        await page.getByRole("button", { name: "Revoke credential", exact: true }).click();
+        await page.getByRole("button", { name: "Confirm", exact: true }).click();
+        await expect(page.getByRole("button", { name: "Revoke credential", exact: true })).toBeDisabled();
+        expect(await page.evaluate(() => (window as unknown as { workflowWrites: unknown[] }).workflowWrites)).toEqual([
+            { url: "/settings/apps/connections/connection1/credentials", expires_in_seconds: 3600 },
+            { url: "/settings/apps/connections/connection1/credentials/credential1/revoke" },
+        ]);
+        expect(await page.evaluate(() => JSON.stringify(localStorage).includes("synthetic-once-value") || JSON.stringify(sessionStorage).includes("synthetic-once-value"))).toBe(false);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    });
+}
+
+test("lost credential response requires receipt recovery without automatic issuance", async ({ page }) => {
+    await page.goto(`${path}?store&external&credentialfail`);
+    await page.getByRole("button", { name: "Manage service connections" }).click();
+    await page.getByRole("button", { name: "Manage credentials" }).click();
+    await page.getByRole("button", { name: "Issue credential", exact: true }).click();
+    await page.getByRole("button", { name: "Confirm", exact: true }).click();
+    await expect(page.getByRole("alert")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Confirm", exact: true })).toBeDisabled();
+    await page.getByRole("button", { name: "Retry", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Revoke credential", exact: true })).toBeEnabled();
+    await expect(page.getByRole("textbox", { name: "Service credential", exact: true })).toHaveCount(0);
+    expect(await page.evaluate(() => (window as unknown as { workflowWrites: unknown[] }).workflowWrites.length)).toBe(1);
+});
+
+test("disabled app exposes credential cleanup but prevents issuance", async ({ page }) => {
+    await page.goto(`${path}?store&external&consentdisabled`);
+    await page.getByRole("button", { name: "Manage service connections" }).click();
+    await page.getByRole("button", { name: "Manage credentials" }).click();
+    await expect(page.getByRole("button", { name: "Issue credential", exact: true })).toBeDisabled();
+});

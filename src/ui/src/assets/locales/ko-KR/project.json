@@ -381,7 +381,14 @@
     "Service resource type": "리소스 유형",
     "Service resource ID": "외부 리소스 ID",
     "Remove service resource": "선택 해제",
-    "Select service resource": "리소스 선택"
+    "Select service resource": "리소스 선택",
+    "Manage service credentials": "자격증명 관리",
+    "Service credential help": "이 서비스 연결에 1시간 유효한 자격증명을 발급합니다. 인증만으로 보드 권한이 부여되지 않습니다. 응답을 잃으면 영수증을 재조회하고 해당 발급을 철회한 후 다시 시도하세요.",
+    "Service credential once": "일회 표시입니다. 지금 서비스에 복사하세요. 닫거나 재조회하면 값이 지워집니다.",
+    "Service credential value": "서비스 자격증명",
+    "Hide service credential": "값 숨기기",
+    "Revoke service credential": "자격증명 철회",
+    "Issue service credential": "자격증명 발급"
   },
   "App panel": "앱 패널",
   "Close App panel": "앱 패널 닫기",
