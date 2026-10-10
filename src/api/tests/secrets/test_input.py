@@ -1,6 +1,7 @@
 # ruff: noqa: F811
 """Native vault persistence and one-use cache boundary; no material on MCP outputs."""
 
+import hashlib
 import json
 from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
@@ -41,6 +42,9 @@ def test_one_use_secret_stays_outside_mcp_and_metadata(flow):
     result = input_flow.complete_input(service, actor, uid, SecretStr("fixture-secret"), challenge)
     assert result == get_secret_input_status(uid, actor, service)
     assert result["state"] == "completed"
+    history = service.secret_reference.list_audit(actor, result["secret_ref"])
+    assert history["items"][0]["request_id"] == hashlib.sha256(uid.encode()).hexdigest()
+    assert uid not in json.dumps(history) and challenge not in json.dumps(history)
     assert (
         service.secret_reference.resolve_for_runtime(actor, result["secret_ref"]).get_secret_value() == "fixture-secret"
     )
@@ -269,6 +273,10 @@ def test_rotation_fixed_reference_revision_and_old_material_retention(flow, chan
         completed = input_flow.complete_input(service, actor, uid, SecretStr("new-secret"), challenge)
         assert completed == {"state": "completed", "secret_ref": reference["uri"]}
         assert service.secret_reference.get_metadata(actor, reference["uri"])["revision"] == 1
+        history = service.secret_reference.list_audit(actor, reference["uri"])
+        assert history["items"][0]["action"] == "rotated"
+        assert history["items"][0]["request_id"] == hashlib.sha256(uid.encode()).hexdigest()
+        assert uid not in json.dumps(history) and challenge not in json.dumps(history)
         assert service.secret_reference.resolve_for_runtime(actor, reference["uri"]).get_secret_value() == "new-secret"
     else:
         with pytest.raises(SecretReferenceUnavailable):

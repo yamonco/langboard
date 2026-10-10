@@ -153,7 +153,10 @@ def complete_input(service, actor, uid, value, challenge):
         raise SecretReferenceUnavailable()
     _claim(uid, context)
     try:
-        source = SecretAuditSource("api", "secret_input", request_id=uid, reason_code="user_input")
+        # The input UID is a bearer URL nonce, not a public audit identifier.
+        source = SecretAuditSource(
+            "api", "secret_input", request_id=hashlib.sha256(uid.encode()).hexdigest(), reason_code="user_input"
+        )
         if context["operation"] == "rotate":
             reference = service.secret_reference.rotate(
                 actor,

@@ -4,6 +4,10 @@ Successful native Dokploy and GlitchTip connection registration and resource sel
 
 The trusted host operation requires an active destination transaction, an `app_connection` source identifier, current reference authority, active state, and the expected reference revision. It does not read or write vault material or increment the reference revision. Audit pages retain the existing current-reference access checks and never expose raw source identifiers, credentials, or vault paths. The fixed reason is `reference_bound`; labels support English, Korean, Japanese, and Chinese.
 
+Browser input create and rotation facts correlate through the SHA-256 digest of
+their one-use input nonce. The bearer URL nonce and browser proof are never recorded
+as audit identifiers. This changes new facts only; existing history is not rewritten.
+
 The migration expands the existing audit constraint and preserves historical records. Downgrade refuses while binding facts exist. It neither synthesizes old binding events nor backfills prior connections.
 
 Audit source links require current native board and card/wiki visibility. App-use policy is independent: disabling apps does not hide a source that the user can still read. Secret ownership alone never grants source access, and deleted sources or revoked membership remain hidden.
