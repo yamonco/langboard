@@ -19,9 +19,9 @@ class DokployConflict(Exception):
     pass
 
 
-def _board(service, actor, project_uid):
+def _board(service, actor, project_uid, *, revocation=False):
     board = service.workflow_stage._authorized_app_board(
-        actor, project_uid, ProjectRoleAction.Update, lock=DbSession.has_active_transaction()
+        actor, project_uid, ProjectRoleAction.Update, lock=DbSession.has_active_transaction(), revocation=revocation
     )
     if board is None:
         raise DokployUnavailable()
@@ -90,7 +90,7 @@ def _fence(service, actor, project_uid, uri, revision):
         raise DokployConflict()
 
 
-def _connection(db, actor, uid, *, lock=False):
+def _connection(db, actor, uid, *, lock=False, revocation=False):
     _id(uid)
     query = SqlBuilder.select.table(AppConnection).where(
         AppConnection.id == InfraHelper.convert_id(uid),
@@ -98,7 +98,8 @@ def _connection(db, actor, uid, *, lock=False):
         AppConnection.app_key == "dokploy",
     )
     row = db.exec(query.with_for_update() if lock else query).first()
-    if row is None or row.state != "connected" or not row.credential_reference:
+    allowed_states = ("connected", "pending", "revoked", "disconnected") if revocation else ("connected",)
+    if row is None or row.state not in allowed_states or (not revocation and not row.credential_reference):
         raise DokployUnavailable()
     return row
 
@@ -430,8 +431,8 @@ def enable_read_access(service, actor, project_uid, connection_uid, expected_rev
 
 def remove_resource(service, actor, project_uid, connection_uid, resource_uid, expected_revision):
     with DbSession.atomic() as db:
-        board = _board(service, actor, project_uid)
-        connection = _connection(db, actor, connection_uid, lock=True)
+        board = _board(service, actor, project_uid, revocation=True)
+        connection = _connection(db, actor, connection_uid, lock=True, revocation=True)
         binding = db.exec(
             SqlBuilder.select.table(BoardAppBinding)
             .where(
@@ -463,8 +464,8 @@ def remove_resource(service, actor, project_uid, connection_uid, resource_uid, e
 
 def disconnect(service, actor, project_uid, connection_uid, expected_revision):
     with DbSession.atomic() as db:
-        _board(service, actor, project_uid)
-        connection = _connection(db, actor, connection_uid, lock=True)
+        _board(service, actor, project_uid, revocation=True)
+        connection = _connection(db, actor, connection_uid, lock=True, revocation=True)
         if _revision(connection) != expected_revision:
             raise DokployConflict()
         connection.state = "disconnected"

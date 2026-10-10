@@ -127,6 +127,11 @@ Board administrators can disable an existing binding even after instance policy
 or app registration has disabled its use. This removal still requires current
 board Update authority and the exact binding revision. It does not restore app
 discovery, execution, capabilities, or access to another person's connection.
+GlitchTip and Dokploy account owners can also remove selected resources or
+disconnect their own connection after policy revocation, including connections
+whose trust change has revoked credentials. These operations do not resolve
+secrets or call the provider; retained cards, history, and shared secrets remain.
+
 
 The standalone source repositories are `langboard-sdk`, `langboard-app-github`,
 `langboard-app-glitchtip`, and `langboard-app-dokploy`. The host consumes reviewed
