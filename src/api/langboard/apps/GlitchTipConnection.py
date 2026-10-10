@@ -383,9 +383,11 @@ def remove_project(service, actor, project_uid, connection_uid, resource_uid, ex
             raise GlitchTipUnavailable()
         if row.access_revision != expected_revision:
             raise GlitchTipConflict()
-        row.is_selected = False
-        row.access_revision += 1
-        db.update(row)
+        if row.is_selected:
+            row.is_selected = False
+            row.access_revision += 1
+            db.update(row)
+            db.after_commit(AppSettingPublisher.apps_changed)
         return {"resource_uid": row.get_uid(), "selected": False, "access_revision": row.access_revision}
 
 

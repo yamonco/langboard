@@ -22,6 +22,33 @@ def revocation_notifications(monkeypatch):
     return events
 
 
+def test_resource_removal_notifies_only_commit_and_preserves_other_selections(selected, revocation_notifications):
+    setup, connection, *_ = selected
+    service, board, *_ = setup
+    with DbSession.use(readonly=False) as db:
+        rows = db.exec(SqlBuilder.select.table(AppResourceBinding).order_by(AppResourceBinding.id)).all()
+        resource = rows[0]
+        uid, revision = resource.get_uid(), resource.access_revision
+        untouched = {row.id: (row.is_selected, row.access_revision) for row in rows[1:]}
+    args = service, board[1], board[2].get_uid(), connection["connection_uid"], uid
+    with pytest.raises(dk.DokployConflict):
+        dk.remove_resource(*args, revision + 1)
+    with pytest.raises(RuntimeError, match="rollback"):
+        with DbSession.atomic():
+            dk.remove_resource(*args, revision)
+            assert revocation_notifications == []
+            raise RuntimeError("rollback")
+    assert revocation_notifications == []
+    result = dk.remove_resource(*args, revision)
+    assert result["selected"] is False and result["access_revision"] == revision + 1
+    assert revocation_notifications == ["apps:changed"]
+    assert dk.remove_resource(*args, result["access_revision"]) == result
+    assert revocation_notifications == ["apps:changed"]
+    with DbSession.use(readonly=False) as db:
+        rows = db.exec(SqlBuilder.select.table(AppResourceBinding)).all()
+        assert {row.id: (row.is_selected, row.access_revision) for row in rows if row.get_uid() != uid} == untouched
+
+
 def test_disconnect_notifies_only_committed_changes_and_is_idempotent(selected, revocation_notifications):
     setup, connection, *_ = selected
     service, board, *_ = setup
