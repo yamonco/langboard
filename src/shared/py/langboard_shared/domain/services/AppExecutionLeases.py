@@ -129,3 +129,18 @@ def check_app_runtime(lease_id, runtime_token, *, stopped=False):
         # Only a still-valid current-authority heartbeat renews. Expired/stopped
         # permits never resume; a new generation requires explicit acceptance.
         return _result(db, row)
+
+
+def recover_app_runtime(request_id, runtime_token):
+    """Resolve a lost permit response without creating or rotating a runtime."""
+    digest = _hash(runtime_token)
+    with DbSession.use(readonly=False) as db:
+        row = db.exec(
+            SqlBuilder.select.table(AppExecutionLease).where(AppExecutionLease.request_id == request_id)
+        ).first()
+        if row is None or not compare_digest(row.runtime_token_hash, digest):
+            raise AppGovernanceDenied()
+        lease_id = row.id
+    # Return only after the normal current-authority/expiry fence. Stop-only
+    # recovery survives app credential revocation and cannot authorize a new lease.
+    return check_app_runtime(lease_id, runtime_token)

@@ -193,3 +193,41 @@ def test_postgres_concurrent_permit_and_stopped_replay(board, monkeypatch):
     with DbSession.atomic() as db:
         row = db.exec(SqlBuilder.select.table(AppExecutionLease)).first()
         assert [entry["state"] for entry in row.history] == ["authorized", "stop_requested", "stopped"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("board", ["sqlite-http"], indirect=True)
+async def test_lost_permit_response_recovery_cannot_rotate_or_resurrect(board, monkeypatch):
+    from types import SimpleNamespace
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from langboard_sdk import AppExecution, HttpTransport, NativeApiError
+    from langboard_shared.core.routing import AppRouter
+
+    connection, card, token, request, ack_id = permit_scope(board, monkeypatch)
+    runtime_token = token_hex(32)
+    first = authorize_app_runtime(token, board[2].id, card.id, request.id, ack_id, runtime_token)
+    app = FastAPI()
+    app.include_router(AppRouter.api)
+    with TestClient(app) as client:
+
+        async def transport(method, path, **kwargs):
+            # Recovery intentionally has no app credential: a scoped runtime token
+            # must remain usable to stop after the app connection is revoked.
+            return client.request(method, path, **kwargs)
+
+        execution = AppExecution(HttpTransport(SimpleNamespace(request=transport)))
+        recovered = await execution.recover_runtime(request.get_uid(), runtime_token)
+        assert recovered["lease_uid"] == first["lease_uid"] and recovered["permit_execution"] is True
+        assert recovered["request_uid"] == request.get_uid() and recovered["runtime_reference"] == "runtime-1"
+        with pytest.raises(NativeApiError):
+            await execution.recover_runtime(request.get_uid(), token_hex(32))
+        with DbSession.atomic() as db:
+            connection.state = "revoked"
+            db.update(connection)
+        assert (await execution.recover_runtime(request.get_uid(), runtime_token))["state"] == "stop_requested"
+        await execution.check_runtime(first["lease_uid"], runtime_token, stopped=True)
+        assert (await execution.recover_runtime(request.get_uid(), runtime_token))["state"] == "stopped"
+    with DbSession.atomic() as db:
+        rows = db.exec(SqlBuilder.select.table(AppExecutionLease)).all()
+        assert len(rows) == 1 and rows[0].runtime_token_hash != runtime_token

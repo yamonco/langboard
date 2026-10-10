@@ -61,3 +61,10 @@ recovery after app credentials are revoked. Stopped or expired permits never
 resume; a new accepted request and generation are required. The host preserves
 the stop history, and scheduling, external process start, and HITL resume are
 separate integrations.
+
+Python SDK 0.2.9 adds `RuntimePermit` identity types and `recover_runtime`.
+Recovery uses the accepted request UID and the privately persisted token to
+find an existing permit; it applies the same primary-database authority and
+expiry checks as heartbeat. It cannot create, rotate, or resurrect a permit.
+An unknown recovery outcome is not permission to execute and is never retried
+implicitly by the SDK.
