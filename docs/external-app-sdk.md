@@ -876,6 +876,20 @@ disconnect credential denial also have PostgreSQL coverage. This local
 configured instance is not public canary, external broker or browser rendering
 acceptance.
 
+`scripts/sdk/accept_inbound_lifecycle.py` makes that acceptance reproducible with
+the public SDK examples. Set `LANGBOARD_SDK_EXAMPLES_DIR` to the separate SDK
+repository's `examples/python` directory and `LANGBOARD_ACCEPTANCE_DATABASE_URL`
+to an empty disposable loopback PostgreSQL database. The script rejects a
+non-loopback database or an existing schema. Run it with the API environment's
+Python and the pinned SDK wheel on `PYTHONPATH`. It starts a separate Uvicorn
+process, uses native routes/authentication, and seeds only account/board/Backlog.
+No runtime monkeypatch or preinserted app state is used. It verifies registry
+registration, connection/resource onboarding, consent, card creation/replay,
+same-trust version update/readback with retained consent, registry disable/readback
+and denied replay, cleanup after disable, and native broadcasts. Temporary server,
+credentials and new broadcast files are removed; the caller must remove the
+disposable database. It is an explicit acceptance command, not an automatic CI job.
+
 ### Standalone management example
 
 The separately versioned SDK repository now contains
