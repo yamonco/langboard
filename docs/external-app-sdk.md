@@ -610,3 +610,27 @@ does not send, increment attempts, acknowledge or start work. It is an internal
 primitive, not a public app configuration endpoint. Current execution consent,
 resource/selection claim fencing, delivery retries and runtime acknowledgment
 remain pending. The legacy board execution outbox and worker are unchanged.
+
+### Internal app delivery claims
+
+`claim_app_event` is an internal primitive, not a public endpoint or scheduled
+worker. It locks the app event with `SKIP LOCKED`, rechecks the current connection,
+policy, ready-stage mapping, consent, ownership and selected resource authority
+against the accepted snapshot, then pins/signs the approved destination. A changed
+authority or destination leaves the event `blocked` without a delivery attempt.
+
+Claims carry a random worker token and 300-second expiry. A live claim excludes
+other workers; expiry allows replay of the same event identity and bytes. There
+are at most four attempts. `finish_app_event` requires the current unexpired token;
+a late worker cannot overwrite a recovered claim. Failure returns `pending` until
+exhaustion, then `failed`; success records `delivered` and `started: false`.
+Append-only claim/expiry/result entries remain in `delivery_history`; tokens and
+secrets are excluded. Downgrade cannot discard records with attempts.
+
+Actual PostgreSQL tests prove exclusive claim under four concurrent workers and
+request acceptance concurrency. SQLite tests exercise expiry recovery, stale
+completion denial, stable retry bytes, exhaustion, and current connection/stage/
+destination revocation. No HTTP executor, scheduler, public retry/history UI,
+runtime acknowledgment/start/stop or HITL flow is wired yet. The worker must
+revalidate before sending, enforce the existing public URL/DNS policy, and obtain
+a separate native runtime receipt before claiming running execution.
