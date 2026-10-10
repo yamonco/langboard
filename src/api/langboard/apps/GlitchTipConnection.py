@@ -447,8 +447,7 @@ def enable_read_access(service, actor, project_uid, connection_uid, expected_rev
         if selected is None:
             raise GlitchTipUnavailable()
         binding.state = "enabled"
-        binding.granted_capabilities = ["resources.read", "signals.read"]
-        binding.stage_transitions_enabled = False
+        binding.granted_capabilities = list(dict.fromkeys([*binding.granted_capabilities, "resources.read", "signals.read"]))
         db.update(binding)
         return {
             "uid": binding.get_uid(),

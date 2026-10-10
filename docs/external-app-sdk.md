@@ -268,3 +268,12 @@ Dirty drafts block pagination until Cancel; visiting first, next and first pages
 makes exactly three discovery requests without background polling. Real
 organization consent, administrator sessions and deployed acceptance remain
 separate checks.
+
+GlitchTip and Dokploy explicit read consent adds only its required read
+capabilities to the existing board grant set. It preserves independently approved
+panel and workflow permissions and the existing transition toggle; it does not
+grant a new workflow permission or enable transitions. Repeated read consent is
+idempotent. Registry trust changes, policy restrictions and explicit revocation
+remain separate authorization boundaries. Native SQLite regressions cover both
+providers and Dokploy application/compose resources; PostgreSQL acceptance still
+requires a disposable configured database.

@@ -21,6 +21,28 @@ from langboard_shared.publishers import CardPublisher
 from test_glitchtip_connection import connect, setup  # noqa: F401
 
 
+def test_read_consent_preserves_independent_existing_grants(selected):
+    setup, connection, *_ = selected
+    service, board, *_ = setup
+    with DbSession.use(readonly=False) as db:
+        binding = db.exec(SqlBuilder.select.table(BoardAppBinding)).first()
+        binding.granted_capabilities = ["panels.render", "workflow.transition"]
+        binding.stage_transitions_enabled = True
+        db.update(binding)
+        revision = binding.edit_revision()
+    result = gt.enable_read_access(
+        service, board[1], board[2].get_uid(), connection["connection_uid"], connection["revision"], revision
+    )
+    expected = ["panels.render", "workflow.transition", "resources.read", "signals.read"]
+    assert result["granted_capabilities"] == expected
+    repeated = gt.enable_read_access(
+        service, board[1], board[2].get_uid(), connection["connection_uid"], connection["revision"], result["revision"]
+    )
+    assert repeated["granted_capabilities"] == expected
+    with DbSession.use(readonly=False) as db:
+        current = db.exec(SqlBuilder.select.table(BoardAppBinding)).first()
+        assert current.granted_capabilities == expected and current.stage_transitions_enabled
+
 @pytest.fixture
 def selected(setup, monkeypatch):
     service, board, _, _, state = setup
