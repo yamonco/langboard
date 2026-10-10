@@ -1,5 +1,12 @@
 import { expect, test } from "@playwright/test";
 
+test("disabled retrieval settings reject native submit events", async ({ page }) => {
+    await page.goto("/src/pages/SettingsPage/components/internalBots/retrieval-settings.fixture.html?readonly");
+    await expect(page.locator("form button[type=submit]")).toBeDisabled();
+    await page.locator("form").evaluate((form) => form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+    await expect(page.locator("output")).toHaveText("{}");
+});
+
 for (const width of [1440, 390]) {
     test(`retrieval modes preserve supported settings at ${width}px`, async ({ page }) => {
         await page.setViewportSize({ width, height: 1000 });

@@ -83,3 +83,13 @@ the source; the attachment remains available. An unauthenticated request is 401.
 The test substitutes card visibility and captures the Celery publisher. It does
 not establish board ACL correctness, a live broker delivery, or deployed worker
 readiness. Its PostgreSQL variant requires an available test database.
+
+### Disabled retrieval editor
+
+The retrieval form rejects submit events while disabled, before collecting its
+fields or calling `onSave`. This also covers programmatic submit events, which
+can bypass a disabled fieldset's buttons. The parent internal-bot editor and
+server still apply their own current permission checks. The UI regression uses
+a character splitter because disabled fields do not participate in FormData;
+relying on separator validation to stop a disabled submission would leave that
+mode unguarded. This guard does not establish deployed authorization behavior.

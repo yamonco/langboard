@@ -78,6 +78,7 @@ export default function DocumentRetrievalSettings({
             }}
             onSubmit={(event) => {
                 event.preventDefault();
+                if (disabled) return;
                 const form = new FormData(event.currentTarget);
                 const size = Number(form.get("splitter.chunk_size"));
                 const overlap = Number(form.get("splitter.chunk_overlap"));
