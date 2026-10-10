@@ -60,12 +60,12 @@ def test_document_generation_fences_old_results_and_preserves_previous_text_on_f
     )
     assert (
         service.card_attachment.request_document_processing(
-            other_project.get_uid(), card.get_uid(), attachment.get_uid()
+            other_project.get_uid(), card.get_uid(), attachment.get_uid(), user=owner
         )
         is None
     )
     binding.assert_not_called()
-    assert service.card_attachment.request_document_processing(other_project, card, attachment) is None
+    assert service.card_attachment.request_document_processing(other_project, card, attachment, user=owner) is None
     binding.assert_not_called()
     config = {"binding_uid": "provider", "model_name": "model"}
     assert docling.queue_document(CardMetadata, card, attachment.get_uid(), attachment.filename, vision_config=config)

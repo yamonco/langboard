@@ -23,7 +23,7 @@ from test_card_app_ownership import prepare
 
 
 @pytest.mark.parametrize("board", ["sqlite://"], indirect=True)
-@pytest.mark.parametrize("operation", ["card", "stage", "checklist", "checkitem", "comment", "upload", "rename", "delete_file"])
+@pytest.mark.parametrize("operation", ["card", "stage", "checklist", "checkitem", "comment", "upload", "rename", "delete_file", "file_order", "processing", "embedding"])
 def test_native_services_deny_bot_before_mutation(board, operation):
     card = prepare(board)
     set_card_app_ownership(board[1], board[2].id, card.id, "example-app", None)
@@ -45,10 +45,21 @@ def test_native_services_deny_bot_before_mutation(board, operation):
         "upload": lambda: CardAttachmentService(None, None, None).create(actor, board[2], card, None),
         "rename": lambda: CardAttachmentService(None, None, None).change_name(actor, board[2], card, None, "Changed"),
         "delete_file": lambda: CardAttachmentService(None, None, None).delete(actor, board[2], card, None),
+        "file_order": lambda: CardAttachmentService(None, None, None).change_order(board[2], card, None, 0, user=actor),
+        "processing": lambda: CardAttachmentService(None, None, None).request_document_processing(board[2], card, None, user=actor),
+        "embedding": lambda: CardAttachmentService(None, None, None).request_document_embedding(board[2], card, None, user=actor),
     }
     with pytest.raises(AppGovernanceDenied):
         operations[operation]()
     assert card.title == "Independent app card" and card.project_column_id == board[5][0].id
+
+
+@pytest.mark.parametrize("operation", ["change_order", "request_document_processing", "request_document_embedding"])
+def test_attachment_writer_requires_actor_before_repository_access(operation):
+    service = CardAttachmentService(None, None, None)
+    args = ("project", "card", "attachment", 0) if operation == "change_order" else ("project", "card", "attachment")
+    with pytest.raises(TypeError, match="user"):
+        getattr(service, operation)(*args)
 
 
 @pytest.mark.parametrize("board", ["sqlite://"], indirect=True)

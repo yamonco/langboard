@@ -4,6 +4,7 @@ from importlib import import_module
 from types import SimpleNamespace
 from unittest.mock import Mock
 import pytest
+from ...models import User
 from .CardAttachmentService import CardAttachmentService
 from .DoclingMetadataService import DoclingMetadataService
 
@@ -81,7 +82,8 @@ def test_explicit_embedding_preserves_transcription_and_uses_current_settings(mo
         yield SimpleNamespace(after_commit=lambda callback: callback())
 
     monkeypatch.setattr(module.DbSession, "atomic", transaction)
-    assert service.request_document_embedding(project, card, attachment) == "pending"
+    user = User(firstname="Test", lastname="Reader", email="reader@example.invalid", password="test-only")
+    assert service.request_document_embedding(project, card, attachment, user=user) == "pending"
     publication = metadata.publish_document_embedding.call_args_list[0]
     assert publication.args[-1]["pointer"] == document["embedding"]["pointer"]
     assert publication.args[-1]["config"] == document["embedding_config"]
@@ -100,7 +102,7 @@ def test_explicit_embedding_preserves_transcription_and_uses_current_settings(mo
     assert document["content"]["markdown"] == "preserved"
     attachment.deleted_at = "deleted"
     send.reset_mock()
-    assert service.request_document_embedding(project, card, attachment) is None
+    assert service.request_document_embedding(project, card, attachment, user=user) is None
     send.assert_not_called()
 
 
@@ -132,8 +134,6 @@ def test_attachment_delete_dispatches_recorded_vector_cleanup_only_after_commit(
     monkeypatch.setattr(service, "_mark_card_changed_for_unread", Mock())
     monkeypatch.setattr(module.CardAttachmentActivityTask, "card_attachment_deleted", Mock())
     monkeypatch.setattr(module.CardAttachmentBotTask, "card_attachment_deleted", Mock())
-    from ...models import User
-
     user = User(firstname="Test", lastname="Reader", email="reader@example.invalid", password="test-only")
     assert service.delete(user, project, card, attachment)
     send.assert_not_called()

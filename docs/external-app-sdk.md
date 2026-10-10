@@ -449,9 +449,10 @@ mutation grant is implemented yet. Receipt writes now recheck ownership in their
 execution transaction after the execution lock and current visibility check,
 before persistence, checklist reconciliation or a Review move. Unauthorized bot
 writes return 403; existing receipt reads retain their visibility checks.
-Attachment upload, rename and delete also use the native service fence. Attachment
-ordering and processing/embedding requests currently lack an actor parameter and
-still require explicit authority plumbing. HITL and remaining direct repository
+Attachment upload, rename, delete, ordering and explicit processing/embedding
+requests also use the native service fence. Ordering and processing methods require
+an explicit authenticated actor; REST/MCP callers pass their current user, without
+inferring automation authority from the attachment author or card owner. HITL and remaining direct repository
 writes also require separate fence coverage before
 ownership configuration is exposed. Service tests prove the exercised denial
 paths; they do not prove deployed REST/MCP or PostgreSQL concurrency acceptance.

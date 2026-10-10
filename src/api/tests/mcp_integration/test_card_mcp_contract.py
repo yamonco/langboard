@@ -216,6 +216,9 @@ def test_public_metadata_mutations_use_native_owner_and_bounded_response(monkeyp
 
 
 def test_attachment_mutations_use_native_owner_and_bounded_response(monkeypatch: pytest.MonkeyPatch) -> None:
+    from langboard_shared.domain.models import User
+
+    user = User.model_construct(id=1)
     calls: list[tuple[str, Any]] = []
     project = SimpleNamespace(id=1)
     card = SimpleNamespace(id=2)
@@ -225,7 +228,7 @@ def test_attachment_mutations_use_native_owner_and_bounded_response(monkeypatch:
     native = SimpleNamespace(
         get_by_id_like=lambda uid: attachment,
         change_name=lambda actor, p, c, item, name: (calls.append(("name", name)) or True),
-        change_order=lambda p, c, item, order: (calls.append(("order", order)) or True),
+        change_order=lambda p, c, item, order, *, user: (calls.append(("order", order, user)) or True),
         delete=lambda actor, p, c, item: (calls.append(("delete", item)) or True),
         get_api_list_by_card=lambda uid, limit: [
             {"uid": str(index), "storage_key": "private/object", "user": {"uid": "u1", "email": "hidden"}}
@@ -235,10 +238,10 @@ def test_attachment_mutations_use_native_owner_and_bounded_response(monkeypatch:
     service = SimpleNamespace(card_attachment=native)
 
     with pytest.raises(ValueError, match="non-negative"):
-        CardMcp.update_card_attachment("p", "c", "a", None, service, " renamed ", -1)
+        CardMcp.update_card_attachment("p", "c", "a", user, service, " renamed ", -1)
     assert calls == []
-    response = CardMcp.update_card_attachment("p", "c", "a", None, service, " renamed ", 2)
-    assert calls == [("name", "renamed"), ("order", 2)]
+    response = CardMcp.update_card_attachment("p", "c", "a", user, service, " renamed ", 2)
+    assert calls == [("name", "renamed"), ("order", 2, user)]
     assert response["attachments"].total_count == 26
     assert len(response["attachments"].items) == 25
     assert response["attachments"].items[0]["user"] == {"uid": "u1"}
