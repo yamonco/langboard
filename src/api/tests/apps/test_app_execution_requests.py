@@ -11,7 +11,7 @@ from langboard.routes.settings import AppExecutionAuthorityApi  # noqa: F401
 from langboard_shared.core.db import DbSession, SqlBuilder
 from langboard_shared.core.db.DbEngine import DbEngine
 from langboard_shared.core.routing import AppRouter
-from langboard_shared.domain.models import AppExecutionRequest
+from langboard_shared.domain.models import AppExecutionOutbox, AppExecutionRequest
 from langboard_shared.domain.services.AppExecutionRequests import AppExecutionRequestConflict, request_app_execution
 from langboard_shared.domain.services.factory.WorkflowStageService_app_test import board  # noqa: F401
 from test_app_execution_grant import grant_scope
@@ -25,6 +25,13 @@ def prepare(board):
         with DbEngine.get_main_engine().begin() as db:
             module.op = Operations(MigrationContext.configure(db))
             module.upgrade()
+            outbox = importlib.import_module("langboard.migrations.versions.20261011032500-d60a571894ec")
+            original_outbox = outbox.op
+            try:
+                outbox.op = module.op
+                outbox.upgrade()
+            finally:
+                outbox.op = original_outbox
     finally:
         module.op = original
     return state
@@ -55,6 +62,13 @@ def test_native_duplicate_and_revocation_keep_receipt(board):
         rows = db.exec(SqlBuilder.select.table(AppExecutionRequest)).all()
         assert len(rows) == 1 and rows[0].authority["generation"] == 3
         assert rows[0].authority["resource_uids"]
+        events = db.exec(SqlBuilder.select.table(AppExecutionOutbox)).all()
+        assert len(events) == 1 and events[0].request_id == rows[0].id
+        assert events[0].state == "pending" and events[0].attempt_count == 0
+        assert events[0].payload["request_uid"] == rows[0].get_uid()
+        assert events[0].payload["event_uid"] == events[0].get_uid()
+        assert events[0].payload["started"] is False
+        assert "authority" not in events[0].payload
         db.delete(card, purge=True)
     module = importlib.import_module("langboard.migrations.versions.20261011031000-c59f460783db")
     original = module.op
@@ -105,3 +119,42 @@ def test_changed_selection_requires_new_generation_even_when_still_authorized(bo
         rows = db.exec(SqlBuilder.select.table(AppExecutionRequest)).all()
         assert len(rows) == 1 and rows[0].get_uid() == first["request_uid"]
         assert rows[0].authority["resource_uids"] == [resources[0].get_uid()]
+
+
+@pytest.mark.parametrize("board", ["sqlite://"], indirect=True)
+@pytest.mark.parametrize("failure", ["insert", "payload"])
+def test_outbox_failure_rolls_back_request_and_event(board, monkeypatch, failure):
+    _, _, _, _, card, token = prepare(board)
+    operation = "insert" if failure == "insert" else "update"
+    original = getattr(DbSession, operation)
+
+    def broken(db, row):
+        if isinstance(row, AppExecutionOutbox):
+            raise RuntimeError("event unavailable")
+        return original(db, row)
+
+    monkeypatch.setattr(DbSession, operation, broken)
+    with pytest.raises(RuntimeError, match="event unavailable"):
+        request_app_execution(token, board[2].id, card.id, 3)
+    with DbSession.atomic() as db:
+        assert not db.exec(SqlBuilder.select.table(AppExecutionRequest)).all()
+        assert not db.exec(SqlBuilder.select.table(AppExecutionOutbox)).all()
+
+
+@pytest.mark.parametrize("board", ["sqlite://"], indirect=True)
+def test_outbox_history_survives_request_deletion_and_blocks_downgrade(board):
+    _, _, _, _, card, token = prepare(board)
+    request_app_execution(token, board[2].id, card.id, 3)
+    with DbSession.atomic() as db:
+        row = db.exec(SqlBuilder.select.table(AppExecutionRequest)).first()
+        db.delete(row)
+        assert len(db.exec(SqlBuilder.select.table(AppExecutionOutbox)).all()) == 1
+    module = importlib.import_module("langboard.migrations.versions.20261011032500-d60a571894ec")
+    original = module.op
+    try:
+        with DbEngine.get_main_engine().begin() as db:
+            module.op = Operations(MigrationContext.configure(db))
+            with pytest.raises(RuntimeError, match="event history"):
+                module.downgrade()
+    finally:
+        module.op = original
