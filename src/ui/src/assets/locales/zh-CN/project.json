@@ -375,7 +375,13 @@
     "Disable App panel": "禁用应用面板",
     "Allow App signal reads": "允许读取应用信号",
     "App signal read consent help": "允许此面板读取此看板中所选资源的信号。此权限独立于打开面板的权限，不允许修改。",
-    "App panel consent help": "允许 {{name}} 在此看板打开隔离的面板。外部应用会收到看板标识和语言，并可在本次会话中保留少量草稿。此权限不允许工作流转换或卡片更改。"
+    "App panel consent help": "允许 {{name}} 在此看板打开隔离的面板。外部应用会收到看板标识和语言，并可在本次会话中保留少量草稿。此权限不允许工作流转换或卡片更改。",
+    "Manage service resources": "管理服务资源",
+    "Service resource help": "此服务连接只能使用明确选择的资源。请输入外部服务标识符。选择资源不代表已验证外部账户。",
+    "Service resource type": "资源类型",
+    "Service resource ID": "外部资源 ID",
+    "Remove service resource": "取消选择",
+    "Select service resource": "选择资源"
   },
   "App panel": "应用面板",
   "Close App panel": "关闭应用面板",

@@ -10,6 +10,7 @@ from langboard_shared.domain.services.AppConnectionManagement import (
     create_inbound_connection,
     disconnect_inbound_connection,
     list_inbound_connections,
+    list_inbound_resources,
     select_inbound_resource,
 )
 from langboard_shared.domain.services.AppGovernance import AppGovernanceDenied
@@ -118,6 +119,34 @@ def select_resource(
             form.external_resource_id,
             form.selected,
             form.expected_access_revision,
+        )
+    finally:
+        service.close()
+
+
+@AppRouter.api.get(
+    "/board/{project_uid}/settings/apps/{app_key}/inbound-connections/{connection_uid}/resources", tags=["Board.Apps"]
+)
+@AuthFilter.add("user")
+def list_resources(
+    project_uid: str,
+    app_key: str,
+    connection_uid: str,
+    user: User = Auth.scope("user"),
+    after: str | None = Query(default=None, pattern=r"^[A-Za-z0-9]{11}$"),
+    limit: int = Query(default=25, ge=1, le=50),
+) -> JsonResponse:
+    service = DomainService()
+    try:
+        return _run(
+            list_inbound_resources,
+            service.workflow_stage,
+            user,
+            project_uid,
+            app_key,
+            SnowflakeID.from_short_code(connection_uid),
+            after_id=SnowflakeID.from_short_code(after) if after else None,
+            limit=limit,
         )
     finally:
         service.close()

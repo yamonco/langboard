@@ -7,6 +7,8 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import BoardSettingsInboundResources from "./BoardSettingsInboundResources";
+
 interface Connection {
     connection_uid: string;
     ownership: string;
@@ -16,7 +18,9 @@ interface Connection {
 
 export default function BoardSettingsInboundConnections({ app, onBusy }: { app: CatalogApp; onBusy: (busy: boolean) => void }) {
     const [t] = useTranslation();
-    const { currentUser } = useBoardSettings();
+    const { currentUser, canEditBasicInfo } = useBoardSettings();
+    const [resourceConnection, setResourceConnection] = useState<string | null>(null);
+    const [resourceBusy, setResourceBusy] = useState(false);
     const [scope, setScope] = useState("");
     const [cursor, setCursor] = useState<string>();
     const [organizationCursor, setOrganizationCursor] = useState<string>();
@@ -45,9 +49,9 @@ export default function BoardSettingsInboundConnections({ app, onBusy }: { app: 
     });
     const busy = pending || list.isFetching;
     useEffect(() => {
-        onBusy(pending);
+        onBusy(pending || resourceBusy);
         return () => onBusy(false);
-    }, [pending, onBusy]);
+    }, [pending, resourceBusy, onBusy]);
     const refresh = async () => {
         const result = await list.refetch();
         if (!result.error) {
@@ -80,6 +84,15 @@ export default function BoardSettingsInboundConnections({ app, onBusy }: { app: 
             setPending(false);
         }
     };
+    if (resourceConnection)
+        return (
+            <>
+                <Button size="sm" variant="outline" disabled={resourceBusy} onClick={() => setResourceConnection(null)}>
+                    {t("common.Close")}
+                </Button>
+                <BoardSettingsInboundResources key={resourceConnection} app={app} connectionUID={resourceConnection} onBusy={setResourceBusy} />
+            </>
+        );
     return (
         <section className="space-y-4 rounded-lg border p-4" aria-busy={busy}>
             <h3 className="text-base font-semibold">
@@ -139,6 +152,14 @@ export default function BoardSettingsInboundConnections({ app, onBusy }: { app: 
                         <span className="min-w-0 break-all">
                             {connection.connection_uid} · {t(`project.settings.App resource state ${connection.state}`)}
                         </span>
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={!canEditBasicInfo || !app.binding || busy || failed || list.isError || !!confirm}
+                            onClick={() => setResourceConnection(connection.connection_uid)}
+                        >
+                            {t("project.settings.Manage service resources")}
+                        </Button>
                         <Button
                             variant="outline"
                             size="sm"

@@ -375,7 +375,13 @@
     "Disable App panel": "Disable App panel",
     "Allow App signal reads": "Allow reading App signals",
     "App signal read consent help": "Allow this panel to read signals for selected resources on this board. This permission is separate from opening the panel and does not allow changes.",
-    "App panel consent help": "Allow {{name}} to open an isolated panel on this board. The external app receives the board identifier and language, and may keep a small draft for this session. This permission does not authorize workflow transitions or card changes."
+    "App panel consent help": "Allow {{name}} to open an isolated panel on this board. The external app receives the board identifier and language, and may keep a small draft for this session. This permission does not authorize workflow transitions or card changes.",
+    "Manage service resources": "Manage service resources",
+    "Service resource help": "Only explicitly selected resources can be used by this service connection. Enter the external service identifier; selecting it does not verify an upstream account.",
+    "Service resource type": "Resource type",
+    "Service resource ID": "External resource ID",
+    "Remove service resource": "Remove selection",
+    "Select service resource": "Select resource"
   },
   "App panel": "App panel",
   "Close App panel": "Close App panel",

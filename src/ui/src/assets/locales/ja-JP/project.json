@@ -375,7 +375,13 @@
     "Disable App panel": "アプリパネルを無効化",
     "Allow App signal reads": "アプリのシグナルの読み取りを許可",
     "App signal read consent help": "このパネルがボードで選択されたリソースのシグナルを読み取ることを許可します。パネルを開く権限とは別で、変更は許可しません。",
-    "App panel consent help": "このボードで {{name}} の隔離されたパネルを開くことを許可します。外部アプリにはボード識別子と言語が渡され、このセッション中に小さな下書きを保持できます。この権限はワークフローの遷移やカードの変更を許可しません。"
+    "App panel consent help": "このボードで {{name}} の隔離されたパネルを開くことを許可します。外部アプリにはボード識別子と言語が渡され、このセッション中に小さな下書きを保持できます。この権限はワークフローの遷移やカードの変更を許可しません。",
+    "Manage service resources": "サービスリソース管理",
+    "Service resource help": "この接続は明示的に選択したリソースのみ使用できます。外部サービスの識別子を入力してください。選択は外部アカウントの認証ではありません。",
+    "Service resource type": "リソース種別",
+    "Service resource ID": "外部リソースID",
+    "Remove service resource": "選択解除",
+    "Select service resource": "リソース選択"
   },
   "App panel": "アプリパネル",
   "Close App panel": "アプリパネルを閉じる",

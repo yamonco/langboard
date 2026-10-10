@@ -161,6 +161,12 @@ async def acceptance(base, auth):
             resource_type="project",
             external_resource_id="erp-project",
         )
+        resource_path = f"/board/{auth['board']}/settings/apps/example-erp/inbound-connections/{auth['connection']}/resources"
+        resource_snapshot = await transport.request("GET", resource_path)
+        assert resource_snapshot["binding_uid"] == binding["uid"]
+        assert resource_snapshot["resource_types"] == ["project"]
+        assert resource_snapshot["items"][0]["resource_uid"] == selected["resource_uid"]
+        assert resource_snapshot["items"][0]["access_revision"] == selected["access_revision"]
         auth["resource"] = selected["resource_uid"]
         credential = await transport.request(
             "POST", f"/settings/apps/connections/{auth['connection']}/credentials", json={"expires_in_seconds": 3600}

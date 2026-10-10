@@ -805,10 +805,12 @@ It displays declared capabilities and current grants, saves only explicit checke
 scopes with pinned app/binding revisions, and can revoke all grants by clearing
 the selection and saving. Disabled apps cannot receive new grants but can still
 be cleared. Failed mutations require a manual catalog refresh before another save.
-Resource selection and credential issuance UI remain incomplete.
+The connection manager includes a board-scoped resource editor. It opens only on explicit action and reads at most 50 records per cursor page. Selection and removal require explicit confirmation and current app/binding/access revisions. Failed mutations block further writes until successful explicit refresh. Disabled apps retain selection removal; credential issuance UI remains incomplete.
 
 After preparing a board workflow draft, select each external resource with
 `PUT /board/{project_uid}/settings/apps/{app_key}/inbound-connections/{connection_uid}/resources`.
+Read management receipts with `GET` on the same resource path. Current board management and connection ownership authority are both required. The response includes declared types, revisions, selected and revoked identities, and remains available for cleanup after app disable. It performs no upstream I/O and returns no credentials. Optional `after` and `limit` (1–50) bound the result.
+
 Send the current app revision, binding UID/revision, declared `resource_type` and
 `external_resource_id`. The current board manager must also manage that connection.
 This explicitly grants Langboard scope for the selected identity; it makes no

@@ -11,6 +11,7 @@ const writes: unknown[] = [];
 let inbound = [{ connection_uid: "connection1", ownership: "personal", state: "connected", revision: "a".repeat(64) }];
 let inboundFailed = false;
 let consentFailed = false;
+let resourceRows: { resource_uid: string; resource_type: string; external_resource_id: string; selected: boolean; access_revision: number }[] = [];
 const inboundReads: string[] = [];
 Object.assign(window, { inboundReads });
 const missing = new URLSearchParams(location.search).has("missing");
@@ -18,6 +19,19 @@ let repaired = false;
 let disabled = false;
 Object.assign(window, { workflowWrites: writes });
 api.defaults.adapter = async (config) => {
+    if (config.url?.includes("/inbound-connections/") && config.url.endsWith("/resources")) {
+        if (config.method === "put") {
+            const body = JSON.parse(config.data ?? "{}");
+            writes.push({ ...body, url: config.url });
+            if (new URLSearchParams(location.search).has("resourcefail")) throw new Error("Resource result unknown");
+            resourceRows = [{ resource_uid: "resource1", resource_type: body.resource_type,
+                external_resource_id: body.external_resource_id, selected: body.selected, access_revision: body.selected ? 1 : 2 }];
+        }
+        return { config, status: 200, statusText: "OK", headers: {}, data: {
+            app_revision: "a".repeat(64), binding_uid: "binding", binding_revision: "b".repeat(64),
+            resource_types: ["project"], items: resourceRows, next_cursor: null,
+        } };
+    }
     if (config.url?.endsWith("/inbound-connections")) {
         if (config.method === "post") {
             writes.push({ ...JSON.parse(config.data ?? "{}"), url: config.url });

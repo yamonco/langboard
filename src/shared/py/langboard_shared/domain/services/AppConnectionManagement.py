@@ -111,6 +111,55 @@ def list_inbound_connections(actor, key, *, organization_id=None, after_id=None,
         }
 
 
+def list_inbound_resources(service, actor, project_uid, key, connection_id, *, after_id=None, limit=25):
+    """Read management receipts without granting upstream access or hiding revocation state."""
+    if type(limit) is not int or not 1 <= limit <= 50 or key in APP_MANIFESTS:
+        raise ValueError("Invalid resource page")
+    with DbSession.atomic() as db:
+        board = service._authorized_app_board(actor, project_uid, ProjectRoleAction.Update, revocation=True)
+        if board is None:
+            raise AppGovernanceDenied()
+        definition = db.exec(SqlBuilder.select.table(AppDefinition).where(AppDefinition.key == key)).first()
+        connection = _current(db, AppConnection, connection_id)
+        if definition is None or connection is None or connection.app_key != key:
+            raise AppGovernanceDenied()
+        _manage(db, actor, connection)
+        binding = db.exec(
+            SqlBuilder.select.table(BoardAppBinding).where(
+                BoardAppBinding.project_id == board.id,
+                BoardAppBinding.app_key == key,
+            )
+        ).first()
+        if binding is None:
+            raise AppGovernanceDenied()
+        statement = SqlBuilder.select.table(AppResourceBinding).where(
+            AppResourceBinding.board_binding_id == binding.id,
+            AppResourceBinding.connection_id == connection.id,
+        )
+        if after_id is not None:
+            statement = statement.where(AppResourceBinding.id > after_id)
+        rows = db.exec(statement.order_by(AppResourceBinding.id).limit(limit + 1)).all()
+        page = rows[:limit]
+        return {
+            "app_revision": definition.edit_revision(),
+            "binding_uid": binding.get_uid(),
+            "binding_revision": binding.edit_revision(),
+            "resource_types": definition.declaration.get("resource_types", []),
+            "items": [
+                {
+                    "resource_uid": row.get_uid(),
+                    "resource_type": row.resource_type,
+                    "external_resource_id": row.external_resource_id,
+                    "selected": row.is_selected,
+                    "access_state": row.access_state,
+                    "access_revision": row.access_revision,
+                }
+                for row in page
+            ],
+            "next_cursor": page[-1].get_uid() if len(rows) > limit else None,
+        }
+
+
 def select_inbound_resource(
     service,
     actor,

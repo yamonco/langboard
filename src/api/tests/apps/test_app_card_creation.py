@@ -515,3 +515,32 @@ def test_policy_disable_blocks_new_consent_but_allows_explicit_removal(creation,
     with pytest.raises(AppRegistryDenied):
         set_board_consent(*args, ["cards.create"])
     assert set_board_consent(*args, [])["state"] == "disabled"
+
+
+def test_inbound_resource_management_snapshot_scope_and_cleanup(creation):
+    from langboard_shared.domain.services import DomainService
+    from langboard_shared.domain.services.AppConnectionManagement import list_inbound_resources
+
+    actor, project, other = creation[0][1:4]
+    connection, binding, resource, definition = creation[2:6]
+    service = DomainService().workflow_stage
+    args = (service, actor, project.get_uid(), "example-erp", connection.id)
+    snapshot = list_inbound_resources(*args, limit=1)
+    assert snapshot["app_revision"] == definition.edit_revision()
+    assert snapshot["binding_revision"] == binding.edit_revision()
+    assert snapshot["resource_types"] == ["project"]
+    assert snapshot["items"][0]["resource_uid"] == resource.get_uid()
+    assert "credential_reference" not in str(snapshot)
+    with pytest.raises(AppGovernanceDenied):
+        list_inbound_resources(service, other, project.get_uid(), "example-erp", connection.id)
+    with pytest.raises(ValueError):
+        list_inbound_resources(*args, limit=51)
+    with DbSession.atomic() as db:
+        definition.is_enabled = False
+        db.update(definition)
+        resource.is_selected = False
+        resource.access_state = "revoked"
+        resource.access_revision += 1
+        db.update(resource)
+    assert list_inbound_resources(*args)["items"][0]["selected"] is False
+    assert list_inbound_resources(*args)["items"][0]["access_revision"] == resource.access_revision

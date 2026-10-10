@@ -219,3 +219,45 @@ test("read-only board member can review but cannot consent", async ({ page }) =>
     await expect(app.getByRole("button", { name: "Clear selection", exact: true })).toBeDisabled();
     expect(await page.evaluate(() => (window as unknown as { workflowWrites: unknown[] }).workflowWrites.length)).toBe(0);
 });
+
+
+for (const width of [1440, 390]) {
+    test(`service resource selection and removal at ${width}px`, async ({ page }) => {
+        await page.setViewportSize({ width, height: 850 });
+        await page.goto(`${path}?store&external&consent`);
+        await page.getByRole("button", { name: "Manage service connections" }).click();
+        await page.getByRole("button", { name: "Manage service resources" }).click();
+        await page.getByRole("combobox", { name: "Resource type", exact: true }).selectOption("project");
+        await page.getByRole("textbox", { name: "External resource ID", exact: true }).fill("erp-project");
+        await page.getByRole("button", { name: "Select resource", exact: true }).click();
+        expect(await page.evaluate(() => (window as unknown as { workflowWrites: unknown[] }).workflowWrites.length)).toBe(0);
+        await page.getByRole("button", { name: "Confirm", exact: true }).click();
+        await expect(page.getByRole("button", { name: "Remove selection", exact: true })).toBeVisible();
+        await page.getByRole("button", { name: "Remove selection", exact: true }).click();
+        await page.getByRole("button", { name: "Confirm", exact: true }).click();
+        expect(await page.evaluate(() => (window as unknown as { workflowWrites: unknown[] }).workflowWrites)).toEqual([
+            { url: "/board/fixture/settings/apps/example-erp/inbound-connections/connection1/resources", app_revision: "a".repeat(64),
+                binding_uid: "binding", expected_revision: "b".repeat(64), resource_type: "project", external_resource_id: "erp-project",
+                selected: true, expected_access_revision: null },
+            { url: "/board/fixture/settings/apps/example-erp/inbound-connections/connection1/resources", app_revision: "a".repeat(64),
+                binding_uid: "binding", expected_revision: "b".repeat(64), resource_type: "project", external_resource_id: "erp-project",
+                selected: false, expected_access_revision: 1 },
+        ]);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    });
+}
+
+test("service resource failure requires refresh", async ({ page }) => {
+    await page.goto(`${path}?store&external&consent&resourcefail`);
+    await page.getByRole("button", { name: "Manage service connections" }).click();
+    await page.getByRole("button", { name: "Manage service resources" }).click();
+    await page.getByRole("combobox", { name: "Resource type", exact: true }).selectOption("project");
+    await page.getByRole("textbox", { name: "External resource ID", exact: true }).fill("erp-project");
+    await page.getByRole("button", { name: "Select resource", exact: true }).click();
+    await page.getByRole("button", { name: "Confirm", exact: true }).click();
+    await expect(page.getByRole("alert")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Confirm", exact: true })).toBeDisabled();
+    await page.getByRole("button", { name: "Retry", exact: true }).click();
+    await expect(page.getByRole("alert")).toHaveCount(0);
+    expect(await page.evaluate(() => (window as unknown as { workflowWrites: unknown[] }).workflowWrites.length)).toBe(1);
+});
