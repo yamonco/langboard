@@ -135,6 +135,10 @@ GlitchTip and Dokploy account owners can also remove selected resources or
 disconnect their own connection after policy revocation, including connections
 whose trust change has revoked credentials. These operations do not resolve
 secrets or call the provider; retained cards, history, and shared secrets remain.
+GitHub repository deselection uses the same revocation-only gate: revoked or
+disconnected connections can remove existing selections with current board
+Update authority, connection ownership and the exact resource revision. Adding
+repositories still requires active policy and verified installation authority.
 
 
 The standalone source repositories are `langboard-sdk`, `langboard-app-github`,

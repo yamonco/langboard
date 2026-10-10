@@ -88,7 +88,9 @@ def _receipt_page(db, binding, connection_id, installation_scope, repository_sco
 
 
 def get_resources(service: DomainService, actor: User, project_uid: str) -> dict:
-    board = _board(service, actor, project_uid)
+    # Retained selection state is needed to obtain the revision for removal.
+    # This does not authorize provider discovery or new selections.
+    board = _board(service, actor, project_uid, revocation=True)
     with DbSession.use(readonly=False) as db:
         binding = db.exec(
             SqlBuilder.select.table(BoardAppBinding).where(
@@ -134,7 +136,7 @@ def update_resources(
         ).first()
         if board is None:
             raise GitHubManifestUnavailable()
-        _board(service, actor, project_uid)
+        _board(service, actor, project_uid, revocation=not add)
         connection = db.exec(
             SqlBuilder.select.table(AppConnection)
             .where(
@@ -144,7 +146,8 @@ def update_resources(
             )
             .with_for_update()
         ).first()
-        if connection is None or connection.state not in {"pending", "connected"}:
+        allowed_states = {"pending", "connected"} if add else {"pending", "connected", "revoked", "disconnected"}
+        if connection is None or connection.state not in allowed_states:
             raise GitHubManifestUnavailable()
         if add:
             require_installation_proof(
