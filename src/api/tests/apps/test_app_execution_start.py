@@ -148,3 +148,15 @@ def test_start_evidence_survives_source_removal_and_blocks_downgrade(board, monk
                 module.downgrade()
     finally:
         module.op = original
+
+
+@pytest.mark.parametrize("board", ["sqlite://"], indirect=True)
+def test_new_credential_cannot_take_over_existing_runtime_start(board, monkeypatch):
+    from langboard_shared.domain.services.AppConnectionAuthentication import issue_connection_credential
+
+    connection, card, _, request, lease_id, runtime_token = start_scope(board, monkeypatch)
+    new_token = issue_connection_credential(board[1], connection.id)["token"]
+    with pytest.raises(AppGovernanceDenied):
+        report_app_execution_start(new_token, board[2].id, card.id, request.id, lease_id, runtime_token, "process-1")
+    with DbSession.atomic() as db:
+        assert not db.exec(SqlBuilder.select.table(AppExecutionStart)).all()

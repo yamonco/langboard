@@ -15,6 +15,7 @@ class AppExecutionLease(BaseDbModel, table=True):
     )
     request_id: int = SnowflakeIDField(nullable=False, unique=True)
     acknowledgment_id: int = SnowflakeIDField(nullable=False)
+    credential_id: int | None = SnowflakeIDField(nullable=True)
     runtime_token_hash: str = Field(nullable=False)
     state: str = Field(default="authorized", nullable=False)
     expires_at: SafeDateTime = DateTimeField(default=SafeDateTime.now, nullable=False)

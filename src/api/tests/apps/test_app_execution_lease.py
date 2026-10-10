@@ -30,6 +30,14 @@ def permit_scope(board, monkeypatch):
             module.upgrade()
     finally:
         module.op = original
+    fence = importlib.import_module("langboard.migrations.versions.20261011060000-dc60b3745ae2")
+    original_fence_op = fence.op
+    try:
+        with DbEngine.get_main_engine().begin() as db:
+            fence.op = Operations(MigrationContext.configure(db))
+            fence.upgrade()
+    finally:
+        fence.op = original_fence_op
     claim_app_event(event.id, 1)
     with DbSession.atomic() as db:
         request = db.exec(SqlBuilder.select.table(AppExecutionRequest)).first()
@@ -231,3 +239,67 @@ async def test_lost_permit_response_recovery_cannot_rotate_or_resurrect(board, m
     with DbSession.atomic() as db:
         rows = db.exec(SqlBuilder.select.table(AppExecutionLease)).all()
         assert len(rows) == 1 and rows[0].runtime_token_hash != runtime_token
+
+
+@pytest.mark.parametrize("board", ["sqlite://", "postgresql-test"], indirect=True)
+@pytest.mark.parametrize("gate", ["revoked", "expired", "deleted"])
+def test_authorizing_credential_removal_stops_permit_despite_new_valid_credential(board, monkeypatch, gate):
+    from langboard_shared.core.types import SnowflakeID
+    from langboard_shared.domain.models import AppConnectionCredential
+    from langboard_shared.domain.services.AppConnectionAuthentication import issue_connection_credential
+    from langboard_shared.domain.services.AppExecutionLeases import recover_app_runtime
+
+    connection, card, token, request, ack_id = permit_scope(board, monkeypatch)
+    runtime_token = token_hex(32)
+    permit = authorize_app_runtime(token, board[2].id, card.id, request.id, ack_id, runtime_token)
+    new_token = issue_connection_credential(board[1], connection.id)["token"]
+    with DbSession.atomic() as db:
+        lease = db.exec(SqlBuilder.select.table(AppExecutionLease)).first()
+        credential = db.exec(
+            SqlBuilder.select.table(AppConnectionCredential).where(AppConnectionCredential.id == lease.credential_id)
+        ).first()
+        if gate == "revoked":
+            credential.revoked_at = SafeDateTime.now()
+            db.update(credential)
+        elif gate == "expired":
+            credential.expires_at = SafeDateTime.now() - timedelta(seconds=1)
+            db.update(credential)
+        else:
+            db.delete(credential)
+    with pytest.raises(AppExecutionRequestConflict):
+        authorize_app_runtime(new_token, board[2].id, card.id, request.id, ack_id, runtime_token)
+    recovered = recover_app_runtime(request.id, runtime_token)
+    assert recovered["state"] == "stop_requested" and recovered["permit_execution"] is False
+    stopped = check_app_runtime(SnowflakeID.from_short_code(permit["lease_uid"]), runtime_token, stopped=True)
+    assert stopped["state"] == "stopped"
+
+
+@pytest.mark.parametrize("board", ["sqlite://"], indirect=True)
+def test_legacy_permit_migration_preserves_stop_reason(board, monkeypatch):
+    import sqlalchemy as sa
+    from langboard_shared.core.types import SnowflakeID
+
+    connection, card, token, event = scope(board, monkeypatch)
+    module = importlib.import_module("langboard.migrations.versions.20261011050000-ba4e915238c0")
+    fence = importlib.import_module("langboard.migrations.versions.20261011060000-dc60b3745ae2")
+    old_module_op, old_fence_op = module.op, fence.op
+    try:
+        with DbEngine.get_main_engine().begin() as db:
+            module.op = Operations(MigrationContext.configure(db))
+            module.upgrade()
+            db.execute(
+                sa.text(
+                    "INSERT INTO app_execution_lease (id,created_at,updated_at,request_id,acknowledgment_id,runtime_token_hash,state,expires_at,history) VALUES (:id,:at,:at,1,2,:hash,'authorized',:at,:history)"
+                ),
+                {"id": int(SnowflakeID()), "at": SafeDateTime.now().isoformat(), "hash": "a" * 64, "history": "[]"},
+            )
+            fence.op = module.op
+            fence.upgrade()
+            row = db.execute(sa.text("SELECT state,history,credential_id FROM app_execution_lease")).first()
+            from json import loads
+
+            history = loads(row.history) if isinstance(row.history, str) else row.history
+            assert row.state == "stop_requested" and row.credential_id is None
+            assert history[-1]["reason"] == "credential_lineage_missing"
+    finally:
+        module.op, fence.op = old_module_op, old_fence_op

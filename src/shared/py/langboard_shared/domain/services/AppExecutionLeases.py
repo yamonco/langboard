@@ -6,7 +6,14 @@ from hashlib import sha256
 from hmac import compare_digest
 from ...core.db import DbSession, SqlBuilder
 from ...core.types import SafeDateTime
-from ..models import AppExecutionAcknowledgment, AppExecutionLease, AppExecutionRequest
+from ..models import (
+    AppConnection,
+    AppConnectionCredential,
+    AppExecutionAcknowledgment,
+    AppExecutionLease,
+    AppExecutionRequest,
+)
+from .AppConnectionAuthentication import _identity_hash, authenticate_connection_credential
 from .AppEventDelivery import _expired
 from .AppExecutionAcknowledgments import _request
 from .AppExecutionGrant import evaluate_connection_execution_grant
@@ -52,6 +59,14 @@ def authorize_app_runtime(token, project_id, card_id, request_id, acknowledgment
     digest = _hash(runtime_token)
     with DbSession.atomic() as db:
         request = _request(db, token, project_id, card_id, request_id)
+        principal = authenticate_connection_credential(token)
+        db.exec(
+            SqlBuilder.select.table(AppConnectionCredential)
+            .where(AppConnectionCredential.id == principal.credential_id)
+            .with_for_update()
+        ).first()
+        # Serialize revocation with creation and recheck after acquiring its lock.
+        principal = authenticate_connection_credential(token)
         ack = db.exec(
             SqlBuilder.select.table(AppExecutionAcknowledgment).where(
                 AppExecutionAcknowledgment.id == acknowledgment_id,
@@ -70,6 +85,7 @@ def authorize_app_runtime(token, project_id, card_id, request_id, acknowledgment
         if row:
             if (
                 not compare_digest(row.runtime_token_hash, digest)
+                or row.credential_id != principal.credential_id
                 or row.acknowledgment_id != ack.id
                 or row.state != "authorized"
                 or _expired(row.expires_at, SafeDateTime.now())
@@ -80,6 +96,7 @@ def authorize_app_runtime(token, project_id, card_id, request_id, acknowledgment
         row = AppExecutionLease(
             request_id=request.id,
             acknowledgment_id=ack.id,
+            credential_id=principal.credential_id,
             runtime_token_hash=digest,
             expires_at=now + timedelta(seconds=LEASE_SECONDS),
             history=[{"state": "authorized", "at": now.isoformat()}],
@@ -108,6 +125,23 @@ def check_app_runtime(lease_id, runtime_token, *, stopped=False):
                     request.connection_id, request.project_id, request.card_id, request.generation
                 )
                 allowed = current["authority_version"] == request.authority.get("authority_version")
+                credential = db.exec(
+                    SqlBuilder.select.table(AppConnectionCredential)
+                    .where(AppConnectionCredential.id == initial.credential_id)
+                    .with_for_update()
+                ).first()
+                connection = db.exec(
+                    SqlBuilder.select.table(AppConnection).where(AppConnection.id == request.connection_id)
+                ).first()
+                allowed = bool(
+                    allowed
+                    and credential is not None
+                    and connection is not None
+                    and credential.connection_id == request.connection_id
+                    and credential.revoked_at is None
+                    and not _expired(credential.expires_at, SafeDateTime.now())
+                    and credential.identity_hash == _identity_hash(db, connection)
+                )
             except AppGovernanceDenied:
                 pass
         row = db.exec(

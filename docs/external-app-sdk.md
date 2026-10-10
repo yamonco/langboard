@@ -725,3 +725,12 @@ migration downgrade refuses to discard this evidence. Never include tokens,
 secrets or process output in execution references. Native running projection,
 active-stage transition, process verification and scheduler integration remain
 separate pending work.
+
+Runtime permits also pin the authorizing inbound app credential UID, without
+storing its token. Heartbeat and recovery recheck that exact credential's
+connection, revocation, expiry and identity fingerprint. Issuing a replacement
+credential does not silently transfer an existing runtime; it cannot reauthorize
+that lease or report its start. Revocation is serialized with permit issuance,
+heartbeat and start-report acceptance. The scoped runtime token still records
+a safe stop after credential revocation. Legacy permits without trustworthy
+credential lineage migrate to `stop_requested` with a retained history entry.
