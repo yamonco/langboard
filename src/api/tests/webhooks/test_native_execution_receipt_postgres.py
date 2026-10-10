@@ -75,8 +75,7 @@ def test_native_receipt_is_idempotent_and_never_writes_user_description(monkeypa
         )
     monkeypatch.setattr(DbEngine, "get_main_engine", lambda: engine)
     monkeypatch.setattr(
-        receipt_command.InfraHelper,
-        "get_records_with_foreign_by_params",
+        receipt_command, "require_receipt_card",
         lambda *args: (SimpleNamespace(id=10), SimpleNamespace(id=100)),
     )
     monkeypatch.setattr(receipt_command, "current_execution", lambda card_id, db: (datetime.now(UTC), True, 5))
@@ -133,7 +132,7 @@ def test_native_receipt_is_idempotent_and_never_writes_user_description(monkeypa
 
         monkeypatch.setattr(receipt_command, "execution_readiness_uow", failed_receipt_uow)
         with pytest.raises(RuntimeError, match="before commit"):
-            receipt_api.put_execution_receipt("board", "card", 5, form, key, actor)
+            receipt_api.put_execution_receipt("board", "card", 5, form, key, actor, request=SimpleNamespace(scope={}))
         assert moves == []
         assert receipt_notifications == []
         with engine.connect() as connection:
@@ -141,22 +140,22 @@ def test_native_receipt_is_idempotent_and_never_writes_user_description(monkeypa
             assert connection.execute(text("SELECT project_column_id FROM card WHERE id=100")).scalar() == 1
         monkeypatch.setattr(receipt_command, "execution_readiness_uow", receipt_uow)
         monkeypatch.setattr(receipt_command, "current_execution", lambda card_id, db: (datetime.now(UTC), True, 6))
-        with pytest.raises(receipt_api.ApiException.Conflict_409):
-            receipt_api.put_execution_receipt("board", "card", 5, form, key, actor)
+        with pytest.raises(receipt_command.ApiException.Conflict_409):
+            receipt_api.put_execution_receipt("board", "card", 5, form, key, actor, request=SimpleNamespace(scope={}))
         with engine.connect() as connection:
             assert connection.execute(text("SELECT count(*) FROM execution_receipt")).scalar() == 0
         monkeypatch.setattr(receipt_command, "current_execution", lambda card_id, db: (datetime.now(UTC), True, 5))
-        first = receipt_api.put_execution_receipt("board", "card", 5, form, key, actor)
+        first = receipt_api.put_execution_receipt("board", "card", 5, form, key, actor, request=SimpleNamespace(scope={}))
         # Simulate a missing derived row after a previous receipt was stored.
         with engine.begin() as connection:
             connection.execute(text("DELETE FROM execution_checklist_projection WHERE item_uid='user-item'"))
         retried = form.model_copy(update={"occurred_at": datetime.now(UTC)})
-        second = receipt_api.put_execution_receipt("board", "card", 5, retried, key, actor)
+        second = receipt_api.put_execution_receipt("board", "card", 5, retried, key, actor, request=SimpleNamespace(scope={}))
         assert json.loads(first.body)["created"] is True
         assert json.loads(second.body)["created"] is False
         with ThreadPoolExecutor(max_workers=2) as pool:
             retries = list(
-                pool.map(lambda _: receipt_api.put_execution_receipt("board", "card", 5, retried, key, actor), range(4))
+                pool.map(lambda _: receipt_api.put_execution_receipt("board", "card", 5, retried, key, actor, request=SimpleNamespace(scope={})), range(4))
             )
         assert all(json.loads(result.body)["created"] is False for result in retries)
         assert moves == [(actor, 10, 100, 1, 2, 1)]
@@ -179,14 +178,14 @@ def test_native_receipt_is_idempotent_and_never_writes_user_description(monkeypa
             assert connection.execute(text("SELECT updated_at FROM card WHERE id=102")).scalar() == datetime(
                 2026, 9, 23, tzinfo=UTC
             )
-        history = receipt_api.receipt_history(100)
+        history = receipt_command.receipt_history(100)
         assert len(history) == 1
         assert history[0]["receipt"]["summary"] == "PR submitted"
         assert history[0]["receipt"]["review"]["remaining"] == "Human acceptance"
         assert len(history[0]["checklist_projection"]) == 2
         changed = form.model_copy(update={"summary": "different result"})
-        with pytest.raises(receipt_api.ApiException.Conflict_409):
-            receipt_api.put_execution_receipt("board", "card", 5, changed, key, actor)
+        with pytest.raises(receipt_command.ApiException.Conflict_409):
+            receipt_api.put_execution_receipt("board", "card", 5, changed, key, actor, request=SimpleNamespace(scope={}))
         assert len(moves) == 1
         assert receipt_notifications == [(100, 1)]
         with engine.connect() as connection:

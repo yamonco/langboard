@@ -2,10 +2,9 @@
 
 from datetime import datetime
 from typing import Annotated, Any
-from langboard_shared.core.routing import ApiErrorCode, ApiException
-from langboard_shared.domain.models import Card, Project, ProjectRole, User
+from langboard_shared.core.security.CollaborationChannel import CollaborationChannel
+from langboard_shared.domain.models import ProjectRole, User
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
-from langboard_shared.helpers import InfraHelper
 from langboard_shared.security import RoleFinder
 from pydantic import Field
 from ..card_workspace.application.execution_receipts import (
@@ -14,7 +13,7 @@ from ..card_workspace.application.execution_receipts import (
     ExecutionEvidence,
     ExecutionReviewReport,
     PutExecutionReceiptForm,
-    receipt_history,
+    read_execution_receipts,
     store_execution_receipt,
 )
 from ..mcp_integration import McpRoleFilter, McpTool
@@ -48,7 +47,7 @@ def submit_card_execution_review(
         checklist_evidence=checklist_evidence or [],
         occurred_at=timestamp,
     )
-    return store_execution_receipt(project_uid, card_uid, generation, form, idempotency_key, user)
+    return store_execution_receipt(project_uid, card_uid, generation, form, idempotency_key, user, channel=CollaborationChannel.Mcp)
 
 
 @McpTool.add(
@@ -56,9 +55,5 @@ def submit_card_execution_review(
     description="Read native execution receipts and machine evidence without changing acceptance or human checklists.",
 )
 @McpRoleFilter.add(ProjectRole, [ProjectRoleAction.Read], RoleFinder.project)
-def get_card_execution_receipts(project_uid: str, card_uid: str) -> dict[str, Any]:
-    records = InfraHelper.get_records_with_foreign_by_params((Project, project_uid), (Card, card_uid))
-    if not records:
-        raise ApiException.NotFound_404(ApiErrorCode.NF2003)
-    _, card = records
-    return {"receipts": receipt_history(card.id)}
+def get_card_execution_receipts(project_uid: str, card_uid: str, user: User) -> dict[str, Any]:
+    return read_execution_receipts(project_uid, card_uid, user, CollaborationChannel.Mcp)

@@ -9,6 +9,7 @@ from langboard.mcp_tools import ExecutionMcp
 from langboard.middlewares.McpAuthMiddleware import mcp_auth_context
 from langboard_shared.core.db import DbSession
 from langboard_shared.core.db.DbEngine import DbEngine
+from langboard_shared.core.security.CollaborationChannel import CollaborationChannel
 from langboard_shared.domain.models import Project, ProjectRole, User
 from sqlalchemy import create_engine, update
 
@@ -31,12 +32,9 @@ async def test_actual_roles_gate_native_review_and_revoked_replay(monkeypatch):
     command = Mock(
         return_value={"receipt": {"status": "review_ready"}, "created": True, "generation": 5, "moved_to_review": False}
     )
-    history = Mock(return_value=[])
+    history = Mock(return_value={"receipts": []})
     monkeypatch.setattr(ExecutionMcp, "store_execution_receipt", command)
-    monkeypatch.setattr(ExecutionMcp, "receipt_history", history)
-    monkeypatch.setattr(
-        ExecutionMcp.InfraHelper, "get_records_with_foreign_by_params", lambda *args: (project, SimpleNamespace(id=101))
-    )
+    monkeypatch.setattr(ExecutionMcp, "read_execution_receipts", history)
     monkeypatch.setattr(server_module, "DomainService", lambda: SimpleNamespace(close=lambda: None))
     inject = McpServer._inject_kwargs
 
@@ -72,6 +70,7 @@ async def test_actual_roles_gate_native_review_and_revoked_replay(monkeypatch):
         async with Client(server) as client:
             assert not (await client.call_tool(names[0], args, raise_on_error=False)).is_error
             history.assert_called_once()
+            assert history.call_args.args == (project.get_uid(), "card", actor, CollaborationChannel.Mcp)
             denied = await client.call_tool(names[1], apply_args, raise_on_error=False)
             assert denied.is_error
             command.assert_not_called()
@@ -84,6 +83,7 @@ async def test_actual_roles_gate_native_review_and_revoked_replay(monkeypatch):
             allowed = await client.call_tool(names[1], apply_args, raise_on_error=False)
             assert not allowed.is_error
             assert command.call_count == 1
+            assert command.call_args.kwargs == {"channel": CollaborationChannel.Mcp}
             saved_form = command.call_args.args[3]
             assert saved_form.status == "review_ready"
             assert saved_form.review.remaining == "Human review"

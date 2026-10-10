@@ -13,6 +13,7 @@ from langboard_shared.core.routing import (
     BaseFormModel,
     form_model,
 )
+from langboard_shared.core.security.CollaborationChannel import CollaborationChannel
 from langboard_shared.domain.models import Bot, Card, Project, ProjectColumn, User
 from langboard_shared.domain.services import DomainService
 from langboard_shared.helpers import InfraHelper
@@ -219,6 +220,28 @@ def _move_to_review(db: DbSession, card_id: int, project_id: int, actor: User | 
     return True
 
 
+def require_receipt_card(
+    project_uid: str, card_uid: str, actor: User | Bot,
+    channel: CollaborationChannel = CollaborationChannel.Api,
+) -> tuple[Project, Card]:
+    service = DomainService()
+    try:
+        resolved = service.card.resolve_readable_card(project_uid, card_uid, actor, channel)
+        if resolved is None:
+            raise ApiException.NotFound_404(ApiErrorCode.NF2003)
+        return resolved[0], resolved[1]
+    finally:
+        service.close()
+
+
+def read_execution_receipts(
+    project_uid: str, card_uid: str, actor: User | Bot,
+    channel: CollaborationChannel = CollaborationChannel.Api,
+) -> dict:
+    _, card = require_receipt_card(project_uid, card_uid, actor, channel)
+    return {"receipts": receipt_history(card.id)}
+
+
 def store_execution_receipt(
     project_uid: str,
     card_uid: str,
@@ -226,11 +249,10 @@ def store_execution_receipt(
     form: PutExecutionReceiptForm,
     idempotency_key: str,
     user_or_bot: User | Bot,
+    *,
+    channel: CollaborationChannel = CollaborationChannel.Api,
 ) -> dict:
-    records = InfraHelper.get_records_with_foreign_by_params((Project, project_uid), (Card, card_uid))
-    if not records:
-        raise ApiException.NotFound_404(ApiErrorCode.NF2003)
-    project, card = records
+    project, card = require_receipt_card(project_uid, card_uid, user_or_bot, channel)
     expected_key = f"langboard:{project_uid}:{card_uid}:{generation}:receipt"
     if generation < 1 or idempotency_key != expected_key:
         raise ApiException.BadRequest_400(ApiErrorCode.VA0000)
@@ -248,6 +270,9 @@ def store_execution_receipt(
     with execution_readiness_uow() as execution:
         db = execution.db
         execution.watch([card.id])
+        # The execution lock precedes revalidation; a visibility change after
+        # the initial request check cannot authorize a later receipt write.
+        project, card = require_receipt_card(project_uid, card_uid, user_or_bot, channel)
         current = current_execution(card.id, db)
         if current is None or current[2] != generation:
             raise ApiException.Conflict_409()
