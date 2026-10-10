@@ -111,8 +111,10 @@ or local integration does not prove deployment.
 Global policy sets the instance ceiling (`disabled`, `approved_only`, or
 `personal_allowed`). Organization policy can only restrict it further. Personal
 app distribution is separate from account ownership: an approved organization
-app may use a user-owned account for that user's requested work. Shared
-organization automation requires an organization-owned connection. Personal
+app may use a user-owned account for that user's requested work. Unattended work on organization boards or boards with another assigned member
+requires an organization-owned connection. A board without an organization ID
+is still shared when it has collaborators. Personal unattended work is allowed
+only on the account owner's private board. Deleted boards cannot authorize apps. Personal
 account credentials and private data are not administrator-readable by virtue
 of app approval.
 

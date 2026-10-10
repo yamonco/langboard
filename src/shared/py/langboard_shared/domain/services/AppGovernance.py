@@ -127,7 +127,7 @@ def save_policy(actor, mode, expected_revision, organization_id=None):
 def require_app_allowed(db, project, *, approved=True, personal=False):
     """Policy gate for callers that already enforce their own project authority."""
     current = _current(db, Project, project.id, for_update=False)
-    if current is None:
+    if current is None or current.deleted_at:
         raise AppGovernanceDenied()
     policy = current_policy(db, current.organization_id)
     mode = policy["effective_mode"]
@@ -141,7 +141,7 @@ def require_connection_access(db, actor, project, connection, *, unattended=Fals
     actor = _actor(db, actor)
     project = _current(db, Project, project.id)
     connection = _current(db, AppConnection, connection.id)
-    if project is None or connection is None or connection.state != "connected":
+    if project is None or project.deleted_at or connection is None or connection.state != "connected":
         raise AppGovernanceDenied()
     member = db.exec(
         SqlBuilder.select.table(ProjectAssignedUser).where(
@@ -154,8 +154,14 @@ def require_connection_access(db, actor, project, connection, *, unattended=Fals
     if personal:
         if connection.organization_id is not None or connection.owner_id != actor.id:
             raise AppGovernanceDenied()
-        if unattended and project.organization_id is not None:
-            raise AppGovernanceDenied()
+        if unattended:
+            shared = db.exec(
+                SqlBuilder.select.table(ProjectAssignedUser)
+                .where(ProjectAssignedUser.project_id == project.id, ProjectAssignedUser.user_id != actor.id)
+                .limit(1)
+            ).first()
+            if project.organization_id is not None or shared is not None:
+                raise AppGovernanceDenied()
     elif connection.ownership == "organization":
         if project.organization_id is None or connection.organization_id != project.organization_id:
             raise AppGovernanceDenied()

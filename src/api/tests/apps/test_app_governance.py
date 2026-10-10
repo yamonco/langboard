@@ -299,3 +299,32 @@ def test_policy_change_invalidates_open_panels_only_after_commit(governance, mon
     inherited = get_policy(owner, org.id)
     save_policy(owner, "approved_only", inherited["revision"], org.id)
     assert events == ["disabled", "disabled"]
+
+
+def test_personal_automation_is_denied_on_shared_board_without_organization(governance):
+    _, (_, owner, collaborator), _, project, personal, _ = governance
+    with DbSession.atomic() as db:
+        project.organization_id = None
+        db.update(project)
+    with DbSession.atomic() as db:
+        assert require_connection_access(db, owner, project, personal, unattended=True).id == personal.id
+        db.insert(ProjectAssignedUser(project_id=project.id, user_id=collaborator.id))
+    with DbSession.atomic() as db:
+        assert require_connection_access(db, owner, project, personal).id == personal.id
+        with pytest.raises(AppGovernanceDenied):
+            require_connection_access(db, owner, project, personal, unattended=True)
+
+
+def test_deleted_board_cannot_use_app_policy_or_connections(governance):
+    _, (_, owner, _), _, project, personal, _ = governance
+    with DbSession.atomic() as db:
+        project.deleted_at = SafeDateTime.now()
+        db.update(project)
+    with DbSession.atomic() as db:
+        for operation in (
+            lambda: require_app_allowed(db, project),
+            lambda: require_connection_access(db, owner, project, personal),
+            lambda: require_connection_access(db, owner, project, personal, unattended=True),
+        ):
+            with pytest.raises(AppGovernanceDenied):
+                operation()
