@@ -96,11 +96,13 @@ export default function CardFlipTray({
     projectUID,
     currentCard,
     disabled = false,
+    leadingSeparator = true,
 }: {
     userUID: string;
     projectUID: string;
     currentCard?: IFlippedCard;
     disabled?: boolean;
+    leadingSeparator?: boolean;
 }) {
     const cards = useFlippedCards(userUID, projectUID);
     const suspendedDrafts = useCardFlipDraftStore((state) => state.drafts);
@@ -234,7 +236,7 @@ export default function CardFlipTray({
     const overflow = cards.slice(capacity);
     return (
         <div ref={host} data-card-flip-tray="" className="flex min-w-0 max-w-[35vw] items-center gap-1 md:w-[min(35vw,40rem)]">
-            <span role="separator" aria-orientation="vertical" className="mx-1 h-6 w-px shrink-0 bg-border" />
+            {leadingSeparator && <span role="separator" aria-orientation="vertical" className="mx-1 h-6 w-px shrink-0 bg-border" />}
             <Reorder.Group
                 data-card-flip-axis="x"
                 axis="x"

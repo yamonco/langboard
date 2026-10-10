@@ -14,6 +14,7 @@ import { BOARD_COLUMN_TOUCH_DND_ATTR, BOARD_DND_SYMBOL_SET } from "@/pages/Board
 import { draggedBoardCard } from "@/pages/BoardPage/components/board/BoardGestureData";
 import useProjectDockSync from "@/controllers/api/board/useProjectDockSync";
 import CardFlipTray from "@/pages/BoardPage/components/card/CardFlipTray";
+import { useFlippedCards } from "@/pages/BoardPage/components/card/CardFlipStore";
 import BoardWorkIsland from "@/pages/BoardPage/components/board/BoardWorkIsland";
 
 function acceptsCard(data: Record<string | symbol, unknown>, projectUID: string): boolean {
@@ -41,6 +42,8 @@ export default function BoardFloatingNavigation({
     const pinned = pinnedProjectDockColumns(columns);
     const archive = columns.find((column) => column.is_archive);
     const [dragging, setDragging] = useState(false);
+    const hasNavigationItems = items.some((item) => !item.hidden);
+    const flippedCards = useFlippedCards(currentUser.uid, project.uid);
 
     useEffect(() => {
         if (!canDrop) return;
@@ -62,10 +65,12 @@ export default function BoardFloatingNavigation({
             )}
             trailing={
                 <>
-                    <CardFlipTray userUID={currentUser.uid} projectUID={project.uid} />
+                    <CardFlipTray userUID={currentUser.uid} projectUID={project.uid} leadingSeparator={hasNavigationItems} />
                     {dockEnabled && (
                         <div className="flex min-w-0 items-center">
-                            <span role="separator" aria-orientation="vertical" className="mx-1 h-6 w-px shrink-0 bg-border" />
+                            {(hasNavigationItems || flippedCards.length > 0) && (
+                                <span role="separator" aria-orientation="vertical" className="mx-1 h-6 w-px shrink-0 bg-border" />
+                            )}
                             <BoardWorkIsland project={project} dragging={dragging} />
                             {pinned.length > 0 && (
                                 <div className="hidden min-w-0 items-center md:flex">
