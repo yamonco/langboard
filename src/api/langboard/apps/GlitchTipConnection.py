@@ -411,6 +411,28 @@ def disconnect(service, actor, project_uid, connection_uid, expected_revision):
         return _metadata(connection)
 
 
+def disable_read_access(service, actor, project_uid, connection_uid, expected_revision, expected_binding_revision):
+    """Revoke board read grants without requiring a live credential or provider."""
+    with DbSession.atomic() as db:
+        board = _board(service, actor, project_uid, revocation=True)
+        connection = _connection(db, actor, connection_uid, lock=True, revocation=True)
+        if _revision(connection) != expected_revision:
+            raise GlitchTipConflict()
+        binding = db.exec(SqlBuilder.select.table(BoardAppBinding).where(
+            BoardAppBinding.project_id == board.id, BoardAppBinding.app_key == "glitchtip",
+        ).with_for_update()).first()
+        if binding is None:
+            raise GlitchTipUnavailable()
+        if binding.edit_revision() != expected_binding_revision:
+            raise GlitchTipConflict()
+        binding.granted_capabilities = [grant for grant in binding.granted_capabilities if grant not in {"resources.read", "signals.read"}]
+        if not binding.granted_capabilities:
+            binding.state = "disabled"
+        db.update(binding)
+        return {"uid": binding.get_uid(), "revision": binding.edit_revision(), "state": binding.state,
+                "granted_capabilities": list(binding.granted_capabilities)}
+
+
 def enable_read_access(service, actor, project_uid, connection_uid, expected_revision, expected_binding_revision):
     """Explicit board read consent; no provider writes or workflow authority."""
     with DbSession.atomic() as db:

@@ -38,7 +38,10 @@ api.defaults.adapter = async (config) => {
                 : [{ id: "1", slug: "organization", name: "Customer organization" }],
             next_cursor: config.params?.organization && params.has("pages") && !config.params.cursor ? "next" : null,
         };
-    else if (config.url?.endsWith("/read-access")) {
+    else if (config.url?.endsWith("/disable-read")) {
+        enabled = false;
+        result = readBinding();
+    } else if (config.url?.endsWith("/read-access")) {
         if (params.has("denyconsent")) throw new Error("Consent denied");
         if (params.has("delayedconsent")) await new Promise((resolve) => setTimeout(resolve, 400));
         enabled = true;

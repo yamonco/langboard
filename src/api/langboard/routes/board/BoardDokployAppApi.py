@@ -223,6 +223,19 @@ def enable_dokploy_read_access(
     )
 
 
+@AppRouter.api.post("/board/{project_uid}/settings/apps/dokploy/connections/{connection_uid}/disable-read", tags=["Board.Settings"])
+@AuthFilter.add("user")
+def disable_dokploy_read_access(
+    project_uid: str,
+    connection_uid: str,
+    form: ReadAccessForm,
+    user: User = Auth.scope("user"),
+    service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    return _response(dokploy.disable_read_access, service, user, project_uid, connection_uid,
+                     form.expected_revision, form.expected_binding_revision)
+
+
 @AppRouter.api.post(
     "/board/{project_uid}/settings/apps/dokploy/connections/{connection_uid}/selected/{resource_uid}/refresh",
     tags=["Board.Settings"],

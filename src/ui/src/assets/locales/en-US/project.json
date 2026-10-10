@@ -302,6 +302,8 @@
     "GlitchTip read confirm help": "Confirm board-wide read access for selected GlitchTip projects.",
     "Enable GlitchTip read access": "Enable read access",
     "Confirm GlitchTip read access": "Confirm read access",
+    "Revoke app read access": "Revoke board read access",
+    "App read revocation help": "Revokes read access for this app across the board. Connections, selected resources, prior observations and separately approved panel/workflow permissions are retained.",
     "GlitchTip read enabled": "Board read access enabled.",
     "Refresh GlitchTip issues": "Refresh issue observations",
     "GlitchTip issue observations help": "Observed issue status, up to 25 issues per page. Observation time is when status was read; it is not the time an issue was resolved or reopened.",

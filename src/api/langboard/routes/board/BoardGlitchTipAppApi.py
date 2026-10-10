@@ -221,6 +221,19 @@ def enable_glitchtip_read_access(
     )
 
 
+@AppRouter.api.post("/board/{project_uid}/settings/apps/glitchtip/connections/{connection_uid}/disable-read", tags=["Board.Settings"])
+@AuthFilter.add("user")
+def disable_glitchtip_read_access(
+    project_uid: str,
+    connection_uid: str,
+    form: ReadAccessForm,
+    user: User = Auth.scope("user"),
+    service: DomainService = DomainService.scope(),
+) -> JsonResponse:
+    return _response(glitchtip.disable_read_access, service, user, project_uid, connection_uid,
+                     form.expected_connection_revision, form.expected_binding_revision)
+
+
 @AppRouter.api.post(
     "/board/{project_uid}/settings/apps/glitchtip/connections/{connection_uid}/projects/{resource_uid}/issues/refresh",
     tags=["Board.Settings"],

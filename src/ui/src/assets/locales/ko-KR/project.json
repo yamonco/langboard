@@ -302,6 +302,8 @@
     "GlitchTip read confirm help": "선택된 GlitchTip 프로젝트에 대한 보드 전체 읽기 권한을 확인하세요.",
     "Enable GlitchTip read access": "읽기 권한 활성화",
     "Confirm GlitchTip read access": "읽기 권한 확인",
+    "Revoke app read access": "보드 조회 동의 철회",
+    "App read revocation help": "이 보드의 해당 앱 조회 권한을 철회합니다. 연결, 선택 자원, 기존 관측 기록과 별도로 승인한 패널·워크플로우 권한은 유지됩니다.",
     "GlitchTip read enabled": "보드 읽기 권한이 활성화되었습니다.",
     "Refresh GlitchTip issues": "이슈 관찰 새로고침",
     "GlitchTip issue observations help": "페이지당 최대 25개의 이슈 상태를 관찰합니다. 관찰 시간은 상태를 읽은 시간이며 이슈가 해결되거나 다시 열린 시간이 아닙니다.",

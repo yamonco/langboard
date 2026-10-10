@@ -14,6 +14,31 @@ from langboard_shared.publishers import CardPublisher
 from test_dokploy_connection import connect, setup  # noqa: F401
 
 
+def test_read_revocation_preserves_other_grants_without_provider_io(selected):
+    setup, connection, *_ = selected
+    service, board, *_ = setup
+    calls = setup[3]
+    with DbSession.use(readonly=False) as db:
+        binding = db.exec(SqlBuilder.select.table(BoardAppBinding)).first()
+        binding.granted_capabilities = [*binding.granted_capabilities, "panels.render", "workflow.transition"]
+        binding.stage_transitions_enabled = True
+        db.update(binding)
+        revision = binding.edit_revision()
+    count = len(calls)
+    with pytest.raises(dk.DokployConflict):
+        dk.disable_read_access(service, board[1], board[2].get_uid(), connection["connection_uid"], connection["revision"], "0" * 64)
+    result = dk.disable_read_access(service, board[1], board[2].get_uid(), connection["connection_uid"], connection["revision"], revision)
+    assert result["granted_capabilities"] == ["panels.render", "workflow.transition"] and result["state"] == "enabled"
+    assert len(calls) == count
+    with DbSession.use(readonly=False) as db:
+        current = db.exec(SqlBuilder.select.table(BoardAppBinding)).first()
+        assert current.stage_transitions_enabled
+    # Current read gates reject the removed grant before making any provider request.
+    with pytest.raises(dk.DokployUnavailable):
+        refresh(selected)
+    assert len(calls) == count
+
+
 def test_read_consent_preserves_independent_existing_grants(selected):
     setup, connection, *_ = selected
     service, board, *_ = setup

@@ -393,6 +393,28 @@ def selected_resources(service, actor, project_uid, connection_uid, after=None):
         }
 
 
+def disable_read_access(service, actor, project_uid, connection_uid, expected_revision, expected_binding_revision):
+    """Revoke board read grants without requiring a live credential or provider."""
+    with DbSession.atomic() as db:
+        board = _board(service, actor, project_uid, revocation=True)
+        connection = _connection(db, actor, connection_uid, lock=True, revocation=True)
+        if _revision(connection) != expected_revision:
+            raise DokployConflict()
+        binding = db.exec(SqlBuilder.select.table(BoardAppBinding).where(
+            BoardAppBinding.project_id == board.id, BoardAppBinding.app_key == "dokploy",
+        ).with_for_update()).first()
+        if binding is None:
+            raise DokployUnavailable()
+        if binding.edit_revision() != expected_binding_revision:
+            raise DokployConflict()
+        binding.granted_capabilities = [grant for grant in binding.granted_capabilities if grant not in {"resources.read", "signals.read", "deployments.read"}]
+        if not binding.granted_capabilities:
+            binding.state = "disabled"
+        db.update(binding)
+        return {"uid": binding.get_uid(), "revision": binding.edit_revision(), "state": binding.state,
+                "granted_capabilities": list(binding.granted_capabilities)}
+
+
 def enable_read_access(service, actor, project_uid, connection_uid, expected_revision, expected_binding_revision):
     """Explicit board read consent; no provider writes or workflow authority."""
     with DbSession.atomic() as db:
