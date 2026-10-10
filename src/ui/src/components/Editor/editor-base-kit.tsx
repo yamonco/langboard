@@ -1,3 +1,4 @@
+import { BaseSecretReferenceKit } from "./plugins/secret-reference-kit";
 import { BaseBasicBlocksKit } from "@/components/Editor/plugins/basic-blocks-base-kit";
 import { BaseBasicMarksKit } from "@/components/Editor/plugins/basic-marks-base-kit";
 import { BaseCalloutKit } from "@/components/Editor/plugins/callout-base-kit";
@@ -24,6 +25,7 @@ export const BaseEditorKit = [
     ...BaseMathKit,
     ...BaseDateKit,
     ...BaseLinkKit,
+    ...BaseSecretReferenceKit,
     ...BaseMentionKit,
     ...BaseBasicMarksKit,
     ...BaseListKit,

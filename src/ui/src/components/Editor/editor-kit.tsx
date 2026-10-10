@@ -1,4 +1,5 @@
-"use client";
+import { SecretReferenceKit } from "./plugins/secret-reference-kit";
+("use client");
 
 import { type Value, TrailingBlockPlugin } from "platejs";
 import { type TPlateEditor } from "platejs/react";
@@ -41,6 +42,7 @@ export const EditorKit = [
     ...MathKit,
     ...DateKit,
     ...LinkKit,
+    ...SecretReferenceKit,
     ...MentionKit,
 
     // Marks

@@ -324,3 +324,32 @@ for (const failure of ["revoked", "conflict", "late-response"]) {
         expect(posts).toBe(1);
     });
 }
+
+for (const width of [1440, 390]) {
+    test(`canonical markdown stores masked void nodes and roundtrips without captions at ${width}`, async ({ page }) => {
+        await page.setViewportSize({ width, height: 900 });
+        await page.goto("/src/components/plate-ui/secret-masked-node.fixture.html");
+        for (const name of ["Masked editable", "Masked static"]) {
+            const section = page.getByRole("region", { name, exact: true });
+            await expect(section.getByRole("link", { name: "Secret history", exact: true })).toHaveCount(2);
+            await expect(section.getByRole("link", { name: "Secret history", exact: true }).first()).toHaveAttribute(
+                "href",
+                "/secret-references/fixture/history"
+            );
+            await expect(section).not.toContainText("legacy-caption");
+            await expect(section).not.toContainText("another-caption");
+            await expect(section.getByText("External", { exact: true })).toBeVisible();
+            await expect(section.getByText("Invalid", { exact: true })).toBeVisible();
+        }
+        await expect(page.locator("[data-reference-value]")).not.toContainText("legacy-caption");
+        await expect(page.locator("[data-reference-value]")).toContainText('"type":"secretReference"');
+        await page.getByRole("button", { name: "Save reference draft" }).click();
+        await expect(page.locator("[data-saved-reference]")).toContainText("secret://ref/fixture");
+        await expect(page.locator("[data-saved-reference]")).not.toContainText("legacy-caption");
+        await page.getByRole("button", { name: "Reload reference draft" }).click();
+        await expect(page.getByRole("region", { name: "Masked editable" }).getByRole("link", { name: "Secret history" })).toHaveCount(2);
+        await page.screenshot({ path: `test-results/secret-masked-node-${width}.png` });
+        await page.getByRole("region", { name: "Masked editable" }).getByRole("link", { name: "Secret history" }).first().click();
+        await expect(page).toHaveURL(/\/secret-references\/fixture\/history$/);
+    });
+}

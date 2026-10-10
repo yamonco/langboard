@@ -53,3 +53,20 @@ Revoked references cannot be submitted; successful receipts link to the new
 history and refresh source facts. Navigation discards late responses. Ambiguous
 failures do not claim that no copy was created and do not automatically replay
 the mutation. Wiki secretization and live canary acceptance remain unfinished.
+
+## Shared masked reference node
+
+The shared editable/static Plate kits and Markdown rules now recognize canonical
+`secret://ref/<uid>` Markdown links as inline void `secretReference` elements.
+They store the canonical URI and an empty text child; the link caption is replaced
+by a fixed mask when saved. Serialization emits a masked canonical Markdown link,
+so existing native wiki Markdown storage can roundtrip the reference without a
+new secret-valued field. The compact lock/mask links to the authenticated native
+history route; rendering does not fetch metadata or resolve vault material.
+
+Ordinary links remain ordinary links. Incomplete references, aliases, query strings,
+and fragments are not upgraded into masked nodes. This is a presentation and
+reference persistence contract for canonical Markdown, not a plaintext-to-vault
+conversion. It does not purge old wiki revisions or sanitize arbitrary preexisting
+collaborative JSON. Wiki secretization still requires an explicit native transaction
+and its own audit producer, source authority, and saved-wiki acceptance.
