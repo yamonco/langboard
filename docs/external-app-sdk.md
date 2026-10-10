@@ -31,6 +31,10 @@ This document distinguishes implemented contracts from remaining acceptance.
    require administrator review and emit a payload-free invalidation event.
 6. Apps use stable built-in workflow keys. A board explicitly chooses an existing
    column for each key; app-owned workflow types are not created.
+   Board settings expose the same mapping editor for every approved catalog app
+   that declares workflow requirements, with or without a panel. App names and
+   descriptions come from the catalog; the UI does not maintain a provider
+   allowlist. Saving a mapping keeps automatic transitions disabled.
 
 ## Current support and acceptance
 
