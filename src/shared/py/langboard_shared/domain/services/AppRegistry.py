@@ -133,3 +133,60 @@ def approved_manifests(*, retained_keys=()):
             result[row.key] = AppManifest(row.key, item["name"], tuple(item["resource_types"]), tuple(item["capabilities"]) if row.is_enabled else (), requirements,
                 version=item["version"], description=item["description"], panel=item.get("panel"))
     return result
+
+def set_board_consent(service, actor, project_uid, app_key, app_revision, binding_uid, expected_revision, capabilities):
+    """Explicitly replace an external app's board grants; never infer them from its declaration."""
+    from ...helpers import InfraHelper
+    from ..models import Project
+    from ..models.ProjectRole import ProjectRoleAction
+
+    if (
+        not isinstance(capabilities, list)
+        or any(not isinstance(v, str) for v in capabilities)
+        or len(capabilities) != len(set(capabilities))
+    ):
+        raise ValueError("Consent capabilities must be a unique list")
+    with DbSession.atomic() as db:
+        board = db.exec(
+            SqlBuilder.select.table(Project).where(Project.id == InfraHelper.convert_id(project_uid)).with_for_update()
+        ).first()
+        if (
+            board is None
+            or service._authorized_app_board(
+                actor, board.id, ProjectRoleAction.Update, lock=True, revocation=not capabilities
+            )
+            is None
+        ):
+            raise AppRegistryDenied()
+        definition = db.exec(
+            SqlBuilder.select.table(AppDefinition).where(AppDefinition.key == app_key).with_for_update()
+        ).first()
+        if definition is None or (capabilities and not definition.is_enabled):
+            raise AppRegistryDenied()
+        if definition.edit_revision() != app_revision:
+            raise AppRegistryConflict()
+        if not set(capabilities).issubset(definition.declaration.get("capabilities", [])):
+            raise ValueError("Consent exceeds the approved app declaration")
+        binding = db.exec(
+            SqlBuilder.select.table(BoardAppBinding)
+            .where(BoardAppBinding.project_id == board.id, BoardAppBinding.app_key == app_key)
+            .with_for_update()
+        ).first()
+        if binding is None or binding.get_uid() != binding_uid:
+            raise AppRegistryDenied()
+        if binding.edit_revision() != expected_revision:
+            raise AppRegistryConflict()
+        binding.granted_capabilities = sorted(capabilities)
+        binding.state = "enabled" if capabilities else "disabled"
+        # Consent grants capabilities; only the workflow editor can enable transitions.
+        if "workflow.transition" not in capabilities:
+            binding.stage_transitions_enabled = False
+        db.update(binding)
+        db.after_commit(AppSettingPublisher.apps_changed)
+        return {
+            "uid": binding.get_uid(),
+            "state": binding.state,
+            "revision": binding.edit_revision(),
+            "granted_capabilities": binding.granted_capabilities,
+            "stage_transitions_enabled": binding.stage_transitions_enabled,
+        }

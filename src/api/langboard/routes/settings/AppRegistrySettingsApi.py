@@ -57,3 +57,37 @@ def disable_app_definition(app_key: str, form: DisableAppDefinitionForm, user: U
     if result is None:
         raise ApiException.NotFound_404(ApiErrorCode.NF3003)
     return JsonResponse(content={"app": result})
+
+@form_model
+class BoardAppConsentForm(BaseFormModel):
+    model_config = {"extra": "forbid"}
+    app_revision: str = Field(pattern=r"^[0-9a-f]{64}$")
+    binding_uid: str = Field(pattern=r"^[A-Za-z0-9]{11}$")
+    expected_revision: str = Field(pattern=r"^[0-9a-f]{64}$")
+    capabilities: list[str] = Field(max_length=32)
+
+
+@AppRouter.api.put("/board/{project_uid}/settings/apps/{app_key}/consent", tags=["Board.Apps"])
+@AuthFilter.add("user")
+def save_board_app_consent(
+    project_uid: str, app_key: str, form: BoardAppConsentForm, user: User = Auth.scope("user")
+) -> JsonResponse:
+    from langboard_shared.domain.services import DomainService
+    from langboard_shared.domain.services.AppRegistry import set_board_consent
+
+    service = DomainService()
+    try:
+        result = _run(
+            set_board_consent,
+            service.workflow_stage,
+            user,
+            project_uid,
+            app_key,
+            form.app_revision,
+            form.binding_uid,
+            form.expected_revision,
+            form.capabilities,
+        )
+        return JsonResponse(content=result)
+    finally:
+        service.close()
