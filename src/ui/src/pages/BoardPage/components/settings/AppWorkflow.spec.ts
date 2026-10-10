@@ -1,5 +1,25 @@
 import { test, expect } from "@playwright/test";
 const path = "/src/pages/BoardPage/components/settings/AppWorkflow.fixture.html";
+for (const panel of [false, true]) {
+    test(`independent app workflow is configurable ${panel ? "with" : "without"} a panel`, async ({ page }) => {
+        await page.goto(`${path}?store&external${panel ? "&panel" : ""}`);
+        const app = page.getByRole("article").filter({ has: page.getByRole("heading", { name: "Example ERP", exact: true }) });
+        await app.getByRole("button", { name: "Configure workflow", exact: true }).click();
+        await expect(page.getByRole("heading", { name: "Example ERP", exact: true })).toBeVisible();
+        await page.getByRole("combobox").selectOption("two");
+        await page.getByRole("button", { name: "Save workflow mapping" }).click();
+        await expect.poll(() => page.evaluate(() => (window as unknown as { workflowWrites: unknown[] }).workflowWrites.length)).toBe(1);
+        expect(await page.evaluate(() => (window as unknown as { workflowWrites: unknown[] }).workflowWrites)).toEqual([
+            {
+                url: "/board/fixture/settings/apps/example-erp/workflow",
+                binding_uid: "binding",
+                workflow_mapping: { active: "two" },
+                expected_revision: "a".repeat(64),
+                enable_transitions: false,
+            },
+        ]);
+    });
+}
 for (const width of [1440, 390]) {
     test(`edit and discard at ${width}px`, async ({ page }) => {
         page.on("console", (msg) => {
@@ -11,14 +31,13 @@ for (const width of [1440, 390]) {
         await page.goto(path);
 
         const selects = page.getByRole("combobox");
-        await expect(selects.nth(1)).toHaveValue("one");
-        await expect(selects.nth(1).getByRole("option", { name: "Implementation" })).toHaveCount(1);
-        await selects.nth(1).selectOption("two");
-        await expect(selects.first()).toBeDisabled();
+        await expect(selects.first()).toHaveValue("one");
+        await expect(selects.first().getByRole("option", { name: "Implementation" })).toHaveCount(1);
+        await selects.first().selectOption("two");
         await expect(page.getByRole("button", { name: "Retry" })).toBeDisabled();
         await page.getByRole("button", { name: "Discard changes" }).click();
-        await expect(selects.nth(1)).toHaveValue("one");
-        await selects.nth(1).selectOption("two");
+        await expect(selects.first()).toHaveValue("one");
+        await selects.first().selectOption("two");
         await page.getByRole("button", { name: "Save workflow mapping" }).click();
         await expect.poll(() => page.evaluate(() => (window as unknown as { workflowWrites: unknown[] }).workflowWrites.length)).toBe(1);
         const writes = await page.evaluate(() => (window as unknown as { workflowWrites: unknown[] }).workflowWrites);

@@ -3,7 +3,6 @@ import { useTranslation } from "react-i18next";
 import { api } from "@/core/helpers/Api";
 import { formatNumber } from "@/core/utils/LocaleFormat";
 import useBoardAppCatalog, { type CatalogApp } from "@/controllers/api/board/useBoardAppCatalog";
-import { useAuth } from "@/core/providers/AuthProvider";
 import { deletePanelState } from "@/core/apps/PanelSession";
 import { useBoardSettings } from "@/core/providers/BoardSettingsProvider";
 import Button from "@/components/base/Button";
@@ -13,11 +12,9 @@ import BoardSettingsGlitchTip from "./BoardSettingsGlitchTip";
 import BoardSettingsDokploy from "./BoardSettingsDokploy";
 import BoardSettingsAppWorkflow from "./BoardSettingsAppWorkflow";
 
-const names = { github: "GitHub", glitchtip: "GlitchTip", dokploy: "Dokploy" };
 export default function BoardSettingsApps() {
     const [t, i18n] = useTranslation();
-    const { project, canEditBasicInfo } = useBoardSettings();
-    const { currentUser } = useAuth();
+    const { project, canEditBasicInfo, currentUser } = useBoardSettings();
     const { data, isLoading, isError, refetch } = useBoardAppCatalog(project.uid, currentUser?.uid);
     const [panelTarget, setPanelTarget] = useState<string | null>(null);
     const [readSignals, setReadSignals] = useState(false);
@@ -25,7 +22,7 @@ export default function BoardSettingsApps() {
     const [disableTarget, setDisableTarget] = useState<string | null>(null);
     const [error, setError] = useState(false);
     const [dirty, setDirty] = useState(false);
-    const [selected, setSelected] = useState<"github" | "glitchtip" | null>(null);
+    const [selected, setSelected] = useState<CatalogApp | null>(null);
     const disable = async (app: CatalogApp) => {
         if (pending || !canEditBasicInfo || !app.binding) return;
         setPending(true);
@@ -81,8 +78,8 @@ export default function BoardSettingsApps() {
                     >
                         {t("project.settings.Back to App Store")}
                     </Button>
-                    <h3 className="text-base font-semibold">{names[selected]}</h3>
-                    <BoardSettingsAppWorkflow key={selected} appKey={selected} onDirtyChange={setDirty} />
+                    <h3 className="text-base font-semibold">{selected.name}</h3>
+                    <BoardSettingsAppWorkflow key={selected.key} appKey={selected.key} onDirtyChange={setDirty} />
                 </>
             ) : (
                 <>
@@ -105,13 +102,13 @@ export default function BoardSettingsApps() {
                         {(data ?? []).map((app) => {
                             const { key, name, binding, workflow_requirements, resources } = app;
                             const panelEnabled = binding?.granted_capabilities.includes("panels.render");
+                            const state = app.is_available === false ? "disabled" : (binding?.state ?? "unconfigured");
+                            const workflowLabel = workflow_requirements ? "Configure workflow" : "App workflow contract pending";
                             return (
                                 <article key={key} className="flex min-w-0 flex-col gap-3 rounded-lg border p-4">
                                     <h4 className="font-semibold">{name}</h4>
                                     <span className="self-start rounded-md bg-muted px-2 py-1 text-xs">
-                                        {t(
-                                            `project.settings.App state ${app.is_available === false ? "disabled" : (binding?.state ?? "unconfigured")}`
-                                        )}
+                                        {t(`project.settings.App state ${state}`)}
                                     </span>
                                     {resources && (
                                         <details className="rounded-md border p-2 text-xs">
@@ -141,23 +138,20 @@ export default function BoardSettingsApps() {
                                         </details>
                                     )}
                                     <p className="flex-1 text-sm text-muted-foreground">
-                                        {app.panel ? app.description : t(`project.settings.App ${key} summary`)}
+                                        {app.description ?? t(`project.settings.App ${key} summary`, { defaultValue: "" })}
                                     </p>
                                     {!app.panel && (
+                                        <p className="text-xs text-muted-foreground">{t("project.settings.App connection setup pending")}</p>
+                                    )}
+                                    {(workflow_requirements || !app.panel) && (
                                         <>
-                                            <p className="text-xs text-muted-foreground">{t("project.settings.App connection setup pending")}</p>
                                             <Button
                                                 size="sm"
                                                 variant="outline"
-                                                disabled={
-                                                    pending ||
-                                                    app.is_available === false ||
-                                                    !workflow_requirements ||
-                                                    (key !== "github" && key !== "glitchtip")
-                                                }
-                                                onClick={() => (key === "github" || key === "glitchtip") && setSelected(key)}
+                                                disabled={pending || app.is_available === false || !workflow_requirements}
+                                                onClick={() => setSelected(app)}
                                             >
-                                                {t(`project.settings.${key === "dokploy" ? "App workflow contract pending" : "Configure workflow"}`)}
+                                                {t(`project.settings.${workflowLabel}`)}
                                             </Button>
                                         </>
                                     )}

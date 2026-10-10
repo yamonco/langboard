@@ -26,27 +26,36 @@ api.defaults.adapter = async (config) => {
             statusText: "OK",
             headers: {},
             data: {
-                apps: ["github", "glitchtip", "dokploy"].map((key) => ({
-                    key,
-                    name: { github: "GitHub", glitchtip: "GlitchTip", dokploy: "Dokploy" }[key],
-                    binding:
-                        key === "github"
-                            ? {
-                                  uid: "binding",
-                                  revision: "a".repeat(64),
-                                  state: !disabled && new URLSearchParams(location.search).has("enabled") ? "enabled" : "disabled",
-                                  granted_capabilities: [],
-                                  stage_transitions_enabled: false,
-                              }
-                            : null,
-                    resources: {
-                        selected_count: key === "github" ? (new URLSearchParams(location.search).has("large") ? 2468 : 2) : 0,
-                        access_counts: key === "github" ? { granted: new URLSearchParams(location.search).has("large") ? 1234 : 1, denied: 1 } : {},
-                        health_counts: key === "github" ? { healthy: 1, degraded: 1 } : {},
-                        connection_counts: key === "github" ? { connected: 2 } : {},
-                    },
-                    workflow_requirements: key === "dokploy" ? null : { required: ["active", "review", "closed"], optional: [] },
-                })),
+                apps: ["github", "glitchtip", "dokploy", ...(new URLSearchParams(location.search).has("external") ? ["example-erp"] : [])].map(
+                    (key) => ({
+                        key,
+                        name: { github: "GitHub", glitchtip: "GlitchTip", dokploy: "Dokploy" }[key] ?? "Example ERP",
+                        description: "Independent issue tracker",
+                        capabilities: ["panels.render"],
+                        panel:
+                            key === "example-erp" && new URLSearchParams(location.search).has("panel")
+                                ? { name: "ERP", url: "https://example.invalid" }
+                                : null,
+                        binding:
+                            key === "github"
+                                ? {
+                                      uid: "binding",
+                                      revision: "a".repeat(64),
+                                      state: !disabled && new URLSearchParams(location.search).has("enabled") ? "enabled" : "disabled",
+                                      granted_capabilities: [],
+                                      stage_transitions_enabled: false,
+                                  }
+                                : null,
+                        resources: {
+                            selected_count: key === "github" ? (new URLSearchParams(location.search).has("large") ? 2468 : 2) : 0,
+                            access_counts:
+                                key === "github" ? { granted: new URLSearchParams(location.search).has("large") ? 1234 : 1, denied: 1 } : {},
+                            health_counts: key === "github" ? { healthy: 1, degraded: 1 } : {},
+                            connection_counts: key === "github" ? { connected: 2 } : {},
+                        },
+                        workflow_requirements: key === "dokploy" ? null : { required: ["active", "review", "closed"], optional: [] },
+                    })
+                ),
             },
         };
     return {
@@ -97,7 +106,7 @@ createRoot(document.getElementById("root")!).render(
     <QueryClientProvider client={new QueryClient()}>
         <BoardSettingsProvider project={project} currentUser={user}>
             <main className="mx-auto max-w-2xl p-4">
-                {new URLSearchParams(location.search).has("store") ? <BoardSettingsApps /> : <BoardSettingsAppWorkflow />}
+                {new URLSearchParams(location.search).has("store") ? <BoardSettingsApps /> : <BoardSettingsAppWorkflow appKey="github" />}
             </main>
         </BoardSettingsProvider>
     </QueryClientProvider>
