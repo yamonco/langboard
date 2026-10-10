@@ -12,7 +12,11 @@ from langboard_shared.domain.models import (
     User,
 )
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
-from langboard_shared.domain.services.AppGovernance import AppGovernanceDenied, require_connection_access
+from langboard_shared.domain.services.AppGovernance import (
+    AppGovernanceDenied,
+    connection_discovery_scope,
+    require_connection_access,
+)
 from langboard_shared.domain.services.AppManifest import APP_MANIFESTS
 from langboard_shared.domain.services.AppSignalProjection import (
     card_signal_projections,
@@ -258,10 +262,14 @@ def list_card_resources(service, actor, project_uid, card_uid, after=None, *, ch
             .where(
                 Project.id == resolved[0].id,
                 *signal_resource_conditions(),
+                connection_discovery_scope(actor.id),
             )
         )
         if after is not None:
-            statement = statement.where(AppResourceBinding.id > InfraHelper.convert_id(after))
+            cursor_id = InfraHelper.convert_id(after)
+            if db.exec(statement.where(AppResourceBinding.id == cursor_id).limit(1)).first() is None:
+                raise ValueError("Invalid resource cursor")
+            statement = statement.where(AppResourceBinding.id > cursor_id)
         rows = db.exec(statement.order_by(AppResourceBinding.id).limit(26)).all()
         allowed = authorized_signal_rows(db, rows[:25]) if rows else []
         return {

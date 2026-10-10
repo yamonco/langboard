@@ -408,7 +408,7 @@ def test_card_resource_discovery_is_read_scoped_and_batched(scoped):
     domain = DomainService()
     service = state[0]
     service.card = domain.card
-    # Read-only caller, different from the connection owner. Owner retains Update consumption authority.
+    # Read-only caller discovers an explicitly shared organization connection only.
     with DbSession.use(readonly=False) as db:
         from langboard_shared.core.types import SafeDateTime
         from langboard_shared.domain.models import ProjectAssignedUser, ProjectRole, User
@@ -447,6 +447,18 @@ def test_card_resource_discovery_is_read_scoped_and_batched(scoped):
                 access_state="granted",
             )
         )
+    private = list_card_resources(service, reader, state[1][2].get_uid(), card.get_uid())
+    assert private == {"items": [], "next_cursor": None}
+    with pytest.raises(ValueError):
+        list_card_resources(service, reader, state[1][2].get_uid(), card.get_uid(), state[4].get_uid())
+    with DbSession.use(readonly=False) as db:
+        organization = Organization(name="Resource discovery", slug="resource-discovery", owner_user_id=state[1][1].id)
+        db.insert(organization)
+        state[1][2].organization_id = organization.id
+        state[2].ownership = "organization"
+        state[2].organization_id = organization.id
+        db.update(state[1][2])
+        db.update(state[2])
     statements = []
 
     def record(*args):
@@ -456,7 +468,8 @@ def test_card_resource_discovery_is_read_scoped_and_batched(scoped):
     try:
         first = list_card_resources(service, reader, state[1][2].get_uid(), card.get_uid())
         assert len(first["items"]) == 25 and first["next_cursor"]
-        assert len(statements) <= 12
+        # Organization membership/policy adds two constant reads, never one per resource.
+        assert len(statements) <= 14
         second = list_card_resources(service, reader, state[1][2].get_uid(), card.get_uid(), first["next_cursor"])
         assert len(second["items"]) == 6 and second["next_cursor"] is None
         assert "foreign" not in str(first) + str(second)
