@@ -30,6 +30,7 @@ from sqlalchemy.util import EMPTY_DICT
 from ...Env import Env
 from ..logger import Logger
 from ..types import SafeDateTime, SnowflakeID
+from ..types.SnowflakeID import SnowflakeID as SnowflakeAllocator
 from .DbEngine import DbEngine
 from .Models import BaseDbModel, SoftDeleteModel
 from .queries.Select import SelectOfScalar, SelectRows
@@ -232,6 +233,7 @@ class DbSession:
             )
             if result.scalar_one_or_none() is not None:
                 return
+            SnowflakeAllocator.advance_after_collision(obj.id)
         obj.id = SnowflakeID(0)
         raise RuntimeError("Snowflake ID allocation exhausted; no row inserted")
 

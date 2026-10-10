@@ -43,6 +43,15 @@ class SnowflakeID(int):
 
         return super().__new__(cls, snowflake_value)
 
+    @classmethod
+    def advance_after_collision(cls, value: int) -> None:
+        """Skip a colliding worker's millisecond instead of retrying its used sequence range."""
+        with SnowflakeID._lock:
+            timestamp = (int(value) >> 22) + SnowflakeID.EPOCH
+            if timestamp >= SnowflakeID._last_timestamp:
+                SnowflakeID._last_timestamp = timestamp
+                SnowflakeID._sequence = 0xFFF
+
     @staticmethod
     def from_short_code(short_code: str) -> "SnowflakeID":
         if not short_code or len(short_code) != SnowflakeID.FIXED_SHORT_CODE_LENGTH:
