@@ -54,6 +54,9 @@ Every metadata or runtime read rechecks the current active user in the primary
 database. Personal references belong only to their user; project credentials
 require existing project update authority, including current membership and role;
 workspace credentials use the existing active Organization owner boundary.
+Project scope checks lock current board authority and are independent of app-use
+policy. Disabling apps cannot prevent native Secret maintenance or revocation;
+app consumers must still apply their own policy before using a reference.
 Workspace member/delegation policy is not introduced by this unit. Moves require
 both source and destination authority. Rename, move and revoke use locked rows
 and an expected integer revision. Runtime resolution returns `SecretStr` only to
