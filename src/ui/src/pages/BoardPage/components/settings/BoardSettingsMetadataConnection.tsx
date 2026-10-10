@@ -464,6 +464,9 @@ export default function BoardSettingsMetadataConnection({
         (row) => row.selected && row.access_state === "granted" && (row.type === "application" || row.type === "compose")
     );
     const selectedReadResources = dokploy ? selectedServices : bindings.items.filter((row) => row.selected && row.access_state === "granted");
+    const hasReadGrants = !!readAccess?.granted_capabilities.some((capability) =>
+        (dokploy ? ["resources.read", "signals.read", "deployments.read"] : ["resources.read", "signals.read"]).includes(capability)
+    );
     const readEnabled =
         !!readAccess &&
         (dokploy ? ["enabled", "needs_attention"].includes(readAccess.state) : readAccess.state === "enabled") &&
@@ -1053,21 +1056,21 @@ export default function BoardSettingsMetadataConnection({
                         </Button>
                     )}
                     <p className="text-xs text-muted-foreground">{text("GlitchTip project selection help")}</p>
-                    {selectedReadResources.length > 0 && (
+                    {(selectedReadResources.length > 0 || hasReadGrants) && (
                         <div className="flex min-w-0 flex-col gap-2 rounded-md border p-2">
                             <p className="text-sm">{text("GlitchTip read scope help")}</p>
                             {readEnabled ? (
                                 <>
                                     <p>{text("GlitchTip read enabled")}</p>
-                                    <p className="text-xs text-muted-foreground">{t("project.settings.App read revocation help")}</p>
-                                    <Button size="sm" variant="outline" onClick={() => void disableRead()}>
-                                        {t("project.settings.Revoke app read access")}
-                                    </Button>
                                 </>
                             ) : consenting ? (
                                 <>
                                     <p>{text("GlitchTip read confirm help")}</p>
-                                    <Button size="sm" disabled={!!bindings.next_cursor || !readAccess} onClick={() => void enableRead()}>
+                                    <Button
+                                        size="sm"
+                                        disabled={!!bindings.next_cursor || !readAccess || !selectedReadResources.length}
+                                        onClick={() => void enableRead()}
+                                    >
                                         {text("Confirm GlitchTip read access")}
                                     </Button>
                                     <Button size="sm" variant="ghost" onClick={() => setConsenting(false)}>
@@ -1078,11 +1081,19 @@ export default function BoardSettingsMetadataConnection({
                                 <Button
                                     size="sm"
                                     variant="outline"
-                                    disabled={!!bindings.next_cursor || !readAccess}
+                                    disabled={!!bindings.next_cursor || !readAccess || !selectedReadResources.length}
                                     onClick={() => setConsenting(true)}
                                 >
                                     {text("Enable GlitchTip read access")}
                                 </Button>
+                            )}
+                            {hasReadGrants && (
+                                <>
+                                    <p className="text-xs text-muted-foreground">{t("project.settings.App read revocation help")}</p>
+                                    <Button size="sm" variant="outline" onClick={() => void disableRead()}>
+                                        {t("project.settings.Revoke app read access")}
+                                    </Button>
+                                </>
                             )}
                             {selectedReadResources.map((binding) => (
                                 <div key={binding.resource_uid} className="flex min-w-0 flex-col gap-2">

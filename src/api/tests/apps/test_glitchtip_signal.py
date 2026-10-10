@@ -21,6 +21,36 @@ from langboard_shared.publishers import CardPublisher
 from test_glitchtip_connection import connect, setup  # noqa: F401
 
 
+def test_read_revocation_survives_policy_and_credential_failure(selected):
+    from langboard_shared.domain.models import AppConnection, AppDefinition, AppGovernancePolicy, SecretReference
+
+    setup, connection, *_ = selected
+    service, board, *_ = setup
+    with DbSession.use(readonly=False) as db:
+        binding = db.exec(SqlBuilder.select.table(BoardAppBinding)).first()
+        revision = binding.edit_revision()
+        secret = db.exec(SqlBuilder.select.table(SecretReference)).first()
+        secret.state = "revoked"
+        db.update(secret)
+        db.insert(AppGovernancePolicy(scope_key="global", mode="disabled"))
+        db.insert(AppDefinition(key="glitchtip", approved_by=board[1].id, is_enabled=False,
+                                declaration={"capabilities": ["signals.read"]}))
+        other = BoardAppBinding(project_id=11, app_key="glitchtip", state="enabled",
+                                granted_capabilities=["signals.read", "panels.render"])
+        db.insert(other)
+        other_revision = other.edit_revision()
+    calls = len(setup[3])
+    revoked = gt.disable_read_access(service, board[1], board[2].get_uid(), connection["connection_uid"], connection["revision"], revision)
+    assert revoked["granted_capabilities"] == [] and revoked["state"] == "disabled"
+    assert len(setup[3]) == calls
+    # Repeating with the returned revision is harmless even while policy/secret are unusable.
+    assert gt.disable_read_access(service, board[1], board[2].get_uid(), connection["connection_uid"], connection["revision"], revoked["revision"]) == revoked
+    with DbSession.use(readonly=False) as db:
+        other = db.exec(SqlBuilder.select.table(BoardAppBinding).where(BoardAppBinding.project_id == 11)).first()
+        conn = db.exec(SqlBuilder.select.table(AppConnection)).first()
+        assert other.edit_revision() == other_revision and conn.state == "connected"
+
+
 def test_read_revocation_preserves_other_grants_without_provider_io(selected):
     setup, connection, *_ = selected
     service, board, *_ = setup

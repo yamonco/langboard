@@ -108,6 +108,16 @@ test("read consent can be revoked without disconnecting or provider refresh", as
     });
     expect(calls.some((row) => row.url.endsWith("/disconnect") || row.url.endsWith("/issues/refresh"))).toBe(false);
 });
+test("partial read grants remain revocable without selected resources or provider discovery", async ({ page }) => {
+    await page.goto(path + "?enabled&missingcap&deny");
+    await page.getByRole("combobox", { name: "Existing connection" }).selectOption("conn");
+    await page.getByRole("button", { name: "Load saved selections", exact: true }).click();
+    await page.getByRole("button", { name: "Revoke board read access", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Revoke board read access", exact: true })).toHaveCount(0);
+    const calls = await issueCalls(page);
+    expect(calls.some((row) => row.url.endsWith("/disable-read"))).toBe(true);
+    expect(calls.some((row) => row.url.endsWith("/resources") || row.url.endsWith("/disconnect"))).toBe(false);
+});
 for (const width of [1920, 390])
     test(`explicit consent and safe status observations ${width}`, async ({ page }) => {
         await page.setViewportSize({ width, height: 1080 });
