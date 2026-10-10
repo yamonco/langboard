@@ -13,7 +13,7 @@ const currentUser = AuthUser.Model.fromOne({
     firstname: "QA",
     lastname: "",
     username: "qa",
-    is_admin: true,
+    is_admin: !new URLSearchParams(location.search).has("owner"),
     user_groups: [],
     subemails: [],
     setting_role_actions: new URLSearchParams(location.search).has("readonly") ? ["global_label_read"] : ["*"],

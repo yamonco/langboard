@@ -147,7 +147,6 @@ function SettingsProxyDisplay({ currentUser, isOllamaAvailable }: { currentUser:
             icon: "app-window",
             label: t("settings.Apps"),
             onClick: () => navigate(ROUTES.SETTINGS.APPS),
-            hidden: !currentUser.is_admin,
         },
         [ROUTES.SETTINGS.WORKFLOW_STAGES]: {
             icon: "list-tree",
