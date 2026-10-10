@@ -21,7 +21,30 @@ from langboard_shared.publishers import CardPublisher
 from test_glitchtip_connection import connect, setup  # noqa: F401
 
 
-def test_read_revocation_survives_policy_and_credential_failure(selected):
+@pytest.fixture(autouse=True)
+def revocation_notifications(monkeypatch):
+    from langboard_shared.publishers import AppSettingPublisher
+    events = []
+    monkeypatch.setattr(AppSettingPublisher, "apps_changed", lambda: events.append("apps:changed"))
+    return events
+
+
+def test_read_revocation_rollback_does_not_publish(selected, revocation_notifications):
+    setup, connection, *_ = selected
+    service, board, *_ = setup
+    with DbSession.use(readonly=False) as db:
+        revision = db.exec(SqlBuilder.select.table(BoardAppBinding)).first().edit_revision()
+    with pytest.raises(RuntimeError, match="rollback"):
+        with DbSession.atomic():
+            gt.disable_read_access(service, board[1], board[2].get_uid(), connection["connection_uid"], connection["revision"], revision)
+            assert revocation_notifications == []
+            raise RuntimeError("rollback")
+    assert revocation_notifications == []
+    with DbSession.use(readonly=False) as db:
+        assert db.exec(SqlBuilder.select.table(BoardAppBinding)).first().edit_revision() == revision
+
+
+def test_read_revocation_survives_policy_and_credential_failure(selected, revocation_notifications):
     from langboard_shared.domain.models import AppConnection, AppDefinition, AppGovernancePolicy, SecretReference
 
     setup, connection, *_ = selected
@@ -42,16 +65,18 @@ def test_read_revocation_survives_policy_and_credential_failure(selected):
     calls = len(setup[3])
     revoked = gt.disable_read_access(service, board[1], board[2].get_uid(), connection["connection_uid"], connection["revision"], revision)
     assert revoked["granted_capabilities"] == [] and revoked["state"] == "disabled"
+    assert revocation_notifications == ["apps:changed"]
     assert len(setup[3]) == calls
     # Repeating with the returned revision is harmless even while policy/secret are unusable.
     assert gt.disable_read_access(service, board[1], board[2].get_uid(), connection["connection_uid"], connection["revision"], revoked["revision"]) == revoked
+    assert revocation_notifications == ["apps:changed"]
     with DbSession.use(readonly=False) as db:
         other = db.exec(SqlBuilder.select.table(BoardAppBinding).where(BoardAppBinding.project_id == 11)).first()
         conn = db.exec(SqlBuilder.select.table(AppConnection)).first()
         assert other.edit_revision() == other_revision and conn.state == "connected"
 
 
-def test_read_revocation_preserves_other_grants_without_provider_io(selected):
+def test_read_revocation_preserves_other_grants_without_provider_io(selected, revocation_notifications):
     setup, connection, *_ = selected
     service, board, *_ = setup
     calls = setup[3]
@@ -65,6 +90,7 @@ def test_read_revocation_preserves_other_grants_without_provider_io(selected):
     with pytest.raises(gt.GlitchTipConflict):
         gt.disable_read_access(service, board[1], board[2].get_uid(), connection["connection_uid"], connection["revision"], "0" * 64)
     result = gt.disable_read_access(service, board[1], board[2].get_uid(), connection["connection_uid"], connection["revision"], revision)
+    assert revocation_notifications == ["apps:changed"]
     assert result["granted_capabilities"] == ["panels.render", "workflow.transition"] and result["state"] == "enabled"
     assert len(calls) == count
     with DbSession.use(readonly=False) as db:
