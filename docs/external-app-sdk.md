@@ -312,3 +312,11 @@ or transaction rollback emits nothing. Selected resources, observations, board
 workflow configuration and shared secret references remain preserved; disconnected
 resource access stays revoked. Local SQLite tests exercise those transaction and
 idempotency boundaries; deployed event delivery is still an acceptance gate.
+
+Individual GlitchTip project and Dokploy resource deselection also emits the
+existing payload-free app invalidation event after commit. An exact-revision
+repeat returns the retained deselected resource without incrementing its access
+revision or emitting another event. Stale revisions and rolled-back transactions
+do not notify; sibling selections remain intact. Native SQLite tests exercise
+these boundaries. This reuses the existing live panel disposal handler, while
+deployed multi-client event delivery remains an acceptance requirement.

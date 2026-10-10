@@ -493,9 +493,11 @@ def remove_resource(service, actor, project_uid, connection_uid, resource_uid, e
             raise DokployUnavailable()
         if row.access_revision != expected_revision:
             raise DokployConflict()
-        row.is_selected = False
-        row.access_revision += 1
-        db.update(row)
+        if row.is_selected:
+            row.is_selected = False
+            row.access_revision += 1
+            db.update(row)
+            db.after_commit(AppSettingPublisher.apps_changed)
         return _resource_metadata(row)
 
 
