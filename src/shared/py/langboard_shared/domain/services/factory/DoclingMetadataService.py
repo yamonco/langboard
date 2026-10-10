@@ -9,7 +9,7 @@ from ....core.db import BaseDbModel, DbSession, SqlBuilder
 from ....core.domain import BaseDomainService
 from ....core.routing import SocketTopic
 from ....core.types import SafeDateTime
-from ....domain.models import CardAttachment, CardDocumentArtifact, CardMetadata
+from ....domain.models import CardAttachment, CardDocumentArtifact, CardMetadata, Project
 from ....domain.models.bases import BaseMetadataModel
 from ....Env import Env
 from ....helpers import InfraHelper
@@ -407,10 +407,15 @@ class DoclingMetadataService(BaseDomainService):
     ) -> bool:
         """Publish a staged vector generation only while its live source still matches."""
         with DbSession.atomic() as db:
+            project = db.exec(
+                SqlBuilder.select.table(Project).where(Project.id == card.project_id).with_for_update()
+            ).first()
+            if project is None or project.deleted_at is not None:
+                return False
             current_card = db.exec(
                 SqlBuilder.select.table(type(card)).where(type(card).column("id") == card.id).with_for_update()
             ).first()
-            if not current_card or current_card.is_linked_resource:
+            if not current_card or current_card.is_linked_resource or current_card.project_id != project.id:
                 return False
             attachment = db.exec(
                 SqlBuilder.select.table(CardAttachment)

@@ -63,3 +63,10 @@ original font. It is scoped to the document worker, not every API image.
 Embedded source fonts remain authoritative; installing fallback fonts cannot
 repair already corrupted text mappings or glyphs saved into the source file.
 Validate the page image sent to the model as well as the returned transcription.
+
+### Deleted board fencing
+
+Embedding tasks reject a deleted board before resolving providers. Publication
+locks the current board before the card and attachment and refuses a deleted or
+mismatched board. If deletion occurs during inference, publication fails and the
+task removes its staged vectors; previously committed source history is retained.

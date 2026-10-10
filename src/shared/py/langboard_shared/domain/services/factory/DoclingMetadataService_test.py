@@ -117,6 +117,19 @@ def test_document_generation_fences_old_results_and_preserves_previous_text_on_f
     assert (
         docling.get_document_by_attachment_uid(CardMetadata, card, attachment.get_uid())["embedding"] == first_embedding
     )
+    from ....core.types import SafeDateTime
+
+    with DbSession.use(readonly=False) as db:
+        project.deleted_at = SafeDateTime.now()
+        db.update(project)
+    assert not docling.publish_document_embedding(
+        card, attachment.get_uid(), first, None, {"status": "indexed", "pointer": {"generation": "late-vector"}},
+        expected_embedding=first_embedding,
+    )
+    assert docling.get_document_by_attachment_uid(CardMetadata, card, attachment.get_uid())["embedding"] == first_embedding
+    with DbSession.use(readonly=False) as db:
+        project.deleted_at = None
+        db.update(project)
     assert docling.queue_document(
         CardMetadata, card, attachment.get_uid(), attachment.filename, vision_config=config, force=True
     )
