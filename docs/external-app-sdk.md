@@ -144,6 +144,9 @@ disabled policy. Disabled app definitions appear only when the board already
 has a retained binding; they expose current removal revisions with no declared
 capabilities. This catalog is configuration metadata, not execution approval.
 Normal approved-manifest resolution continues to exclude disabled definitions.
+Catalog `is_available` reflects current policy and registration status. An
+unavailable entry has no declared capabilities; the settings UI marks it
+disabled and prevents new workflow configuration while retaining cleanup.
 GlitchTip and Dokploy account owners can also remove selected resources or
 disconnect their own connection after policy revocation, including connections
 whose trust change has revoked credentials. These operations do not resolve

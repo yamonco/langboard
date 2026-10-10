@@ -7,6 +7,7 @@ export interface CatalogApp {
     description?: string;
     version: string;
     app_revision: string | null;
+    is_available?: boolean;
     panel: { url: string; name: string; icon?: string | null } | null;
     capabilities: string[];
     workflow_requirements: { required: string[]; optional: string[] } | null;

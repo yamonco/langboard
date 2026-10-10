@@ -84,11 +84,20 @@ class WorkflowStageService(BaseDomainService):
                     summary[field][state] = summary[field].get(state, 0) + count
 
             definitions = {row.key: row for row in db.exec(SqlBuilder.select.table(AppDefinition)).all()}
+            from ..AppGovernance import AppGovernanceDenied, require_current_project_policy
+            try:
+                require_current_project_policy(db, board)
+                policy_available = True
+            except AppGovernanceDenied:
+                policy_available = False
             items = []
             for key, manifest in approved_manifests(retained_keys=by_app).items():
                 binding = by_app.get(key)
+                available = policy_available and (key not in definitions or definitions[key].is_enabled)
                 items.append({
                     **manifest.catalog_fields(),
+                    "is_available": available,
+                    "capabilities": list(manifest.capabilities) if available else [],
                     "app_revision": definitions[key].edit_revision() if key in definitions else None,
                     "resources": summaries.get(binding.id if binding else None, {
                         "selected_count": 0, "access_counts": {}, "health_counts": {}, "connection_counts": {},
