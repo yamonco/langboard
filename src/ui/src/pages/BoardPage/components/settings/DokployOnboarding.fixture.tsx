@@ -34,6 +34,7 @@ let webhookRevision = params.has("webhook-enabled") ? 7 : 0;
 let webhookState = params.has("webhook-enabled") ? "enabled" : "unconfigured";
 let notificationID: string | null = params.has("webhook-enabled") ? "notification-1" : null;
 const webhookHealth = () => ({
+    can_configure: !params.has("revoked"),
     config_revision: webhookRevision,
     state: webhookState,
     receiver_path: webhookRevision ? "/apps/dokploy/notifications/config" : null,
@@ -44,7 +45,9 @@ const webhookHealth = () => ({
     connection_state: params.has("revoked") ? "revoked" : "connected",
     connection_revision: "c".repeat(64),
     binding_revision: resources.size || webhookRevision ? "d".repeat(64) : null,
-    resources: [...resources.values()].filter((row) => row.selected).map((row) => ({ resource_uid: row.resource_uid, health: "healthy" })),
+    resources: params.has("revoked")
+        ? []
+        : [...resources.values()].filter((row) => row.selected).map((row) => ({ resource_uid: row.resource_uid, health: "healthy" })),
 });
 Object.assign(window, { dokployCalls: calls });
 api.defaults.adapter = async (config) => {

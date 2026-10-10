@@ -109,7 +109,7 @@ def _expected(conn, binding, config, expected_revision, expected_binding_revisio
         raise connection.DokployConflict()
 
 
-def _health(db, conn, binding, resources, config):
+def _health(db, conn, binding, resources, config, *, revocation=False):
     last = (
         db.exec(
             SqlBuilder.select.table(DokployNotificationReceipt)
@@ -132,6 +132,7 @@ def _health(db, conn, binding, resources, config):
         "last_received_at": last.received_at if last else None,
         "local_evidence": "authenticated_notification_receipt",
         "connection_state": conn.state,
+        "can_configure": not revocation and conn.state == "connected",
         "connection_revision": connection._revision(conn),
         "binding_revision": binding.edit_revision() if binding else None,
         "resources": [{"resource_uid": row.get_uid(), "health": row.health} for row in resources],
@@ -149,7 +150,7 @@ def health(service, actor, project_uid, connection_uid):
         except connection.DokployUnavailable:
             # Retain only removal revisions after app/connection policy revocation.
             conn, binding, _, config = _scope(service, actor, project_uid, connection_uid, revocation=True)
-            return _health(db, conn, binding, [], config)
+            return _health(db, conn, binding, [], config, revocation=True)
         return _health(db, conn, binding, resources, config)
 
 
@@ -215,7 +216,7 @@ def disable(
         config.state = "disabled"
         config.config_revision += 1
         db.update(config)
-        return _health(db, conn, binding, [], config)
+        return health(service, actor, project_uid, connection_uid)
 
 
 def _authenticate(service, config_uid, authorization):

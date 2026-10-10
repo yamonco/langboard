@@ -251,9 +251,30 @@ test("unknown receipt and revoked connection", async ({ page }) => {
     await expect(page.getByText("No authenticated receipt recorded", { exact: false })).toBeVisible();
     await page.goto(path + "?revoked");
     await page.getByRole("combobox", { name: "Existing connection" }).selectOption("conn");
-    await expect(page.getByRole("alert")).toBeVisible();
-    await expect(page.getByLabel("Webhook credential reference")).toHaveCount(0);
+    await expect(page.getByLabel("Webhook credential reference")).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Configure notifications", exact: true })).toBeDisabled();
 });
+
+for (const width of [1920, 390])
+    test(`revoked notification receiver remains removable ${width}`, async ({ page }) => {
+        await page.setViewportSize({ width, height: 1000 });
+        await page.goto(path + "?revoked&webhook-enabled&receipt&deny");
+        await page.getByRole("combobox", { name: "Existing connection" }).selectOption("conn");
+        await expect(page.getByRole("button", { name: "Configure notifications", exact: true })).toBeDisabled();
+        await expect(page.getByRole("button", { name: "Store webhook token securely" })).toBeDisabled();
+        await page.getByRole("button", { name: "Disable notifications", exact: true }).click();
+        await page.getByRole("button", { name: "Confirm disable notifications" }).click();
+        await expect(page.getByText("Notifications disabled", { exact: true })).toBeVisible();
+        await expect(page.locator("time[datetime='2026-10-08T01:02:03Z']")).toBeVisible();
+        const calls = await page.evaluate(() => (window as unknown as { dokployCalls: { url: string; data: unknown }[] }).dokployCalls);
+        expect(calls.find((row) => row.url.endsWith("/webhook-disable"))?.data).toEqual({
+            expected_revision: "c".repeat(64),
+            expected_binding_revision: "d".repeat(64),
+            expected_config_revision: 7,
+        });
+        expect(calls.some((row) => /\/(resources|webhook-config|verify-notification)$/.test(row.url))).toBe(false);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    });
 
 for (const action of ["Switch board", "Remove permission"])
     test(`late webhook configuration discarded on ${action}`, async ({ page }) => {

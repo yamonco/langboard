@@ -219,5 +219,9 @@ with no resource discovery or credentials. Disabling an existing receiver still
 requires current board Update access, its connection owner and exact revisions;
 it does not require the removed signal grant or an active secret. Reconfiguration
 continues to require current app policy and active connection credentials.
+Notification health includes a current `can_configure` hint. The UI keeps revoked
+receiver metadata available for explicit disablement while blocking credential
+input and configuration actions when that hint is false. The hint does not grant
+authority: every mutation rechecks its current server permissions and revisions.
 This does not retroactively undo external changes or prove that every automation
 route is integrated with connection ownership and governance policy.

@@ -535,6 +535,7 @@ def test_notification_disable_survives_revocation_with_current_revision(configur
         accept(configured)
     retained = webhook.health(service, board[1], board[2].get_uid(), conn["connection_uid"])
     assert retained["connection_revision"] == revision and retained["resources"] == []
+    assert retained["can_configure"] is False
     args = (service, board[1], board[2].get_uid(), conn["connection_uid"], revision, config["binding_revision"])
     with pytest.raises(dk.DokployConflict):
         webhook.disable(*args, config["config_revision"] + 1)
