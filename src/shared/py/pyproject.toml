@@ -74,7 +74,7 @@ link-mode = "copy"
 
 [tool.uv.sources]
 langboard-shared = { workspace = true }
-langboard-sdk = { path = "../../sdk/vendor/langboard_sdk-0.2.0-py3-none-any.whl" }
+langboard-sdk = { path = "../../sdk/vendor/langboard_sdk-0.2.1-py3-none-any.whl" }
 
 
 [tool.uv.workspace]

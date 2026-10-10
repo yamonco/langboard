@@ -43,6 +43,13 @@ async def test_sdk_deployment_refresh_and_current_consent(selected, monkeypatch)
         assert (await manager.refresh_deployments(*arguments))["inserted"] == 0
         assert len(events) == 1
         assert "private" not in str(first)
+        revoked = await manager.disable_read(conn["connection_uid"], conn["revision"], enabled["revision"])
+        assert revoked["granted_capabilities"] == [] and revoked["state"] == "disabled"
+        count = len(events)
+        with pytest.raises(NativeApiError) as consent_denied:
+            await manager.refresh_deployments(*arguments)
+        assert consent_denied.value.status_code == 404 and len(events) == count
+        await manager.enable_read(conn["connection_uid"], conn["revision"], revoked["revision"])
         with DbSession.use(readonly=False) as db:
             board[4].actions = ["read"]
             db.update(board[4])
