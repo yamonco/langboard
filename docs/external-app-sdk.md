@@ -382,6 +382,15 @@ app-owned card fence, app execution grants, HITL delivery contract and independe
 app end-to-end acceptance remain subsequent work. These endpoints have local
 implementation evidence; deployment and PostgreSQL acceptance are pending.
 
+Owners can recover an uncertain issuance outcome with
+`GET /settings/apps/connections/{connection_uid}/credentials`, using native user
+authentication. This bounded history remains available after connection or app
+disablement. `limit` defaults to 25 (maximum 50); `after` is a credential UID cursor.
+Items contain only `credential_uid`, `created_at`, `expires_at` and `revoked_at`.
+No token, token hash, trust hash or provider secret is returned. Inspect this
+history and revoke the affected credential before explicitly issuing a replacement;
+an unavailable issue response must never trigger automatic repeat issuance.
+
 ### Credential-scoped resource reads (local implementation)
 
 `GET /apps/v1/boards/{project_uid}/resources` accepts the inbound connection
