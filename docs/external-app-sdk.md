@@ -135,6 +135,10 @@ Board administrators can disable an existing binding even after instance policy
 or app registration has disabled its use. This removal still requires current
 board Update authority and the exact binding revision. It does not restore app
 discovery, execution, capabilities, or access to another person's connection.
+Existing panel consent can also be withdrawn after policy or registration
+disablement, using current board Update authority and exact app/binding
+revisions. Withdrawal does not require the removed panel capability to remain
+in the declaration; enabling a panel still requires current approval and policy.
 GlitchTip and Dokploy account owners can also remove selected resources or
 disconnect their own connection after policy revocation, including connections
 whose trust change has revoked credentials. These operations do not resolve

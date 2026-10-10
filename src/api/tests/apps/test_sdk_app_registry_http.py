@@ -178,7 +178,15 @@ async def test_panel_consent_scope_revisions_and_revocation(board, monkeypatch, 
         with pytest.raises(NativeApiError) as forbidden_panel:
             await manager.panel("example-erp")
         assert forbidden_panel.value.status_code in (403, 404)
+        cleared = (await manager.set_panel_consent("example-erp", approved["revision"], enabled=False,
+            binding_uid=saved["uid"], expected_revision=saved["revision"]))["binding"]
+        assert cleared["granted_capabilities"] == []
+        with pytest.raises(NativeApiError):
+            await manager.set_panel_consent("example-erp", approved["revision"], enabled=True,
+                binding_uid=cleared["uid"], expected_revision=cleared["revision"])
         save_policy(actor, "approved_only", policy["revision"])
+        saved = (await manager.set_panel_consent("example-erp", approved["revision"], enabled=True,
+            binding_uid=cleared["uid"], expected_revision=cleared["revision"]))["binding"]
         assert (await manager.panel("example-erp"))["panel"] == declaration["panel"]
         with DbSession.use(readonly=False) as db:
             binding = db.exec(SqlBuilder.select.table(BoardAppBinding).where(BoardAppBinding.app_key == "example-erp")).first()
@@ -217,9 +225,15 @@ async def test_panel_consent_scope_revisions_and_revocation(board, monkeypatch, 
         assert entry["app_revision"] == newer["revision"]
         restored = (await manager.set_panel_consent("example-erp", newer["revision"], enabled=True,
             binding_uid=entry["binding"]["uid"], expected_revision=entry["binding"]["revision"]))["binding"]
-        await registry.disable("example-erp", newer["revision"])
+        disabled_app = await registry.disable("example-erp", newer["revision"])
         with pytest.raises(NativeApiError):
             await manager.panel("example-erp")
+        with DbSession.use(readonly=False) as db:
+            current = db.exec(SqlBuilder.select.table(BoardAppBinding).where(BoardAppBinding.app_key == "example-erp")).first()
+            binding_uid, revision = current.get_uid(), current.edit_revision()
+        cleared = (await manager.set_panel_consent("example-erp", disabled_app["revision"], enabled=False,
+            binding_uid=binding_uid, expected_revision=revision))["binding"]
+        assert cleared["granted_capabilities"] == []
 
 
 @pytest.mark.asyncio
