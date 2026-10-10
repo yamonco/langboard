@@ -192,10 +192,10 @@ def test_public_metadata_mutations_use_native_owner_and_bounded_response(monkeyp
     service = SimpleNamespace(
         card=SimpleNamespace(resolve_readable_card=lambda *args: (object(), card, object())),
         metadata=SimpleNamespace(
-            save=lambda model, target, key, value, old_key: (
+            save_card=lambda actor, project, target, key, value, old_key: (
                 calls.append(("save", (target, key, value, old_key))) or SimpleNamespace(value=value)
             ),
-            delete=lambda model, target, keys: (calls.append(("delete", (target, keys))) or True),
+            delete_card=lambda actor, project, target, keys: (calls.append(("delete", (target, keys))) or True),
         )
     )
 
@@ -624,7 +624,9 @@ def test_native_archive_rejects_card_outside_project(monkeypatch: pytest.MonkeyP
         lambda *args: None,
     )
 
-    assert CardService.archive(object(), object(), "project-a", "card-from-b") is None
+    from langboard_shared.domain.models import User
+
+    assert CardService.archive(object(), User.model_construct(id=1), "project-a", "card-from-b") is None
 
 
 def test_card_delete_preserves_known_authors_and_allows_role_gated_legacy_cards(
@@ -665,9 +667,7 @@ def test_card_delete_rejects_non_author_before_any_destructive_work(monkeypatch:
 
     module = importlib.import_module("langboard_shared.domain.services.factory.CardService")
 
-    class FakeUser:
-        id = 8
-        is_admin = False
+    from langboard_shared.domain.models import User
 
     project = SimpleNamespace(id=1)
     card = SimpleNamespace(created_by_user_id=7, created_by_bot_id=None, archived_at=object())
@@ -675,11 +675,10 @@ def test_card_delete_rejects_non_author_before_any_destructive_work(monkeypatch:
         checkitem=SimpleNamespace(get_all_started_checkitem_by_card=lambda _card: pytest.fail())
     )
     service = CardService(lambda _service: pytest.fail(), lambda _name: pytest.fail(), repository)
-    monkeypatch.setattr(module, "User", FakeUser)
     monkeypatch.setattr(module.InfraHelper, "get_records_with_foreign_by_params", lambda *_args: (project, card))
 
     with pytest.raises(CardDeleteForbidden, match="original card author or an administrator"):
-        service.delete(FakeUser(), project, card)
+        service.delete(User.model_construct(id=8, is_admin=False), project, card)
 
 
 def test_card_delete_mcp_returns_actionable_author_or_admin_error(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -738,7 +737,9 @@ def test_native_move_rejects_column_from_another_project(
         yield SimpleNamespace(db=SimpleNamespace(exec=query))
 
     monkeypatch.setattr(module, "execution_readiness_uow", readiness_uow)
-    assert CardService.change_order(SimpleNamespace(), object(), project, card, 0, foreign_column) is None
+    from langboard_shared.domain.models import User
+
+    assert CardService.change_order(SimpleNamespace(), User.model_construct(id=1), project, card, 0, foreign_column) is None
     assert len(statements) == 1
     assert statements[0]._for_update_arg is not None
     assert "card.project_id" in str(statements[0])

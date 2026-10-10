@@ -469,6 +469,11 @@ check the anchor, existing/new endpoints and endpoints of removed edges under th
 project transaction before readiness watches or persistence. An unowned anchor
 cannot be used to add or remove another app's card relationships. These fences
 retain human permission paths and do not issue an owning-app execution grant.
+Public card metadata writes in REST and both MCP surfaces use authenticated
+`MetadataService.save_card/delete_card` boundaries. Their internal-key option
+does not bypass app ownership. Generic metadata storage remains available to
+internal document/work-plan/projection paths; those paths still require their own
+caller and lifecycle audit before claiming complete mutation coverage.
 The generic HITL contract and remaining direct repository
 writes also require separate fence coverage before
 ownership configuration is exposed. Service tests prove the exercised denial
