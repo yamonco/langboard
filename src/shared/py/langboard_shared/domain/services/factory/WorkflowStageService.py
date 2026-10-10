@@ -53,7 +53,7 @@ class WorkflowStageService(BaseDomainService):
     def get_app_catalog(self, user: User, project_uid: str) -> list[dict] | None:
         """Host catalog and board-owned status, never installation authority."""
         with DbSession.atomic() as db:
-            board = self._authorized_app_board(user, project_uid, ProjectRoleAction.Read)
+            board = self._authorized_app_board(user, project_uid, ProjectRoleAction.Read, revocation=True)
             if board is None:
                 return None
             bindings = db.exec(SqlBuilder.select.table(BoardAppBinding).where(
@@ -83,9 +83,9 @@ class WorkflowStageService(BaseDomainService):
                 for field, state in (("access_counts", access), ("health_counts", health), ("connection_counts", connection)):
                     summary[field][state] = summary[field].get(state, 0) + count
 
-            definitions = {row.key: row for row in db.exec(SqlBuilder.select.table(AppDefinition).where(AppDefinition.is_enabled == True)).all()}  # noqa: E712
+            definitions = {row.key: row for row in db.exec(SqlBuilder.select.table(AppDefinition)).all()}
             items = []
-            for key, manifest in approved_manifests().items():
+            for key, manifest in approved_manifests(retained_keys=by_app).items():
                 binding = by_app.get(key)
                 items.append({
                     **manifest.catalog_fields(),

@@ -111,25 +111,25 @@ def signal_app_allowed(db, key, *, lock=False):
     return manifest is not None and "signals.read" in manifest.capabilities
 
 
-def approved_manifests():
+def approved_manifests(*, retained_keys=()):
     """No signal adapter or connection route is inferred from an app declaration."""
     result = dict(APP_MANIFESTS)
     with DbSession.use(readonly=False) as db:
         rows = db.exec(SqlBuilder.select.table(AppDefinition)).all()
         for row in rows:
-            if not row.is_enabled:
+            if not row.is_enabled and row.key not in retained_keys:
                 result.pop(row.key, None)
                 continue
             if row.key in APP_MANIFESTS:
                 manifest = APP_MANIFESTS[row.key]
                 result[row.key] = replace(manifest, capabilities=tuple(
                     capability for capability in manifest.capabilities
-                    if capability in row.declaration.get("capabilities", [])
+                    if row.is_enabled and capability in row.declaration.get("capabilities", [])
                 ))
                 continue
             item = validate_app_definition(row.declaration)
             workflow = item.get("workflow_requirements")
             requirements = WorkflowRequirements(tuple(workflow["required"]), tuple(workflow["optional"])) if workflow else None
-            result[row.key] = AppManifest(row.key, item["name"], tuple(item["resource_types"]), tuple(item["capabilities"]), requirements,
+            result[row.key] = AppManifest(row.key, item["name"], tuple(item["resource_types"]), tuple(item["capabilities"]) if row.is_enabled else (), requirements,
                 version=item["version"], description=item["description"], panel=item.get("panel"))
     return result
