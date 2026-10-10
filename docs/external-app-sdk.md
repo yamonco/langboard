@@ -123,6 +123,11 @@ implement these boundaries. Personal app registration, connection scope consent,
 optional MCP execution and all existing automation paths still require complete
 runtime integration; declaration validation alone does not enable them.
 
+Board administrators can disable an existing binding even after instance policy
+or app registration has disabled its use. This removal still requires current
+board Update authority and the exact binding revision. It does not restore app
+discovery, execution, capabilities, or access to another person's connection.
+
 The standalone source repositories are `langboard-sdk`, `langboard-app-github`,
 `langboard-app-glitchtip`, and `langboard-app-dokploy`. The host consumes reviewed
 package artifacts, and the three panels use host design resources and the same
