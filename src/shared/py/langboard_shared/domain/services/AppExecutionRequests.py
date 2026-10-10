@@ -11,11 +11,13 @@ class AppExecutionRequestConflict(Exception):
     pass
 
 
-def request_app_execution(token, project_id, card_id, generation):
+def request_app_execution(token, project_id, card_id, generation, *, expected_authority_version):
     with DbSession.atomic() as db:
         # Current authority locks project/card before idempotency lookup. Reading an
         # old receipt must never bypass current consent or resource revocation.
         authority = evaluate_current_execution_grant(token, project_id, card_id, generation)
+        if authority["authority_version"] != expected_authority_version:
+            raise AppExecutionRequestConflict()
         row = db.exec(
             SqlBuilder.select.table(AppExecutionRequest).where(
                 AppExecutionRequest.card_id == card_id,
@@ -27,9 +29,8 @@ def request_app_execution(token, project_id, card_id, generation):
                 authority["connection_uid"]
             ):
                 raise AppExecutionRequestConflict()
-            for key in ("ownership_revision", "selection_revision", "binding_revision", "resource_revisions"):
-                if row.authority.get(key) != authority[key]:
-                    raise AppExecutionRequestConflict()
+            if row.authority.get("authority_version") != authority["authority_version"]:
+                raise AppExecutionRequestConflict()
             if row.project_id != project_id:
                 raise AppGovernanceDenied()
             changed = False
@@ -75,4 +76,5 @@ def request_app_execution(token, project_id, card_id, generation):
             "state": "requested",
             "started": False,
             "changed": changed,
+            "authority": row.authority,
         }

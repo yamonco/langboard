@@ -536,14 +536,20 @@ acceptance remain pending.
 ### Durable execution request acceptance
 
 `POST /apps/v1/boards/{board_uid}/cards/{card_uid}/execution-requests` accepts
-only `{ "generation": N }` with a strict positive integer and a dedicated app
-Bearer credential. It evaluates current authority in the same atomic transaction
+only `{ "generation": N, "expected_authority_version": "<64 lowercase hex>" }`
+with a strict positive integer and a dedicated app Bearer credential. The version
+comes from the preceding authority GET and hashes its full bounded snapshot.
+It evaluates current authority in the same atomic transaction
 as insertion. `AppExecutionRequest` preserves the accepted authority snapshot
 without card/connection foreign keys. The unique card/generation record returns
 the same request UID for a retry only after current authority is rechecked.
 Changing owner, connection, selection, board revision or resource access revision
 conflicts with that accepted generation. Revocation denies a retry without
-removing evidence. Downgrade refuses to discard existing requests.
+removing evidence. A version mismatch returns 409 before either request or event
+is inserted. Ownership, selection, definition, binding and selected resource rows
+are locked during evaluation. The response `authority` contains the accepted
+fixed snapshot, including its version and selected resource UIDs. Downgrade refuses
+to discard existing requests. PostgreSQL concurrent acceptance remains unverified.
 
 The response is `state: requested`, `started: false`. This is request acceptance,
 not dispatch, delivery, a running lease or an external runtime acknowledgment.
@@ -551,15 +557,19 @@ No automatic start or resume is implemented by this route. Durable signed
 outbox delivery, request discovery and start/stop/resume acknowledgment remain
 required before an external app can execute through this flow.
 
-### Independent execution client (SDK 0.2.5)
+### Independent execution client (SDK 0.2.6)
 
 `from langboard_sdk import AppExecution, ExecutionAuthority, ExecutionRequest`.
 `AppExecution(app_transport).authority(board_uid, card_uid, generation=N)` calls
-current authority inspection; `.request(board_uid, card_uid, generation=N)` calls
+current authority inspection; `.request(board_uid, card_uid, generation=N,
+expected_authority_version=authority["authority_version"])` calls
 request acceptance. Both use the caller-owned app Bearer transport. No automatic
 start, stop, retry or token refresh is performed. Native wheel/HTTP tests cover
 current authority, duplicate request identity and immediate consent revocation.
-The successful responses explicitly retain `started: false`.
+The successful responses explicitly retain `started: false`. SDK 0.2.5
+generation-only requests now fail validation; callers must upgrade explicitly.
+The packaged SDK/native HTTP test covers a changed selection returning 409 with
+zero persisted requests/events, followed by a new lookup and fixed receipt.
 
 The existing board execution outbox has a unique card/generation identity and a
 board webhook destination contract. App requests cannot be inserted as another

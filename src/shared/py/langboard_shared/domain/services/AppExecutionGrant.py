@@ -1,5 +1,7 @@
 """Current owner-app execution grant; declaration and resource reads are insufficient."""
 
+from hashlib import sha256
+from json import dumps
 from sqlalchemy import select, text
 from ...core.db import DbSession, SqlBuilder
 from ...core.types import SnowflakeID
@@ -63,28 +65,34 @@ def evaluate_current_execution_grant(token: str, project_id: int, card_id: int, 
             card.visibility == "INTERNAL" and not DomainService().card._resolve_internal_access(actor)
         ):
             raise AppGovernanceDenied()
-        owner = db.exec(SqlBuilder.select.table(CardAppOwnership).where(CardAppOwnership.card_id == card.id)).first()
+        owner = db.exec(
+            SqlBuilder.select.table(CardAppOwnership).where(CardAppOwnership.card_id == card.id).with_for_update()
+        ).first()
         if owner is None or owner.app_key != principal.app_key:
             raise AppGovernanceDenied()
         selection = db.exec(
-            SqlBuilder.select.table(CardAppResourceSelection).where(
+            SqlBuilder.select.table(CardAppResourceSelection)
+            .where(
                 CardAppResourceSelection.card_id == card.id,
                 CardAppResourceSelection.app_key == principal.app_key,
             )
+            .with_for_update()
         ).first()
         if selection is None or not selection.resource_uids or selection.connection_id != connection.id:
             raise AppGovernanceDenied()
         definition = db.exec(
-            SqlBuilder.select.table(AppDefinition).where(AppDefinition.key == principal.app_key)
+            SqlBuilder.select.table(AppDefinition).where(AppDefinition.key == principal.app_key).with_for_update()
         ).first()
         # Execution is offered only by approved external definitions. Built-in
         # signal adapters do not acquire it through implicit fallback.
         declared = definition.declaration if definition else {}
         binding = db.exec(
-            SqlBuilder.select.table(BoardAppBinding).where(
+            SqlBuilder.select.table(BoardAppBinding)
+            .where(
                 BoardAppBinding.project_id == project.id,
                 BoardAppBinding.app_key == principal.app_key,
             )
+            .with_for_update()
         ).first()
         if (
             not definition
@@ -96,7 +104,8 @@ def evaluate_current_execution_grant(token: str, project_id: int, card_id: int, 
         ):
             raise AppGovernanceDenied()
         resources = db.exec(
-            SqlBuilder.select.table(AppResourceBinding).where(
+            SqlBuilder.select.table(AppResourceBinding)
+            .where(
                 AppResourceBinding.id.in_([SnowflakeID.from_short_code(uid) for uid in selection.resource_uids]),
                 AppResourceBinding.board_binding_id == binding.id,
                 AppResourceBinding.connection_id == connection.id,
@@ -104,6 +113,7 @@ def evaluate_current_execution_grant(token: str, project_id: int, card_id: int, 
                 AppResourceBinding.access_state == "granted",
                 AppResourceBinding.resource_type.in_(declared.get("resource_types", [])),
             )
+            .with_for_update()
         ).all()
         if sorted(r.get_uid() for r in resources) != sorted(selection.resource_uids):
             raise AppGovernanceDenied()
@@ -146,7 +156,7 @@ def evaluate_current_execution_grant(token: str, project_id: int, card_id: int, 
         actual_generation = int(generation[0] if hasattr(generation, "__getitem__") else generation)
         if actual_generation != expected_generation:
             raise AppGovernanceDenied()
-        return {
+        authority = {
             "schema_version": 1,
             "card_uid": card.get_uid(),
             "app_key": principal.app_key,
@@ -159,3 +169,7 @@ def evaluate_current_execution_grant(token: str, project_id: int, card_id: int, 
             "selection_revision": selection.revision,
             "binding_revision": binding.edit_revision(),
         }
+        authority["authority_version"] = sha256(
+            dumps(authority, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+        return authority

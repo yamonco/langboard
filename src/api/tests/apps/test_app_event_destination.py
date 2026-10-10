@@ -16,10 +16,9 @@ from langboard_shared.domain.services.AppEventDestination import (
     bind_app_event_destination,
     prepare_app_event_signature,
 )
-from langboard_shared.domain.services.AppExecutionRequests import request_app_execution
 from langboard_shared.domain.services.AppGovernance import AppGovernanceConflict, AppGovernanceDenied
 from langboard_shared.domain.services.factory.WorkflowStageService_app_test import board  # noqa: F401
-from test_app_execution_requests import prepare
+from test_app_execution_requests import accepted_request, prepare
 
 
 def destination_scope(board):
@@ -33,7 +32,7 @@ def destination_scope(board):
             module.upgrade()
     finally:
         module.op = original
-    request_app_execution(token, board[2].id, card.id, 3)
+    accepted_request(token, board[2].id, card.id, 3)
     with DbSession.atomic() as db:
         board[1].is_admin = True
         db.update(board[1])

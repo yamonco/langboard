@@ -40,6 +40,7 @@ def execution_authority(
 class ExecutionRequestBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
     generation: int = Field(strict=True, ge=1)
+    expected_authority_version: str = Field(strict=True, pattern="^[0-9a-f]{64}$")
 
 
 @AppRouter.api.post("/apps/v1/boards/{project_uid}/cards/{card_uid}/execution-requests", tags=["App.Execution"])
@@ -56,7 +57,11 @@ def execution_request(
         raise ApiException.Unauthorized_401()
     try:
         result = request_app_execution(
-            token, SnowflakeID.from_short_code(project_uid), SnowflakeID.from_short_code(card_uid), body.generation
+            token,
+            SnowflakeID.from_short_code(project_uid),
+            SnowflakeID.from_short_code(card_uid),
+            body.generation,
+            expected_authority_version=body.expected_authority_version,
         )
     except AppExecutionCredentialDenied as exc:
         raise ApiException.Unauthorized_401() from exc
