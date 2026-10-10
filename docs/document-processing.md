@@ -117,3 +117,23 @@ is a test double. This establishes the local worker/splitter/store contract, not
 live provider inference, PostgreSQL publication, broker delivery or deployed UI
 acceptance. Previously indexed records require the user's explicit reindex action
 to receive text-only vectors.
+
+### Preserve readable vectors during reindex
+
+An embedding pointer carries its own non-secret configuration snapshot in
+`embedding.config`. The document's `embedding_config` describes the requested
+next generation. Queuing explicit reindex preserves the previous pointer and
+its settings; a successful worker publishes the new pointer and settings
+together. Failure retains the prior pair. For older metadata without a pointer
+snapshot, the explicit request captures the previous document configuration
+before replacing it, and reads retain the legacy fallback.
+
+Native document vector search resolves the pointer's settings, not the pending
+request's new model or dimensions. It still rechecks current read permission,
+attachment lifecycle, source generation, pointer/configuration equality,
+provider endpoint and global retrieval enablement after querying. Retaining
+old vectors never bypasses revocation or enables retrieval when switched off.
+The local regression searches persisted vectors while the request is pending
+or failed and rejects both flows when read permission is revoked during search.
+Inference and ACL services are test doubles; PostgreSQL publication and live
+provider acceptance remain separate gates.
