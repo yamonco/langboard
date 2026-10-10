@@ -29,6 +29,32 @@ def revocation_notifications(monkeypatch):
     return events
 
 
+def test_disconnect_notifies_only_committed_changes_and_is_idempotent(selected, revocation_notifications):
+    setup, connection, *_ = selected
+    service, board, *_ = setup
+    args = service, board[1], board[2].get_uid(), connection["connection_uid"]
+    with pytest.raises(gt.GlitchTipConflict):
+        gt.disconnect(*args, "0" * 64)
+    assert revocation_notifications == []
+    with pytest.raises(RuntimeError, match="rollback"):
+        with DbSession.atomic():
+            gt.disconnect(*args, connection["revision"])
+            assert revocation_notifications == []
+            raise RuntimeError("rollback")
+    assert revocation_notifications == []
+    result = gt.disconnect(*args, connection["revision"])
+    assert result["state"] == "disconnected" and revocation_notifications == ["apps:changed"]
+    with DbSession.use(readonly=False) as db:
+        rows = db.exec(SqlBuilder.select.table(AppResourceBinding)).all()
+        revisions = {row.id: row.access_revision for row in rows}
+        assert all(row.access_state == "revoked" and row.is_selected for row in rows)
+    assert gt.disconnect(*args, result["revision"]) == result
+    assert revocation_notifications == ["apps:changed"]
+    with DbSession.use(readonly=False) as db:
+        rows = db.exec(SqlBuilder.select.table(AppResourceBinding)).all()
+        assert {row.id: row.access_revision for row in rows} == revisions
+
+
 def test_read_revocation_rollback_does_not_publish(selected, revocation_notifications):
     setup, connection, *_ = selected
     service, board, *_ = setup

@@ -396,6 +396,8 @@ def disconnect(service, actor, project_uid, connection_uid, expected_revision):
         connection = _connection(db, actor, connection_uid, lock=True, revocation=True)
         if _revision(connection) != expected_revision:
             raise GlitchTipConflict()
+        if connection.state == "disconnected":
+            return _metadata(connection)
         connection.state = "disconnected"
         db.update(connection)
         # Preserve selected resources, cards and workflow configuration. The
@@ -409,6 +411,7 @@ def disconnect(service, actor, project_uid, connection_uid, expected_revision):
                 access_state="revoked", health="unavailable", access_revision=AppResourceBinding.access_revision + 1
             )
         )
+        db.after_commit(AppSettingPublisher.apps_changed)
         return _metadata(connection)
 
 
