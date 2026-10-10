@@ -53,6 +53,7 @@ def test_http_current_auth_metadata_redaction_and_revocation(secrets, monkeypatc
         client.cookies.set(Env.REFRESH_TOKEN_NAME, refresh)
         response = client.get(url, headers=headers)
         assert response.status_code == 200 and response.json() == {"reference": meta}
+        assert response.headers["cache-control"] == "no-store"
         assert not any(part in response.text for part in ["fixture-sensitive-key", "locator", "provider"])
         assert client.get("/secret-references/notvalid-uid", headers=headers).status_code == 404
         with DbSession.use(readonly=False) as db:
