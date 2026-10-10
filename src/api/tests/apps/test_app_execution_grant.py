@@ -24,13 +24,30 @@ from test_card_app_resources import prepare
 def grant_scope(board):
     connection, definition, binding, resources, card = prepare(board)
     engine = DbEngine.get_main_engine()
-    for model in (
+    models = (
         GlobalCardRelationshipType,
         CardRelationship,
         GraphApprovalRequest,
         *ModelHelper.get_models_by_base_class(BaseGraphApprovalRequestModel),
-    ):
-        model.__table__.create(engine)
+    )
+    if engine.dialect.name == "postgresql":
+        # Approval variants reference real bot/history tables. Include their FK
+        # dependency closure rather than weakening PostgreSQL constraints.
+        tables = set()
+
+        def include(table):
+            if table in tables:
+                return
+            tables.add(table)
+            for foreign_key in table.foreign_keys:
+                include(foreign_key.column.table)
+
+        for model in models:
+            include(model.__table__)
+        models[0].metadata.create_all(engine, tables=list(tables), checkfirst=True)
+    else:
+        for model in models:
+            model.__table__.create(engine)
     with engine.begin() as db:
         db.execute(
             text(
