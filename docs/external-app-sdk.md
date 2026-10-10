@@ -416,6 +416,29 @@ resource models. It does not establish card-to-resource execution bindings or
 authorize card mutation. PostgreSQL, deployed use and external-app acceptance
 remain pending.
 
+### App-owned card governance storage (internal implementation)
+
+`CardAppOwnership` stores a nullable app key and revision independently of
+`Card.visibility`, private owner, creator and presentation metadata.
+`set_card_app_ownership` currently exists as an internal service only. It requires
+current instance administration, board ownership, or board membership with its
+existing management permission. It additionally rejects another user's private
+card, mismatched project and deleted card. Assigning an app requires current
+approval and project policy; release remains possible after app disablement.
+
+Initial assignment expects no prior revision; transfer and release require the
+current integer revision. A repeat of the current decision produces no new audit
+entry. Every changed decision retains the actor, previous and new app keys and
+revision in `CardAppOwnershipAudit`. Outer transaction failure rolls both back.
+Audit card IDs have no cascading card foreign key, so governance evidence is not
+silently removed by card deletion. Migration downgrade refuses to discard history.
+
+This is storage and management preparation, not an enforced exclusive mutation
+claim. No REST/MCP/UI ownership configuration is exposed yet. The canonical card,
+stage, checklist and HITL mutation fence must be implemented before exposing the
+configuration surface. PostgreSQL concurrency and native HTTP acceptance for
+that complete fence remain pending.
+
 The native GitHub health worker now has an organization-owned connection
 acceptance regression using actual SQLite lifecycle receipts and leased jobs.
 An active matching organization completes the job and restores resource health.
