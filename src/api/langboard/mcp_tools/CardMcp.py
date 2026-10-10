@@ -1557,7 +1557,7 @@ def update_card_attachment(
         raise ValueError("Attachment not found in card")
     if name is not None and not service.card_attachment.change_name(user, project, card, attachment, name.strip()):
         raise ValueError("Attachment not found in card")
-    if order is not None and not service.card_attachment.change_order(project, card, attachment, order):
+    if order is not None and not service.card_attachment.change_order(project, card, attachment, order, user=user):
         raise ValueError("Attachment not found in card")
     attachments = service.card_attachment.get_api_list_by_card(card_uid, limit=26)
     return {

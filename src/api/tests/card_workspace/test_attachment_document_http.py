@@ -26,10 +26,16 @@ def document_http(monkeypatch):
         "child_valid": True,
     }
 
-    def process(project, card, attachment, *, reprocess):
+    def process(project, card, attachment, *, user, reprocess):
+        assert user is state["actor"]
         calls.append((project, card, attachment, reprocess))
         if isinstance(state["result"], Exception):
             raise state["result"]
+        return state["result"]
+
+    def embed(project, card, attachment, *, user):
+        assert user is state["actor"]
+        calls.append((project, card, attachment, "embedding"))
         return state["result"]
 
     def resolve_card(project, card, actor, channel):
@@ -42,7 +48,7 @@ def document_http(monkeypatch):
             raise ApiException.NotFound_404()
 
     monkeypatch.setattr(BoardCardAttachmentApi, "require_card_child", validate_child)
-    service = SimpleNamespace(card=SimpleNamespace(resolve_readable_card=resolve_card), card_attachment=SimpleNamespace(request_document_processing=process), close=lambda: None)
+    service = SimpleNamespace(card=SimpleNamespace(resolve_readable_card=resolve_card), card_attachment=SimpleNamespace(request_document_processing=process, request_document_embedding=embed), close=lambda: None)
 
     def validate(scope, *, allow_oidc=False):
         assert allow_oidc is False
@@ -94,6 +100,15 @@ def test_document_processing_http_preserves_scope_and_handles_rejection(document
     assert client.post(path, json={}).status_code == 404
     state["result"] = ValueError("Provider not configured")
     assert client.post(path, json={}).status_code == 400
+
+
+def test_embedding_http_passes_authenticated_actor(document_http):
+    client, state, calls = document_http
+    state["allowed"] = True
+    response = client.post("/board/board/card/card/attachment/source/document-processing", json={"mode": "embedding"})
+    assert response.status_code == 200
+    assert response.json() == {"status": "pending"}
+    assert calls == [("board", "card", "source", "embedding")]
 
 
 @pytest.mark.parametrize("invalid", ["visible", "child_valid"])

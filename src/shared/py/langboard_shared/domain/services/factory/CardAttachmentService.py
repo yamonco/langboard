@@ -15,7 +15,7 @@ from ....helpers import InfraHelper
 from ....publishers import CardAttachmentPublisher
 from ....tasks.activities import CardAttachmentActivityTask
 from ....tasks.bots import CardAttachmentBotTask
-from ...models import Card, CardAttachment, CardMetadata, Project, User
+from ...models import Bot, Card, CardAttachment, CardMetadata, Project, User
 from ..CardAppMutation import guard_card_app_mutation
 from .DoclingMetadataService import DoclingMetadataService
 from .InternalBotService import InternalBotService
@@ -171,8 +171,9 @@ class CardAttachmentService(BaseDomainService):
             # Invalid optional embedding configuration must not break attachment storage/transcription.
             return None
 
+    @guard_card_app_mutation
     def request_document_processing(
-        self, project: TProjectParam, card: TCardParam, attachment: TAttachmentParam, *, reprocess: bool = False
+        self, project: TProjectParam, card: TCardParam, attachment: TAttachmentParam, *, user: User | Bot, reprocess: bool = False
     ) -> str | None:
         """Explicit per-attachment processing; never scan existing files on settings changes."""
         params = InfraHelper.get_records_with_foreign_by_params(
@@ -217,8 +218,9 @@ class CardAttachmentService(BaseDomainService):
         document = docling.get_document_by_attachment_uid(CardMetadata, card, attachment.get_uid())
         return document.get("status", "pending") if document else None
 
+    @guard_card_app_mutation
     def request_document_embedding(
-        self, project: TProjectParam, card: TCardParam, attachment: TAttachmentParam
+        self, project: TProjectParam, card: TCardParam, attachment: TAttachmentParam, *, user: User | Bot
     ) -> str | None:
         """Explicitly embed one existing transcription without rerunning VLM or scanning files."""
         from ....tasks.docling.DocumentEmbedding import snapshot_embedding_config
@@ -294,12 +296,15 @@ class CardAttachmentService(BaseDomainService):
             db.after_commit(enqueue)
         return "pending"
 
+    @guard_card_app_mutation
     def change_order(
         self,
         project: TProjectParam | None,
         card: TCardParam | None,
         card_attachment: TAttachmentParam | None,
         order: int,
+        *,
+        user: User | Bot,
     ) -> bool | None:
         params = InfraHelper.get_records_with_foreign_by_params(
             (Project, project), (Card, card), (CardAttachment, card_attachment)

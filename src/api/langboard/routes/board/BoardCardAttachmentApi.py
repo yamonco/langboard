@@ -83,7 +83,7 @@ def change_attachment_order(
 ) -> JsonResponse:
     card = require_visible_card(project_uid, card_uid, request, user, service)
     require_card_child(card, CardAttachment, attachment_uid)
-    result = service.card_attachment.change_order(project_uid, card_uid, attachment_uid, form.order)
+    result = service.card_attachment.change_order(project_uid, card_uid, attachment_uid, form.order, user=user)
     if not result:
         raise ApiException.NotFound_404(ApiErrorCode.NF2009)
 
@@ -197,10 +197,10 @@ def process_card_attachment_document(
     require_card_child(card, CardAttachment, attachment_uid)
     try:
         if form.mode == "embedding":
-            result = service.card_attachment.request_document_embedding(project_uid, card_uid, attachment_uid)
+            result = service.card_attachment.request_document_embedding(project_uid, card_uid, attachment_uid, user=user)
         else:
             result = service.card_attachment.request_document_processing(
-                project_uid, card_uid, attachment_uid, reprocess=form.reprocess
+                project_uid, card_uid, attachment_uid, user=user, reprocess=form.reprocess
             )
     except ValueError as error:
         raise ApiException.BadRequest_400(ApiErrorCode.VA0000) from error
