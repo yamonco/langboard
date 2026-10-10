@@ -379,14 +379,31 @@ export default function BoardSettingsMetadataConnection({
             if (valid()) setProjects(page);
         });
     const matches = (row: Binding, item: Resource) => (dokploy ? row.external_id === item.id && row.type === item.type : row.project_id === item.id);
-    const loadBindings = () =>
+    const loadBindings = (append = true) =>
         run(async (valid) => {
-            const page = (await api.get<Page<Binding>>(selectedRoot, { params: { after: bindings.next_cursor } })).data;
+            const page = (await api.get<Page<Binding>>(selectedRoot, { params: append ? { after: bindings.next_cursor } : {} })).data;
             if (valid()) {
-                setBindings((old) => merge(old, page, true));
+                setBindings((old) => merge(old, page, append));
                 setReadAccess(page.binding ?? null);
                 clearReadResults();
             }
+        });
+    const removeBinding = (binding: Binding) =>
+        run(async (valid) => {
+            clearWebhook();
+            clearReadResults();
+            const result = (
+                await api.post<{ access_revision: number }>(`${selectedRoot}/${binding.resource_uid}/remove`, {
+                    expected_revision: binding.access_revision,
+                })
+            ).data;
+            if (valid())
+                setBindings((old) => ({
+                    ...old,
+                    items: old.items.map((row) =>
+                        row.resource_uid === binding.resource_uid ? { ...row, selected: false, access_revision: result.access_revision } : row
+                    ),
+                }));
         });
     const toggle = (item: Resource) =>
         run(async (valid) => {
@@ -894,6 +911,19 @@ export default function BoardSettingsMetadataConnection({
                     <Button size="sm" variant="outline" onClick={() => void loadOrganizations()}>
                         {text("Load GlitchTip organizations")}
                     </Button>
+                    <Button size="sm" variant="outline" onClick={() => void loadBindings(false)}>
+                        {text("Load app selections")}
+                    </Button>
+                    {bindings.items
+                        .filter((row) => row.selected)
+                        .map((row) => (
+                            <div key={row.resource_uid} className="flex items-center justify-between gap-2 rounded-md border p-2">
+                                <span className="min-w-0 break-words">{row.path?.map((part) => part.name ?? part.slug ?? part.id).join(" / ")}</span>
+                                <Button size="sm" variant="outline" onClick={() => void removeBinding(row)}>
+                                {text("Remove app selection")}
+                                </Button>
+                            </div>
+                        ))}
                     {organizations.items.length > 0 && (
                         <label className="flex flex-col gap-1 text-sm">
                             {text("GlitchTip organization")}

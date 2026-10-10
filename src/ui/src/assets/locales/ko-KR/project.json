@@ -240,6 +240,8 @@
     "GlitchTip organization": "조직",
     "Choose GlitchTip organization": "조직 선택",
     "More GlitchTip organizations": "조직 더 보기",
+    "Load app selections": "저장된 선택 조회",
+    "Remove app selection": "선택 해제",
     "Load remaining GlitchTip selections": "나머지 선택 항목 조회",
     "More GlitchTip projects": "프로젝트 더 보기",
     "GlitchTip project selection help": "변경은 즉시 저장됩니다. 선택만으로 Signal이나 워크플로 전환을 활성화하지 않습니다.",

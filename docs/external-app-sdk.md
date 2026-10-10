@@ -144,6 +144,8 @@ available to the account owner with current board Update authority after policy
 revocation. Pending, revoked and disconnected metadata is returned without
 credentials so clients can obtain current removal revisions. Provider discovery
 and activation continue to require active policy and a connected account.
+The shared settings panel has a separate saved-selection query and explicit
+selection removal controls. This path does not depend on provider discovery.
 GitHub repository deselection uses the same revocation-only gate: revoked or
 disconnected connections can remove existing selections with current board
 Update authority, connection ownership and the exact resource revision. Adding

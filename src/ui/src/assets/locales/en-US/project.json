@@ -240,6 +240,8 @@
     "GlitchTip organization": "Organization",
     "Choose GlitchTip organization": "Choose an organization",
     "More GlitchTip organizations": "More organizations",
+    "Load app selections": "Load saved selections",
+    "Remove app selection": "Remove selection",
     "Load remaining GlitchTip selections": "Load remaining selections",
     "More GlitchTip projects": "More projects",
     "GlitchTip project selection help": "Changes save immediately. Selection does not enable signals or workflow transitions.",
