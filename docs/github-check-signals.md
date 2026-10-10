@@ -62,6 +62,12 @@ personal Signal rows. The same SQL scope applies before pagination and cursor va
 so hidden personal rows do not produce discoverable cursors. Explicit card-bound evidence
 remains a separate projection with its own card visibility rules.
 
+New card creation and explicit Signal binding additionally require current requesting
+actor access to the selected connection through the shared app governance gate.
+Authority of the connection owner alone cannot authorize another actor to publish
+that person's unshared personal Signal. Instance administration does not override
+this connection ownership check.
+
 `GET /board/{board_uid}/settings/apps/github/connections/{connection_uid}/resources/{resource_uid}/signals`
 requires browser authentication and current board Read permission in addition to the live
 consumer authority above. It returns 25 events per page with a scoped opaque cursor,
