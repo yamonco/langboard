@@ -72,6 +72,12 @@ through Plate operations (including JSON `setValue`) and strips all text/marks
 from the required empty child of a masked reference. Replacing a void node child
 explicitly includes void descendants, avoiding an endless insertion loop.
 This does not purge old wiki revisions or sanitize unrelated collaborative JSON.
-A live multi-client Yjs synchronization check remains outstanding. Wiki
+The native Plate Yjs plugin is also exercised with two independent Y.Doc instances
+and encoded updates: initial canonical links normalize, a replacement reference
+propagates, and both shared documents retain only the URI and empty reference
+child. Plate-local node IDs and structural empty text siblings are not Yjs
+content, so assertions compare reference subtrees and both shared documents.
+This is a local transport harness, not authenticated Hocuspocus/server evidence;
+that live multi-client synchronization check remains outstanding. Wiki
 secretization still requires an explicit native transaction
 and its own audit producer, source authority, and saved-wiki acceptance.
