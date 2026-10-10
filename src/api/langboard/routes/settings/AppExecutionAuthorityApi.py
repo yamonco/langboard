@@ -188,6 +188,22 @@ class RuntimeCheckBody(BaseModel):
     stopped: bool = Field(default=False, strict=True)
 
 
+class RuntimeRecoveryBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    runtime_token: str = Field(strict=True, pattern="^[0-9a-f]{64}$")
+
+
+@AppRouter.api.post("/apps/v1/execution-requests/{request_uid}/runtime-permit-recovery", tags=["App.Execution"])
+def execution_runtime_recovery(request_uid: str, body: RuntimeRecoveryBody) -> JsonResponse:
+    from langboard_shared.domain.services.AppExecutionLeases import recover_app_runtime
+
+    try:
+        result = recover_app_runtime(SnowflakeID.from_short_code(request_uid), body.runtime_token)
+    except AppGovernanceDenied as exc:
+        raise ApiException.Forbidden_403() from exc
+    return JsonResponse(content=result, headers={"Cache-Control": "no-store"})
+
+
 @AppRouter.api.post("/apps/v1/runtime-permits/{lease_uid}/check", tags=["App.Execution"])
 def execution_runtime_check(lease_uid: str, body: RuntimeCheckBody) -> JsonResponse:
     from langboard_shared.domain.services.AppExecutionLeases import check_app_runtime

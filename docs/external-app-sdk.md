@@ -690,9 +690,13 @@ Permit and check receipts include `schema_version`, `request_uid`,
 compare the native identity before acting. Store the runtime token privately
 and durably before authorization; never include it in logs or events. After
 an ambiguous authorization outcome, do not start a process. If the lease UID
-was received, `check_runtime` can confirm its current permit. A lookup by
-request for an entirely lost response is not implemented, so that case remains
-unresolved and requires operator intervention rather than blind dispatch.
+was received, `check_runtime` can confirm its current permit. SDK 0.2.9 adds
+`recover_runtime(request_uid, runtime_token)` for an entirely lost response.
+It looks up the existing permit on the primary database and uses the same
+current-authority and expiry fence. It never creates a permit, rotates its
+token, or resumes a stopped runtime. The scoped runtime token allows recovery
+after app credential revocation, but only the stop state is then returned.
+A failed/unknown recovery still grants no permission; do not dispatch.
 
 The native permit/check endpoints are app-independent and do not alter cards or
 start server-side work. A receiver controls its own process and must stop when
