@@ -5,11 +5,12 @@ import "@/i18n";
 import "@/assets/styles/main.css";
 function Fixture() {
     const [saved, setSaved] = useState<Record<string, unknown>>({});
+    const readonly = new URLSearchParams(location.search).has("readonly");
     return (
         <>
             <DocumentRetrievalSettings
-                value={{ retrieval: { enabled: false, splitter: { strip_headers: true } } }}
-                disabled={false}
+                value={{ retrieval: { enabled: false, splitter: { strip_headers: true, ...(readonly ? { type: "character" } : {}) } } }}
+                disabled={readonly}
                 onSave={setSaved}
             />
             <output className="block whitespace-pre-wrap break-all">{JSON.stringify(saved)}</output>
