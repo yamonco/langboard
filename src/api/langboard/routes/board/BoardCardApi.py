@@ -39,6 +39,7 @@ from langboard_shared.domain.models import (
 from langboard_shared.domain.models.bases import ALL_GRANTED
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
 from langboard_shared.domain.services import DomainService
+from langboard_shared.domain.services.AppGovernance import AppGovernanceDenied
 from langboard_shared.filter import RoleFilter
 from langboard_shared.security import Auth, RoleFinder
 from langboard_shared.tasks.webhooks.ExecutionReadinessUow import current_execution
@@ -595,6 +596,8 @@ def update_card_relationships(
         result = service.card_relationship.update(
             user_or_bot, project_uid, card_uid, form.is_parent, form.relationships
         )
+    except AppGovernanceDenied as exc:
+        raise ApiException.Forbidden_403() from exc
     except RelationshipCycle as exc:
         raise ApiException.BadRequest_400(ApiErrorCode.VA0000) from exc
     if result is None:
@@ -638,6 +641,8 @@ def patch_card_relationships(
     )
     try:
         result = service.card_relationship.apply_graph_patch(user_or_bot, *patch)
+    except AppGovernanceDenied as exc:
+        raise ApiException.Forbidden_403() from exc
     except RelationshipCycle as exc:
         raise ApiException.BadRequest_400(ApiErrorCode.VA0000) from exc
     if result is None:

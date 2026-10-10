@@ -11,6 +11,7 @@ from ....tasks.activities import CardActivityTask, CardRelationshipActivityTask
 from ....tasks.bots import CardBotTask
 from ....tasks.webhooks.ExecutionReadinessUow import execution_readiness_uow
 from ...models import Card, CardRelationship, Project, ProjectColumn
+from ..CardAppMutation import require_card_app_mutation
 from ..CardVisibilityPolicy import CardVisibilityContext
 
 
@@ -86,6 +87,7 @@ class CardRelationshipService(BaseDomainService):
             ).first()
             if project_row is None:
                 return None
+            require_card_app_mutation(db, user_or_bot, card, project)
             old_relationships = self.repo.card_relationship.get_all_by_card_and_relation(
                 card, relation="parent" if is_parent else "child"
             )
@@ -94,6 +96,11 @@ class CardRelationshipService(BaseDomainService):
                 (related_card.id, relationship.relationship_type_id)
                 for relationship, _, related_card in old_relationships
             }
+            requested_ids = {SnowflakeID.from_short_code(uid) for uid, _ in relationships}
+            valid_ids = self.repo.card_relationship.get_all_related_card_ids(project, list(requested_ids))
+            affected_ids = {related.id for _, _, related in old_relationships} | set(valid_ids)
+            for affected_id in sorted(affected_ids):
+                require_card_app_mutation(db, user_or_bot, affected_id, project)
 
             with execution_readiness_uow() as execution:
                 if is_parent:
@@ -103,19 +110,15 @@ class CardRelationshipService(BaseDomainService):
                         [related_card.id for _, _, related_card in old_relationships]
                         + [SnowflakeID.from_short_code(uid) for uid, _ in relationships]
                     )
-                converted_related_card_ids: set[SnowflakeID] = set()
                 relationship_type_ids: set[SnowflakeID] = set()
                 converted_relationships: list[tuple[SnowflakeID, SnowflakeID]] = []
                 for related_card_uid, relationship_type_uid in relationships:
                     related_card_id = SnowflakeID.from_short_code(related_card_uid)
                     relationship_type_id = SnowflakeID.from_short_code(relationship_type_uid)
-                    converted_related_card_ids.add(related_card_id)
                     relationship_type_ids.add(relationship_type_id)
                     converted_relationships.append((related_card_id, relationship_type_id))
 
-                related_card_ids = self.repo.card_relationship.get_all_related_card_ids(
-                    project, list(converted_related_card_ids)
-                )
+                related_card_ids = valid_ids
 
                 relationship_types = self.repo.card_relationship.get_global_relationship_types_map(
                     list(relationship_type_ids)
@@ -267,6 +270,7 @@ class CardRelationshipService(BaseDomainService):
             ).first()
             if project_row is None:
                 return None
+            require_card_app_mutation(db, user_or_bot, anchor_card, project)
             column = InfraHelper.get_by_id_like(ProjectColumn, anchor_card.project_column_id)
             if not column or column.project_id != project.id or column.is_archive:
                 raise ValueError("Anchor card must be in an active project column")
@@ -297,6 +301,11 @@ class CardRelationshipService(BaseDomainService):
                 if not relationship:
                     raise ValueError(f"Unknown project relationship: {relationship_uid}")
                 remove_relationships.append(relationship)
+
+            affected_ids = {card.id for card in existing_cards.values()}
+            affected_ids.update(endpoint for _, parent, child in remove_relationships for endpoint in (parent, child))
+            for affected_id in sorted(affected_ids):
+                require_card_app_mutation(db, user_or_bot, affected_id, project)
 
             relationship_type_ids = {
                 SnowflakeID.from_short_code(relationship_type_uid) for _, _, relationship_type_uid in add_edges
