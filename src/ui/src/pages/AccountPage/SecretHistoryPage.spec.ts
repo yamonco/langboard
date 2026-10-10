@@ -342,7 +342,7 @@ for (const width of [1440, 390]) {
             await expect(section.getByText("Invalid", { exact: true })).toBeVisible();
         }
         await expect(page.locator("[data-reference-value]")).not.toContainText("legacy-caption");
-        await expect(page.locator("[data-reference-value]")).toContainText('"type":"secretReference"');
+        await expect(page.locator("[data-reference-value]")).toContainText(String.raw`"type":"secretReference"`);
         await page.getByRole("button", { name: "Save reference draft" }).click();
         await expect(page.locator("[data-saved-reference]")).toContainText("secret://ref/fixture");
         await expect(page.locator("[data-saved-reference]")).not.toContainText("legacy-caption");
@@ -351,5 +351,24 @@ for (const width of [1440, 390]) {
         await page.screenshot({ path: `test-results/secret-masked-node-${width}.png` });
         await page.getByRole("region", { name: "Masked editable" }).getByRole("link", { name: "Secret history" }).first().click();
         await expect(page).toHaveURL(/\/secret-references\/fixture\/history$/);
+    });
+}
+
+for (const width of [1440, 390]) {
+    test(`collaborative JSON normalizes reference links and strips node captions at ${width}`, async ({ page }) => {
+        await page.setViewportSize({ width, height: 900 });
+        await page.goto("/src/components/plate-ui/secret-masked-node.fixture.html");
+        await page.getByRole("button", { name: "Load collaborative reference" }).click();
+        const editor = page.getByRole("region", { name: "Masked editable" });
+        await expect(editor.getByRole("link", { name: "Secret history" })).toHaveCount(2);
+        await expect(editor).not.toContainText("json-caption");
+        await expect(editor).not.toContainText("tainted-caption");
+        await page.getByRole("button", { name: "Save reference draft" }).click();
+        await expect(page.locator("[data-saved-reference]")).not.toContainText("json-caption");
+        await expect(page.locator("[data-saved-reference]")).not.toContainText("tainted-caption");
+        await expect(page.locator("[data-reference-value]")).not.toContainText("json-caption");
+        await expect(page.locator("[data-reference-value]")).not.toContainText("tainted-caption");
+        await page.getByRole("button", { name: "Reload reference draft" }).click();
+        await expect(editor.getByRole("link", { name: "Secret history" })).toHaveCount(2);
     });
 }

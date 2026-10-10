@@ -67,6 +67,11 @@ history route; rendering does not fetch metadata or resolve vault material.
 Ordinary links remain ordinary links. Incomplete references, aliases, query strings,
 and fragments are not upgraded into masked nodes. This is a presentation and
 reference persistence contract for canonical Markdown, not a plaintext-to-vault
-conversion. It does not purge old wiki revisions or sanitize arbitrary preexisting
-collaborative JSON. Wiki secretization still requires an explicit native transaction
+conversion. The shared normalizer also converts canonical link elements introduced
+through Plate operations (including JSON `setValue`) and strips all text/marks
+from the required empty child of a masked reference. Replacing a void node child
+explicitly includes void descendants, avoiding an endless insertion loop.
+This does not purge old wiki revisions or sanitize unrelated collaborative JSON.
+A live multi-client Yjs synchronization check remains outstanding. Wiki
+secretization still requires an explicit native transaction
 and its own audit producer, source authority, and saved-wiki acceptance.
