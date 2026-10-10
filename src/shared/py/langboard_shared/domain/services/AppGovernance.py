@@ -6,6 +6,7 @@ from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError
 from ...core.db import DbSession, SqlBuilder
 from ...core.types import SafeDateTime
+from ...publishers import AppSettingPublisher
 from ..models import AppConnection, AppGovernancePolicy, Organization, Project, ProjectAssignedUser, User
 
 
@@ -116,7 +117,9 @@ def save_policy(actor, mode, expected_revision, organization_id=None):
                 )
                 if count != 1:
                     raise AppGovernanceConflict()
-            return current_policy(db, organization_id, for_update=True)
+            result = current_policy(db, organization_id, for_update=True)
+            db.after_commit(AppSettingPublisher.apps_changed)
+            return result
     except IntegrityError as exc:
         raise AppGovernanceConflict() from exc
 

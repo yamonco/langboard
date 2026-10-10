@@ -33,6 +33,8 @@ from sqlalchemy.pool import StaticPool
 
 @pytest.fixture
 def governance(monkeypatch):
+    from langboard_shared.publishers import AppSettingPublisher
+    monkeypatch.setattr(AppSettingPublisher, "apps_changed", lambda: None)
     engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
     for model in (User, Organization, Project, ProjectAssignedUser, AppConnection, AppGovernancePolicy):
         model.__table__.create(engine)
@@ -271,3 +273,29 @@ def test_runtime_policy_reads_do_not_lock_global_or_organization_rows(governance
     get_policy(owner, org.id)
     assert any("app_governance_policy" in statement and "FOR UPDATE" in statement for statement in statements)
     assert any("organization" in statement and "FOR UPDATE" in statement for statement in statements)
+
+
+def test_policy_change_invalidates_open_panels_only_after_commit(governance, monkeypatch):
+    from langboard_shared.publishers import AppSettingPublisher
+
+    _, (admin, owner, _), org, *_ = governance
+    events = []
+
+    def published():
+        # A fresh primary read must observe the committed policy.
+        with DbSession.use(readonly=False) as db:
+            events.append(current_policy(db, org.id)["effective_mode"])
+
+    monkeypatch.setattr(AppSettingPublisher, "apps_changed", published)
+    baseline = get_policy(admin)
+    saved = save_policy(admin, "disabled", baseline["revision"])
+    assert events == ["disabled"]
+    with pytest.raises(AppGovernanceConflict):
+        save_policy(admin, "approved_only", baseline["revision"])
+    assert events == ["disabled"]
+    with pytest.raises(AppGovernanceDenied):
+        save_policy(owner, "approved_only", saved["revision"])
+    assert events == ["disabled"]
+    inherited = get_policy(owner, org.id)
+    save_policy(owner, "approved_only", inherited["revision"], org.id)
+    assert events == ["disabled", "disabled"]
