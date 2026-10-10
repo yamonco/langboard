@@ -3,7 +3,7 @@ import hmac
 import importlib
 import json
 import os
-from contextlib import contextmanager
+from contextlib import nullcontext
 from types import SimpleNamespace
 import pytest
 from pydantic import ValidationError
@@ -380,11 +380,6 @@ def test_update_webhook_distinguishes_omitted_events_from_explicit_null(
     )
     # This unit exercises field omission semantics; native readiness transaction
     # integration is covered by the execution binding/outbox test suite.
-    watched: list[int] = []
-    @contextmanager
-    def execution_uow():
-        yield SimpleNamespace(watch_webhook=watched.append)
-    monkeypatch.setattr(app_setting_module, "execution_readiness_uow", execution_uow)
     updates: list[object] = []
     publications: list[dict[str, object]] = []
     service = SimpleNamespace(repo=SimpleNamespace(webhook_setting=SimpleNamespace(update=updates.append)))
