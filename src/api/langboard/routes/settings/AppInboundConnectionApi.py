@@ -1,5 +1,6 @@
 """Native inbound service onboarding; no provider credentials or upstream verification."""
 
+from fastapi import Query
 from langboard_shared.core.filter import AuthFilter
 from langboard_shared.core.routing import ApiErrorCode, ApiException, AppRouter, BaseFormModel, JsonResponse, form_model
 from langboard_shared.core.types import SnowflakeID
@@ -8,6 +9,7 @@ from langboard_shared.domain.services import DomainService
 from langboard_shared.domain.services.AppConnectionManagement import (
     create_inbound_connection,
     disconnect_inbound_connection,
+    list_inbound_connections,
     select_inbound_resource,
 )
 from langboard_shared.domain.services.AppGovernance import AppGovernanceDenied
@@ -35,9 +37,9 @@ class InboundResourceForm(BaseFormModel):
     expected_access_revision: int | None = Field(default=None, strict=True, ge=0)
 
 
-def _run(operation, *args):
+def _run(operation, *args, **kwargs):
     try:
-        return JsonResponse(content=operation(*args), headers={"Cache-Control": "no-store"})
+        return JsonResponse(content=operation(*args, **kwargs), headers={"Cache-Control": "no-store"})
     except AppGovernanceDenied as exc:
         raise ApiException.Forbidden_403(ApiErrorCode.PE1001) from exc
     except AppRegistryConflict as exc:
@@ -62,6 +64,25 @@ def create_connection(app_key: str, form: InboundConnectionForm, user: User = Au
 class DisconnectInboundForm(BaseFormModel):
     model_config = {"extra": "forbid"}
     expected_revision: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
+@AppRouter.api.get("/settings/apps/registry/{app_key}/inbound-connections", tags=["AppSettings.Connections"])
+@AuthFilter.add("user")
+def list_connections(
+    app_key: str,
+    user: User = Auth.scope("user"),
+    organization_uid: str | None = Query(default=None, pattern=r"^[A-Za-z0-9]{11}$"),
+    after: str | None = Query(default=None, pattern=r"^[A-Za-z0-9]{11}$"),
+    limit: int = Query(default=25, ge=1, le=50),
+) -> JsonResponse:
+    return _run(
+        list_inbound_connections,
+        user,
+        app_key,
+        organization_id=SnowflakeID.from_short_code(organization_uid) if organization_uid else None,
+        after_id=SnowflakeID.from_short_code(after) if after else None,
+        limit=limit,
+    )
 
 
 @AppRouter.api.post("/settings/apps/inbound-connections/{connection_uid}/disconnect", tags=["AppSettings.Connections"])
