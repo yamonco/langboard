@@ -161,7 +161,7 @@ export default function BoardSettingsMetadataConnection({
         setReadAccess(null);
         clearReadResults();
     };
-    const run = async (action: (valid: () => boolean) => Promise<void>, allowVerificationEdits = false) => {
+    const run = async (action: (valid: () => boolean) => Promise<void>, allowVerificationEdits = false, retainConnection = false) => {
         if (busy.current || !canEditBasicInfo) return;
         clearVerification();
         busy.current = true;
@@ -177,8 +177,10 @@ export default function BoardSettingsMetadataConnection({
             if (valid()) {
                 setError(true);
                 clearResources();
-                setConnection(null);
-                setConnections({ items: [], next_cursor: null });
+                if (!retainConnection) {
+                    setConnection(null);
+                    setConnections({ items: [], next_cursor: null });
+                }
             }
         } finally {
             if (valid()) {
@@ -282,12 +284,16 @@ export default function BoardSettingsMetadataConnection({
         setNotificationID(result.notification_id ?? "");
     };
     const refreshWebhook = (uid = connection?.connection_uid) =>
-        run(async (valid) => {
-            if (!dokploy || !uid) return;
-            clearWebhook();
-            const result = (await api.get<WebhookHealth>(`${root}/connections/${uid}/webhook-health`)).data;
-            if (valid()) acceptWebhook(result);
-        });
+        run(
+            async (valid) => {
+                if (!dokploy || !uid) return;
+                clearWebhook();
+                const result = (await api.get<WebhookHealth>(`${root}/connections/${uid}/webhook-health`)).data;
+                if (valid()) acceptWebhook(result);
+            },
+            false,
+            true
+        );
     const webhookSecretInput = () =>
         run(async (valid) => {
             const result = (await api.post<{ input_uid: string; input_url: string }>(`${root}/webhook-secret-input`)).data;
@@ -920,7 +926,7 @@ export default function BoardSettingsMetadataConnection({
                             <div key={row.resource_uid} className="flex items-center justify-between gap-2 rounded-md border p-2">
                                 <span className="min-w-0 break-words">{row.path?.map((part) => part.name ?? part.slug ?? part.id).join(" / ")}</span>
                                 <Button size="sm" variant="outline" onClick={() => void removeBinding(row)}>
-                                {text("Remove app selection")}
+                                    {text("Remove app selection")}
                                 </Button>
                             </div>
                         ))}

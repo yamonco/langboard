@@ -13,6 +13,15 @@ const resources = new Map<
     { resource_uid: string; external_id: string; type: string; access_revision: number; selected: boolean; path: { type: string; id: string }[] }
 >();
 let enabled = false;
+if (params.has("saved"))
+    resources.set("app-1", {
+        resource_uid: "resource",
+        external_id: "app-1",
+        type: "application",
+        access_revision: 1,
+        selected: true,
+        path: [{ type: "application", id: "app-1" }],
+    });
 const readAccess = () => ({
     uid: "board-binding",
     revision: "b".repeat(64),
@@ -41,6 +50,7 @@ Object.assign(window, { dokployCalls: calls });
 api.defaults.adapter = async (config) => {
     const data = config.data ? JSON.parse(config.data) : null;
     calls.push({ method: config.method, url: config.url, data, params: config.params });
+    if (params.has("denyhealth") && config.url?.endsWith("/webhook-health")) throw new Error("Denied");
     if (params.has("delayed") && (config.url?.endsWith("/resources") || config.url?.endsWith("/refresh") || config.url?.endsWith("/enable-read")))
         await new Promise((resolve) => setTimeout(resolve, 400));
     if (params.has("deny") && config.url?.endsWith("/resources")) throw new Error("Denied");

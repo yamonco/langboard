@@ -146,6 +146,10 @@ credentials so clients can obtain current removal revisions. Provider discovery
 and activation continue to require active policy and a connected account.
 The shared settings panel has a separate saved-selection query and explicit
 selection removal controls. This path does not depend on provider discovery.
+Dokploy notification-health failures clear cached resource and notification
+results while retaining the selected account metadata for removal. This retained
+UI state grants no authority; every saved-selection query and removal still
+requires current server authorization and revisions.
 GitHub repository deselection uses the same revocation-only gate: revoked or
 disconnected connections can remove existing selections with current board
 Update authority, connection ownership and the exact resource revision. Adding
