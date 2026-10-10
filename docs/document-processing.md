@@ -70,3 +70,16 @@ Embedding tasks reject a deleted board before resolving providers. Publication
 locks the current board before the card and attachment and refuses a deleted or
 mismatched board. If deletion occurs during inference, publication fails and the
 task removes its staged vectors; previously committed source history is retained.
+
+### Optional converter upload regression
+
+The optional-converter integration test runs with Docling genuinely absent. It
+uses native JWT authentication, the HTTP upload endpoint, SQLite repositories,
+and local file storage. An authenticated upload returns 201, preserves the file
+and attachment, and emits one captured indexing task after commit. The native
+worker records a failed conversion with installation guidance before downloading
+the source; the attachment remains available. An unauthenticated request is 401.
+
+The test substitutes card visibility and captures the Celery publisher. It does
+not establish board ACL correctness, a live broker delivery, or deployed worker
+readiness. Its PostgreSQL variant requires an available test database.
