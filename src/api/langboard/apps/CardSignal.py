@@ -12,6 +12,7 @@ from langboard_shared.domain.models import (
     User,
 )
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
+from langboard_shared.domain.services.AppGovernance import AppGovernanceDenied, require_connection_access
 from langboard_shared.domain.services.AppManifest import APP_MANIFESTS
 from langboard_shared.domain.services.AppSignalProjection import (
     card_signal_projections,
@@ -77,6 +78,10 @@ def authorized_signal_scope(service, db, actor, project_uid, connection_uid, res
         actor, project_uid, ProjectRoleAction.Read, lock=True
     ) is None:
         raise GitHubManifestUnavailable()
+    try:
+        require_connection_access(db, actor, board, connection)
+    except AppGovernanceDenied:
+        raise GitHubManifestUnavailable() from None
     binding = db.exec(
         SqlBuilder.select.table(BoardAppBinding).where(
             BoardAppBinding.project_id == board.id,
