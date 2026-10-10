@@ -41,6 +41,25 @@ function Fixture() {
             <section aria-label="Masked static">
                 <PlateStatic editor={staticEditor} />
             </section>
+            <button
+                className="btn btn-sm"
+                onClick={() => {
+                    editor.tf.setValue([
+                        {
+                            type: "p",
+                            children: [
+                                { text: "JSON " },
+                                { type: "a", url: "secret://ref/fixture", children: [{ text: "json-caption" }] },
+                                { text: " and " },
+                                { type: "secretReference", uri: "secret://ref/other", children: [{ text: "tainted-caption" }] },
+                                { text: "" },
+                            ],
+                        },
+                    ]);
+                }}
+            >
+                Load collaborative reference
+            </button>
             <button className="btn btn-sm" onClick={() => setSaved(editor.getApi(MarkdownPlugin).markdown.serialize())}>
                 Save reference draft
             </button>
