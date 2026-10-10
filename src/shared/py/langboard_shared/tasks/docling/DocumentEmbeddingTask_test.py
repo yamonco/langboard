@@ -32,7 +32,9 @@ def fixture(monkeypatch, tmp_path):
     service = SimpleNamespace(
         card_attachment=SimpleNamespace(get_by_id_like=Mock(return_value=attachment)),
         card=SimpleNamespace(get_by_id_like=Mock(return_value=card)),
-        project=SimpleNamespace(get_by_id_like=Mock(return_value=SimpleNamespace(deleted_at=None, get_uid=lambda: "board-uid"))),
+        project=SimpleNamespace(
+            get_by_id_like=Mock(return_value=SimpleNamespace(deleted_at=None, get_uid=lambda: "board-uid"))
+        ),
         internal_bot=SimpleNamespace(get_current_by_id_like=Mock(return_value=binding)),
         docling_metadata=metadata,
     )
@@ -311,3 +313,103 @@ def test_explicit_reindex_preserves_off_and_snapshotted_model_after_global_edit(
     assert loads(task.create_document_embeddings.call_args.args[0])["model_name"] == "old-model"
     assert service.docling_metadata.publish_document_embedding.call_args.args[-1]["status"] == "indexed"
     task.delete_vector_generation.assert_not_called()
+
+
+def test_explicit_splitter_reindex_applies_snapshot_in_persistent_store(monkeypatch, tmp_path):
+    from json import dumps, loads
+    from langboard_shared.tasks.docling.DocumentEmbedding import (
+        resolve_embedding_snapshot,
+        snapshot_embedding_config,
+        validate_embedding_config,
+    )
+    from langboard_shared.tasks.docling.DocumentSqliteStore import open_sqlite_vector_store
+    from langboard_shared.tasks.docling.DocumentVectorStore import (
+        delete_vector_generation,
+        open_document_vector_store,
+        stage_vector_generation,
+    )
+
+    service, document, _ = fixture(monkeypatch, tmp_path)
+    text = "alpha 한국어 문서 日本語の資料 中文资料 beta " * 24
+    document["content"]["markdown"] = text
+    document["embedding"] = {}
+    for name, implementation in (
+        ("resolve_embedding_snapshot", resolve_embedding_snapshot),
+        ("validate_embedding_config", validate_embedding_config),
+        ("open_document_vector_store", open_document_vector_store),
+        ("stage_vector_generation", stage_vector_generation),
+        ("delete_vector_generation", delete_vector_generation),
+    ):
+        monkeypatch.setattr(task, name, implementation)
+    from langboard_shared.tasks.docling.DocumentSqliteVectorStore_test import Fixture
+
+    requests = []
+
+    class RecordingEmbeddings(Fixture):
+        def embed_documents(self, texts):
+            requests.extend(texts)
+            return super().embed_documents(texts)
+
+    def embeddings(value, allowed):
+        config = loads(value)
+        assert config["model_name"] == "frozen-model"
+        assert config["api_key"] == "rotated-secret"
+        assert config["base_url"] in allowed
+        return RecordingEmbeddings()
+
+    monkeypatch.setattr(task, "create_document_embeddings", embeddings)
+
+    def publish(_card, _attachment, _generation, _hash, embedding, *, expected_embedding):
+        assert expected_embedding == document["embedding"]
+        document["embedding"] = embedding
+        return True
+
+    service.docling_metadata.publish_document_embedding.side_effect = publish
+    pointers = []
+    for chunk_size in (128, 64):
+        value = {
+            "agent_llm": "OpenAI Compatible",
+            "base_url": "https://fixture.invalid",
+            "model_name": "frozen-model",
+            "api_key": "original-secret",
+            "retrieval": {
+                "enabled": False,
+                "dimensions": 3,
+                "splitter": {"chunk_size": chunk_size, "chunk_overlap": 0},
+            },
+        }
+        document["embedding_config"] = snapshot_embedding_config(dumps(value), "binding", explicit=True)
+        assert "original-secret" not in dumps(document["embedding_config"])
+        request_uid = f"explicit-{chunk_size}"
+        document["embedding"] = {**document["embedding"], "status": "pending", "request_uid": request_uid}
+        # Later global edits must not alter this request's model or splitter.
+        service.internal_bot.get_current_by_id_like.return_value.value = dumps(
+            {
+                **value,
+                "model_name": "later-global-model",
+                "api_key": "rotated-secret",
+                "retrieval": {"enabled": False},
+            }
+        )
+        start = len(requests)
+        task.embed_transcription(service, "attachment", "current", request_uid)
+        assert document["embedding"]["status"] == "indexed"
+        pointer = document["embedding"]["pointer"]
+        pointers.append(pointer)
+        path = tmp_path / "document-retrieval" / (pointer["embedding_fingerprint"] + ".sqlite")
+        with open_sqlite_vector_store(path, None, dimensions=3) as store:
+            chunks = store.get_by_ids(pointer["chunk_ids"])
+            assert len(chunks) == pointer["chunk_count"] > 1
+            assert sorted(chunk.page_content for chunk in chunks) == sorted(requests[start:])
+            assert all(len(chunk.page_content) <= chunk_size for chunk in chunks)
+            assert all(chunk.metadata["attachment_uid"] == "attachment" for chunk in chunks)
+            assert all(chunk.metadata["board_uid"] == "board-uid" for chunk in chunks)
+            if len(pointers) == 2:
+                assert not store.get_by_ids(pointers[0]["chunk_ids"])
+        # Duplicate delivery is a no-op after authoritative publication.
+        call_count = len(requests)
+        task.embed_transcription(service, "attachment", "current", request_uid)
+        assert len(requests) == call_count
+    assert pointers[0]["embedding_fingerprint"] == pointers[1]["embedding_fingerprint"]
+    assert pointers[1]["chunk_count"] > pointers[0]["chunk_count"]
+    assert document["content"]["markdown"] == text
