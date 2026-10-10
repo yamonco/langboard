@@ -103,7 +103,7 @@ export function useAppPanel({ app, projectUID, userUID, onClose }: Props) {
                                         Array.isArray(params) ||
                                         Object.keys(params).some((key) => key !== "provider" && key !== "after") ||
                                         typeof params.provider !== "string" ||
-                                        !["github", "glitchtip", "dokploy"].includes(params.provider) ||
+                                        !/^[a-z][a-z0-9_-]{0,31}$/.test(params.provider) ||
                                         (params.after !== undefined && typeof params.after !== "string")
                                     )
                                         throw new Error("Invalid signal request parameters");
