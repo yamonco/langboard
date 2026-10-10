@@ -64,6 +64,13 @@
     "invalid_archive_visible_days": "Enter at least 1 day."
   },
   "settings": {
+    "Prepare workflow before consent": "Prepare a workflow binding before granting permissions.",
+    "Review App permissions": "Review permissions",
+    "App explicit permissions help": "Select only permissions you approve for this board. Saving replaces the current grants. Clearing the selection and saving revokes all grants.",
+    "Save reviewed permissions": "Save reviewed permissions",
+    "Clear App permissions": "Clear selection",
+    "Back and refresh App permissions": "Back and refresh",
+
     "Confirm inbound change": "Confirm",
     "Manage inbound connections": "Manage service connections",
     "Inbound connection help": "Registers a Langboard inbound service identity. Does not sign in to an external account or grant board access.",

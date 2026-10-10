@@ -799,7 +799,13 @@ explicit registration and disconnect confirmation. Failed writes require a manua
 list refresh before another mutation; no automatic mutation retry is scheduled.
 These identities do not authenticate external accounts or grant board capabilities.
 Resource selection, capability consent and credential issuance remain separate
-operations; this connection screen does not yet provide those controls.
+operations; this connection screen does not provide those controls. The App Store
+now provides a separate **Review permissions** control for an existing binding.
+It displays declared capabilities and current grants, saves only explicit checked
+scopes with pinned app/binding revisions, and can revoke all grants by clearing
+the selection and saving. Disabled apps cannot receive new grants but can still
+be cleared. Failed mutations require a manual catalog refresh before another save.
+Resource selection and credential issuance UI remain incomplete.
 
 After preparing a board workflow draft, select each external resource with
 `PUT /board/{project_uid}/settings/apps/{app_key}/inbound-connections/{connection_uid}/resources`.

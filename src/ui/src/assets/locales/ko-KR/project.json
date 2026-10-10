@@ -64,6 +64,13 @@
     "invalid_archive_visible_days": "1일 이상 입력하세요."
   },
   "settings": {
+    "Prepare workflow before consent": "권한 동의 전에 워크플로 연결을 준비하세요.",
+    "Review App permissions": "권한 검토",
+    "App explicit permissions help": "이 보드에서 승인할 권한만 선택하세요. 저장하면 현재 동의를 대체합니다. 선택을 비운 후 저장하면 모든 동의를 철회합니다.",
+    "Save reviewed permissions": "검토한 권한 저장",
+    "Clear App permissions": "선택 비우기",
+    "Back and refresh App permissions": "돌아가서 새로 조회",
+
     "Confirm inbound change": "확인",
     "Manage inbound connections": "서비스 연결 관리",
     "Inbound connection help": "Langboard 인입 서비스 주체를 등록합니다. 외부 계정 로그인이나 보드 권한 부여는 수행하지 않습니다.",

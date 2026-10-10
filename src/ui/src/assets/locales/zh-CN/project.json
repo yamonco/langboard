@@ -64,6 +64,13 @@
     "invalid_archive_visible_days": "请输入至少 1 天。"
   },
   "settings": {
+    "Prepare workflow before consent": "授予权限前请准备工作流绑定。",
+    "Review App permissions": "审核权限",
+    "App explicit permissions help": "只选择您批准用于此看板的权限。保存将替换当前授权。清空选择并保存可撤销所有授权。",
+    "Save reviewed permissions": "保存审核后的权限",
+    "Clear App permissions": "清空选择",
+    "Back and refresh App permissions": "返回并刷新",
+
     "Confirm inbound change": "确认",
     "Manage inbound connections": "管理服务连接",
     "Inbound connection help": "注册 Langboard 入站服务身份。不会登录外部账户或授予看板权限。",

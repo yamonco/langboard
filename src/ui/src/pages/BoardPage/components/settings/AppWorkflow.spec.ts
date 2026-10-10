@@ -169,3 +169,28 @@ test("inbound failure blocks another mutation until explicit refresh", async ({ 
     await expect(page.getByRole("alert")).toHaveCount(0);
     expect(await page.evaluate(() => (window as unknown as { workflowWrites: unknown[] }).workflowWrites.length)).toBe(1);
 });
+
+test("independent board consent requires explicit selection and save", async ({ page }) => {
+    await page.goto(`${path}?store&external&consent`);
+    const app = page.getByRole("article").filter({ has: page.getByRole("heading", { name: "Example ERP", exact: true }) });
+    await app.getByRole("button", { name: "Review permissions", exact: true }).click();
+    await app.getByRole("checkbox", { name: "panels.render", exact: true }).click();
+    expect(await page.evaluate(() => (window as unknown as { workflowWrites: unknown[] }).workflowWrites.length)).toBe(0);
+    await app.getByRole("button", { name: "Save reviewed permissions", exact: true }).click();
+    await expect.poll(() => page.evaluate(() => (window as unknown as { workflowWrites: unknown[] }).workflowWrites.length)).toBe(1);
+    expect(await page.evaluate(() => (window as unknown as { workflowWrites: unknown[] }).workflowWrites[0])).toEqual({
+        url: "/board/fixture/settings/apps/example-erp/consent", app_revision: "a".repeat(64),
+        binding_uid: "binding", expected_revision: "a".repeat(64), capabilities: ["panels.render"],
+    });
+});
+
+test("disabled app consent can be revoked while new grants remain blocked", async ({ page }) => {
+    await page.goto(`${path}?store&external&consent&consentdisabled`);
+    const app = page.getByRole("article").filter({ has: page.getByRole("heading", { name: "Example ERP", exact: true }) });
+    await app.getByRole("button", { name: "Review permissions", exact: true }).click();
+    await expect(app.getByRole("button", { name: "Save reviewed permissions", exact: true })).toBeDisabled();
+    await app.getByRole("button", { name: "Clear selection", exact: true }).click();
+    await app.getByRole("button", { name: "Save reviewed permissions", exact: true }).click();
+    await expect.poll(() => page.evaluate(() => (window as unknown as { workflowWrites: unknown[] }).workflowWrites.length)).toBe(1);
+    expect(await page.evaluate(() => (window as unknown as { workflowWrites: { capabilities: string[] }[] }).workflowWrites[0].capabilities)).toEqual([]);
+});

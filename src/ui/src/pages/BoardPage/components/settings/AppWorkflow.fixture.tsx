@@ -56,17 +56,21 @@ api.defaults.adapter = async (config) => {
                         name: { github: "GitHub", glitchtip: "GlitchTip", dokploy: "Dokploy" }[key] ?? "Example ERP",
                         description: "Independent issue tracker",
                         capabilities: ["panels.render"],
+                        is_available: !(key === "example-erp" && new URLSearchParams(location.search).has("consentdisabled")),
                         panel:
                             key === "example-erp" && new URLSearchParams(location.search).has("panel")
                                 ? { name: "ERP", url: "https://example.invalid" }
                                 : null,
                         binding:
-                            key === "github"
+                            key === "github" || (key === "example-erp" && new URLSearchParams(location.search).has("consent"))
                                 ? {
                                       uid: "binding",
                                       revision: "a".repeat(64),
                                       state: !disabled && new URLSearchParams(location.search).has("enabled") ? "enabled" : "disabled",
-                                      granted_capabilities: [],
+                                      granted_capabilities:
+                                          key === "example-erp" && new URLSearchParams(location.search).has("consentdisabled")
+                                              ? ["panels.render"]
+                                              : [],
                                       stage_transitions_enabled: false,
                                   }
                                 : null,

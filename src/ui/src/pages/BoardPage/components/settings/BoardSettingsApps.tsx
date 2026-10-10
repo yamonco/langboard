@@ -12,6 +12,7 @@ import BoardSettingsGlitchTip from "./BoardSettingsGlitchTip";
 import BoardSettingsDokploy from "./BoardSettingsDokploy";
 import BoardSettingsAppWorkflow from "./BoardSettingsAppWorkflow";
 import BoardSettingsInboundConnections from "./BoardSettingsInboundConnections";
+import BoardSettingsAppConsent from "./BoardSettingsAppConsent";
 
 export default function BoardSettingsApps() {
     const [t, i18n] = useTranslation();
@@ -158,6 +159,13 @@ export default function BoardSettingsApps() {
                                     <p className="flex-1 text-sm text-muted-foreground">
                                         {app.description ?? t(`project.settings.App ${key} summary`, { defaultValue: "" })}
                                     </p>
+                                    {app.inbound_connection_management && (
+                                        <BoardSettingsAppConsent
+                                            key={`${app.key}:${app.app_revision}:${app.binding?.revision}`}
+                                            app={app}
+                                            onRefresh={refetch}
+                                        />
+                                    )}
                                     {app.inbound_connection_management && (
                                         <Button size="sm" variant="outline" onClick={() => setConnections(app)}>
                                             {t("project.settings.Manage inbound connections")}

@@ -64,6 +64,13 @@
     "invalid_archive_visible_days": "1日以上を入力してください。"
   },
   "settings": {
+    "Prepare workflow before consent": "権限付与前にワークフロー接続を準備してください。",
+    "Review App permissions": "権限を確認",
+    "App explicit permissions help": "このボードで承認する権限のみ選択してください。保存すると現在の許可を置き換えます。選択を空にして保存すると全て撤回します。",
+    "Save reviewed permissions": "確認した権限を保存",
+    "Clear App permissions": "選択をクリア",
+    "Back and refresh App permissions": "戻って更新",
+
     "Confirm inbound change": "確認",
     "Manage inbound connections": "サービス接続の管理",
     "Inbound connection help": "Langboard の受信サービスIDを登録します。外部ログインやボード権限の付与は行いません。",
