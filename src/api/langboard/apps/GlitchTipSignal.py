@@ -11,6 +11,7 @@ import re
 from datetime import datetime, timezone
 from langboard_shared.core.db import DbSession, SqlBuilder
 from langboard_shared.domain.models import AppResourceBinding, AppSignal, BoardAppBinding
+from langboard_shared.domain.services.AppRegistry import signal_app_allowed
 from langboard_shared.helpers import InfraHelper
 from langboard_shared.publishers import CardPublisher
 from sqlalchemy import func, select
@@ -75,6 +76,8 @@ def normalize_issue(row, project_id, project_slug, observed_at):
 def _scope(service, actor, project_uid, connection_uid, resource_uid, *, lock=False):
     board = connection._board(service, actor, project_uid)
     with DbSession.use(readonly=False) as db:
+        if not signal_app_allowed(db, "glitchtip", lock=lock):
+            raise connection.GlitchTipUnavailable()
         conn = connection._connection(db, actor, connection_uid, lock=lock)
         query = SqlBuilder.select.table(BoardAppBinding).where(
             BoardAppBinding.project_id == board.id,

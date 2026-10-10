@@ -440,3 +440,19 @@ def test_receiver_binding_audit_rolls_back_failed_reconfiguration(configured, mo
         sum(x["action"] == "bound" for x in service.secret_reference.list_audit(board[1], management["uri"])["items"])
         == management_bound
     )
+
+
+@pytest.mark.parametrize("change", ["disabled", "capability"])
+def test_app_registry_revocation_blocks_webhook_without_losing_receipts(configured, change):
+    from langboard_shared.domain.models import AppDefinition
+
+    first = accept(configured)
+    actor = configured[0][1][1]
+    with DbSession.atomic() as db:
+        db.insert(AppDefinition(key="dokploy", approved_by=actor.id, is_enabled=change != "disabled",
+                                declaration={"capabilities": [] if change == "capability" else ["signals.read"]}))
+    with pytest.raises(dk.DokployUnavailable):
+        accept(configured)
+    with DbSession.use(readonly=False) as db:
+        rows = db.exec(SqlBuilder.select.table(DokployNotificationReceipt)).all()
+        assert len(rows) == 1 and rows[0].get_uid() == first["receipt_uid"]

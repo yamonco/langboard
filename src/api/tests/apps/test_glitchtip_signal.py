@@ -385,3 +385,33 @@ def test_selected_projects_exposes_consent_revision(selected):
         binding = db.exec(SqlBuilder.select.table(BoardAppBinding)).first()
         assert page["binding"]["revision"] == binding.edit_revision()
         assert not binding.stage_transitions_enabled
+
+
+@pytest.mark.parametrize("change", ["disabled", "capability"])
+@pytest.mark.parametrize("inflight", [False, True])
+def test_app_registry_revocation_fences_refresh(selected, change, inflight):
+    from langboard_shared.domain.models import AppDefinition
+
+    setup = selected[0]
+    board = setup[1]
+    with DbSession.atomic() as db:
+        definition = AppDefinition(key="glitchtip", approved_by=board[1].id, declaration={"capabilities": ["signals.read"]})
+        db.insert(definition)
+
+    def revoke():
+        with DbSession.atomic() as db:
+            current = db.exec(SqlBuilder.select.table(AppDefinition).where(AppDefinition.key == "glitchtip")).first()
+            if change == "disabled":
+                current.is_enabled = False
+            else:
+                current.declaration = {"capabilities": []}
+            db.update(current)
+
+    if inflight:
+        setup[-1]["after_issues"] = revoke
+    else:
+        revoke()
+    with pytest.raises(gt.GlitchTipUnavailable):
+        refresh(selected)
+    with DbSession.use(readonly=False) as db:
+        assert not db.exec(SqlBuilder.select.table(AppSignal)).all()

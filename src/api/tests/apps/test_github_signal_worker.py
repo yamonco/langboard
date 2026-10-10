@@ -13,6 +13,7 @@ from langboard_shared.core.db import DbSession, SqlBuilder
 from langboard_shared.core.types import SafeDateTime
 from langboard_shared.domain.models import (
     AppConnection,
+    AppDefinition,
     AppResourceBinding,
     AppSignal,
     BoardAppBinding,
@@ -389,3 +390,25 @@ def test_worker_notifies_only_after_new_resource_evidence_commit(delivery_storag
     assert notified == [state[1][2].get_uid()]
     assert worker.drain_one(state[0], uid)
     assert notified == [state[1][2].get_uid()]
+
+
+@pytest.mark.parametrize("change", ["disabled", "capability"])
+def test_queued_signal_does_not_execute_after_app_revocation(delivery_storage, change):
+    state = delivery_storage[0]
+    result = receive(delivery_storage)
+    uid = result["delivery_uid"]
+    before = dict(job(uid).evidence)
+    with DbSession.atomic() as db:
+        definition = db.exec(SqlBuilder.select.table(AppDefinition).where(AppDefinition.key == "github")).first()
+        if change == "disabled":
+            definition.is_enabled = False
+            db.update(definition)
+        else:
+            definition.declaration = {"capabilities": []}
+            db.update(definition)
+    assert worker.drain_one(state[0], uid)
+    assert not evidence()
+    assert job(uid).last_error == "authority_unavailable"
+    assert worker.drain_one(state[0], uid)
+    assert job(uid).state == "blocked"
+    assert job(uid).evidence == before

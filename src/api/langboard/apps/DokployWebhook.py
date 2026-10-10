@@ -13,6 +13,7 @@ from langboard_shared.domain.models import (
     DokployWebhookBinding,
     User,
 )
+from langboard_shared.domain.services.AppRegistry import signal_app_allowed
 from langboard_shared.domain.services.factory.SecretReferenceService import SecretAuditSource
 from langboard_shared.helpers import InfraHelper
 from . import DokployConnection as connection
@@ -24,6 +25,8 @@ MAX_BODY = 65536
 def _scope(service, actor, project_uid, connection_uid, *, allow_unconfigured=False):
     board = connection._board(service, actor, project_uid)
     with DbSession.use(readonly=False) as db:
+        if not signal_app_allowed(db, "dokploy", lock=True):
+            raise connection.DokployUnavailable()
         conn = connection._connection(db, actor, connection_uid, lock=True)
         binding = db.exec(
             SqlBuilder.select.table(BoardAppBinding)
