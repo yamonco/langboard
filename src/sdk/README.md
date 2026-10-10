@@ -81,3 +81,10 @@ current authority without extending the permit. It retains historical start
 attestation separately from `active_report`; stopped, expired or revoked
 permits cannot appear active. This is an app-attestation projection, not
 independent process health. Use explicit heartbeat calls for renewal.
+
+Python SDK 0.2.12 adds `CardResources.read/select` for human administrator
+configuration through the native card-resource GET/PUT routes. Use a user
+transport separately from app-scoped `AppResources`. Read current revision
+before replacement; an empty selection unlinks resources. No automatic retry,
+execution grant or workflow transition is performed. The reviewed wheel is
+pinned with its digest in `vendor/provenance.json`.

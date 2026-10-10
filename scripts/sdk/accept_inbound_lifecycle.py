@@ -98,7 +98,7 @@ if os.environ.get("SDK_ACCEPTANCE_SERVER") == "1":
 
 async def acceptance(base, auth):
     import httpx
-    from langboard_sdk import AppManager, AppRegistry, HttpTransport, NativeApiError
+    from langboard_sdk import AppManager, AppRegistry, CardResources, HttpTransport, NativeApiError
 
     spec = importlib.util.spec_from_file_location("external_issue", EXAMPLES / "external_issue.py")
     example = importlib.util.module_from_spec(spec)
@@ -204,24 +204,15 @@ async def acceptance(base, auth):
             )
             assert first["created"] and not replay["created"] and first["card_uid"] == replay["card_uid"]
             assert replay["effects_state"] == "dispatched", replay
-            card_resources_path = (
-                f"/board/{auth['board']}/card/{first['card_uid']}/apps/connections/{auth['connection']}/resources"
-            )
-            selection = await transport.request("GET", card_resources_path)
+            card_resources = CardResources(transport)
+            selection_scope = (auth["board"], first["card_uid"], auth["connection"])
+            selection = await card_resources.read(*selection_scope)
             assert selection["revision"] is None and selection["resource_uids"] == []
-            selection = await transport.request(
-                "PUT",
-                card_resources_path,
-                json={"resource_uids": [auth["resource"]], "expected_revision": None},
-            )
+            selection = await card_resources.select(*selection_scope, [auth["resource"]], expected_revision=None)
             assert selection["revision"] == 1 and selection["changed"]
-            assert (await transport.request("GET", card_resources_path))["resource_uids"] == [auth["resource"]]
+            assert (await card_resources.read(*selection_scope))["resource_uids"] == [auth["resource"]]
             try:
-                await transport.request(
-                    "PUT",
-                    card_resources_path,
-                    json={"resource_uids": [], "expected_revision": None},
-                )
+                await card_resources.select(*selection_scope, [], expected_revision=None)
             except NativeApiError as exc:
                 assert exc.status_code == 409
             else:
@@ -241,12 +232,8 @@ async def acceptance(base, auth):
             assert updated_replay["card_uid"] == first["card_uid"] and not updated_replay["created"]
             app_disabled = await registry.disable("example-erp", updated["revision"])
             assert not app_disabled["is_enabled"]
-            assert (await transport.request("GET", card_resources_path))["revision"] == 1
-            cleared = await transport.request(
-                "PUT",
-                card_resources_path,
-                json={"resource_uids": [], "expected_revision": 1},
-            )
+            assert (await card_resources.read(*selection_scope))["revision"] == 1
+            cleared = await card_resources.select(*selection_scope, [], expected_revision=1)
             assert cleared["revision"] == 2 and cleared["resource_uids"] == []
             assert not next(a for a in await registry.list() if a["declaration"]["key"] == "example-erp")["is_enabled"]
             try:
@@ -331,7 +318,7 @@ with tempfile.TemporaryDirectory(prefix="langboard-sdk-http-") as tmp:
         JWT_SECRET_KEY="disposable-acceptance-" + os.urandom(32).hex(),
         CACHE_TYPE="in-memory",
         BROADCAST_TYPE="in-memory",
-        PYTHONPATH=str(ROOT / "src/sdk/vendor/langboard_sdk-0.2.11-py3-none-any.whl"),
+        PYTHONPATH=str(ROOT / "src/sdk/vendor/langboard_sdk-0.2.12-py3-none-any.whl"),
     )
     broadcast = ROOT / "local/broadcast"
     broadcast.mkdir(parents=True, exist_ok=True)
