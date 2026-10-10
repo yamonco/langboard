@@ -4,7 +4,7 @@ import { IAppGovernance, TAppGovernanceMode, useAppGovernance } from "@/controll
 import { AuthUser } from "@/core/models";
 import { usePageHeader } from "@/core/providers/PageHeaderProvider";
 import { isAxiosError } from "axios";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import SettingsLoadState from "./SettingsLoadState";
 
@@ -23,6 +23,7 @@ function AppGovernanceSettings() {
     const [failure, setFailure] = useState<"conflict" | "save" | null>(null);
     const [refreshFailed, setRefreshFailed] = useState(false);
     const [receipt, setReceipt] = useState<string | null>(null);
+    const writingRef = useRef(false);
     const busy = load.isFetching || save.isPending;
     const dirty = baseline !== null && mode !== baseline.mode;
 
@@ -38,7 +39,8 @@ function AppGovernanceSettings() {
     }, [load.data, load.isFetching, load.isError, baseline]);
 
     const submit = async () => {
-        if (!baseline || !dirty || busy || failure === "conflict") return;
+        if (!baseline || !dirty || busy || writingRef.current || failure === "conflict") return;
+        writingRef.current = true;
         setFailure(null);
         setReceipt(null);
         try {
@@ -48,6 +50,8 @@ function AppGovernanceSettings() {
             setReceipt(updated.revision);
         } catch (error) {
             setFailure(isAxiosError(error) && error.response?.status === 409 ? "conflict" : "save");
+        } finally {
+            writingRef.current = false;
         }
     };
 
@@ -123,7 +127,7 @@ function AppGovernanceSettings() {
                             </div>
                         )}
                         {receipt !== null && (
-                            <p role="status" className="text-sm">
+                            <p role="status" className="break-words text-sm">
                                 {t("settings.App governance saved", { revision: receipt })}
                             </p>
                         )}
