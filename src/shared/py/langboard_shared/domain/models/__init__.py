@@ -6,6 +6,7 @@ from .AppEventDestination import AppEventDestination
 from .AppExecutionOutbox import AppExecutionOutbox
 from .AppExecutionAcknowledgment import AppExecutionAcknowledgment
 from .AppExecutionLease import AppExecutionLease
+from .AppExecutionStart import AppExecutionStart
 from .AppExecutionRequest import AppExecutionRequest
 from .AppConnection import AppConnection
 from .AppConnectionCredential import AppConnectionCredential
@@ -125,6 +126,9 @@ __all__ = [
     "AppEventDestination",
     "AppExecutionOutbox",
     "AppExecutionRequest",
+    "AppExecutionAcknowledgment",
+    "AppExecutionLease",
+    "AppExecutionStart",
     "AppConnection",
     "BoardAppBinding",
     "DokployWebhookBinding",

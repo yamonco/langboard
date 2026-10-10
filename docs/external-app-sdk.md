@@ -703,3 +703,25 @@ start server-side work. A receiver controls its own process and must stop when
 `permit_execution` becomes false. A new generation and new acknowledgment are
 required to resume. This is the safe-stop boundary; HITL decisions, scheduler
 admission, runtime start evidence and external process integration remain separate.
+
+### Explicit app-reported execution start
+
+SDK 0.2.10 provides `report_start` after the receiver observes its external
+process start. The native `start-reports` endpoint requires the current app
+Bearer credential, the matching accepted request, a live authorized permit,
+its private runtime token, and a bounded execution reference. Current policy,
+ownership, resources, generation, stage and authority snapshot are rechecked
+before storing any receipt. A replay with the same reference returns the same
+receipt; a different reference conflicts. Revoked, expired and stopped permits
+cannot create or replay a start report as current authority.
+
+The receipt uses `state: start_reported` and `evidence_kind: app_attestation`.
+It records the app's report, not independent observation by Langboard. It does
+not start a process, renew the permit, move the card, resolve HITL, or declare
+work completed. Permit responses remain `started:false`: authorization is not
+start evidence. Start history retains its request, acknowledgment, generation,
+runtime and execution references even after source records are removed; a
+migration downgrade refuses to discard this evidence. Never include tokens,
+secrets or process output in execution references. Native running projection,
+active-stage transition, process verification and scheduler integration remain
+separate pending work.

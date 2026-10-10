@@ -68,3 +68,10 @@ find an existing permit; it applies the same primary-database authority and
 expiry checks as heartbeat. It cannot create, rotate, or resurrect a permit.
 An unknown recovery outcome is not permission to execute and is never retried
 implicitly by the SDK.
+
+Python SDK 0.2.10 adds `report_start` and `ExecutionStartReport`. The native
+app-authenticated endpoint records a receiver-reported execution reference
+only under a current live permit. `start_reported/app_attestation` describes
+the evidence source explicitly; it is not host process observation, dispatch,
+workflow transition, or completion. Duplicate reports are idempotent only for
+the same execution reference. Permit receipts still return `started:false`.
