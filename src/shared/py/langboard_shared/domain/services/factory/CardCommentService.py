@@ -8,8 +8,9 @@ from ....publishers import CardCommentPublisher
 from ....tasks.activities import CardCommentActivityTask
 from ....tasks.bots import CardCommentBotTask
 from ...models import Bot, Card, CardComment, CardCommentReaction, Project, User
-from ...models.CardComment import CardCommentAnchorModel
 from ...models.bases import REACTION_TYPES
+from ...models.CardComment import CardCommentAnchorModel
+from ..CardAppMutation import guard_card_app_mutation
 from .CardService import CardService
 from .NotificationService import NotificationService
 from .ReactionService import ReactionService
@@ -110,6 +111,7 @@ class CardCommentService(BaseDomainService):
         api_comment["reactions"] = {kind: uids for kind, uids in (reaction or {}).items() if kind in REACTION_TYPES}
         return api_comment
 
+    @guard_card_app_mutation
     def create(
         self,
         user_or_bot: TUserOrBot,
@@ -170,6 +172,7 @@ class CardCommentService(BaseDomainService):
         if include_bot:
             CardCommentBotTask.card_comment_added(user_or_bot, project, card, comment)
 
+    @guard_card_app_mutation
     def update(
         self,
         user_or_bot: TUserOrBot,
@@ -207,6 +210,7 @@ class CardCommentService(BaseDomainService):
 
         return comment
 
+    @guard_card_app_mutation
     def delete(
         self,
         user_or_bot: TUserOrBot,
@@ -234,6 +238,7 @@ class CardCommentService(BaseDomainService):
 
         return comment
 
+    @guard_card_app_mutation
     def toggle_reaction(
         self,
         user_or_bot: TUserOrBot,

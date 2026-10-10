@@ -9,6 +9,7 @@ from ....tasks.activities import CardChecklistActivityTask
 from ....tasks.bots import CardChecklistBotTask
 from ...models import Card, Checklist, Project
 from ...models.Checkitem import CheckitemStatus
+from ..CardAppMutation import guard_card_app_mutation
 from ..CardVisibilityPolicy import CardVisibilityContext
 from .CheckitemService import CheckitemService
 from .NotificationService import NotificationService
@@ -113,6 +114,7 @@ class ChecklistService(BaseDomainService):
         )
         return [checklist.api_response() for checklist in checklists]
 
+    @guard_card_app_mutation
     def create(
         self,
         user_or_bot: TUserOrBot,
@@ -154,6 +156,7 @@ class ChecklistService(BaseDomainService):
         if include_bot:
             CardChecklistBotTask.card_checklist_created(user_or_bot, project, card, checklist)
 
+    @guard_card_app_mutation
     def change_title(
         self,
         user_or_bot: TUserOrBot,
@@ -184,6 +187,7 @@ class ChecklistService(BaseDomainService):
 
         return True
 
+    @guard_card_app_mutation
     def change_order(
         self,
         project: TProjectParam | None,
@@ -209,6 +213,7 @@ class ChecklistService(BaseDomainService):
             db.after_commit(lambda: ChecklistPublisher.order_changed(card, changed_checklist))
         return True
 
+    @guard_card_app_mutation
     def toggle_checked(
         self,
         user_or_bot: TUserOrBot,
@@ -265,6 +270,7 @@ class ChecklistService(BaseDomainService):
 
         return True
 
+    @guard_card_app_mutation
     def delete(
         self,
         user_or_bot: TUserOrBot,
