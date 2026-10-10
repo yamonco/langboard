@@ -205,5 +205,9 @@ Direct GitHub signal reads also validate the requesting user's connection access
 not only the stored connection owner's authority. Board ownership and instance
 administration do not make another user's personal account readable, including
 when the requester supplies a previously known signal cursor.
+The resource-specific GitHub webhook endpoint applies the same unattended gate
+before signature resolution and again inside the evidence transaction. Changing
+the connection to personal ownership or disabling its organization while a
+signature is checked prevents the subsequent write.
 This does not retroactively undo external changes or prove that every automation
 route is integrated with connection ownership and governance policy.

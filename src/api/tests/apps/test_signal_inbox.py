@@ -44,13 +44,16 @@ def test_inbox_personal_connection_is_private_even_to_board_owner(scoped, admin)
     from langboard_shared.domain.models import User
 
     state, _, binding, _ = scoped
+    send(state)
     with DbSession.use(readonly=False) as db:
+        state[2].ownership = "personal"
+        state[2].organization_id = None
+        db.update(state[2])
         binding.is_enabled = False
         db.update(binding)
         owner = db.exec(SqlBuilder.select.table(User).where(User.id == state[1][2].owner_id)).first()
         owner.is_admin = admin
         db.update(owner)
-    send(state)
     visible = inbox(scoped)
     assert len(visible["items"]) == 1
     assert owner.id != state[1][1].id

@@ -11,7 +11,14 @@ from langboard.apps.GitHubManifest import GitHubManifestUnavailable
 from langboard.apps.GitHubSignal import list_signals, receive_check
 from langboard_shared.core.db import DbSession, SqlBuilder
 from langboard_shared.core.db.DbEngine import DbEngine
-from langboard_shared.domain.models import AppDefinition, AppResourceBinding, AppSignal, BoardAppBinding, User
+from langboard_shared.domain.models import (
+    AppDefinition,
+    AppResourceBinding,
+    AppSignal,
+    BoardAppBinding,
+    Organization,
+    User,
+)
 from test_github_installation import board, installation, secrets  # noqa: F401
 from test_github_lifecycle import lifecycle, signed  # noqa: F401
 
@@ -30,6 +37,12 @@ def signal_storage(lifecycle, monkeypatch):
         migration.op = Operations(MigrationContext.configure(db))
         migration.upgrade()
     with DbSession.use(readonly=False) as db:
+        organization = Organization(name="Signal fixture", slug="signal-fixture", owner_user_id=board[1].id)
+        db.insert(organization)
+        board[2].organization_id = organization.id
+        connection.ownership = "organization"
+        connection.organization_id = organization.id
+        db.update(board[2])
         db.insert(AppDefinition(key="github", approved_by=board[1].id, declaration={"capabilities": ["signals.read"]}))
         connection.state = "connected"
         db.update(connection)
@@ -75,12 +88,35 @@ def test_direct_signal_read_cannot_borrow_another_personal_connection(signal_sto
     signal = send(state)
     assert len(read(state)["items"]) == 1
     with DbSession.atomic() as db:
+        state[2].ownership = "personal"
+        state[2].organization_id = None
+        db.update(state[2])
         owner = db.exec(SqlBuilder.select.table(User).where(User.id == state[1][2].owner_id)).first()
         owner.is_admin = admin
         db.update(owner)
     for cursor in (None, signal["signal_uid"]):
         with pytest.raises(GitHubManifestUnavailable):
             list_signals(state[0], owner, state[1][2].get_uid(), state[2].get_uid(), state[4].get_uid(), cursor)
+
+
+@pytest.mark.parametrize("private_board", [False, True])
+def test_direct_webhook_personal_connection_requires_private_board(signal_storage, private_board):
+    state = signal_storage
+    with DbSession.atomic() as db:
+        state[2].ownership = "personal"
+        state[2].organization_id = None
+        db.update(state[2])
+        if private_board:
+            state[1][2].organization_id = None
+            state[1][2].owner_id = state[1][1].id
+            db.update(state[1][2])
+    if private_board:
+        send(state)
+        assert len(read(state)["items"]) == 1
+    else:
+        with pytest.raises(GitHubManifestUnavailable):
+            send(state)
+        assert read(state)["items"] == []
 
 
 def test_signed_lite_installation_and_incomplete_mapping_keep_evidence(signal_storage):
@@ -240,7 +276,7 @@ def test_native_signed_http_and_authenticated_read(signal_storage, monkeypatch):
         assert client.post(ingest, content=body, headers=headers).status_code == 400
 
 
-@pytest.mark.parametrize("failure", ["unlink", "path", "secret_revoke"])
+@pytest.mark.parametrize("failure", ["unlink", "path", "secret_revoke", "personal_connection", "organization_inactive"])
 def test_authority_changes_during_signature_resolution_block_commit(signal_storage, monkeypatch, failure):
     state = signal_storage
     original = state[0].secret_reference.resolve_for_runtime
@@ -255,6 +291,14 @@ def test_authority_changes_during_signature_resolution_block_commit(signal_stora
             with DbSession.use(readonly=False) as db:
                 if failure == "unlink":
                     state[4].is_selected = False
+                elif failure == "personal_connection":
+                    state[2].ownership = "personal"
+                    state[2].organization_id = None
+                    db.update(state[2])
+                elif failure == "organization_inactive":
+                    organization = db.exec(SqlBuilder.select.table(Organization).where(Organization.id == state[2].organization_id)).first()
+                    organization.is_active = False
+                    db.update(organization)
                 else:
                     state[4].resource_path = [{"type": "installation", "id": "18"}, *state[4].resource_path[1:]]
                 db.update(state[4])
