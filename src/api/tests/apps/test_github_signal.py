@@ -11,7 +11,7 @@ from langboard.apps.GitHubManifest import GitHubManifestUnavailable
 from langboard.apps.GitHubSignal import list_signals, receive_check
 from langboard_shared.core.db import DbSession, SqlBuilder
 from langboard_shared.core.db.DbEngine import DbEngine
-from langboard_shared.domain.models import AppDefinition, AppResourceBinding, AppSignal, BoardAppBinding
+from langboard_shared.domain.models import AppDefinition, AppResourceBinding, AppSignal, BoardAppBinding, User
 from test_github_installation import board, installation, secrets  # noqa: F401
 from test_github_lifecycle import lifecycle, signed  # noqa: F401
 
@@ -67,6 +67,20 @@ def send(state, delivery=None):
 def read(state, after=None):
     service, board, connection, _, resource, _, _, _ = state
     return list_signals(service, board[1], board[2].get_uid(), connection.get_uid(), resource.get_uid(), after)
+
+
+@pytest.mark.parametrize("admin", [False, True])
+def test_direct_signal_read_cannot_borrow_another_personal_connection(signal_storage, admin):
+    state = signal_storage
+    signal = send(state)
+    assert len(read(state)["items"]) == 1
+    with DbSession.atomic() as db:
+        owner = db.exec(SqlBuilder.select.table(User).where(User.id == state[1][2].owner_id)).first()
+        owner.is_admin = admin
+        db.update(owner)
+    for cursor in (None, signal["signal_uid"]):
+        with pytest.raises(GitHubManifestUnavailable):
+            list_signals(state[0], owner, state[1][2].get_uid(), state[2].get_uid(), state[4].get_uid(), cursor)
 
 
 def test_signed_lite_installation_and_incomplete_mapping_keep_evidence(signal_storage):

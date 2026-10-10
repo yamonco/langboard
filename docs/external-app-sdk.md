@@ -201,5 +201,9 @@ each leased resource before writing evidence. Personal connections are blocked
 on organization or shared boards; an owner-only personal board may retain its
 explicit personal automation. Organization connections require a current matching
 active organization. Existing evidence and failed delivery history are retained.
+Direct GitHub signal reads also validate the requesting user's connection access,
+not only the stored connection owner's authority. Board ownership and instance
+administration do not make another user's personal account readable, including
+when the requester supplies a previously known signal cursor.
 This does not retroactively undo external changes or prove that every automation
 route is integrated with connection ownership and governance policy.
