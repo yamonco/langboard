@@ -14,19 +14,20 @@ def set_panel(service, actor, project_uid, app_key, binding_uid, expected_revisi
         board = db.exec(SqlBuilder.select.table(Project).where(Project.id == InfraHelper.convert_id(project_uid)).with_for_update()).first()
         if board is None:
             return None
-        project = service._authorized_app_board(actor, board.id, ProjectRoleAction.Update, lock=True)
+        project = service._authorized_app_board(actor, board.id, ProjectRoleAction.Update, lock=True, revocation=not enabled)
         if project is None:
             return None
-        try:
-            require_app_allowed(db, project)
-        except AppGovernanceDenied:
-            return None
+        if enabled:
+            try:
+                require_app_allowed(db, project)
+            except AppGovernanceDenied:
+                return None
         definition = db.exec(SqlBuilder.select.table(AppDefinition).where(AppDefinition.key == app_key).with_for_update()).first()
-        if definition is None or not definition.is_enabled:
+        if definition is None or (enabled and not definition.is_enabled):
             return None
         if definition.edit_revision() != app_revision:
             raise AppRegistryConflict()
-        if not definition.declaration.get("panel") or "panels.render" not in definition.declaration["capabilities"]:
+        if enabled and (not definition.declaration.get("panel") or "panels.render" not in definition.declaration["capabilities"]):
             raise ValueError("This app has no approved panel capability")
         binding = db.exec(SqlBuilder.select.table(BoardAppBinding).where(
             BoardAppBinding.project_id == project.id, BoardAppBinding.app_key == app_key,
