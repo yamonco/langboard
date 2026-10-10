@@ -671,3 +671,31 @@ The same request/event/runtime reference replays the same acknowledgment; a
 changed runtime reference conflicts. SDK 0.2.7 exposes `read_request` and
 `acknowledge` for these native routes. Runtime start/stop/resume, HITL and
 unattended scheduler remain separate contracts.
+
+### Runtime permit and safe stop
+
+After a `received` acknowledgment, the app may explicitly request a
+runtime-specific permit with a random 32-byte token. The permit lasts 120 seconds
+and is bound to one request and acknowledgment. It returns `permit_execution:true`
+for authorization only; it is not proof that a process started. A runtime check
+revalidates the same connection, policy, ownership, selection, stage and authority
+snapshot. A valid current heartbeat renews the permit. Revocation, stage exit,
+resource drift or expiry changes it to `stop_requested`; an explicit stop changes
+it to `stopped`. Stopped and expired permits never resume automatically and retain
+an append-only state history. The opaque token is stored only as a hash and is
+required for stop/check; no credential or runtime output is persisted.
+
+Permit and check receipts include `schema_version`, `request_uid`,
+`acknowledgment_uid`, `runtime_reference`, and `generation` so receivers can
+compare the native identity before acting. Store the runtime token privately
+and durably before authorization; never include it in logs or events. After
+an ambiguous authorization outcome, do not start a process. If the lease UID
+was received, `check_runtime` can confirm its current permit. A lookup by
+request for an entirely lost response is not implemented, so that case remains
+unresolved and requires operator intervention rather than blind dispatch.
+
+The native permit/check endpoints are app-independent and do not alter cards or
+start server-side work. A receiver controls its own process and must stop when
+`permit_execution` becomes false. A new generation and new acknowledgment are
+required to resume. This is the safe-stop boundary; HITL decisions, scheduler
+admission, runtime start evidence and external process integration remain separate.
