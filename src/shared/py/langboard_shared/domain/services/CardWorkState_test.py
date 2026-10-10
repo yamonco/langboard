@@ -212,3 +212,27 @@ def test_deployment_execution_precedence_preserves_human_and_dependency_evidence
     assert result["external_execution_state"] == "failed"
     proofs[-1]["state"] = "stale"
     assert state(external_signals=proofs)["execution_state"] == "external_active"
+
+
+def test_independent_manifest_controls_execution_and_observation_semantics(monkeypatch):
+    from importlib import import_module
+    from .AppManifest import AppManifest, AppSignalPolicy
+
+    module = import_module("langboard_shared.domain.services.AppManifest")
+    registry = dict(module.APP_MANIFESTS)
+    for key, kind in (("example-runner", "deployment"), ("example-observer", "issue_observation")):
+        registry[key] = AppManifest(key, key, ("service",), ("signals.read",),
+            signal_policy=AppSignalPolicy(("status",), ("service",), evidence_kind=kind))
+    monkeypatch.setattr(module, "APP_MANIFESTS", registry)
+    running = {"binding_uid": "runner", "provider": "example-runner", "state": "running"}
+    result = state(external_signals=[running])
+    assert result["external_execution_state"] == "running"
+    assert result["execution_state"] == "external_active"
+    assert any(r["code"] == "external_deployment_running" for r in result["reasons"])
+    observed = {"binding_uid": "observer", "provider": "example-observer", "state": "resolved"}
+    result = state(external_signals=[observed])
+    assert result["external_execution_state"] is None
+    assert any(r["code"] == "external_issue_observation_resolved" for r in result["reasons"])
+    assert result["verification_state"] != "passed"
+    # Unknown evidence cannot claim execution merely by naming a running state.
+    assert state(external_signals=[{**running, "provider": "undeclared"}])["external_execution_state"] is None

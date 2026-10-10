@@ -755,6 +755,17 @@ or proof of progress. No start attestation yields `start_report:null` and
 or implicitly resume stopped generations. Explicit heartbeat renewal remains
 `check_runtime`; keep private tokens out of URLs and logs.
 
+### Signal evidence semantics
+
+Host-installed signal adapters declare `AppSignalPolicy.evidence_kind` alongside
+outcome mappings and time basis. `deployment` participates in the external
+execution projection; `issue_observation` retains observation wording; the
+default `check` does not claim a running external execution. Work-state readers
+use this declaration rather than provider names. These evidence kinds do not
+grant reviewer approval or move workflow stages. Unknown providers cannot claim
+execution by returning a `running` state. App registration alone does not install
+a trusted signal adapter.
+
 ### Standalone management example
 
 The separately versioned SDK repository now contains

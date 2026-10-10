@@ -132,14 +132,23 @@ def project_work_state(
         )
     signals = external_signals or []
     signal_blocked = any(item["state"] in {"failed", "conflict"} for item in signals)
-    deployment_states = {item["state"] for item in signals if item.get("provider") == "dokploy"}
+    from .AppManifest import APP_MANIFESTS
+
+    evidence_kinds = {
+        key: manifest.signal_policy.evidence_kind
+        for key, manifest in APP_MANIFESTS.items() if manifest.signal_policy
+    }
+    deployment_states = {
+        item["state"] for item in signals if evidence_kinds.get(item.get("provider")) == "deployment"
+    }
     external_execution = next(
         (value for value in ("failed", "conflict", "running", "queued", "cancelled") if value in deployment_states),
         None,
     )
     for item in signals:
-        deployment = item.get("provider") == "dokploy"
-        issue_observation = item.get("provider") == "glitchtip"
+        kind = evidence_kinds.get(item.get("provider"), "check")
+        deployment = kind == "deployment"
+        issue_observation = kind == "issue_observation"
         reasons.append(
             {
                 "code": (
