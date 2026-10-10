@@ -230,3 +230,97 @@ for (const width of [1440, 390]) {
         await expect(page).toHaveURL(/\/secret-references\/fixture\/history$/);
     });
 }
+
+for (const width of [1440, 390]) {
+    test(`explicit copy submits metadata once and links independent history at ${width}`, async ({ page }) => {
+        await page.setViewportSize({ width, height: 900 });
+        let posts = 0;
+        await page.route("**/secret-references/fixture/history*", (route) =>
+            route.fulfill({
+                json: {
+                    items: posts
+                        ? [
+                              {
+                                  uid: "copy-event",
+                                  action: "copied",
+                                  created_at: "2026-10-10T00:00:00Z",
+                                  actor_uid: "copy-actor",
+                                  source_kind: "api",
+                                  reason_code: "reference_copied",
+                                  revision_before: 7,
+                                  revision_after: 7,
+                              },
+                          ]
+                        : [],
+                    next_cursor: null,
+                },
+            })
+        );
+        await page.route("**/secret-references/fixture", (route) =>
+            route.fulfill({ json: { reference: { name: "provider/key", state: "active", revision: 7 } } })
+        );
+        await page.route("**/secret-references/fixture/copy", async (route) => {
+            posts++;
+            expect(route.request().postDataJSON()).toEqual({ name: "provider/new-key", expected_revision: 7 });
+            await route.fulfill({ status: 201, json: { reference: { uri: "secret://ref/copied", revision: 0 } } });
+        });
+        await page.goto("/src/pages/AccountPage/secret-history.fixture.html");
+        await page.getByRole("button", { name: "Copy secret", exact: true }).click();
+        const name = page.getByRole("textbox", { name: "New logical name" });
+        await expect(name).toBeEnabled();
+        await name.fill("provider/new-key");
+        await page.getByRole("button", { name: "Create copy", exact: true }).click();
+        await expect(page.getByRole("status")).toHaveText("Copy created. The original is unchanged.");
+        await expect(page.getByRole("link", { name: "Open copied secret history" })).toHaveAttribute("href", "/secret-references/copied/history");
+        await expect(page.getByText("Copied", { exact: true })).toBeVisible();
+        expect(posts).toBe(1);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+        await page.screenshot({ path: `test-results/secret-copy-${width}.png` });
+    });
+}
+
+for (const failure of ["revoked", "conflict", "late-response"]) {
+    test(`copy fences ${failure} and retains current reference UI`, async ({ page }) => {
+        let held: import("@playwright/test").Route | undefined;
+        let posts = 0;
+        await page.route("**/secret-references/*/history*", (route) => route.fulfill({ json: { items: [], next_cursor: null } }));
+        await page.route("**/secret-references/fixture", (route) =>
+            route.fulfill({ json: { reference: { name: "provider/key", state: failure === "revoked" ? "revoked" : "active", revision: 2 } } })
+        );
+        await page.route("**/secret-references/fixture/copy", async (route) => {
+            posts++;
+            if (failure === "late-response") {
+                held = route;
+                return;
+            }
+            await route.fulfill({ status: 409, json: {} });
+        });
+        await page.goto("/src/pages/AccountPage/secret-history.fixture.html");
+        await page.getByRole("button", { name: "Copy secret", exact: true }).click();
+        if (failure === "revoked") {
+            await expect(page.getByRole("alert")).toBeVisible();
+            await expect(page.getByRole("button", { name: "Create copy", exact: true })).toBeDisabled();
+            expect(posts).toBe(0);
+            return;
+        }
+        const name = page.getByRole("textbox", { name: "New logical name" });
+        await expect(name).toBeEnabled();
+        await name.fill("provider/new-key");
+        await page.getByRole("button", { name: "Create copy", exact: true }).click();
+        if (failure === "conflict") {
+            await expect(page.getByRole("alert")).toBeVisible();
+            await expect(name).toHaveValue("provider/new-key");
+            await expect(page.getByRole("link", { name: "Open copied secret history" })).toHaveCount(0);
+        } else {
+            await expect.poll(() => !!held).toBe(true);
+            await expect(page.getByRole("button", { name: "Create copy", exact: true })).toBeDisabled();
+            await page.getByRole("button", { name: "Other reference", exact: true }).click();
+            const response = page.waitForResponse("**/secret-references/fixture/copy");
+            await held!.fulfill({ status: 201, json: { reference: { uri: "secret://ref/copied" } } });
+            await (await response).finished();
+            await expect(page.getByRole("link", { name: "Open copied secret history" })).toHaveCount(0);
+            await expect(page.getByRole("alert")).toHaveCount(0);
+        }
+        expect(posts).toBe(1);
+    });
+}
