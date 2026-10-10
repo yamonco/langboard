@@ -134,15 +134,7 @@ class CardAttachmentService(BaseDomainService):
         )
         vision_config = None
         if binding and internal_bot.is_document_processing_enabled():
-            config = loads(binding.value)
-            vision_config = {
-                "binding_uid": binding.get_uid(),
-                **{
-                    key: config[key]
-                    for key in ("base_url", "model_name", "model", "reasoning_effort", "top_p", "keyword_languages")
-                    if key in config
-                },
-            }
+            vision_config = self._snapshot_vision_config(binding)
         if vision_config and docling_metadata.queue_document(
             CardMetadata,
             card,
@@ -158,6 +150,19 @@ class CardAttachmentService(BaseDomainService):
         CardAttachmentActivityTask.card_attachment_uploaded(user, project, card, card_attachment)
         if include_bot:
             CardAttachmentBotTask.card_attachment_uploaded(user, project, card, card_attachment)
+
+    @staticmethod
+    def _snapshot_vision_config(binding) -> dict:
+        """Share the credential-free upload and explicit-processing snapshot."""
+        config = loads(binding.value)
+        return {
+            "binding_uid": binding.get_uid(),
+            **{
+                key: config[key]
+                for key in ("base_url", "model_name", "model", "reasoning_effort", "top_p", "keyword_languages")
+                if key in config
+            },
+        }
 
     def _snapshot_embedding_config(self) -> dict | None:
         from ....tasks.docling.DocumentEmbedding import snapshot_embedding_config
@@ -192,15 +197,7 @@ class CardAttachmentService(BaseDomainService):
         binding = self._get_service(InternalBotService).get_document_vision_binding()
         if not binding:
             raise ValueError("Configure a document vision provider before processing attachments")
-        config = loads(binding.value)
-        vision_config = {
-            "binding_uid": binding.get_uid(),
-            **{
-                key: config[key]
-                for key in ("base_url", "model_name", "model", "reasoning_effort", "top_p", "keyword_languages")
-                if key in config
-            },
-        }
+        vision_config = self._snapshot_vision_config(binding)
         docling = self._get_service(DoclingMetadataService)
         if not docling.detect_document_type(attachment.filename):
             raise ValueError("Attachment format does not support document processing")
