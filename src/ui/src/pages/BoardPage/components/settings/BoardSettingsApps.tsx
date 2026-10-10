@@ -109,7 +109,9 @@ export default function BoardSettingsApps() {
                                 <article key={key} className="flex min-w-0 flex-col gap-3 rounded-lg border p-4">
                                     <h4 className="font-semibold">{name}</h4>
                                     <span className="self-start rounded-md bg-muted px-2 py-1 text-xs">
-                                        {t(`project.settings.App state ${binding?.state ?? "unconfigured"}`)}
+                                        {t(
+                                            `project.settings.App state ${app.is_available === false ? "disabled" : (binding?.state ?? "unconfigured")}`
+                                        )}
                                     </span>
                                     {resources && (
                                         <details className="rounded-md border p-2 text-xs">
@@ -147,7 +149,12 @@ export default function BoardSettingsApps() {
                                             <Button
                                                 size="sm"
                                                 variant="outline"
-                                                disabled={pending || !workflow_requirements || (key !== "github" && key !== "glitchtip")}
+                                                disabled={
+                                                    pending ||
+                                                    app.is_available === false ||
+                                                    !workflow_requirements ||
+                                                    (key !== "github" && key !== "glitchtip")
+                                                }
                                                 onClick={() => (key === "github" || key === "glitchtip") && setSelected(key)}
                                             >
                                                 {t(`project.settings.${key === "dokploy" ? "App workflow contract pending" : "Configure workflow"}`)}

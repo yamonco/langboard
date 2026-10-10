@@ -97,6 +97,7 @@ async def test_registration_workflow_update_disable_and_admin_revocation(board, 
         assert not disabled["is_enabled"] and disabled["generation"] == 3
         retained = next(a for a in (await manager.catalog())["apps"] if a["key"] == "example-erp")
         assert retained["capabilities"] == [] and retained["app_revision"] == disabled["revision"]
+        assert retained["is_available"] is False
         assert retained["binding"]["granted_capabilities"] == []
         with DbSession.use(readonly=False) as db:
             actor.is_admin = False
@@ -179,6 +180,7 @@ async def test_panel_consent_scope_revisions_and_revocation(board, monkeypatch, 
         policy = save_policy(actor, "disabled", policy["revision"])
         retained = next(a for a in (await manager.catalog())["apps"] if a["key"] == "example-erp")
         assert retained["binding"]["revision"] == saved["revision"]
+        assert retained["is_available"] is False and retained["capabilities"] == []
         with pytest.raises(NativeApiError) as forbidden_panel:
             await manager.panel("example-erp")
         assert forbidden_panel.value.status_code in (403, 404)
