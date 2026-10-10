@@ -199,6 +199,12 @@ still rejects adapters that are not installed in the host and rechecks current
 board, connection and capability authority. Registering an external panel does
 not install a signal adapter or grant access to another connection.
 
+Card evidence reads its outcome-to-state mapping and timestamp basis from the
+installed adapter's `AppSignalPolicy`. The shared projection has no provider-name
+branches. Unmapped outcomes remain `unknown`; conflicting observations remain
+`conflict`. These displayed states never grant reviewer approval or move a card.
+This declaration is installed host code, not a client-supplied permission grant.
+
 ### Native signal revocation
 
 Built-in adapters retain their host declarations when no registry override exists.

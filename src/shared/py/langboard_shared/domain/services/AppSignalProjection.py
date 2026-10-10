@@ -211,6 +211,8 @@ def authorized_signal_rows(db, rows):
 
 def card_signal_projections(cards):
     """Caller supplies its authorized card batch; current consumer authority is checked on primary."""
+    from .AppManifest import APP_MANIFESTS
+
     if not cards:
         return {}
     card_ids = [card.id for card in cards]
@@ -287,29 +289,20 @@ def card_signal_projections(cards):
     by_binding = {row[0]: row for row in evidence}
     current_revisions = {binding.card_id: revision for binding, _, revision, _ in rows}
     resources = {binding.id: (connection.app_key, resource) for binding, connection, _, resource in rows}
+    outcome_states = {
+        provider: dict(APP_MANIFESTS[provider].signal_policy.outcome_states)
+        for provider, _ in resources.values()
+    }
     result = {}
     for binding in eligible:
         provider, resource = resources[binding.id]
+        policy = APP_MANIFESTS[provider].signal_policy
         proof = by_binding.get(binding.id)
         state = "stale" if binding.source_change_seq != current_revisions[binding.card_id] else "unavailable"
         outcome = None
         if state != "stale" and proof:
             outcome = proof[1] if proof[1] == proof[2] else None
-            state = (
-                "conflict"
-                if proof[1] != proof[2]
-                else "failed"
-                if provider == "glitchtip" and outcome == "unresolved"
-                else outcome
-                if provider == "glitchtip" and outcome in {"resolved", "ignored"}
-                else "passed"
-                if outcome == "success"
-                else "failed"
-                if outcome in {"failure", "timed_out"}
-                else outcome
-                if provider == "dokploy" and outcome in {"queued", "running", "cancelled"}
-                else "unknown"
-            )
+            state = "conflict" if outcome is None else outcome_states[provider].get(outcome, "unknown")
         result.setdefault(binding.card_id, []).append(
             {
                 "binding_uid": binding.get_uid(),
@@ -326,7 +319,7 @@ def card_signal_projections(cards):
                 "outcome": outcome,
                 "signal_uid": InfraHelper.convert_uid(proof[3]) if proof else None,
                 "occurred_at": proof[4] if proof else None,
-                "time_basis": "observation" if provider == "glitchtip" else "provider_occurrence",
+                "time_basis": policy.time_basis,
             }
         )
     return result
