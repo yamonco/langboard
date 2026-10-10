@@ -16,6 +16,8 @@ from langboard_shared.core.routing import (
 from langboard_shared.core.security.CollaborationChannel import CollaborationChannel
 from langboard_shared.domain.models import Bot, Card, Project, ProjectColumn, User
 from langboard_shared.domain.services import DomainService
+from langboard_shared.domain.services.AppGovernance import AppGovernanceDenied
+from langboard_shared.domain.services.CardAppMutation import require_card_app_mutation
 from langboard_shared.helpers import InfraHelper
 from langboard_shared.infrastructure.repositories import Repository
 from langboard_shared.publishers import CardPublisher
@@ -269,10 +271,19 @@ def store_execution_receipt(
     ).hexdigest()
     with execution_readiness_uow() as execution:
         db = execution.db
+        try:
+            # Match native mutations' project/card -> execution lock order.
+            require_card_app_mutation(db, user_or_bot, card, project)
+        except AppGovernanceDenied as exc:
+            raise ApiException.Forbidden_403() from exc
         execution.watch([card.id])
         # The execution lock precedes revalidation; a visibility change after
         # the initial request check cannot authorize a later receipt write.
         project, card = require_receipt_card(project_uid, card_uid, user_or_bot, channel)
+        try:
+            require_card_app_mutation(db, user_or_bot, card, project)
+        except AppGovernanceDenied as exc:
+            raise ApiException.Forbidden_403() from exc
         current = current_execution(card.id, db)
         if current is None or current[2] != generation:
             raise ApiException.Conflict_409()

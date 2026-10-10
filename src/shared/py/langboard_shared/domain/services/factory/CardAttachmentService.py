@@ -16,6 +16,7 @@ from ....publishers import CardAttachmentPublisher
 from ....tasks.activities import CardAttachmentActivityTask
 from ....tasks.bots import CardAttachmentBotTask
 from ...models import Card, CardAttachment, CardMetadata, Project, User
+from ..CardAppMutation import guard_card_app_mutation
 from .DoclingMetadataService import DoclingMetadataService
 from .InternalBotService import InternalBotService
 
@@ -81,6 +82,7 @@ class CardAttachmentService(BaseDomainService):
             for card_attachment, user in card_attachments
         ]
 
+    @guard_card_app_mutation
     def create(
         self,
         user: User,
@@ -314,6 +316,7 @@ class CardAttachmentService(BaseDomainService):
 
         return True
 
+    @guard_card_app_mutation
     def change_name(
         self,
         user: User,
@@ -341,6 +344,7 @@ class CardAttachmentService(BaseDomainService):
 
         return True
 
+    @guard_card_app_mutation
     def delete(
         self,
         user: User,
