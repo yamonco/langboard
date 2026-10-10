@@ -16,6 +16,9 @@ class AppSignalPolicy:
     requires_empty_commit: bool = False
     requires_commit: bool = False
     time_basis: str = "provider_occurrence"
+    outcome_states: tuple[tuple[str, str], ...] = (
+        ("success", "passed"), ("failure", "failed"), ("timed_out", "failed"),
+    )
 
 
 @dataclass(frozen=True)
@@ -79,6 +82,7 @@ APP_MANIFESTS = MappingProxyType(
             signal_policy=AppSignalPolicy(
                 ("issue.status_observed",), ("project",), ("signals.read", "resources.read"),
                 requires_empty_commit=True, time_basis="observation",
+                outcome_states=(("unresolved", "failed"), ("resolved", "resolved"), ("ignored", "ignored")),
             ),
         ),
         "dokploy": AppManifest(
@@ -89,6 +93,10 @@ APP_MANIFESTS = MappingProxyType(
             signal_policy=AppSignalPolicy(
                 ("deployment.queued", "deployment.started", "deployment.succeeded", "deployment.failed", "deployment.cancelled"),
                 ("application", "compose"), ("signals.read", "deployments.read"), requires_empty_commit=True,
+                outcome_states=(
+                    ("success", "passed"), ("failure", "failed"), ("timed_out", "failed"),
+                    ("queued", "queued"), ("running", "running"), ("cancelled", "cancelled"),
+                ),
             ),
         ),
     }

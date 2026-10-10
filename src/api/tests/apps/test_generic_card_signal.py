@@ -8,17 +8,22 @@ from langboard.apps.GitHubManifest import GitHubManifestUnavailable
 from langboard_shared.core.db import DbSession, SqlBuilder
 from langboard_shared.domain.models import AppSignal, BoardAppBinding
 from langboard_shared.domain.services.AppManifest import AppManifest, AppSignalPolicy
+from langboard_shared.domain.services.AppSignalProjection import card_signal_projections
 from test_card_signal_projection import scoped  # noqa: F401
 from test_github_signal import board, installation, lifecycle, secrets, send, signal_storage  # noqa: F401
 
 
 @pytest.mark.parametrize("revoke", [None, "resource", "capability", "connection"])
-def test_independent_adapter_scope_and_revocation(scoped, monkeypatch, revoke):
-    state, _, _, _ = scoped
+@pytest.mark.parametrize("outcome, expected", [("recovered", "resolved"), ("alert", "failed"), ("other", "unknown")])
+def test_independent_adapter_scope_and_revocation(scoped, monkeypatch, revoke, outcome, expected):
+    state, card, card_binding, _ = scoped
     send(state)
     adapter = AppManifest(
         "independent-monitor", "Independent Monitor", ("service",), ("signals.read",),
-        signal_policy=AppSignalPolicy(("incident.observed",), ("service",)),
+        signal_policy=AppSignalPolicy(
+            ("incident.observed",), ("service",), time_basis="observation",
+            outcome_states=(("recovered", "resolved"), ("alert", "failed")),
+        ),
     )
     manifests = importlib.import_module("langboard_shared.domain.services.AppManifest")
     card_scope = importlib.import_module("langboard.apps.CardSignal")
@@ -43,7 +48,10 @@ def test_independent_adapter_scope_and_revocation(scoped, monkeypatch, revoke):
         signal.provider = adapter.key
         signal.event_type = "incident.observed"
         signal.commit_sha = ""
+        signal.outcome = outcome
         db.update(signal)
+        card_binding.commit_sha = ""
+        db.update(card_binding)
         args = (state[0], db, state[1][1], state[1][2].get_uid(), state[2].get_uid(), state[4].get_uid(), signal.get_uid())
         if revoke:
             with pytest.raises(GitHubManifestUnavailable):
@@ -51,3 +59,9 @@ def test_independent_adapter_scope_and_revocation(scoped, monkeypatch, revoke):
         else:
             result = authorized_signal_scope(*args)
             assert result[0].id == signal.id and result[2].id == state[4].id
+    projections = card_signal_projections([card])
+    if revoke:
+        assert projections == {}
+    else:
+        proof = projections[card.id][0]
+        assert proof["state"] == expected and proof["time_basis"] == "observation"

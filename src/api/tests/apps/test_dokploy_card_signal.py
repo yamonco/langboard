@@ -251,7 +251,7 @@ def test_deployment_identity_negatives_and_binding_limit(deployment_card):
         bind_check(*args(state, signal), 7, None)
 
 
-def test_deployment_card_actor_uses_owner_consumption_authority(deployment_card):
+def test_deployment_personal_connection_excludes_other_card_editors(deployment_card):
     from langboard_shared.core.types import SafeDateTime
     from langboard_shared.domain.models import ProjectAssignedUser, ProjectRole, User
 
@@ -273,13 +273,16 @@ def test_deployment_card_actor_uses_owner_consumption_authority(deployment_card)
         db.insert(role)
     original = args(state, signal)
     actor_args = (service, actor, *original[2:])
-    bound = bind_check(*actor_args, 7, None)
-    assert read_checks(service, actor, board[2].get_uid(), card.get_uid())["items"][0]["state"] == "passed"
+    # Board editing does not transfer another user's personal connection consent.
+    with pytest.raises(GitHubManifestUnavailable):
+        bind_check(*actor_args, 7, None)
+    bound = bind_check(*original, 7, None)
+    assert read_checks(service, board[1], board[2].get_uid(), card.get_uid())["items"][0]["state"] == "passed"
     with DbSession.use(readonly=False) as db:
         board[4].actions = ["read", "card_update"]
         db.update(board[4])
     with pytest.raises(GitHubManifestUnavailable):
-        bind_check(*actor_args, 7, bound["revision"])
+        bind_check(*original, 7, bound["revision"])
     assert read_checks(service, actor, board[2].get_uid(), card.get_uid())["items"] == []
 
 
