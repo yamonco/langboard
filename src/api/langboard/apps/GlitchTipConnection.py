@@ -44,6 +44,8 @@ def _revision(connection):
             {
                 "id": int(connection.id),
                 "owner": int(connection.owner_id),
+                "ownership": connection.ownership,
+                "organization_id": int(connection.organization_id) if connection.organization_id is not None else None,
                 "app": connection.app_key,
                 "instance": connection.instance_url,
                 "credential": connection.credential_reference,
