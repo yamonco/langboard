@@ -250,7 +250,7 @@ class SecretReferenceService(BaseDomainService):
         for card in cards:
             if card.project_id not in contexts:
                 board = self._get_service(WorkflowStageService)._authorized_app_board(
-                    actor, card.project_id, ProjectRoleAction.Read
+                    actor, card.project_id, ProjectRoleAction.Read, revocation=True
                 )
                 contexts[card.project_id] = (
                     card_service.resolve_visibility_context(card.project_id, actor, channel) if board else None
@@ -301,7 +301,7 @@ class SecretReferenceService(BaseDomainService):
         for wiki in wikis:
             if wiki.project_id not in boards:
                 boards[wiki.project_id] = self._get_service(WorkflowStageService)._authorized_app_board(
-                    actor, wiki.project_id, ProjectRoleAction.Read
+                    actor, wiki.project_id, ProjectRoleAction.Read, revocation=True
                 )
             project = boards[wiki.project_id]
             if project is not None and wiki_service.can_view(
