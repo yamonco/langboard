@@ -748,3 +748,16 @@ or proof of progress. No start attestation yields `start_report:null` and
 `evidence_kind:none`. Runtime report reads do not move cards, start processes,
 or implicitly resume stopped generations. Explicit heartbeat renewal remains
 `check_runtime`; keep private tokens out of URLs and logs.
+
+### Standalone management example
+
+The separately versioned SDK repository now contains
+`examples/python/panel_lifecycle.py` and its execution guide (example source
+commit `620e7f9`). The example imports only the public SDK and takes a
+caller-owned transport. It approves a disposable third-party app, grants board
+panel consent, reads the panel declaration, approves a revision-checked update,
+and disables the app. The default `.invalid` origin does not render a panel.
+Authenticated native HTTP integration exercises the actual example source;
+this management evidence does not substitute for webhook processing, browser
+rendering or deployment acceptance. The SDK wheel remains independently pinned
+at its reviewed package source; example-only edits do not rebuild that artifact.
