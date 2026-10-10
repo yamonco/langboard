@@ -70,3 +70,72 @@ def execution_request(
     except AppExecutionRequestConflict as exc:
         raise ApiException.Conflict_409() from exc
     return JsonResponse(content=result, headers={"Cache-Control": "no-store"})
+
+
+@AppRouter.api.get(
+    "/apps/v1/boards/{project_uid}/cards/{card_uid}/execution-requests/{request_uid}", tags=["App.Execution"]
+)
+def execution_request_read(
+    project_uid: str, card_uid: str, request_uid: str, authorization: str = Header(default="", max_length=256)
+) -> JsonResponse:
+    from langboard_shared.domain.services.AppExecutionAcknowledgments import read_app_execution_request
+    from langboard_shared.domain.services.AppExecutionRequests import AppExecutionRequestConflict
+
+    scheme, _, token = authorization.partition(" ")
+    if scheme.lower() != "bearer":
+        raise ApiException.Unauthorized_401()
+    try:
+        result = read_app_execution_request(
+            token,
+            SnowflakeID.from_short_code(project_uid),
+            SnowflakeID.from_short_code(card_uid),
+            SnowflakeID.from_short_code(request_uid),
+        )
+    except AppExecutionCredentialDenied as exc:
+        raise ApiException.Unauthorized_401() from exc
+    except AppGovernanceDenied as exc:
+        raise ApiException.Forbidden_403() from exc
+    except AppExecutionRequestConflict as exc:
+        raise ApiException.Conflict_409() from exc
+    return JsonResponse(content=result, headers={"Cache-Control": "no-store"})
+
+
+class ExecutionAcknowledgmentBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    event_uid: str = Field(strict=True, pattern="^[A-Za-z0-9]{11}$")
+    runtime_reference: str = Field(strict=True, min_length=1, max_length=200, pattern=r"\S")
+
+
+@AppRouter.api.post(
+    "/apps/v1/boards/{project_uid}/cards/{card_uid}/execution-requests/{request_uid}/acknowledgments",
+    tags=["App.Execution"],
+)
+def execution_acknowledgment(
+    project_uid: str,
+    card_uid: str,
+    request_uid: str,
+    body: ExecutionAcknowledgmentBody,
+    authorization: str = Header(default="", max_length=256),
+) -> JsonResponse:
+    from langboard_shared.domain.services.AppExecutionAcknowledgments import acknowledge_app_execution
+    from langboard_shared.domain.services.AppExecutionRequests import AppExecutionRequestConflict
+
+    scheme, _, token = authorization.partition(" ")
+    if scheme.lower() != "bearer":
+        raise ApiException.Unauthorized_401()
+    try:
+        result = acknowledge_app_execution(
+            token,
+            SnowflakeID.from_short_code(project_uid),
+            SnowflakeID.from_short_code(card_uid),
+            SnowflakeID.from_short_code(request_uid),
+            SnowflakeID.from_short_code(body.event_uid),
+            body.runtime_reference,
+        )
+    except AppExecutionCredentialDenied as exc:
+        raise ApiException.Unauthorized_401() from exc
+    except AppGovernanceDenied as exc:
+        raise ApiException.Forbidden_403() from exc
+    except AppExecutionRequestConflict as exc:
+        raise ApiException.Conflict_409() from exc
+    return JsonResponse(content=result, headers={"Cache-Control": "no-store"})

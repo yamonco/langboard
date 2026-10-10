@@ -655,3 +655,19 @@ obtain current native runtime authority before executing. The executor is not
 automatically scheduled/enqueued and creates no runtime start receipt. Delivery
 retry scheduling, external receiver acceptance and native runtime lifecycle/HITL
 remain required before unattended execution can be enabled.
+
+### Native reception acknowledgment
+
+`GET /execution-requests/{request_uid}` lets the app reread the accepted fixed
+authority snapshot. `POST /execution-requests/{request_uid}/acknowledgments`
+accepts only the matching event UID and a bounded runtime reference while the
+same app event is currently delivering or delivered. It persists an idempotent
+`received` acknowledgment and always returns `started:false`; it never grants
+approval, changes workflow, starts a process or widens resource authority.
+Current app credential, connection, policy, ownership, selection, stage and
+receipt snapshot are rechecked. A revoked connection, changed stage, different
+event, expired lease or changed resource causes rejection and leaves no receipt.
+The same request/event/runtime reference replays the same acknowledgment; a
+changed runtime reference conflicts. SDK 0.2.7 exposes `read_request` and
+`acknowledge` for these native routes. Runtime start/stop/resume, HITL and
+unattended scheduler remain separate contracts.
