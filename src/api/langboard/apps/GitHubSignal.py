@@ -4,8 +4,15 @@ import re
 from datetime import datetime, timezone
 from uuid import UUID
 from langboard_shared.core.db import DbSession, SqlBuilder
-from langboard_shared.domain.models import AppConnection, AppResourceBinding, AppSignal, BoardAppBinding, User
+from langboard_shared.domain.models import (
+    AppConnection,
+    AppResourceBinding,
+    AppSignal,
+    BoardAppBinding,
+    User,
+)
 from langboard_shared.domain.models.ProjectRole import ProjectRoleAction
+from langboard_shared.domain.services.AppRegistry import signal_app_allowed
 from langboard_shared.helpers import InfraHelper
 from langboard_shared.publishers import CardPublisher
 from .GitHubInstallation import connection_revision
@@ -33,6 +40,8 @@ def _scope(service, db, project_uid, connection_uid, resource_uid, actor=None, *
     if board is None or actor is not None and service.workflow_stage._authorized_app_board(
         actor, project_uid, ProjectRoleAction.Read, lock=lock
     ) is None:
+        raise GitHubManifestUnavailable()
+    if not signal_app_allowed(db, "github", lock=lock):
         raise GitHubManifestUnavailable()
     connection = db.exec(query(AppConnection).where(AppConnection.id == connection_id)).first()
     binding = db.exec(query(BoardAppBinding).where(

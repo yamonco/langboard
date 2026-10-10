@@ -291,3 +291,33 @@ def test_invalid_evidence_has_no_fallback_timestamp(mutation):
     }
     with pytest.raises(dk.DokployUnavailable):
         signal.normalize_deployment(row, "application", "app-1")
+
+
+@pytest.mark.parametrize("change", ["disabled", "capability"])
+@pytest.mark.parametrize("inflight", [False, True])
+def test_app_registry_revocation_fences_refresh(selected, change, inflight):
+    from langboard_shared.domain.models import AppDefinition
+
+    setup = selected[0]
+    board = setup[1]
+    with DbSession.atomic() as db:
+        definition = AppDefinition(key="dokploy", approved_by=board[1].id, declaration={"capabilities": ["signals.read"]})
+        db.insert(definition)
+
+    def revoke():
+        with DbSession.atomic() as db:
+            current = db.exec(SqlBuilder.select.table(AppDefinition).where(AppDefinition.key == "dokploy")).first()
+            if change == "disabled":
+                current.is_enabled = False
+            else:
+                current.declaration = {"capabilities": []}
+            db.update(current)
+
+    if inflight:
+        setup[-1]["after_deploy"] = revoke
+    else:
+        revoke()
+    with pytest.raises(dk.DokployUnavailable):
+        refresh(selected)
+    with DbSession.use(readonly=False) as db:
+        assert not db.exec(SqlBuilder.select.table(AppSignal)).all()

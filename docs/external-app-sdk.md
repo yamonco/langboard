@@ -127,3 +127,15 @@ The standalone source repositories are `langboard-sdk`, `langboard-app-github`,
 `langboard-app-glitchtip`, and `langboard-app-dokploy`. The host consumes reviewed
 package artifacts, and the three panels use host design resources and the same
 SDK read bridge. No provider credentials are passed into an iframe.
+
+### Native signal revocation
+
+Built-in adapters retain their host declarations when no registry override exists.
+An explicit registry override can disable an adapter or reduce its capabilities;
+it cannot add an unsupported built-in capability. Discovery excludes disabled
+adapters. GitHub signal reads and leased signal delivery tasks, GlitchTip issue
+refreshes, Dokploy deployment refreshes and Dokploy notification receivers check
+current registry state again before committing new evidence. A revoked queued
+GitHub delivery retains its normalized evidence and blocked delivery history.
+This does not retroactively undo external changes or prove that every automation
+route is integrated with connection ownership and governance policy.

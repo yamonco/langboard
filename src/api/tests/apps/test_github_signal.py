@@ -11,7 +11,7 @@ from langboard.apps.GitHubManifest import GitHubManifestUnavailable
 from langboard.apps.GitHubSignal import list_signals, receive_check
 from langboard_shared.core.db import DbSession, SqlBuilder
 from langboard_shared.core.db.DbEngine import DbEngine
-from langboard_shared.domain.models import AppResourceBinding, AppSignal, BoardAppBinding
+from langboard_shared.domain.models import AppDefinition, AppResourceBinding, AppSignal, BoardAppBinding
 from test_github_installation import board, installation, secrets  # noqa: F401
 from test_github_lifecycle import lifecycle, signed  # noqa: F401
 
@@ -30,6 +30,7 @@ def signal_storage(lifecycle, monkeypatch):
         migration.op = Operations(MigrationContext.configure(db))
         migration.upgrade()
     with DbSession.use(readonly=False) as db:
+        db.insert(AppDefinition(key="github", approved_by=board[1].id, declaration={"capabilities": ["signals.read"]}))
         connection.state = "connected"
         db.update(connection)
         binding = BoardAppBinding(
@@ -321,3 +322,39 @@ def test_notification_transport_failure_preserves_committed_evidence(signal_stor
     result = send(signal_storage)
     assert not result['duplicate']
     assert len(read(signal_storage)['items']) == 1
+
+
+@pytest.mark.parametrize("change", ["disabled", "capability"])
+def test_current_app_registry_revocation_denies_signal_read_and_receive(signal_storage, change):
+    state = signal_storage
+    send(state)
+    with DbSession.atomic() as db:
+        definition = db.exec(SqlBuilder.select.table(AppDefinition).where(AppDefinition.key == "github")).first()
+        if change == "disabled":
+            definition.is_enabled = False
+            db.update(definition)
+        else:
+            definition.declaration = {"capabilities": []}
+            db.update(definition)
+    with pytest.raises(GitHubManifestUnavailable):
+        read(state)
+    with pytest.raises(GitHubManifestUnavailable):
+        send(state)
+    with DbSession.use(readonly=False) as db:
+        assert len(db.exec(SqlBuilder.select.table(AppSignal)).all()) == 1
+
+
+def test_builtin_discovery_respects_explicit_registry_revocation(signal_storage):
+    from langboard_shared.domain.services.AppRegistry import approved_manifests
+
+    assert "signals.read" in approved_manifests()["github"].capabilities
+    with DbSession.atomic() as db:
+        definition = db.exec(SqlBuilder.select.table(AppDefinition).where(AppDefinition.key == "github")).first()
+        definition.declaration = {"capabilities": ["resources.read", "unrecognized.write"]}
+        db.update(definition)
+    manifest = approved_manifests()["github"]
+    assert manifest.capabilities == ("resources.read",)
+    with DbSession.atomic() as db:
+        definition.is_enabled = False
+        db.update(definition)
+    assert "github" not in approved_manifests()

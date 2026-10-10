@@ -1,5 +1,6 @@
 """Persistent external app approval. Current primary admin authority on every edit."""
 
+from dataclasses import replace
 from langboard_sdk.definition import validate_app_definition
 from langboard_sdk.governance import update_consent
 from langboard_sdk.workflow import WorkflowRequirements
@@ -100,13 +101,31 @@ def _disable_bindings(db, key):
         db.update(binding)
 
 
+def signal_app_allowed(db, key, *, lock=False):
+    """Explicit registry overrides fence native adapters; absence retains built-in compatibility."""
+    query = SqlBuilder.select.table(AppDefinition).where(AppDefinition.key == key)
+    row = db.exec(query.with_for_update() if lock else query).first()
+    if row is not None:
+        return row.is_enabled and "signals.read" in row.declaration.get("capabilities", [])
+    manifest = APP_MANIFESTS.get(key)
+    return manifest is not None and "signals.read" in manifest.capabilities
+
+
 def approved_manifests():
     """No signal adapter or connection route is inferred from an app declaration."""
     result = dict(APP_MANIFESTS)
     with DbSession.use(readonly=False) as db:
-        rows = db.exec(SqlBuilder.select.table(AppDefinition).where(AppDefinition.is_enabled == True)).all()  # noqa: E712
+        rows = db.exec(SqlBuilder.select.table(AppDefinition)).all()
         for row in rows:
+            if not row.is_enabled:
+                result.pop(row.key, None)
+                continue
             if row.key in APP_MANIFESTS:
+                manifest = APP_MANIFESTS[row.key]
+                result[row.key] = replace(manifest, capabilities=tuple(
+                    capability for capability in manifest.capabilities
+                    if capability in row.declaration.get("capabilities", [])
+                ))
                 continue
             item = validate_app_definition(row.declaration)
             workflow = item.get("workflow_requirements")

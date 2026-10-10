@@ -19,7 +19,8 @@ from langboard_shared.Env import Env
 
 
 @pytest.fixture(autouse=True)
-def app_notifications(monkeypatch):
+def app_notifications(monkeypatch, tmp_path):
+    monkeypatch.setattr(type(Env), "CACHE_DIR", property(lambda _: tmp_path / "cache"))
     from langboard_shared.publishers import AppSettingPublisher
     events = []
     monkeypatch.setattr(AppSettingPublisher, "apps_changed", lambda: events.append("apps:changed"))
