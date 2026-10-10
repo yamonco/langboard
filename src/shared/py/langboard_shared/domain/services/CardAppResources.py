@@ -3,7 +3,7 @@
 import re
 from sqlalchemy import update
 from ...core.db import DbSession, SqlBuilder
-from ...core.types import SafeDateTime
+from ...core.types import SafeDateTime, SnowflakeID
 from ...helpers import InfraHelper
 from ..models import (
     AppConnection,
@@ -18,6 +18,25 @@ from ..models import (
 from .AppGovernance import AppGovernanceDenied, _current, require_connection_access
 from .AppManifest import APP_MANIFESTS
 from .CardAppGovernance import CardAppOwnershipConflict, _admin_card
+
+
+class CardAppResourcesUnavailable(AppGovernanceDenied):
+    """Do not reveal an inaccessible card's resource configuration."""
+
+
+def configure_card_app_resources(operation, service, actor, project_uid, card_uid, connection_uid, channel, *args):
+    """Lock current authority and resolve native visibility for the authenticated transport."""
+    with DbSession.atomic() as db:
+        project_id = SnowflakeID.from_short_code(project_uid)
+        card_id = SnowflakeID.from_short_code(card_uid)
+        connection_id = SnowflakeID.from_short_code(connection_uid)
+        try:
+            _admin_card(db, actor, project_id, card_id)
+        except AppGovernanceDenied:
+            raise CardAppResourcesUnavailable() from None
+        if service.card.resolve_readable_card(project_uid, card_uid, actor, channel) is None:
+            raise CardAppResourcesUnavailable()
+        return operation(actor, project_id, card_id, connection_id, *args)
 
 
 def read_card_app_resources(actor, project_id, card_id, connection_id):

@@ -535,7 +535,17 @@ GET and empty PUT remain available for cleanup after consent/resource revocation
 selecting new resources still requires current policy and consent. A different
 personal connection owner cannot read or clear the selection. This configuration
 does not issue an execution grant, start a job or enable workflow transitions.
-MCP/UI configuration and deployed external-app acceptance remain pending.
+Native MCP exposes `get_card_app_resources` and
+`set_card_app_resource_selection` under human authentication. The update requires
+an explicit `expected_revision`, including null on initial selection. Use only
+on explicit user instruction; read back unknown outcomes rather than retrying.
+Both transports share the same locked authority and visibility coordinator.
+MCP uses its authenticated channel, so native PRIVATE owner access is preserved
+without granting other administrators access. Safe unavailable/conflict errors
+are explicit FastMCP `ToolError` messages; internal exceptions remain masked.
+The commands are optional searchable native tools, not added to the default
+pinned catalog. Configured tool groups still control discovery and execution.
+UI configuration and deployed external-app acceptance remain pending.
 
 ### Current execution authority inspection
 
