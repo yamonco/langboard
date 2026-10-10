@@ -2,7 +2,7 @@
 
 from ...core.db import DbSession, SqlBuilder
 from ...core.types import SnowflakeID
-from ..models import AppExecutionRequest
+from ..models import AppExecutionOutbox, AppExecutionRequest
 from .AppExecutionGrant import evaluate_current_execution_grant
 from .AppGovernance import AppGovernanceDenied
 
@@ -43,6 +43,29 @@ def request_app_execution(token, project_id, card_id, generation):
                 authority=authority,
             )
             db.insert(row)
+            event = AppExecutionOutbox(
+                request_id=row.id,
+                project_id=row.project_id,
+                app_key=row.app_key,
+                connection_id=row.connection_id,
+                event_type="io.langboard.app.execution.requested.v1",
+            )
+            db.insert(event)
+            event.payload = {
+                "schema_version": 1,
+                "event_uid": event.get_uid(),
+                "event_type": event.event_type,
+                "app_key": row.app_key,
+                "connection_uid": SnowflakeID(row.connection_id).to_short_code(),
+                "board_uid": SnowflakeID(row.project_id).to_short_code(),
+                "card_uid": SnowflakeID(row.card_id).to_short_code(),
+                "request_uid": row.get_uid(),
+                "generation": row.generation,
+                "resource_uids": row.authority["resource_uids"],
+                "state": "requested",
+                "started": False,
+            }
+            db.update(event)
             changed = True
         return {
             "schema_version": 1,

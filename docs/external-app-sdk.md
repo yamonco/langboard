@@ -565,3 +565,21 @@ The existing board execution outbox has a unique card/generation identity and a
 board webhook destination contract. App requests cannot be inserted as another
 ready event without colliding with that contract. App-scoped signed delivery is
 not implemented by the SDK clients and remains a required host integration.
+
+### App-scoped transactional event intent
+
+`AppExecutionOutbox` preserves one
+`io.langboard.app.execution.requested.v1` event per accepted request independently
+of the legacy board ready outbox. The request and event are inserted in the same
+transaction, including the stable event UID and request UID in the payload.
+Retries recheck current authority and reuse the request without inserting another
+event. Event insertion or payload persistence failure rolls back the request.
+Events retain app/connection, board/card, generation and selected resource UIDs;
+credentials and the full authority snapshot are excluded from the event payload.
+
+These records begin `pending` with attempt count zero. They have no deletion
+cascade and downgrade refuses to discard event history. This is durable event
+intent only: it is not signed, sent, acknowledged or evidence of running work.
+App destination configuration, trust/consent-bound signing, current-authority
+claim fencing, delivery retries and runtime acknowledgment remain pending. The
+legacy board execution outbox and its worker are unchanged.

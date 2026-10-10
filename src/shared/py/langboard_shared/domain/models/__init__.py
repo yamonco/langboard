@@ -2,6 +2,7 @@ from .ApiComfortTool import ApiComfortTool
 from .ApiKeyRole import ApiKeyRole
 from .ApiKeySetting import ApiKeySetting
 from .ApiKeyUsage import ApiKeyUsage
+from .AppExecutionOutbox import AppExecutionOutbox
 from .AppExecutionRequest import AppExecutionRequest
 from .AppConnection import AppConnection
 from .AppConnectionCredential import AppConnectionCredential
@@ -118,6 +119,7 @@ __all__ = [
     "GitHubHealthJob",
     "AppDefinition",
     "AppGovernancePolicy",
+    "AppExecutionOutbox",
     "AppExecutionRequest",
     "AppConnection",
     "BoardAppBinding",
