@@ -1,5 +1,6 @@
 import importlib
 import os
+from contextlib import contextmanager
 from types import SimpleNamespace
 from unittest.mock import ANY, Mock
 import pytest
@@ -8,7 +9,7 @@ import pytest
 os.environ.setdefault("PROJECT_NAME", "langboard")
 
 from langboard_shared.core.types import SnowflakeID  # noqa: E402
-from langboard_shared.domain.models import Card  # noqa: E402
+from langboard_shared.domain.models import Card, User  # noqa: E402
 from langboard_shared.domain.services.factory.BotService import BotService, BotServiceError  # noqa: E402
 from langboard_shared.domain.services.factory.CardAttachmentService import CardAttachmentService  # noqa: E402
 from langboard_shared.domain.services.factory.CardCommentService import CardCommentService  # noqa: E402
@@ -213,9 +214,9 @@ def test_archive_and_archive_column_drop_delete_only_the_link(monkeypatch: pytes
 
     module = importlib.import_module("langboard_shared.domain.services.factory.CardService")
     project = SimpleNamespace(id=1)
-    card = SimpleNamespace(project_id=1, project_column_id=10, is_linked_resource=True)
+    card = SimpleNamespace(id=30, project_id=1, project_column_id=10, is_linked_resource=True, deleted_at=None)
     old_column = SimpleNamespace(id=10, project_id=1, is_archive=False)
-    archive_column = SimpleNamespace(id=20, project_id=1, is_archive=True)
+    archive_column = SimpleNamespace(id=20, project_id=1, is_archive=True, deleted_at=None)
     monkeypatch.setattr(module.InfraHelper, "get_records_with_foreign_by_params", lambda *args: (project, card))
     monkeypatch.setattr(
         module.InfraHelper, "get_by_id_like", lambda model, value: old_column if value == 10 else archive_column
@@ -224,17 +225,24 @@ def test_archive_and_archive_column_drop_delete_only_the_link(monkeypatch: pytes
     delete_link = Mock(return_value=True)
     can_delete = Mock(return_value=False)
     service = SimpleNamespace(_delete_card=delete_link, can_delete=can_delete)
+    actor = User.model_construct(id=1)
+
+    @contextmanager
+    def execution():
+        yield SimpleNamespace(db=SimpleNamespace(exec=lambda _: SimpleNamespace(first=lambda: card)))
+
+    monkeypatch.setattr(module, "execution_readiness_uow", execution)
 
     with pytest.raises(CardDeleteForbidden, match="original card author or an administrator"):
-        CardService.archive(service, object(), project, card)
+        CardService.archive(service, actor, project, card)
     with pytest.raises(CardDeleteForbidden, match="original card author or an administrator"):
-        CardService.change_order(service, object(), project, card, 0, archive_column)
+        CardService.change_order(service, actor, project, card, 0, archive_column)
     delete_link.assert_not_called()
 
     can_delete.return_value = True
 
-    assert CardService.archive(service, object(), project, card) is True
-    assert CardService.change_order(service, object(), project, card, 0, archive_column) is True
+    assert CardService.archive(service, actor, project, card) is True
+    assert CardService.change_order(service, actor, project, card, 0, archive_column) is True
     assert delete_link.call_count == 2
     delete_link.assert_called_with(ANY, project, card)
 
@@ -260,7 +268,16 @@ def test_linked_card_deletion_purges_reference_row(monkeypatch: pytest.MonkeyPat
     service = SimpleNamespace(
         repo=repo,
         _get_service=lambda service_type: graph_approval,
+        _dependency_children=lambda _: [],
+        publish_work_states=Mock(),
     )
+    watched = Mock()
+
+    @contextmanager
+    def execution():
+        yield SimpleNamespace(watch_card_and_dependents=watched)
+
+    monkeypatch.setattr(module, "execution_readiness_uow", execution)
     monkeypatch.setattr(module.BotScopeHelper, "delete_by_scope", Mock())
     monkeypatch.setattr(module.BotScheduleHelper, "unschedule_by_scope", Mock())
     monkeypatch.setattr(module.CardPublisher, "deleted", Mock())
@@ -273,6 +290,8 @@ def test_linked_card_deletion_purges_reference_row(monkeypatch: pytest.MonkeyPat
 
     card_repo.delete.assert_called_once_with(card, purge=True)
     card_repo.reoder_after_delete.assert_called_once_with(20, 4)
+    watched.assert_called_once_with(card.id)
+    service.publish_work_states.assert_called_once_with(project, [])
     activity_deleted.assert_not_called()
     bot_deleted.assert_not_called()
 
@@ -280,9 +299,9 @@ def test_linked_card_deletion_purges_reference_row(monkeypatch: pytest.MonkeyPat
 def test_regular_column_move_keeps_linked_card_movable(monkeypatch: pytest.MonkeyPatch) -> None:
     module = importlib.import_module("langboard_shared.domain.services.factory.CardService")
     project = SimpleNamespace(id=1)
-    card = SimpleNamespace(project_id=1, project_column_id=10, is_linked_resource=True, order=2, archived_at=None)
+    card = SimpleNamespace(id=30, project_id=1, project_column_id=10, is_linked_resource=True, order=2, archived_at=None, deleted_at=None)
     old_column = SimpleNamespace(id=10, project_id=1, is_archive=False)
-    destination = SimpleNamespace(id=20, project_id=1, is_archive=False)
+    destination = SimpleNamespace(id=20, project_id=1, is_archive=False, deleted_at=None)
     monkeypatch.setattr(module.InfraHelper, "get_records_with_foreign_by_params", lambda *args: (project, card))
     monkeypatch.setattr(
         module.InfraHelper, "get_by_id_like", lambda model, value: old_column if value == 10 else destination
@@ -292,11 +311,28 @@ def test_regular_column_move_keeps_linked_card_movable(monkeypatch: pytest.Monke
     monkeypatch.setattr(module.CardBotTask, "enqueue_card_moved_webhook", Mock())
     monkeypatch.setattr(module.CardBotTask, "card_moved", Mock())
     repo = SimpleNamespace(card=SimpleNamespace(update_row_order=Mock(), update=Mock()))
-    service = SimpleNamespace(repo=repo)
+    transition = Mock()
+    service = SimpleNamespace(repo=repo, _get_service=lambda _: SimpleNamespace(apply_transition=transition),
+                              next_change_seq=lambda: 1, UNREAD_TARGET_CARD="card", publish_work_states=Mock(),
+                              _dependency_children=lambda _: [])
+    service.notify_order_changed = lambda *args: CardService.notify_order_changed(service, *args)
+    watched = Mock()
 
-    assert CardService.change_order(service, object(), project, card, 0, destination) is True
+    @contextmanager
+    def execution():
+        yield SimpleNamespace(db=SimpleNamespace(exec=lambda _: SimpleNamespace(first=lambda: card),
+                                                after_commit=lambda callback: callback()),
+                              watch_card_and_dependents=watched)
+
+    monkeypatch.setattr(module, "execution_readiness_uow", execution)
+
+    actor = User.model_construct(id=1)
+    assert CardService.change_order(service, actor, project, card, 0, destination) is True
     assert card.project_column_id == destination.id
-    repo.card.update.assert_called_once_with(card)
+    repo.card.update.assert_called_with(card)
+    assert card.last_change_seq == 1 and card.last_change_target_type == "card"
+    watched.assert_called_once_with(card.id)
+    transition.assert_called_once_with(actor, project, card, old_column, destination)
     module.CardActivityTask.card_moved.assert_not_called()
     module.CardBotTask.enqueue_card_moved_webhook.assert_not_called()
     module.CardBotTask.card_moved.assert_not_called()
@@ -354,7 +390,7 @@ def test_linked_resource_rejects_task_feature_creation(
     monkeypatch.setattr(module.InfraHelper, "get_records_with_foreign_by_params", lambda *args: (project, card))
     service = SimpleNamespace(repo=Mock())
 
-    result = getattr(service_class, method_name)(service, object(), project, card, *tail_args)
+    result = getattr(service_class, method_name)(service, User.model_construct(id=1), project, card, *tail_args)
 
     assert result is None
     assert not service.repo.mock_calls
@@ -369,7 +405,7 @@ def test_linked_resource_has_no_card_metadata_surface() -> None:
         source_uid="wiki-1",
     )
     repo = SimpleNamespace(metadata=Mock())
-    service = SimpleNamespace(repo=repo)
+    service = SimpleNamespace(repo=repo, _is_work_plan_receipt=MetadataService._is_work_plan_receipt)
 
     assert MetadataService.get_all_as_api(service, object(), card, as_dict=True) == {}
     assert MetadataService.get_by_key_as_api(service, object(), card, "key") is None
