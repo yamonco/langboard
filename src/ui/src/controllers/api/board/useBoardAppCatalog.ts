@@ -8,6 +8,7 @@ export interface CatalogApp {
     version: string;
     app_revision: string | null;
     is_available?: boolean;
+    inbound_connection_management?: boolean;
     panel: { url: string; name: string; icon?: string | null } | null;
     capabilities: string[];
     workflow_requirements: { required: string[]; optional: string[] } | null;

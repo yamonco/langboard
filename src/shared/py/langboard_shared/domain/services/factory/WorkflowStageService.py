@@ -97,6 +97,7 @@ class WorkflowStageService(BaseDomainService):
                 items.append({
                     **manifest.catalog_fields(),
                     "is_available": available,
+                    "inbound_connection_management": key in definitions and key not in APP_MANIFESTS,
                     "capabilities": list(manifest.capabilities) if available else [],
                     "app_revision": definitions[key].edit_revision() if key in definitions else None,
                     "resources": summaries.get(binding.id if binding else None, {

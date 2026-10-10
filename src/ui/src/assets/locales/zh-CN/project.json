@@ -64,6 +64,19 @@
     "invalid_archive_visible_days": "请输入至少 1 天。"
   },
   "settings": {
+    "Confirm inbound change": "确认",
+    "Manage inbound connections": "管理服务连接",
+    "Inbound connection help": "注册 Langboard 入站服务身份。不会登录外部账户或授予看板权限。",
+    "Connection ownership": "连接所有权",
+    "Personal connection": "我的个人连接",
+    "Inbound connection refresh required": "请先刷新列表再修改。",
+    "No inbound connections": "暂无服务连接",
+    "Disconnect inbound connection": "断开连接",
+    "More inbound connections": "更多连接",
+    "First inbound connections": "第一页",
+    "Create inbound connection": "注册服务连接",
+    "Inbound disconnect help": "断开后将阻止使用现有凭证及签发新凭证。",
+
     "Copy as template": "复制为模板",
     "Template name": "模板名称",
     "Basic info": "基本信息",

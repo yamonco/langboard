@@ -134,3 +134,38 @@ for (const locale of ["en-US", "ko-KR", "ja-JP", "zh-CN"]) {
         await expect(app).toContainText("1,234");
     });
 }
+
+for (const width of [1440, 390]) {
+    test(`inbound connections register and disconnect at ${width}px`, async ({ page }) => {
+        await page.setViewportSize({ width, height: 850 });
+        await page.goto(`${path}?store&external`);
+        expect(await page.evaluate(() => (window as unknown as { inboundReads: string[] }).inboundReads.length)).toBe(0);
+        await page.getByRole("button", { name: "Manage service connections" }).click();
+        await expect(page.getByText("connection1 · Connected", { exact: true })).toBeVisible();
+        await page.getByRole("button", { name: "Register service connection", exact: true }).click();
+        expect(await page.evaluate(() => (window as unknown as { workflowWrites: unknown[] }).workflowWrites.length)).toBe(0);
+        await page.getByRole("button", { name: "Confirm", exact: true }).click();
+        await expect(page.getByText("connection2 · Connected", { exact: true })).toBeVisible();
+        const first = page.getByRole("listitem").filter({ hasText: "connection1" });
+        await first.getByRole("button", { name: "Disconnect", exact: true }).click();
+        await page.getByRole("button", { name: "Confirm", exact: true }).click();
+        await expect(first.getByRole("button", { name: "Disconnect", exact: true })).toBeDisabled();
+        expect(await page.evaluate(() => (window as unknown as { workflowWrites: unknown[] }).workflowWrites)).toEqual([
+            { url: "/settings/apps/registry/example-erp/inbound-connections", app_revision: "a".repeat(64), organization_uid: null },
+            { url: "/settings/apps/inbound-connections/connection1/disconnect", expected_revision: "a".repeat(64) },
+        ]);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    });
+}
+
+test("inbound failure blocks another mutation until explicit refresh", async ({ page }) => {
+    await page.goto(`${path}?store&external&connectionfail`);
+    await page.getByRole("button", { name: "Manage service connections" }).click();
+    await page.getByRole("button", { name: "Disconnect", exact: true }).click();
+    await page.getByRole("button", { name: "Confirm", exact: true }).click();
+    await expect(page.getByRole("alert")).toContainText("Refresh the list");
+    await expect(page.getByRole("button", { name: "Confirm", exact: true })).toBeDisabled();
+    await page.getByRole("button", { name: "Retry", exact: true }).click();
+    await expect(page.getByRole("alert")).toHaveCount(0);
+    expect(await page.evaluate(() => (window as unknown as { workflowWrites: unknown[] }).workflowWrites.length)).toBe(1);
+});

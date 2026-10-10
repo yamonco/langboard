@@ -11,6 +11,7 @@ import BoardSettingsGitHub from "./BoardSettingsGitHub";
 import BoardSettingsGlitchTip from "./BoardSettingsGlitchTip";
 import BoardSettingsDokploy from "./BoardSettingsDokploy";
 import BoardSettingsAppWorkflow from "./BoardSettingsAppWorkflow";
+import BoardSettingsInboundConnections from "./BoardSettingsInboundConnections";
 
 export default function BoardSettingsApps() {
     const [t, i18n] = useTranslation();
@@ -22,6 +23,7 @@ export default function BoardSettingsApps() {
     const [disableTarget, setDisableTarget] = useState<string | null>(null);
     const [error, setError] = useState(false);
     const [dirty, setDirty] = useState(false);
+    const [connections, setConnections] = useState<CatalogApp | null>(null);
     const [selected, setSelected] = useState<CatalogApp | null>(null);
     const disable = async (app: CatalogApp) => {
         if (pending || !canEditBasicInfo || !app.binding) return;
@@ -64,7 +66,23 @@ export default function BoardSettingsApps() {
     };
     return (
         <div className="flex w-full flex-col gap-4 py-4">
-            {selected ? (
+            {connections ? (
+                <>
+                    <Button
+                        size="sm"
+                        variant="outline"
+                        className="self-start"
+                        disabled={dirty}
+                        onClick={() => {
+                            setConnections(null);
+                            void refetch();
+                        }}
+                    >
+                        {t("project.settings.Back to App Store")}
+                    </Button>
+                    <BoardSettingsInboundConnections key={connections.key} app={connections} onBusy={setDirty} />
+                </>
+            ) : selected ? (
                 <>
                     <Button
                         size="sm"
@@ -140,7 +158,12 @@ export default function BoardSettingsApps() {
                                     <p className="flex-1 text-sm text-muted-foreground">
                                         {app.description ?? t(`project.settings.App ${key} summary`, { defaultValue: "" })}
                                     </p>
-                                    {!app.panel && (
+                                    {app.inbound_connection_management && (
+                                        <Button size="sm" variant="outline" onClick={() => setConnections(app)}>
+                                            {t("project.settings.Manage inbound connections")}
+                                        </Button>
+                                    )}
+                                    {!app.panel && !app.inbound_connection_management && (
                                         <p className="text-xs text-muted-foreground">{t("project.settings.App connection setup pending")}</p>
                                     )}
                                     {(workflow_requirements || !app.panel) && (
