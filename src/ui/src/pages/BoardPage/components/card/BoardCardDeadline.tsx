@@ -138,6 +138,9 @@ const BoardCardDeadlineDraft = memo(() => {
     }, [updateCollaborativeDeadline]);
 
     const saveDeadline = useCallback(() => {
+        if (isWaitingForSync) {
+            throw new Error("Deadline draft has not synchronized");
+        }
         const nextDeadline = draftDeadline ? new Date(draftDeadline) : undefined;
         nextDeadline?.setSeconds(0, 0);
 
@@ -150,7 +153,7 @@ const BoardCardDeadlineDraft = memo(() => {
         const deadlineAt: Date | "" = nextDeadline || "";
 
         return { deadline_at: deadlineAt };
-    }, [deadline, draftDeadline, getNormalizedTime, resetCollaborativeDeadline]);
+    }, [deadline, draftDeadline, getNormalizedTime, isWaitingForSync, resetCollaborativeDeadline]);
 
     const cancelDeadline = useCallback(() => {
         resetCollaborativeDeadline(serializeDeadline(deadline));

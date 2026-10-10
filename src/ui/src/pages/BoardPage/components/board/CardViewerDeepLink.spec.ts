@@ -405,6 +405,35 @@ test("retained comment draft has a tray dot and restore expands from the chip", 
     await expect.poll(() => viewer.evaluate((element) => element.style.getPropertyValue("--card-origin-transform"))).toContain("translate(");
 });
 
+test("unsynchronized restored deadline cannot save and cancellation restores the confirmed value", async ({ page }) => {
+    await mockBoardApi(page);
+    let writes = 0;
+    await page.route("**/board/fixture-project/card/fixture-card/details", async (route) => {
+        if (route.request().method() !== "OPTIONS") writes++;
+        await fulfillWithCors(route, {});
+    });
+    await page.addInitScript(() => {
+        sessionStorage.setItem(
+            "langboard-card-flip-drafts",
+            JSON.stringify({
+                state: { drafts: { "fixture-user:fixture-project:fixture-card": { deadline_at: "2030-06-15T12:00:00Z" } } },
+                version: 0,
+            })
+        );
+    });
+    await page.goto(FIXTURE);
+    await expect(page.getByRole("button", { name: "Cancel", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Syncing draft...", exact: true })).toBeDisabled();
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Save", exact: true })).toBeEnabled();
+    await expect(page.getByRole("button", { name: "Cancel", exact: true })).toBeVisible();
+    expect(writes).toBe(0);
+    await page.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Cancel", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Add deadline", exact: true })).toBeVisible();
+    expect(writes).toBe(0);
+});
+
 test("restoring a suspended card resumes its unsaved title edit", async ({ page }) => {
     await mockBoardApi(page);
     await page.addInitScript(() => {
