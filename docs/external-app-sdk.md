@@ -550,3 +550,18 @@ not dispatch, delivery, a running lease or an external runtime acknowledgment.
 No automatic start or resume is implemented by this route. Durable signed
 outbox delivery, request discovery and start/stop/resume acknowledgment remain
 required before an external app can execute through this flow.
+
+### Independent execution client (SDK 0.2.5)
+
+`from langboard_sdk import AppExecution, ExecutionAuthority, ExecutionRequest`.
+`AppExecution(app_transport).authority(board_uid, card_uid, generation=N)` calls
+current authority inspection; `.request(board_uid, card_uid, generation=N)` calls
+request acceptance. Both use the caller-owned app Bearer transport. No automatic
+start, stop, retry or token refresh is performed. Native wheel/HTTP tests cover
+current authority, duplicate request identity and immediate consent revocation.
+The successful responses explicitly retain `started: false`.
+
+The existing board execution outbox has a unique card/generation identity and a
+board webhook destination contract. App requests cannot be inserted as another
+ready event without colliding with that contract. App-scoped signed delivery is
+not implemented by the SDK clients and remains a required host integration.
