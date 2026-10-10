@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import re
 from sqlalchemy import and_, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from ...core.db import DbSession, SqlBuilder
@@ -111,6 +112,36 @@ def get_policy(actor, organization_id=None):
     with DbSession.atomic() as db:
         _authorize(db, actor, organization_id)
         return current_policy(db, organization_id, for_update=True)
+
+
+def list_managed_organizations(actor, *, after_uid=None, limit=25):
+    """Discover a bounded page of active policy scopes using current primary authority."""
+    from ...core.types import SnowflakeID
+
+    if type(limit) is not int or not 1 <= limit <= 50:
+        raise ValueError("Invalid organization page limit")
+    after_id = None
+    if after_uid is not None:
+        if not isinstance(after_uid, str) or not re.fullmatch(r"[a-zA-Z0-9]{11}", after_uid):
+            raise ValueError("Invalid organization cursor")
+        after_id = SnowflakeID.from_short_code(after_uid)
+        if not after_id or after_id.to_short_code() != after_uid:
+            raise ValueError("Invalid organization cursor")
+    with DbSession.atomic() as db:
+        actor = _actor(db, actor)
+        statement = SqlBuilder.select.table(Organization).where(
+            Organization.is_active == True, Organization.suspended_at.is_(None)  # noqa: E712
+        )
+        if not actor.is_admin:
+            statement = statement.where(Organization.owner_user_id == actor.id)
+        if after_id is not None:
+            statement = statement.where(Organization.id > after_id)
+        rows = db.exec(statement.order_by(Organization.id).limit(limit + 1)).all()
+        page = rows[:limit]
+        return {
+            "items": [{"uid": row.get_uid(), "name": row.name} for row in page],
+            "next_cursor": page[-1].get_uid() if len(rows) > limit else None,
+        }
 
 
 def save_policy(actor, mode, expected_revision, organization_id=None):

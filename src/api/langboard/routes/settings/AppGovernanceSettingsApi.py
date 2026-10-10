@@ -1,6 +1,7 @@
 """Instance and organization app governance policy settings."""
 
 from typing import Literal
+from fastapi import Query
 from langboard_shared.core.filter import AuthFilter
 from langboard_shared.core.routing import ApiErrorCode, ApiException, AppRouter, BaseFormModel, JsonResponse, form_model
 from langboard_shared.core.types import SnowflakeID
@@ -9,6 +10,7 @@ from langboard_shared.domain.services.AppGovernance import (
     AppGovernanceConflict,
     AppGovernanceDenied,
     get_policy,
+    list_managed_organizations,
     save_policy,
 )
 from langboard_shared.security import Auth
@@ -42,6 +44,22 @@ def get_global_governance(user: User = Auth.scope("user")) -> JsonResponse:
 @AuthFilter.add("admin")
 def put_global_governance(form: AppGovernanceForm, user: User = Auth.scope("user")) -> JsonResponse:
     return JsonResponse(content=_run(save_policy, user, form.mode, form.expected_revision))
+
+
+@AppRouter.api.get("/settings/apps/governance/organizations", tags=["AppSettings.AppGovernance"])
+@AuthFilter.add("user")
+def get_managed_organizations(
+    cursor: str | None = Query(default=None, min_length=1, max_length=32),
+    limit: int = Query(default=25, ge=1, le=50),
+    user: User = Auth.scope("user"),
+) -> JsonResponse:
+    try:
+        result = list_managed_organizations(user, after_uid=cursor, limit=limit)
+    except AppGovernanceDenied as exc:
+        raise ApiException.Forbidden_403(ApiErrorCode.PE1001) from exc
+    except ValueError as exc:
+        raise ApiException.BadRequest_400(ApiErrorCode.VA0000) from exc
+    return JsonResponse(content=result)
 
 
 @AppRouter.api.get("/settings/apps/governance/organizations/{uid}", tags=["AppSettings.AppGovernance"])

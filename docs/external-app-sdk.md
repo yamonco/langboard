@@ -238,3 +238,13 @@ retry. The saved revision receipt wraps on mobile rather than widening the page.
 The browser regression exercises the actual page and query hook at 1280px and
 390px using intercepted HTTP responses. It does not establish live administrator
 authorization, organization policy UI or deployed policy enforcement.
+
+Organization policy discovery uses `GET /settings/apps/governance/organizations`
+with an optional `cursor` and `limit` (default 25, maximum 50). The current primary
+user determines visibility: administrators see active, unsuspended organizations;
+other activated users see only those they own. Each item contains only `uid` and
+`name`. `next_cursor` identifies the last returned organization when another page
+exists; invalid cursors are rejected rather than silently restarting pagination.
+Enumeration does not grant policy authority. The per-organization GET/PUT APIs
+still recheck the current actor, organization state and policy revision. This API
+does not expose personal connections, tokens, employee membership or credentials.
