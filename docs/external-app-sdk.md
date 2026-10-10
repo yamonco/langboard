@@ -513,3 +513,22 @@ card/connection foreign keys, and downgrade refuses to discard existing history.
 The internal service is not exposed as an execution API or SDK grant. Native
 REST/MCP configuration, execution grants, PostgreSQL concurrency, HITL/outbox and
 external-app acceptance remain pending.
+
+### Current execution authority inspection
+
+SDK 0.2.4 adds the separate reviewed `execution.run` capability. Adding it to
+an app update requires additional explicit consent; existing resource read
+consent does not acquire it. The host offers
+`GET /apps/v1/boards/{board_uid}/cards/{card_uid}/execution-authority?generation=N`
+through dedicated app Bearer authentication, without accepting caller identity.
+
+The current primary checks owning app, current connection/policy and actor role,
+card visibility, current resource selection/access/type, current board consent,
+explicit built-in ready mapping, unsatisfied blocking prerequisites, pending
+native approvals and the requested positive execution generation. Successful
+inspection returns `state: eligible` and `started: false`, with ownership,
+selection, board and card revisions. It is not a stored grant, lease, execution
+start, stop acknowledgment or a mutation authorization token. Every future write
+must recheck current authority. Durable execution/HITL receipts, start/resume,
+active-stage mutation fences, signed event delivery and PostgreSQL concurrency
+acceptance remain pending.
