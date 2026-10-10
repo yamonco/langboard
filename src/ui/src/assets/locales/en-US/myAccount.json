@@ -86,5 +86,14 @@
     },
     "openSource": "Open source card",
     "openSourceWiki": "Open source wiki"
+  },
+  "secretCopy": {
+    "title": "Copy secret",
+    "help": "Create an independent secret in the same access scope. The value stays in secure storage.",
+    "name": "New logical name",
+    "submit": "Create copy",
+    "completed": "Copy created. The original is unchanged.",
+    "open": "Open copied secret history",
+    "failed": "Could not confirm the copy. The name may already exist or access/revision changed. Check the history before retrying; close and reopen to refresh the source."
   }
 }

@@ -4,6 +4,8 @@ import { useTranslation } from "react-i18next";
 import { api } from "@/core/helpers/Api";
 import { formatDateTime } from "@/core/utils/LocaleFormat";
 import Button from "@/components/base/Button";
+import IconComponent from "@/components/base/IconComponent";
+import SecretCopyForm from "./SecretCopyForm";
 
 interface HistoryItem {
     uid: string;
@@ -22,6 +24,8 @@ export default function SecretHistoryPage() {
     const [t, i18n] = useTranslation();
     const [items, setItems] = useState<HistoryItem[]>([]);
     const [cursor, setCursor] = useState<string | null>(null);
+    const [copyReference, setCopyReference] = useState<string>();
+    const copyOpen = copyReference === referenceUID;
     const [busy, setBusy] = useState(true);
     const [failed, setFailed] = useState(false);
     const currentRequest = useRef<object | null>(null);
@@ -31,6 +35,7 @@ export default function SecretHistoryPage() {
     useEffect(() => {
         currentRequest.current = requestGeneration;
         let active = true;
+        setCopyReference(undefined);
         setItems([]);
         setBusy(true);
         setFailed(false);
@@ -57,8 +62,35 @@ export default function SecretHistoryPage() {
         <main className="mx-auto w-full max-w-2xl px-4 py-10 sm:py-16">
             <section className="card card-border rounded-xl border bg-background">
                 <div className="card-body flex flex-col gap-4 p-5 sm:p-6">
-                    <h1 className="card-title text-lg font-semibold">{t("myAccount.secretHistory.title")}</h1>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                        <h1 className="card-title text-lg font-semibold">{t("myAccount.secretHistory.title")}</h1>
+                        <Button variant="ghost" size="sm" disabled={busy || failed || copyOpen} onClick={() => setCopyReference(referenceUID)}>
+                            <IconComponent icon="copy" size="4" />
+                            {t("myAccount.secretCopy.title")}
+                        </Button>
+                    </div>
                     <p className="text-sm text-muted-foreground">{t("myAccount.secretHistory.help")}</p>
+                    {copyOpen && referenceUID && !failed && (
+                        <SecretCopyForm
+                            key={referenceUID}
+                            referenceUID={referenceUID}
+                            onClose={() => setCopyReference(undefined)}
+                            onCopied={async () => {
+                                try {
+                                    const { data } = await api.get(url);
+                                    if (currentRequest.current !== requestGeneration) return;
+                                    setItems(data.items);
+                                    setCursor(data.next_cursor);
+                                } catch {
+                                    if (currentRequest.current === requestGeneration) {
+                                        setItems([]);
+                                        setCursor(null);
+                                        setFailed(true);
+                                    }
+                                }
+                            }}
+                        />
+                    )}
                     {failed ? (
                         <p role="alert">{t("myAccount.secretHistory.failed")}</p>
                     ) : (

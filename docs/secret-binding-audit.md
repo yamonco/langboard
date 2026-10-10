@@ -47,5 +47,9 @@ does not change the source revision or retire source material. Both database
 facts commit together; a database/audit failure removes the newly stored vault
 material. A duplicate logical name or stale revision returns a conflict rather
 than replacing an existing secret. The migration preserves old audit records
-and refuses downgrade while copy facts exist. Browser copy controls, wiki
-secretization, and live canary acceptance remain separate unfinished work.
+and refuses downgrade while copy facts exist. The native history screen offers an explicit copy form, fetches current metadata
+only when opened, and submits the selected name with the fetched revision.
+Revoked references cannot be submitted; successful receipts link to the new
+history and refresh source facts. Navigation discards late responses. Ambiguous
+failures do not claim that no copy was created and do not automatically replay
+the mutation. Wiki secretization and live canary acceptance remain unfinished.
