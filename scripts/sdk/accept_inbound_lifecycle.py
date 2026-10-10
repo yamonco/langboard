@@ -19,6 +19,7 @@ if os.environ.get("SDK_ACCEPTANCE_SERVER") == "1":
     # Import native route modules for their registration side effects.
     for module in (
         "langboard.routes.board.BoardSettingApi",
+        "langboard.routes.board.CardAppResourcesApi",
         "langboard.routes.settings.AppRegistrySettingsApi",
         "langboard.routes.settings.AppCardCreationApi",
         "langboard.routes.settings.AppInboundConnectionApi",
@@ -161,7 +162,9 @@ async def acceptance(base, auth):
             resource_type="project",
             external_resource_id="erp-project",
         )
-        resource_path = f"/board/{auth['board']}/settings/apps/example-erp/inbound-connections/{auth['connection']}/resources"
+        resource_path = (
+            f"/board/{auth['board']}/settings/apps/example-erp/inbound-connections/{auth['connection']}/resources"
+        )
         resource_snapshot = await transport.request("GET", resource_path)
         assert resource_snapshot["binding_uid"] == binding["uid"]
         assert resource_snapshot["resource_types"] == ["project"]
@@ -179,7 +182,9 @@ async def acceptance(base, auth):
         revoked = await transport.request("POST", f"{credential_path}/{temporary['credential_uid']}/revoke", json={})
         assert revoked["revoked"]
         recovered_receipts = await transport.request("GET", credential_path)
-        assert next(item for item in recovered_receipts["items"] if item["credential_uid"] == temporary["credential_uid"])["revoked_at"]
+        assert next(
+            item for item in recovered_receipts["items"] if item["credential_uid"] == temporary["credential_uid"]
+        )["revoked_at"]
         async with httpx.AsyncClient(
             base_url=base, timeout=30, trust_env=False, headers={"Authorization": "Bearer " + credential["token"]}
         ) as app_client:
@@ -199,6 +204,28 @@ async def acceptance(base, auth):
             )
             assert first["created"] and not replay["created"] and first["card_uid"] == replay["card_uid"]
             assert replay["effects_state"] == "dispatched", replay
+            card_resources_path = (
+                f"/board/{auth['board']}/card/{first['card_uid']}/apps/connections/{auth['connection']}/resources"
+            )
+            selection = await transport.request("GET", card_resources_path)
+            assert selection["revision"] is None and selection["resource_uids"] == []
+            selection = await transport.request(
+                "PUT",
+                card_resources_path,
+                json={"resource_uids": [auth["resource"]], "expected_revision": None},
+            )
+            assert selection["revision"] == 1 and selection["changed"]
+            assert (await transport.request("GET", card_resources_path))["resource_uids"] == [auth["resource"]]
+            try:
+                await transport.request(
+                    "PUT",
+                    card_resources_path,
+                    json={"resource_uids": [], "expected_revision": None},
+                )
+            except NativeApiError as exc:
+                assert exc.status_code == 409
+            else:
+                raise AssertionError("Stale selection revision was accepted")
             updated = await registry.approve(
                 {**declared, "version": "1.0.1", "description": "Independent external issue service, updated"},
                 expected_revision=approved["revision"],
@@ -214,6 +241,13 @@ async def acceptance(base, auth):
             assert updated_replay["card_uid"] == first["card_uid"] and not updated_replay["created"]
             app_disabled = await registry.disable("example-erp", updated["revision"])
             assert not app_disabled["is_enabled"]
+            assert (await transport.request("GET", card_resources_path))["revision"] == 1
+            cleared = await transport.request(
+                "PUT",
+                card_resources_path,
+                json={"resource_uids": [], "expected_revision": 1},
+            )
+            assert cleared["revision"] == 2 and cleared["resource_uids"] == []
             assert not next(a for a in await registry.list() if a["declaration"]["key"] == "example-erp")["is_enabled"]
             try:
                 await example.create_issue(*args, description="Native PostgreSQL source", presentation=presentation)
@@ -269,6 +303,7 @@ async def acceptance(base, auth):
                         "revocation_denied": True,
                         "inbound_connection_via_http": True,
                         "resource_selection_via_http": True,
+                        "card_resource_selection_via_http": True,
                         "seeded_app_state": False,
                         "registry_update_readback": True,
                         "registry_disable_denied": True,

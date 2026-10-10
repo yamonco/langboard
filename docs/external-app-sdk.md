@@ -520,9 +520,22 @@ no authority; execution must recheck current resources and execution gates.
 Empty selections explicitly unlink resources, including after consent revocation.
 Every changed selection appends an audit record atomically. Audit rows have no
 card/connection foreign keys, and downgrade refuses to discard existing history.
-The internal service is not exposed as an execution API or SDK grant. Native
-REST/MCP configuration, execution grants, PostgreSQL concurrency, HITL/outbox and
-external-app acceptance remain pending.
+Human configuration uses `GET` and `PUT`
+`/board/{board_uid}/card/{card_uid}/apps/connections/{connection_uid}/resources`.
+GET returns `app_key`, `connection_uid`, `revision` and `resource_uids`. PUT accepts
+`resource_uids` (at most 20 distinct native UIDs) and `expected_revision` (null for
+the initial selection, otherwise the current positive revision). It returns the
+revision, selected UIDs and whether configuration changed. A stale revision is
+409. Responses use `Cache-Control: no-store`.
+
+Both methods resolve current native card visibility using the authenticated
+channel, then require current board administration and connection ownership.
+Client channel hints cannot expose PRIVATE configuration through API transport.
+GET and empty PUT remain available for cleanup after consent/resource revocation;
+selecting new resources still requires current policy and consent. A different
+personal connection owner cannot read or clear the selection. This configuration
+does not issue an execution grant, start a job or enable workflow transitions.
+MCP/UI configuration and deployed external-app acceptance remain pending.
 
 ### Current execution authority inspection
 

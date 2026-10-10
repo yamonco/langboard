@@ -20,6 +20,39 @@ from .AppManifest import APP_MANIFESTS
 from .CardAppGovernance import CardAppOwnershipConflict, _admin_card
 
 
+def read_card_app_resources(actor, project_id, card_id, connection_id):
+    """Read configuration for its current administrator and connection owner, including cleanup receipts."""
+    if not isinstance(actor, User):
+        raise AppGovernanceDenied()
+    with DbSession.atomic() as db:
+        current, project, card = _admin_card(db, actor, project_id, card_id)
+        connection = _current(db, AppConnection, connection_id)
+        if (
+            connection is None
+            or (connection.ownership == "personal" and connection.owner_id != current.id)
+            or (
+                connection.ownership == "organization"
+                and (connection.organization_id is None or connection.organization_id != project.organization_id)
+            )
+            or connection.ownership not in ("personal", "organization")
+        ):
+            raise AppGovernanceDenied()
+        row = db.exec(
+            SqlBuilder.select.table(CardAppResourceSelection).where(
+                CardAppResourceSelection.card_id == card.id,
+                CardAppResourceSelection.app_key == connection.app_key,
+            )
+        ).first()
+        if row is not None and row.connection_id != connection.id:
+            raise AppGovernanceDenied()
+        return {
+            "app_key": connection.app_key,
+            "connection_uid": connection.get_uid(),
+            "revision": row.revision if row else None,
+            "resource_uids": list(row.resource_uids) if row else [],
+        }
+
+
 def set_card_app_resources(actor, project_id, card_id, connection_id, resource_uids, expected_revision):
     """Atomically replace a bounded explicit selection; empty selection unlinks it."""
     if not isinstance(actor, User):
