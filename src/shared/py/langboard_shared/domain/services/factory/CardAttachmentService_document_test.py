@@ -50,6 +50,7 @@ def test_explicit_embedding_preserves_transcription_and_uses_current_settings(mo
         "generation": "source",
         "content_hash": "hash",
         "content": {"markdown": "preserved"},
+        "embedding_config": {"binding_uid": "prior-binding", "model_name": "prior-model"},
         "embedding": {"status": "indexed", "pointer": {"generation": "prior"}},
     }
     metadata = Mock()
@@ -83,6 +84,7 @@ def test_explicit_embedding_preserves_transcription_and_uses_current_settings(mo
     assert service.request_document_embedding(project, card, attachment) == "pending"
     publication = metadata.publish_document_embedding.call_args_list[0]
     assert publication.args[-1]["pointer"] == document["embedding"]["pointer"]
+    assert publication.args[-1]["config"] == document["embedding_config"]
     assert publication.kwargs["expected_embedding"] == document["embedding"]
     assert "private" not in str(publication.kwargs["embedding_config"])
     assert publication.kwargs["embedding_config"]["model_name"] == "embed"
@@ -91,6 +93,7 @@ def test_explicit_embedding_preserves_transcription_and_uses_current_settings(mo
         failure = metadata.publish_document_embedding.call_args
         assert failure.args[-1]["status"] == "failed"
         assert failure.args[-1]["pointer"] == document["embedding"]["pointer"]
+        assert failure.args[-1]["config"] == document["embedding_config"]
         assert "private broker address" not in failure.args[-1]["error"]
         assert failure.kwargs["expected_embedding"] == publication.args[-1]
     metadata.queue_document.assert_not_called()

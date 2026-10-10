@@ -245,6 +245,8 @@ class CardAttachmentService(BaseDomainService):
         old = document.get("embedding") or {}
         request_uid = uuid4().hex
         queued = {**old, "status": "pending", "request_uid": request_uid}
+        if old.get("pointer") and "config" not in queued and document.get("embedding_config"):
+            queued["config"] = document["embedding_config"]
         queued.pop("error", None)
         args, kwargs = TaskParameters(
             dumps(

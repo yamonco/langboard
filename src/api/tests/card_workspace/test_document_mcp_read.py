@@ -277,3 +277,69 @@ def test_vector_return_uses_current_primary_binding(monkeypatch, binding_store, 
             CardMcp.search_card_document("board", "card", "attachment", "query", object(), service)
     if change == "deleted":
         assert service.internal_bot.get_current_by_id_like(binding) is None
+
+
+@pytest.mark.parametrize("status", ["pending", "failed"])
+@pytest.mark.parametrize("revoke", [False, True])
+def test_reindex_keeps_previous_model_searchable_with_current_acl(monkeypatch, tmp_path, status, revoke):
+    from json import dumps, loads
+    from langboard_shared.domain.models.InternalBot import InternalBotType
+    from langboard_shared.tasks.docling import DocumentEmbedding as embedding
+    from langboard_shared.tasks.docling import DocumentVectorQuery as query_module
+    from langboard_shared.tasks.docling.DocumentRetrievalSettings import DocumentRetrievalSettings
+    from langboard_shared.tasks.docling.DocumentSqliteStore import open_sqlite_vector_store
+    from langboard_shared.tasks.docling.DocumentSqliteVectorStore_test import Fixture
+    from langboard_shared.tasks.docling.DocumentVectorGeneration import embedding_fingerprint
+    from langboard_shared.tasks.docling.DocumentVectorStore import stage_vector_generation
+
+    service, _card, _attachment, document = fixture(monkeypatch)
+    config = {
+        "agent_llm": "OpenAI Compatible", "base_url": "https://fixture.invalid",
+        "model_name": "previous-model", "retrieval": {"enabled": True, "dimensions": 3},
+    }
+    old_snapshot = embedding.snapshot_embedding_config(dumps(config), "binding")
+    current_config = {**config, "model_name": "new-model"}
+    document["embedding_config"] = embedding.snapshot_embedding_config(dumps(current_config), "binding")
+    service.internal_bot = SimpleNamespace(get_current_by_id_like=Mock(return_value=SimpleNamespace(
+        value=dumps(current_config), bot_type=InternalBotType.DocumentEmbedding,
+    )))
+    fingerprint = embedding_fingerprint(
+        provider=config["base_url"], model=config["model_name"], dimensions=3, version="v1"
+    )
+    directory = tmp_path / "document-retrieval"
+    directory.mkdir()
+    with open_sqlite_vector_store(directory / (fingerprint + ".sqlite"), Fixture(), dimensions=3) as store:
+        pointer = stage_vector_generation(
+            store,
+            source={"board_uid": "board", "card_uid": "card", "attachment_uid": "attachment",
+                    "content_hash": "hash", "embedding_fingerprint": fingerprint},
+            text="alpha previous searchable generation 한국어 日本語 中文",
+            splitter=DocumentRetrievalSettings().splitter, storage={"type": "sqlite"},
+        )
+    document["embedding"] = {
+        "status": status, "source_generation": "current", "pointer": pointer, "config": old_snapshot,
+    }
+    monkeypatch.setattr(CardMcp, "Env", SimpleNamespace(DATA_DIR=tmp_path, get_from_env=lambda *_: "https://fixture.invalid"))
+    def create(value, allowed):
+        assert loads(value)["model_name"] == "previous-model"
+        assert config["base_url"] in allowed
+        return Fixture()
+    monkeypatch.setattr(embedding, "create_document_embeddings", create)
+    real_search = query_module.search_vector_generation
+    def search(*args, **kwargs):
+        result = real_search(*args, **kwargs)
+        if revoke:
+            service.project.get_user_role_actions_by_project.return_value = []
+        return result
+    monkeypatch.setattr(query_module, "search_vector_generation", search)
+    if revoke:
+        with pytest.raises(ValueError, match="unavailable"):
+            CardMcp.search_card_document("board", "card", "attachment", "alpha", object(), service)
+    else:
+        result = CardMcp.search_card_document("board", "card", "attachment", "alpha", object(), service)
+        assert len(result["matches"]) == 1
+        assert "previous searchable" in result["matches"][0]["content"]
+        assert result["matches"][0]["source"]["embedding_fingerprint"] == fingerprint
+        assert "embedding_config" not in result and "config" not in result
+    assert document["embedding"]["pointer"] == pointer
+    assert document["embedding_config"]["model_name"] == "new-model"

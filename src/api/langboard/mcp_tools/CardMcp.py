@@ -264,7 +264,7 @@ def search_card_document(
         or (document.get("embedding") or {}).get("source_generation") != document.get("generation")
     ):
         raise ValueError("Document vectors do not match the current source")
-    snapshot = document.get("embedding_config") or {}
+    snapshot = (document.get("embedding") or {}).get("config") or document.get("embedding_config") or {}
     binding = service.internal_bot.get_current_by_id_like(snapshot.get("binding_uid"))
     from langboard_shared.domain.models.InternalBot import InternalBotType
 
@@ -311,7 +311,7 @@ def search_card_document(
         or latest.get("generation") != document.get("generation")
         or latest.get("content_hash") != document.get("content_hash")
         or (latest.get("embedding") or {}).get("pointer") != pointer
-        or latest.get("embedding_config") != snapshot
+        or ((latest.get("embedding") or {}).get("config") or latest.get("embedding_config") or {}) != snapshot
     ):
         raise ValueError("Document generation changed; retry retrieval")
     current_binding = service.internal_bot.get_current_by_id_like(snapshot.get("binding_uid"))

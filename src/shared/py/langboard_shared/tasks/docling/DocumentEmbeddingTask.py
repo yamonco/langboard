@@ -154,7 +154,7 @@ def embed_transcription(service, attachment_uid: str, generation: str, request_u
                     attachment_uid,
                     generation,
                     content_hash,
-                    {"status": "indexed", "pointer": pointer, "source_generation": generation},
+                    {"status": "indexed", "pointer": pointer, "source_generation": generation, "config": snapshot},
                     expected_embedding=old,
                 )
             except Exception:
