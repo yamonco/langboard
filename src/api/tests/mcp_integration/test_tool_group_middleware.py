@@ -157,6 +157,7 @@ async def test_native_oidc_group_default_preserves_authorization(monkeypatch, su
             # Real native discovery/call gate remains authoritative after group resolution.
             from langboard.mcp_integration.ToolGroupMiddleware import ToolGroupMiddleware
 
+            assert mcp_auth_context.get()["oidc_claims"] is claims
             try:
                 await ToolGroupMiddleware().on_call_tool(
                     SimpleNamespace(message=SimpleNamespace(name="allowed")), lambda _: native_call("allowed", {})
@@ -167,7 +168,9 @@ async def test_native_oidc_group_default_preserves_authorization(monkeypatch, su
             await send({"type": "http.response.start", "status": actual, "headers": []})
 
         # Bots cannot use the OIDC default; absent group is rejected before dispatch.
+        previous_context = mcp_auth_context.get()
         await module.McpAuthMiddleware(app)(scope, receive, send)
+        assert mcp_auth_context.get() is previous_context
         actual = next(message["status"] for message in messages if message["type"] == "http.response.start")
         if case == "bot":
             expected = 400
