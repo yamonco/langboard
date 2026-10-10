@@ -32,7 +32,19 @@ const isPreviousSession = (config?: AxiosRequestConfig) => {
     return version !== undefined && version !== getAuthStore().getSessionVersion();
 };
 
-export const refresh = async (): Promise<bool> => {
+let pendingRefresh: { session: number; promise: Promise<bool> } | undefined;
+
+export const refresh = (): Promise<bool> => {
+    const session = getAuthStore().getSessionVersion();
+    if (pendingRefresh?.session === session) return pendingRefresh.promise;
+    const promise = refreshSession().finally(() => {
+        if (pendingRefresh?.promise === promise) pendingRefresh = undefined;
+    });
+    pendingRefresh = { session, promise };
+    return promise;
+};
+
+const refreshSession = async (): Promise<bool> => {
     const authStore = getAuthStore();
 
     try {
@@ -43,7 +55,10 @@ export const refresh = async (): Promise<bool> => {
             throw new Error("Failed to refresh token");
         }
 
-        await authStore.updateToken(response.data.access_token, api);
+        const identity = authStore.updateToken(response.data.access_token, api);
+        // Token rotation changes the version synchronously; identity hydration still belongs to this refresh.
+        if (pendingRefresh) pendingRefresh.session = authStore.getSessionVersion();
+        await identity;
         return true;
     } catch (e) {
         if (!axios.isCancel(e)) authStore.removeToken();
