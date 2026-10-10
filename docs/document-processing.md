@@ -137,3 +137,13 @@ The local regression searches persisted vectors while the request is pending
 or failed and rejects both flows when read permission is revoked during search.
 Inference and ACL services are test doubles; PostgreSQL publication and live
 provider acceptance remain separate gates.
+
+### Card-level embedding queue indicator
+
+The existing card document progress area includes pending embedding requests,
+even when transcription has already completed. It shows the localized embedding
+queue label instead of suggesting that an indexed transcription has no remaining
+work. Attachment detail retains its separate transcription and embedding labels.
+Completed or failed embeddings do not keep the card's active progress indicator
+visible. This uses existing metadata subscriptions and translation keys without
+adding polling, scanning attachments or triggering processing.

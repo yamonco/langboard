@@ -3,7 +3,7 @@ import MoreMenu from "@/components/MoreMenu";
 import Toast from "@/components/base/Toast";
 import { api } from "@/core/helpers/Api";
 import setupApiErrorHandler from "@/core/helpers/setupApiErrorHandler";
-import { documentDisplayTags, EDoclingIndexStatus, parseDoclingMetadata } from "@/core/constants/DoclingMetadata";
+import { documentDisplayTags, EDoclingIndexStatus, parseDoclingMetadata, pendingDocument } from "@/core/constants/DoclingMetadata";
 import { MetadataModel } from "@/core/models";
 import { ModelRegistry } from "@/core/models/ModelRegistry";
 import { useBoardCard } from "@/core/providers/BoardCardProvider";
@@ -73,23 +73,24 @@ function DocumentProgress({
     const [t, i18n] = useTranslation();
     const preferredLanguage = currentUser.useField("preferred_lang");
     const metadata = record.useField("metadata");
-    const document = parseDoclingMetadata(metadata).find((entry) =>
-        attachmentUID
-            ? entry.attachment_uid === attachmentUID
-            : entry.status === EDoclingIndexStatus.Pending || entry.status === EDoclingIndexStatus.Processing
-    );
+    const document = attachmentUID
+        ? parseDoclingMetadata(metadata).find((entry) => entry.attachment_uid === attachmentUID)
+        : pendingDocument(metadata);
     if (!document) return null;
     const tags = attachmentUID ? documentDisplayTags(document.content, preferredLanguage) : [];
     const running = document.status === EDoclingIndexStatus.Processing;
-    const label = running
-        ? t("card.Processing document")
-        : document.status === EDoclingIndexStatus.Pending
-          ? t("card.Document queued")
-          : document.status === EDoclingIndexStatus.Indexed
-            ? t("card.Document indexed")
-            : document.status === EDoclingIndexStatus.Failed
-              ? t("card.Document processing failed")
-              : t("card.Document processing disabled");
+    const label =
+        !attachmentUID && document.status === EDoclingIndexStatus.Indexed && document.embedding?.status === "pending"
+            ? t("card.Embedding queued")
+            : running
+              ? t("card.Processing document")
+              : document.status === EDoclingIndexStatus.Pending
+                ? t("card.Document queued")
+                : document.status === EDoclingIndexStatus.Indexed
+                  ? t("card.Document indexed")
+                  : document.status === EDoclingIndexStatus.Failed
+                    ? t("card.Document processing failed")
+                    : t("card.Document processing disabled");
     const percent = typeof document.progress_percent === "number" ? Math.max(0, Math.min(100, document.progress_percent)) : undefined;
     const pages =
         typeof document.total_pages === "number" && document.total_pages > 0

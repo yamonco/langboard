@@ -22,6 +22,13 @@ export interface IDoclingMetadataEntry {
     content: Record<string, unknown>;
 }
 
+export function pendingDocument(metadata: Record<string, string> | undefined): IDoclingMetadataEntry | undefined {
+    return parseDoclingMetadata(metadata).find(
+        (entry) =>
+            entry.status === EDoclingIndexStatus.Pending || entry.status === EDoclingIndexStatus.Processing || entry.embedding?.status === "pending"
+    );
+}
+
 export function parseDoclingMetadata(metadata: Record<string, string> | undefined): IDoclingMetadataEntry[] {
     const value = metadata?.[DOCLING_DOCUMENTS_METADATA_KEY];
     if (!value) {
