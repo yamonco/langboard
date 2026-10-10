@@ -254,3 +254,120 @@ def test_organization_connection_can_create_in_shared_organization_board(creatio
     updated = (board, token, *creation[2:])
     assert call(updated)["created"]
     assert not call(updated)["created"]
+
+
+def test_explicit_board_consent_enables_then_revokes_creation(creation, monkeypatch):
+    from langboard_shared.domain.services.AppRegistry import AppRegistryConflict, set_board_consent
+    from langboard_shared.publishers import AppSettingPublisher
+
+    monkeypatch.setattr(AppSettingPublisher, "apps_changed", lambda: None)
+    board, _, _, binding, _, definition, _ = creation
+    with DbSession.atomic() as db:
+        binding.granted_capabilities = []
+        binding.state = "disabled"
+        db.update(binding)
+    with pytest.raises(AppGovernanceDenied):
+        call(creation)
+    result = set_board_consent(
+        board[0],
+        board[1],
+        board[2].get_uid(),
+        "example-erp",
+        definition.edit_revision(),
+        binding.get_uid(),
+        binding.edit_revision(),
+        ["resources.read", "cards.create", "cards.presentation"],
+    )
+    assert result["state"] == "enabled" and not result["stage_transitions_enabled"]
+    assert call(creation)["created"]
+    with pytest.raises(AppRegistryConflict):
+        set_board_consent(
+            board[0],
+            board[1],
+            board[2].get_uid(),
+            "example-erp",
+            definition.edit_revision(),
+            binding.get_uid(),
+            binding.edit_revision(),
+            [],
+        )
+    result = set_board_consent(
+        board[0],
+        board[1],
+        board[2].get_uid(),
+        "example-erp",
+        definition.edit_revision(),
+        binding.get_uid(),
+        result["revision"],
+        [],
+    )
+    assert result["state"] == "disabled"
+    with pytest.raises(AppGovernanceDenied):
+        call(creation)
+
+
+def test_board_consent_cannot_exceed_declaration_or_stale_app_review(creation):
+    from langboard_shared.domain.services.AppRegistry import AppRegistryConflict, set_board_consent
+
+    board, _, _, binding, _, definition, _ = creation
+    args = (
+        board[0],
+        board[1],
+        board[2].get_uid(),
+        "example-erp",
+        definition.edit_revision(),
+        binding.get_uid(),
+        binding.edit_revision(),
+    )
+    with pytest.raises(ValueError):
+        set_board_consent(*args, ["execution.run"])
+    with pytest.raises(ValueError):
+        set_board_consent(*args, ["cards.create", "cards.create"])
+    args = (*args[:4], "0" * 64, *args[5:])
+    with pytest.raises(AppRegistryConflict):
+        set_board_consent(*args, ["cards.create"])
+
+
+def test_board_consent_requires_current_management_role(creation):
+    from langboard_shared.domain.services.AppRegistry import AppRegistryDenied, set_board_consent
+
+    board, _, _, binding, _, definition, _ = creation
+    with DbSession.atomic() as db:
+        board[2].owner_id = 2
+        db.update(board[2])
+        board[4].actions = ["read"]
+        db.update(board[4])
+    with pytest.raises(AppRegistryDenied):
+        set_board_consent(
+            board[0],
+            board[1],
+            board[2].get_uid(),
+            "example-erp",
+            definition.edit_revision(),
+            binding.get_uid(),
+            binding.edit_revision(),
+            ["cards.create"],
+        )
+
+
+def test_policy_disable_blocks_new_consent_but_allows_explicit_removal(creation, monkeypatch):
+    from langboard_shared.domain.models import AppGovernancePolicy
+    from langboard_shared.domain.services.AppRegistry import AppRegistryDenied, set_board_consent
+    from langboard_shared.publishers import AppSettingPublisher
+
+    monkeypatch.setattr(AppSettingPublisher, "apps_changed", lambda: None)
+    board, _, _, binding, _, definition, _ = creation
+    with DbSession.atomic() as db:
+        db.insert(AppGovernancePolicy(scope_key="global", mode="disabled"))
+    args = (
+        board[0],
+        board[1],
+        board[2].get_uid(),
+        "example-erp",
+        definition.edit_revision(),
+        binding.get_uid(),
+        binding.edit_revision(),
+    )
+    with pytest.raises(AppRegistryDenied):
+        set_board_consent(*args, ["cards.create"])
+    assert set_board_consent(*args, [])["state"] == "disabled"

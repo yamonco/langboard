@@ -766,6 +766,22 @@ grant reviewer approval or move workflow stages. Unknown providers cannot claim
 execution by returning a `running` state. App registration alone does not install
 a trusted signal adapter.
 
+### Explicit board capability consent
+
+`PUT /board/{project_uid}/settings/apps/{app_key}/consent` replaces grants on an
+existing board binding. The authenticated board manager supplies the current
+`app_revision`, `binding_uid`, `expected_revision` and an explicit unique
+`capabilities` list. Grants must be a subset of the administrator-approved app
+declaration. The current instance/organization policy and board update authority
+are checked in the write transaction. A stale app or binding revision returns
+409; excess or duplicate capabilities are rejected. Empty grants disable the
+binding and remain removable even when instance policy disables app use.
+
+This endpoint does not create a connection, select resources, approve an app,
+start execution or enable workflow transitions. Panel-only consent retains its
+separate rendering endpoint. Source replay is fenced by the current grants, so
+removing `cards.create` blocks replay of an already committed external issue.
+
 ### External issue card creation
 
 `POST /apps/v1/boards/{project_uid}/cards` accepts a connection Bearer credential,
@@ -804,8 +820,16 @@ SDK repository's `examples/python/external_issue.py` uses `HttpTransport` direct
 without new provider branches or a package version change. Native PostgreSQL tests
 exercise four concurrent identical requests, current revocation, changed-payload
 conflicts, metadata rollback, organization scope and HTTP status boundaries.
-They replace outbound creation dispatch in the test harness; live broker and
-browser rendering acceptance remain separate.
+The focused tests replace outbound creation dispatch in their harness. A separate
+unpatched loopback HTTP acceptance also used a Uvicorn process, real PostgreSQL,
+native file broadcasts and native in-memory broker execution: administrator
+registration, workflow mapping, explicit capability consent, native credential
+issuance, public SDK issue creation/replay, and consent revocation all passed.
+Creation and presentation broadcasts plus native activity recording were observed.
+The disposable account, board, connection and selected resource were seeded with
+native model IDs; generic connection onboarding was not exercised. This local
+configured instance is not public canary, external broker or browser rendering
+acceptance.
 
 ### Standalone management example
 
