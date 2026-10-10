@@ -21,6 +21,17 @@ class SettingRoleAction(Enum):
     InternalBotUpdate = "internal_bot_update"
     InternalBotDelete = "internal_bot_delete"
 
+    # Workflow Stage Management
+    WorkflowStageRead = "workflow_stage_read"
+    WorkflowStageCreate = "workflow_stage_create"
+    WorkflowStageUpdate = "workflow_stage_update"
+    WorkflowStageDeactivate = "workflow_stage_deactivate"
+
+    # Global Label Management
+    GlobalLabelRead = "global_label_read"
+    GlobalLabelCreate = "global_label_create"
+    GlobalLabelUpdate = "global_label_update"
+
     # Global Relationship Management
     GlobalRelationshipRead = "global_relationship_read"
     GlobalRelationshipCreate = "global_relationship_create"
@@ -48,21 +59,18 @@ class SettingRoleAction(Enum):
     # Ollama Management
     OllamaRead = "ollama_read"
 
-    # Project Template Management
-    ProjectTemplateCreate = "project_template_create"
-    ProjectTemplateUpdate = "project_template_update"
-
 
 class SettingRoleCategory(Enum):
     User = "user"
     Bot = "bot"
     InternalBot = "internal_bot"
     GlobalRelationship = "global_relationship"
+    GlobalLabel = "global_label"
+    WorkflowStage = "workflow_stage"
     Webhook = "webhook"
     NotificationSchedule = "notification_schedule"
     ApiComfortTool = "api_comfort_tool"
     Ollama = "ollama"
-    ProjectTemplate = "project_template"
 
 
 class SettingRole(BaseRoleModel, table=True):
@@ -78,6 +86,8 @@ class SettingRole(BaseRoleModel, table=True):
             SettingRoleAction.BotRead,
             SettingRoleAction.InternalBotRead,
             SettingRoleAction.GlobalRelationshipRead,
+            SettingRoleAction.GlobalLabelRead,
+            SettingRoleAction.WorkflowStageRead,
             SettingRoleAction.WebhookRead,
             SettingRoleAction.NotificationScheduleRead,
             SettingRoleAction.ApiComfortToolRead,

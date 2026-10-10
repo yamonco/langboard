@@ -260,7 +260,7 @@ export abstract class BaseModel<TModel extends IBaseModel> {
     ): InstanceType<TDerived> | undefined {
         const filter = Utils.Type.isString(uidOrFilter) ? (model: InstanceType<TDerived>) => model.uid === uidOrFilter : uidOrFilter;
         const [model, setModel] = useState<InstanceType<TDerived> | undefined>(
-            Object.values(BaseModel.#MODELS[this.MODEL_NAME] ?? {}).filter(filter as any)[0]
+            () => Object.values(BaseModel.#MODELS[this.MODEL_NAME] ?? {}).filter(filter as any)[0]
         );
 
         useEffect(() => {
@@ -307,7 +307,7 @@ export abstract class BaseModel<TModel extends IBaseModel> {
         dependencies?: React.DependencyList
     ): InstanceType<TDerived>[] {
         const [models, setModels] = useState<InstanceType<TDerived>[]>(
-            Object.values(BaseModel.#MODELS[this.MODEL_NAME] ?? {}).filter(filter as any) as any
+            () => Object.values(BaseModel.#MODELS[this.MODEL_NAME] ?? {}).filter(filter as any) as any
         );
 
         useEffect(() => {

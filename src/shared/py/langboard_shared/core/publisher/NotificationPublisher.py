@@ -15,6 +15,8 @@ class NotificationPublishModel(BaseModel):
     # email
     email_template_name: TEmailTemplateName | None
     email_formats: dict[str, str] | None
+    source_notification_persisted: bool = False
+    web_notification_visible: bool = True
 
 
 @staticclass

@@ -1,3 +1,4 @@
+import { formatNumber } from "@/core/utils/LocaleFormat";
 import Box from "@/components/base/Box";
 import Button from "@/components/base/Button";
 import { ICollaborativeTextMeta, useCollaborativeText } from "@/components/Collaborative/useCollaborativeText";
@@ -8,6 +9,7 @@ import SubmitButton from "@/components/base/SubmitButton";
 import Toast from "@/components/base/Toast";
 import useUpdateCardLabels from "@/controllers/api/card/useUpdateCardLabels";
 import setupApiErrorHandler from "@/core/helpers/setupApiErrorHandler";
+import { useBoardGlobalLabels } from "@/controllers/api/board/settings/useBoardGlobalLabels";
 import { ProjectRole } from "@/core/models/roles";
 import { useBoardCard } from "@/core/providers/BoardCardProvider";
 import { parseCollaborativeStringList } from "@/core/utils/CollaborativeSelectionUtils";
@@ -29,9 +31,11 @@ interface ILabelToggleMeta {
 const BoardCardActionSetLabel = memo(({ buttonClassName }: IBoardCardActionSetLabelProps) => {
     const { projectUID, card, hasRoleAction } = useBoardCard();
     const labels = card.useForeignFieldArray("labels");
-    const [t] = useTranslation();
+    const [t, i18n] = useTranslation();
     const [isOpened, setIsOpened] = useState(false);
     const [isValidating, setIsValidating] = useState(false);
+    const canUseGlobal = hasRoleAction(ProjectRole.EAction.Update);
+    const { catalog, useGlobal } = useBoardGlobalLabels(projectUID, isOpened && canUseGlobal);
     const { mutateAsync: updateCardLabelsMutateAsync } = useUpdateCardLabels({ interceptToast: true });
     const currentCardLabelUIDs = labels.map((label) => label.uid);
     const defaultSelectedLabelUIDs = JSON.stringify(currentCardLabelUIDs);
@@ -102,11 +106,19 @@ const BoardCardActionSetLabel = memo(({ buttonClassName }: IBoardCardActionSetLa
 
         setIsValidating(true);
 
-        const promise = updateCardLabelsMutateAsync({
-            project_uid: projectUID,
-            card_uid: card.uid,
-            labels: selectedLabelUIDs,
-        });
+        const promise = (async () => {
+            const resolved: string[] = [];
+            const replacements = new Map<string, string>();
+            for (const uid of selectedLabelUIDs) {
+                const localUID = uid.startsWith("global:") ? await useGlobal.mutateAsync(uid.slice(7)) : uid;
+                resolved.push(localUID);
+                if (localUID !== uid) {
+                    replacements.set(uid, localUID);
+                    updateValue(JSON.stringify([...new Set(selectedLabelUIDs.map((selected) => replacements.get(selected) ?? selected))]));
+                }
+            }
+            return updateCardLabelsMutateAsync({ project_uid: projectUID, card_uid: card.uid, labels: [...new Set(resolved)] });
+        })();
 
         Toast.Add.promise(promise, {
             loading: t("common.Updating..."),
@@ -118,11 +130,11 @@ const BoardCardActionSetLabel = memo(({ buttonClassName }: IBoardCardActionSetLa
                 return messageRef.message;
             },
             success: () => {
+                setIsOpened(false);
                 return t("successes.Labels updated successfully.");
             },
             finally: () => {
                 setIsValidating(false);
-                setIsOpened(false);
             },
         });
     };
@@ -134,17 +146,31 @@ const BoardCardActionSetLabel = memo(({ buttonClassName }: IBoardCardActionSetLa
     return (
         <Popover.Root modal open={isOpened} onOpenChange={changeOpenedState}>
             <Popover.Trigger asChild>
-                <Button variant="secondary" className={buttonClassName}>
-                    <IconComponent icon="file-up" size="4" />
-                    {t("card.Set label")}
+                <Button variant="outline" className={buttonClassName} aria-label={t("card.Add labels")}>
+                    <IconComponent icon="plus" size="3" />
+                    {t("card.Add labels")}
                 </Button>
             </Popover.Trigger>
-            <Popover.Content align="end" className="w-[min(theme(spacing.72),80vw)]">
-                <Box mb="2" textSize="sm" weight="semibold">
-                    {t("card.Set label")}
+            <Popover.Content align="start" sideOffset={8} className="w-[min(340px,calc(100vw-24px))] rounded-xl p-3 shadow-xl">
+                <Flex items="center" justify="between" mb="2">
+                    <Flex items="center" gap="2">
+                        <IconComponent icon="tags" size="4" />
+                        <Box textSize="sm" weight="semibold">
+                            {t("card.Labels")}
+                        </Box>
+                    </Flex>
+                    <Box textSize="xs" className="rounded-full bg-secondary px-2 py-0.5 text-muted-foreground">
+                        {formatNumber(selectedLabelUIDs.length, i18n.language)}
+                    </Box>
+                </Flex>
+                <Box mb="3" textSize="xs" className="text-muted-foreground">
+                    {t("card.Select labels to attach or remove, then save.")}
                 </Box>
                 <BoardCardActionLabelList
-                    disabled={isWaitingForSync}
+                    globalLabels={canUseGlobal ? (catalog.data ?? []) : []}
+                    globalLoading={canUseGlobal && catalog.isLoading}
+                    globalError={canUseGlobal && catalog.isError}
+                    disabled={isWaitingForSync || isValidating}
                     remoteLabelStates={remoteLabelStates}
                     selectedLabelUIDs={selectedLabelUIDs}
                     setSelectedLabelUIDs={handleSelectedLabelUIDsChange}

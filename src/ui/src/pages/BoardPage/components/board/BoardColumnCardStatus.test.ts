@@ -1,0 +1,157 @@
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+
+import {
+    calculateChecklistProgress,
+    calculateChecklistProgressFromCounts,
+    calculateDeadlinePressure,
+    getChecklistBorderDashes,
+    DEADLINE_PRESSURE_WINDOW_MS,
+    getDeadlinePressureLevel,
+    getStaleDays,
+    getOverdueDays,
+    getUpcomingDeadlineDays,
+    isDeadlineFinished,
+    isDeadlineWarningSuppressed,
+    isChecklistCompleted,
+} from "./BoardColumnCardStatus.ts";
+
+describe("board column card status", () => {
+    it("suppresses deadline warning for card completion, all checkitems, or archive", () => {
+        const checklist = { completed: 0, total: 0 };
+        assert.equal(isDeadlineFinished({ checklist }), false);
+        assert.equal(isDeadlineWarningSuppressed({ checklist, completed: true }), true);
+        assert.equal(isDeadlineWarningSuppressed({ checklist, completed: false }), false);
+        assert.equal(isDeadlineWarningSuppressed({ checklist, archivedAt: new Date() }), true);
+        assert.equal(isDeadlineWarningSuppressed({ checklist: { total: 2, completed: 2 } }), true);
+    });
+    it("calculates checklist completion and hides progress without items", () => {
+        assert.deepEqual(calculateChecklistProgress([]), { completed: 0, total: 0, ratio: 0 });
+        assert.deepEqual(calculateChecklistProgress([{ is_checked: true }, { is_checked: false }]), {
+            completed: 1,
+            total: 2,
+            ratio: 0.5,
+        });
+    });
+
+    it("uses bounded board summary counts without detail hydration", () => {
+        assert.deepEqual(calculateChecklistProgressFromCounts(7, 8), { completed: 7, total: 8, ratio: 0.875 });
+        assert.deepEqual(calculateChecklistProgressFromCounts(0, 0), { completed: 0, total: 0, ratio: 0 });
+        assert.deepEqual(calculateChecklistProgressFromCounts(9, 8), { completed: 8, total: 8, ratio: 1 });
+    });
+
+    it("divides the rounded border into one segment per checkitem", () => {
+        const dashes = getChecklistBorderDashes(4, 9, 780);
+        const track = dashes.track.split(" ").map(Number);
+        const value = dashes.value.split(" ").map(Number);
+        assert.equal(track[0] + track[1], 1);
+        assert.equal(
+            value.reduce((sum, length) => sum + length, 0),
+            9
+        );
+        assert.equal(getChecklistBorderDashes(1, 1, 780).track, "1 0");
+        assert.equal(getChecklistBorderDashes(0, 9, 780).value, "");
+    });
+
+    it("marks the terminated state only when every item is completed", () => {
+        assert.equal(isChecklistCompleted({ completed: 3, total: 3 }), true);
+        assert.equal(isChecklistCompleted({ completed: 0, total: 3 }), false);
+        assert.equal(isChecklistCompleted({ completed: 2, total: 3 }), false);
+        // Empty checklists are in-progress work, not finished work.
+        assert.equal(isChecklistCompleted({ completed: 0, total: 0 }), false);
+        // Board summary counts are clamped before the predicate runs.
+        assert.equal(isChecklistCompleted(calculateChecklistProgressFromCounts(9, 8)), true);
+        assert.equal(isChecklistCompleted(calculateChecklistProgressFromCounts(0, 0)), false);
+    });
+
+    it("suppresses deadline warnings only for archived or fully checked cards", () => {
+        assert.equal(isDeadlineFinished({ checklist: { completed: 0, total: 0 } }), false);
+        assert.equal(isDeadlineFinished({ checklist: { completed: 1, total: 2 } }), false);
+        assert.equal(isDeadlineFinished({ checklist: { completed: 2, total: 2 } }), true);
+        assert.equal(isDeadlineFinished({ archivedAt: new Date(), checklist: { completed: 0, total: 2 } }), true);
+    });
+
+    it("shows stale days only after the configured calendar-day threshold on unfinished cards", () => {
+        const now = new Date(2026, 8, 29, 12);
+        const updatedAt = new Date(2026, 8, 15, 23);
+        assert.equal(getStaleDays({ updatedAt, now }), 14);
+        assert.equal(getStaleDays({ updatedAt, now, thresholdDays: 15 }), null);
+        assert.equal(getStaleDays({ updatedAt, now, isFinished: true }), null);
+        assert.equal(getStaleDays({ updatedAt: new Date(2026, 8, 16), now }), null);
+        assert.equal(getStaleDays({ updatedAt: undefined, now }), null);
+    });
+
+    it("removes deadline pressure and aura styling for terminated cards", () => {
+        const now = new Date("2026-09-17T00:00:00.000Z");
+        const overdueButTerminated = { deadlineAt: new Date(now.getTime() - 1), isCompleted: true, now };
+
+        // Terminated cards expose pressure 0 and level "none", so the deadline
+        // aura class and pressure CSS variable resolve to a removed aura.
+        assert.equal(calculateDeadlinePressure(overdueButTerminated), 0);
+        assert.equal(getDeadlinePressureLevel(overdueButTerminated), "none");
+        // Un-checking any item restores pressure instantly from the same inputs.
+        assert.equal(calculateDeadlinePressure({ deadlineAt: overdueButTerminated.deadlineAt, isCompleted: false, now }), 1);
+        assert.equal(getDeadlinePressureLevel({ deadlineAt: overdueButTerminated.deadlineAt, isCompleted: false, now }), "overdue");
+    });
+
+    it("ramps deadline pressure across seven days and suppresses completed cards", () => {
+        const now = new Date("2026-09-17T00:00:00.000Z");
+
+        assert.equal(calculateDeadlinePressure({ deadlineAt: undefined, now }), 0);
+        assert.equal(calculateDeadlinePressure({ deadlineAt: new Date(now.getTime() + DEADLINE_PRESSURE_WINDOW_MS), now }), 0);
+        assert.equal(calculateDeadlinePressure({ deadlineAt: new Date(now.getTime() + DEADLINE_PRESSURE_WINDOW_MS / 2), now }), 0.5);
+        assert.equal(calculateDeadlinePressure({ deadlineAt: new Date(now.getTime() - 1), now }), 1);
+        assert.equal(calculateDeadlinePressure({ deadlineAt: now, isCompleted: true, now }), 0);
+    });
+
+    it("classifies deadline pressure without treating the whole final week as urgent", () => {
+        const now = new Date("2026-09-17T00:00:00.000Z");
+        const at = (days: number) => new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
+
+        assert.equal(getDeadlinePressureLevel({ deadlineAt: at(4), now }), "none");
+        assert.equal(getDeadlinePressureLevel({ deadlineAt: at(2.5), now }), "near");
+        assert.equal(getDeadlinePressureLevel({ deadlineAt: at(1.5), now }), "due-soon");
+        assert.equal(getDeadlinePressureLevel({ deadlineAt: at(0.5), now }), "critical");
+        assert.equal(getDeadlinePressureLevel({ deadlineAt: at(-0.1), now }), "overdue");
+        assert.equal(getDeadlinePressureLevel({ deadlineAt: at(-0.1), isCompleted: true, now }), "none");
+    });
+
+    it("shows overdue calendar days in the user's local timezone", () => {
+        const now = new Date(2026, 8, 29, 12);
+        assert.equal(getOverdueDays({ deadlineAt: undefined, now }), 0);
+        assert.equal(getOverdueDays({ deadlineAt: new Date(2026, 8, 29, 8), now }), 0);
+        assert.equal(getOverdueDays({ deadlineAt: new Date(2026, 8, 26, 23), now }), 3);
+        assert.equal(getOverdueDays({ deadlineAt: new Date(2026, 8, 30, 8), now }), 0);
+    });
+
+    it("shows D-3 through D-Day by local calendar date and hides finished work", () => {
+        const now = new Date(2026, 8, 29, 12);
+        const at = (day: number, hour = 8) => new Date(2026, 8, day, hour);
+        assert.equal(getUpcomingDeadlineDays({ deadlineAt: at(32, 23), now }), 3);
+        assert.equal(getUpcomingDeadlineDays({ deadlineAt: at(30), now }), 1);
+        assert.equal(getUpcomingDeadlineDays({ deadlineAt: at(29, 18), now }), 0);
+        assert.equal(getUpcomingDeadlineDays({ deadlineAt: at(29, 8), now }), null);
+        assert.equal(getUpcomingDeadlineDays({ deadlineAt: at(33), now }), null);
+        assert.equal(getUpcomingDeadlineDays({ deadlineAt: at(30), now, isCompleted: true }), null);
+    });
+});
+
+describe("server workflow deadline policy", () => {
+    const checklist = { completed: 0, total: 2 };
+    it("suppresses incomplete work when the authoritative policy requests it", () => {
+        assert.equal(isDeadlineWarningSuppressed({ checklist, workState: { completed: false, overdue_suppressed: true } }), true);
+        assert.equal(isDeadlineWarningSuppressed({ checklist, workState: { completed: true, overdue_suppressed: false } }), true);
+    });
+    it("does not treat missing or false policy as completion", () => {
+        assert.equal(isDeadlineWarningSuppressed({ checklist, workState: { completed: false, overdue_suppressed: false } }), false);
+        assert.equal(isDeadlineWarningSuppressed({ checklist, workState: { completed: null, overdue_suppressed: null } }), false);
+        assert.equal(isDeadlineWarningSuppressed({ checklist }), false);
+    });
+    it("retains archive and fully completed checklist suppression", () => {
+        assert.equal(isDeadlineWarningSuppressed({ checklist, workState: { lifecycle: "archived" } }), true);
+        assert.equal(
+            isDeadlineWarningSuppressed({ checklist: { completed: 2, total: 2 }, workState: { completed: false, overdue_suppressed: false } }),
+            true
+        );
+    });
+});

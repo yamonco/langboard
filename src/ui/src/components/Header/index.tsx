@@ -1,4 +1,6 @@
-import { memo, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
+import { Link, useLocation } from "react-router";
+import { useTranslation } from "react-i18next";
 import CachedImage from "@/components/CachedImage";
 import HedaerNavItems from "@/components/Header/HedaerNavItems";
 import { IHeaderProps } from "@/components/Header/types";
@@ -11,28 +13,46 @@ import Separator from "@/components/base/Separator";
 import Sheet from "@/components/base/Sheet";
 import { useAuth } from "@/core/providers/AuthProvider";
 import { ROUTES } from "@/core/routing/constants";
-import { usePageNavigateRef } from "@/core/hooks/usePageNavigate";
 import HeaderUserMenu from "@/components/Header/HeaderUserMenu";
 import HeaderUserNotification from "@/components/Header/HeaderUserNotification";
+import { PROJECT_QUICK_SWITCHER_EVENT } from "@/pages/DashboardPage/components/ProjectDiscovery";
 
-const Header = memo(({ navs, title }: IHeaderProps) => {
+const Header = memo(({ navs, title, compact, navigationReady = true, mobileNavigationTriggerRef, mobileContextRef }: IHeaderProps) => {
+    const [t] = useTranslation();
     const { currentUser } = useAuth();
     const [isOpened, setIsOpen] = useState(false);
-    const navigate = usePageNavigateRef();
+    const location = useLocation();
+    const commandTrigger = useRef<HTMLButtonElement>(null);
+    const mobileSelection = useRef(false);
+    const mobileMenuPath = useRef(location.pathname);
 
-    const toDashboard = () => {
-        navigate(ROUTES.DASHBOARD.PROJECTS.ALL, { smooth: true });
-    };
+    useEffect(() => {
+        if (navigationReady && location.state?.commandPaletteFocus === true) {
+            commandTrigger.current?.focus({ preventScroll: true });
+        }
+    }, [location.key, location.state, navigationReady]);
 
     const separator = <Separator className="h-5" orientation="vertical" />;
 
     return (
-        <header className="sticky top-0 z-10 flex h-16 items-center justify-between gap-4 border-b bg-background px-4 md:px-6">
+        <header
+            data-workbench-context=""
+            className={
+                compact
+                    ? "sticky top-0 z-10 flex h-11 items-center justify-between gap-4 border-b bg-background px-4"
+                    : "sticky top-0 z-10 flex h-16 items-center justify-between gap-4 border-b bg-background px-4 md:px-6"
+            }
+        >
             {!navs.length && (
                 <Flex className="flex md:hidden">
-                    <a onClick={toDashboard} className="flex size-6 cursor-pointer items-center gap-2 text-lg font-semibold md:text-base">
-                        <CachedImage src="/images/logo.png" alt="Logo" size="full" />
-                    </a>
+                    <Link
+                        to={ROUTES.DASHBOARD.PROJECTS.ALL}
+                        viewTransition
+                        aria-label={t("common.Go to Dashboard")}
+                        className="flex size-6 cursor-pointer items-center gap-2 text-lg font-semibold md:text-base"
+                    >
+                        <CachedImage src="/images/logo.png" alt={t("common.Logo")} size="full" />
+                    </Link>
                 </Flex>
             )}
             <Flex
@@ -47,13 +67,26 @@ const Header = memo(({ navs, title }: IHeaderProps) => {
                     md: "sm",
                 }}
                 weight="medium"
-                className="hidden md:flex"
+                className={compact ? "min-w-0 flex-1" : "hidden md:flex"}
             >
-                <a onClick={toDashboard} className="flex size-6 cursor-pointer items-center gap-2 text-lg font-semibold md:text-base">
-                    <CachedImage src="/images/logo.png" alt="Logo" size="full" />
-                </a>
-                {!!title && <span className="text-lg font-semibold">{title}</span>}
-                {navs.length > 0 && (
+                <Link
+                    to={ROUTES.DASHBOARD.PROJECTS.ALL}
+                    viewTransition
+                    aria-label={t("common.Go to Dashboard")}
+                    className={compact ? "hidden size-6 shrink-0 cursor-pointer items-center md:flex" : "flex size-6 cursor-pointer items-center"}
+                >
+                    <CachedImage src="/images/logo.png" alt={t("common.Logo")} size="full" />
+                </Link>
+                {compact ? (
+                    <span className="flex min-w-0 items-center gap-2 text-sm font-medium">
+                        <span className="hidden shrink-0 font-semibold md:inline">Langboard</span>
+                        {!!title && <IconComponent icon="chevron-right" size="3.5" className="hidden shrink-0 text-muted-foreground md:inline" />}
+                        {!!title && <span className="min-w-0 truncate">{title}</span>}
+                    </span>
+                ) : (
+                    !!title && <span className="text-lg font-semibold">{title}</span>
+                )}
+                {navs.length > 0 && !compact && (
                     <NavigationMenu.Root>
                         <NavigationMenu.List>
                             <HedaerNavItems navs={navs} />
@@ -62,16 +95,45 @@ const Header = memo(({ navs, title }: IHeaderProps) => {
                 )}
             </Flex>
             {navs.length > 0 && (
-                <Sheet.Root open={isOpened} onOpenChange={setIsOpen}>
+                <Sheet.Root
+                    open={isOpened}
+                    onOpenChange={(open) => {
+                        if (open) {
+                            mobileSelection.current = false;
+                            mobileMenuPath.current = location.pathname;
+                        }
+                        setIsOpen(open);
+                    }}
+                >
                     <Sheet.Title hidden />
                     <Sheet.Description hidden />
                     <Sheet.Trigger asChild>
-                        <Button variant="outline" size="icon" className="shrink-0 md:hidden">
+                        <Button
+                            ref={mobileNavigationTriggerRef}
+                            data-mobile-navigation-trigger
+                            variant="outline"
+                            size="icon"
+                            className={compact ? "order-first shrink-0 md:hidden" : "shrink-0 md:hidden"}
+                        >
                             <IconComponent icon="menu" size="5" />
-                            <span className="sr-only">Toggle navigation menu</span>
+                            <span className="sr-only">{t("common.Toggle navigation menu")}</span>
                         </Button>
                     </Sheet.Trigger>
-                    <Sheet.Content side="left" className="flex flex-col justify-between">
+                    <Sheet.Content
+                        side="left"
+                        data-workbench-context=""
+                        className="flex flex-col justify-between"
+                        onCloseAutoFocus={(event) => {
+                            // A mode selection enters the context panel; cancellation and route
+                            // navigation retain the drawer's normal trigger restoration.
+                            const panel = mobileContextRef?.current;
+                            if (mobileSelection.current && mobileMenuPath.current === location.pathname && panel && !panel.closest("[inert]")) {
+                                event.preventDefault();
+                                panel.focus({ preventScroll: true });
+                            }
+                            mobileSelection.current = false;
+                        }}
+                    >
                         <Flex
                             items="center"
                             position="absolute"
@@ -81,9 +143,15 @@ const Header = memo(({ navs, title }: IHeaderProps) => {
                             w="full"
                             className="max-w-[calc(100%_-_theme(spacing.16))] truncate sm:max-w-[calc(24rem_-_theme(spacing.16))]"
                         >
-                            <a onClick={toDashboard} className="flex cursor-pointer items-center gap-2 text-lg font-semibold">
-                                <CachedImage src="/images/logo.png" alt="Logo" size="6" />
-                            </a>
+                            <Link
+                                to={ROUTES.DASHBOARD.PROJECTS.ALL}
+                                viewTransition
+                                aria-label={t("common.Go to Dashboard")}
+                                className="flex cursor-pointer items-center gap-2 text-lg font-semibold"
+                                onClick={() => setIsOpen(false)}
+                            >
+                                <CachedImage src="/images/logo.png" alt={t("common.Logo")} size="6" />
+                            </Link>
                             {!!title && (
                                 <>
                                     <IconComponent icon="chevron-right" size="5" />
@@ -95,7 +163,10 @@ const Header = memo(({ navs, title }: IHeaderProps) => {
                             <HedaerNavItems
                                 isMobile
                                 navs={navs}
-                                setIsOpen={setIsOpen}
+                                setIsOpen={(open) => {
+                                    mobileSelection.current = !open;
+                                    setIsOpen(open);
+                                }}
                                 activatedClass=""
                                 deactivatedClass="text-muted-foreground"
                                 shardClass="hover:text-foreground"
@@ -115,12 +186,31 @@ const Header = memo(({ navs, title }: IHeaderProps) => {
                     md: "auto",
                 }}
             >
-                <ThemeSwitcher variant="ghost" hideTriggerIcon buttonClassNames="p-2" />
+                {compact && (
+                    <Button
+                        ref={commandTrigger}
+                        data-command-palette-trigger
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        aria-label={t("dashboard.Command palette")}
+                        title={t("dashboard.Command palette")}
+                        className="h-8 shrink-0 gap-2 px-2"
+                        onClick={() => window.dispatchEvent(new Event(PROJECT_QUICK_SWITCHER_EVENT))}
+                    >
+                        <IconComponent icon="search" size="4" />
+                        <span className="hidden lg:inline">{t("dashboard.Search")}</span>
+                        <kbd className="hidden rounded border px-1 font-mono text-[10px] text-muted-foreground lg:inline">⌘K</kbd>
+                    </Button>
+                )}
+                <span className={compact ? "hidden sm:inline-flex" : "inline-flex"}>
+                    <ThemeSwitcher variant="ghost" hideTriggerIcon buttonClassNames="p-2" />
+                </span>
                 {currentUser ? (
                     <>
-                        {separator}
+                        {!compact && separator}
                         <HeaderUserNotification currentUser={currentUser} />
-                        {separator}
+                        {!compact && separator}
                         <HeaderUserMenu currentUser={currentUser} />
                     </>
                 ) : null}

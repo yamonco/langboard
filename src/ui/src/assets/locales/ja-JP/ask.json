@@ -1,0 +1,20 @@
+{
+  "Are you sure you want to unassign this assignee?": "この担当者の割り当てを解除しますか？",
+  "Are you sure you want to archive this card?": "このカードをアーカイブしますか？",
+  "Are you sure you want to delete this card?": "このカードを削除しますか？",
+  "Are you sure you want to delete this file?": "このファイルを削除しますか？",
+  "Are you sure you want to delete this checklist?": "このチェックリストを削除しますか？",
+  "Are you sure you want to delete this checkitem?": "このチェック項目を削除しますか？",
+  "Are you sure you want to delete this column?": "このカラムを削除しますか？",
+  "Are you sure you want to unschedule this cron?": "このcronの予約を解除しますか？",
+  "Are you sure you want to delete this label?": "このラベルを削除しますか？",
+  "Are you sure you want to delete this project?": "このプロジェクトを削除しますか？",
+  "Are you sure you want to delete this template?": "このテンプレートを削除しますか？",
+  "Are you sure you want to delete this user?": "このユーザーを削除しますか？",
+  "Are you sure you want to delete this bot?": "このボットを削除しますか？",
+  "Are you sure you want to delete this internal bot?": "この内部ボットを削除しますか？",
+  "Are you sure you want to delete this model?": "このモデルを削除しますか？",
+  "Are you sure you want to delete this API key?": "このAPIキーを削除しますか？",
+  "Are you sure you want to delete this API comfort tool?": "このAPI便利ツールを削除しますか？",
+  "Are you sure you want to delete this MCP tool group?": "このMCPツールグループを削除しますか？"
+}

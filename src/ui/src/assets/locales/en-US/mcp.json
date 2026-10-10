@@ -4,7 +4,7 @@
   "MCP Server": "MCP Server",
   "MCP Server Configuration": "MCP Server Configuration",
   "Copy config": "Copy config",
-  "Available Tools ({count})": "Available Tools ({{count}})",
+  "Available Tools ({count})": "Available Tools ({{count, number}})",
   "View Input Schema": "View Input Schema",
-  "{count} tools": "{{count}} tools"
+  "{count} tools": "{{count, number}} tools"
 }

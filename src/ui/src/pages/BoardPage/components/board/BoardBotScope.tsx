@@ -1,3 +1,4 @@
+import { formatNumber } from "@/core/utils/LocaleFormat";
 import Badge from "@/components/base/Badge";
 import Box from "@/components/base/Box";
 import Button from "@/components/base/Button";
@@ -290,7 +291,7 @@ interface IBoardGraphApprovalListProps {
 }
 
 function BoardGraphApprovalList({ approvals, projectUID }: IBoardGraphApprovalListProps): React.JSX.Element | null {
-    const [t] = useTranslation();
+    const [t, i18n] = useTranslation();
     const runningApprovalUIDRef = useRef<string | null>(null);
     const [hiddenApprovalUIDs, setHiddenApprovalUIDs] = useState<Set<string>>(() => new Set());
     const approveMutation = useApproveGraphApproval({ interceptToast: true });
@@ -343,7 +344,7 @@ function BoardGraphApprovalList({ approvals, projectUID }: IBoardGraphApprovalLi
                     {t("bot.Human input required")}
                 </Box>
                 <Badge variant="secondary" className="ml-auto px-2 py-0 text-[11px]">
-                    {visibleApprovals.length}
+                    {formatNumber(visibleApprovals.length, i18n.language)}
                 </Badge>
             </Flex>
             {visibleApprovals.map((approval) => (

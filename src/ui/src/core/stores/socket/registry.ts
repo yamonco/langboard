@@ -6,6 +6,7 @@ import type {
     TSocketRemoveEventProps,
     TSocketTopicNotifierProps,
     TSocketTopicNotifierRemoveProps,
+    TSocketEventKeyMap,
     TSocketTopicNotifierKeyMap,
 } from "@/core/stores/socket/types";
 
@@ -120,7 +121,7 @@ const getSubscriptionEventCallbacks = (topic: ESocketTopic, topicId: string, eve
         socketMap.subscriptions[topic][topicId][event] = {};
     }
 
-    return socketMap.subscriptions[topic][topicId][event];
+    return socketMap.subscriptions[topic][topicId][event] as TSocketEventKeyMap;
 };
 
 const clearSubscriptionEventCallbacks = (topic: ESocketTopic, topicId: string, event: string) => {
@@ -266,7 +267,7 @@ const notifyTopicNotifiers = (topic: ESocketTopic, topicId: string, isSubscribed
     }
 };
 
-export const addEvent = <TResponse>(props: TSocketAddEventProps<TResponse>) => {
+export const addEvent = (props: TSocketAddEventProps<unknown>) => {
     const { event, eventKey, callback } = props;
 
     if (isDefaultEvent(event)) {
@@ -285,7 +286,7 @@ export const addEvent = <TResponse>(props: TSocketAddEventProps<TResponse>) => {
     pushUniqueValue(events[eventKey], callback);
 };
 
-export const removeEvent = <TResponse>(props: TSocketRemoveEventProps<TResponse>) => {
+export const removeEvent = (props: TSocketRemoveEventProps) => {
     const { event, eventKey, callback } = props;
 
     if (isDefaultEvent(event)) {

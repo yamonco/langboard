@@ -1,0 +1,10 @@
+{
+  "Metadata": "메타데이터",
+  "Key": "키",
+  "Value": "값",
+  "Add a data": "데이터 추가",
+  "errors": {
+    "Key is required.": "키를 입력해 주세요.",
+    "Invalid JSON format.": "잘못된 JSON 형식입니다."
+  }
+}

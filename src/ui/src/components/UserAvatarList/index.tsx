@@ -51,6 +51,7 @@ export interface IUserAvatarListProps extends Omit<React.ComponentProps<typeof F
     scope?: IUserAvatarDefaultListProviderProps["scope"];
     avatarHoverProps?: IUserAvatarProps["hoverProps"];
     onlyList?: bool;
+    renderAvatar?: (user: TUserLikeModel, avatar: React.ReactNode) => React.ReactNode;
 }
 
 export const UserAvatarList = memo(
@@ -65,25 +66,33 @@ export const UserAvatarList = memo(
             scope,
             avatarHoverProps,
             onlyList,
+            renderAvatar,
             ...flexProps
         } = props;
         const moreUsersCount = userOrBots.length - maxVisible;
 
         return (
             <Flex position="relative" className={cn("rtl:space-x-reverse", SPACING_MAP[spacing], className)} ref={ref} {...flexProps}>
-                {userOrBots.slice(0, maxVisible).map((userOrBot) => (
-                    <UserAvatar.Root
-                        key={`user-avatar-${userOrBot.MODEL_NAME}-${userOrBot.uid}`}
-                        userOrBot={userOrBot}
-                        avatarSize={size}
-                        listAlign={listAlign}
-                        className="hover:z-50"
-                        hoverProps={avatarHoverProps}
-                        onlyAvatar={onlyList}
-                    >
-                        <UserAvatarDefaultList userOrBot={userOrBot} scope={scope} />
-                    </UserAvatar.Root>
-                ))}
+                {userOrBots.slice(0, maxVisible).map((userOrBot) => {
+                    const avatar = (
+                        <UserAvatar.Root
+                            key={`user-avatar-${userOrBot.MODEL_NAME}-${userOrBot.uid}`}
+                            userOrBot={userOrBot}
+                            avatarSize={size}
+                            listAlign={listAlign}
+                            className="hover:z-50"
+                            hoverProps={avatarHoverProps}
+                            onlyAvatar={onlyList}
+                        >
+                            <UserAvatarDefaultList userOrBot={userOrBot} scope={scope} />
+                        </UserAvatar.Root>
+                    );
+                    return (
+                        <Fragment key={`avatar-${userOrBot.MODEL_NAME}-${userOrBot.uid}`}>
+                            {renderAvatar ? renderAvatar(userOrBot, avatar) : avatar}
+                        </Fragment>
+                    );
+                })}
                 {moreUsersCount > 0 && <UserAvatarMoreList {...props} />}
             </Flex>
         );
@@ -94,55 +103,60 @@ interface IUserAvatarMoreList extends IUserAvatarListProps {
     isBadge?: bool;
 }
 
-const UserAvatarMoreList = memo(({ maxVisible, userOrBots, size = "default", listAlign, isBadge, scope, avatarHoverProps }: IUserAvatarMoreList) => {
-    const [isOpened, setIsOpened] = useState(false);
-    const moreUsersCount = userOrBots.length - maxVisible;
-    const moreUsersCountText = moreUsersCount > 99 ? "99" : moreUsersCount;
+const UserAvatarMoreList = memo(
+    ({ maxVisible, userOrBots, size = "default", listAlign, isBadge, scope, avatarHoverProps, renderAvatar }: IUserAvatarMoreList) => {
+        const [isOpened, setIsOpened] = useState(false);
+        const moreUsersCount = userOrBots.length - maxVisible;
+        const moreUsersCountText = moreUsersCount > 99 ? "99" : moreUsersCount;
 
-    return (
-        <HoverCard.Root open={isOpened} onOpenChange={setIsOpened} {...avatarHoverProps}>
-            <HoverCard.Trigger asChild>
-                {isBadge ? (
-                    <Box cursor="pointer" onClick={() => setIsOpened(!isOpened)}>
-                        <LabelBadge
-                            name={`+${moreUsersCountText}`}
-                            color="hsl(var(--secondary))"
-                            textColor="hsl(var(--secondary-foreground))"
-                            noTooltip
-                        />
-                    </Box>
-                ) : (
-                    <Button
-                        variant="secondary"
-                        className={cn(Avatar.Variants({ size }), "z-10 m-0 border-none p-0")}
-                        onClick={() => setIsOpened(!isOpened)}
-                    >
-                        +{moreUsersCountText}
-                    </Button>
-                )}
-            </HoverCard.Trigger>
-            <HoverCard.Content className="z-50 w-auto p-0" align="end" {...avatarHoverProps}>
-                <ScrollArea.Root>
-                    <Box maxH="52" minW="40" py="1">
-                        {userOrBots.slice(maxVisible).map((userOrBot, i) => (
-                            <Fragment key={`user-avatar-${userOrBot.uid}-${Utils.String.Token.shortUUID()}`}>
-                                {i !== 0 && <Separator className="my-1 h-px bg-muted" />}
-                                <UserAvatar.Root
-                                    userOrBot={userOrBot}
-                                    avatarSize="xs"
-                                    listAlign={listAlign}
-                                    withNameProps={{
-                                        className: "justify-start gap-2 px-3 py-1 hover:bg-accent/70 cursor-pointer",
-                                    }}
-                                    hoverProps={avatarHoverProps}
-                                >
-                                    <UserAvatarDefaultList userOrBot={userOrBot} scope={scope} />
-                                </UserAvatar.Root>
-                            </Fragment>
-                        ))}
-                    </Box>
-                </ScrollArea.Root>
-            </HoverCard.Content>
-        </HoverCard.Root>
-    );
-});
+        return (
+            <HoverCard.Root open={isOpened} onOpenChange={setIsOpened} {...avatarHoverProps}>
+                <HoverCard.Trigger asChild>
+                    {isBadge ? (
+                        <Box cursor="pointer" onClick={() => setIsOpened(!isOpened)}>
+                            <LabelBadge
+                                name={`+${moreUsersCountText}`}
+                                color="hsl(var(--secondary))"
+                                textColor="hsl(var(--secondary-foreground))"
+                                noTooltip
+                            />
+                        </Box>
+                    ) : (
+                        <Button
+                            variant="secondary"
+                            className={cn(Avatar.Variants({ size }), "z-10 m-0 border-none p-0")}
+                            onClick={() => setIsOpened(!isOpened)}
+                        >
+                            +{moreUsersCountText}
+                        </Button>
+                    )}
+                </HoverCard.Trigger>
+                <HoverCard.Content className="z-50 w-auto p-0" align="end" {...avatarHoverProps}>
+                    <ScrollArea.Root>
+                        <Box maxH="52" minW="40" py="1">
+                            {userOrBots.slice(maxVisible).map((userOrBot, i) => {
+                                const avatar = (
+                                    <UserAvatar.Root
+                                        userOrBot={userOrBot}
+                                        avatarSize="xs"
+                                        listAlign={listAlign}
+                                        withNameProps={{ className: "justify-start gap-2 px-3 py-1 hover:bg-accent/70 cursor-pointer" }}
+                                        hoverProps={avatarHoverProps}
+                                    >
+                                        <UserAvatarDefaultList userOrBot={userOrBot} scope={scope} />
+                                    </UserAvatar.Root>
+                                );
+                                return (
+                                    <Fragment key={`user-avatar-${userOrBot.MODEL_NAME}-${userOrBot.uid}`}>
+                                        {i !== 0 && <Separator className="my-1 h-px bg-muted" />}
+                                        {renderAvatar ? renderAvatar(userOrBot, avatar) : avatar}
+                                    </Fragment>
+                                );
+                            })}
+                        </Box>
+                    </ScrollArea.Root>
+                </HoverCard.Content>
+            </HoverCard.Root>
+        );
+    }
+);

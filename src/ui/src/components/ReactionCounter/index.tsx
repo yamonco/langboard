@@ -1,25 +1,29 @@
+import { formatNumber } from "@/core/utils/LocaleFormat";
 import Button from "@/components/base/Button";
 import Dock from "@/components/base/Dock";
 import Flex from "@/components/base/Flex";
 import IconComponent from "@/components/base/IconComponent";
 import Popover from "@/components/base/Popover";
+import Tooltip from "@/components/base/Tooltip";
 import AnimatedEmoji from "@/components/base/AnimatedEmoji";
+import { summarizeReactionActorNames } from "@/components/ReactionCounter/reactionActorNames";
 import { cn } from "@/core/utils/ComponentUtils";
 import { Utils } from "@langboard/core/utils";
 import { LottieRefCurrentProps } from "lottie-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 export type TReactionEmoji = "check-mark" | "thumbs-up" | "thumbs-down" | "laughing" | "party-popper" | "confusing" | "heart" | "rocket" | "eyes";
 
 export interface IReactionCounterProps<TReactionData = unknown> {
     reactions: Partial<Record<TReactionEmoji, TReactionData[]>>;
+    reactionActorNames?: Partial<Record<TReactionEmoji, string[]>>;
     toggleCallback: (reaction: TReactionEmoji) => void;
     isActiveReaction?: (reaction: TReactionEmoji, data: TReactionData[]) => bool;
     disabled?: bool;
 }
 
-function ReactionCounter({ reactions, toggleCallback, isActiveReaction, disabled }: IReactionCounterProps): React.JSX.Element {
+function ReactionCounter({ reactions, reactionActorNames, toggleCallback, isActiveReaction, disabled }: IReactionCounterProps): React.JSX.Element {
     const [t] = useTranslation();
     const reactionOrders: TReactionEmoji[] = [
         "check-mark",
@@ -49,9 +53,10 @@ function ReactionCounter({ reactions, toggleCallback, isActiveReaction, disabled
 
                     return (
                         <ReactionCounterButton
-                            key={`reaction-counter-${reaction}-${Utils.String.Token.shortUUID()}`}
+                            key={`reaction-counter-${reaction}`}
                             reaction={reaction}
                             reactionData={reactions[reaction]}
+                            actorNames={reactionActorNames?.[reaction]}
                             toggleCallback={toggle}
                             isActiveReaction={isActiveReaction}
                             disabled={disabled}
@@ -72,7 +77,15 @@ function ReactionCounter({ reactions, toggleCallback, isActiveReaction, disabled
                     size="sm"
                     className="!mt-0 h-auto max-w-[100vw] flex-wrap gap-1 px-1 py-0 xs:h-12"
                 >
-                    {reactionOrders.map((reaction) => ReactionCounterButton({ reaction, isDock: true, toggleCallback: toggle, disabled }))}
+                    {reactionOrders.map((reaction) => (
+                        <ReactionCounterButton
+                            key={`reaction-dock-${reaction}`}
+                            reaction={reaction}
+                            isDock
+                            toggleCallback={toggle}
+                            disabled={disabled}
+                        />
+                    ))}
                 </Dock.Root>
             </Popover.Content>
         </Popover.Root>
@@ -82,6 +95,7 @@ function ReactionCounter({ reactions, toggleCallback, isActiveReaction, disabled
 interface IBaseReactionCounterButtonProps<TReactionData = unknown> {
     reaction: TReactionEmoji;
     reactionData?: TReactionData[];
+    actorNames?: string[];
     isDock?: bool;
     toggleCallback: (emoji: TReactionEmoji) => void;
     isActiveReaction?: (emoji: TReactionEmoji, data: TReactionData[]) => bool;
@@ -96,6 +110,7 @@ interface IReactionCounterListButtonProps<TReactionData = unknown> extends IBase
 interface IReactionCounterDockButtonProps extends IBaseReactionCounterButtonProps {
     isDock: true;
     reactionData?: never;
+    actorNames?: never;
     isActiveReaction?: never;
 }
 
@@ -104,13 +119,21 @@ type TReactionCounterButtonProps = IReactionCounterListButtonProps | IReactionCo
 function ReactionCounterButton({
     reaction,
     reactionData,
+    actorNames,
     toggleCallback,
     isActiveReaction,
     disabled,
 }: TReactionCounterButtonProps): React.JSX.Element {
-    const [t] = useTranslation();
+    const [t, i18n] = useTranslation();
     const lottieRef = useRef<LottieRefCurrentProps>(null);
     const isPlayed = useRef(false);
+    const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+    const suppressNextClickRef = useRef(false);
+    const [isActorListOpen, setIsActorListOpen] = useState(false);
+
+    useEffect(() => {
+        return () => clearTimeout(longPressTimerRef.current);
+    }, []);
 
     const play = () => {
         if (!isPlayed.current) {
@@ -126,17 +149,44 @@ function ReactionCounterButton({
 
     const emoji = <AnimatedEmoji emoji={reaction} className="inline-block" lottieRef={lottieRef} onLoopComplete={stop} />;
 
+    const cancelLongPress = () => {
+        clearTimeout(longPressTimerRef.current);
+    };
+
     const buttonProps = {
         onPointerEnter: play,
-        onPointerLeave: stop,
-        onClick: () => toggleCallback(reaction),
+        onPointerLeave: () => {
+            stop();
+            cancelLongPress();
+        },
+        onPointerDown: (event: React.PointerEvent) => {
+            if (event.pointerType !== "touch" || Utils.Type.isUndefined(reactionData)) {
+                return;
+            }
+
+            cancelLongPress();
+            longPressTimerRef.current = setTimeout(() => {
+                suppressNextClickRef.current = true;
+                setIsActorListOpen(true);
+            }, 500);
+        },
+        onPointerUp: cancelLongPress,
+        onPointerCancel: cancelLongPress,
+        onClick: () => {
+            if (suppressNextClickRef.current) {
+                suppressNextClickRef.current = false;
+                return;
+            }
+
+            setIsActorListOpen(false);
+            toggleCallback(reaction);
+        },
         disabled,
     };
 
     if (Utils.Type.isUndefined(reactionData)) {
         return (
             <Dock.Button
-                key={`reaction-dock-${reaction}-${Utils.String.Token.shortUUID()}`}
                 buttonProps={{
                     type: "button",
                     className: "size-full p-3",
@@ -151,19 +201,46 @@ function ReactionCounterButton({
         );
     }
 
-    return (
+    const reactionTitle = t(`reaction.${reaction}`);
+    const names = actorNames ?? [];
+    const { visibleNames, remainingCount } = summarizeReactionActorNames(names);
+    const accessibleName = names.length ? `${reactionTitle}: ${names.join(", ")}` : reactionTitle;
+    const button = (
         <Button
             variant="outline"
             size="sm"
-            title={t(`reaction.${reaction}`)}
+            aria-label={accessibleName}
             className={cn("h-6 gap-1.5 px-1.5", isActiveReaction?.(reaction, reactionData) ? "bg-accent/75" : "")}
             {...buttonProps}
         >
             <Flex items="center" w="4">
                 {emoji}
             </Flex>
-            {reactionData.length}
+            {formatNumber(reactionData.length, i18n.language)}
         </Button>
+    );
+
+    if (!names.length) {
+        return button;
+    }
+
+    return (
+        <Tooltip.Root open={isActorListOpen} onOpenChange={setIsActorListOpen}>
+            <Tooltip.Trigger asChild>{button}</Tooltip.Trigger>
+            <Tooltip.Portal>
+                <Tooltip.Content side="top" className="max-w-64 py-2">
+                    <div className="mb-1 font-medium">{t("reaction.Reacted by")}</div>
+                    <div role="list" className="space-y-0.5">
+                        {visibleNames.map((name, index) => (
+                            <div role="listitem" key={`${name}-${index}`} className="truncate">
+                                {name}
+                            </div>
+                        ))}
+                        {remainingCount > 0 && <div className="text-muted-foreground">{t("reaction.and more", { count: remainingCount })}</div>}
+                    </div>
+                </Tooltip.Content>
+            </Tooltip.Portal>
+        </Tooltip.Root>
     );
 }
 

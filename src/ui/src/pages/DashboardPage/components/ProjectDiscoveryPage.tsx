@@ -1,0 +1,209 @@
+import { memo, useCallback, useEffect, useMemo, useReducer, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { Search } from "lucide-react";
+import Box from "@/components/base/Box";
+import Input from "@/components/base/Input";
+import Skeleton from "@/components/base/Skeleton";
+import type { IGetProjectsResponse } from "@/controllers/api/dashboard/useGetProjects";
+import { useDebounce } from "@/core/hooks/useDebounce";
+import ProjectList, { SkeletonProjectList } from "@/pages/DashboardPage/components/ProjectList";
+import { Project } from "@/core/models";
+import Button from "@/components/base/Button";
+import Flex from "@/components/base/Flex";
+import IconComponent from "@/components/base/IconComponent";
+import ProjectCompactList from "@/pages/DashboardPage/components/ProjectCompactList";
+import {
+    buildProjectDiscoverySections,
+    parseProjectListView,
+    projectListViewStorageKey,
+    searchProjects,
+    PROJECT_QUICK_SWITCHER_EVENT,
+    type TProjectListView,
+} from "@/pages/DashboardPage/components/ProjectDiscovery";
+
+export function SkeletonProjectDiscoveryPage() {
+    return (
+        <>
+            <Box px="2" mt="3">
+                <Skeleton h="9" />
+            </Box>
+            <Flex justify="end" gap="1" px="2" mt="2">
+                <Skeleton className="size-8" />
+                <Skeleton className="size-8" />
+            </Flex>
+            <Box mt="2">
+                <SkeletonProjectList />
+            </Box>
+        </>
+    );
+}
+
+interface IProjectDiscoveryPageProps {
+    userUID: string;
+    projectsData?: IGetProjectsResponse;
+    isProjectsFetching: bool;
+    isProjectsLoading: bool;
+    hasProjectsError?: bool;
+    onRetryProjects?: () => Promise<unknown>;
+    updateStarredProjects: React.DispatchWithoutAction;
+    scrollAreaUpdater: [number, React.DispatchWithoutAction];
+}
+
+function ProjectDiscoveryObserver({ project, onChange }: { project: Project.TModel; onChange: () => void }) {
+    const title = project.useField("title");
+    const starred = project.useField("starred");
+    const lastActivityAt = project.useField("last_activity_at");
+    useEffect(onChange, [title, starred, lastActivityAt, onChange]);
+    return null;
+}
+
+const ProjectDiscoveryPage = memo(
+    ({
+        userUID,
+        projectsData,
+        isProjectsFetching,
+        isProjectsLoading,
+        hasProjectsError = false,
+        onRetryProjects,
+        updateStarredProjects: updateHeaderStarredProjects,
+        scrollAreaUpdater,
+    }: IProjectDiscoveryPageProps): React.JSX.Element => {
+        const [projectDiscoveryRevision, updateProjectDiscovery] = useReducer((x) => x + 1, 0);
+        const onProjectDiscoveryChanged = useCallback(() => updateProjectDiscovery(), []);
+        const [searchQuery, setSearchQuery] = useState("");
+        const storageKey = projectListViewStorageKey(userUID);
+        const [projectListView, setProjectListView] = useState<TProjectListView>(() => parseProjectListView(localStorage.getItem(storageKey)));
+        useEffect(() => setProjectListView(parseProjectListView(localStorage.getItem(storageKey))), [storageKey]);
+        const debouncedSearchQuery = useDebounce(searchQuery.trim(), 300);
+        const [t] = useTranslation();
+
+        const projectUIDs = useMemo(() => (projectsData?.projects ?? []).map((project) => project.uid), [projectsData]);
+        const loadedProjects = Project.Model.useModels((model) => projectUIDs.includes(model.uid), [projectUIDs, projectDiscoveryRevision]);
+        const projects = useMemo(() => {
+            const projectsByUID = new Map(loadedProjects.map((project) => [project.uid, project]));
+            return projectUIDs.map((projectUID) => projectsByUID.get(projectUID)).filter((project): project is Project.TModel => !!project);
+        }, [loadedProjects, projectUIDs]);
+
+        const currentProjects = useMemo(() => searchProjects(projects, debouncedSearchQuery), [debouncedSearchQuery, projects]);
+        const discoverySections = useMemo(() => buildProjectDiscoverySections(projects), [projects]);
+
+        const changeProjectListView = (view: TProjectListView) => {
+            setProjectListView(view);
+            localStorage.setItem(storageKey, view);
+        };
+
+        const updateStars = () => {
+            updateHeaderStarredProjects();
+            updateProjectDiscovery();
+        };
+
+        return (
+            <>
+                {projects.map((project) => (
+                    <ProjectDiscoveryObserver key={project.uid} project={project} onChange={onProjectDiscoveryChanged} />
+                ))}
+                <Flex items="center" gap="2" px="2" mt="3">
+                    <Input
+                        wrapperProps={{ className: "min-w-0 flex-1" }}
+                        value={searchQuery}
+                        onChange={(event) => setSearchQuery(event.currentTarget.value)}
+                        placeholder={t("dashboard.Search projects...")}
+                        aria-label={t("dashboard.Search projects")}
+                        leftIcon={<Search />}
+                        clearable
+                    />
+                    <Button
+                        type="button"
+                        size="icon"
+                        variant="outline"
+                        className="shrink-0 md:hidden"
+                        title={t("dashboard.Quick switcher")}
+                        aria-label={t("dashboard.Quick switcher")}
+                        onClick={() => window.dispatchEvent(new Event(PROJECT_QUICK_SWITCHER_EVENT))}
+                    >
+                        <IconComponent icon="search" size="4" />
+                    </Button>
+                </Flex>
+                <Flex role="group" justify="end" gap="1" px="2" mt="2" aria-label={t("dashboard.Project view") as string}>
+                    <Button
+                        type="button"
+                        size="icon-sm"
+                        variant={projectListView === "compact" ? "secondary" : "ghost"}
+                        title={t("dashboard.Compact view")}
+                        aria-label={t("dashboard.Compact view")}
+                        aria-pressed={projectListView === "compact"}
+                        onClick={() => changeProjectListView("compact")}
+                    >
+                        <IconComponent icon="list" size="4" />
+                    </Button>
+                    <Button
+                        type="button"
+                        size="icon-sm"
+                        variant={projectListView === "cards" ? "secondary" : "ghost"}
+                        title={t("dashboard.Card view")}
+                        aria-label={t("dashboard.Card view")}
+                        aria-pressed={projectListView === "cards"}
+                        onClick={() => changeProjectListView("cards")}
+                    >
+                        <IconComponent icon="layout-grid" size="4" />
+                    </Button>
+                </Flex>
+                {hasProjectsError && (
+                    <Flex role="alert" items="center" justify="center" gap="2" px="2" py="3">
+                        <span className="text-sm text-muted-foreground">{t("dashboard.Could not load projects")}</span>
+                        <Button type="button" size="sm" variant="outline" disabled={isProjectsFetching} onClick={() => void onRetryProjects?.()}>
+                            {t("dashboard.Retry")}
+                        </Button>
+                    </Flex>
+                )}
+                <Box>
+                    <div className="grid min-w-0 gap-x-4 md:grid-cols-2">
+                        <ProjectCompactList
+                            title={t("dashboard.Favorites")}
+                            projects={discoverySections.favorites}
+                            updateStarredProjects={updateStars}
+                            initialVisibleCount={4}
+                            listClassName="xl:grid-cols-2"
+                            dense
+                        />
+                        <ProjectCompactList
+                            title={t("dashboard.Recent work")}
+                            projects={debouncedSearchQuery ? [] : discoverySections.recent}
+                            updateStarredProjects={updateStars}
+                            initialVisibleCount={4}
+                            listClassName="xl:grid-cols-2"
+                            dense
+                        />
+                    </div>
+                    <ProjectCompactList
+                        title={t("dashboard.Related to me")}
+                        projects={discoverySections.related}
+                        updateStarredProjects={updateStars}
+                        listClassName="md:grid-cols-2"
+                        dense
+                    />
+                    {(isProjectsLoading || isProjectsFetching) && currentProjects.length === 0 ? (
+                        <SkeletonProjectList />
+                    ) : currentProjects.length === 0 && hasProjectsError ? null : currentProjects.length === 0 ? (
+                        <h2 className="py-3 text-center text-lg text-accent-foreground">{t("dashboard.No projects found")}</h2>
+                    ) : (
+                        <>
+                            {projectListView === "cards" ? (
+                                <ProjectList projects={currentProjects} updateStarredProjects={updateStars} scrollAreaUpdater={scrollAreaUpdater} />
+                            ) : (
+                                <ProjectCompactList
+                                    key={debouncedSearchQuery}
+                                    title={t(debouncedSearchQuery ? "dashboard.Search results" : "dashboard.All projects")}
+                                    projects={currentProjects}
+                                    updateStarredProjects={updateStars}
+                                />
+                            )}
+                        </>
+                    )}
+                </Box>
+            </>
+        );
+    }
+);
+
+export default ProjectDiscoveryPage;

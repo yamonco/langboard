@@ -8,6 +8,18 @@ from ..domain.models import ApiComfortTool, McpToolGroup, NotificationScheduleRu
 @staticclass
 class AppSettingPublisher(BaseSocketPublisher):
     @staticmethod
+    def workflow_stages_changed():
+        """Invalidate authorized readers without broadcasting registry contents."""
+        AppSettingPublisher.put_dispather(
+            {},
+            SocketPublishModel(
+                topic=SocketTopic.Global,
+                topic_id=GLOBAL_TOPIC_ID,
+                event="workflow-stages:changed",
+            ),
+        )
+
+    @staticmethod
     def selected_users_deleted(uids: list[str]):
         model = {"uids": uids}
         publish_model = SocketPublishModel(

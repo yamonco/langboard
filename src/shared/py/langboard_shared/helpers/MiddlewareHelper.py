@@ -61,7 +61,8 @@ class MiddlewareHelper:
             pass
 
     @staticmethod
-    def validate_auth(scope: Scope) -> User | Bot | int:
+    def validate_auth(scope: Scope, *, allow_oidc: bool = False) -> User | Bot | int:
+        scope.pop("oidc_claims", None)
         headers = Headers(scope=scope)
         if headers.get(AuthSecurity.API_TOKEN_HEADER, headers.get(AuthSecurity.API_TOKEN_HEADER.lower())):
             validation_result = Auth.validate_user_by_api_token(headers)
@@ -82,12 +83,71 @@ class MiddlewareHelper:
                 scope["auth"] = user
                 scope["api_key"] = api_key
                 return user
+            return status.HTTP_401_UNAUTHORIZED
 
         validation_result = Auth.validate(headers)
+        if allow_oidc and not isinstance(validation_result, User) and not scope.get("api_key"):
+            authorization = headers.get("authorization", "").split(" ", maxsplit=1)
+            if len(authorization) == 2 and authorization[0].lower() == "bearer":
+                from ..security.OidcMcpIdentity import resolve_oidc_mcp_identity
+
+                try:
+                    user, claims = resolve_oidc_mcp_identity(authorization[1])
+                    scope["auth"] = user
+                    scope["oidc_claims"] = claims
+                    return user
+                except Exception:
+                    pass
         if isinstance(validation_result, User):
             scope["auth"] = validation_result
+            return validation_result
+
+        if allow_oidc:
+            return validation_result
+
+        oidc_user = MiddlewareHelper._validate_oidc_user(headers)
+        if oidc_user:
+            scope["auth"] = oidc_user
+            return oidc_user
 
         return validation_result
+
+    @staticmethod
+    def _validate_oidc_user(headers: Headers) -> User | None:
+        """Resolve a resource-scoped OIDC token through an explicit identity link."""
+
+        from ..core.security import OidcClient
+        from ..domain.models import IdentityProvider
+        from ..domain.services import DomainService
+        from ..Env import Env
+
+        if not Env.OIDC_BEARER_ENABLED:
+            return None
+        authorization = headers.get(AuthSecurity.AUTHORIZATION_HEADER, "")
+        scheme, separator, token = authorization.partition(" ")
+        token = token.strip()
+        if not separator or scheme.lower() != "bearer" or not token:
+            return None
+        try:
+            claims = OidcClient.validate_access_token(token)
+            subject = str(claims.get("sub", "")).strip()
+            issuer = str(claims.get("iss", "")).strip().rstrip("/")
+            if not subject or not issuer:
+                return None
+            service = DomainService()
+            try:
+                user = service.identity_link.get_user_by_provider_external_id(
+                    IdentityProvider.Oidc,
+                    subject,
+                    issuer,
+                )
+                if not user or not user.activated_at or user.deleted_at:
+                    return None
+                return user
+            finally:
+                service.close()
+        except Exception:
+            return None
 
     @staticmethod
     def _is_api_key_used(headers: Headers) -> bool:

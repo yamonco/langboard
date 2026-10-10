@@ -4,7 +4,6 @@ import useSocketStore from "@/core/stores/SocketStore";
 import { AxiosInstance } from "axios";
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
-import { APP_SHORT_NAME } from "@/constants";
 
 type TOidcCallbackRequestStatus = "pending" | "done";
 
@@ -13,10 +12,9 @@ interface IAuthStore {
     currentUser: AuthUser.TModel | null;
     pageLoaded: bool;
     getToken: () => string | null;
+    getSessionVersion: () => number;
     updateToken: (token: string, api: AxiosInstance) => Promise<void>;
     removeToken: () => void;
-    hasSetPreferredLang: () => bool;
-    setPreferredLangHandled: () => void;
     getOidcCallbackRequestStatus: (requestKey: string) => TOidcCallbackRequestStatus | null;
     setOidcCallbackRequestStatus: (requestKey: string, status: TOidcCallbackRequestStatus) => void;
     removeOidcCallbackRequestStatus: (requestKey: string) => void;
@@ -24,7 +22,6 @@ interface IAuthStore {
 
 let accessToken: string | null = null;
 let tokenUpdateVersion = 0;
-const HAS_SET_LANG_STORAGE_KEY = `has-set-lang-${APP_SHORT_NAME}`;
 
 const useAuthStore = create(
     immer<IAuthStore>((set, get) => {
@@ -33,26 +30,25 @@ const useAuthStore = create(
             currentUser: null,
             pageLoaded: false,
             getToken: () => accessToken,
+            getSessionVersion: () => tokenUpdateVersion,
             updateToken: async (token: string, api: AxiosInstance) => {
-                const updateVersion = ++tokenUpdateVersion;
-                accessToken = token;
-                if (get().state === "initial") {
-                    set({ state: "pending" });
+                if (get().state === "pending") {
+                    return;
                 }
+
+                accessToken = token;
+                tokenUpdateVersion += 1;
 
                 const tryGetUser = async () => {
                     const MAX_ATTEMPTS = 5;
                     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
-                        if (updateVersion !== tokenUpdateVersion) {
-                            return undefined;
-                        }
                         try {
                             const response = await api.get<{
                                 user: AuthUser.Interface;
                                 bots: BotModel.Interface[];
                             }>(Routing.API.AUTH.ABOUT_ME, {
                                 headers: {
-                                    Authorization: `Bearer ${token}`,
+                                    Authorization: `Bearer ${accessToken}`,
                                 },
                                 withCredentials: true,
                             });
@@ -63,7 +59,7 @@ const useAuthStore = create(
 
                             return response.data;
                         } catch {
-                            if (updateVersion !== tokenUpdateVersion || attempt === MAX_ATTEMPTS - 1) {
+                            if (attempt === MAX_ATTEMPTS - 1) {
                                 return undefined;
                             }
 
@@ -75,9 +71,6 @@ const useAuthStore = create(
                 };
 
                 const data = await tryGetUser();
-                if (updateVersion !== tokenUpdateVersion || accessToken !== token) {
-                    return;
-                }
                 if (!data) {
                     set({ currentUser: null, state: "loaded" });
                     return;
@@ -90,12 +83,10 @@ const useAuthStore = create(
             },
             removeToken: () => {
                 useSocketStore.getState().close();
-                tokenUpdateVersion += 1;
                 accessToken = null;
+                tokenUpdateVersion += 1;
                 set({ currentUser: null, state: "loaded" });
             },
-            hasSetPreferredLang: () => localStorage.getItem(HAS_SET_LANG_STORAGE_KEY) === "true",
-            setPreferredLangHandled: () => localStorage.setItem(HAS_SET_LANG_STORAGE_KEY, "true"),
             getOidcCallbackRequestStatus: (requestKey) => {
                 const status = sessionStorage.getItem(requestKey);
                 return status === "pending" || status === "done" ? status : null;

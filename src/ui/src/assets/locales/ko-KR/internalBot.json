@@ -1,0 +1,7 @@
+{
+  "botTypes": {
+    "project_chat": "프로젝트 채팅",
+    "editor_chat": "편집기 채팅",
+    "editor_copilot": "편집기 Copilot"
+  }
+}

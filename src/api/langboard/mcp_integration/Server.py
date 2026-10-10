@@ -6,7 +6,7 @@ from typing import Any, TypeGuard, Union, get_args, get_origin
 from urllib.parse import urlsplit
 from fastmcp import FastMCP
 from fastmcp.exceptions import AuthorizationError
-from fastmcp.tools import Tool
+from fastmcp.server.transforms.search import RegexSearchTransform
 from langboard_shared.core.types import Factory
 from langboard_shared.core.utils.decorators import class_instance
 from langboard_shared.domain.models import Bot, User
@@ -16,35 +16,56 @@ from langboard_shared.infrastructure.repositories import Repository
 from ..mcp_tools.RoleChecker import McpRoleChecker
 from ..middlewares import McpAuthMiddleware
 from ..middlewares.McpAuthMiddleware import mcp_auth_context
+from .Annotations import ToolAnnotationTransform
+from .Providers import create_agent_core_provider, create_compatibility_provider, create_raw_primitive_provider
+from .Receipts import MutationReceiptMiddleware
+from .ResponseBudget import ReadResponseBudgetMiddleware
+from .Telemetry import ToolTelemetryMiddleware
 from .Tool import McpTool
 from .ToolGroupMiddleware import ToolGroupMiddleware
 
 
-def _create_fastmcp() -> FastMCP:
+RAW_DISCOVERY_TOOLS = frozenset({"search_raw_tools", "call_raw_tool"})
+
+
+def _create_fastmcp(discovery_tools: frozenset[str] = frozenset()) -> FastMCP:
     return FastMCP(
         Env.PROJECT_NAME,
         strict_input_validation=True,
         mask_error_details=True,
-        middleware=[ToolGroupMiddleware()],
+        middleware=[ToolTelemetryMiddleware(), ToolGroupMiddleware(discovery_tools)],
     )
 
 
 @class_instance()
 class McpServer:
-    def __init__(self) -> None:
+    def __init__(self):
         self.mcp = _create_fastmcp()
+        self.agent_mcp = None
+        self._streamable_http_app = None
 
-    def get_http_app(self) -> tuple[Any, FastMCP]:
+    def get_http_app(self, profile: str = "compatibility") -> tuple[Any, FastMCP]:
         """Build the MCP transport or fail application startup."""
 
         allowed_hosts, allowed_origins = _get_transport_security_allowlists()
-        app = _create_fastmcp()
+        app = _create_fastmcp(RAW_DISCOVERY_TOOLS if profile == "raw" else frozenset())
+        if profile in {"agent", "raw"}:
+            app.add_middleware(MutationReceiptMiddleware())
+            app.add_middleware(ReadResponseBudgetMiddleware())
 
-        all_tools = McpTool.get_tools()
-        for tool_name, tool_data in all_tools.items():
-            handler = tool_data["handler"]
-            wrapper = self._wrap_tool(tool_name, handler)
-            app.add_tool(Tool.from_function(wrapper, name=tool_name, description=tool_data["description"]))
+        providers = {
+            "compatibility": create_compatibility_provider,
+            "agent": create_agent_core_provider,
+            "raw": create_raw_primitive_provider,
+        }
+        if profile not in providers:
+            raise ValueError(f"Unknown MCP profile: {profile}")
+        app.add_provider(providers[profile](self._wrap_tool))
+        if profile == "raw":
+            app.add_transform(
+                RegexSearchTransform(max_results=5, search_tool_name="search_raw_tools", call_tool_name="call_raw_tool")
+            )
+            app.add_transform(ToolAnnotationTransform())
 
         http_app = app.http_app(
             path="/stream",
@@ -54,10 +75,13 @@ class McpServer:
         )
         http_app.add_middleware(McpAuthMiddleware)
 
-        self.mcp = app
+        if profile == "agent":
+            self.agent_mcp = app
+        if profile == "compatibility":
+            self.mcp = app
         return http_app, app
 
-    def _wrap_tool(self, tool_name: str, handler: Callable[..., Any]) -> Callable[..., Any]:
+    def _wrap_tool(self, tool_name: str, handler: Callable[..., Any]):
         sig = signature(handler)
         tool_data = McpTool.get_tool(tool_name)
         exclude = tool_data.get("exclude", []) if tool_data else []
@@ -67,7 +91,7 @@ class McpServer:
         filtered_sig = sig.replace(parameters=filtered_params)
 
         @wraps(handler)
-        async def wrapper(**kwargs: Any) -> Any:
+        async def wrapper(**kwargs):
             auth_data = mcp_auth_context.get()
             auth_value: User | Bot | None = auth_data.get("user_or_bot") if auth_data else None
 

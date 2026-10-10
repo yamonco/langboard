@@ -17,6 +17,7 @@ import MarkdownMentionLink from "@/components/Markdown/MentionLink";
 import { CODE_DRAWING_TYPE } from "@platejs/code-drawing";
 import { visit } from "unist-util-visit";
 import type { Plugin } from "unified";
+import ImageThumbnail from "@/components/ImagePreviewDialog/ImageThumbnail";
 
 export interface IMarkdownProps extends Omit<MarkdownOptions, "remarkPlugins" | "rehypePlugins" | "className" | "components" | "children"> {
     message: IChatContent | { content: string };
@@ -406,7 +407,7 @@ const Markdown = memo(({ message, ...mdProps }: IMarkdownProps): React.JSX.Eleme
             return <audio controls className="mt-2 max-w-full" {...props} />;
         },
         img({ node, ...props }) {
-            return <img className="h-auto max-w-full" {...props} />;
+            return <ImageThumbnail {...props} />;
         },
         video({ node, ...props }) {
             return <video controls className="mt-2 max-w-full rounded-md" {...props} />;
@@ -431,8 +432,8 @@ const Markdown = memo(({ message, ...mdProps }: IMarkdownProps): React.JSX.Eleme
             ) : (
                 <code
                     className={cn(
-                        "whitespace-pre-wrap rounded-md bg-foreground/10 px-[0.3em] py-[0.2em] font-mono text-sm",
-                        "text-inherit [overflow-wrap:anywhere]",
+                        "whitespace-pre-wrap rounded-md bg-foreground/10 px-[0.3em] py-[0.2em] font-mono text-sm " +
+                            "text-inherit [overflow-wrap:anywhere]",
                         className
                     )}
                     {...props}

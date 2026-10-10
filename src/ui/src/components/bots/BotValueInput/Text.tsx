@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import Button from "@/components/base/Button";
 import Flex from "@/components/base/Flex";
 import Floating from "@/components/base/Floating";
@@ -18,6 +19,7 @@ function BotValueTextInput({
     required,
     ref,
 }: TSharedBotValueInputProps) {
+    const [t] = useTranslation();
     const inputID = useId();
 
     const handleKeyEvent = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -54,7 +56,7 @@ function BotValueTextInput({
                 </Floating.Label>
             </Collaborative.Input>
             {change && (
-                <Button type="button" size="icon-sm" variant="ghost" onClick={change} disabled={disabled} title="Save">
+                <Button type="button" size="icon-sm" variant="ghost" onClick={change} disabled={disabled} title={t("common.Save")}>
                     <IconComponent icon="check" size="4" />
                 </Button>
             )}

@@ -22,6 +22,13 @@ class CardAttachmentService(BaseDomainService):
         """DO NOT EDIT THIS METHOD"""
         return "card_attachment"
 
+    def _mark_card_changed_for_unread(self, card, target_type: str, target_id=None) -> None:
+        """Stamp the unread cursor for this card change (lazy import avoids cycles)."""
+        from .CardService import CardService
+
+        card_service = self._get_service(CardService)
+        card_service.mark_card_changed(card, target_type, target_id)
+
     def get_by_id_like(self, attachment: TAttachmentParam | None) -> CardAttachment | None:
         attachment = InfraHelper.get_by_id_like(CardAttachment, attachment)
         return attachment
@@ -39,12 +46,20 @@ class CardAttachmentService(BaseDomainService):
         ]
 
     def create(
-        self, user: User, project: TProjectParam | None, card: TCardParam | None, attachment: FileModel
+        self,
+        user: User,
+        project: TProjectParam | None,
+        card: TCardParam | None,
+        attachment: FileModel,
+        *,
+        dispatch_effects: bool = True,
     ) -> CardAttachment | None:
         params = InfraHelper.get_records_with_foreign_by_params((Project, project), (Card, card))
         if not params:
             return None
         project, card = params
+        if card.is_linked_resource:
+            return None
 
         card_attachment = CardAttachment(
             user_id=user.id,
@@ -55,6 +70,16 @@ class CardAttachmentService(BaseDomainService):
         )
 
         self.repo.card_attachment.insert(card_attachment)
+        self._mark_card_changed_for_unread(card, "attachment", card_attachment.id)
+        if dispatch_effects:
+            self.dispatch_created(user, project, card, card_attachment)
+
+        return card_attachment
+
+    def dispatch_created(
+        self, user: User, project: Project, card: Card, card_attachment: CardAttachment, *, include_bot: bool = True
+    ) -> None:
+        """Dispatch effects after a persisted attachment is available."""
         docling_metadata = self._get_service(DoclingMetadataService)
         if docling_metadata.queue_document(CardMetadata, card, card_attachment.get_uid(), card_attachment.filename):
             docling_metadata.publish_update(CardMetadata, card, SocketTopic.BoardCard)
@@ -62,9 +87,8 @@ class CardAttachmentService(BaseDomainService):
 
         CardAttachmentPublisher.uploaded(user, card, card_attachment)
         CardAttachmentActivityTask.card_attachment_uploaded(user, project, card, card_attachment)
-        CardAttachmentBotTask.card_attachment_uploaded(user, project, card, card_attachment)
-
-        return card_attachment
+        if include_bot:
+            CardAttachmentBotTask.card_attachment_uploaded(user, project, card, card_attachment)
 
     def change_order(
         self,
@@ -109,6 +133,7 @@ class CardAttachmentService(BaseDomainService):
         self.repo.card_attachment.update(card_attachment)
 
         CardAttachmentPublisher.name_changed(card, card_attachment)
+        self._mark_card_changed_for_unread(card, "attachment", card_attachment.id)
         CardAttachmentActivityTask.card_attachment_name_changed(user, project, card, old_name, card_attachment)
         CardAttachmentBotTask.card_attachment_name_changed(user, project, card, card_attachment)
 
@@ -135,6 +160,7 @@ class CardAttachmentService(BaseDomainService):
         self.repo.card_attachment.reoder_after_delete(card, card_attachment.order)
 
         CardAttachmentPublisher.deleted(card, card_attachment)
+        self._mark_card_changed_for_unread(card, "attachment")
         CardAttachmentActivityTask.card_attachment_deleted(user, project, card, card_attachment)
         CardAttachmentBotTask.card_attachment_deleted(user, project, card, card_attachment)
 

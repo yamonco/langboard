@@ -26,6 +26,12 @@ export const api = axios.create({
     }),
 });
 
+const requestSessions = new WeakMap<AxiosRequestConfig, number>();
+const isPreviousSession = (config?: AxiosRequestConfig) => {
+    const version = config ? requestSessions.get(config) : undefined;
+    return version !== undefined && version !== getAuthStore().getSessionVersion();
+};
+
 export const refresh = async (): Promise<bool> => {
     const authStore = getAuthStore();
 
@@ -40,7 +46,7 @@ export const refresh = async (): Promise<bool> => {
         await authStore.updateToken(response.data.access_token, api);
         return true;
     } catch (e) {
-        authStore.removeToken();
+        if (!axios.isCancel(e)) authStore.removeToken();
         return false;
     }
 };
@@ -64,9 +70,23 @@ api.interceptors.request.use(
     }
 );
 
+// Axios request interceptors run in reverse registration order. Capture before
+// asynchronous token attachment, including cookie-based refresh requests.
+api.interceptors.request.use((config) => {
+    requestSessions.set(config, getAuthStore().getSessionVersion());
+    return config;
+});
+
 api.interceptors.response.use(
-    (value) => value,
+    (value) => {
+        if (isPreviousSession(value.config)) throw new axios.CanceledError("Session changed");
+        return value;
+    },
     async (error) => {
+        if (axios.isCancel(error)) throw error;
+        if (isPreviousSession(error.config)) throw new axios.CanceledError("Session changed");
+        // A failed cookie refresh is terminal; it must never refresh itself.
+        if (error.config?.url?.endsWith(Routing.API.AUTH.REFRESH)) throw error;
         const interceptToast = error.config?.env?.interceptToast;
         const { handleAsync } = setupApiErrorHandler({
             code: {
@@ -104,10 +124,12 @@ api.interceptors.response.use(
             [EHttpStatus.HTTP_422_UNPROCESSABLE_CONTENT]: {
                 message: async (e) => {
                     const authStore = getAuthStore();
-                    const originalConfig: AxiosRequestConfig = e.config!;
+                    const originalConfig = e.config as AxiosRequestConfig & { _langboardAuthReplayed?: boolean };
+                    if (originalConfig._langboardAuthReplayed) throw e;
+                    originalConfig._langboardAuthReplayed = true;
                     const isRefreshed = await refresh();
                     if (!isRefreshed) {
-                        return;
+                        throw e;
                     }
                     originalConfig.headers!.Authorization = `Bearer ${authStore.getToken()}`;
                     return await api(originalConfig);

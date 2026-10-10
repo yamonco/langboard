@@ -7,6 +7,10 @@ export interface Interface extends IBaseModel {
     parent_name: string;
     child_name: string;
     description: string;
+    machine_semantic?: "contains" | "blocks" | "references" | null;
+    is_system_default?: boolean;
+    is_active?: boolean;
+    affects_readiness?: boolean;
 }
 
 class GlobalRelationshipType extends BaseModel<Interface> {
@@ -41,6 +45,18 @@ class GlobalRelationshipType extends BaseModel<Interface> {
     }
     public set description(value) {
         this.update({ description: value });
+    }
+
+    public get machine_semantic() {
+        return this.getValue("machine_semantic");
+    }
+
+    public get is_active() {
+        return this.getValue("is_active");
+    }
+
+    public get affects_readiness() {
+        return this.getValue("affects_readiness");
     }
 }
 

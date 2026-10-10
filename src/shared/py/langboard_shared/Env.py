@@ -73,6 +73,11 @@ class Env:
         return self.__get_from_cache("API_INTERNAL_URL", f"http://{self.API_HOST}:{self.API_PORT}").rstrip("/")
 
     @property
+    def MCP_OIDC_DEFAULT_TOOL_GROUP_UID(self) -> str:
+        """Optional native tool group for verified OIDC users without a group header."""
+        return self.__get_from_cache("MCP_OIDC_DEFAULT_TOOL_GROUP_UID", "").strip()
+
+    @property
     def MCP_ALLOWED_HOSTS(self) -> list[str]:
         """Return explicitly allowed MCP Host header values."""
 
@@ -294,6 +299,10 @@ class Env:
         return self.__get_from_cache("OIDC_ISSUER", "")
 
     @property
+    def EMPLOYEE_IDENTITY_SIGNING_KEY_PATH(self) -> str:
+        return self.__get_from_cache("EMPLOYEE_IDENTITY_SIGNING_KEY_PATH", "")
+
+    @property
     def OIDC_DISCOVERY_URL(self) -> str:
         return self.__get_from_cache("OIDC_DISCOVERY_URL", "")
 
@@ -336,6 +345,22 @@ class Env:
     @property
     def OIDC_CLOCK_SKEW_SEC(self) -> int:
         return int(self.__get_from_cache("OIDC_CLOCK_SKEW_SEC", "60"))
+
+    @property
+    def OIDC_BEARER_ENABLED(self) -> bool:
+        return self.__get_from_cache("OIDC_BEARER_ENABLED", "false").lower() == "true"
+
+    @property
+    def OIDC_RESOURCE_AUDIENCE(self) -> str:
+        return self.__get_from_cache("OIDC_RESOURCE_AUDIENCE", "")
+
+    @property
+    def OIDC_AUTO_LINK_BY_EMAIL(self) -> bool:
+        return self.__get_from_cache("OIDC_AUTO_LINK_BY_EMAIL", "false").lower() == "true"
+
+    @property
+    def OIDC_AUTO_PROVISION(self) -> bool:
+        return self.__get_from_cache("OIDC_AUTO_PROVISION", "true").lower() == "true"
 
     @property
     def SCIM_ENABLED(self) -> bool:

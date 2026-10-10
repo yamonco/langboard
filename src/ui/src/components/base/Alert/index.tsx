@@ -1,6 +1,8 @@
 /* eslint-disable @/max-len */
 "use client";
 
+import { useTranslation } from "react-i18next";
+
 import * as React from "react";
 import { cva, type VariantProps } from "class-variance-authority";
 import { motion, AnimatePresence } from "framer-motion";
@@ -32,6 +34,7 @@ export interface AlertProps extends React.HTMLAttributes<HTMLDivElement>, Varian
 }
 
 const Alert = React.forwardRef<HTMLDivElement, AlertProps>(({ className, variant, icon, title, dismissible, onDismiss, children, ...props }, ref) => {
+    const [t] = useTranslation();
     const [isVisible, setIsVisible] = React.useState(true);
 
     const handleDismiss = () => {
@@ -73,7 +76,7 @@ const Alert = React.forwardRef<HTMLDivElement, AlertProps>(({ className, variant
                                     type="button"
                                     className="inline-flex rounded-md p-1.5 transition-colors hover:bg-black/5 focus:outline-none focus:ring-2 focus:ring-[hsl(var(--hu-ring))] focus:ring-offset-2 dark:hover:bg-white/5"
                                     onClick={handleDismiss}
-                                    aria-label="Dismiss alert"
+                                    aria-label={t("common.Dismiss alert")}
                                 >
                                     <IconComponent icon="x" size="4" />
                                 </button>

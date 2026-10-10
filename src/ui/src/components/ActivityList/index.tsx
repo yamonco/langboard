@@ -15,6 +15,7 @@ import { useTranslation } from "react-i18next";
 export interface IActivityListProps extends Pick<React.ComponentProps<typeof InfiniteScroller.Default>, "as"> {
     form: TGetActivitiesForm;
     currentUser: AuthUser.TModel;
+    className?: string;
     outerClassName?: string;
     outerStyle?: React.CSSProperties;
     viewType?: TActivityViewType;
@@ -68,7 +69,14 @@ function ActivityList({ form, ...props }: IActivityListProps) {
     );
 }
 
-function ActivityListDisplay({ as, currentUser, outerClassName, outerStyle, viewType }: Omit<IActivityListProps, "form">): React.JSX.Element {
+function ActivityListDisplay({
+    as,
+    currentUser,
+    className,
+    outerClassName,
+    outerStyle,
+    viewType,
+}: Omit<IActivityListProps, "form">): React.JSX.Element {
     const [t] = useTranslation();
     const {
         models: activities,
@@ -83,7 +91,7 @@ function ActivityListDisplay({ as, currentUser, outerClassName, outerStyle, view
     const { SkeletonActivity, ActivityTimeline } = useCreateActivityTimeline(currentUser, viewType);
 
     return (
-        <Box position="relative">
+        <Box position="relative" className={className}>
             {!activities.length && (
                 <Flex justify="center" items="center" h="full">
                     {t("activity.No activities")}

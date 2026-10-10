@@ -6,6 +6,7 @@ import useInternalBotDeletedHandlers from "@/controllers/socket/global/useIntern
 import useInternalBotUpdatedHandlers from "@/controllers/socket/global/useInternalBotUpdatedHandlers";
 import useSelectedGlobalRelationshipsDeletedHandlers from "@/controllers/socket/global/useSelectedGlobalRelationshipsDeletedHandlers";
 import useSwitchSocketHandlers from "@/core/hooks/useSwitchSocketHandlers";
+import useWorkflowStagesChangedHandlers from "@/controllers/socket/global/useWorkflowStagesChangedHandlers";
 import { useSocket } from "@/core/providers/SocketProvider";
 import { createContext, useMemo } from "react";
 
@@ -24,8 +25,10 @@ export const GlobalSocketHandlersSubscriber = ({ children }: IGlobalSocketHandle
     const internalBotCreatedHandlers = useInternalBotCreatedHandlers({});
     const internalBotUpdatedHandlers = useInternalBotUpdatedHandlers({});
     const internalBotDeletedHandlers = useInternalBotDeletedHandlers({});
+    const workflowStagesChangedHandlers = useWorkflowStagesChangedHandlers();
     const handlers = useMemo(
         () => [
+            workflowStagesChangedHandlers,
             botCreatedHandlers,
             globalRelationshipCreatedHandlers,
             botDefaultScopeBranchCreatedHandlers,
@@ -35,6 +38,7 @@ export const GlobalSocketHandlersSubscriber = ({ children }: IGlobalSocketHandle
             internalBotDeletedHandlers,
         ],
         [
+            workflowStagesChangedHandlers,
             botCreatedHandlers,
             globalRelationshipCreatedHandlers,
             botDefaultScopeBranchCreatedHandlers,

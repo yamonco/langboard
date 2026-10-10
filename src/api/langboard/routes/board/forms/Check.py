@@ -11,6 +11,7 @@ class CardCheckRelatedForm(BaseFormModel):
 @form_model
 class ChangeCardCheckitemStatusForm(BaseFormModel):
     status: CheckitemStatus
+    replace_active: bool = False
 
 
 @form_model

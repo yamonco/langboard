@@ -1,0 +1,7 @@
+{
+  "botTypes": {
+    "project_chat": "项目聊天",
+    "editor_chat": "编辑器聊天",
+    "editor_copilot": "编辑器Copilot"
+  }
+}

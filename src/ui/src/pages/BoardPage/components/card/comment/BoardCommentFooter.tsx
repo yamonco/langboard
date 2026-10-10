@@ -12,6 +12,7 @@ import { isModel, ModelRegistry } from "@/core/models/ModelRegistry";
 import { ProjectRole } from "@/core/models/roles";
 import { useBoardCard } from "@/core/providers/BoardCardProvider";
 import { getEditorStore } from "@/core/stores/EditorStore";
+import BoardCommentSeen from "./BoardCommentSeen";
 import BoardCommentReaction from "@/pages/BoardPage/components/card/comment/BoardCommentReaction";
 import { IBoardCommentContextParams } from "@/pages/BoardPage/components/card/comment/types";
 import { useState } from "react";
@@ -22,7 +23,7 @@ function BoardCommentFooter(): React.JSX.Element {
     const { isCurrentEditor } = params;
 
     return (
-        <Flex items="center" gap="2">
+        <Flex items="center" gap="2" wrap={true}>
             {isCurrentEditor ? <BoardCommentFooterEditButtons /> : <BoardCommentFooterActions />}
         </Flex>
     );
@@ -152,6 +153,7 @@ function BoardCommentFooterActions() {
     return (
         <>
             <BoardCommentReaction comment={comment} />
+            {currentUser.isValidUser() && <BoardCommentSeen comment={comment} />}
             {hasRoleAction(ProjectRole.EAction.Read) && currentUser.uid !== author.uid && currentUser.isValidUser() && canReply && (
                 <>
                     <Separator orientation="vertical" className="h-1/2" />

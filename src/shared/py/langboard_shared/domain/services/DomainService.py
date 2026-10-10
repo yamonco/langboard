@@ -31,8 +31,20 @@ class DomainService(Factory):
         return self._create_or_get_product(factory.UserService)
 
     @property
+    def organization(self):
+        return self._create_or_get_product(factory.OrganizationService)
+
+    @property
     def project(self):
         return self._create_or_get_product(factory.ProjectService)
+
+    @property
+    def workflow_stage(self):
+        return self._create_or_get_product(factory.WorkflowStageService)
+
+    @property
+    def global_label(self):
+        return self._create_or_get_product(factory.GlobalLabelService)
 
     @property
     def project_template(self):
@@ -141,6 +153,10 @@ class DomainService(Factory):
     @property
     def card_comment(self):
         return self._create_or_get_product(factory.CardCommentService)
+
+    @property
+    def card_content_block(self):
+        return self._create_or_get_product(factory.CardContentBlockService)
 
     @property
     def docling_metadata(self):

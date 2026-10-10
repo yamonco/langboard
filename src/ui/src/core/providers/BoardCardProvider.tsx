@@ -1,3 +1,4 @@
+import { flipDraftKey, useCardFlipDraftStore } from "@/pages/BoardPage/components/card/CardFlipDraftStore";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { AuthUser, ProjectCard } from "@/core/models";
 import useRoleActionFilter from "@/core/hooks/useRoleActionFilter";
@@ -5,9 +6,10 @@ import { ISocketContext, useSocket } from "@/core/providers/SocketProvider";
 import { TUserLikeModel } from "@/core/models/ModelRegistry";
 import { ProjectRole } from "@/core/models/roles";
 import { Utils } from "@langboard/core/utils";
+import type { ICardCommentAnchor } from "@/core/models/types/card-comment-anchor.type";
 
-// Must stay aligned with Tailwind `md` breakpoint in `tailwind.config.js` (768px).
-const DESKTOP_COMMENT_BREAKPOINT = 768;
+// Must stay aligned with Tailwind `lg` breakpoint so the body keeps usable width.
+const DESKTOP_COMMENT_BREAKPOINT = 1024;
 
 export interface IBoardCardContext {
     projectUID: string;
@@ -18,6 +20,7 @@ export interface IBoardCardContext {
     canEditCard: bool;
     socket: ISocketContext;
     replyRef: React.RefObject<(target: TUserLikeModel) => void>;
+    anchoredCommentRef: React.RefObject<(anchor: ICardCommentAnchor) => void>;
     cardEditMode: "view" | "edit";
     isCardEditing: bool;
     setCardEditMode: React.Dispatch<React.SetStateAction<"view" | "edit">>;
@@ -46,6 +49,7 @@ const initialContext = {
     canEditCard: false,
     socket: {} as ISocketContext,
     replyRef: { current: () => {} },
+    anchoredCommentRef: { current: () => {} },
     cardEditMode: "view" as const,
     isCardEditing: false,
     setCardEditMode: () => "view",
@@ -82,11 +86,14 @@ const BoardCardPanelContext = createContext<IBoardCardPanelContext>(initialPanel
 export const BoardCardProvider = ({ projectUID, card, currentUser, viewportRef, children }: IBoardCardProviderProps): React.ReactNode => {
     const socket = useSocket();
     const replyRef = useRef<(target: TUserLikeModel) => void>(() => {});
+    const anchoredCommentRef = useRef<(anchor: ICardCommentAnchor) => void>(() => {});
     const commentCount = card.useField("count_comment");
     const [isCommentPanelOpen, setIsCommentPanelOpen] = useState(() => commentCount > 0);
     const [isActionPanelOpen, setIsActionPanelOpen] = useState(false);
     const [commentLayoutMode, setCommentLayoutMode] = useState<"mobile" | "panel">("mobile");
-    const [cardEditMode, setCardEditMode] = useState<"view" | "edit">("view");
+    const [cardEditMode, setCardEditMode] = useState<"view" | "edit">(() =>
+        useCardFlipDraftStore.getState().drafts[flipDraftKey(currentUser.uid, projectUID, card.uid)] ? "edit" : "view"
+    );
     const currentUserRoleActions = card.useField("current_auth_role_actions");
     const { hasRoleAction } = useRoleActionFilter(currentUserRoleActions);
     const canEditCard = hasRoleAction(ProjectRole.EAction.CardUpdate);
@@ -125,8 +132,9 @@ export const BoardCardProvider = ({ projectUID, card, currentUser, viewportRef, 
         setCardEditMode("edit");
     }, [canEditCard]);
     const leaveCardEditMode = useCallback(() => {
+        useCardFlipDraftStore.getState().clear(flipDraftKey(currentUser.uid, projectUID, card.uid));
         setCardEditMode("view");
-    }, []);
+    }, [currentUser.uid, projectUID, card.uid]);
     const toggleCardEditMode = useCallback(() => {
         if (!canEditCard) {
             return;
@@ -145,6 +153,7 @@ export const BoardCardProvider = ({ projectUID, card, currentUser, viewportRef, 
             canEditCard,
             socket,
             replyRef,
+            anchoredCommentRef,
             cardEditMode,
             isCardEditing: cardEditMode === "edit",
             setCardEditMode,

@@ -1,11 +1,12 @@
-from copy import deepcopy
-from typing import Any, TypeVar
-from sqlalchemy.exc import IntegrityError
+import re
+from typing import Any
+from ....core.db import DbSession
 from ....core.domain import BaseDomainService
 from ....helpers import InfraHelper
 from ...models import (
     Bot,
     BotDefaultScopeBranch,
+    GlobalLabel,
     InternalBot,
     Project,
     ProjectAssignedInternalBot,
@@ -21,13 +22,66 @@ from ...models.ProjectEmailNotificationPolicy import ProjectEmailNotificationCat
 
 
 SI_COLUMNS = ["Backlog", "Ready", "In Progress", "Review", "Done"]
+SI_COLUMN_DESCRIPTIONS = [
+    "Untriaged or uncommitted work. Claiming ownership alone does not mean work has started.",
+    "Owned, prepared work waiting to start. Suggest this stage when someone commits to take a backlog item.",
+    "Work actively being executed. Enter when the assignee explicitly starts work, not merely when assigned.",
+    "Implementation is ready for review or acceptance. Do not infer approval from assignment.",
+    "Completed and accepted work. Move here only when completion is explicitly confirmed.",
+]
+SI_WORKFLOW_STAGES = ["backlog", "ready", "active", "review", "closed"]
+SI_COLUMN_TRANSLATIONS = {
+    "ko": [
+        ("백로그", "미분류 또는 아직 맡지 않은 업무입니다. 담당자로 지정된 것만으로 작업 시작을 의미하지 않습니다."),
+        (
+            "준비",
+            "담당자와 준비가 갖춰져 시작을 기다리는 업무입니다. 백로그 업무를 맡기로 했다면 이 단계를 제안합니다.",
+        ),
+        ("진행 중", "실제로 수행 중인 업무입니다. 단순 배정이 아니라 담당자가 명시적으로 작업을 시작할 때 진입합니다."),
+        ("검토", "구현이 끝나 검토 또는 인수를 기다립니다. 담당자 배정으로 승인을 추론하지 않습니다."),
+        ("완료", "완료되고 인수된 업무입니다. 완료가 명시적으로 확인된 경우에만 이동합니다."),
+    ],
+    "ja": [
+        ("バックログ", "未分類または未着手の業務です。担当者への割り当てだけでは作業開始を意味しません。"),
+        (
+            "準備完了",
+            "担当者と準備が整い、開始を待つ業務です。バックログの業務を引き受ける場合にこの段階を提案します。",
+        ),
+        ("進行中", "実際に実行中の業務です。単なる割り当てではなく、担当者が明示的に作業を開始したときに移動します。"),
+        ("レビュー", "実装が完了し、レビューまたは受け入れを待ちます。担当者の割り当てから承認を推測しません。"),
+        ("完了", "完了し受け入れられた業務です。完了が明示的に確認された場合にのみ移動します。"),
+    ],
+    "zh": [
+        ("待办", "尚未分类或认领的工作。仅指定负责人不代表工作已经开始。"),
+        ("就绪", "已指定负责人并准备就绪，等待开始的工作。有人认领待办工作时可建议此阶段。"),
+        ("进行中", "正在实际执行的工作。负责人明确开始工作时进入此阶段，而不是仅被分配时。"),
+        ("审核", "实现已完成，等待审核或验收。不要根据负责人分配推断已获批准。"),
+        ("完成", "已完成并通过验收的工作。仅在明确确认完成后移入此阶段。"),
+    ],
+}
+SI_COLUMN_DEFINITIONS = [
+    {
+        "name": name,
+        "workflow_stage": stage,
+        "description": description,
+        "translations": {
+            "en": {"name": name, "description": description},
+            **{
+                language: {"name": text[index][0], "description": text[index][1]}
+                for language, text in SI_COLUMN_TRANSLATIONS.items()
+            },
+        },
+    }
+    for index, (name, stage, description) in enumerate(
+        zip(SI_COLUMNS, SI_WORKFLOW_STAGES, SI_COLUMN_DESCRIPTIONS, strict=True)
+    )
+]
 SI_EMAIL_NOTIFICATION_POLICY = {
     "is_enabled": True,
     "notify_all_members": True,
     "categories": [ProjectEmailNotificationCategory.Cards.value],
     "card_move_target_columns": ["Review"],
 }
-_TScope = TypeVar("_TScope", ProjectBotScope, ProjectColumnBotScope)
 
 
 class ProjectTemplateService(BaseDomainService):
@@ -46,25 +100,53 @@ class ProjectTemplateService(BaseDomainService):
                 self.repo.project_template.replace_default(template)
                 template.is_default = True
             if not template.email_notification_policy:
-                template.email_notification_policy = deepcopy(SI_EMAIL_NOTIFICATION_POLICY)
+                template.email_notification_policy = SI_EMAIL_NOTIFICATION_POLICY
+                self.repo.project_template.update(template)
+            if template.columns == SI_COLUMNS:
+                definitions = template.column_definitions()
+                for index, definition in enumerate(definitions):
+                    definition["workflow_stage"] = SI_WORKFLOW_STAGES[index]
+                    if not template.column_descriptions:
+                        definition["description"] = SI_COLUMN_DESCRIPTIONS[index]
+                template.columns = definitions
+                template.column_descriptions = []
+                self.repo.project_template.update(template)
+            definitions = template.column_definitions()
+            changed = False
+            for definition in definitions:
+                # Seed only unchanged built-in guidance; custom canonical text must not acquire mismatched translations.
+                default = next(
+                    (
+                        item
+                        for item in SI_COLUMN_DEFINITIONS
+                        if all(definition.get(key) == item[key] for key in ("name", "description", "workflow_stage"))
+                    ),
+                    None,
+                )
+                if default is None:
+                    continue
+                translations = {language: dict(text) for language, text in definition.get("translations", {}).items()}
+                for language, text in default["translations"].items():
+                    if language not in translations:
+                        translations[language] = dict(text)
+                        changed = True
+                definition["translations"] = translations
+            if changed:
+                template.columns = definitions
                 self.repo.project_template.update(template)
             return template
-        current_default = self.repo.project_template.get_default()
         template = ProjectTemplate(
             name="SI",
-            columns=list(SI_COLUMNS),
-            email_notification_policy=deepcopy(SI_EMAIL_NOTIFICATION_POLICY),
+            columns=[
+                {**column, "translations": {language: dict(text) for language, text in column["translations"].items()}}
+                for column in SI_COLUMN_DEFINITIONS
+            ],
+            email_notification_policy=SI_EMAIL_NOTIFICATION_POLICY,
             is_builtin=True,
-            is_default=current_default is None,
+            is_default=True,
         )
-        try:
-            self.repo.project_template.insert(template)
-        except IntegrityError as error:
-            existing = self.repo.project_template.get_by_name("SI")
-            if existing and existing.is_builtin:
-                return existing
-            raise ValueError("SI is reserved for the built-in project template") from error
-        if current_default is None:
+        self.repo.project_template.insert(template)
+        if self.repo.project_template.get_default() is None:
             self.repo.project_template.replace_default(template)
         return template
 
@@ -83,6 +165,112 @@ class ProjectTemplateService(BaseDomainService):
         template = self.get(name)
         self.repo.project_template.replace_default(template)
         template.is_default = True
+        return template
+
+    def save_columns(
+        self,
+        name: str,
+        columns: list[dict[str, Any]],
+        uid: str | None = None,
+        *,
+        description: str | None = None,
+        global_label_uids: list[str] | None = None,
+        internal_bot_uids: list[str] | None = None,
+    ) -> ProjectTemplate | None:
+        """Edit the existing structural SSOT without replacing automation snapshots."""
+        template = InfraHelper.get_by_id_like(ProjectTemplate, uid) if uid else None
+        if uid and not template:
+            return None
+        name = name.strip()
+        if not name or len(name) > 100 or not 1 <= len(columns) <= 100:
+            raise ValueError("Invalid template structure")
+        existing = self.repo.project_template.get_by_name(name)
+        if existing and (not template or existing.id != template.id):
+            raise ValueError("Template name already exists")
+        if (name == "SI" and not template) or (template and template.is_builtin and template.name != name):
+            raise ValueError("Built-in template name is immutable")
+        if description is not None and len(description) > 4096:
+            raise ValueError("Template description is too long")
+        if global_label_uids is not None:
+            if len(global_label_uids) > 100 or len(set(global_label_uids)) != len(global_label_uids):
+                raise ValueError("Invalid template labels")
+            for label_uid in global_label_uids:
+                if not InfraHelper.get_by_id_like(GlobalLabel, label_uid):
+                    raise ValueError("Unknown global label")
+        bot_snapshots = None
+        if internal_bot_uids is not None:
+            if len(internal_bot_uids) > 3 or len(set(internal_bot_uids)) != len(internal_bot_uids):
+                raise ValueError("Invalid template bots")
+            bot_snapshots = []
+            existing_snapshots = {item.get("bot_type"): item for item in template.internal_bots} if template else {}
+            selected_types = set()
+            for bot_uid in internal_bot_uids:
+                bot = InfraHelper.get_by_id_like(InternalBot, bot_uid)
+                if not bot or bot.bot_type.value in selected_types:
+                    raise ValueError("Unknown or duplicate template bot role")
+                selected_types.add(bot.bot_type.value)
+                bot_snapshots.append(
+                    {
+                        **existing_snapshots.get(bot.bot_type.value, {"prompt": "", "use_default_prompt": True}),
+                        "internal_bot_uid": bot.get_uid(),
+                        "bot_type": bot.bot_type.value,
+                    }
+                )
+        definitions = []
+        for column in columns:
+            column_name = column["name"].strip()
+            column_description = column.get("description", "")
+            stage_key = column.get("workflow_stage")
+            if not column_name or len(column_name) > 100 or len(column_description) > 4096:
+                raise ValueError("Invalid template column")
+            if stage_key:
+                stage = self.repo.workflow_stage.get_by_keys({stage_key}).get(stage_key)
+                old_keys = {item.get("workflow_stage") for item in template.column_definitions()} if template else set()
+                if not stage or (not stage.is_active and stage_key not in old_keys):
+                    raise ValueError("Unknown or inactive workflow stage")
+            translations = {language: dict(text) for language, text in column.get("translations", {}).items()}
+            if len(set(translations) | {"en"}) > 30:
+                raise ValueError("Too many column languages")
+            for language, text in translations.items():
+                if (
+                    not re.fullmatch(r"[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*", language)
+                    or set(text) - {"name", "description"}
+                    or len(text.get("name", "")) > 100
+                    or len(text.get("description", "")) > 4096
+                ):
+                    raise ValueError("Invalid column translation")
+            translations["en"] = {"name": column_name, "description": column_description}
+            definitions.append(
+                {
+                    "name": column_name,
+                    "description": column_description,
+                    "workflow_stage": stage_key or None,
+                    "translations": translations,
+                }
+            )
+        if template:
+            scoped_names = {scope.get("column_name") for scope in template.column_bot_scopes}
+            if scoped_names - {column["name"] for column in definitions}:
+                raise ValueError("Update column bot scopes before renaming or removing bound columns")
+            template.name = name
+            template.columns = definitions
+            template.column_descriptions = []
+            if description is not None:
+                template.description = description
+            if global_label_uids is not None:
+                template.global_label_uids = list(global_label_uids)
+            if bot_snapshots is not None:
+                template.internal_bots = bot_snapshots
+            self.repo.project_template.update(template)
+        else:
+            template = ProjectTemplate(
+                name=name,
+                columns=definitions,
+                description=description or "",
+                global_label_uids=list(global_label_uids or []),
+                internal_bots=bot_snapshots or [],
+            )
+            self.repo.project_template.insert(template)
         return template
 
     def copy_from_project(self, project: Project, name: str) -> ProjectTemplate:
@@ -112,18 +300,34 @@ class ProjectTemplateService(BaseDomainService):
             for scope in self.repo.project_column.get_bot_scopes_by_project(project)
             if scope.project_column_id in column_by_id
         ]
+        global_label_uids: list[str] = []
+        for label in self.repo.project_label.get_all_by_project(project):
+            if label.global_label_id is None:
+                continue
+            global_label = InfraHelper.get_by_id_like(GlobalLabel, label.global_label_id)
+            if not global_label:
+                raise ValueError("Project global label is unavailable")
+            uid = global_label.get_uid()
+            if uid not in global_label_uids:
+                global_label_uids.append(uid)
         template = ProjectTemplate(
             name=clean_name,
-            columns=[column.name for column in columns],
+            global_label_uids=global_label_uids,
+            columns=[
+                {
+                    "name": column.name,
+                    "workflow_stage": column.workflow_stage,
+                    "description": column.description,
+                    "translations": getattr(column, "translations", {}),
+                }
+                for column in columns
+            ],
             internal_bots=internal_bots,
             project_bot_scopes=project_scopes,
             column_bot_scopes=column_scopes,
             email_notification_policy=self._email_notification_policy_snapshot(project),
         )
-        try:
-            self.repo.project_template.insert(template)
-        except IntegrityError as error:
-            raise ValueError("Project template name already exists") from error
+        self.repo.project_template.insert(template)
         return template
 
     def create_project(
@@ -143,26 +347,34 @@ class ProjectTemplateService(BaseDomainService):
         template = self.get(template_name)
         project_service = self._get_service_by_name("project")
         column_service = self._get_service_by_name("project_column")
-        project = project_service.create(user, title, description, project_type)
-        columns: list[ProjectColumn] = []
-        try:
-            for column_name in template.columns:
-                column = column_service.create(user, project, column_name)
+        with DbSession.atomic() as db:
+            project = project_service.create(user, title, description, project_type)
+            columns: list[ProjectColumn] = []
+            for definition in template.column_definitions():
+                fields = {"description": definition.get("description", "")}
+                if definition.get("translations"):
+                    fields["translations"] = definition["translations"]
+                if definition.get("workflow_stage") is not None:
+                    fields["workflow_stage"] = definition["workflow_stage"]
+                column = column_service.create(user, project, definition["name"], dispatch_effects=False, **fields)
                 if not column:
-                    raise RuntimeError(f"Failed to create project column: {column_name}")
+                    raise RuntimeError(f"Failed to create project column: {definition['name']}")
                 columns.append(column)
+                db.after_commit(lambda column=column: column_service.dispatch_created(user, project, column))
             archive = self.repo.project_column.get_or_create_archive_if_not_exists(project)
             for order, column in enumerate(columns):
                 column.order = order
             archive.order = len(columns)
             self.repo.project_column.update([*columns, archive])
+            if template.global_label_uids:
+                label_service = self._get_service_by_name("project_label")
+                for label_uid in template.global_label_uids:
+                    if not label_service.use_global(user, project, label_uid):
+                        raise ValueError("Template global label is unavailable")
             self._apply_internal_bots(project, template.internal_bots)
             self._apply_scopes(project, columns, template)
             self._apply_email_notification_policy(project, template)
-        except Exception:
-            project_service.delete(user, project)
-            raise
-        return project, columns, template
+            return project, columns, template
 
     def _email_notification_policy_snapshot(self, project: Project) -> dict[str, Any]:
         policy, _ = self.repo.project_email_notification.get_with_recipients(project)
@@ -267,20 +479,18 @@ class ProjectTemplateService(BaseDomainService):
             if scope:
                 self.repo.project_column_bot_scope.insert(scope)
 
-    def _build_scope(
-        self,
-        model: type[_TScope],
-        snapshot: dict[str, Any],
-        **scope: Any,
-    ) -> _TScope | None:
+    def _build_scope(self, model: type, snapshot: dict[str, Any], **scope: Any) -> Any | None:
         bot = self._find_bot(str(snapshot.get("bot_uname") or ""))
         if not bot:
             return None
         branch_name = snapshot.get("default_scope_branch")
-        branch = (
-            self.repo.bot_default_scope_branch.get_by_bot_and_name(bot, str(branch_name))
-            if branch_name is not None
-            else None
+        branch = next(
+            (
+                item
+                for item in InfraHelper.get_all_by(BotDefaultScopeBranch, "bot_id", bot.id)
+                if item.name == branch_name
+            ),
+            None,
         )
         available = model.get_available_conditions()
         conditions = []

@@ -1,3 +1,4 @@
+import { metadataDisplay } from "@/core/utils/MetadataDisplay";
 import Button from "@/components/base/Button";
 import IconComponent from "@/components/base/IconComponent";
 import Input from "@/components/base/Input";
@@ -28,9 +29,15 @@ const BoardColumnName = memo(
     forwardRef<IBoardColumnNameRef, IBoardColumnNameProps>(({ isDragging, column }: IBoardColumnNameProps, ref) => {
         const { selectCardViewType } = useBoardController();
         const { project, hasRoleAction } = useBoard();
-        const [t] = useTranslation();
+        const [t, i18n] = useTranslation();
         const [isValidating, setIsValidating] = useState(false);
         const columnName = column.useField("name");
+        const translations = column.useField("translations");
+        const displayName = metadataDisplay(
+            { name: columnName, description: "" },
+            { ...translations, en: { name: columnName, description: "" }, "en-US": { name: columnName, description: "" } },
+            i18n.resolvedLanguage ?? i18n.language
+        ).name;
         const editorName = `${column.uid}-column-title`;
         const isArchiveColumn = column.useField("is_archive");
         const { mutateAsync: changeProjectColumnNameMutateAsync } = useChangeProjectColumnName({ interceptToast: true });
@@ -110,6 +117,7 @@ const BoardColumnName = memo(
                 projectUID={project.uid}
                 columnUID={column.uid}
                 columnName={columnName}
+                displayName={displayName}
                 disabled={isValidating}
                 isArchive={isArchiveColumn}
                 inputRef={valueRef}
@@ -131,6 +139,7 @@ export interface IBoardColumnNameInput {
     projectUID?: string;
     columnUID?: string;
     columnName: string;
+    displayName?: string;
     isArchive?: bool;
     disabled?: bool;
     inputRef: React.Ref<HTMLInputElement>;
@@ -148,6 +157,7 @@ export const BoardColumnNameInput = memo(
         columnUID,
         changeMode,
         columnName,
+        displayName,
         isArchive,
         disabled,
         inputRef,
@@ -239,7 +249,9 @@ export const BoardColumnNameInput = memo(
         return (
             <>
                 {!isEditing || isArchive ? (
-                    <span className={cn("h-7 truncate", isArchive && "text-secondary-foreground/70", viewClassName)}>{columnName}</span>
+                    <span className={cn("h-7 truncate", isArchive && "text-secondary-foreground/70", viewClassName)}>
+                        {displayName ?? columnName}
+                    </span>
                 ) : (
                     <div className="flex min-w-0 flex-1 items-center gap-1">
                         {input}

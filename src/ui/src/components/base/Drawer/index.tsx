@@ -92,21 +92,7 @@ const Description: typeof DrawerPrimitive.Description = React.forwardRef<
 >(({ className, ...props }, ref) => <DrawerPrimitive.Description ref={ref} className={cn("text-sm text-muted-foreground", className)} {...props} />);
 Description.displayName = DrawerPrimitive.Description.displayName;
 
-interface IDrawerComponents {
-    Close: typeof Close;
-    Handle: typeof Handle;
-    Content: typeof Content;
-    Description: typeof Description;
-    Footer: typeof Footer;
-    Header: typeof Header;
-    Overlay: typeof Overlay;
-    Portal: typeof Portal;
-    Root: typeof Root;
-    Title: typeof Title;
-    Trigger: typeof Trigger;
-}
-
-const Drawer: IDrawerComponents = {
+export default {
     Close,
     Handle,
     Content,
@@ -119,5 +105,3 @@ const Drawer: IDrawerComponents = {
     Title,
     Trigger,
 };
-
-export default Drawer;

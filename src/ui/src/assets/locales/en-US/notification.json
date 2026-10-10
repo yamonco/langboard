@@ -1,6 +1,6 @@
 {
   "Notifications": "Notifications",
-  "{count} notifications received": "{{count}} notifications received",
+  "{count} notifications received": "{{count, number}} notifications received",
   "Only show unread": "Only show unread",
   "You have a new notification.": "You have a new notification.",
   "Read all notifications": "Read all notifications",

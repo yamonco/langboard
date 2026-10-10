@@ -14,6 +14,18 @@ from starlette.datastructures import Headers
 mcp_auth_context: ContextVar[Any] = ContextVar("mcp_auth_context", default=None)
 
 
+def _resolve_mcp_tool_group_uid(headers: Headers, scope: dict[str, Any], validation_result: Any) -> str | None:
+    """Resolve an MCP group without allowing API keys or unauthenticated callers to inherit OIDC defaults."""
+    value = headers.get(
+        AuthSecurity.MCP_TOOL_GROUP_UID_HEADER, headers.get(AuthSecurity.MCP_TOOL_GROUP_UID_HEADER.lower())
+    )
+    if value is not None:
+        return value
+    if scope.get("oidc_claims") and isinstance(validation_result, User) and not scope.get("api_key"):
+        return Env.MCP_OIDC_DEFAULT_TOOL_GROUP_UID or None
+    return None
+
+
 class McpAuthMiddleware(BaseMiddleware):
     """Authentication middleware for MCP SSE app."""
 
@@ -26,7 +38,7 @@ class McpAuthMiddleware(BaseMiddleware):
 
         is_secure = Env.PUBLIC_UI_URL.startswith("https://")
 
-        validation_result = MiddlewareHelper.validate_auth(scope)
+        validation_result = MiddlewareHelper.validate_auth(scope, allow_oidc=True)
         if isinstance(validation_result, int):
             response = JsonResponse(status_code=validation_result)
             if validation_result != status.HTTP_422_UNPROCESSABLE_CONTENT:
@@ -39,11 +51,9 @@ class McpAuthMiddleware(BaseMiddleware):
             await response(scope, receive, send)
             return
 
-        # Extract and validate mcp_tool_group_uid from header only
+        # An explicit header remains authoritative; only verified OIDC users get the configured default.
         headers = Headers(scope=scope)
-        mcp_tool_group_uid = headers.get(
-            AuthSecurity.MCP_TOOL_GROUP_UID_HEADER, headers.get(AuthSecurity.MCP_TOOL_GROUP_UID_HEADER.lower())
-        )
+        mcp_tool_group_uid = _resolve_mcp_tool_group_uid(headers, scope, validation_result)
 
         if not mcp_tool_group_uid:
             response = JsonResponse(
@@ -92,22 +102,23 @@ class McpAuthMiddleware(BaseMiddleware):
 
         # Check if it's a personal tool group and validate ownership
         if tool_group.user_id is not None:
-            if not api_key:
+            if scope.get("oidc_claims") and isinstance(validation_result, User):
+                if tool_group.user_id != validation_result.id:
+                    response = JsonResponse(ApiErrorCode.PE1001, status_code=status.HTTP_403_FORBIDDEN)
+                    await response(scope, receive, send)
+                    return
+            elif not api_key:
                 response = JsonResponse(ApiErrorCode.PE1001, status_code=status.HTTP_403_FORBIDDEN)
                 await response(scope, receive, send)
                 return
 
             # Validate that the API key belongs to the same user as the tool group
-            if api_key.user_id != tool_group.user_id:
+            if api_key and api_key.user_id != tool_group.user_id:
                 response = JsonResponse(ApiErrorCode.PE1001, status_code=status.HTTP_403_FORBIDDEN)
                 await response(scope, receive, send)
                 return
 
-        if (
-            isinstance(validation_result, User)
-            and not validation_result.is_admin
-            and validation_result.email not in Env.FULL_ADMIN_ACCESS_EMAILS
-        ):
+        if isinstance(validation_result, User) and not validation_result.is_admin:
             mcp_role = service.mcp_tool_group.get_role(validation_result)
             if not mcp_role or not mcp_role.is_granted(McpRoleAction.Read):
                 response = JsonResponse(ApiErrorCode.PE1001, status_code=status.HTTP_403_FORBIDDEN)
@@ -115,7 +126,12 @@ class McpAuthMiddleware(BaseMiddleware):
                 return
 
         # Store auth data and validated tool group in context
-        auth_data = {"user_or_bot": validation_result, "api_key": api_key, "tool_group": tool_group}
+        auth_data = {
+            "user_or_bot": validation_result,
+            "api_key": api_key,
+            "tool_group": tool_group,
+            "oidc_claims": scope.get("oidc_claims"),
+        }
         context_token = mcp_auth_context.set(auth_data)
         try:
             await MiddlewareHelper.log_api_key_usage(self.app, scope, receive, send, service)

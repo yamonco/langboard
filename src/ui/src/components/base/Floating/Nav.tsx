@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef } from "react";
 import Button, { ButtonProps } from "@/components/base/Button";
 import Flex from "@/components/base/Flex";
 import IconComponent, { TIconName } from "@/components/base/IconComponent";
@@ -25,6 +26,7 @@ export interface IFloatingNavProps {
     itemClassName?: string;
     labelClassName?: string;
     iconSize?: React.ComponentProps<typeof IconComponent>["size"];
+    trailing?: React.ReactNode;
 }
 
 function Nav({
@@ -35,27 +37,50 @@ function Nav({
     itemClassName,
     labelClassName,
     iconSize = "4",
+    trailing,
 }: IFloatingNavProps): React.JSX.Element | null {
+    const host = useRef<HTMLDivElement>(null);
+    useLayoutEffect(() => {
+        if (!fixed || !host.current) return;
+        const main = document.querySelector("main");
+        const board = document.getElementById("board-scrollport");
+        const update = () =>
+            host.current?.style.setProperty(
+                "--floating-left",
+                `${Math.max(main?.getBoundingClientRect().left ?? 0, board?.getBoundingClientRect().left ?? 0) + 8}px`
+            );
+        const observer = new ResizeObserver(update);
+        if (main) observer.observe(main);
+        if (board) observer.observe(board);
+        window.addEventListener("resize", update);
+        update();
+        return () => {
+            observer.disconnect();
+            window.removeEventListener("resize", update);
+        };
+    }, [fixed]);
     const visibleItems = items.filter((item) => !item.hidden);
 
-    if (visibleItems.length === 0) {
+    if (visibleItems.length === 0 && !trailing) {
         return null;
     }
 
     return (
         <Flex
+            ref={host}
             justify="center"
             className={cn(
                 "pointer-events-none z-50 w-full shrink-0",
-                fixed && "fixed bottom-2 left-2 right-2 md:left-1/2 md:right-auto md:w-auto md:-translate-x-1/2",
+                fixed && "fixed bottom-2 left-[var(--floating-left,8px)] right-2 w-auto",
                 className
             )}
         >
             <Flex
+                data-floating-nav-content=""
                 items="center"
                 gap="1"
                 className={cn(
-                    "pointer-events-auto w-full rounded-2xl border bg-background/95 p-1 shadow-lg backdrop-blur md:w-auto md:rounded-full",
+                    "pointer-events-auto w-full max-w-full rounded-2xl border bg-background/95 p-1 shadow-lg backdrop-blur md:w-auto md:rounded-full",
                     contentClassName
                 )}
             >
@@ -71,13 +96,13 @@ function Nav({
                             item.className
                         )}
                         onClick={item.onClick}
+                        aria-label={typeof item.label === "string" ? item.label : undefined}
                     >
                         {item.badge && (
                             <span
                                 className={cn(
-                                    "absolute -right-1 -top-1 inline-flex min-w-5 items-center justify-center rounded-full",
-                                    "bg-destructive px-1.5 py-0.5 text-[10px] font-bold leading-none",
-                                    "text-destructive-foreground shadow"
+                                    "absolute -right-1 -top-1 inline-flex min-w-5 items-center justify-center rounded-full bg-destructive",
+                                    "px-1.5 py-0.5 text-[10px] font-bold leading-none text-destructive-foreground shadow"
                                 )}
                             >
                                 {item.badge}
@@ -87,6 +112,7 @@ function Nav({
                         <span className={cn("truncate text-xs", labelClassName, item.labelClassName)}>{item.label}</span>
                     </Button>
                 ))}
+                {trailing}
             </Flex>
         </Flex>
     );

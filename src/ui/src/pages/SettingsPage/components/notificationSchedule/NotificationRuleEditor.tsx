@@ -249,7 +249,7 @@ function NotificationRuleEditor({ rule, schema, disabled, isExpanded, isSelected
                 }
                 labelStyle={{ top: "-0.75rem" }}
                 name={meta.name}
-                title={`${meta.name} changed ${meta.value.label}`}
+                title={t("common.User changed field", { name: meta.name, field: meta.value.label })}
             />
         );
     };

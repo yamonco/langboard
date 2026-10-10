@@ -1,3 +1,4 @@
+import { normalizeLocale } from "@/core/utils/LocalePolicy";
 import { createContext, useContext, useEffect, useRef } from "react";
 import { Routing } from "@langboard/core/constants";
 import { api, refresh } from "@/core/helpers/Api";
@@ -9,8 +10,6 @@ import { useTranslation } from "react-i18next";
 import useAuthStore, { getAuthStore } from "@/core/stores/AuthStore";
 import { usePageNavigateRef } from "@/core/hooks/usePageNavigate";
 import Progress from "@/components/base/Progress";
-import useGetNotificationList from "@/controllers/api/notification/useGetNotificationList";
-import { useUserSettings } from "@/core/stores/UserSettingsStore";
 
 export interface IAuthContext {
     signIn: (accessToken: string, redirectCallback?: () => void) => Promise<void>;
@@ -36,20 +35,21 @@ export const AuthProvider = ({ children }: IAuthProviderProps): React.ReactNode 
     const [_, i18n] = useTranslation();
     const { queryClient } = useQueryMutation();
     const { state, currentUser, pageLoaded, updateToken, removeToken } = useAuthStore();
-    const { mutate } = useGetNotificationList();
-    const timeRange = useUserSettings("notifications_time_range");
     const navigate = usePageNavigateRef();
     const hadAuthenticatedUserRef = useRef(false);
+    const preferredLanguageUserRef = useRef<string | null>(null);
+
     useEffect(() => {
-        if (state !== "loaded" || !currentUser) {
+        if (state !== "loaded") return;
+        if (!currentUser) {
+            preferredLanguageUserRef.current = null;
             return;
         }
-
-        if (!getAuthStore().hasSetPreferredLang()) {
-            i18n.changeLanguage(currentUser.preferred_lang);
-            getAuthStore().setPreferredLangHandled();
+        if (preferredLanguageUserRef.current !== currentUser.uid) {
+            if (currentUser.preferred_lang) i18n.changeLanguage(normalizeLocale(currentUser.preferred_lang));
+            preferredLanguageUserRef.current = currentUser.uid;
         }
-    }, [state, currentUser]);
+    }, [state, currentUser, i18n]);
 
     useEffect(() => {
         const shouldSkip =
@@ -60,7 +60,7 @@ export const AuthProvider = ({ children }: IAuthProviderProps): React.ReactNode 
 
         switch (state) {
             case "initial":
-                refresh();
+                void refresh();
                 return;
             case "loaded":
                 if (!currentUser && !shouldSkip) {
@@ -68,17 +68,7 @@ export const AuthProvider = ({ children }: IAuthProviderProps): React.ReactNode 
                 }
                 return;
         }
-    }, [state, currentUser]);
-
-    useEffect(() => {
-        if (state !== "loaded" || !pageLoaded || !currentUser) {
-            return;
-        }
-
-        mutate({
-            time_range: timeRange || "3d",
-        });
-    }, [state, pageLoaded, currentUser, timeRange]);
+    }, [state]);
 
     useEffect(() => {
         if (currentUser) {

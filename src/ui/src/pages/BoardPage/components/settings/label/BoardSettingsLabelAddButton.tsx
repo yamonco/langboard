@@ -22,9 +22,9 @@ function BoardSettingsLabelAddButton() {
 
         const promise = createProjectLabelMutateAsync({
             project_uid: project.uid,
-            name: "New Label",
+            name: t("project.settings.New Label"),
             color: new Utils.Color.Generator(Utils.String.Token.shortUUID()).generateRandomColor(),
-            description: "Sample label description",
+            description: t("project.settings.Sample label description"),
         });
 
         Toast.Add.promise(promise, {

@@ -1,13 +1,17 @@
 import { SocketEvents } from "@langboard/core/constants";
 import useSocketHandler, { IBaseUseSocketHandlersProps } from "@/core/helpers/SocketHandler";
 import { ProjectCard } from "@/core/models";
+import type { IWorkState } from "@/core/models/ProjectCard";
 import { IEditorContent } from "@/core/models/Base";
 import { ESocketTopic } from "@langboard/core/enums";
 
 export interface ICardDetailsChangedRawResponse {
+    read_state_changed?: boolean;
+    updated_at?: string;
     title?: string;
     description?: IEditorContent;
-    deadline_at?: string;
+    deadline_at?: string | null;
+    work_state?: IWorkState;
 }
 
 export interface IUseCardDetailsChangedHandlersProps extends IBaseUseSocketHandlersProps<{}> {
@@ -27,9 +31,12 @@ const useCardDetailsChangedHandlers = ({ callback, projectUID, cardUID }: IUseCa
             responseConverter: (data) => {
                 const card = ProjectCard.Model.getModel(cardUID);
                 if (card) {
-                    Object.entries(data).forEach(([key, value]) => {
-                        card[key] = value as (string & IEditorContent) | (Date & string & IEditorContent);
-                    });
+                    if (data.read_state_changed) card.read_state_version = (card.read_state_version ?? 0) + 1;
+                    if (data.title !== undefined) card.title = data.title;
+                    if (data.description !== undefined) card.description = data.description;
+                    if (data.deadline_at !== undefined) card.deadline_at = data.deadline_at ?? undefined;
+                    if (data.work_state !== undefined) card.work_state = data.work_state;
+                    if (data.updated_at !== undefined) card.updated_at = data.updated_at;
                 }
                 return {};
             },

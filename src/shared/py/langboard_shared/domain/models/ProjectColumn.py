@@ -1,7 +1,12 @@
 from typing import Any, ClassVar
+from sqlalchemy import JSON, TEXT
 from ...core.db import ApiField, Field, SnowflakeIDField, SoftDeleteModel
 from ...core.types import SnowflakeID
 from .Project import Project
+
+
+class ProjectColumnDockConflict(Exception):
+    """The shared shortcut configuration changed after the caller read it."""
 
 
 class ProjectColumn(SoftDeleteModel, table=True):
@@ -10,8 +15,15 @@ class ProjectColumn(SoftDeleteModel, table=True):
         foreign_key=Project, nullable=False, index=True, api_field=ApiField(name="project_uid")
     )
     name: str = Field(nullable=False, api_field=ApiField())
+    description: str = Field(default="", nullable=False, sa_type=TEXT, api_field=ApiField())
     order: int = Field(default=0, nullable=False, api_field=ApiField())
+    dock_order: int | None = Field(default=None, nullable=True, api_field=ApiField())
     is_archive: bool = Field(default=False, nullable=False, api_field=ApiField())
+    # Explicit board workflow meaning. None means unclassified, never inferred from the display name.
+    translations: dict[str, dict[str, str]] = Field(
+        default_factory=dict, nullable=False, sa_type=JSON, sa_column_kwargs={"server_default": "{}"}, api_field=ApiField()
+    )
+    workflow_stage: str | None = Field(default=None, nullable=True, api_field=ApiField())
 
     def notification_data(self) -> dict[str, Any]:
         return {}

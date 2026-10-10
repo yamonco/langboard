@@ -1,0 +1,94 @@
+import { test, expect } from "@playwright/test";
+for (const width of [1280, 390])
+    test(`registry stage filters preserve OR, column AND and URL at ${width}px`, async ({ page }) => {
+        let requests = 0;
+        await page.route("**/auth/token/refresh", (route) => route.fulfill({ json: { access_token: "synthetic-fixture-token" } }));
+        await page.route("**/board/fixture/workflow-stages", async (route) => {
+            requests++;
+            await route.fulfill({ json: { stages: [
+                { key: "custom_ready", name: "Custom queue", color: "#123456", is_active: true, translations: {} },
+                { key: "custom_active", name: "Custom execution", color: "#654321", is_active: true, translations: {} },
+            ] } });
+        });
+        await page.setViewportSize({ width, height: 844 });
+        await page.goto("/src/pages/BoardPage/components/board/BoardFilter.fixture.html");
+        await expect(page.getByRole("region", { name: "Results" })).toContainText("Active mine");
+        expect(requests).toBe(0);
+        await page.getByRole("button", { name: "Filters", exact: true }).click();
+        const dialog = page.getByRole("dialog");
+        await dialog.getByRole("button", { name: "Workflow stage", exact: true }).click();
+        await dialog.getByRole("checkbox", { name: "Custom queue", exact: true }).check();
+        await expect(page.getByRole("region", { name: "Results" })).not.toContainText("Active mine");
+        await dialog.getByRole("checkbox", { name: "Custom execution", exact: true }).check();
+        await expect(page.getByRole("region", { name: "Results" })).toContainText("Active mine");
+        if (width === 390) await dialog.getByRole("button", { name: "Back to categories" }).click();
+        await dialog.getByRole("button", { name: "Status", exact: true }).click();
+        await dialog.getByRole("checkbox", { name: "ready", exact: true }).check();
+        await expect(page.getByRole("region", { name: "Results" })).not.toContainText("Active mine");
+        await page.keyboard.press("Escape");
+        await expect(page.getByTestId("url")).toContainText("workflow_stages");
+        await page.goto(`/src/pages/BoardPage/components/board/BoardFilter.fixture.html${new URL(page.url()).search}`);
+        await expect(page.getByRole("region", { name: "Results" })).not.toContainText("Active mine");
+        await page.getByRole("button", { name: "Remove filter: Workflow stage: Custom queue", exact: true }).click();
+        await expect(page.getByRole("region", { name: "Results" })).toHaveText("");
+        expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
+    });
+for (const width of [1280, 390])
+    test(`category filters retain OR/AND and chips at ${width}px`, async ({ page }) => {
+        await page.setViewportSize({ width, height: 844 });
+        await page.goto("/src/pages/BoardPage/components/board/BoardFilter.fixture.html");
+        await page.getByRole("button", { name: "Filters", exact: true }).click();
+        const dialog = page.getByRole("dialog");
+        await expect(dialog.getByRole("checkbox")).toHaveCount(0);
+        await dialog.getByRole("button", { name: "Status", exact: true }).click();
+        await dialog.getByRole("checkbox", { name: "ready", exact: true }).check();
+        await dialog.getByRole("checkbox", { name: "active", exact: true }).check();
+        await expect(page.getByRole("region", { name: "Results" })).toContainText("Ready unassigned");
+        if (width === 390) await dialog.getByRole("button", { name: "Back to categories" }).click();
+        await dialog.getByRole("button", { name: "Assignee", exact: true }).click();
+        await dialog.getByRole("checkbox", { name: /Assigned to me/ }).check();
+        await expect(page.getByRole("region", { name: "Results" })).not.toContainText("Ready unassigned");
+        await expect(page.getByRole("region", { name: "Results" })).toContainText("Active mine");
+        if (width === 390) await dialog.getByRole("button", { name: "Back to categories" }).click();
+        await dialog.getByRole("button", { name: "Status", exact: true }).click();
+        await expect(dialog.getByRole("checkbox", { name: "ready", exact: true })).toBeChecked();
+        await expect(dialog.getByRole("checkbox", { name: "active", exact: true })).toBeChecked();
+        await dialog.getByRole("textbox", { name: "Keyword" }).fill("Ready");
+        await expect(page.getByRole("region", { name: "Results" })).toHaveText("Ready mine");
+        await page.keyboard.press("Escape");
+        await expect(dialog).not.toBeVisible();
+        await page.getByRole("button", { name: "Remove filter: Keyword: Ready", exact: true }).click();
+        await expect(page.getByRole("region", { name: "Results" })).toContainText("Active mine");
+        await page.getByRole("button", { name: "Remove filter: Status: active", exact: true }).click();
+        await expect(page.getByRole("region", { name: "Results" })).toHaveText("Ready mine");
+        await expect(page.getByTestId("url")).toContainText("columns");
+        await page.getByRole("button", { name: "Filters", exact: true }).click();
+        await dialog.getByRole("button", { name: "Creator", exact: true }).click();
+        await dialog.getByRole("checkbox", { name: /Created by me/ }).check();
+        await dialog.getByRole("checkbox", { name: /Former User/ }).check();
+        await page.keyboard.press("Escape");
+        await expect(dialog).not.toBeVisible();
+        await page.getByRole("button", { name: "Remove filter: Assignee: Assigned to me", exact: true }).click();
+        await expect(page.getByRole("region", { name: "Results" })).toContainText("Ready unassigned");
+        await page.getByRole("button", { name: "Remove filter: Creator: Created by me", exact: true }).click();
+        await expect(page.getByRole("region", { name: "Results" })).toHaveText("Ready unassigned");
+        await page.getByRole("button", { name: "Clear", exact: true }).click();
+        await expect(page.getByRole("region", { name: "Results" })).toContainText("Ready unassigned");
+        await expect(page.getByTestId("url")).toHaveText("");
+        expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
+    });
+
+test("parent and child selections match either across reload", async ({ page }) => {
+    await page.goto("/src/pages/BoardPage/components/board/BoardFilter.fixture.html?filters=parents%3Ab%2Cchildren%3Ab");
+    const results = page.getByRole("region", { name: "Results" });
+    await expect(results).toContainText("Ready mine");
+    await expect(results).toContainText("Active mine");
+    await expect(results).toContainText("Ready unassigned");
+    await page.reload();
+    await expect(results).toContainText("Ready mine");
+    await expect(results).toContainText("Ready unassigned");
+    await page.getByRole("button", { name: "Remove filter: Parents of: Active mine", exact: true }).click();
+    await expect(results).not.toContainText("Ready mine");
+    await expect(results).toContainText("Active mine");
+    await expect(results).toContainText("Ready unassigned");
+});

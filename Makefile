@@ -1,4 +1,4 @@
-.PHONY: help init format lint start_docker stop_docker rebuild_docker update_docker clean_docker_images clean_docker_build_cache
+.PHONY: help init format lint start_docker stop_docker rebuild_docker update_docker deploy_ui clean_docker_build_cache
 
 # Function to get compose args from script
 get_compose_args = $(shell WITH_DOCS=$(WITH_DOCS) WITH_UI_WATCHER=$(WITH_UI_WATCHER) WITH_OLLAMA_CPU=$(WITH_OLLAMA_CPU) WITH_OLLAMA_GPU=$(WITH_OLLAMA_GPU) WITH_DB_BACKUP=$(WITH_DB_BACKUP) bash scripts/utils/get-compose-args.sh)
@@ -152,12 +152,16 @@ update_ts_core:
 	@cd $(SOCKET_DIR) && yarn remove @langboard/core
 	@cd $(SOCKET_DIR) && yarn add @langboard/core@file:../shared/ts
 
+deploy_ui: ## rebuild UI assets using the existing image without restarting dependencies
+	# The server already mounts src/ui/dist; no service recreation is needed.
+	docker compose $(COMPOSE_ARGS) run --rm --no-deps ui
+
 start_docker: ## run Docker in the production environment
 	make init_env
 	mkdir -p ./docker/volumes
 	make update_docker_settings
 	docker compose $(COMPOSE_ARGS) up -d --build --remove-orphans
-	make clean_docker_images
+	make clean_docker_build_cache
 
 rebuild_docker: ## run Docker in the production environment (e.g. make rebuild_docker IMAGES=image_name or IMAGES="image_name1 image_name2")
 	if [ "$(IMAGES)" = "" ]; then \
@@ -169,17 +173,10 @@ rebuild_docker: ## run Docker in the production environment (e.g. make rebuild_d
 	mkdir -p ./docker/volumes
 	make update_docker_settings
 	docker compose $(COMPOSE_ARGS) up -d --build ${IMAGES} --remove-orphans
-	make clean_docker_images
+	make clean_docker_build_cache
 
-clean_docker_images: ## remove unused images created by this Compose project
-	@project_name=$$(sed -n 's/^PROJECT_NAME=//p' .env | tail -n 1); \
-	if [ -z "$$project_name" ]; then \
-		echo "$(RED)PROJECT_NAME is missing from .env.$(NC)"; \
-		exit 1; \
-	fi; \
-	docker image prune --force --filter "label=com.docker.compose.project=$$project_name"
-
-clean_docker_build_cache: clean_docker_images ## explicitly cap the shared Docker builder cache
+clean_docker_build_cache: ## remove dangling images and cap unused Docker build cache
+	docker image prune --force
 	docker builder prune --all --force --max-used-space $(DOCKER_BUILD_CACHE_MAX)
 
 update_docker: ## update Docker in the production environment

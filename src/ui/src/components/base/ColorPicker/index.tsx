@@ -17,6 +17,7 @@ interface ColorPickerProps {
     onSave: (value: string, endCallback: () => void) => void;
     popoverContentAlign?: "center" | "start" | "end";
     popoverContentSide?: "top" | "bottom" | "left" | "right";
+    portalContainer?: HTMLElement | null;
 }
 
 const COLOR_PRESETS = [
@@ -35,7 +36,7 @@ const COLOR_PRESETS = [
 ];
 
 const ColorPicker = forwardRef<HTMLInputElement, Omit<ButtonProps, "value" | "disabled"> & ColorPickerProps>(
-    ({ isValidating, value, onSave, name, className, popoverContentAlign, popoverContentSide, ...props }, ref) => {
+    ({ isValidating, value, onSave, name, className, popoverContentAlign, popoverContentSide, portalContainer, ...props }, ref) => {
         const [open, setOpen] = useState(false);
         const [currentValue, setCurrentValue] = useState(value);
         const [t] = useTranslation();
@@ -78,7 +79,12 @@ const ColorPicker = forwardRef<HTMLInputElement, Omit<ButtonProps, "value" | "di
                         <div />
                     </Button>
                 </Popover.Trigger>
-                <Popover.Content className="w-full max-w-60 sm:max-w-96" align={popoverContentAlign} side={popoverContentSide}>
+                <Popover.Content
+                    portalContainer={portalContainer}
+                    className="z-[60] w-full max-w-60 sm:max-w-96"
+                    align={popoverContentAlign}
+                    side={popoverContentSide}
+                >
                     <Flex direction={{ initial: "col", sm: "row" }} gap="2" justify="center">
                         <Box w={{ initial: "full", sm: "52" }}>
                             <HexColorPicker color={parsedValue} onChange={setCurrentValue} className="!h-44 !w-full" />

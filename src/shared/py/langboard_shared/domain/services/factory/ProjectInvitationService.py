@@ -9,8 +9,10 @@ from ....Env import UI_QUERY_NAMES, Env
 from ....helpers import InfraHelper
 from ....publishers import ProjectInvitationPublisher, ProjectPublisher
 from ....tasks.activities import ProjectActivityTask, UserActivityTask
-from ...models import Project, ProjectAssignedUser, ProjectInvitation, User, UserEmail
+from ...models import IdentityProvider, Project, ProjectAssignedUser, ProjectInvitation, User, UserEmail
+from ...models.ProjectRole import ProjectRoleAction
 from .EmailService import EmailService
+from .IdentityLinkService import IdentityLinkService
 from .NotificationService import NotificationService
 from .ProjectService import ProjectService
 
@@ -24,7 +26,6 @@ class InvitationRelatedResult:
         self.users_by_email: dict[str, User] = {}
         self.user_ids_should_delete: set[SnowflakeID] = set()
         self.assigned_ids_should_delete: set[SnowflakeID] = set()
-        self.applied_count = 0
 
 
 class ProjectInvitationService(BaseDomainService):
@@ -128,7 +129,11 @@ class ProjectInvitationService(BaseDomainService):
         return invitation_result
 
     def invite_emails(
-        self, user: User, project: TProjectParam | None, invitation_result: InvitationRelatedResult
+        self,
+        user: User,
+        project: TProjectParam | None,
+        invitation_result: InvitationRelatedResult,
+        direct_user_ids: set[SnowflakeID] | None = None,
     ) -> bool:
         project = InfraHelper.get_by_id_like(Project, project)
         if not project:
@@ -145,19 +150,16 @@ class ProjectInvitationService(BaseDomainService):
         for email in invitation_result.emails_should_invite:
             preferred_lang = user.preferred_lang
             target_user = invitation_result.users_by_email.get(email)
-            if user.is_admin and target_user:
+            if target_user and (
+                user.is_admin
+                or (direct_user_ids is not None and target_user.id in direct_user_ids)
+                or self._is_federated_active_user(target_user)
+            ):
                 self.__assign_project_user(project, target_user)
-                invitation_result.applied_count += 1
                 continue
 
-            invitation = self.repo.project_invitation.create_if_missing(
-                project,
-                email,
-                generate_random_string(32),
-            )
-            if invitation is None:
-                continue
-            invitation_result.applied_count += 1
+            invitation = ProjectInvitation(project_id=project.id, email=email, token=generate_random_string(32))
+            self.repo.project_invitation.insert(invitation)
 
             if target_user:
                 preferred_lang = target_user.preferred_lang
@@ -177,6 +179,19 @@ class ProjectInvitationService(BaseDomainService):
             )
 
         return True
+
+    def _is_federated_active_user(self, user: User) -> bool:
+        """Return whether an active account is managed by a federated identity provider."""
+
+        if not user.activated_at:
+            return False
+        identity_link = self._get_service(IdentityLinkService)
+        identity_provider = getattr(identity_link, "get_by_user_provider", None)
+        if identity_provider is None:
+            return False
+        return any(
+            identity_provider(user, provider) is not None for provider in (IdentityProvider.Oidc, IdentityProvider.Scim)
+        )
 
     def update_by_signed_up(self, user: User) -> None:
         invitations = self.repo.project_invitation.get_all_with_projects_by_email(user.email)
@@ -280,12 +295,21 @@ class ProjectInvitationService(BaseDomainService):
 
             self.repo.project_invitation.delete(invitation)
 
-        self.repo.project_assigned_user.ensure_assigned(project, user)
+        _, created = self.repo.project_assigned_user.ensure_assigned(project, user)
         project_users = self.repo.project_assigned_user.get_all_by_project(project)
         self.repo.project_user_relationship.ensure_project_relationships(
             project, [assigned_user.id for assigned_user, _ in project_users]
         )
-        self.repo.role.project.grant_default(user_id=user.id, project_id=project.id)
+        if created:
+            self.repo.role.project.grant(
+                actions=[
+                    ProjectRoleAction.Read.value,
+                    ProjectRoleAction.CardWrite.value,
+                    ProjectRoleAction.CardUpdate.value,
+                ],
+                user_id=user.id,
+                project_id=project.id,
+            )
         ProjectPublisher.assigned_to_users(project, [user])
 
         project_service = self._get_service(ProjectService)

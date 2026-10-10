@@ -19,23 +19,15 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     """Match legacy PostgreSQL enum columns to the current varchar model."""
 
-    op.execute(
-        "ALTER TABLE checkitem ALTER COLUMN status "
-        "TYPE VARCHAR USING status::text"
-    )
-    op.execute(
-        "ALTER TABLE checkitem_timer_record ALTER COLUMN status "
-        "TYPE VARCHAR USING status::text"
-    )
+    op.execute("ALTER TABLE checkitem ALTER COLUMN status TYPE VARCHAR USING status::text")
+    op.execute("ALTER TABLE checkitem_timer_record ALTER COLUMN status TYPE VARCHAR USING status::text")
     op.execute("DROP TYPE IF EXISTS checkitemstatus")
 
 
 def downgrade() -> None:
     """Restore the historical native PostgreSQL enum representation."""
 
-    op.execute(
-        "CREATE TYPE checkitemstatus AS ENUM ('Started', 'Paused', 'Stopped')"
-    )
+    op.execute("CREATE TYPE checkitemstatus AS ENUM ('Started', 'Paused', 'Stopped')")
     op.execute(
         "ALTER TABLE checkitem ALTER COLUMN status TYPE checkitemstatus "
         "USING (CASE lower(status) "

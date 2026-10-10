@@ -44,21 +44,27 @@ Consumer.register("notification_publish", async (data: unknown) => {
             return;
         }
 
-        delete (model.notification as Record<string, unknown>).id;
-
-        for (let i = 0; i < (model.notification.record_list?.length ?? 0); ++i) {
-            const [record, id] = model.notification.record_list![i];
-            model.notification.record_list![i] = [record, id.toString()];
+        if (model.web_notification_visible === false) {
+            return;
         }
 
-        const notification = await UserNotification.create({
-            ...model.notification,
-            notifier_id: model.notification.notifier_id!.toString(),
-            receiver_id: model.notification.receiver_id!.toString(),
-        });
+        if (!model.source_notification_persisted) {
+            delete (model.notification as Record<string, unknown>).id;
 
-        notification.id = SnowflakeID.fromShortCode(model.api_notification.uid).toString();
-        await notification.save();
+            for (let i = 0; i < (model.notification.record_list?.length ?? 0); ++i) {
+                const [record, id] = model.notification.record_list![i];
+                model.notification.record_list![i] = [record, id.toString()];
+            }
+
+            const notification = await UserNotification.create({
+                ...model.notification,
+                notifier_id: model.notification.notifier_id!.toString(),
+                receiver_id: model.notification.receiver_id!.toString(),
+            });
+
+            notification.id = SnowflakeID.fromShortCode(model.api_notification.uid).toString();
+            await notification.save();
+        }
 
         await Subscription.publish(ESocketTopic.UserPrivate, new SnowflakeID(model.notification.receiver_id!).toShortCode(), "user:notified", {
             notification: model.api_notification,

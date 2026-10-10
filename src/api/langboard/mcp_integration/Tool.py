@@ -1,6 +1,6 @@
 from functools import wraps
 from inspect import Parameter, signature
-from typing import Any, Callable, Literal, TypedDict, get_args
+from typing import Callable, Literal, TypedDict, get_args
 from fastmcp.tools import Tool
 from langboard_shared.core.utils.decorators import class_instance, thread_safe_singleton
 
@@ -10,10 +10,11 @@ _TAccessibleType = Literal["all", "user", "bot"]
 
 class McpToolMetadata(TypedDict):
     description: str
-    handler: Callable[..., Any]
-    input_schema: dict[str, Any]
+    handler: Callable
+    input_schema: dict
     accessible_type: _TAccessibleType
     exclude: list[str]
+    modern_only: tuple[str, ...]
 
 
 @class_instance()
@@ -23,26 +24,24 @@ class McpTool:
         self._tools: dict[str, McpToolMetadata] = {}
 
     def add(
-        self, accessible_type: _TAccessibleType = "all", description: str | None = None
-    ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+        self,
+        accessible_type: _TAccessibleType = "all",
+        description: str | None = None,
+        modern_only: tuple[str, ...] = (),
+    ) -> Callable[[Callable], Callable]:
         """Register a model-visible MCP tool and derive its input schema."""
 
-        def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
-            if func.__name__ in self._tools:
-                raise ValueError(f"Duplicate MCP tool name: {func.__name__}")
-
+        def decorator(func: Callable) -> Callable:
             sig = signature(func)
             params = sig.parameters
             exclude = [name for name, param in params.items() if self._is_injected_parameter(param)]
 
             @wraps(func)
-            def visible_handler(*args: Any, **kwargs: Any) -> Any:
+            def visible_handler(*args, **kwargs):
                 return func(*args, **kwargs)
 
-            setattr(
-                visible_handler,
-                "__signature__",
-                sig.replace(parameters=[param for name, param in params.items() if name not in exclude]),
+            visible_handler.__signature__ = sig.replace(
+                parameters=[param for name, param in params.items() if name not in exclude and name not in modern_only]
             )
             tool = Tool.from_function(
                 visible_handler,
@@ -56,6 +55,7 @@ class McpTool:
                 "input_schema": tool.parameters,
                 "accessible_type": accessible_type,
                 "exclude": exclude,
+                "modern_only": modern_only,
             }
 
             return func

@@ -7,6 +7,7 @@ export interface IUserAvatarContext {
     hoverProps?: Record<string, string>;
     isOpened: bool;
     setIsOpened: React.Dispatch<React.SetStateAction<bool>>;
+    setIsHoverLocked: React.Dispatch<React.SetStateAction<bool>>;
     onPointerEnter: () => void;
     onPointerLeave: () => void;
     getAvatarHoverCardAttrs: () => Record<string, string>;
@@ -22,6 +23,7 @@ const initialContext = {
     userOrBot: {} as TUserLikeModel,
     isOpened: false,
     setIsOpened: () => {},
+    setIsHoverLocked: () => {},
     onPointerEnter: () => {},
     onPointerLeave: () => {},
     getAvatarHoverCardAttrs: () => ({}),
@@ -33,8 +35,9 @@ export const HOVER_DELAY = 500;
 export const HOVER_USER_UID_ATTR = "data-avatar-user";
 export const UserAvatarProvider = ({ userOrBot, hoverProps, children }: IUserAvatarProps): React.ReactNode => {
     const [isOpened, setIsOpened] = useState(false);
+    const [isHoverLocked, setIsHoverLocked] = useState(false);
     const { onPointerEnter, onPointerLeave } = useHoverEffect({
-        isOpened,
+        isOpened: isOpened && !isHoverLocked,
         setIsOpened,
         scopeAttr: HOVER_USER_UID_ATTR,
         expectedScopeValue: userOrBot.uid,
@@ -53,6 +56,7 @@ export const UserAvatarProvider = ({ userOrBot, hoverProps, children }: IUserAva
                 hoverProps,
                 isOpened,
                 setIsOpened,
+                setIsHoverLocked,
                 onPointerEnter,
                 onPointerLeave,
                 getAvatarHoverCardAttrs,

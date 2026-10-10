@@ -12,6 +12,7 @@ import {
     ProjectColumnBotSchedule,
 } from "@/core/models";
 import { Utils } from "@langboard/core/utils";
+import { mergeLinkedResourceProjection } from "@/controllers/api/board/mergeLinkedResourceProjection";
 
 export interface IGetCardsForm {
     project_uid: string;
@@ -35,37 +36,34 @@ const useGetCards = (params: IGetCardsForm, options?: TQueryOptions<unknown, IGe
                 interceptToast: options?.interceptToast,
             } as never,
         });
-        const metadataUrl = Utils.String.format(Routing.API.METADATA.PROJECT_CARDS, { uid: params.project_uid });
-        const metadataRes = await api.get<IGetProjectCardMetadataResponse>(metadataUrl, {
-            env: {
-                interceptToast: options?.interceptToast,
-            } as never,
-        });
+        const cards = res.data.cards.map((card: ProjectCard.Interface) => {
+            if (!card.linked_resource) {
+                return card;
+            }
 
-        const cardUIDs = new Set<string>(res.data.cards.map((card: ProjectCard.TModel) => card.uid));
+            const existing = ProjectCard.Model.getModel(card.uid)?.linked_resource;
+            return {
+                ...card,
+                linked_resource: mergeLinkedResourceProjection(card.linked_resource, existing),
+            };
+        });
+        const cardUIDs = new Set<string>(cards.map((card: ProjectCard.Interface) => card.uid));
         const columnUIDs = new Set<string>(res.data.columns.map((column: ProjectColumn.TModel) => column.uid));
 
-        ProjectCard.Model.fromArray(res.data.cards, true);
-        const metadataModels: MetadataModel.Interface[] = Object.entries(metadataRes.data.metadata ?? {}).map(([cardUID, metadata]) => ({
-            uid: cardUID,
-            type: "card",
-            metadata,
-            created_at: new Date(),
-            updated_at: new Date(),
-        }));
-        MetadataModel.Model.fromArray(metadataModels, true);
+        ProjectCard.Model.fromArray(cards, true);
         GlobalRelationshipType.Model.fromArray(res.data.global_relationships, true);
         ProjectColumn.Model.fromArray(res.data.columns, true);
         ProjectChecklist.Model.fromArray(res.data.checklists, true);
 
         ProjectCard.Model.getModels((model) => model.project_uid === params.project_uid && !cardUIDs.has(model.uid)).forEach((model) => {
-            deleteCardModel(model.uid, true);
+            // A card omitted from this projection may still be available in the archive.
+            // The tray availability endpoint owns deletion and authorization validation.
+            deleteCardModel(model.uid, true, false);
         });
         ProjectColumn.Model.deleteModels((model) => model.project_uid === params.project_uid && !columnUIDs.has(model.uid));
 
         ProjectColumnBotScope.Model.fromArray(res.data.column_bot_scopes, true);
         ProjectColumnBotSchedule.Model.fromArray(res.data.column_bot_schedules, true);
-
         return { isUpdated: true };
     };
 
@@ -75,6 +73,29 @@ const useGetCards = (params: IGetCardsForm, options?: TQueryOptions<unknown, IGe
         refetchInterval: Infinity,
         refetchOnWindowFocus: false,
     });
+
+    // Optional enrichment must never delay or reject the authorized board snapshot.
+    query(
+        ["get-board-card-metadata", params.project_uid, result.dataUpdatedAt],
+        async ({ signal }) => {
+            const url = Utils.String.format(Routing.API.METADATA.PROJECT_CARDS, { uid: params.project_uid });
+            const res = await api.get<IGetProjectCardMetadataResponse>(url, { signal, env: { interceptToast: false } as never });
+            const models: MetadataModel.Interface[] = Object.entries(res.data.metadata ?? {})
+                .filter(([uid]) => ProjectCard.Model.getModel(uid)?.project_uid === params.project_uid)
+                .map(([uid, metadata]) => ({ uid, type: "card", metadata, created_at: new Date(), updated_at: new Date() }));
+            MetadataModel.Model.fromArray(models, true);
+            return res.data;
+        },
+        {
+            // One attempt per successful snapshot; observers cannot retry a failed older snapshot.
+            enabled: (enrichment) => result.isEnabled && result.isSuccess && !result.isFetching && enrichment.state.status !== "error",
+            staleTime: Infinity,
+            gcTime: 0,
+            retry: 0,
+            refetchInterval: Infinity,
+            refetchOnWindowFocus: false,
+        }
+    );
 
     return result;
 };

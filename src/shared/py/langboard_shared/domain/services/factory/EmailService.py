@@ -66,6 +66,8 @@ class EmailService(BaseDomainService):
 
     def __get_template(self, lang: str, template_name: TEmailTemplateName, formats: dict[str, str]) -> tuple[str, str]:
         locale_path = get_resource_path("locales", lang)
+        if not (locale_path / "lang.json").is_file() or not (locale_path / f"{template_name}_email.html").is_file():
+            locale_path = get_resource_path("locales", "en-US")
         template_path = locale_path / f"{template_name}_email.html"
         lang_path = locale_path / "lang.json"
 
