@@ -1,4 +1,38 @@
 import { test, expect } from "@playwright/test";
+
+test("global label save rejects duplicate submissions and permits explicit retry", async ({ page }) => {
+    let writes = 0;
+    let release!: () => void;
+    const pending = new Promise<void>((resolve) => {
+        release = resolve;
+    });
+    await page.route("**/settings/global-labels**", async (route) => {
+        if (route.request().method() === "OPTIONS") return route.fulfill({ status: 204 });
+        if (route.request().method() === "GET") return route.fulfill({ json: { labels: [] } });
+        writes++;
+        await pending;
+        return route.fulfill({ status: 500, json: {} });
+    });
+    await page.goto("/src/pages/SettingsPage/GlobalLabels.fixture.html");
+    await page.getByLabel("Label name", { exact: true }).fill("Question");
+    await page.locator("form").evaluate((form) => {
+        form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+        form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+    try {
+        await expect.poll(() => writes).toBe(1);
+        await expect(page.locator("form button[type=submit]")).toBeDisabled();
+        await page.waitForTimeout(100);
+        expect(writes).toBe(1);
+    } finally {
+        release();
+    }
+    await expect(page.locator("form").getByRole("button", { name: "Save", exact: true })).toBeEnabled();
+    await expect(page.getByLabel("Label name", { exact: true })).toHaveValue("Question");
+    await page.locator("form").getByRole("button", { name: "Save", exact: true }).click();
+    await expect.poll(() => writes).toBe(2);
+});
+
 for (const width of [1280, 390])
     test(`global label translations persist at ${width}px`, async ({ page }) => {
         await page.setViewportSize({ width, height: 844 });
