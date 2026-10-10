@@ -328,3 +328,16 @@ def test_deleted_board_cannot_use_app_policy_or_connections(governance):
         ):
             with pytest.raises(AppGovernanceDenied):
                 operation()
+
+
+def test_personal_automation_requires_board_ownership(governance):
+    _, (_, owner, other), _, project, personal, _ = governance
+    with DbSession.atomic() as db:
+        project.organization_id = None
+        project.owner_id = other.id
+        db.update(project)
+        db.insert(ProjectAssignedUser(project_id=project.id, user_id=owner.id))
+    with DbSession.atomic() as db:
+        assert require_connection_access(db, owner, project, personal).id == personal.id
+        with pytest.raises(AppGovernanceDenied):
+            require_connection_access(db, owner, project, personal, unattended=True)

@@ -160,7 +160,7 @@ def require_connection_access(db, actor, project, connection, *, unattended=Fals
                 .where(ProjectAssignedUser.project_id == project.id, ProjectAssignedUser.user_id != actor.id)
                 .limit(1)
             ).first()
-            if project.organization_id is not None or shared is not None:
+            if project.organization_id is not None or project.owner_id != actor.id or shared is not None:
                 raise AppGovernanceDenied()
     elif connection.ownership == "organization":
         if project.organization_id is None or connection.organization_id != project.organization_id:
