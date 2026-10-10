@@ -829,6 +829,7 @@ def test_conditional_description_emits_effects_only_after_save(monkeypatch: pyte
     from unittest.mock import Mock
     from langboard_shared.core.db import EditorContentModel
     from langboard_shared.core.exceptions.CardDescriptionConflict import CardDescriptionConflict
+    from langboard_shared.domain.models import Card as NativeCard
     from langboard_shared.domain.services.factory.CardService import CardService
     from langboard_shared.helpers import InfraHelper
     from langboard_shared.publishers import CardPublisher
@@ -836,7 +837,9 @@ def test_conditional_description_emits_effects_only_after_save(monkeypatch: pyte
     from langboard_shared.tasks.bots import CardBotTask
 
     project = SimpleNamespace(id=1)
-    card = SimpleNamespace(description=EditorContentModel(content="before"), is_linked_resource=False)
+    card = NativeCard.model_construct(
+        id=7, project_id=1, project_column_id=2, description=EditorContentModel(content="before")
+    )
     conditional = Mock(return_value=saved)
     unconditional = Mock()
     service = CardService(
@@ -923,7 +926,7 @@ def test_created_card_projects_authenticated_creator_before_publish(
     actor = actor_type.model_construct(id=42)
     monkeypatch.setattr(actor_type, "get_fullname", lambda _: "Creator")
     monkeypatch.setattr(actor_type, "api_response", lambda _: {"avatar": None, "email": "private", "api_key": "secret"})
-    project = SimpleNamespace(id=1)
+    project = SimpleNamespace(id=1, owner_id=99)
     column = SimpleNamespace(id=2, is_archive=False)
     monkeypatch.setattr(module.InfraHelper, "get_records_with_foreign_by_params", lambda *_: (project, column))
     committed: list[bool] = []
