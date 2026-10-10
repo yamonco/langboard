@@ -139,6 +139,11 @@ Existing panel consent can also be withdrawn after policy or registration
 disablement, using current board Update authority and exact app/binding
 revisions. Withdrawal does not require the removed panel capability to remain
 in the declaration; enabling a panel still requires current approval and policy.
+The board catalog remains readable with current board Read authority under
+disabled policy. Disabled app definitions appear only when the board already
+has a retained binding; they expose current removal revisions with no declared
+capabilities. This catalog is configuration metadata, not execution approval.
+Normal approved-manifest resolution continues to exclude disabled definitions.
 GlitchTip and Dokploy account owners can also remove selected resources or
 disconnect their own connection after policy revocation, including connections
 whose trust change has revoked credentials. These operations do not resolve

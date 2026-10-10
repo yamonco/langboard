@@ -95,7 +95,9 @@ async def test_registration_workflow_update_disable_and_admin_revocation(board, 
         assert stale.value.status_code == 409
         disabled = await registry.disable("example-erp", updated["revision"])
         assert not disabled["is_enabled"] and disabled["generation"] == 3
-        assert "example-erp" not in {a["key"] for a in (await manager.catalog())["apps"]}
+        retained = next(a for a in (await manager.catalog())["apps"] if a["key"] == "example-erp")
+        assert retained["capabilities"] == [] and retained["app_revision"] == disabled["revision"]
+        assert retained["binding"]["granted_capabilities"] == []
         with DbSession.use(readonly=False) as db:
             actor.is_admin = False
             db.update(actor)
@@ -175,6 +177,8 @@ async def test_panel_consent_scope_revisions_and_revocation(board, monkeypatch, 
         from langboard_shared.domain.services.AppGovernance import get_policy, save_policy
         policy = get_policy(actor)
         policy = save_policy(actor, "disabled", policy["revision"])
+        retained = next(a for a in (await manager.catalog())["apps"] if a["key"] == "example-erp")
+        assert retained["binding"]["revision"] == saved["revision"]
         with pytest.raises(NativeApiError) as forbidden_panel:
             await manager.panel("example-erp")
         assert forbidden_panel.value.status_code in (403, 404)
@@ -228,9 +232,8 @@ async def test_panel_consent_scope_revisions_and_revocation(board, monkeypatch, 
         disabled_app = await registry.disable("example-erp", newer["revision"])
         with pytest.raises(NativeApiError):
             await manager.panel("example-erp")
-        with DbSession.use(readonly=False) as db:
-            current = db.exec(SqlBuilder.select.table(BoardAppBinding).where(BoardAppBinding.app_key == "example-erp")).first()
-            binding_uid, revision = current.get_uid(), current.edit_revision()
+        retained = next(a for a in (await manager.catalog())["apps"] if a["key"] == "example-erp")
+        binding_uid, revision = retained["binding"]["uid"], retained["binding"]["revision"]
         cleared = (await manager.set_panel_consent("example-erp", disabled_app["revision"], enabled=False,
             binding_uid=binding_uid, expected_revision=revision))["binding"]
         assert cleared["granted_capabilities"] == []
