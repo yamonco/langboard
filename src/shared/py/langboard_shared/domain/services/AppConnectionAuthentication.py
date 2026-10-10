@@ -114,6 +114,37 @@ def revoke_connection_credential(actor, connection_id, credential_id):
         return {"credential_uid": row.get_uid(), "revoked": True}
 
 
+def list_connection_credentials(actor, connection_id, *, after_id=None, limit=25):
+    """Recover issuance receipts without retrieving or rotating credential values."""
+    if type(limit) is not int or not 1 <= limit <= 50:
+        raise ValueError("Credential page limit must be 1 to 50")
+    with DbSession.atomic() as db:
+        connection = _current(db, AppConnection, connection_id, for_update=False)
+        if connection is None:
+            raise AppGovernanceDenied()
+        _manage(db, actor, connection)
+        statement = SqlBuilder.select.table(AppConnectionCredential).where(
+            AppConnectionCredential.connection_id == connection.id,
+        )
+        if after_id is not None:
+            statement = statement.where(AppConnectionCredential.id > after_id)
+        rows = db.exec(statement.order_by(AppConnectionCredential.id).limit(limit + 1)).all()
+        page = rows[:limit]
+        return {
+            "connection_uid": connection.get_uid(),
+            "items": [
+                {
+                    "credential_uid": row.get_uid(),
+                    "created_at": row.created_at.isoformat(),
+                    "expires_at": row.expires_at.isoformat(),
+                    "revoked_at": row.revoked_at.isoformat() if row.revoked_at else None,
+                }
+                for row in page
+            ],
+            "next_cursor": page[-1].get_uid() if len(rows) > limit else None,
+        }
+
+
 def authenticate_connection_credential(token: str) -> AuthenticatedAppConnection:
     if not isinstance(token, str) or len(token) != 48 or not token.startswith("lbac_"):
         raise AppGovernanceDenied()
