@@ -56,6 +56,69 @@ def test_structured_json_roundtrip_retains_duplicate_names_and_stage_keys(storag
     assert set(loaded.columns[1]) == {"name", "description", "workflow_stage"}
 
 
+def test_template_recreation_and_copy_resolve_current_registry_without_policy_snapshots(storage, monkeypatch):
+    project = Project(id=1, owner_id=1, title="QA")
+    monkeypatch.setattr(InfraHelper, "get_by_id_like", lambda _model, _uid: project)
+    column_service = ProjectColumnService(None, None, storage)
+    column_service.dispatch_created = Mock()
+    services = {
+        "project": SimpleNamespace(create=Mock(return_value=project), delete=Mock()),
+        "project_column": column_service,
+    }
+    service = ProjectTemplateService(None, services.__getitem__, storage)
+    service._apply_internal_bots = Mock()
+    service._apply_scopes = Mock()
+    service._apply_email_notification_policy = Mock()
+    template = service.save_columns(
+        "Registry reference",
+        [
+            {
+                "name": "Queue",
+                "description": "Local guidance",
+                "workflow_stage": "ready",
+                "counts_as_completed": True,
+                "entry_effects": ["complete_checkitems"],
+                "active_queue_policy": "exclude",
+                "overdue_policy": "suppress",
+            }
+        ],
+    )
+    stored = storage.project_template.get_by_name(template.name)
+    allowed = {"name", "description", "workflow_stage", "translations"}
+    assert set(stored.column_definitions()[0]) == allowed
+    stage = storage.workflow_stage.get_by_keys({"ready"})["ready"]
+    stage.description = "Current registry guidance"
+    stage.counts_as_completed = True
+    stage.active_queue_policy = "exclude"
+    stage.overdue_policy = "suppress"
+    storage.workflow_stage.update(stage)
+    _, columns, _ = service.create_project(object(), "QA", template_name=stored.name)
+    column = columns[0]
+    guidance = column_service.get_workflow_guidance([column])[column.id]
+    assert guidance["workflow_counts_as_completed"] is True
+    assert guidance["workflow_stage_description"] == "Current registry guidance"
+    assert guidance["column_description"] == "Local guidance"
+    assert guidance["workflow_guidance"] == "Workflow stage:\nCurrent registry guidance\n\nColumn:\nLocal guidance"
+    from langboard_shared.domain.models import Card
+
+    Card.__table__.create(DbEngine.get_main_engine())
+    storage.project_assigned_internal_bot = SimpleNamespace(get_all_by_project=lambda _: [])
+    storage.project_bot_scope = SimpleNamespace(get_all_by_project=lambda _: [])
+    storage.project_column.get_bot_scopes_by_project = lambda _: []
+    storage.project_label = SimpleNamespace(get_all_by_project=lambda _: [])
+    service._email_notification_policy_snapshot = Mock(return_value={})
+    copied = service.copy_from_project(project, "Copied registry reference")
+    assert copied.column_definitions() == stored.column_definitions()
+    assert set(copied.column_definitions()[0]) == allowed
+    stage.description = "Updated after copying"
+    stage.counts_as_completed = False
+    storage.workflow_stage.update(stage)
+    guidance = column_service.get_workflow_guidance([column])[column.id]
+    assert guidance["workflow_counts_as_completed"] is False
+    assert guidance["workflow_stage_description"] == "Updated after copying"
+    assert storage.project_template.get_by_name(copied.name).columns == copied.columns
+
+
 def test_legacy_roundtrip_never_infers_done_meaning(storage):
     storage.project_template.insert(
         ProjectTemplate(name="Legacy", columns=["Done", "Done"], column_descriptions=["First", "Second"])
