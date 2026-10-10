@@ -345,6 +345,37 @@ for (const status of [403, 500]) {
     });
 }
 
+test("network recovery removes newly inaccessible tray cards without changing the active detail", async ({ page }) => {
+    await mockBoardApi(page);
+    await seedTray(page, 3);
+    let revoked = false;
+    let validations = 0;
+    await page.route("**/board/fixture-project/cards/available", async (route) => {
+        if (route.request().method() === "OPTIONS") {
+            await route.fulfill({ status: 204, headers: corsHeaders(route) });
+            return;
+        }
+        validations++;
+        await fulfillWithCors(route, { card_uids: revoked ? ["other-1"] : ["other-0", "other-1", "other-2"] });
+    });
+    await page.goto(FIXTURE);
+    await expect(page.getByRole("button", { name: "Flip card", exact: true })).toBeVisible();
+    await expect.poll(() => validations).toBeGreaterThan(0);
+    revoked = true;
+    await page.evaluate(() => window.dispatchEvent(new Event("online")));
+    await expect
+        .poll(() =>
+            page.evaluate(() =>
+                JSON.parse(sessionStorage.getItem("langboard-card-flip-session")!).state.trays["fixture-user:fixture-project"].map(
+                    (card: { uid: string }) => card.uid
+                )
+            )
+        )
+        .toEqual(["other-1"]);
+    await expect(page.locator("[data-card-viewer]")).toHaveCount(1);
+    await expect(page.getByRole("heading", { name: "Fixture card", exact: true })).toBeVisible();
+});
+
 test("reduced-motion keeps the compact tray keyboard accessible", async ({ page }) => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.setViewportSize({ width: 390, height: 844 });

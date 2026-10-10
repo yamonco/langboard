@@ -10,10 +10,12 @@ from langboard_shared.core.db import DbSession
 from langboard_shared.core.db.DbEngine import DbEngine
 from langboard_shared.core.filter import AuthFilter
 from langboard_shared.core.routing import AppRouter
+from langboard_shared.core.security.CollaborationChannel import CollaborationChannel
 from langboard_shared.domain.models import Project, ProjectRole, User
 from langboard_shared.filter import RoleFilter
 from pydantic import ValidationError
 from sqlalchemy import create_engine
+from starlette.requests import Request
 
 
 @pytest.mark.parametrize(
@@ -81,11 +83,21 @@ def test_invalid_or_unbounded_input_is_rejected(uids):
         RecentCardsAvailabilityForm(card_uids=uids)
 
 
-def test_route_forwards_only_requested_ids_to_scoped_service():
+@pytest.mark.parametrize("channel", [None, CollaborationChannel.HumanUI, CollaborationChannel.Mcp])
+def test_route_forwards_only_requested_ids_and_authenticated_context_to_scoped_service(channel):
     calls = []
+    actor = User(firstname="Recent", lastname="Reader", email="recent-reader@example.invalid", password="test-only")
+    scope = {"type": "http"}
+    if channel is not None:
+        scope["collaboration_channel"] = channel
     service = SimpleNamespace(
-        card=SimpleNamespace(get_existing_uids=lambda project, uids: calls.append((project, uids)) or ["one"])
+        card=SimpleNamespace(
+            get_existing_uids=lambda project, uids, **context: calls.append((project, uids, context)) or ["one"]
+        )
     )
-    response = get_available_recent_cards("project", RecentCardsAvailabilityForm(card_uids=["one", "missing"]), service)
-    assert calls == [("project", ["one", "missing"])]
+    response = get_available_recent_cards(
+        "project", RecentCardsAvailabilityForm(card_uids=["one", "missing"]),
+        Request(scope), user=actor, service=service,
+    )
+    assert calls == [("project", ["one", "missing"], {"user": actor, "channel": channel or CollaborationChannel.Api})]
     assert response.body == b'{"card_uids":["one"]}'

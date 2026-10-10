@@ -162,9 +162,11 @@ export default function CardFlipTray({
         };
         void validate();
         window.addEventListener("focus", validate);
+        window.addEventListener("online", validate);
         return () => {
             controller.abort();
             window.removeEventListener("focus", validate);
+            window.removeEventListener("online", validate);
         };
     }, [userUID, projectUID, identities]);
 
