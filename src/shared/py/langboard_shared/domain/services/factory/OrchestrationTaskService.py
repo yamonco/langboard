@@ -25,6 +25,7 @@ from ...constants.TaskMetadata import (
 )
 from ...models import Bot, Card, CardMetadata, GlobalCardRelationshipType, Project, ProjectColumn, User
 from ...models.GraphApprovalRequest import GraphApprovalOriginType
+from ..CardAppMutation import guard_card_app_mutation
 from .AppSettingService import AppSettingService
 from .CardCommentService import CardCommentService
 from .CardRelationshipService import CardRelationshipService
@@ -84,15 +85,18 @@ class OrchestrationTaskService(BaseDomainService):
             return None
 
         card, api_card = created
-        saved_metadata = self.save_task_metadata(project, card, metadata or {})
+        saved_metadata = self.save_task_metadata(project, card, metadata or {}, user_or_bot=user_or_bot)
         self.__dispatch_assigned_bot(user_or_bot, project, card, metadata or {})
         return api_card, saved_metadata
 
+    @guard_card_app_mutation
     def save_task_metadata(
         self,
         project: TProjectParam | None,
         card: TCardParam | None,
         metadata: dict[str, Any],
+        *,
+        user_or_bot: TUserOrBot,
     ) -> dict[str, str]:
         params = InfraHelper.get_records_with_foreign_by_params((Project, project), (Card, card))
         if not params:
@@ -114,6 +118,7 @@ class OrchestrationTaskService(BaseDomainService):
 
         return saved
 
+    @guard_card_app_mutation
     def record_verification(
         self,
         user_or_bot: TUserOrBot,
@@ -173,11 +178,14 @@ class OrchestrationTaskService(BaseDomainService):
 
         return saved
 
+    @guard_card_app_mutation
     def record_run(
         self,
         project: TProjectParam | None,
         card: TCardParam | None,
         run: dict[str, Any],
+        *,
+        user_or_bot: TUserOrBot,
     ) -> dict[str, str] | None:
         params = InfraHelper.get_records_with_foreign_by_params((Project, project), (Card, card))
         if not params:
@@ -194,11 +202,14 @@ class OrchestrationTaskService(BaseDomainService):
         MetadataPublisher.updated_metadata(SocketTopic.BoardCard, card.get_uid(), key, serialized)
         return {key: serialized}
 
+    @guard_card_app_mutation
     def record_suggestions(
         self,
         project: TProjectParam | None,
         card: TCardParam | None,
         suggestions: list[dict[str, Any]],
+        *,
+        user_or_bot: TUserOrBot,
     ) -> dict[str, str] | None:
         params = InfraHelper.get_records_with_foreign_by_params((Project, project), (Card, card))
         if not params:
@@ -213,6 +224,7 @@ class OrchestrationTaskService(BaseDomainService):
         MetadataPublisher.updated_metadata(SocketTopic.BoardCard, card.get_uid(), key, serialized)
         return {key: serialized}
 
+    @guard_card_app_mutation
     def record_bypass_decision(
         self,
         user_or_bot: TUserOrBot,
@@ -245,6 +257,7 @@ class OrchestrationTaskService(BaseDomainService):
         MetadataPublisher.updated_metadata(SocketTopic.BoardCard, card.get_uid(), key, serialized)
         return {key: serialized}, approval_request_response
 
+    @guard_card_app_mutation
     def create_child_task_from_suggestion(
         self,
         user_or_bot: TUserOrBot,

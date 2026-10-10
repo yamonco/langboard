@@ -40,7 +40,7 @@ def guard_card_app_mutation(operation):
     def guarded(*args, **kwargs):
         bound = parameters.bind(*args, **kwargs)
         actor = bound.arguments.get("user_or_bot", bound.arguments.get("user"))
-        card = bound.arguments.get("card")
+        card = bound.arguments.get("card", bound.arguments.get("parent_card"))
         # User-scoped REST/MCP retain their existing human permission checks.
         # Dedicated app credentials cannot authenticate as those users.
         if isinstance(actor, User) or card is None:

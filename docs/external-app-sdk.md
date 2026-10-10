@@ -459,7 +459,12 @@ requesting user; none of them carries an owner-app grant. Human-only and release
 bot requests retain the existing native scope/origin validation. Other approval
 scopes and human approval resolution retain their existing behavior. This does
 not implement the generic external-app HITL request/response/delivery contract.
-That contract and remaining direct repository
+Native orchestration metadata, verification, run, suggestions, bypass decisions
+and child creation also use the ownership fence before writing or dispatching.
+Metadata/run/suggestion methods require an explicit actor; route callers forward
+current authentication. Child creation checks the parent card before creating a
+new card or updating parent metadata. This does not authorize an external app to
+execute these operations. The generic HITL contract and remaining direct repository
 writes also require separate fence coverage before
 ownership configuration is exposed. Service tests prove the exercised denial
 paths; they do not prove deployed REST/MCP or PostgreSQL concurrency acceptance.

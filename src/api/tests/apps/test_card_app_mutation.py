@@ -27,6 +27,7 @@ from langboard_shared.domain.services.factory.CardService import CardService
 from langboard_shared.domain.services.factory.CheckitemService import CheckitemService
 from langboard_shared.domain.services.factory.ChecklistService import ChecklistService
 from langboard_shared.domain.services.factory.GraphApprovalRequestService import GraphApprovalRequestService
+from langboard_shared.domain.services.factory.OrchestrationTaskService import OrchestrationTaskService
 from langboard_shared.domain.services.factory.WorkflowStageService_app_test import board  # noqa: F401
 from langboard_shared.infrastructure.repositories.factory.GraphApprovalRequestRepository import (
     GraphApprovalRequestRepository,
@@ -72,6 +73,71 @@ def test_attachment_writer_requires_actor_before_repository_access(operation):
     args = ("project", "card", "attachment", 0) if operation == "change_order" else ("project", "card", "attachment")
     with pytest.raises(TypeError, match="user"):
         getattr(service, operation)(*args)
+
+
+@pytest.mark.parametrize("board", ["sqlite://"], indirect=True)
+@pytest.mark.parametrize("operation", ["metadata", "verification", "run", "suggestions", "bypass", "child"])
+def test_orchestration_denies_bot_before_metadata_or_child_creation(board, operation):
+    card = prepare(board)
+    set_card_app_ownership(board[1], board[2].id, card.id, "example-app", None)
+    actor = Bot(name="Automation", bot_uname="bot-test", app_api_token="test-only",
+                platform="default", platform_running_type="default")
+    service = OrchestrationTaskService(None, None, None)
+    operations = {
+        "metadata": lambda: service.save_task_metadata(board[2], card, {"source": "spoof"}, user_or_bot=actor),
+        "verification": lambda: service.record_verification(actor, board[2], card, {"passed": True}),
+        "run": lambda: service.record_run(board[2], card, {"status": "done"}, user_or_bot=actor),
+        "suggestions": lambda: service.record_suggestions(board[2], card, [], user_or_bot=actor),
+        "bypass": lambda: service.record_bypass_decision(actor, board[2], card, {"allowed": True}),
+        "child": lambda: service.create_child_task_from_suggestion(actor, board[2], card, {"title": "Unauthorized child"}),
+    }
+    with pytest.raises(AppGovernanceDenied):
+        operations[operation]()
+    with DbSession.atomic() as db:
+        from langboard_shared.domain.models import Card
+
+        assert len(db.exec(SqlBuilder.select.table(Card)).all()) == 1
+
+
+@pytest.mark.parametrize("operation", ["save_task_metadata", "record_run", "record_suggestions"])
+def test_orchestration_metadata_requires_actor(operation):
+    with pytest.raises(TypeError, match="user_or_bot"):
+        getattr(OrchestrationTaskService(None, None, None), operation)("project", "card", {})
+
+
+def test_orchestration_routes_pass_authenticated_actor():
+    from langboard.routes.board import BoardOrchestrationApi as routes
+    from langboard_shared.domain.models import User
+
+    actor = User.model_construct(id=1)
+    run = Mock(return_value={"run": "saved"})
+    suggestions = Mock(return_value={"suggestions": "saved"})
+    service = SimpleNamespace(orchestration_task=SimpleNamespace(record_run=run, record_suggestions=suggestions))
+    form = SimpleNamespace(model_dump=lambda **_: {"status": "running"})
+    routes.record_orchestration_run("project", "card", form, actor, service)
+    run.assert_called_once_with("project", "card", {"status": "running"}, user_or_bot=actor)
+    routes.record_orchestration_suggestions("project", "card", SimpleNamespace(suggestions=[form]), actor, service)
+    suggestions.assert_called_once_with("project", "card", [{"status": "running"}], user_or_bot=actor)
+
+
+@pytest.mark.parametrize("board", ["sqlite://"], indirect=True)
+def test_owned_card_human_orchestration_metadata_retains_native_write(board, monkeypatch):
+    from importlib import import_module
+
+    module = import_module("langboard_shared.domain.services.factory.OrchestrationTaskService")
+    card = prepare(board)
+    set_card_app_ownership(board[1], board[2].id, card.id, "example-app", None)
+    service = OrchestrationTaskService(None, None, None)
+    metadata = Mock()
+    monkeypatch.setattr(service, "_get_service", lambda _: metadata)
+    monkeypatch.setattr(module.InfraHelper, "get_records_with_foreign_by_params", lambda *_: (board[2], card))
+    published = Mock()
+    monkeypatch.setattr(module.MetadataPublisher, "updated_metadata", published)
+    assert service.save_task_metadata(board[2], card, {"source": "human"}, user_or_bot=board[1])
+    assert service.record_run(board[2], card, {"status": "running"}, user_or_bot=board[1])
+    assert service.record_suggestions(board[2], card, [{"title": "Next"}], user_or_bot=board[1])
+    assert metadata.save.call_count == 3
+    assert published.call_count == 3
 
 
 @pytest.mark.parametrize("board", ["sqlite://"], indirect=True)
