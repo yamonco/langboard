@@ -248,3 +248,18 @@ exists; invalid cursors are rejected rather than silently restarting pagination.
 Enumeration does not grant policy authority. The per-organization GET/PUT APIs
 still recheck the current actor, organization state and policy revision. This API
 does not expose personal connections, tokens, employee membership or credentials.
+
+The Apps settings page is available to organization owners as well as instance
+administrators. Its scope selector consumes the paginated authorized organization
+API. Only administrators see the instance-policy option; organization owners do
+not request global policy data. The same editor uses separately keyed queries and
+mutations for each selected organization, supports `mode: null` inheritance, and
+displays the server's effective policy under the instance ceiling. Scope and page
+changes are disabled while a draft is dirty or a request is active. Save or
+explicit Cancel releases that guard; switching scopes mounts a separate editor
+so its baseline revision cannot migrate to another organization. Four supported
+languages include scope, inheritance and ceiling explanations. The Chrome HTTP
+fixture covers desktop/mobile global saves and an owner-only organization flow
+with cancellation, conflict preservation and a null inheritance write. Real
+organization consent, administrator sessions and deployed acceptance remain
+separate checks.
