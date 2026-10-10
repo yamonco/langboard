@@ -5,6 +5,7 @@ from .ApiKeyUsage import ApiKeyUsage
 from .AppEventDestination import AppEventDestination
 from .AppExecutionOutbox import AppExecutionOutbox
 from .AppExecutionAcknowledgment import AppExecutionAcknowledgment
+from .AppExecutionLease import AppExecutionLease
 from .AppExecutionRequest import AppExecutionRequest
 from .AppConnection import AppConnection
 from .AppConnectionCredential import AppConnectionCredential

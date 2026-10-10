@@ -48,3 +48,16 @@ acknowledgment. `read_request` returns the fixed accepted authority snapshot;
 `acknowledge` records `received/started:false` with the matching event UID and
 runtime reference. These operations do not start execution or approve work.
 The independently built wheel and both lockfiles remain digest pinned.
+
+Python SDK 0.2.8 adds an explicit runtime permit boundary. `authorize_runtime`
+requires the accepted request and its `acknowledgment_uid`, plus a random
+32-byte lowercase-hex runtime token. It returns a 120-second
+`permit_execution: true` authorization with `started: false`; acquiring it
+does not start a process. `check_runtime` renews only while current authority
+still matches. A revoked connection, stage/resource drift, or expiry changes
+the permit to `stop_requested`; the receiver may then submit `stopped: true`.
+The opaque token is scoped to that lease and remains valid for stop-only
+recovery after app credentials are revoked. Stopped or expired permits never
+resume; a new accepted request and generation are required. The host preserves
+the stop history, and scheduling, external process start, and HITL resume are
+separate integrations.

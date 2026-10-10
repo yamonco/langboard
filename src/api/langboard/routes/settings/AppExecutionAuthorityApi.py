@@ -139,3 +139,61 @@ def execution_acknowledgment(
     except AppExecutionRequestConflict as exc:
         raise ApiException.Conflict_409() from exc
     return JsonResponse(content=result, headers={"Cache-Control": "no-store"})
+
+
+class ExecutionPermitBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    acknowledgment_uid: str = Field(strict=True, pattern="^[A-Za-z0-9]{11}$")
+    runtime_token: str = Field(strict=True, pattern="^[0-9a-f]{64}$")
+
+
+@AppRouter.api.post(
+    "/apps/v1/boards/{project_uid}/cards/{card_uid}/execution-requests/{request_uid}/runtime-permits",
+    tags=["App.Execution"],
+)
+def execution_runtime_permit(
+    project_uid: str,
+    card_uid: str,
+    request_uid: str,
+    body: ExecutionPermitBody,
+    authorization: str = Header(default="", max_length=256),
+) -> JsonResponse:
+    from langboard_shared.domain.services.AppExecutionLeases import authorize_app_runtime
+    from langboard_shared.domain.services.AppExecutionRequests import AppExecutionRequestConflict
+
+    scheme, _, token = authorization.partition(" ")
+    if scheme.lower() != "bearer":
+        raise ApiException.Unauthorized_401()
+    try:
+        result = authorize_app_runtime(
+            token,
+            SnowflakeID.from_short_code(project_uid),
+            SnowflakeID.from_short_code(card_uid),
+            SnowflakeID.from_short_code(request_uid),
+            SnowflakeID.from_short_code(body.acknowledgment_uid),
+            body.runtime_token,
+        )
+    except AppExecutionCredentialDenied as exc:
+        raise ApiException.Unauthorized_401() from exc
+    except AppGovernanceDenied as exc:
+        raise ApiException.Forbidden_403() from exc
+    except AppExecutionRequestConflict as exc:
+        raise ApiException.Conflict_409() from exc
+    return JsonResponse(content=result, headers={"Cache-Control": "no-store"})
+
+
+class RuntimeCheckBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    runtime_token: str = Field(strict=True, pattern="^[0-9a-f]{64}$")
+    stopped: bool = Field(default=False, strict=True)
+
+
+@AppRouter.api.post("/apps/v1/runtime-permits/{lease_uid}/check", tags=["App.Execution"])
+def execution_runtime_check(lease_uid: str, body: RuntimeCheckBody) -> JsonResponse:
+    from langboard_shared.domain.services.AppExecutionLeases import check_app_runtime
+
+    try:
+        result = check_app_runtime(SnowflakeID.from_short_code(lease_uid), body.runtime_token, stopped=body.stopped)
+    except AppGovernanceDenied as exc:
+        raise ApiException.Forbidden_403() from exc
+    return JsonResponse(content=result, headers={"Cache-Control": "no-store"})
